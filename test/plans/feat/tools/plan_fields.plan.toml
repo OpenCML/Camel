@@ -1,0 +1,45 @@
+id = "tools.plan_fields"
+order = 920
+tier = "fast"
+tags = ["feat", "tools"]
+desc = "A plan field the runner never reads is not a test: the guard that reads every plan entry against what its kind evaluates runs here, and its ratchet over the accepted findings may only go down"
+
+# `test/tools/check-plan-fields.mjs` reads all 389 plan files against the truth table of what
+# `validateTest` evaluates for each kind, and fails when the number of entries that carry a field
+# their kind never reads grows past `test/tools/plan-fields-baseline.json`. A plan schema check can
+# refuse a misspelled key; it cannot refuse a correctly spelled field under a kind that does not
+# evaluate it, and that is the worse half -- the entry reads as a check of something it never
+# compares.
+#
+# Nothing ran it. It went red only when a person typed the command in a worktree, which is the
+# shape `docs/handover/pending-work.cn.md` records as a red with no owner: the count drifted from
+# 331 to 333 inside one lane's merge and the gate stayed green. These two entries are the door --
+# the tree reading and the table's own reading against the runner.
+#
+# The ratchet is deliberately not self-updating. `--update-baseline` is a separate command that a
+# lane runs after fixing something and commits with the fix, so a red here always means the tree
+# moved and nobody accepted it; an entry that rewrote the baseline would be a check that passes by
+# recording whatever it found.
+
+[[tests]]
+name = "plan_fields.tree"
+desc = "Every `[[tests]]` entry of every plan file, with `[defaults]` merged the way `loadPlanTests` merges it, is read against what its kind evaluates: a field written and never read is reported by file, entry, field and kind. The reading is compared with the accepted count in `test/tools/plan-fields-baseline.json` and the exit code is the wall -- growing is red, coming down is green and says to accept the new number, and no baseline at all is red rather than a pass over nothing. `ratchet=` is `grown` only on the red, so the two lines this entry asks for are the reading and the verdict."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-plan-fields.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["plan-fields read", "ratchet="]
+expect_stdout_not_contains = ["ratchet=grown", "FAIL plan-fields"]
+timeout_ms = 120000
+
+[[tests]]
+name = "plan_fields.table"
+desc = "The table the guard decides by is read against `test/tools/run-tests.mjs` itself: the three kind-gated blocks of `validateTest` by name and by the fields each one reads, and every field listed as evaluated for every kind has to be read somewhere in the runner. A hard-coded table that outlives the code it describes is the same defect one level up -- a guard that asserts nothing -- so the runner's shape is checked rather than assumed, and a fourth gated kind or a field that moves out of a block fails here by name."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-plan-fields.mjs"
+args = ["${case}", "--verify-runner"]
+expect_exit = 0
+expect_stdout_contains = ["plan-fields table ok"]
+timeout_ms = 60000
