@@ -696,7 +696,9 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // dropped value is what this says: the same thing one rule says about any value nobody uses
     // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. The write is not
     // an effect, so EffectNotExecuted above is not the place for it: that one is about a statement
-    // that reaches outside the program and the region it is written in.
+    // nothing needs, and the region it is written in -- a fact about the value, not about how far
+    // the statement reaches (design principles 3.1 and 3.3, the ruling of 2026-11-16: a write of a
+    // handle is used by the region it is written into, by the same rule as an outside write).
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id) || needed.contains(id)) {
             continue;

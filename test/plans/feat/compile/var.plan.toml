@@ -292,7 +292,7 @@ timeout_ms = 30000
 # one is left.
 [[tests]]
 name = "var.unused_assigned_value_is_a_dropped_value"
-desc = "A write to a `var` whose value nobody reads is a dropped value and nothing else: the case reads the variable before the write (so the variable is used) and the write's value is read by nobody (`x = 1` at 15:7), so the run's stderr holds exactly one diagnostic -- `SemanticDiag::UnusedAssignedValue` -- and neither `IgnoredSideEffect` (a write outside a `sync` block) nor `EffectNotExecuted` (a statement that reaches outside the program written in a region that does not run) appears. The program still prints `0`, the value it read before the write."
+desc = "A write to a `var` whose value nobody reads is a dropped value and nothing else: the case reads the variable before the write (so the variable is used) and the write's value is read by nobody (`x = 1` at 15:7), so the run's stderr holds exactly one diagnostic -- `SemanticDiag::UnusedAssignedValue` -- and neither `IgnoredSideEffect` (a write outside a `sync` block) nor `EffectNotExecuted` (a statement nothing needs, written in a region that does not run) appears. The program still prints `0`, the value it read before the write."
 kind = "behavior"
 case = "../../../cases/compile/var/unused_assigned_value.cml"
 args = ["${case}", "${run_nvm}"]
