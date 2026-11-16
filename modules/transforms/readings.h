@@ -11,22 +11,56 @@
  * the program's output captured the transform's debugging with it and a reader who collected the
  * diagnostics got nothing (the author's review, high-3 second half).
  *
- * The reading goes to `std::cerr`, the diagnostic side: the same channel every diagnostic already
- * uses, and the one a plan reads with `expect_output_contains` / `expect_stderr_contains`. It is not
- * behind a log switch. A refusal's reason has to be readable without turning anything on, and a
- * reading that can be silenced is a reading nobody can cite: `present.remat` pins
- * `in_recompute=0 out_recompute=1` precisely so a transform that stopped marking anything cannot
- * stay green.
+ * The walk goes to `std::cerr`, the diagnostic side, and never to `std::cout`.
+ *
+ * It is written only when the run asked for it, and the asking is the command line:
+ * `--trace transforms` (`include/camel/core/trace.h`, whose registry holds the area name and the
+ * switch, and whose `trace` is the one place the stream is decided). It was unconditional until
+ * 2026-11-16: "a refusal's reason has to be readable without turning anything on, and a reading that
+ * can be silenced is a reading nobody can cite" (`present.remat` pins `in_recompute=0
+ * out_recompute=1` so that a transform which stopped marking anything cannot stay green). The
+ * author's ruling of 2026-11-16 narrowed that to what it was always about: a program that
+ * differentiates a small model wrote **1988** such lines on a default run -- one per operator per
+ * step -- so the walk was in the product path, and the case study's break-rate reading carried all
+ * of it while the program's own four numbers were lost in it.
+ *
+ * The environment is not a way to ask. A run's behaviour is decided by the program, the command line
+ * and the build options (design principles 9.3), and `test/tools/check-env-switches.mjs` refused the
+ * first shape of this switch in one line: "reads 'CAMEL_TRANSFORMS_READINGS' from the environment
+ * and no ledger line allows it". A pass parameter was tried next and measured to be too narrow: two
+ * entries that pin a reading write `args = ["${case}"]` and name no pass at all (the `std::nvm`
+ * fallback), so the parameter has nowhere to hang. The command line is what is left, and the first
+ * thing 9.3 names.
+ *
+ * What the old reason still buys is `verdicts()` below: **what a transform refused, it says, always**.
+ * The sentence for a refused transpose goes to `verdicts()` and not through the switch, because a
+ * reader who never heard of `--trace` still has to be able to read why their derivative was
+ * refused -- and that is one sentence per refusal, not one line per step.
  */
 
 #pragma once
 
+#include "camel/core/trace.h"
+
 #include <iostream>
 #include <ostream>
+#include <streambuf>
 
 namespace camel::transforms {
 
-/// The stream a transform writes its reading to. Never `std::cout`: see the comment above.
-inline std::ostream &readings() { return std::cerr; }
+
+/// Whether this run asked for the readings of this area: the switch and the stream are the core's
+/// (`camel/core/trace.h`, whose registry has one row for `transforms`), so this module is one
+/// reader of a channel it does not own.
+inline bool readingsAsked() { return camel::core::traceEnabled(camel::core::TraceArea::Transforms); }
+
+/// The stream a transform writes its step-by-step walk to. Never `std::cout`: see above. A discarded
+/// stream when the run did not ask, so every call site stays one expression.
+inline std::ostream &readings() { return camel::core::trace(camel::core::TraceArea::Transforms); }
+
+/// The stream a transform writes its *verdict* to -- what it refused and why. Always `std::cerr`: a
+/// reader who never heard of `--trace` still has to be able to read why their derivative was
+/// refused.
+inline std::ostream &verdicts() { return std::cerr; }
 
 } // namespace camel::transforms

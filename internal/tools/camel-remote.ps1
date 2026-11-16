@@ -365,7 +365,18 @@ param(
     # (see the header). A current build carries its own copy in `libs/` with a `$ORIGIN` rpath, so
     # the export only serves the older installs still sitting in host checkouts. Empty means the
     # local settings file decides.
-    [string]$LibStdCxxDir = ''
+    [string]$LibStdCxxDir = '',
+# A file inside this tree that the host sends back after the run: base64 between two markers on the
+# same stream as RUN_EXIT, which is the channel `-UpdateAstHashes` already uses (one channel, so one
+# place to fix it). Relative to -Path and it must stay inside the tree.
+#
+# What it is for: a check that needs two runs -- `-UpdateGolden` writes a record, the next run
+# compares against it -- cannot leave the record on the host, because the host checkout is reset to
+# the patch on every run: an untracked file written by one run is gone by the next (measured
+# 2026-11-16: the golden written by `-UpdateGolden` was reported missing by the run right after it).
+# Pair this with a path `.gitignore` covers (e.g. `out/trace-golden/...`), so a fetched record can
+# never be committed by accident.
+[string]$FetchFile = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -894,6 +905,9 @@ $gpuReading = $null
 $astExit = $null
 $astCapture = $null
 $astPayloadText = $null
+# The file `-FetchFile` asks for: same shape as the AST record above.
+$fetchCapture = $null
+$fetchPayloadText = $null
 $lastRunPublish = [datetime]::MinValue
 
 # One line per run for the panel's run registry. `slot` stays null (the host does not report which
@@ -1221,6 +1235,23 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # `(NOT REBUILT -- may be stale)` to that line rather than leaving it looking like a fresh build.
     $astBuiltNote = if ($NoBuild) { ' (NOT REBUILT -- may be stale)' } else { '' }
     $astOnlyArgs = ($AstOnly | ForEach-Object { " --only '$_'" }) -join ''
+# The file `-FetchFile` asks for, sent back the same way the AST record is: base64 between two
+# markers, after the plan. It runs after `RUN_EXIT` so a record the plan wrote is complete, and it
+# names the path when the host has nothing there -- a fetch that silently sends nothing would look
+# exactly like a run whose comparison passed.
+$fetchRel = ($FetchFile -replace '\\', '/')
+$fetchStage = if ($FetchFile -ne '') {
+@'
+if [ -f "$R/FETCHREL" ]; then
+echo '__CAMEL_REMOTE_FETCH_BEGIN__'
+base64 "$R/FETCHREL"
+echo '__CAMEL_REMOTE_FETCH_END__'
+else
+echo 'FETCH_MISSING=FETCHREL'
+echo '[camel-remote] -FetchFile: the host has no FETCHREL (whatever writes it must run in this same run)'
+fi
+'@.Replace('FETCHREL', $fetchRel)
+} else { ':' }
     $astStage = if ($UpdateAstHashes) {
         @'
 echo '__CAMEL_REMOTE_AST_START__'
@@ -1567,6 +1598,7 @@ $planMarker
 $runPlan 2>&1
 code=`$?
 echo "RUN_EXIT=`$code"
+$fetchStage
 # Released here, before the checkers: they read a finished run and need no exclusion.
 exec 7>&- 2>/dev/null
 # --- the checkers -----------------------------------------------------------
@@ -1637,6 +1669,7 @@ exit `$code
                 [void]$astCapture.Append($cleanLine)
                 return
             }
+            # -FetchFile sends one file back the same way the AST record travels: base64 between             # two markers, collected here and written after the run (so a truncated stream writes             # nothing rather than half a record).             if ($line -match '__CAMEL_REMOTE_FETCH_BEGIN__') {                 $fetchCapture = New-Object System.Text.StringBuilder                 return             }             if ($line -match '__CAMEL_REMOTE_FETCH_END__') {                 $fetchPayloadText = $fetchCapture.ToString()                 $fetchCapture = $null                 return             }             if ($null -ne $fetchCapture) {                 [void]$fetchCapture.Append($cleanLine)                 return             }
             if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
                 $astExit = [int]$Matches[1]
                 $run.lastLine = if ($astExit -eq 0) {
@@ -1843,6 +1876,28 @@ exit `$code
     # stream carried the payload to its end marker, and the run did not fail -- so a failed or truncated
     # stage leaves the file exactly as it was. The text is written as UTF-8 without a BOM and with LF
     # endings, because the record is compared byte for byte by `check.py` on a Linux host.
+# The file `-FetchFile` asked for. Written after the run, on the same rule as the AST record:
+# the host sent it base64 between two markers, a payload that does not decode is reported and
+# nothing is written, and a directory the path needs is created first.
+if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
+    $fetchPayload = ($fetchPayloadText -replace '\s', '')
+    $fetchTarget = Join-Path $Path $FetchFile
+    if ($fetchPayload.Length -eq 0 -or $fetchPayload.Length % 4 -ne 0 -or
+        $fetchPayload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
+        Write-Host ("[camel-remote] -FetchFile: the file did not arrive intact ({0} chars); nothing was written" -f $fetchPayload.Length)
+        $code = 2
+    } else {
+        $fetchDir = Split-Path -Parent $fetchTarget
+        if ($fetchDir -and -not (Test-Path -LiteralPath $fetchDir)) {
+            New-Item -ItemType Directory -Path $fetchDir -Force | Out-Null
+        }
+        $fetchText = [System.Text.Encoding]::UTF8.GetString(
+            [System.Convert]::FromBase64String($fetchPayload)) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($fetchTarget, $fetchText, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host ("[camel-remote] -FetchFile: {0} bytes written to {1}" -f $fetchText.Length, $fetchTarget)
+    }
+}
+
     if ($null -ne $astPayloadText -and $astExit -eq 0) {
         $astPayload = ($astPayloadText -replace '\s', '')
         $astTarget = Join-Path $Path 'test/plans/feat/parse/golden/ast_hashes.txt'

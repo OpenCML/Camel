@@ -413,7 +413,14 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         function->graph(),
         why,
         /*promisedToTheOperator=*/true);
-    readings() << why.str();
+    // The walk is a reading, and the run has to ask for it; the sentence of a *refused* build is
+    // not, because a reader who never heard of `readings=true` still has to be able to read why
+    // their derivative was refused (`readings.h`, `verdicts`). One site, two channels, same text.
+    if (built.graph == nullptr) {
+        verdicts() << why.str();
+    } else {
+        readings() << why.str();
+    }
     if (built.graph == nullptr) {
         // A cause the language has a rule for is raised as the diagnostic the registry declares for
         // it, not as the catch-all: `ParameterShape` is the shape rule -- the adjoint of a linear

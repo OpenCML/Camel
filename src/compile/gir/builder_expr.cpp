@@ -10,12 +10,17 @@
 #include "builder.h"
 #include "builder_helpers.h"
 #include "builder_support.h"
+#include "camel/core/trace.h"
+#include <format>
 
 namespace {
-// The `[DBG-W]` and `[DBG-FOLD]` lines of the fold are one reading of `CAMEL_LOG_DEBUG` for the
-// whole file. The environment is asked once, so `test/tools/check-env-switches.mjs` has one ledger
-// line to allow instead of one per print, and the switch is a single place to look for.
-const bool kVarFoldDebug = std::getenv("CAMEL_LOG_DEBUG") != nullptr;
+// The `[DBG-W]` and `[DBG-FOLD]` lines of the fold are one reading of the run's tracing channel,
+// `--trace fold` (`include/camel/core/trace.h`). It was `CAMEL_LOG_DEBUG`, an environment switch,
+// until the author's ruling of 2026-11-16: the environment is not where a run's settings come from
+// (design principles 9.3), and one kind of reading has one way to ask for it.
+namespace folddebug {
+inline std::ostream &out() { return camel::core::trace(camel::core::TraceArea::Fold); }
+} // namespace folddebug
 } // namespace
 
 #include "camel/compile/gir/static_function.h"
@@ -1893,12 +1898,8 @@ void Builder::collapseNonEscapingVariableReads() {
     static int foldTookFold_ = 0;
     struct FoldCountsReport {
         ~FoldCountsReport() {
-            if (!kVarFoldDebug) {
-                return;
-            }
-            std::fprintf(
-                stderr,
-                "[DBG-FOLD] initial=%d loop=%d join=%d write=%d nothing=%d fold=%d\n",
+            folddebug::out() << std::format(
+                "[DBG-FOLD] initial={} loop={} join={} write={} nothing={} fold={}\n",
                 foldTookInitial_,
                 foldSawLoop_,
                 foldTookJoin_,
@@ -1973,12 +1974,9 @@ void Builder::collapseNonEscapingVariableReads() {
             if (readType != nullptr && readType->code() != TypeCode::String &&
                 isGCTraced(readType->code())) {
                 ++foldTookNothing_;
-                if (kVarFoldDebug) {
-                    std::fprintf(
-                        stderr,
-                        "[DBG-W] read=%u writes=- candidate=none kind=- region=- took=kept\n",
-                        static_cast<unsigned>(readId));
-                }
+                folddebug::out() << std::format(
+                    "[DBG-W] read={} writes=- candidate=none kind=- region=- took=kept\n",
+                    static_cast<unsigned>(readId));
                 continue;
             }
             // A write gives the cell of this version; what a read wants is the value written, and
@@ -2011,15 +2009,11 @@ void Builder::collapseNonEscapingVariableReads() {
                             readKind == camel::runtime::GCRegionKind::LoopBody ||
                             readKind == camel::runtime::GCRegionKind::LoopCond) {
                             ++foldTookNothing_;
-                            if (kVarFoldDebug) {
-                                std::fprintf(
-                                    stderr,
-                                    "[DBG-W] read=%u writes=%zu readregion=%d candidate=- kind=- "
-                                    "region=- took=region-read\n",
-                                    static_cast<unsigned>(readId),
-                                    writesSeen,
-                                    static_cast<int>(readRegionId));
-                            }
+                            folddebug::out() << std::format(
+                                "[DBG-W] read={} writes={} readregion={} candidate=- kind=- region=- took=region-read\n",
+                                static_cast<unsigned>(readId),
+                                writesSeen,
+                                static_cast<int>(readRegionId));
                             continue;
                         }
                     }
@@ -2041,14 +2035,10 @@ void Builder::collapseNonEscapingVariableReads() {
                     }
                     if (aCallWroteBeforeTheRead) {
                         ++foldTookNothing_;
-                        if (kVarFoldDebug) {
-                            std::fprintf(
-                                stderr,
-                                "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- "
-                                "took=call-write\n",
-                                static_cast<unsigned>(readId),
-                                writesSeen);
-                        }
+                        folddebug::out() << std::format(
+                            "[DBG-W] read={} writes={} candidate=none kind=- region=- took=call-write\n",
+                            static_cast<unsigned>(readId),
+                            writesSeen);
                         continue;
                     }
                 }
@@ -2056,13 +2046,10 @@ void Builder::collapseNonEscapingVariableReads() {
                     if (cellInputs.empty()) { ++foldTookNothing_; continue; }
                     version = cellInputs[0];
                     ++foldTookInitial_;
-                    if (kVarFoldDebug) {
-                        std::fprintf(
-                            stderr,
-                            "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- took=initial\n",
-                            static_cast<unsigned>(readId),
-                            writesSeen);
-                    }
+                    folddebug::out() << std::format(
+                        "[DBG-W] read={} writes={} candidate=none kind=- region=- took=initial\n",
+                        static_cast<unsigned>(readId),
+                        writesSeen);
                 } else {
                     // The candidate's region, by id: `region()` takes a region id, and a node's is
                     // `nodeRegion`. An arm's or a loop's write is a write of that region, and the
@@ -2074,17 +2061,14 @@ void Builder::collapseNonEscapingVariableReads() {
                         kind == camel::runtime::GCRegionKind::LoopCond ||
                         kind == camel::runtime::GCRegionKind::LoopBody ||
                         kind == camel::runtime::GCRegionKind::Dead;
-                    if (kVarFoldDebug) {
-                        std::fprintf(
-                            stderr,
-                            "[DBG-W] read=%u writes=%zu candidate=%u kind=%d region=%d took=%s\n",
-                            static_cast<unsigned>(readId),
-                            writesSeen,
-                            static_cast<unsigned>(nodeIdOf(candidate)),
-                            static_cast<int>(nodeKindOf(candidate)),
-                            static_cast<int>(regionId),
-                            refused ? "nothing" : "fold");
-                    }
+                    folddebug::out() << std::format(
+                        "[DBG-W] read={} writes={} candidate={} kind={} region={} took={}\n",
+                        static_cast<unsigned>(readId),
+                        writesSeen,
+                        static_cast<unsigned>(nodeIdOf(candidate)),
+                        static_cast<int>(nodeKindOf(candidate)),
+                        static_cast<int>(regionId),
+                        refused ? "nothing" : "fold");
                     if (refused) {
                         ++foldTookNothing_;
                         continue;
@@ -3175,4 +3159,3 @@ void Builder::rebindSsa(const std::string &name, node_handle_t value) {
 }
 
 } // namespace camel::compile::gir
-
