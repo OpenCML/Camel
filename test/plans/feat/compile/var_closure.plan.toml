@@ -80,10 +80,33 @@ expect_output_contains = ["'k' is immutable and cannot be passed to a var parame
 # entries above are two of the same programs accepted, and they go red with this change: the step that
 # removes the by-reference capture (the `tee` migration) deletes them, it does not change them.
 #
-# What is NOT reported, and why: a closure written at a call's argument position is used by that call
-# (3.5, 198), and a closure the program puts into another value is used to the end of the scope. Neither
-# end is a source offset this build can prove, so neither shape is refused here -- under-reporting
-# leaves a program to the next step; over-reporting refuses one the design allows.
+# Which of the two ends 3.5 (198) names without a source offset are reported TODAY, and which is not:
+#
+#   - a closure the program puts into another value IS reported: the value is used to the end of the
+#     scope, `scanClosureLastUses` records that end as `CapturedVar::stretchToEnd`, and every write
+#     after the making is inside it. `f92e5246f` is the commit that implemented the sentence; the
+#     tuple shape is read on `test/cases/opt/effects/dead_write_dropped_closure.cml` and the array
+#     shape on `err_captured_var_put_into_an_array` below. Before it the write was built and then
+#     erased for having no reader left: no node and no diagnostic, which is the class of defect this
+#     rule exists to remove.
+#   - a closure written at a call's argument position is NOT reported when the callee's result type
+#     can hold a function (3.5, 198 gives that shape the rest of the scope too). `scanClosureLastUses`
+#     reads the GCT before any body is built, so it cannot resolve a callee, and the shape falls to
+#     the "used by that call" end. Measured 2026-11-16 on this tree, and it is the shape the defect
+#     the tuple and array entries pin is still open in:
+#
+#         func take(f: () => int): () => int { return f }
+#         func probe(): int {
+#             var c = 0
+#             let h = (): int => c
+#             let kept = take(h)
+#             c = 41
+#             return kept()
+#         }
+#
+#     exits 0 and prints `0` with an empty stderr: no node, no diagnostic. No entry below reads it,
+#     because an entry that asserts the refusal would be red on this tree, and one that asserts the
+#     silence would pin the defect as the behaviour. Reported, not papered over.
 
 [[tests]]
 name = "err.a_closure_assigns_a_captured_var"
@@ -165,3 +188,20 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
+
+# ---- The end 3.5 (198) gives without a source offset, on the array shape -----------------------
+# The entries above read the end the block's own use of the closure's NAME gives. This one reads the
+# other end: the name the closure was bound to is never named again, because the program put the
+# closure's value into another value -- an array -- and design principles 3.5 (198) runs that shape
+# to the rest of the scope. It is the same rule the tuple shape of
+# `test/cases/opt/effects/dead_write_dropped_closure.cml` reads, from the other kind of aggregate, so
+# a reader can tell "the tuple is special-cased" from "the sentence is implemented".
+[[tests]]
+name = "err.a_captured_var_written_after_its_closure_is_put_into_an_array"
+desc = "The name a closure read is assigned after the closure's value is put into another value -- the array `many` -- so design principles 3.5 (198) runs the stretch to the rest of the scope and the write stands inside it. The report is the one the tuple shape gets: `CapturedVarWrittenAfterTheClosure` (`0x03000214`). The scan reaches it without a source offset: the block that binds `h` never names it again (`many[1]()` names `many`), so `CapturedVar::stretchToEnd` is the end, and a write anywhere after the making is inside it."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_captured_var_put_into_an_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
