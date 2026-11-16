@@ -946,6 +946,10 @@ class Builder {
     /// Registers the direct call `call` of `callee` in the current graph: its captures, as
     /// the current graph sees them now, to be linked by linkCaptureSites.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
+    /// Whether a capture site that is not linked yet names `value`: a site keeps the value it hands
+    /// a direct call in a table rather than as an edge (`addCaptureSite`, `linkCaptureSites`), so a
+    /// node it names must not be erased or folded away under it.
+    bool heldByCaptureSite(node_handle_t value) const;
     /// The link step for captures: passes to every direct call the captures of its callee,
     /// including the ones the callee made after the call was built, until nothing changes.
     void linkCaptureSites();

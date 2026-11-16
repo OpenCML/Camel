@@ -35,6 +35,56 @@
  *   cell_typed_nodes every node of every graph whose `outputType` is a cell (`var T`), which is the
  *                    wider reading the earlier sweep reported beside the ports (3223 / 3206).
  *
+ * --- the split: two kinds of port, and the one that has to reach zero --------------------
+ * Not every by-reference port is the program's. A generator keeps the state it carries from one
+ * `yield` to the next in cells of its own body (`src/compile/gct/builder.cpp#Builder::
+ * visitGeneratorBody`: `__gen_pc__`, `__gen_halt__`, and every local the body declares), and hands
+ * those cells to its caller inside a closure the machine builds itself (`streamValue()`: an
+ * unnamed function whose whole body is `return __gen_step__()`). The language author ruled
+ * (2026-11-16, item 4 of the answer on the generator page): that state is the generator's
+ * implementation and not `var` semantics, it must not be counted among the by-reference captures
+ * that remain, and the merge must report the two kinds apart.
+ *
+ * So `capture_ports` is split into three buckets, decided by the graph a port lives in and by
+ * nothing else:
+ *
+ *   capture_ports_generator  the port sits in a graph the generator machine built. Two markers,
+ *                            both facts about the graph:
+ *                            (a) the graph names itself `__gen_*`. The machine's step function is
+ *                                `src/compile/gct/builder.cpp#Builder::visitGeneratorBody`'s
+ *                                `stepName` (`const std::string stepName = "__gen_step__"`), and
+ *                                nothing else in the compiler gives a graph that prefix (an
+ *                                ordinary anonymous closure is `__g_<n>__`);
+ *                            (b) the graph's body calls a graph named `__gen_*` -- that is exactly
+ *                                `streamValue()`'s `return __gen_step__()`, so a graph with this
+ *                                marker is the stream value of one pull, i.e. a direct product of a
+ *                                generator body. Its ports are the step's cells plus the body's own
+ *                                hoisted locals, in a closure the program never wrote.
+ *   capture_ports_closure    the port sits in any graph neither marker names: a closure the
+ *                            program wrote (or a call site that holds its ports), capturing a cell
+ *                            by reference. This is the number the author's target 0 is about.
+ *   capture_ports_unknown    the port cannot be attributed: the document prints no graph name, or a
+ *                            port of the machine's own kind (`__gen_*`, a name only the compiler
+ *                            writes) sits in a graph neither marker names -- the two signals
+ *                            disagree, so the port is counted out loud rather than parked in one of
+ *                            the two classes to make the other one smaller.
+ *
+ * Why the markers are facts about the graph and not the port's name: a generator body's own local
+ * keeps its source spelling across `yield` (`i`, `x`, `e` in
+ * `test/cases/compile/stream/generators.cml` captures `__gen_halt__`, `__gen_pc__`, `e`), so a
+ * name match on the port would leave those cells in `capture_ports_closure` while the machine port
+ * beside them left -- a split by spelling, not by what the port is. The graph, on the other hand,
+ * is the thing the compiler builds: `__gen_step__` is a literal bound inside the generator's own
+ * scope, so no program can write a name resolving to it, and no program closure can be a graph
+ * whose body calls it. The one shape the markers deliberately leave out is a closure the *program*
+ * wrote inside a generator body (`let read = () => x` in the same case): it is the program's
+ * closure and it stays in `capture_ports_closure` even though the cell it captures is generator
+ * state -- which is worth knowing, and is why the buckets are named by the graph and not by the
+ * cell.
+ *
+ * The three buckets must add up to `capture_ports`. A run where they do not (a port shape neither
+ * bucket claims) is refused with exit 2 instead of printing a total that does not close.
+ *
  * Why `std::jgir` and not `std::gir` or `std::stats`:
  *
  *   - `std::stats` prints one `GRAPH_STATS {json}` line per graph with aggregate counts and no
@@ -73,12 +123,13 @@
  *   node scripts/check-capture-census.mjs --detail        # one line per file, for a diff of two trees
  *   node scripts/check-capture-census.mjs --jobs 8        # translations in flight (default 8)
  *   node scripts/check-capture-census.mjs --limit 20      # a sample: the first N of the sorted list
- *   node scripts/check-capture-census.mjs --enforce       # exit 1 unless both numbers are 0
+ *   node scripts/check-capture-census.mjs --enforce       # exit 1 unless closure ports and :var/new are 0
  *
  * Exit 0 is a reading (report-only, the mode the gate runs). 1 is `--enforce` over a non-zero
- * reading. 2 is a run that could not take a reading: no install, a usage error, an empty scope, or a
- * file whose translation outlived `--timeout` or could not start -- those are named and counted, and
- * a run that lost files is refused rather than reported as if it had compiled them.
+ * reading. 2 is a run that could not take a reading: no install, a usage error, an empty scope, a
+ * split whose three buckets do not add up to `capture_ports`, or a file whose translation outlived
+ * `--timeout` or could not start -- those are named and counted, and a run that lost files or a
+ * reading that does not close is refused rather than reported as if it were whole.
  */
 
 import fs from 'node:fs'
@@ -119,6 +170,13 @@ const HANDOVER = ['docs', 'handover']
 
 /** The one field of the document this script reads its shape from; anything else is refused. */
 const FORMAT = 'camel.gir'
+
+/**
+ * The prefix of the graphs the generator machine builds for itself: `__gen_step__`
+ * (`src/compile/gct/builder.cpp#Builder::visitGeneratorBody`, `stepName`). It is matched on a
+ * graph's `name`, never on a port's, and the header says why the graph is the reliable marker.
+ */
+const GENERATOR_GRAPH = '__gen_'
 
 function usage(message) {
     if (message) console.error(`[${NAME}] ${message}`)
@@ -240,14 +298,41 @@ function markdownBlockCount() {
     return blocks
 }
 
+/**
+ * Which kind of graph a capture port lives in: the generator machine's, the program's, or one the
+ * document does not let this script attribute. The two markers are the ones the header states: the
+ * graph names itself `__gen_*`, or its body calls one of those (the stream value the machine makes).
+ */
+function machineBuiltGraph(graph, nameOf) {
+    if (typeof graph.name !== 'string') return 'unknown'
+    if (graph.name.startsWith(GENERATOR_GRAPH)) return 'generator'
+    for (const node of graph.nodes) {
+        if (typeof node.callee !== 'string') continue
+        const callee = nameOf.get(node.callee)
+        if (typeof callee === 'string' && callee.startsWith(GENERATOR_GRAPH)) return 'generator'
+    }
+    return 'closure'
+}
+
 /** The parts of one file's GIR document this census reads, or a refusal naming what was missing. */
 function census(document) {
     if (!document || document.format !== FORMAT || !Array.isArray(document.graphs)) {
         return { refused: `not a ${FORMAT} document` }
     }
+    // A graph names the graphs it calls by id, so the name is resolved over the whole document
+    // before any graph is classified: a body may call a graph printed after it.
+    const nameOf = new Map()
+    for (const graph of document.graphs) {
+        if (typeof graph.id === 'string' && typeof graph.name === 'string') {
+            nameOf.set(graph.id, graph.name)
+        }
+    }
     let varNew = 0
     let varNewEmpty = 0
     let capturePorts = 0
+    let capturePortsGenerator = 0
+    let capturePortsClosure = 0
+    let capturePortsUnknown = 0
     let capturePortsValue = 0
     let capturePortsUntyped = 0
     let cellTypedNodes = 0
@@ -272,7 +357,43 @@ function census(document) {
             else capturePortsValue += 1
         }
     }
-    return { varNew, varNewEmpty, capturePorts, capturePortsValue, capturePortsUntyped, cellTypedNodes }
+    // The split is counted in a second walk over the same tables, not accumulated inside the walk
+    // above: `capture_ports` is the historical number and stays computed the way it always was, and
+    // the two walks disagreeing is what the sum check at the end of the run is able to see. A split
+    // accumulated in the same `+= 1` as the total could never fail to add up.
+    for (const graph of document.graphs) {
+        const captures = graph.capturePorts
+        if (captures.length === 0) continue
+        const owner = machineBuiltGraph(graph, nameOf)
+        const byId = new Map(graph.nodes.map((node) => [node.id, node]))
+        for (const id of captures) {
+            const port = byId.get(id)
+            if (!port || typeof port.outputType !== 'string' || !port.outputType.startsWith('var ')) {
+                continue
+            }
+            const portName =
+                port.parameter && typeof port.parameter.name === 'string' ? port.parameter.name : ''
+            // Only the by-reference ports are split, and each one is claimed by a named bucket. A
+            // port the machine named but a graph neither marker attributes is a disagreement
+            // between the two facts, so it is counted out loud instead of being parked in the class
+            // that would look smaller.
+            if (owner === 'generator') capturePortsGenerator += 1
+            else if (owner === 'closure' && !portName.startsWith(GENERATOR_GRAPH)) {
+                capturePortsClosure += 1
+            } else capturePortsUnknown += 1
+        }
+    }
+    return {
+        varNew,
+        varNewEmpty,
+        capturePorts,
+        capturePortsGenerator,
+        capturePortsClosure,
+        capturePortsUnknown,
+        capturePortsValue,
+        capturePortsUntyped,
+        cellTypedNodes,
+    }
 }
 
 /** One translation: `camel <file> std::jgir`, with the install this run measures. */
@@ -360,6 +481,9 @@ const totals = {
     varNew: 0,
     varNewEmpty: 0,
     capturePorts: 0,
+    capturePortsGenerator: 0,
+    capturePortsClosure: 0,
+    capturePortsUnknown: 0,
     capturePortsValue: 0,
     capturePortsUntyped: 0,
     cellTypedNodes: 0,
@@ -385,6 +509,9 @@ for (let index = 0; index < sampled.length; index++) {
     totals.varNew += reading.varNew
     totals.varNewEmpty += reading.varNewEmpty
     totals.capturePorts += reading.capturePorts
+    totals.capturePortsGenerator += reading.capturePortsGenerator
+    totals.capturePortsClosure += reading.capturePortsClosure
+    totals.capturePortsUnknown += reading.capturePortsUnknown
     totals.capturePortsValue += reading.capturePortsValue
     totals.capturePortsUntyped += reading.capturePortsUntyped
     totals.cellTypedNodes += reading.cellTypedNodes
@@ -419,9 +546,23 @@ console.log(
         `cell_typed_nodes=${totals.cellTypedNodes}`,
 )
 console.log(
-    `[${NAME}] capture_ports=${totals.capturePorts} capture_ports_value=${totals.capturePortsValue} ` +
+    `[${NAME}] capture_ports=${totals.capturePorts} ` +
+        `capture_ports_generator=${totals.capturePortsGenerator} ` +
+        `capture_ports_closure=${totals.capturePortsClosure} ` +
+        `capture_ports_unknown=${totals.capturePortsUnknown} ` +
+        `capture_ports_value=${totals.capturePortsValue} ` +
         `capture_ports_total=${totals.capturePorts + totals.capturePortsValue + totals.capturePortsUntyped} ` +
         `capture_ports_untyped=${totals.capturePortsUntyped}`,
+)
+// The split is a reading only if it adds up: the three buckets are the whole of `capture_ports`,
+// so a run where they do not is refused rather than printed (a number whose parts do not close is
+// the kind of reading this script exists to stop).
+const splitSum =
+    totals.capturePortsGenerator + totals.capturePortsClosure + totals.capturePortsUnknown
+console.log(
+    `[${NAME}] capture_ports_split ` +
+        `${totals.capturePortsGenerator} + ${totals.capturePortsClosure} + ${totals.capturePortsUnknown} ` +
+        `= ${splitSum} ${splitSum === totals.capturePorts ? '==' : '!='} ${totals.capturePorts} capture_ports`,
 )
 console.log(`[${NAME}] list_sha=${listSha}`)
 if (limit > 0) console.log(`[${NAME}] list_sha_all=${listShaListed}`)
@@ -440,6 +581,9 @@ if (detailed) {
     for (const entry of perFile) {
         console.log(
             `[${NAME}] file ${entry.file}: var_new=${entry.varNew} capture_ports=${entry.capturePorts} ` +
+                `capture_ports_generator=${entry.capturePortsGenerator} ` +
+                `capture_ports_closure=${entry.capturePortsClosure} ` +
+                `capture_ports_unknown=${entry.capturePortsUnknown} ` +
                 `capture_ports_value=${entry.capturePortsValue} ` +
                 `capture_ports_untyped=${entry.capturePortsUntyped} cell_typed_nodes=${entry.cellTypedNodes}`,
         )
@@ -456,11 +600,26 @@ if (notCounted.length > 0) {
     if (notCounted.length > 6) console.log(`[${NAME}]   ... and ${notCounted.length - 6} more`)
 }
 // The line the gate reduces to its count (`findings` in internal/tools/camel-remote.ps1). Its first
-// number is `capture_ports`: the reading the author's acceptance is stated in.
+// number is `capture_ports`: the reading the author's acceptance is stated in, kept at the same
+// place so a historical reading and this one line up. The split the author asked to see beside it
+// is in the parentheses: the generator's own state, and the program's closures -- the second is the
+// number the target 0 is about.
 console.log(
-    `${NAME}: ${totals.capturePorts} reference capture port(s), ${totals.varNew} :var/new node(s), ` +
-        `over ${outcomes.ok} of ${sampled.length} file(s) of the scope`,
+    `${NAME}: ${totals.capturePorts} reference capture port(s) ` +
+        `(generator ${totals.capturePortsGenerator}, closure ${totals.capturePortsClosure}, ` +
+        `unknown ${totals.capturePortsUnknown}), ` +
+        `${totals.varNew} :var/new node(s), over ${outcomes.ok} of ${sampled.length} file(s) of the scope`,
 )
+if (splitSum !== totals.capturePorts) {
+    console.error(
+        `${NAME}: the split does not close: generator ${totals.capturePortsGenerator} + closure ` +
+            `${totals.capturePortsClosure} + unknown ${totals.capturePortsUnknown} = ${splitSum}, ` +
+            `not ${totals.capturePorts} reference capture port(s). A port that neither the ` +
+            'generator marker nor the closure class claims is a defect of this reading, so it is ' +
+            'refused instead of reported.',
+    )
+    process.exit(2)
+}
 if (outcomes.crashed + outcomes.timeout + outcomes.failed > 0) {
     console.error(
         `${NAME}: ${outcomes.crashed + outcomes.timeout + outcomes.failed} file(s) did not give a ` +
@@ -468,10 +627,15 @@ if (outcomes.crashed + outcomes.timeout + outcomes.failed > 0) {
     )
     process.exit(2)
 }
-if (enforce && (totals.capturePorts > 0 || totals.varNew > 0)) {
+if (enforce && (totals.capturePortsClosure > 0 || totals.varNew > 0)) {
+    // `--enforce` is the mode this reading becomes once the work is done, so it asks the question
+    // the author's target asks: the program's closures, not the generator's own state (which stays
+    // until the generator stops keeping its state in cells).
     console.error(
-        `${NAME}: the closure-capture work is not done: ${totals.capturePorts} capture port(s) are ` +
-            `bound by reference and ${totals.varNew} :var/new node(s) remain (the author's target is 0/0)`,
+        `${NAME}: the closure-capture work is not done: ${totals.capturePortsClosure} capture ` +
+            `port(s) are bound by reference outside the generator machines ` +
+            `(generator ${totals.capturePortsGenerator} counted apart) and ${totals.varNew} ` +
+            `:var/new node(s) remain (the author's target is 0/0)`,
     )
     process.exit(1)
 }
