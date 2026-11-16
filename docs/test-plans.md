@@ -193,6 +193,32 @@ Immediately before `[SUMMARY]`, every run states the artifact its numbers belong
   `unknown` rather than an empty field. `out/latest/build-info.json` carries the build's own stamp for
   anyone who needs to know which tree produced the binary -- the two answer different questions.
 
+The line after `[SUMMARY]` says whether the run left anything in the tree it tested:
+
+```
+[TREE] clean: nothing appeared under the checkout during this run (git status --porcelain -u normal: 0 before, 0 after, 2392 directories watched)
+```
+
+- **The verdict is `git status --porcelain --untracked-files=normal` read twice**, once before the
+  first test and once after the last, and the failure is the difference: a path that appeared during
+  the run and is not ignored. Ignored is decided by `.gitignore`, not by this check, so
+  `test/results` and `tmp/test` -- the two trees a run owns -- need no exception, and there is no
+  list of paths that are allowed to be dirty.
+- **A path the run left behind fails the run.** It is not advice: a red gate whose only defect is a
+  file in the checkout is a red gate, because a tree the run made dirty is what makes the next
+  `[provenance]` read `(dirty: N files)` and stop naming a commit. `camel-remote.ps1` also carries
+  the untracked files to the host on every run, and `--changed` counts them as changed files.
+- **Each path is printed with the tests that were running when it appeared**, which is the only part
+  of the line a watcher supplies: a path the watcher did not see still fails (the attribution is a
+  diagnosis, never the verdict). `--update-golden` rewrites tracked files on purpose and prints
+  `[TREE] not judged: ...` rather than a green line; a `git status` that cannot be read is a failure,
+  not a clean tree.
+- **Paths already uncommitted when the run started are printed and are not this run's.** A lane that
+  edits and then runs `--changed` before committing would otherwise red every run it makes; the line
+  is printed anyway, because a file left by the run before this one has to be visible somewhere.
+- Where a test may write, and the fourteen files that made this line exist:
+  [Test Scratch](#test-scratch).
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
@@ -1791,6 +1817,28 @@ instances run at the same time without seeing each other's files. A case run out
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
 `get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
 `onnx::export out="${test_tmp}/..."` path.
+
+**A test's own program runs from the checkout root, and a program that starts other programs must
+give them a directory of their own.** That is the rule this section is about, stated twice because
+the two halves are what a defect of 2026-11-16 got wrong. `${test_tmp}` is a *repository-relative*
+path, so a program the runner starts anywhere but here resolves it one level too deep: measured with
+the child's cwd set to its scratch directory, `feat/modules` went from 3 failures to 98, and every
+one of the 95 new ones was `ENOENT .../tmp/test/run-<pid>/<plan>/<test>/<file>` -- the file had been
+written under `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
+So the runner keeps `cwd: REPO_ROOT` (`runOneTest`), and the second half carries the weight: one gate
+of the whole `feat` tree left fourteen files in the repository root -- twelve models from
+`test/cases/modules/onnx/ort_*.cml` (`export_model<out: 'affine.onnx'>`) and `子 目录/嵌套 文件.txt`
+and `数据 文件 🐫.txt` from `env_paths.cml`, which writes beside `get_cwd()` -- because
+`test/plans/feat/tools/plan_refs_sweep.plan.toml` starts one `camel` per case in the tree
+(`scripts/check-plan-refs.mjs`) and those 3,844 case programs were executed from the checkout root.
+That script now runs each case in a directory of its own under `CAMEL_TEST_TMPDIR`, removed with the
+case: what a case writes lands where the test's other output goes and goes with it. Any other harness
+that runs case programs owes the same.
+
+What a *user* sees is unchanged: `camel x.cml` with `onnx::export out=model.onnx` still writes to
+the directory the user ran it in. Nothing here changes how the exporter resolves a path, only where a
+test's programs are started. A `skip_unless` precondition also runs from the repository root -- it is
+a command a plan writes against the checkout, not a test's own program.
 
 ## Field Constraints And Style
 

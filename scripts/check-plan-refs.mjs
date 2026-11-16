@@ -22,6 +22,8 @@
 
 import { readdir } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -30,6 +32,21 @@ const REPO = path.dirname(HERE)
 const CASES = path.join(REPO, 'test', 'cases')
 const CONCURRENCY = Number(process.env.PLAN_REFS_JOBS || 8)
 const TIMEOUT_MS = Number(process.env.PLAN_REFS_TIMEOUT_MS || 20000)
+// Where the cases run. A case is a program, and a program that writes a relative path writes it
+// where it is: `export_model<out: 'affine.onnx'>` writes the model to the process's cwd, and
+// `test/cases/modules/std/env/unicode/env_paths.cml` writes `数据 文件 🐫.txt` and `子 目录/嵌套 文件.txt`
+// beside its own `get_cwd()`. Started from the checkout root -- which is what a child of the runner
+// inherits -- those fourteen files landed in the repository root on every `feat` gate: the next
+// `[provenance]` line read `(dirty: 14 files)` instead of a commit, `camel-remote.ps1` carried them
+// to the host on every run, and `--changed` counted them as changed files.
+//
+// So each case gets a directory of its own, under the runner's per-test scratch (`CAMEL_TEST_TMPDIR`,
+// removed with the test) or under the system temporary directory when this script is run directly.
+// One directory per case and not one for the sweep: two cases of the 3,844 write the same file name,
+// and a leftover that one case can read changes what the next one does.
+const RUN_ROOT = process.env.CAMEL_TEST_TMPDIR
+    ? path.join(path.resolve(process.env.CAMEL_TEST_TMPDIR), 'plan-refs')
+    : fs.mkdtempSync(path.join(os.tmpdir(), 'camel-plan-refs-'))
 
 function camelBinary() {
     if (process.env.CAMEL_BIN) return process.env.CAMEL_BIN
@@ -55,9 +72,9 @@ async function casesUnder(directory) {
     return found
 }
 
-function run(binary, args) {
+function run(binary, args, cwd) {
     return new Promise((resolve) => {
-        const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+        const child = spawn(binary, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
         let stdout = ''
         let stderr = ''
         const timer = setTimeout(() => {
@@ -109,7 +126,13 @@ async function main() {
             const index = next++
             if (index >= files.length) return
             const file = files[index]
-            const result = await run(binary, [file, 'test::plan_refs'])
+            // A directory of its own, named by the case it held so a directory left behind after a
+            // crash says which case wrote it. It goes whether the case passed, failed or timed out:
+            // what a case writes is not this sweep's evidence.
+            const cwd = path.join(RUN_ROOT, path.relative(CASES, file).replace(/[\\/]/g, '__'))
+            fs.mkdirSync(cwd, { recursive: true })
+            const result = await run(binary, [file, 'test::plan_refs'], cwd)
+            fs.rmSync(cwd, { recursive: true, force: true })
             const { summaries, unbalanced } = tablesOf(result.stdout)
             if (summaries.length === 0) {
                 // No table: either the case does not compile without the arguments its plan gives
@@ -130,6 +153,9 @@ async function main() {
         }
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker))
+    // The sweep's own root goes too, unless the runner gave it one it owns (`CAMEL_TEST_TMPDIR`,
+    // removed with the test) -- a script run by hand leaves nothing behind either.
+    if (!process.env.CAMEL_TEST_TMPDIR) fs.rmSync(RUN_ROOT, { recursive: true, force: true })
 
     console.log(
         `PLAN_REFS_SWEEP cases=${files.length} read=${read} graphs=${graphs} ` +
