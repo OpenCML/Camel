@@ -26,7 +26,7 @@
  * `node scripts/stdlib-reference.mjs --write`.
  */
 
-import { is_float, is_same } from types
+import { is_float } from types
 import {
     add_cotangent,
     add_cotangent_c,
@@ -71,17 +71,52 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
     -x => (ct: T) => neg_cotangent(ct)
 }
 
-/// The transpose of `float(x)` where `x` is a double already: the conversion changes nothing, so the
-/// cotangent goes back unchanged.
+
+/// The transpose of `float(x)` where `x` is a float: a conversion between float widths is linear,
+/// so its transpose is the same conversion read backwards -- the cotangent of the result carried
+/// into the width of `x`. One law for every float width, the way `jvp_float_from_float`
+/// (`stdlib/rulesets/jvp.cml`) is one law for every float width. `float`'s own case is the cotangent
+/// itself, because `:op/dtod` converts a value to the width it already has and the pullback the core
+/// writes for it is the identity (`src/builtin/operators/derivative.cpp`:
+/// `registry.setRule(":op/dtod", identityVjp)`).
 ///
-/// This is the transpose half of `jvp_dtod` (`stdlib/rulesets/jvp.cml`), and it was missing while the
-/// forward half was there: a program that writes `float(...)` around a value that is a double already
-/// keeps the conversion as a node, so the pullback met `:op/dtod` where the forward walk met it and
-/// found a law, and stopped there with `skip=rule uri=:op/dtod reason=no-rule` -- on the first step of
-/// the walk, since the conversion is what the function returns. The family filed laws for the
-/// operators in the body and for none of the conversions in front of them.
-export rule dtod_t::<T>(x: T) when is_same::<T, float>() {
-    float(x) => (ct: T) => ct
+/// It was written for `float` alone (`dtod_t::<T>(x: T) when is_same::<T, float>()`), and a program
+/// that converts an `f32` to a double -- `float(sum(err * err))`, the loss in every
+/// `examples/case-study` program -- then met this family at `:op/ftod` and was refused:
+///
+///     the rule the index filed for `:op/ftod` was written for another shape: the rule takes
+///     (float), and the operator has (f32)
+///
+/// The index files a rule under the head of its left side and that head's operand count and reads
+/// no operand types (`modules/transforms/transpose_operator.cpp`), so a law written for one width
+/// is the law every width of `float(...)` is given, and a width it does not spell is refused by
+/// shape rather than served by a second law: a module holds one rule per operator and
+/// parameter-type list. Widening the law is therefore the repair; a second `float(x)` rule beside
+/// this one is refused where it is written.
+///
+/// Two type parameters, in the order the expansion names a law's ports -- the cotangent's element
+/// first, then the operands (`transpose.cpp#chooseTransposedRule`) -- because the cotangent of
+/// `float(x)` is a `float` whatever width `x` has, and one type parameter cannot be both. `T` is
+/// that cotangent and `S` the width of the operand, so the guard names both ports and not one of
+/// them: a rule's `when` says which shapes it serves, and a law filed under `float(x)` without a
+/// word about the operand's width would be handed a `float(n)` over an `int` and would have to
+/// invent a width for a value that has no tangent (`jvp_float_from_int` is the forward half's
+/// reading of that case).
+///
+/// The conversion back is a `match type` on `S` inside the body and not a helper call with `S` in
+/// its angle brackets: a generic call whose type argument is a rule's type parameter arrives at the
+/// width as a **name used as a value** (`'f32' is used as a value here, but it names an operator
+/// with 8 signatures`, measured 2026-11-15 on the first spelling of this law), and the match is the
+/// spelling `zero_tangent` already uses in `stdlib/rulesets/jvp.cml`.
+export rule dtod_t::<T, S>(x: S) when is_float::<S>() && is_float::<T>() {
+    float(x) => (ct: T) => {
+        return match type S {
+            case float => ct
+            case f32 => f32(ct)
+            case f16 => f16(ct)
+            case bf16 => bf16(ct)
+        }
+    }
 }
 
 // ---- the transpose rule of `stop_gradient` ----
@@ -415,37 +450,37 @@ export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 // `matmul_transpose_vector_rhs.cml`.
 
 /// The cotangent of the left operand, both operands matrices: `ct · bᵀ`, reduced to `a`'s extents.
-func ct_of_a(ct: float[...], a: float[?, ?], b: float[?, ?]): float[?, ?] {
-    return sum_to(matmul(ct, transpose(b)), shape(a)) as float[?, ?]
+func ct_of_a::<T>(ct: T[...], a: T[?, ?], b: T[?, ?]): T[?, ?] when is_float::<T>() {
+    return sum_to(matmul(ct, transpose(b)), shape(a)) as T[?, ?]
 }
 
 /// The cotangent of the left operand when it is a row: `ct · bᵀ` is already its own shape.
-func ct_of_a(ct: float[...], a: float[?], b: float[?, ?]): float[?] {
-    return sum_to(matmul(ct, transpose(b)), shape(a)) as float[?]
+func ct_of_a::<T>(ct: T[...], a: T[?], b: T[?, ?]): T[?] when is_float::<T>() {
+    return sum_to(matmul(ct, transpose(b)), shape(a)) as T[?]
 }
 
 /// The cotangent of the left operand when the right one is a column: the outer product `ct ⊗ b`,
 /// spread into `a`'s lanes from the two values that have the elements.
-func ct_of_a(ct: float[...], a: float[?, ?], b: float[?]): float[?, ?] {
+func ct_of_a::<T>(ct: T[...], a: T[?, ?], b: T[?]): T[?, ?] when is_float::<T>() {
     return broadcast_like(ct, a) * broadcast_like(b, a)
 }
 
 /// The cotangent of the right operand, both matrices: `aᵀ · ct`, reduced to `b`'s extents.
-func ct_of_b(ct: float[...], a: float[?, ?], b: float[?, ?]): float[?, ?] {
-    return sum_to(matmul(transpose(a), ct), shape(b)) as float[?, ?]
+func ct_of_b::<T>(ct: T[...], a: T[?, ?], b: T[?, ?]): T[?, ?] when is_float::<T>() {
+    return sum_to(matmul(transpose(a), ct), shape(b)) as T[?, ?]
 }
 
 /// The cotangent of the right operand when the left one is a row: the outer product `a ⊗ ct`, built
 /// in `bᵀ`'s lanes and turned round, because a row's cotangent is where the missing axis is.
-func ct_of_b(ct: float[...], a: float[?], b: float[?, ?]): float[?, ?] {
+func ct_of_b::<T>(ct: T[...], a: T[?], b: T[?, ?]): T[?, ?] when is_float::<T>() {
     return sum_to(
         transpose(broadcast_like(ct, transpose(b)) * broadcast_like(a, transpose(b))),
-        shape(b)) as float[?, ?]
+        shape(b)) as T[?, ?]
 }
 
 /// The cotangent of the right operand when it is a column: `aᵀ · ct` is already its own shape.
-func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
-    return sum_to(matmul(transpose(a), ct), shape(b)) as float[?]
+func ct_of_b::<T>(ct: T[...], a: T[?, ?], b: T[?]): T[?] when is_float::<T>() {
+    return sum_to(matmul(transpose(a), ct), shape(b)) as T[?]
 }
 
 // ---- the same six answers, with the extents handed over instead of computed ----
@@ -498,39 +533,46 @@ func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
 // `#jvp_erf` and `#jvp_erfc` too). A product whose forward rule writes the bare operator still meets
 // `mul_tensor_t` / `matmul_t`, and those compute the lists from the operands' values where the walk
 // holds them.
+//
+// Twelve helpers, one family: `T` is the element type of every array here, and the guard
+// `is_float::<T>()` is what the six above and the six below both say. They were written for
+// `float[...]` and `float[?, ?]` outright, so a product over `f32` arrays had no law to reach -- the
+// case study's tensors are `f32` -- and the walk reported it as a shape the law does not take. The
+// cotangent of a product has the element type of its operands (`Tangent<f32[...]>` is `f32[...]`),
+// so one type parameter per helper covers every float width and a second set of six is not owed.
 
 /// Both operands matrices: `ct · bᵀ`, reduced to `sa`.
-func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sa: int[]): float[?, ?] {
-    return sum_to(matmul(ct, transpose(b)), sa) as float[?, ?]
+func ct_of_a_stated::<T>(ct: T[...], a: T[?, ?], b: T[?, ?], sa: int[]): T[?, ?] when is_float::<T>() {
+    return sum_to(matmul(ct, transpose(b)), sa) as T[?, ?]
 }
 
 /// The left operand a row: `ct · bᵀ` is already its own shape, and `sa` is that shape.
-func ct_of_a_stated(ct: float[...], a: float[?], b: float[?, ?], sa: int[]): float[?] {
-    return sum_to(matmul(ct, transpose(b)), sa) as float[?]
+func ct_of_a_stated::<T>(ct: T[...], a: T[?], b: T[?, ?], sa: int[]): T[?] when is_float::<T>() {
+    return sum_to(matmul(ct, transpose(b)), sa) as T[?]
 }
 
 /// The right operand a column: the outer product `ct ⊗ b`, spread into `a`'s lanes (the carrier's
 /// extents are `sa`, so this is the spread into `sa`).
-func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?], sa: int[]): float[?, ?] {
+func ct_of_a_stated::<T>(ct: T[...], a: T[?, ?], b: T[?], sa: int[]): T[?, ?] when is_float::<T>() {
     return broadcast_like(ct, a) * broadcast_like(b, a)
 }
 
 /// Both operands matrices: `aᵀ · ct`, reduced to `sb`.
-func ct_of_b_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sb: int[]): float[?, ?] {
-    return sum_to(matmul(transpose(a), ct), sb) as float[?, ?]
+func ct_of_b_stated::<T>(ct: T[...], a: T[?, ?], b: T[?, ?], sb: int[]): T[?, ?] when is_float::<T>() {
+    return sum_to(matmul(transpose(a), ct), sb) as T[?, ?]
 }
 
 /// The left operand a row: the outer product `a ⊗ ct`, built in `bᵀ`'s lanes and turned round, then
 /// reduced to `sb`. `b` here is the carrier, so `transpose(b)`'s lanes are `b`'s own extents.
-func ct_of_b_stated(ct: float[...], a: float[?], b: float[?, ?], sb: int[]): float[?, ?] {
+func ct_of_b_stated::<T>(ct: T[...], a: T[?], b: T[?, ?], sb: int[]): T[?, ?] when is_float::<T>() {
     return sum_to(
         transpose(broadcast_like(ct, transpose(b)) * broadcast_like(a, transpose(b))),
-        sb) as float[?, ?]
+        sb) as T[?, ?]
 }
 
 /// The right operand a column: `aᵀ · ct` is already its own shape, and `sb` is that shape.
-func ct_of_b_stated(ct: float[...], a: float[?, ?], b: float[?], sb: int[]): float[?] {
-    return sum_to(matmul(transpose(a), ct), sb) as float[?]
+func ct_of_b_stated::<T>(ct: T[...], a: T[?, ?], b: T[?], sb: int[]): T[?] when is_float::<T>() {
+    return sum_to(matmul(transpose(a), ct), sb) as T[?]
 }
 
 // The head takes three type parameters because the walk hands a rule one type per value it can see:

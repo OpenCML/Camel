@@ -3267,13 +3267,17 @@ class Builder {
         const std::vector<bool> &privateInitial = {});
     /// The per-state half of markLoopStateInPlace: rewrites state `index` when each of its next
     /// values (`nexts`: one for a body that gives the state directly, one per arm for a body that
-    /// ends in an `if` or `match`) is `state->append<v>` or the state itself, and the body uses
-    /// that state's parameter nowhere else. `initialIsPrivate`: the first value is a projection
+    /// ends in an `if` or `match`) is `state->append<v>` or the state itself, the body uses that
+    /// state's parameter nowhere else, and nothing outside the round's state keeps the value an
+    /// append hands back (`stateValues`: the values the round hands on as the next state; a reader
+    /// that is not one of them, or that assembles one out of the value, is a second holder the
+    /// runtime's reference count cannot see). `initialIsPrivate`: the first value is a projection
     /// of a value the loop does not own (a part of a struct state); it is copied once before the
     /// loop either way.
     void markLoopStateInPlaceOne(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-        size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate = false);
+        size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate,
+        const std::vector<node_handle_t> &stateValues);
     /// Recognises a state that starts as an empty array and whose only use is appending one
     /// value per round, and gives the loop a collection slot for the appended values
     /// (design principles 3.10). The state itself stays: it is the value the program sees and

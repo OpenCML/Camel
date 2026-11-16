@@ -1,0 +1,42 @@
+id = "consistency.snapshot_state"
+order = 365
+tier = "fast"
+tags = ["feat", "consistency", "compile", "collections", "loops"]
+desc = "A loop's array state that the round hands to another value keeps the value it held: the append in place is refused for that state only, and the state nothing else holds still appends in place (design principles 10.5, 11.3; docs/design/arrays-memory/README.cn.md 4.3.1, the loop's collecting slot)."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "snapshot_state.four_back_ends"
+desc = "`seen = seen->append<acc>` in a `loop ... while` keeps the array `acc` held at the time, so the three entries are `[0]`, `[0, 1]` and `[0, 1, 2]`; a write into a slot (`seen[i] = acc`) keeps them the same way. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/snapshot_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[[0], [0, 1], [0, 1, 2]]\n[[0], [0, 1], [0, 1, 2]]\n"
+
+[[tests]]
+name = "snapshot_state.in_place_kept"
+desc = "The two states of `snapshots` are decided apart: the one whose value goes into `seen` keeps the copying `:struct/append_arr`, and the one nothing else holds still takes `:struct/append_arr_owned` with its one private copy -- in-place appending is refused where a second holder exists, not turned off."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/snapshot_state.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const gir = JSON.parse(input.stdout)
+const graph = gir.graphs.find((g) => g.name === 'snapshots')
+assert(graph, 'the snapshots graph is in the dump')
+const only = (label) => graph.nodes.filter((n) => n.label === label)
+const copying = only(':struct/append_arr')
+const inPlace = only(':struct/append_arr_owned')
+assert(copying.length === 1, `one copying append, got ${copying.length}`)
+assert(inPlace.length === 1, `one in-place append, got ${inPlace.length}`)
+assert(only(':struct/copy_arr').length === 1, 'the in-place state still starts from its private copy')
+}
+"""
