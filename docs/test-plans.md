@@ -1648,6 +1648,15 @@ The table above is copied into that script, so `--verify-runner` fails by name w
 gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
 catch, one level up.
 
+**It is also a plan**: `feat/tools/plan_fields.plan.toml` (`tools.plan_fields`, fast) runs the
+ratcheted tree reading as `plan_fields.tree` and `--verify-runner` as `plan_fields.table`. `-Check
+all` was the only door before that plan existed, and a door somebody has to remember to ask for is
+not a wall: the count moved from 331 to 333 inside one lane's merge and every gate stayed green.
+The plan is the door `npm run test` opens on its own. What it must not become is a check that
+rewrites its own baseline -- `--update-baseline` stays a separate command a lane runs and commits
+with the fix, so the ratchet can only move down, and a red means the tree moved and nobody
+accepted it.
+
 ## Performance Measurement
 
 The plans under `test/plans/perf/` -- one plan file per benchmark, every one of them carrying the
