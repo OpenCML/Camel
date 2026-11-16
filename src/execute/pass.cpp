@@ -1060,6 +1060,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kFoldFunctionTypeTestPass, FoldFunctionTypeTestPass),
+        TEST_PASS(kCamelCommitChecksTestPass, CamelCommitChecksTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
@@ -2703,15 +2704,16 @@ std::string effectContainmentText(
 ///
 /// The commit checks of docs/design/effects/analysis.cn.md 4.1 are asked when `commitChecks` is
 /// set: a pass that rewrites through the graph module alone cannot build an effectful node, so for
-/// it "no extra effect, no lost order" is a theorem and it does not pay for them (the ruling of
-/// 2026-11-15, GraphIRPass::rewritesThroughTheGraphModuleOnly). Effect containment is the item of
-/// 4.1 this commit lands; order completeness is the other one and is not here yet.
+/// it "no extra effect, no lost order" is a theorem (the ruling of 2026-11-15,
+/// GraphIRPass::rewritesThroughTheGraphModuleOnly). Whether that theorem is read as a theorem or
+/// checked is the caller's answer and it is a build's: `commitChecksAskedOf` below. Effect
+/// containment is the item of 4.1 this commit lands; order completeness is the other one and is not
+/// here yet.
 ///
 /// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
-    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true,
-    std::ostream *summary = nullptr) {
+    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true) {
     const ProgramEffects effectsAfter = collectEffects(program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
@@ -2764,10 +2766,15 @@ bool passBoundaryViolation(
         // call node and the accesses beyond its type, because those two are what a reader has to
         // look at: the type is the promise a caller relies on.
         //
-        // The check also says what it declined to judge, when a caller asks for it
-        // (CAMEL_EFFECT_CONTAINMENT_SUMMARY): a decline is the analysis saying it cannot name the
-        // resource, and a number that only ever grows is how that is told apart from a pass whose
-        // program was fine.
+        // The check also says what it declined to judge. That reading is a diagnostic line on the
+        // `Pass` scope and not an environment switch, because a count decides only how much is
+        // printed: the log threshold is a command-line flag (`-vv`, or `--log-include Pass` for the
+        // one scope), and the environment is not where a run's settings come from -- the same rule
+        // as pass settings being pass parameters (AGENTS.md). A count is how "I looked and it is
+        // fine" is told apart from "I refused to look": a decline is the analysis saying it cannot
+        // name the resource, and a number that only ever grows is how that shows up. A run that
+        // does not ask pays nothing for it, because the arguments are not formatted unless the line
+        // is emitted.
         camel::runtime::EffectContainmentReport report;
         const camel::runtime::GCGraph *refused = nullptr;
         std::optional<camel::runtime::EffectContainment> violation;
@@ -2781,20 +2788,19 @@ bool passBoundaryViolation(
                 violation = std::move(found);
             }
         }
-        if (summary != nullptr && std::getenv("CAMEL_EFFECT_CONTAINMENT_SUMMARY") != nullptr) {
-            *summary << std::format(
-                "effect containment: checked {} call site(s), declined {} reading(s) (any unknown "
-                "{} / any "
-                "object {} / any handle {} / variable cell {} / unresolved {} / other {})\n",
-                report.checked,
-                report.declined(),
-                report.anyUnknown,
-                report.anyObject,
-                report.anyHandle,
-                report.variableCell,
-                report.unresolved,
-                report.other);
-        }
+        CAMEL_LOG_INFO_S(
+            "Pass",
+            "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
+            "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
+            "other {})",
+            report.checked,
+            report.declined(),
+            report.anyUnknown,
+            report.anyObject,
+            report.anyHandle,
+            report.variableCell,
+            report.unresolved,
+            report.other);
         if (violation.has_value()) {
             ctx->rtmDiags()
                 ->of(RuntimeDiag::PassEffectContainment)
@@ -2895,6 +2901,38 @@ std::unique_ptr<GraphIRPass> constructPass(const context_ptr_t &ctx, const std::
 
 } // namespace
 
+namespace {
+
+/// Whether the commit checks of analysis 4.1 are asked of a pass that rewrites through the graph
+/// module alone. The pass answers a fact (`rewritesThroughTheGraphModuleOnly`, true for every pass
+/// written in Camel, src/execute/camel_pass.cpp); whether the two checks are asked of it is this
+/// question, and it is a build question: the ruling of 2026-11-15 stopped asking because such a
+/// pass cannot build the defect, and the ruling of 2026-11-16 keeps that saving only where it is
+/// paid for -- a shipped build does not ask, a debug build asks, and a test asks
+/// (`setCamelPassCommitChecksEnabled`). The theorem is why the shipped build may skip; reading it
+/// in the builds that have the suite is how anyone knows the theorem is still true.
+std::atomic<bool> camelPassCommitChecks =
+#ifndef NDEBUG
+    true;
+#else
+    false;
+#endif
+
+/// Whether the two commit checks of analysis 4.1 are asked of `pass`: every pass answers yes, except
+/// one that rewrites through the graph module alone -- and it answers as the build does, because the
+/// reason not to ask is a theorem about that pass, not a measurement of it (see the switch above).
+bool commitChecksAskedOf(const GraphIRPass &pass) {
+    return !pass.rewritesThroughTheGraphModuleOnly() || camelPassCommitChecksEnabled();
+}
+
+} // namespace
+
+bool camelPassCommitChecksEnabled() { return camelPassCommitChecks.load(std::memory_order_relaxed); }
+
+void setCamelPassCommitChecksEnabled(bool enabled) {
+    camelPassCommitChecks.store(enabled, std::memory_order_relaxed);
+}
+
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
     std::ostream &os, GraphIRPass *caller) {
@@ -2948,8 +2986,7 @@ PassRunResult applyRegisteredPass(
                               *produced,
                               effectsBefore,
                               false,
-                              !pass->rewritesThroughTheGraphModuleOnly(),
-                              &os)) {
+                              commitChecksAskedOf(*pass))) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -3464,8 +3501,7 @@ PassApplyResult applyPassesDetailed(
                     *program,
                     effectsBefore,
                     false,
-                    !pass->rewritesThroughTheGraphModuleOnly(),
-                    &os)) {
+                    commitChecksAskedOf(*pass))) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =
