@@ -883,21 +883,29 @@ class Builder {
     // The captures refused so (CaptureAfterRecursiveCall), each reported once.
     std::set<std::pair<DraftGraphBuilder *, node_handle_t>> lateCaptures_;
     // A direct call of a graph (a FUNC node): its captures are passed as With inputs after
-    // the declared `with` arguments, in the order of the callee's capture ports, by the link
-    // step (linkCaptureSites) once the module is built. `values` are the callee's captures as
-    // the caller saw them when the call was built; a capture the callee makes later (a
-    // recursive function that calls itself before it uses a value) is looked up then.
+    // the declared `with` arguments, in the order of the callee's capture ports. Each one is an
+    // edge of the call from the moment it is made (`addCaptureSite`): the value a call is handed
+    // is the call's `with` input, and not a node a table remembers, so the fold and the erasure
+    // rewrite it like any other edge and nothing here has to keep a node alive.
+    //
+    // What the table still says is a question about the call, not about a value: which call is
+    // still owed captures, and how many of its `with` inputs are captures. The captures a callee
+    // makes after the call was built -- a recursive function that calls itself before it uses a
+    // value -- are linked by the link step (`linkCaptureSites`) once the module is built, and the
+    // captures made while the call was built are moved behind the call's declared `with` arguments
+    // there, which its own arguments write after the callee is visited.
     struct CaptureSite {
         compile_graph_ptr_t caller;
         node_handle_t call;
         compile_graph_ptr_t callee;
-        std::vector<node_handle_t> values;
-        // The new version each capture has as of the call, when its last write produced one of
-        // its own valueVersionOf; null otherwise. A variable capture is always in `values` (a
-        // late one is refused), so the version a call hands on is the one recorded here.
-        std::vector<node_handle_t> versions;
-        // How many of the callee's captures are linked already.
+        // How many of the call's `with` inputs are its captures: the last that many, once the
+        // link step has placed them (`placed`).
         size_t linked = 0;
+        // How many `with` inputs the call had when the captures were appended, so the link step
+        // knows which ones to move behind the declared `with` arguments.
+        size_t firstCapture = 0;
+        // Whether the link step has placed those captures already.
+        bool placed = false;
     };
     std::vector<CaptureSite> captureSites_;
     /// The value of `origin` as `graph` sees it: `origin` when it is a node of `graph`;
@@ -949,15 +957,18 @@ class Builder {
     /// from). Written where a capture origin is written, so one table says what value a port is
     /// (`machinePortOrigin_`).
     void noteMachinePortOrigin(node_handle_t port, node_handle_t origin);
-    /// Registers the direct call `call` of `callee` in the current graph: its captures, as
-    /// the current graph sees them now, to be linked by linkCaptureSites.
+    /// Registers the direct call `call` of `callee` in the current graph: each capture the callee
+    /// has now is linked as one of the call's `with` inputs straight away (`captureValueOf`), so
+    /// the value a call is handed is an edge of the graph from the start. The site that is kept is
+    /// a question about the call -- which capture still has to be linked -- and names no value.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
-    /// Whether a capture site that is not linked yet names `value`: a site keeps the value it hands
-    /// a direct call in a table rather than as an edge (`addCaptureSite`, `linkCaptureSites`), so a
-    /// node it names must not be erased or folded away under it.
-    bool heldByCaptureSite(node_handle_t value) const;
-    /// The link step for captures: passes to every direct call the captures of its callee,
-    /// including the ones the callee made after the call was built, until nothing changes.
+    /// The value the call is handed for one capture of the callee, as the current graph sees it: a
+    /// capture of a cell is that cell's nearest write (`valueVersionOf`), and a capture of a value is
+    /// a read of the variable where the call stands, never the cell (design principles 3.5, 197).
+    node_handle_t captureValueOf(const CapturedValue &captured);
+    /// The link step for captures: puts the captures a call was given while it was built behind its
+    /// declared `with` arguments (the callee's with-ports in order), then passes every direct call
+    /// the captures its callee made after the call was built, until nothing changes.
     void linkCaptureSites();
     // The decorated form of each function declared with decorators, by its own graph.
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;

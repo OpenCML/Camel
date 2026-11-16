@@ -4512,13 +4512,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // that read takes is the version the variable's nearest write made, not the cell
                 // the first write made: the port carries that version as a data edge, and the
                 // control input the writer used to stand in for it is gone with it
-                // (linkCaptureSites links a capture the same way; Builder::valueVersionOf says what
-                // a version is). The version is the cell the write stored into -- `:op/assn` gives
-                // that cell back as its own value -- so the callee still writes the variable's one
-                // cell, and the write the callee does is recorded where the call is built
-                // (recordWrite). The `var` position of an assignment or of a variable operator is
-                // the write itself rather than a read of the cell, so it keeps the cell
-                // (docs/design/effects/edges.cn.md 5.6).
+                // (a capture of a cell is linked the same way, Builder::captureValueOf;
+                // Builder::valueVersionOf says what a version is). The version is the cell the write
+                // stored into -- `:op/assn` gives that cell back as its own value -- so the callee
+                // still writes the variable's one cell, and the write the callee does is recorded
+                // where the call is built (recordWrite). The `var` position of an assignment or of a
+                // variable operator is the write itself rather than a read of the cell, so it keeps
+                // the cell (docs/design/effects/edges.cn.md 5.6).
                 if (named && targetOperator == nullptr) {
                     if (node_handle_t version = valueVersionOf(variable);
                         version != nullptr && inSameRegion(version, targetNode)) {
