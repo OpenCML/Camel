@@ -161,6 +161,8 @@ node_handle_t Builder::captureInto(
                                     : graph->name();
                 known.lastUse =
                     knownUse != closureUseOf_.end() ? knownUse->second.lastUse : kNoSourceOffset;
+                known.stretchToEnd =
+                    knownUse != closureUseOf_.end() && knownUse->second.stretchToEnd;
             }
         }
     }
@@ -370,8 +372,11 @@ void Builder::requireCapturedNameWritable(
     }
     // The rule runs to the closure's last use and not one byte further: a name assigned after the
     // closure is done with is a name nothing holds any more, and the design keeps that legal. Where
-    // the end of the stretch is not known the report stays off -- see `CapturedVar::lastUse`.
-    if (known.lastUse == kNoSourceOffset || writtenAt >= known.lastUse) {
+    // the end of the stretch is not known the report stays off -- see `CapturedVar::lastUse`. The one
+    // end design principles 3.5 (198) names without an offset is a closure the program put into
+    // another value: it runs to the rest of the scope, so a write anywhere after the making is
+    // inside it (`CapturedVar::stretchToEnd`).
+    if (!known.stretchToEnd && (known.lastUse == kNoSourceOffset || writtenAt >= known.lastUse)) {
         return;
     }
     const std::string shown = known.closure;

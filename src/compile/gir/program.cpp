@@ -964,7 +964,18 @@ void Builder::scanClosureLastUses() {
             }
         }
         if (binding.at != kNoSourceOffset && lastUse > binding.at) {
-            closureUseOf_[binding.closure] = {lastUse, binding.name};
+            closureUseOf_[binding.closure] = {lastUse, false, binding.name};
+        } else if (binding.at != kNoSourceOffset) {
+            // The block never names the closure again after the binding. Two shapes reach here and
+            // the graph does not tell them apart: a closure the program put into another value (a
+            // tuple, a struct, an array, a `Ref`, a return) -- whose construction may have dropped
+            // the value from the datum it built, so no reference to the closure is left to walk --
+            // and one the program never used at all. Design principles 3.5 (198) gives the first
+            // shape an end: "the closure's value put into another value runs to the rest of the
+            // scope". A stretch cut that far covers every write after the making, which is what the
+            // report reads; the shape the design keeps legal, a name assigned after the closure is
+            // done with, still shows as a use after the write and keeps its own offset above.
+            closureUseOf_[binding.closure] = {binding.at, true, binding.name};
         }
     }
 }
