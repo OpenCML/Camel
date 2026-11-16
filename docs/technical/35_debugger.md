@@ -479,9 +479,6 @@ the dispatch point the compiler kept the loop's program counter on the stack ins
 register (the inline code that had been there calls nothing). A register-preserving calling
 convention for the hook did not change that. Hence the second instance.
 
-The switch interpreter (`casevm.cpp`, for builds without computed goto) has no hooks: it does
-not compile at present (it includes a header that no longer exists), so no build uses it.
-
 Cost without a debugger: `std::nvm`, one load of a pointer per node (as before: the node hook
 it replaces was one atomic load) and one per call; `std::fvm`, one load of a pointer per
 nested activation (a call of a function value, an element call of a higher-order operator;

@@ -60,8 +60,6 @@ add_platform_option(
     "JIT_TARGET_X64=0"
 )
 
-add_bool_option(ENABLE_FASTVM_COMPUTED_GOTO "Use computed goto in interpreter" ON)
-
 # ========== Python embedding modules (python.cmo / pyplot.cmo / py_bridge*) ==========
 # Defined in cmake/options.json; CAMEL_SKIP_PYTHON=1 forces them off during configuration (higher priority than cache).
 option(

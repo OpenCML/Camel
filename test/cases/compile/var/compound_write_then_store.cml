@@ -1,0 +1,16 @@
+/**
+ * A compound assignment's dropped value and a plain store's dropped value, side by side in one
+ * scope. `x += 1` reads the name it writes -- it is `x = x + 1` -- so the report of a dropped
+ * value has never stood on it, and it does not stand on it here: the guard that keeps the report
+ * off the rebuilt link is on the link, not on the name. The plain `x = 5` after it stores a value
+ * nobody reads, and that is the one report this program has. `x = 5` reporting while `x += 1` does
+ * not, in the same body, is what says the guard is scoped to the statement it was built for.
+ */
+
+func main(): int {
+    var x = 0;
+    let y = x;
+    x += 1;
+    x = 5;
+    return println(y)
+}

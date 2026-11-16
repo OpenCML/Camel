@@ -1107,6 +1107,70 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
+    /// A `var` whose declaration is built as a value and not as a cell
+    /// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1): the name is
+    /// bound to the value in `nodeScope_`, an assignment rebinds it (`ssaAssignmentOf`), and no cell
+    /// is made, so nothing reads or writes one. One entry per declaration, in the scope that
+    /// declared it; the scope is
+    /// the region, so within it a name has one declaration and the entry *is* that declaration. The
+    /// value in the entry is the name's current one: a read takes the map, and a write replaces it.
+    struct SsaValue {
+        node_handle_t value = nullptr;
+        /// The type the cell would have held (`:var/new`'s value type, taken from the
+        /// initializer): every later write enters it, as a store into that cell did.
+        Type *type = nullptr;
+        /// The declaration the entry belongs to, which is what the scan below answers about.
+        const GCT::Node *decl = nullptr;
+    };
+    std::map<node_scope_ptr_t, std::unordered_map<std::string, SsaValue>> ssaValues_;
+    /// The entries whose declaration was found and made SSA, for the dropped-value report
+    /// (`reportDroppedEffects`): the value a write made, and where the write is written.
+    std::unordered_map<node_handle_t, camel::source::origin_id_t> ssaWrites_;
+    /// The body of the innermost region being built, innermost last: the function body, an arm's
+    /// body, a loop's body. A `var` declared in it may be SSA when the scan of that body says so.
+    std::vector<const GCT::Node *> regionBodies_;
+    /// The scan of each body: for every `var` declaration in it, whether the declaration is SSA.
+    std::map<const GCT::Node *, std::unordered_map<const GCT::Node *, bool>> ssaScan_;
+    /// Set while the link a compound assignment rebuilds (`a = a op b`) is being written, so that
+    /// the write it performs is not reported as a value nobody reads.
+    bool inCompoundAssignment_ = false;
+    /// Set while a branch's arms are being built. `rebindSsa` changes the binding where it stands,
+    /// so the value a name had before the branch has to be taken as the first arm writes it: by the
+    /// time the join is built the binding holds the last arm's value. Without it the join carries
+    /// the wrong value into the arm that wrote nothing, which is a wrong program, not a red test.
+    bool gatheringBranchValues_ = false;
+    std::unordered_map<std::string, node_handle_t> branchBeforeValues_;
+    /// The declarations that decide eligibility, once, at the declaration: a `var` is SSA exactly
+    /// when every read and every write of its name lies in the region that declared it (no join,
+    /// no loop head, no arm), no path of it is written, and the name is never handed to a `var`
+    /// parameter, which writes a caller's cell back. Decided by one walk of the body, before any of
+    /// it is built, so the decision does not depend on how the body is built.
+    std::unordered_map<const GCT::Node *, bool> scanBodyForSsa(const GCT::Node *body);
+    bool ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name);
+    /// Whether an argument at `index` of `call` stands at a `var` parameter, which writes the
+    /// argument back: the callee's signature says, so the callee has to be a program function (a
+    /// built-in operator's parameters are never `var`, and a callee this scan cannot name is
+    /// answered as one that may write).
+    bool argumentMayWriteBack(const GCT::Node *call,
+                              size_t index,
+                              const std::vector<std::unordered_map<std::string, const GCT::Node *>>
+                                  &scopes) const;
+    /// The signature of every function of the program, by name, filled by `scanProgramWriters`.
+    std::unordered_map<std::string, std::vector<const FunctionType *>> functionSignatures_;
+    /// The SSA binding of `name` in force (the innermost scope that binds it), or null.
+    const SsaValue *ssaBindingOf(const std::string &name) const;
+    SsaValue *mutableSsaBindingOf(const std::string &name);
+    /// Whether `name` stands for a value built as SSA: such a name is not a constant the compiler
+    /// knows, the same way the cell it stands for was not (what it holds may be another value by
+    /// the time an unrolled loop or a static key runs).
+    bool nameIsSsa(const std::string &name) const;
+    /// Binds `name` to the value it now stands for: the binding the reads take, in the scope that
+    /// declared it (a write inside a nested statement list rebinds the declaration's entry).
+    void rebindSsa(const std::string &name, node_handle_t value);
+    /// `x = e` where `x` is SSA: the write is the new value, and nothing is stored. Null when the
+    /// link is not such an assignment.
+    node_handle_t ssaAssignmentOf(const GCT::node_ptr_t &gct);
+
     /// A `var` that does not escape becomes SSA: every read takes the value of the write that made
     /// it, and no read node is left reading the cell. A `var` that escapes -- captured by a
     /// closure, handed out as a `var` argument, or a `var` parameter of this graph -- is a resource
@@ -1277,6 +1341,10 @@ class Builder {
         };
         std::unordered_map<node_handle_t, Touched> touched;
         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
+        /// The `var` names the arm built as values, and the value each ended with, in the order
+        /// they were first written there: what the branch's JOIN carries (stage S2, one per join).
+        std::unordered_map<std::string, node_handle_t> ssaWrites;
+        std::vector<std::string> ssaWriteOrder;
         /// The ports of the region (a loop's condition or body), in order: the element, then the
         /// values of the state.
         std::vector<node_handle_t> ports;

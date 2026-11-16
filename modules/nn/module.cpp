@@ -64,6 +64,27 @@ bool NnModule::load() {
     for (const char *uri : {"nn:sgd", "nn:adam_state", "nn:adam"}) {
         camel::core::OperatorTable::instance().set(uri, {.pure = true, .elementwise = false});
     }
+    // And they reuse the storage of the tree they are handed. `sgd(params, g, lr)` answers a
+    // parameter tree shaped like `params`, and `adam(params, g, state, lr, ...)` a parameter tree
+    // and the next state: at every leaf the new value is a function of the old one, written over
+    // the old leaf when nothing else holds it, so a training loop's step asks the runtime for no
+    // new block per parameter (design principles 10.5; docs/design/arrays-memory/README.cn.md
+    // 4.3.1 names this case -- "a training loop's optimizer, written as a pure function, updates
+    // its parameters in place, with no donate_argnums hint"). The declaration is the one fact this
+    // module writes about it, and it is what the memory plan reads to count the call as an update:
+    // neither optimizer has an in-place form, because the value it updates is a *tree* walked leaf
+    // by leaf (modules/nn/optim.cpp#walk), not one array `OperatorTable::setInPlaceForm` could
+    // name. Both stay `pure`: what they change is the program's own value, and only where no one
+    // else can see the old one (Array::writableInPlace at the leaf).
+    //
+    // `adam`'s state is a tree of two moments that is walked the same way, so the same declaration
+    // covers it: the value handed in as `state` is the one the next state is written into.
+    // `adam_state` declares nothing: it makes a state out of the *shape* of the tree it is given
+    // and hands back nothing of it -- every moment is a new zero tensor (`zerosLeaf`) -- so there
+    // is no operand of it to reuse.
+    for (const char *uri : {"nn:sgd", "nn:adam"}) {
+        camel::core::OperatorTable::instance().declareReusesOperand(uri);
+    }
     // Writes a file.
     camel::core::OperatorTable::instance().declare("nn", {{"save_params", false}});
     // It writes files (docs/design/op-semantics 8).
