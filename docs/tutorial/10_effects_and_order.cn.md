@@ -154,6 +154,13 @@ camel docs/tutorial/examples/10_var_order.cml
 ```
 
 ```text
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+   --> docs/tutorial/examples/10_var_order.cml:21:7
+    |
+ 21 |     c = 3
+    |       ^
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+
 2
 2
 ```
@@ -164,9 +171,10 @@ camel docs/tutorial/examples/10_var_order.cml
 - `latest`：`let before = c` **读到的是它前面最近一次写的值**，也就是 `c = 2` 写下的那个版本；后面那句
   `c = 3` 在它之后，改不到它。所以 `before` 是 `2`，与最后的 `c` 无关。
 
-第三条规则在反面上：**写之后没有任何地方再读这个变量，写进去的值就没人用**。同一个格子、两种函数体，输出一样，
-报出来的东西不一样——给 `var` 赋值不是效应（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)、3.3），
-所以这里报的是"这个值没人用"，不是"这次赋值有副作用"
+最后那句 `c = 3` 写下的值没有任何地方读，所以它报了上面那条警告：**写之后没有任何地方再读这个变量，写进去的
+值就没人用**。这是下面那条规则的引子。同一个格子、两种函数体，输出一样，报的都是同一条——给 `var` 赋值不是
+效应（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)、3.3），所以这里报的是"这个值没人用"，不是
+"这次赋值有副作用"
 （[`examples/10_write_nobody_reads.cml`](examples/10_write_nobody_reads.cml)）：
 
 ```cml
@@ -202,9 +210,16 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 
 ```text
 warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
-    |
+  --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
+   |
  9 |     c = 5
+   |       ^
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:16:7
+    |
+ 16 |     c = 5
     |       ^
 help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
 
@@ -212,9 +227,10 @@ help: An assignment stores a value for whatever reads the variable afterwards, a
 1
 ```
 
-两个函数都打印 `1`：读到的是写之前的版本，写又没人读。区别在保证——同步块里的那次写**一定发生**（块里直接
-写着的语句随块运行），所以它不报；不在同步块里的那次写，值没人要，于是整条写不执行，编译器报
-`SemanticDiag::UnusedAssignedValue`。这句话说的是**值没人用**：删掉这次赋值，或者之后读一下这个变量，都由你决定。
+两个函数都打印 `1`：读到的是写之前的版本，写又没人读，所以两处都报 `SemanticDiag::UnusedAssignedValue`——
+一条诊断只看**值有没有人用**，与那次写跑不跑无关。区别在保证——同步块里的那次写**一定发生**（块里直接
+写着的语句随块运行），不在同步块里的那次写没有东西要它，于是整条写不执行。删掉这次赋值，或者之后读一下这个
+变量，都由你决定。
 
 没人要就不执行的那一档是**读**：一个外部读的结果没人要，它就不运行，编译器报 `SemanticDiag::EffectNotExecuted`。
 这条警告的文案**曾经**说这条语句"伸到了程序外面"，那只在"对外部资源的写是区域唯一欠的执行"的时候说得通：那时读与句柄写都得靠"之后有没有人要"来判。2026-11-16 的裁定把**句柄的写**与外部写并到同一条规则上——写由它所在的区域用到（设计原则 3.1、3.3）——所以"没人要"不再是"到程序外"的同义词，文案现在只说哪件事没发生、为什么不运行，不再替读者猜语句伸到哪里。
