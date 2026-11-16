@@ -58,7 +58,11 @@ namespace err = camel::core::error;
 
 ForeignResourceDescriptor refDescriptor() {
     ForeignResourceDescriptor descriptor;
-    descriptor.kind    = "state.ref";
+    descriptor.kind = "state.ref";
+    // This module owns the type, so this module is the one that says it: a count reclaims the box
+    // (rtdata/foreign.h, `ForeignResourceDescriptor::counted`). The kind above is the type's name
+    // for diagnostics, and nothing in the count compares it.
+    descriptor.counted = true;
     descriptor.deleter = [](void *resource) { delete static_cast<RefBox *>(resource); };
     // The content is not traced through the wrapper: a traced content is held by the box's own
     // root (ref.cpp), so the collector neither reads nor rewrites anything here.
@@ -72,7 +76,9 @@ RefBox &boxOf(ArgsView &norm, size_t index, const char *who) {
     auto *handle = norm.get<ForeignResourceObject *>(index);
     if (handle == nullptr || handle->disposed() || handle->kind() != "state.ref") {
         err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument, who, "the value is not a reference");
+            err::RuntimeDiag::InvalidArgument,
+            who,
+            "the value is not a reference");
     }
     return *static_cast<RefBox *>(handle->resource());
 }
@@ -85,7 +91,9 @@ slot_t refKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 /// `get(r)`: the content of the box `r` points at.
-slot_t getKernel(ArgsView &, ArgsView &norm, Context &) { return boxOf(norm, 0, "state.get").get(); }
+slot_t getKernel(ArgsView &, ArgsView &norm, Context &) {
+    return boxOf(norm, 0, "state.get").get();
+}
 
 /// `set(r, v)`: write `v` into the box, and answer `v`.
 slot_t setKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -97,19 +105,24 @@ slot_t setKernel(ArgsView &, ArgsView &norm, Context &) {
 /// `update(r, f)`: write `f` of the content into the box, and answer the new content. `f` is
 /// declared `pure`, so running it here touches no resource but the one being written.
 slot_t updateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    RefBox &box        = boxOf(norm, 0, "state.update");
-    auto *function     = norm.get<::Function *>(1);
+    RefBox &box    = boxOf(norm, 0, "state.update");
+    auto *function = norm.get<::Function *>(1);
     if (function == nullptr) {
         err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument, "state.update", "the update is not a function");
+            err::RuntimeDiag::InvalidArgument,
+            "state.update",
+            "the update is not a function");
     }
     // The call runs under the box's own root: nothing here can be collected while `f` runs, so the
     // value read out and the value written back are the same objects before and after it.
     mm::NoCollectionScope noCollection;
-    const slot_t current = box.get();
+    const slot_t current      = box.get();
     const slot_t arguments[1] = {current};
-    const slot_t next = camel::execute::invokeFunction(
-        ctx, function, std::span<const slot_t>(), std::span<const slot_t>(arguments, 1));
+    const slot_t next         = camel::execute::invokeFunction(
+        ctx,
+        function,
+        std::span<const slot_t>(),
+        std::span<const slot_t>(arguments, 1));
     box.set(next);
     return next;
 }
@@ -136,23 +149,21 @@ class StateModule final : public BuiltinModule {
         // is the core's type (camel/core/type/ref.h). The module declares it as its own, so
         // `uses state::Ref` names it and the compiler's rules about a reference are rules about
         // this type wherever it is written.
-        camel::core::type::registerNativeType(
-            "state", "Ref", camel::core::type::RefType::get());
+        camel::core::type::registerNativeType("state", "Ref", camel::core::type::RefType::get());
     }
 
     bool load() override {
         if (loaded_) {
             return true;
         }
-        context_->registerExecutorFactory(
-            "state", [ctx = context_]() { return std::make_shared<StateExecutor>(ctx); });
+        context_->registerExecutorFactory("state", [ctx = context_]() {
+            return std::make_shared<StateExecutor>(ctx);
+        });
         auto &table = OperatorTable::instance();
         // None of the four is pure: a reference is a resource, and reading or writing one is an
         // effect on it (design principles 3.3). `update` runs the function value it is handed, so
         // its traits say it calls graphs.
-        table.declare(
-            "state",
-            {{"ref", false}, {"get", false}, {"set", false}, {"update", false}});
+        table.declare("state", {{"ref", false}, {"get", false}, {"set", false}, {"update", false}});
         table.set("state:update", {.pure = false, .callsGraphs = true});
         // What each touches, in the operator contract (principle 10.5): the handle the operand
         // names. `ref` allocates one, and its result is fresh -- a new box is a new resource.
@@ -164,28 +175,30 @@ class StateModule final : public BuiltinModule {
             const std::string name = "state::Ref";
 
             ResourceSpec makes;
-            makes.allocates       = camel::core::sem::Resource{ResourceClass::Handle, "state::Ref"};
-            makes.result          = camel::core::sem::ResultAlias{};
-            makes.result.kind     = camel::core::sem::ResultAlias::Kind::Fresh;
+            makes.allocates   = camel::core::sem::Resource{ResourceClass::Handle, "state::Ref"};
+            makes.result      = camel::core::sem::ResultAlias{};
+            makes.result.kind = camel::core::sem::ResultAlias::Kind::Fresh;
 
             ResourceSpec reads;
             reads.accesses = {operandAccess(ResourceClass::Handle, 0, AccessMode::Read, name)};
             // What `get` answers is what the box holds, so it may be the object the reference
             // reaches: it is not a fresh value nothing else refers to.
             reads.result = camel::core::sem::ResultAlias{
-                .kind = camel::core::sem::ResultAlias::Kind::MayAlias, .operand = 0};
+                .kind    = camel::core::sem::ResultAlias::Kind::MayAlias,
+                .operand = 0};
 
             // `set` answers the value it was handed, and `update` answers whatever `f` made of the
             // content: the first is its own operand, the second nothing this can name.
             ResourceSpec writes;
-            writes.accesses = {operandAccess(
-                ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, name)};
+            writes.accesses = {
+                operandAccess(ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, name)};
             writes.result = camel::core::sem::ResultAlias{
-                .kind = camel::core::sem::ResultAlias::Kind::Same, .operand = 1};
+                .kind    = camel::core::sem::ResultAlias::Kind::Same,
+                .operand = 1};
 
             ResourceSpec updates = writes;
-            updates.result = camel::core::sem::ResultAlias{
-                .kind = camel::core::sem::ResultAlias::Kind::Unknown};
+            updates.result =
+                camel::core::sem::ResultAlias{.kind = camel::core::sem::ResultAlias::Kind::Unknown};
 
             table.declareResources(
                 "state",

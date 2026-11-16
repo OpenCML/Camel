@@ -1,0 +1,82 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include <ostream>
+
+namespace camel::source {
+class SourceContext;
+}
+
+namespace camel::runtime {
+
+class Program;
+
+/*
+ * `camel inspect --copies`: what the execution plan decided about every update node of the program,
+ * printed as a reading. An update node is an operator that "returns a new value" and could reuse
+ * the storage of the value it is given -- `v = v->append(x)`, a path assignment (`xs[i] = x`), a
+ * rebinding such as `xs = xs->sort` (camel/runtime/exec_plan.h, StorageReuse). The decision is made
+ * once, in the plan, and every back end follows it; this function prints it, and decides nothing.
+ *
+ * It exists to be the ruler the direct-SSA plan's S3b is read with (docs/handover/plans/
+ * 2026-11-16-direct-ssa-construction.cn.md): "the SSA value, at its last use, hands its storage to
+ * an update; the criterion is `camel inspect --copies` reporting in-place for the `v =
+ * v->append(x)` loop and for the case study's training step". The tool reports what the tree does
+ * today; it does not make an update in-place, and both answers are readings.
+ *
+ * "In place" is two answers, not one: `in-place` (the plan decided at compile time that the storage
+ * is reused) and `by-count` (the update asks the array's own count at run time, and reuses the
+ * storage when it is the only holder -- design principles 10.5; it is in place, only decided
+ * later). The criterion is "not `copied`": `in-place` and `by-count` both pass it. Read as "only
+ * `in-place`", the criterion would fail every site in today's tree, including the ones that already
+ * work in place, and it would fail them over a wording -- see
+ * docs/handover/questions/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md.
+ *
+ * One line per update node, in the plan's own order:
+ *
+ *   COPIES <file>:<line>:<column> <update> <verdict>
+ *
+ * `<update>` is the name the program writes: the plain form of the operator the node is the
+ * in-place form of (`append` for `:struct/append_arr`, `set_index` for `:op/set_index`, `sort_i`
+ * for `array:sort_i`), the same name for the copying form of that operator, or the loop-state
+ * append's own name (`append` for `:struct/append_arr_owned`). The three shapes are the three ways
+ * `v = v->append(x)` reaches the graph, and all three are reported: a call that copies is an update
+ * too, and the reading that says it allocates is the one it exists for. `<verdict>` is the plan's
+ * answer:
+ *
+ *   in-place  the plan proved the old value has no other holder and hands its storage to the
+ *             update (StorageReuse::Input);
+ *   by-count  the plan could not prove it -- the cell escapes, or the graph's own edges do not
+ *             order the other users of the cell after this update -- so the update asks the array
+ *             itself at run time: written in place when it is the only holder of its block,
+ *             copied otherwise (StorageReuse::ByArrayCount). An in-place form the plan decided
+ *             nothing about is read the same way, because that is what the back end runs
+ *             (ExecPlan::operatorUriFor names the in-place form, which asks the array); so is the
+ *             loop-state append (`:struct/append_arr_owned`), which has no cell to read a decision
+ *             from and asks Array::writableInPlace by construction;
+ *   copied    the plan proved the old value has a holder the update must leave alone
+ *             (StorageReuse::Copy), or the node is the copying form of an operator that has an
+ *             in-place form -- `v = v->append(x)` on an array the compiler did not hand over, where
+ *             the operator allocates the result by construction. This is the performance cliff the
+ *             tool is named for.
+ *
+ * A source position the node does not have ({file, line, column} absent, which a synthetic node
+ * has) falls back to `<graph>@<node>`, so a row is never nameless: an update is either `copied` or
+ * in-place, and never silent.
+ *
+ * Then one line per graph, which is the count, and what makes a zero visible instead of silence:
+ *
+ *   COPIES <graph> updates <n> in-place <n> by-count <n> copied <n>
+ *
+ * A graph with no update node prints that line with `updates 0`: "this program has no update to
+ * reuse storage for" is a reading, and a missing line would not be. A graph there is nothing to
+ * read at all for -- no body, or several writings per value, so no execution plan -- prints
+ * `COPIES <graph> no-plan` rather than being passed over.
+ */
+void dumpStorageReuse(
+    const Program &program, std::ostream &os,
+    const camel::source::SourceContext *sources = nullptr);
+
+} // namespace camel::runtime

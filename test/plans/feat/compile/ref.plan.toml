@@ -346,19 +346,19 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  // `--gc-check foreign` prints the plan's counted sites while the graph is compiled, so on a back
-  // end that compiles the program's lines are not at the head of stdout: they are found as lines
-  // of their own, and the dump is asserted to be there and to come first. std::nvm compiles
-  // nothing and starts with the program, so there the absence is asserted -- which also catches a
-  // dump that leaked onto a back end without a compiler. Both halves are needed: finding nothing
-  // has to be distinguishable from never having looked.
+  // `--gc-check foreign` asks for the plan's counted sites, and they are a diagnostic: the log's
+  // `RefSites` scope, off unless a threshold or `--log-include` asks for it, written to stderr with
+  // every other log line. So a program's stdout is the program's own on every back end -- std::nvm
+  // included, which compiles nothing and has no sites to print -- and that is what this asserts.
+  // `ref.counted_sites_are_a_diagnostic` is the entry that turns the channel on and reads the same
+  // dump, so the absence here is a channel and not a deletion.
   const lines = out.split('\n')
   const first = lines.indexOf('499500')
   assert(first >= 0 && lines.slice(first, first + 3).join('\n') === '499500\n20000\n41',
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
   const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
-  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
-    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  assert(sites < 0,
+    'the counted sites are a diagnostic now and not part of the program output: ' + said)
   const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -385,15 +385,15 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  // The counted sites are printed while the graph is compiled, before the program's own lines (see
-  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  // The counted sites are a diagnostic now (see `ref.counted_sites_are_a_diagnostic`): they are not
+  // in the program's output on any back end, which is what the assertion below reads.
   const lines = out.split('\n')
   const first = lines.indexOf('10 41')
   assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
   const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
-  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
-    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  assert(sites < 0,
+    'the counted sites are a diagnostic now and not part of the program output: ' + said)
   const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -419,15 +419,15 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  // The counted sites are printed while the graph is compiled, before the program's own lines (see
-  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  // The counted sites are a diagnostic now (see `ref.counted_sites_are_a_diagnostic`): they are not
+  // in the program's output on any back end, which is what the assertion below reads.
   const lines = out.split('\n')
   const first = lines.indexOf('1000 41')
   assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
   const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
-  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
-    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  assert(sites < 0,
+    'the counted sites are a diagnostic now and not part of the program output: ' + said)
   const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -442,8 +442,12 @@ verify_script = '''
 }
 '''
 
-# red by new item 5 (plan-side last-use analysis); remove when it lands, then tighten live <= 3 to an
-# equality. p≈0.3-0.5 at --jobs 4, ≈0.25 at --jobs 1. Do not rerun to close it.
+# Item 5 (the plan writes a CALL's and a FILL's rows where a back end runs them) makes the boxes
+# come back: the count reaches zero, `released` follows `created`, and the leak this comment was
+# written around is gone. The bound stays `live <= 3` and is not tightened to an equality here,
+# because the reading under these flags (`--gc-stress`, generational, where the collector also frees
+# what the count has not released) has not been taken again: a bound guessed from another run's
+# flags is not a reading. `live` is what the collector left, not what the count gave back.
 [[tests]]
 name = "ref.boxes_made_per_call_ten"
 desc = "`live` = 0 is not reached and not asserted: a call makes a box and drops it, ten times over, and 2 blocks are still counted at exit (3 on nvm), because the handle count does not follow the holders yet. What this entry asserts instead: `created` >= 11, `created` = `released` + `live`, `live` <= 3, `disposed` = `live`. Its pair `ref.boxes_made_per_call_thousand` is the same program over a range a hundred times longer and reads the same size, so the number of live blocks does not follow the number of calls whose boxes are over."
@@ -457,15 +461,15 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  // The counted sites are printed while the graph is compiled, before the program's own lines (see
-  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  // The counted sites are a diagnostic now (see `ref.counted_sites_are_a_diagnostic`): they are not
+  // in the program's output on any back end, which is what the assertion below reads.
   const lines = out.split('\n')
   const first = lines.indexOf('10 41')
   assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
   const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
-  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
-    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  assert(sites < 0,
+    'the counted sites are a diagnostic now and not part of the program output: ' + said)
   const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -492,15 +496,15 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  // The counted sites are printed while the graph is compiled, before the program's own lines (see
-  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  // The counted sites are a diagnostic now (see `ref.counted_sites_are_a_diagnostic`): they are not
+  // in the program's output on any back end, which is what the assertion below reads.
   const lines = out.split('\n')
   const first = lines.indexOf('1000 41')
   assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
   const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
-  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
-    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  assert(sites < 0,
+    'the counted sites are a diagnostic now and not part of the program output: ' + said)
   const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -825,5 +829,32 @@ verify_script = '''
   assert(out === want,
     'the default pipeline answers the same: want ' + JSON.stringify(want) +
     ' got ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+[[tests]]
+name = "ref.counted_sites_are_a_diagnostic"
+desc = "The plan's counted sites are a diagnostic, not a program's output. The five entries above assert they are absent from stdout on every back end; this entry is the half that says the absence is a channel and not a deletion -- the same case run with the log's `RefSites` scope asked for prints one `PLAN_REF_SITES` line per site, on stderr, in the diagnostic's own shape, and prints none of them on stdout. Without this entry `sites < 0` would also hold for a dump that was simply removed, which is why the two are read together."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
+# A back end that compiles: std::nvm runs the nodes and compiles nothing, so it has no sites to
+# print and the five entries above assert that absence instead.
+backends = ["fvm"]
+args = ["-vv", "--log-include", "RefSites", "--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const merged = input.normalized.output
+  const said = merged.replace(/\n/g, ' | ')
+  // The program's own output stays the program's: nothing of the compiler's dump is in it.
+  const program = input.normalized.stdout.split('\n')
+  const leaked = program.filter(l => l.includes('PLAN_REF_SITES '))
+  assert(leaked.length === 0, 'the counted sites are not part of the program output: ' + said)
+  // And the dump is not gone: it is a log line, in the scope that names it.
+  const logged = merged.split('\n').filter(l => l.includes('PLAN_REF_SITES ')).map(l => l.trim())
+  assert(logged.length > 0, 'the diagnostic is still printed, to the log: ' + said)
+  const shape = /^\[INFO\] <RefSites> PLAN_REF_SITES .+ at \d+ node \d+ \+\d+ -\d+ (produces|no-row)$/
+  assert(logged.every(l => shape.test(l)),
+    'every site is one line of the RefSites diagnostic, with the plan\'s counts: ' +
+    JSON.stringify(logged.slice(0, 3)))
 }
 '''
