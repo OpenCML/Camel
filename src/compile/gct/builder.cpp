@@ -6198,6 +6198,30 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         }
         return tupleOf(parts);
     };
+    // What one round hands to the next: the answer the pull has (or has not yet) and whether the
+    // round answered at all. Both travel as the loop's *state* -- one value the round produces --
+    // and not as cells the round writes. The difference is not cosmetic. The machine's loop tests
+    // its flag in a condition of its own, and a cell written inside the round reaches that
+    // condition as the value the cell had where the loop stands, which is the value before the
+    // first round: with a local cell there, the test is folded to `flag == 0` at build time
+    // (`src/compile/gir/builder_expr.cpp`, `collapseNonEscapingVariableReads`) and the round never
+    // stops. A state, by contrast, is the one road the loop's condition reads round by round.
+    // Measured: a step whose `pc`/`halt` are its own cells hangs every generator case on this tree
+    // (the flag is `0 == 0` in the graph); with the flag carried as the round's value the stream
+    // plan is back to the tree's own reading.
+    const auto roundState = [&](node_ptr_t answer, node_ptr_t answered) {
+        // The answer is the state's first part, so it is the answer type the pull hands out and not
+        // the pair an arm builds: `(elem, rest)?` and not `(elem, rest)`.
+        return tupleOf({declaredValue(answer, answerType, at), answered});
+    };
+    // The state's own type, so that the loop's first value states it instead of leaving a member
+    // unresolved (the answer's part stands for a `cast` node, which has no constant to read).
+    Type *const roundStateType = TupleType::create({answerType, intLiteral(0)->data()->type()});
+    const auto roundPart = [&](const node_ptr_t &state, size_t index) {
+        node_ptr_t part = tree_->makeAccs(index);
+        *part << state;
+        return part;
+    };
     // The arms: one per point of the body. Arm 0 is where a pull starts; the others are reached
     // through `pc`.
     std::vector<node_ptr_t> arms;
@@ -6215,11 +6239,11 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         mark(exec, at, "gct.generator.jump");
         return exec;
     };
-    // The pull is done, and what it hands out is `out` (the answer a `yield` wrote, or null at
-    // the end of the stream).
+    // The pull is done: the round hands the answer it built (or null at the end of the stream) on
+    // with the flag saying the round has answered, so the loop stops.
     const auto stopHere = [&](node_ptr_t &exec) {
         *exec << writeCell(haltName, intLiteral(1));
-        *exec << readCell(outName);
+        *exec << roundState(roundPart(readCell(outName), 0), intLiteral(1));
     };
 
     // Fills the arm `pc` with `stmts[from..]`; after them the body goes on at the arm `next`
@@ -6308,8 +6332,8 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                     // The value of the round is the answer of the pull: a `return` is written
                     // only in the step function's own body
                     // (docs/design/io-concurrency-streams/plan.cn.md, slice E), so the element
-                    // and the rest of the stream are the arm's value.
-                    *exec << pairValue(elem, streamValue(stateNow()));
+                    // and the rest of the stream are the arm's value, and the round answers.
+                    *exec << roundState(pairValue(elem, streamValue(stateNow())), intLiteral(1));
                     popScope();
                     return;
                 }
@@ -6904,9 +6928,17 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     }
     node_ptr_t loopNode = tree_->makeLoop(camel::core::LoopKind::While, {outName}, std::string());
     mark(loopNode, at, "gct.generator.loop");
-    *loopNode << declaredValue(tree_->makeData(Data::null()), answerType, at);
+    // The state the loop starts from: no answer yet, and the round has not answered.
+    *loopNode << declaredValue(roundState(tree_->makeData(Data::null()), intLiteral(0)),
+                               roundStateType,
+                               at);
     node_ptr_t condition = makeExec();
-    *condition << equalTo(haltName, 0);
+    // The round goes on while the state it was handed says no arm has answered. The flag is read
+    // from the state, which is the round's own value: reading it from a cell would test the value
+    // the cell had where the loop stands, round after round.
+    node_ptr_t answered = tree_->makeLink(2);
+    *answered << tree_->makeDRef("__eq__") << roundPart(readCell(outName), 1) << intLiteral(0);
+    *condition << answered;
     *loopNode << condition;
     node_ptr_t round = makeExec(synced);
     node_ptr_t chain = nullptr;
@@ -6931,7 +6963,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     }
     *round << chain;
     *loopNode << round;
-    *stepBody << loopNode;
+    // What the step answers: the state's first part, which the last round wrote -- the answer a
+    // `yield` built, or null where the stream ended.
+    *stepBody << roundPart(loopNode, 0);
     node_ptr_t stepFunc = tree_->makeFunc(stepName);
     mark(stepFunc, funcAst, "gct.generator.step");
     // The step takes the state as a normal parameter: a call's positional argument is matched
