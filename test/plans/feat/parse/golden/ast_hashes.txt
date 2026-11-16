@@ -1941,6 +1941,7 @@ af4075fd424ca648 ok test/cases/compile/transforms/jvp_rule_at_the_operand_type.c
 830ab7367110d6e9 ok test/cases/compile/transforms/jvp_structural_zero_at_the_half_widths.cml
 4ae622aaac3d19b1 ok test/cases/compile/transforms/jvp_structural_zero_at_the_wide_widths.cml
 1e9b3130caf8cede ok test/cases/compile/transforms/jvp_vjp_array_product_cross.cml
+20086c20ced1268a ok test/cases/compile/transforms/library_grad_carries_the_second_with_value.cml
 2c500d5f2cfdbd4b ok test/cases/compile/transforms/library_grad_is_the_composition.cml
 2be0b832541f1439 ok test/cases/compile/transforms/library_grad_of_a_with_weight.cml
 aa0ddbdbc7c7861a ok test/cases/compile/transforms/linear_gradient_both_legs.cml
@@ -3007,7 +3008,7 @@ c0a20f3657a9d2ef ok test/cases/modules/autodiff/second_order_array_append_init_b
 d07ea398e7f7079d ok test/cases/modules/autodiff/second_order_array_zeros.cml
 0c529401d63b4cf6 ok test/cases/modules/autodiff/second_order_nest.cml
 3738708d3ede3dea ok test/cases/modules/autodiff/second_order_refused_captured.cml
-fbf48d9dba081e45 ok test/cases/modules/autodiff/second_order_refused_vjp.cml
+b90ab20fbec02311 ok test/cases/modules/autodiff/second_order_refused_vjp.cml
 f2760c0b0e338c68 ok test/cases/modules/autodiff/slice_grad.cml
 e5e7e093fd6f1ee3 ok test/cases/modules/autodiff/slice_grad_negative_step.cml
 7a9581b8ebb34ed8 ok test/cases/modules/autodiff/slice_open_end.cml
