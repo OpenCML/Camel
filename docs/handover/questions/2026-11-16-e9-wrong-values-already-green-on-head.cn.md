@@ -195,14 +195,32 @@ this run   seeds 1..500  273 generator rejects  227 in the matrix  22,473 cells
 守卫把「进矩阵的程序数」也记进比较键里。**这两件都不在本车道这一轮的范围内**，而且第二件改的是
 `test/tools/*`。
 
+**7.4 入口自己的验证**
+
+- `-Check all` 仍然跑 **19** 项，并且两行分开报：
+
+  ```
+  checks: 19 run, 3 failed (391 s)
+  checks: 1 named-stage check(s) not run by -Check all: plan-debt (use -Check <name>)
+  checks: 1 named-only check(s) not run by -Check all: e9-full (use -Check <name>; each is a reading
+          somebody asks for, not a stage of the static layer)
+  ```
+
+  `N run` 仍是 19（新行没有挤进 static layer 的计数）。
+- 那 3 个红里 **`headers` 是本车道造成的**（新脚本少了版权行），补两行后转绿
+  （`every one of 1601 member files carries the two-line header`）。
+- 另两个（`camel-for-ai`、`gate-static`）**不是本车道的**：`camel-for-ai` 说
+  `docs/reference/camel-for-ai-diagnostics.md` 与生成器不一致（322 条），而本树与 `origin/develop`
+  在这个文件上**零差异**（它上一次被写是 `54be326ee`，今天另一条车道的合并），`gate-static` 挂在同一处。
+
 ## 若作者另有裁定
 
 - **若说「口径不变，仍要本车道在 HEAD 上再改一处 `src/passes/opt/`」**：请指一处**今天读数为错**的程序（仓库内或 E9 慢层里的种子都行）。没有具体的红，改遍只能靠猜，而且会把「没红也能交修复」变成可接受的做法。
-- **若说「三个数应当按完整跑（500 种子 × 99 格）报错值/拒绝/崩溃，而不是计划文件的 pass/fail」**：那需要 `test/tools/` 下的 E9 工具与生成器，本车道的禁止项里有 `test/tools/*`，请另派或解禁；今天的 132/132/0 是 `798d19ed7` 自己用的口径，我照它报，是为了能对上账。
+- **若说「三个数应当按完整跑报」**：这一轮已经补上了入口并跑出了 8 / 3 / 10（第 7 节），这三个数与那只棘轮的 10 / 17 / 3 为什么不能直接比也写在同一节；计划文件那 132/132/0 是 `798d19ed7` 自己用的口径，两个都留着，是因为它们回答的不是同一个问题。
 - **若说「pin 上其实不复现，你的读数有问题」**：上面第 4 条的四行可以原样重跑，`-Plan` 指一个只有这四格的计划文件，几秒钟出读数。
 
 ## 这一页不改变的事
 
 - **A16 程序的期望输出一个字节没动**（判据本身）。
 - `captures.cpp` / `decideCaptureByValue`（`lane-captedge`）、`test/cases/linear/byref/*` 与 `consistency/new_values/*`（`lane-rewrite`）、`test/tools/*` 一律没碰。
-- 工作树 `D:\Projects\Camel-wt\e9fix`，分支 `lane-e9fix`，基于 `origin/develop` `1ab776c4`。
+- 工作树 `D:\Projects\Camel-wt\e9fix`，分支 `lane-e9fix`，三步：`0f23e31fa`（本页）、`adb270709`（入口）、`c46affda7`（`headers` 要求的那两行）。
