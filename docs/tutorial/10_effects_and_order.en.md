@@ -176,6 +176,13 @@ camel docs/tutorial/examples/10_var_order.cml
 ```
 
 ```text
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+   --> docs/tutorial/examples/10_var_order.cml:21:7
+    |
+ 21 |     c = 3
+    |       ^
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+
 2
 2
 ```
@@ -187,10 +194,11 @@ Two rules, one `2` each:
 - `latest`: `let before = c` **reads the most recent write before it**, the version written by `c = 2`; the later
   `c = 3` cannot reach back to it. So `before` is `2`, whatever `c` becomes afterwards.
 
-The third rule is its other side: **a write that nothing reads afterwards leaves a value nobody uses**. The same cell,
-two function bodies, the same output, and what is reported is not the same thing -- assigning to a `var` is not an
-effect ([design principles 3.1](../design-principles.cn.md#31-按依赖求值), 3.3), so what is reported is "this value is
-never read", not "this assignment has side effects"
+That last `c = 3` stores a value nothing reads, which is what the warning above says: **a write that nothing reads
+afterwards leaves a value nobody uses**. It leads to the next rule. The same cell, two function bodies, the same output,
+and the same one report for both -- assigning to a `var` is not an effect
+([design principles 3.1](../design-principles.cn.md#31-按依赖求值), 3.3), so what is reported is "this value is never
+read", not "this assignment has side effects"
 ([`examples/10_write_nobody_reads.cml`](examples/10_write_nobody_reads.cml)):
 
 ```cml
@@ -226,9 +234,16 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 
 ```text
 warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
-    |
+  --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
+   |
  9 |     c = 5
+   |       ^
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:16:7
+    |
+ 16 |     c = 5
     |       ^
 help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
 
@@ -236,11 +251,11 @@ help: An assignment stores a value for whatever reads the variable afterwards, a
 1
 ```
 
-Both functions print `1`: the read takes the version from before the write, and the write is read by nobody. The
-difference is the guarantee -- the write inside the sync block **certainly happens** (the statements written directly in
-a block run with the block), so nothing is reported for it; for the write outside one, nobody wants its value, so the
-whole write does not run, and the compiler reports `SemanticDiag::UnusedAssignedValue`. That sentence is about the
-**value nobody uses**: remove the assignment, or read the variable after it -- either is a fix.
+Both functions print `1`: the read takes the version from before the write, the write is read by nobody, and both are
+reported as `SemanticDiag::UnusedAssignedValue` -- one diagnostic asks only whether anything reads the **value**, which
+has nothing to do with whether the write runs. The difference is the guarantee: the write inside the sync block
+**certainly happens** (the statements written directly in a block run with the block), while the write outside one has
+nothing that wants it and does not run at all. Remove the assignment, or read the variable after it -- either is a fix.
 
 What is really dropped for lack of a reader is a **read**: an external read whose result nobody uses does not
 run, and it is `SemanticDiag::EffectNotExecuted`. The sentence this warning prints **used to say** the statement
