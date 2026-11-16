@@ -2121,9 +2121,15 @@ a697f497a304c872 ok test/cases/compile/unused_values/fallible_sync.cml
 95ed7504bd6f8377 ok test/cases/compile/unused_values/pure_sync.cml
 f7d270690e555876 ok test/cases/compile/var/arm_let.cml
 39a8067622656c5a ok test/cases/compile/var/arm_var.cml
+acd621d26ef7b049 ok test/cases/compile/var/branch_carry_both_arms_else.cml
+daea60557d204d99 ok test/cases/compile/var/branch_carry_both_arms_then.cml
+88cad1f0a7773f76 ok test/cases/compile/var/branch_carry_taken_writes.cml
+99640bc6c0a1d6bc ok test/cases/compile/var/branch_carry_untaken_keeps_initialiser.cml
+4fcf2716ed4bc212 ok test/cases/compile/var/branch_carry_value_written_before.cml
 4895c5ee54d6cfb2 ok test/cases/compile/var/capture_value_port.cml
 faf7a471321f79c8 ok test/cases/compile/var/closure_read.cml
 7e95a32da81d0116 ok test/cases/compile/var/closure_read_let.cml
+a127e58e7d85a66a ok test/cases/compile/var/compound_write_then_store.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml
 36c00bf6af90970d ok test/cases/compile/var/loop_var.cml
 9a65db17c8e1acb7 ok test/cases/compile/var/loop_write_outside_read.cml
