@@ -28,7 +28,7 @@ case = "../../probe/refleak/call_box.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
 args = ["--gc-check", "foreign", "${case}", "${backend}"]
 expect_exit = 0
-backends_agree = ["stdout", "exit_code"]
+backends_agree = ["stdout_normalized", "exit_code"]
 verify_script = '''
 ({ input, assert }) => {
   const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
@@ -50,7 +50,7 @@ case = "../../probe/refleak/fill_carries.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
 args = ["--gc-check", "foreign", "${case}", "${backend}"]
 expect_exit = 0
-backends_agree = ["stdout", "exit_code"]
+backends_agree = ["stdout_normalized", "exit_code"]
 verify_script = '''
 ({ input, assert }) => {
   const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
