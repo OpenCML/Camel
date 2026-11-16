@@ -1,0 +1,8 @@
+import state
+
+func main(): int sync {
+    let r = state::ref(5)
+    let f = (): int => state::get(r)
+    println(f(), f())
+    return 0
+}

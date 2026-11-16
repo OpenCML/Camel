@@ -101,8 +101,11 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                    << row.value << " x" << row.count << "\n";
             }
             // The same schedule keyed the way an instruction is: what a back end emitted at this
-            // position would do, one count for the holds taken and one for the ones given back.
-            const uint32_t taken = i < plan.refCopiesAt.size() ? plan.refCopiesAt[i] : 0;
+            // position would do, one count for the holds taken and one for the ones given back. The
+            // holds are `refHoldsAt` and not `refCopiesAt` because the two differ in position for a
+            // value a CALL or a FILL makes: the node that makes it takes no hold itself, the first
+            // operator position that writes one of its rows does.
+            const uint32_t taken = i < plan.refHoldsAt.size() ? plan.refHoldsAt[i] : 0;
             const uint32_t given = i < plan.refGiveBackAt.size() ? plan.refGiveBackAt[i] : 0;
             if (taken != 0 || given != 0) {
                 os << "PLAN_REFS " << name << " at " << i << " count +" << taken << " -" << given

@@ -282,10 +282,12 @@ class ExecPlan {
     // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
     //
     // What this table does not decide: a value a callee keeps, or one a later graph reads, is a
-    // holder no edge of this graph shows. Counting those is the rest of the way to route 4 -- and
-    // until they are counted, the rows of a value whose holders cannot all be seen are simply not
-    // executed (`applyRefEntriesForNode` only runs the rows of a value an operator node makes), so
-    // a count no edge explains stays above zero instead of reaching it early.
+    // holder no edge of this graph shows. Counting those is the rest of the way to route 4. Until
+    // they are counted, the rows are laid out where the graph's own holds can see them, and the rows
+    // of a value a CALL or a FILL makes are written where an operator's site runs them
+    // (`planRefRows`): the leak of 2026-11-16 was that those rows were laid out at the CALL or the
+    // FILL, no back end ran them (`applyRefEntriesForNode` is reached at operator sites), and a
+    // count no edge explains stayed above zero while the plan read balanced.
     struct RefGiveBack {
         gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
         gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
@@ -297,8 +299,17 @@ class ExecPlan {
     /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
     /// constant, nor a node that only forwards).
     std::vector<uint8_t> refProducedAt;
-    /// By topo index: how many references the node's output takes beyond the producing one.
+    /// By topo index: how many references the value this node makes takes beyond the producing one.
+    /// A column about the value, so it stays at the value's own position; where the hold is *taken*
+    /// is `refHoldsAt`.
     std::vector<uint32_t> refCopiesAt;
+    /// By topo index: how many holds a back end takes when this node has run -- the holds keyed the
+    /// way an instruction is, as `refGiveBackAt` is for the references that come back, so that these
+    /// two columns are the schedule a back end reads. They agree with `refCopiesAt` in total and
+    /// differ in position for a value a CALL or a FILL makes: the node that makes such a value
+    /// writes no rows at its own position, so the holds are taken at the first operator position
+    /// that writes one of the value's rows (exec_plan.cpp, `planRefRows`).
+    std::vector<uint32_t> refHoldsAt;
     /// By topo index: how many references come back when this node has run. The same schedule as
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
     /// reads this, and the sum over the plan is `refGiveBacksTotal()`.

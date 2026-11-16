@@ -1052,6 +1052,28 @@ bool repeatsWithoutMakingIt(const ExecPlan &plan, size_t produced, size_t at) {
     return false;
 }
 
+/// The type code of the reference handle the runtime counts (`state::Ref`); defined below, beside the
+/// filter that reads it at run time, so that the plan and the count ask one question.
+camel::core::type::TypeCode countedHandleCode();
+
+/// Whether the count applies to the value the node makes: its type is the reference handle the
+/// runtime counts (`countedHandleCode`). The plan lays the rows of such a value out where a back end
+/// runs them; every other value's rows keep the position the last-use column gives them, because no
+/// back end can tell whether they ran -- `retainCountNow` and `giveBackCountNow` answer false for a
+/// value that is not the handle, so a row for any other value is inert wherever it is written.
+bool valueIsCounted(const GCGraph &graph, gc_node_ref_t value) noexcept {
+    const GCNode *node = graph.node(value);
+    if (node == nullptr) {
+        return false;
+    }
+    const camel::core::type::Type *type = node->dataType();
+    if (type == nullptr) {
+        return false;
+    }
+    const camel::core::type::TypeCode code = type->code();
+    return code == camel::core::type::TypeCode::Ref || code == countedHandleCode();
+}
+
 /// The references that come back and the holds they are balanced by, as rows of the plan. The rule
 /// is written out in the header; the placement of the rows is what the last-use column is for: a
 /// reference packed into another value comes back where that value's own last use is, so the column
@@ -1063,6 +1085,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     const auto &usesAt        = uses.usesAt;
     const auto &keptByProgram = uses.keptByProgram;
     plan.refCopiesAt.assign(count, 0);
+    plan.refHoldsAt.assign(count, 0);
     plan.refProducedAt.assign(count, 0);
     plan.refKeptAt.assign(count, 0);
     plan.refGiveBackOffsets.assign(count + 1, 0);
@@ -1072,6 +1095,11 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
 
     // The rows, in topo order so that the table is a function of the graph and nothing else.
     std::vector<std::vector<ExecPlan::RefGiveBack>> rows(count);
+    // The holds, one per reference taken beyond a value's own, by the position that takes it.
+    std::vector<std::vector<gc_node_ref_t>> holds(count);
+    // Which control region a position is in: a row moves inside the region its use is in, so that it
+    // runs exactly when that use does.
+    const camel::runtime::ControlRegions controls(graph);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t value = plan.topo[idx];
         if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
@@ -1095,36 +1123,101 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
             return std::pair<uint32_t, bool>{end, true};
         };
         const uint32_t uses = static_cast<uint32_t>(usesAt[value].size());
+        // Where a row of this value may be written. A row is due where its use lands, and a value the
+        // count applies to has its rows written where a back end runs them: the site of an operator,
+        // which is where all four back ends apply them (`applyRefEntriesForNode`). A CALL, a FILL and
+        // a node the plan only forwards write no rows at their own position, so a row due there moves
+        // to the next operator of the same control region -- it runs when the use does, and later is
+        // the safe direction, a reference given back after the use that ends it. A row with no such
+        // position behind it cannot run at all, and the value is then kept: the conservative
+        // direction, a leak, and never an unmatched hold.
+        //
+        // What this fixes (author review 2026-11-16, item 5): the rows of a value a CALL or a FILL
+        // makes were laid out and never run, so the box the call made kept its count for ever while
+        // the plan read balanced (`test::plan_refs` and the anchor's `found` both count it).
+        const bool counted = valueIsCounted(graph, value);
+        const auto rowRunsAt = [&](uint32_t at) {
+            const GCNode *node = graph.node(plan.topo[at]);
+            return node != nullptr && node->kind == GCNodeKind::Oper;
+        };
+        const auto rowPositionAt = [&](uint32_t due) -> std::optional<uint32_t> {
+            if (!counted) {
+                return due;
+            }
+            for (uint32_t at = due; at < count; ++at) {
+                if (!rowRunsAt(at) || repeatsWithoutMakingIt(plan, idx, at) ||
+                    controls.controlOf(plan.topo[at]) != controls.controlOf(plan.topo[due])) {
+                    continue;
+                }
+                return at;
+            }
+            return std::nullopt;
+        };
         // The uses whose reference cannot come back where it is written: the row would run inside a
         // loop's round for a value that loop does not make (`repeatsWithoutMakingIt`).
         uint32_t heldByRounds = 0;
-        for (const uint32_t usePosition : usesAt[value]) {
-            if (repeatsWithoutMakingIt(plan, idx, landingOf(usePosition).first)) {
-                ++heldByRounds;
-            }
-        }
-        const bool kept = keptByProgram[value] != 0 || heldByRounds != 0;
-        plan.refProducedAt[idx] = 1;
-        plan.refKeptAt[idx]     = kept ? 1 : 0;
-        // A kept value takes one hold per reference the plan still gives back, so the gives cannot
-        // take the count below the graph's own hold. A value no loop holds keeps its old answer.
-        plan.refCopiesAt[idx] =
-            kept ? uses - heldByRounds : (uses == 0 ? 0 : uses - 1);
+        // The rows written, the rows no position could take, and the holds taken beyond the value's
+        // own reference -- the three numbers `1 + copies == give-backs + kept` is read from.
+        uint32_t held   = 0;
+        uint32_t lost   = 0;
+        uint32_t copies = 0;
+        // The first position that writes one of this value's rows: where its holds are taken, before
+        // the give-back of that row and in the same control region.
+        uint32_t firstRowAt = static_cast<uint32_t>(count);
         for (const uint32_t usePosition : usesAt[value]) {
             const auto [landing, packed] = landingOf(usePosition);
             if (repeatsWithoutMakingIt(plan, idx, landing)) {
+                ++heldByRounds;
                 continue;
             }
-            rows[landing].push_back(
+            const auto at = rowPositionAt(landing);
+            if (!at) {
+                ++lost;
+                continue;
+            }
+            rows[*at].push_back(
                 ExecPlan::RefGiveBack{
                     .value  = value,
-                    .at     = plan.topo[landing],
+                    .at     = plan.topo[*at],
                     .count  = 1,
                     .packed = packed});
+            firstRowAt = std::min(firstRowAt, *at);
+            ++held;
         }
-        if (uses == 0 && !kept) {
+        if (uses == 0 && keptByProgram[value] == 0) {
             // Born with a reference nothing reads: it comes back as soon as the value exists.
-            rows[idx].push_back(ExecPlan::RefGiveBack{.value = value, .at = value, .count = 1});
+            const auto at = rowPositionAt(static_cast<uint32_t>(idx));
+            if (!at) {
+                ++lost;
+            } else {
+                rows[*at].push_back(
+                    ExecPlan::RefGiveBack{.value = value, .at = plan.topo[*at], .count = 1});
+                firstRowAt = std::min(firstRowAt, *at);
+                ++held;
+            }
+        }
+        const bool kept = keptByProgram[value] != 0 || heldByRounds != 0 || lost != 0;
+        plan.refProducedAt[idx] = 1;
+        plan.refKeptAt[idx]     = kept ? 1 : 0;
+        // The holds the plan takes beyond the value's own reference: one for each reference it gives
+        // back, less that own reference, and one more when the graph keeps it. With every row written
+        // this is the answer the column had before -- `uses - 1`, or `uses - heldByRounds` for a value
+        // a loop held -- and a row no position took lowers it by one, because the reference that row
+        // would have given back is then one the program still holds.
+        copies = held + (kept ? 1u : 0u) - 1u;
+        plan.refCopiesAt[idx] = copies;
+        if (counted && copies != 0 && !rowRunsAt(static_cast<uint32_t>(idx))) {
+            // The value's own position takes no hold, so they are taken at the first position that
+            // writes one of the value's rows: before that row's give-back, where the value is held.
+            for (uint32_t take = 0; take < copies; ++take) {
+                holds[firstRowAt].push_back(value);
+            }
+            plan.refHoldsAt[firstRowAt] += copies;
+        } else {
+            for (uint32_t take = 0; take < copies; ++take) {
+                holds[idx].push_back(value);
+            }
+            plan.refHoldsAt[idx] += copies;
         }
     }
     plan.refGiveBackAt.assign(count, 0);
@@ -1141,13 +1234,11 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     plan.refGiveBackOffsets[count] = static_cast<uint32_t>(plan.refGiveBacks.size());
 
     // The same schedule as the entries a back end reads, one row per thing to do. The holds are the
-    // producing node's own output taking the references beyond its own; the give-backs are the rows
-    // just laid out, in the same order at the same positions.
+    // references beyond a value's own that the position takes, the give-backs the rows just laid out,
+    // in the same order at the same positions.
     plan.refEntryOffsets[0] = 0;
     for (size_t idx = 0; idx < count; ++idx) {
-        const uint32_t holds      = plan.refCopiesAt[idx];
-        const gc_node_ref_t value = plan.topo[idx];
-        for (uint32_t held = 0; held < holds; ++held) {
+        for (const gc_node_ref_t value : holds[idx]) {
             plan.refEntries.push_back(
                 ExecPlan::RefEntry{
                     .kind  = ExecPlan::RefEntryKind::Retain,
@@ -1239,10 +1330,13 @@ camel::core::type::TypeCode countedHandleCode() {
     return code;
 }
 
-/// Whether the plan says a back end runs the rows of `value`: the value is one the plan counts, and
-/// the node that makes it is an operator. Both halves are the author's requirement: a value with no
-/// row (`refProducedAt` 0) has nothing to do, and a value whose producer is a CALL or a FILL is
-/// skipped *whole* -- see the note on `applyRefEntriesForNode`.
+/// Whether the plan says a back end runs the rows of `value`: the value is one the plan counts, so
+/// it has rows to run. The kind of node that makes it is not part of the answer: a CALL and a FILL
+/// make a value as an operator does, they only have no site of their own to write its rows at, and
+/// `planRefRows` writes those rows at the first operator position after the moment they are due. The
+/// question this must *not* ask is the producing node's kind -- that was the leak of 2026-11-16: the
+/// rows of a box a call made were in the table, the balance read them, `found` counted the box, and
+/// no back end ever applied them.
 bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept {
     if (plan.graph == nullptr || value >= plan.topoIndexByRef.size()) {
         return false;
@@ -1251,11 +1345,7 @@ bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept 
     if (position == ExecPlan::kNotInPlan || position >= plan.refProducedAt.size()) {
         return false;
     }
-    if (plan.refProducedAt[position] == 0) {
-        return false;
-    }
-    const GCNode *node = plan.graph->node(value);
-    return node != nullptr && node->kind == GCNodeKind::Oper;
+    return plan.refProducedAt[position] != 0;
 }
 
 /// The rows of one position of `topo`: the holds a value taken at that position and the references
@@ -1542,4 +1632,4 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
     noteCountedCreationForNode(graph, node, boxes);
 }
 
-} // namespace camel::runtime
+} // namespace camel::runtime

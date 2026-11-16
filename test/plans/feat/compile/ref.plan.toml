@@ -442,8 +442,12 @@ verify_script = '''
 }
 '''
 
-# red by new item 5 (plan-side last-use analysis); remove when it lands, then tighten live <= 3 to an
-# equality. p≈0.3-0.5 at --jobs 4, ≈0.25 at --jobs 1. Do not rerun to close it.
+# Item 5 (the plan writes a CALL's and a FILL's rows where a back end runs them) makes the boxes
+# come back: the count reaches zero, `released` follows `created`, and the leak this comment was
+# written around is gone. The bound stays `live <= 3` and is not tightened to an equality here,
+# because the reading under these flags (`--gc-stress`, generational, where the collector also frees
+# what the count has not released) has not been taken again: a bound guessed from another run's
+# flags is not a reading. `live` is what the collector left, not what the count gave back.
 [[tests]]
 name = "ref.boxes_made_per_call_ten"
 desc = "`live` = 0 is not reached and not asserted: a call makes a box and drops it, ten times over, and 2 blocks are still counted at exit (3 on nvm), because the handle count does not follow the holders yet. What this entry asserts instead: `created` >= 11, `created` = `released` + `live`, `live` <= 3, `disposed` = `live`. Its pair `ref.boxes_made_per_call_thousand` is the same program over a range a hundred times longer and reads the same size, so the number of live blocks does not follow the number of calls whose boxes are over."

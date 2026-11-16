@@ -678,8 +678,11 @@ static bytecode_vec_t compileRuntimeGraph(
         for (const auto &[pc, ref] : sites) {
             const size_t position =
                 ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
+            // The holds are the schedule efHoldsAt keeps and not the efCopiesAt column: the
+            // two agree in total and differ in position for a value a CALL or a FILL makes, whose
+            // harness takes the hold at the first operator position that writes one of its rows.
             const uint32_t taken =
-                position < plan.refCopiesAt.size() ? plan.refCopiesAt[position] : 0;
+                position < plan.refHoldsAt.size() ? plan.refHoldsAt[position] : 0;
             const uint32_t given =
                 position < plan.refGiveBackAt.size() ? plan.refGiveBackAt[position] : 0;
             const bool produces =
