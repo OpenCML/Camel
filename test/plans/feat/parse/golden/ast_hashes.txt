@@ -2144,6 +2144,7 @@ adae243535451365 ok test/cases/compile/var/var_parameter_write_at_exit.cml
 2b8031facce79c67 ok test/cases/compile/var_closure/err_a_captured_nullable_var_is_not_narrowed.cml
 751c56b917e53986 ok test/cases/compile/var_closure/err_captured_name_handed_to_var_parameter_in_a_closure.cml
 4fc80034c90d477e ok test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml
+c2ca4510d5d3cf3d ok test/cases/compile/var_closure/err_captured_var_put_into_an_array.cml
 a9f6a2882d82fa49 ok test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml
 e451136d83ceb542 ok test/cases/compile/var_closure/err_closure_assigns_captured.cml
 da0ef0a6c2880a4e ok test/cases/compile/var_closure/err_closure_assigns_let.cml
