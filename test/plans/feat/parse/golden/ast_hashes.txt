@@ -2421,6 +2421,7 @@ b4b098fe9da2204d ok test/cases/consistency/new_values/dropped_void_body.cml
 ff89b857cfdca4c6 ok test/cases/consistency/new_values/peek.cml
 1275aead7e6df352 ok test/cases/consistency/new_values/peek_loop.cml
 c58529c6bcd925bc ok test/cases/consistency/new_values/rebinding_loop.cml
+049a04472078ee4e ok test/cases/consistency/new_values/snapshot_state.cml
 638ec3de9c083547 ok test/cases/consistency/new_values/sort_rebinding.cml
 12bfa27ee5d13b4b ok test/cases/consistency/new_values/unused_in_lambda.cml
 ed04ebc79de351df ok test/cases/consistency/new_values/unused_operator.cml
