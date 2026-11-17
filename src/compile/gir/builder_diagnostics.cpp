@@ -626,34 +626,15 @@ void Builder::layRegionWriteEdges() {
                 if (!exitInRegion(region, exit)) {
                     continue; // the exit is not a node of this region: the seed answers this write
                 }
-                // A statement already on its region's chain needs nothing more -- when that chain
-                // really does reach the region's exit, which is what a `sync` body is. It does not
-                // when the chain belongs to a block written inside a body that is not one and the
-                // block's value is taken by nobody: the tail then runs because something reads it,
-                // and the something is this GATE (`test/cases/linear/runtime/effects_outside_sync.cml`
-                // line 19, `nested 2` -- the last line of a `sync` block inside a plain body, which
-                // used to be dropped while every earlier line of its block ran).
-                if (!draft.syncInputsOf(statement).empty()) {
-                    runtime::gc_node_ref_t current = statement;
-                    bool carried                   = false;
-                    for (size_t hops = 0; hops < 64 && draft.alive(current); ++hops) {
-                        const auto users = draft.syncUsersOf(current);
-                        if (users.empty()) {
-                            break;
-                        }
-                        current = users.front();
-                        if (current == exit) {
-                            carried = true;
-                            break;
-                        }
-                        if (runtime::decidingRegionOfDraft(draft, current) != region) {
-                            break;
-                        }
-                    }
-                    if (carried) {
-                        continue; // the chain it is on is carried by the exit already
-                    }
-                }
+                // A statement already on its region's chain is hung on the exit anyway. "It is already
+                // carried, so it needs no second reason to run" is true of the write **inside a
+                // region that runs** and false of the region itself: a `sync` block whose value
+                // nobody takes runs only because something reads what it holds, and the something
+                // is this GATE. Hanging every write, chained or not, is also what the ruling asks
+                // for in so many words -- the region's exit reads the region's writes (`test/
+                // cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is the last statement of the
+                // block `case _ => sync { q(5); return 0; }`, and with it hung on the exit the
+                // block's own GATE is read, the arm runs and `q(5)` prints).
                 if (reachesBack(statement, exit)) {
                     // The exit is a value the statement reads -- the box a body hands out, where the
                     // statement is the write into it. The statement is then *upstream* of the exit
@@ -828,6 +809,16 @@ void Builder::layRegionWriteEdges() {
                     // place in the block's chain: the JOIN's old sync predecessor becomes the
                     // GATE's, and the JOIN waits on the GATE. That is one order edge on a JOIN that
                     // joins no value, which carries no type and is legal there.
+                    //
+                    // Legal only when the JOIN is in the GATE's own region: a sync edge that joins
+                    // two blocks is what the commit refuses ("sync edge 28 -> 5 joins two blocks:
+                    // 28 is in the block of region 2 and 5 in region 0", `perf_fib_smoke`). A JOIN
+                    // of another region is the body's or an enclosing one's, and a region whose exit
+                    // nothing of its own reads is then left as it is, like any other unreachable
+                    // GATE (`reachesBack`, above).
+                    if (draft.nodeRegion(join) != region) {
+                        return runtime::kInvalidNodeRef;
+                    }
                     if (!joinSync.empty()) {
                         draft.setSyncInputs(gate, joinSync);
                     }
