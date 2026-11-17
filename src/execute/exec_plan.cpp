@@ -836,17 +836,23 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 
 /// A node that only carries a value on: a JOIN hands on the value of the arm that ran, a GATE
 /// passes its input through, a port hands on what it was given (an exit port, its input's value),
-/// and `:enum/field` hands on the field it read out of the variant. It produces nothing of its own,
-/// so a reference to what it "holds" is a reference to the value behind it.
+/// and an operator whose result is a value an operand already holds -- `:enum/field` hands on the
+/// field it read out of the variant -- hands on that operand's value. It produces nothing of its
+/// own, so a reference to what it "holds" is a reference to the value behind it.
 ///
-/// `:enum/field` is on this list because of what the operator does with the field: `__enum_field__`
+/// The three graph kinds are the fact themselves (a program cannot name a JOIN, a GATE or a port),
+/// and the operator is asked for its declaration (`OperatorTable::handsOnOperandValue`):
+/// there used to be a list of operator names here beside a table of the same names in the operator
+/// table, and the two could say different things (author review 2026-11-17, section 2.8).
+///
+/// `:enum/field` declares it because of what the operator does with the field: `__enum_field__`
 /// returns the slot the variant holds (src/builtin/operators/enum.cpp) and takes no reference for
 /// it. Read as a producer, its result looked like a value born with a reference of its own, so the
 /// plan released the value where it was read and again where the enum died -- one release too many
 /// for a handle read out of a variant and used afterwards (a `Ref` a defunctionalized closure
 /// carried, read after the call through the value).
 ///
-/// `:op/idx_arr`'s element read is on it for the same reason and by the same measurement: an
+/// `:op/idx_arr`'s element read declares it for the same reason and by the same measurement: an
 /// element of `xs` is the slot the array holds (`Array::getSlot`,
 /// src/builtin/operators/struct.cpp#__index_arr__), and no reference is taken for it -- the array
 /// is what holds it. Read as a producer, `xs[0]` looked like a value born with a reference of its
@@ -857,14 +863,18 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 /// reference comes back where the array dies -- and the reference of a handle packed into the array
 /// comes back with it, after the last read of any element.
 ///
-/// A row of a higher-rank array is NOT one of these: `xs[i]` on a value with more than one
-/// dimension makes a value of its own (a view that shares the block, or a copy for an array of
-/// references), so the plan counts it as a producer's, as it counts any operator's output.
+/// A row of a higher-rank array is NOT one of these, and its declaration says so
+/// (`handsOnOnlyOutsideArrays`): `xs[i]` on a value with more than one dimension makes a value of
+/// its own (a view that shares the block, or a copy for an array of references), so the plan counts
+/// it as a producer's, as it counts any operator's output.
 bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
     const GCNode *node = graph.node(at);
     if (node == nullptr) {
         return false;
     }
+    // The three carriers a graph is built with, not operators: a JOIN hands on the arm's value, a
+    // GATE passes its input through and a port hands on what it was given. Their node kind is the
+    // fact -- there is no operator record for one, because a program cannot name one.
     if (node->kind == GCNodeKind::Join || node->kind == GCNodeKind::Gate ||
         node->kind == GCNodeKind::Port) {
         return true;
@@ -876,13 +886,17 @@ bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
     if (body == nullptr) {
         return false;
     }
-    const std::string_view uri = body->uri();
-    if (uri == ":enum/field") {
-        return true;
-    }
-    if (uri != ":op/idx_arr") {
+    // The same fact for an operator: it is the operator's own declaration, not a list of names
+    // here, so the two cannot say different things (OperatorTable::handsOnOperandValue).
+    const camel::core::OperatorTable &table = camel::core::OperatorTable::instance();
+    if (!table.handsOnOperandValue(body->uri())) {
         return false;
     }
+    if (!table.handsOnOnlyOutsideArrays(body->uri())) {
+        return true;
+    }
+    // A row of a higher-rank value is a value of its own (a view that shares the block, or a copy
+    // for an array of references), and the declaration says so: the hand-on is of an element.
     const camel::core::type::Type *type = node->dataType();
     return type != nullptr && type->code() != camel::core::type::TypeCode::Array;
 }
@@ -1167,6 +1181,11 @@ std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced,
 /// the filter that reads it at run time, so that the plan and the count ask one question.
 camel::core::type::TypeCode countedHandleCode();
 
+/// Whether a value of this type code is one the count owns (`state::Ref`). Defined once, beside
+/// `countedHandleCode`, and asked by the plan below and by the run at the rows; the judgment was
+/// written in both places and one of the two would have changed first.
+bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
+
 /// Whether the count applies to the value the node makes: its type is the reference handle the
 /// runtime counts (`countedHandleCode`). The plan lays the rows of such a value out where a back
 /// end runs them; every other value's rows keep the position the last-use column gives them,
@@ -1182,8 +1201,7 @@ bool valueIsCounted(const GCGraph &graph, gc_node_ref_t value) noexcept {
     if (type == nullptr) {
         return false;
     }
-    const camel::core::type::TypeCode code = type->code();
-    return code == camel::core::type::TypeCode::Ref || code == countedHandleCode();
+    return isCountedHandle(type->code());
 }
 
 /// The references that come back and the holds they are balanced by, as rows of the plan. The rule
@@ -1439,6 +1457,19 @@ camel::core::type::TypeCode countedHandleCode() {
     return code;
 }
 
+/// Whether a value of this type code is one the count owns: the reference handle the runtime counts
+/// (`state::Ref`). `TypeCode::Ref` is accepted beside it because it costs one comparison and a slot
+/// that somehow carries it is still not a value to count -- `retainCountNow` answers false for it
+/// either way.
+///
+/// One answer, asked by both sides of the same table: the plan, which lays the rows only where a
+/// back end runs them (`valueIsCounted`), and the run, which applies a row only where the slot is
+/// one (`applyRefEntriesAtPosition`). It was written twice, and one of the two would have changed
+/// first.
+bool isCountedHandle(camel::core::type::TypeCode code) noexcept {
+    return code == camel::core::type::TypeCode::Ref || code == countedHandleCode();
+}
+
 /// Whether the plan says a back end runs the rows of `value`: the value is one the plan counts, so
 /// it has rows to run. The kind of node that makes it is not part of the answer: a CALL and a FILL
 /// make a value as an operator does, and every back end runs their position's rows where it runs
@@ -1472,8 +1503,7 @@ camel::core::rtdata::Object *objectOfTheOwnValue(
     if (slot == 0) {
         return nullptr;
     }
-    const camel::core::type::TypeCode code = frame->codeAt(slot);
-    if (code != camel::core::type::TypeCode::Ref && code != countedHandleCode()) {
+    if (!isCountedHandle(frame->codeAt(slot))) {
         return nullptr;
     }
     return camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(produced);
@@ -1509,8 +1539,7 @@ void applyRefEntriesAtPosition(
         if (slot == 0) {
             continue; // the value has no slot: a node whose type is void counted nothing
         }
-        const camel::core::type::TypeCode code = frame->codeAt(slot);
-        if (code != camel::core::type::TypeCode::Ref && code != countedHandleCode()) {
+        if (!isCountedHandle(frame->codeAt(slot))) {
             continue;
         }
         // The node's own value is the one the operator just made: a back end that runs bytecode
@@ -1524,15 +1553,15 @@ void applyRefEntriesAtPosition(
         if (object == nullptr) {
             continue;
         }
+        // The node has just published this very object as its own value, so the reference that
+        // would come back here is the one its value is born with: the last use takes the
+        // producing reference over (exec_plan.h, "the references that come back") and a node
+        // that hands a value back hands that take-over on. `reduce` returns its accumulator, so
+        // a `state::Ref` as its `initial` makes its value the initial's box; giving the
+        // initial's reference back here took the count to zero while the node's value still
+        // named it. The value's own row, at its last use, is the one that brings the count
+        // home.
         if (entry.kind == ExecPlan::RefEntryKind::GiveBack && !ownValue && object == ownObject) {
-            // The node has just published this very object as its own value, so the reference that
-            // would come back here is the one its value is born with: the last use takes the
-            // producing reference over (exec_plan.h, "the references that come back") and a node
-            // that hands a value back hands that take-over on. `reduce` returns its accumulator, so
-            // a `state::Ref` as its `initial` makes its value the initial's box; giving the
-            // initial's reference back here took the count to zero while the node's value still
-            // named it. The value's own row, at its last use, is the one that brings the count
-            // home.
             continue;
         }
         for (uint32_t taken = 0; taken < entry.count; ++taken) {

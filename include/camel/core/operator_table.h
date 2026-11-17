@@ -444,6 +444,26 @@ class OperatorTable {
     /// Whether the operator `uri` was declared to reuse an operand.
     bool reusesOperand(std::string_view uri) const;
 
+    // ---- What the result is, when it is not a value of the operator's own ---------------------
+    //
+    // The operator's result is a value one of its operands already holds instead of a value the
+    // operator makes: the element read answers the slot the array holds (`__index_arr__`), and the
+    // field read answers the slot the variant holds (`__enum_field__`). It is therefore a carrier
+    // of that operand's value, as a JOIN, a GATE and a port are carriers of theirs -- it makes no
+    // reference of its own, and the reference of the value it hands on is the holder's. Declared
+    // where the operator is registered, beside `declareReusesOperand`, and read by the plan --
+    // `forwardsItsValue` (src/execute/exec_plan.cpp) -- which kept a list of these names beside it
+    // until the author's review of 2026-11-17, section 2.8: one fact, one place to write it.
+
+    /// Declares that `uri` answers a value an operand already holds; `onlyOutsideArrays` restricts
+    /// that to the results that are not arrays (a row of a higher-rank value is its own).
+    void declareHandsOnOperandValue(std::string_view uri, bool onlyOutsideArrays = false);
+
+    /// Whether the operator `uri` declares it, and whether it holds only for a result that is not
+    /// an array. False for an operator nobody declared.
+    bool handsOnOperandValue(std::string_view uri) const;
+    bool handsOnOnlyOutsideArrays(std::string_view uri) const;
+
     // ---- Conversions (the fact a rule's key is read from) -----------------------------------
     //
     // A conversion of the language is written `op/<source>to<destination>` and its rule is filed
@@ -744,6 +764,12 @@ class OperatorTable {
         /// The operator may return its operand (declareReusesOperand): an elementwise operator
         /// that writes into an operand it owns, rather than allocating a result.
         bool reusesOperand = false;
+        /// The operator answers a value an operand already holds (declareHandsOnOperandValue):
+        /// the element read hands on the slot the array holds. `handsOnOnlyOutsideArrays` says
+        /// that holds only when the result is not an array -- a row of a higher-rank value is a
+        /// value of its own. Guarded by mutex_, written at module load time only.
+        bool handsOnOperandValue      = false;
+        bool handsOnOnlyOutsideArrays = false;
         /// The types this operator converts between (declareConversion), or nullopt when it is
         /// not a conversion. Guarded by mutex_, written at module load time only.
         std::optional<ConversionTypes> conversion;
