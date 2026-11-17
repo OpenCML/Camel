@@ -2195,8 +2195,16 @@ node_handle_t Builder::visitAssignNode(const GCT::node_ptr_t &gct) {
     const GCT::AssignmentForm form  = gct->assignmentForm();
     GCT::node_ptr_t store           = tree_->makeLink(2);
     GCT::node_ptr_t storeOperator   = makeStoreOperator(gct);
-    *store << storeOperator << tree_->clone(gct->assignmentTarget())
-           << tree_->clone(gct->assignmentValue());
+    // The store is a node of its own, so its two sides are copied into it. The copy of the value
+    // takes the in-place mark with it: that mark is the GCT node's identity (inPlaceCalls_,
+    // Builder::pathAssignmentOf and Builder::inPlaceRebindingOf), and a copy that lost it was
+    // built as the copying form the operator declares next to the in-place one -- `:op/set_index`
+    // and `:struct/append_arr` -- so every array the lowering meant to rebind in place was copied.
+    GCT::node_ptr_t storeValue = tree_->clone(gct->assignmentValue());
+    if (inPlaceCalls_.erase(gct->assignmentValue()) > 0) {
+        inPlaceCalls_.insert(storeValue);
+    }
+    *store << storeOperator << tree_->clone(gct->assignmentTarget()) << storeValue;
     store->setOrigin(gct->origin());
     node_handle_t stored = visitLinkNode(store, form);
     LEAVE("ASSIGN");
