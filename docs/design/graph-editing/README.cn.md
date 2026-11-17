@@ -34,8 +34,8 @@ export func fold_zero_adds::<F>(f: F): F! when is_function::<F>() {
 export func log_result(f: (x: float) => float): ((x: float) => float uses console)! {
     return edit f as d: (x: float) => float uses console {
         let out = exit_of(d)
-        let p = graft(out, (y: float) => println(`result = ${y}`), out)
-        order(p, out)
+        let p = inline(out, (y: float) => println(`result = ${y}`), out)
+        before(p, out)
     }
 }
 
@@ -68,7 +68,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 2. **一个标记就是第二份真相**。"这个函数是图算子"若既由签名里的句柄类型决定、又由一个关键字或标记决定，两者迟早不一致（原则：同一件事只有一份）。签名已经说了它操作什么，再标一次是重复。
 3. **用户写的帮助函数自动归位**。`func is_add_zero(n: Node): bool`、`func first_input(n: Node): Node` 写在块外，签名提到 `Node`，所以只能在块里调用，并随调用它的块一起聚合进那个原子操作（第 5 节），不单独展开成图。不提到句柄的普通函数（`len`、算术）在块里照常调用。
 
-**改图算子只收 `edit` 块的句柄**：句柄的类型带着它所属块的种类（第 4 节的标签），`replace`、`erase`、`graft`、`extract`、`order`、`drop_effect`、`add_constant`、`eval` 要求 `edit` 块的节点；把 `view` 块的节点交给它们是类型不符，报"`replace` 需要 `edit` 块里的节点"。查询算子（`nodes`、`inputs`、`users`、`op`、`type_of`、事实查询……）两种块都收。
+**改图算子只收 `edit` 块的句柄**：句柄的类型带着它所属块的种类（第 4 节的标签），`replace`、`erase`、`inline`、`outline`、`before`、`drop_effect`、`eval` 要求 `edit` 块的节点；把 `view` 块的节点交给它们是类型不符，报"`replace` 需要 `edit` 块里的节点"。查询算子（`nodes`、`inputs`、`users`、`op`、`type_of`、事实查询……）两种块都收。
 
 关键字只用在**块的边界**上：`view`、`edit` 两个，加上已有的 `rule`。类型检查靠边界判断"这里有没有句柄"，算子是否只能在块里调用由签名推出。
 
@@ -91,7 +91,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 - **对外**：块在外层的图里是一个节点。它的接口只有类型与效应（第 9 节）：`view` 收函数、交出普通值；`edit` 收函数、交出函数或错误值。外层的遍、变换、导出把它当原子算子处理，和一个 C++ 算子没有区别：不内联它、不变换它、不读它的内部。
 - **对内**：块体（连同它调用的、签名提到句柄的帮助函数）由同一个编译器编译、同一个虚拟机执行，不另起一套代码生成与执行器（否则同样的 Camel 代码有两种编译方式，语义可能分叉）。编译器可以在块的内部优化，优化不跨过边界。
 - **对其他元层代码也不开放**：任何遍都看不到块的内部，这切断了"遍改遍"的递归。
-- **规则应用同样是一个原子操作**：`rewrite`、`run`、`saturate` 的内部就是一个 `edit` 块（匹配处 `graft` 右侧再 `replace`），共用同一份草稿与提交。
+- **规则应用同样是一个原子操作**：`rewrite`、`run`、`saturate` 的内部就是一个 `edit` 块（匹配处 `inline` 右侧再 `replace`），共用同一份草稿与提交。
 - 调试块的内部不靠 `std::gir` 从外面看，由跟踪选项的一个区域（如 `--trace meta`）给出。
 
 ## 6. `edit` 的语义
@@ -111,19 +111,18 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 |---|---|---|
 | `replace(old, new)` | 把 `old` 的使用者改接到 `new` | 现有；类型必须相容 |
 | `erase(n)` | 删一个没人读的纯节点 | 现有；删不掉效应（原则 9.7） |
-| `drop_effect(n)` | 显式删一个外部访问或句柄写 | 原则 9.7 要求的"专门删效应的操作"，与 `erase` 分开 |
-| `add_constant(at, value)` | 在 `at` 所在的图里加一个常量节点 | 现有，改为收一个节点定位 |
+| `drop_effect(n)` | 显式删一个外部访问或句柄写 | 原则 9.7 要求的"专门删效应的操作"，与 `erase` 分开。`n` 的值若还有人读，先 `replace` 掉；在效应链上的位置交给后继 |
 | `eval(n)` | 把 `n` 就地算成常量 | 现有 |
-| `graft(at, fn, args...)` | 在 `at` 所在的区域里，把函数值 `fn` 的体以 `args` 为实参拼进来，交出结果节点 | **新增**。新节点只能由已类型检查的 Camel 代码产生，不提供"按算子名直接造节点" |
-| `extract(nodes)` | 把图里的一段提成一个函数值 | **新增**，`graft` 的反向。交出的是检查过的函数值，不带草稿句柄，可以交出块 |
-| `order(a, b)` | 加一条顺序边：两端都执行时 `a` 在 `b` 之前 | **新增**。插入效应时给它排位置；提交按"顺序完整"检查 |
+| `inline(at, fn, args...)` | 在 `at` 所在的区域里，把函数值 `fn` 的体以 `args` 为实参拼进来，交出结果节点 | **新增**。新节点只能由已类型检查的 Camel 代码产生，不提供"按算子名直接造节点" |
+| `outline(nodes)` | 把图里的一段提成一个函数值 | **新增**，`inline` 的反向。交出的是检查过的函数值，不带草稿句柄，可以交出块 |
+| `before(a, b)` | 加一条顺序边：两端都执行时 `a` 在 `b` 之前 | **新增**。插入效应时给它排位置；提交按"顺序完整"检查 |
 
-`graft` 与 `extract` 互为反向，区域级的改写由它们组合出来，不为每种循环变换各加一个算子：
-- **提出新函数**：`extract` 一段，在原处 `graft` 一次对它的调用；
-- **展开循环**：`extract` 循环体，`graft` 两次；
-- **合并两个循环**：`extract` 两个循环体，`graft` 一个用 Camel 写的合并循环并把两个体作实参交给它，再内联；
-- **移出循环**：`extract` 与循环无关的那段，在循环外 `graft`、循环内 `replace`。移出区域的必须是纯且不会出故障的计算（原则 9.7），当场检查；
-- **内联**：`graft` 被调函数的体、`replace` 接上；
+`inline` 与 `outline` 互为反向，区域级的改写由它们组合出来，不为每种循环变换各加一个算子：
+- **提出新函数**：`outline` 一段，在原处 `inline` 一次对它的调用；
+- **展开循环**：`outline` 循环体，`inline` 两次；
+- **合并两个循环**：`outline` 两个循环体，`inline` 一个用 Camel 写的合并循环并把两个体作实参交给它，再内联；
+- **移出循环**：`outline` 与循环无关的那段，在循环外 `inline`、循环内 `replace`。移出区域的必须是纯且不会出故障的计算（原则 9.7），当场检查；
+- **内联**：`inline` 被调函数的体、`replace` 接上；
 - **特化、删没用的形参**（签名会变）：先写一个 Camel 闭包，如 `(y) => f(3, y)`，再对它 `edit`、内联、折叠。
 
 位置交接（取走一个持位节点时把它在链上的位置交给后继）由这些算子自己负责，用户不写。
@@ -133,17 +132,17 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 **块内每一步（当场失败，指出这一步的源码位置）**：
 - `replace`：新旧值类型相容；`new` 不是 `old` 的下游（不成环）；`new` 在 `old` 的使用者看得见的区域里。
 - `erase`：节点没人读、不是效应、不是锚点。
-- `graft`：实参类型与 `fn` 的形参相符；实参在 `at` 的区域里看得见。
-- `extract`：这段只经由明确的入口取值、只经由明确的出口交值；不含锚点。
-- `order`：不成环；两端在同一张图里。
+- `inline`：实参类型与 `fn` 的形参相符；实参在 `at` 的区域里看得见。
+- `outline`：这段只经由明确的入口取值、只经由明确的出口交值；不含锚点。
+- `before`：不成环；两端在同一张图里。
 
 **块尾的提交（不可关闭）**：结构、作用域、类型、无环、区域与锚点（`docs/technical/17_graph_rewrite_api_contracts.md` 第 4 节），加上：
 - **效应包含**：新图的足迹不超出块头声明（省略时为原函数）的效应；
 - **顺序完整**：同一资源上的冲突访问都有先后。
 
-**错误值写什么**：违反的是哪条规则、涉及哪几个节点（`show(n)` 的形式），以及**是块里哪一步造成的**：草稿给每次改动记下发起它的那条语句的源码位置，提交时一个节点出了问题，报告能指回"第几行的 `graft` 造出了这个没有先后的写"。
+**错误值写什么**：违反的是哪条规则、涉及哪几个节点（`show(n)` 的形式），以及**是块里哪一步造成的**：草稿给每次改动记下发起它的那条语句的源码位置，提交时一个节点出了问题，报告能指回"第几行的 `inline` 造出了这个没有先后的写"。
 
-**开销**：按 2026-11-15 定的分档（`docs/design/effects/analysis.cn.md` 4.1）：只用了不新增访问的算子（`replace`、`erase`、`eval`、`add_constant`、`extract`）的块，效应包含与顺序完整是定理，发行构建里不查，调试构建与测试照查；用了 `graft`、`order`、`drop_effect` 的块照查。结构、作用域、类型、无环任何时候都查。所以不设跳过检查的"可信"模式。
+**开销**：按 2026-11-15 定的分档（`docs/design/effects/analysis.cn.md` 4.1）：只用了不新增访问的算子（`replace`、`erase`、`eval`、`outline`）的块，效应包含与顺序完整是定理，发行构建里不查，调试构建与测试照查；用了 `inline`、`order`、`drop_effect` 的块照查。结构、作用域、类型、无环任何时候都查。所以不设跳过检查的"可信"模式。
 
 ## 9. 读图是一种效应
 
@@ -167,7 +166,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 
 ## 11. 迁移
 
-- `stdlib/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `graft`、`extract`、`order`、`drop_effect`、`exit_of` 一类锚点查询；`add_constant` 改为收一个定位节点。
+- `stdlib/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`before`、`drop_effect`、`exit_of` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例），`order` 改名 `before`。
 - 用 Camel 写的遍（`stdlib/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit f as d { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
 - `probe_handle`、`check_pass_boundary` 改成 `view` 块里的查询。
 - 测试：每条现有的 `Txn` 用例改写；另加反例，各报一条具名诊断：句柄作为块的值交出、存进块外的 `Ref`、被离开的闭包带走、图算子写在块外、`view` 的节点交给 `replace`。
@@ -198,15 +197,14 @@ replace(a, b)
 
 **负责人 2026-11-17 已定**：
 - 图操作只写在规则、`view`、`edit` 三处，聚合成运行时的原子操作，不展开编译成图；`view` 保留，是读图的唯一入口。
-- 加 `extract`，与 `graft` 互为反向。
+- 加 `outline`，与 `inline` 互为反向；按本质命名：`graft` 改为 `inline`（调用并当场展开），提取改为 `outline`（把一段收回成函数），`order` 改为 `before`，删除 `add_constant`。`view`、`edit` 两个关键字定名。
 - 调度决定放在图外的执行计划里。
 - 读图作为一种效应挂在块上（第 9 节）。
 
 **待定**：
-1. 关键字的名字：`view`、`edit` 还是别的（`unsafe` 不合适，它不放弃任何检查）。
-2. `edit` 块头类型可省略、只在加效应时写（第 2 节）。
-3. 一个块能否编辑整个程序、一起提交：本稿建议能。
-4. `edit` 能否改签名：本稿建议不能，只允许效应变多。
-5. 规则两侧"什么都不访问"不放宽：要加效应用 `edit`，由边界按声明检查。这是对 11-14 那条的保留。
-6. 不设跳过检查的"可信"模式（第 8 节的分档已经让只用公开编辑的块在发行构建里不付效应检查的代价）。
-7. 带读图效应的整函数变换与 `rewrite` 的名单（第 9 节）：`grad` 带上它、训练代码的类型里因此出现它，是否接受。
+1. `edit` 块头类型可省略、只在加效应时写（第 2 节）。
+2. 一个块能否编辑整个程序、一起提交：本稿建议能。
+3. `edit` 能否改签名：本稿建议不能，只允许效应变多。
+4. 规则两侧"什么都不访问"不放宽：要加效应用 `edit`，由边界按声明检查。这是对 11-14 那条的保留。
+5. 不设跳过检查的"可信"模式（第 8 节的分档已经让只用公开编辑的块在发行构建里不付效应检查的代价）。
+6. 带读图效应的整函数变换与 `rewrite` 的名单（第 9 节）：`grad` 带上它、训练代码的类型里因此出现它，是否接受。
