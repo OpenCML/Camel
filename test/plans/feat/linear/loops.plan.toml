@@ -421,13 +421,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.dropped_effect"
-desc = "A loop whose value nothing uses, outside a sync block, does not run and is reported as `The loop` not executed; the function's own value is printed."
+desc = "A loop whose value nothing uses outside a sync block still runs, because its body writes: what a region writes is a root of that region (the ruling of 2026-11-17). The three rounds print `0`, `1`, `2` and the function's own value `5` follows; nothing is reported, because the warning that used to name the loop went with the region roots."
 kind = "behavior"
 case = "../../../cases/loops/dropped_effect.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
-expect_output_contains = ["The loop is never executed: nothing needs what it gives", "SemanticDiag::EffectNotExecuted"]
-expect_stdout_contains = ["5"]
+expect_output_not_contains = ["is never executed"]
+expect_stdout_contains = ["0\n1\n2\n5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 

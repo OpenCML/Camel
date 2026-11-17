@@ -926,7 +926,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.warning"
-desc = "The call through a `let`-bound lambda that nothing follows is reported once, at the call: today the warning is `SemanticDiag::EffectNotExecuted` (the call is never executed, nothing depends on it), not `IgnoredSideEffect`; the write it would make is dropped with it (proved by the output of the test above). The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
+desc = "The call through a `let`-bound lambda that nothing follows runs on this build, because it writes: what a region writes is a root of that region (the ruling of 2026-11-17). Nothing is reported for it. The warning this entry used to pin -- the never-executed one, at 22:5 -- went with the region roots, and the entries above that expect only the `0` of `main` now disagree with the tree -- they are measured and reported to the author, not rewritten here. The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["--output-format", "json", "${case}"]
@@ -937,9 +937,7 @@ verify_script = """
 const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const seen = diags.map(d => d.data.name + ' at ' + at(d))
-assert(seen.join(' | ') === 'SemanticDiag::EffectNotExecuted at 22:5', 'diagnostics: ' + seen.join(' | '))
-assert(diags[0].message === 'The call is never executed: nothing needs what it gives, so nothing runs it.',
-    'message: ' + diags[0].message)
+assert(seen.length === 0, 'nothing is reported for a call that writes: ' + seen.join(' | '))
 }
 """
 timeout_ms = 10000
