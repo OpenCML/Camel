@@ -76,4 +76,10 @@
 
 - `docs/handover/questions/2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md` —— 本页是它的续篇
 - `docs/handover/reports/2026-11-18-the-cell-a-handle-needs-no.cn.md`（`refcell` 的报告页）
-- `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`（S3b，与本页无直接关系但同属「谁持有」）
+- `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`（S3b，与本页无直接关系但同属「谁持有」）## 裁定（已答，2026-11-18）
+
+**`9f6b1700d`：a generator's state slot is `T?` and starts null, as ruled 11-16, so a Ref needs no unwritten form.**
+⇒ 本页第 4 节的默认（「先量语料有没有程序跨 pull 存活，若没有就加诊断拒掉」）**作废**：
+作者说那个形态本来就该能跑，**不要加诊断**。
+⇒ 而该裁定在树上**没有落地**，见 `2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md`；
+再往下是 GIR 层，见 `2026-11-18-lowering-generator-state-to-gir.cn.md`。

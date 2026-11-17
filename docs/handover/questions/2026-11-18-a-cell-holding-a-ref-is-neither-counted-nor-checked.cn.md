@@ -69,4 +69,9 @@ yield state::get(box)
 ## 5. 相关页
 
 - `docs/handover/reports/` 里 `lane-refstep` 的同族缺口记录（本页第 1 节的出处）
-- `docs/handover/questions/2026-11-18-generator-halt-has-no-reader.cn.md` —— **已由作者答「drop the generator's halt bit」并落地**（`6ce3bf1f2` 裁定、`647b4a31a` 合入）
+- `docs/handover/questions/2026-11-18-generator-halt-has-no-reader.cn.md` —— **已由作者答「drop the generator's halt bit」并落地**（`6ce3bf1f2` 裁定、`647b4a31a` 合入）## 裁定（已答，2026-11-18）
+
+**`9d29939c4`：a cell holding a Ref is a holder, and the cell should go.**
+⇒ 已落地一半（`lane-refcell`，`9d589d2f3`）：跨闭包读/写的 `Ref` 局部不再是格子。
+⇒ 未落地的一半与后续见 `2026-11-18-lowering-generator-state-to-gir.cn.md`。
+⇒ **本页状态已不是「待裁定」，保留原状以便回看当时的问法。**
