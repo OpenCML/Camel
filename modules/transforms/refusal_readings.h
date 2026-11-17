@@ -197,7 +197,9 @@ inline void appendJsonMember(std::string &out, const char *name, std::string_vie
 /// it names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the
 /// `expect_refusal` assertions in the plans).
 ///
-/// It always writes to `readings()` and not to the stream the caller handed the transform. A
+/// It always writes to `verdicts()` and not to the stream the caller handed the transform -- and
+/// `verdicts()` is the one channel `readings=true` does not reach (`readings.h`): a refusal has to be
+/// readable without a parameter, and this record is one line per refusal. A
 /// transform's readings are the diagnostic channel even when a caller collects the line elsewhere
 /// (`modules/transforms/module.cpp`'s `reinterp` pass hands `apply`'s stream down), so the record
 /// has to be readable in one place; a plan reads stderr, and a record that followed the line to
@@ -226,7 +228,7 @@ inline void noteRefusal(const RefusalReading &reading) {
         detail::appendJsonMember(json, "construct", reading.construct);
     }
     json += "}";
-    readings() << "READING_REFUSAL " << json << '\n';
+    verdicts() << "READING_REFUSAL " << json << '\n';
 }
 
 } // namespace camel::transforms

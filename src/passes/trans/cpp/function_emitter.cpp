@@ -42,8 +42,8 @@ std::optional<std::string> stringConstantOf(const GCGraph *graph, gc_node_ref_t 
         node->dataType()->code() != camel::core::type::TypeCode::String) {
         return std::nullopt;
     }
-    if (const auto *text =
-            camel::core::rtdata::fromSlot<::String *>(graph->staticArea()->get<slot_t>(-node->dataIndex));
+    if (const auto *text = camel::core::rtdata::fromSlot<::String *>(
+            graph->staticArea()->get<slot_t>(-node->dataIndex));
         text != nullptr) {
         return text->toString();
     }
@@ -283,8 +283,8 @@ std::string FunctionEmitter::cppType(const GCGraph *graph, gc_node_ref_t ref, co
             kTranslatedTypes));
 }
 
-std::string FunctionEmitter::bridgeOperator(
-    const GCGraph *graph, gc_node_ref_t ref, const std::string &uri) {
+std::string
+FunctionEmitter::bridgeOperator(const GCGraph *graph, gc_node_ref_t ref, const std::string &uri) {
     auto [it, added] = program_.bridgedOperators.try_emplace(uri, std::string());
     if (added) {
         it->second = std::format("op_{}", cppIdentifier(uri));
@@ -406,8 +406,7 @@ size_t FunctionEmitter::liveUses(const GCGraph *graph, gc_node_ref_t ref) {
     if (table.empty()) {
         auto &order = orders_[graph];
         if (order.empty()) {
-            order =
-                graph->execPlan().topo;
+            order = graph->execPlan().topo;
         }
         std::unordered_set<gc_node_ref_t> live(order.begin(), order.end());
         for (gc_node_ref_t n : order) {
@@ -505,10 +504,10 @@ Block FunctionEmitter::lowerSequenceBody(
             // write nothing can follow (nothingAfter). They still give values: an arm laid out
             // after another one reads the gates the order put at the end of the other. A gate
             // of the value that ended the sequence (a tail call has none) gives nothing.
-            const bool forwards  = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
-            const bool valueOnly = forwards || node->kind == GCNodeKind::Data ||
-                                   node->kind == GCNodeKind::Port;
-            const auto inputs    = frame.graph->normInputsOf(ref);
+            const bool forwards = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
+            const bool valueOnly =
+                forwards || node->kind == GCNodeKind::Data || node->kind == GCNodeKind::Port;
+            const auto inputs = frame.graph->normInputsOf(ref);
             if (valueOnly &&
                 (!forwards || (!inputs.empty() && frame.values.contains(inputs.front())))) {
                 lowerNode(frame, ref, out, false, Tail{});
@@ -538,7 +537,8 @@ Block FunctionEmitter::lowerSequenceBody(
         return out;
     }
 
-    const bool hasValue = result != kInvalidNodeRef && isValueType(frame.graph->node(result)->dataType());
+    const bool hasValue =
+        result != kInvalidNodeRef && isValueType(frame.graph->node(result)->dataType());
     switch (tail.kind) {
     case Tail::Kind::Return:
         // A function declared to return nothing ends with `return;` whatever its last value
@@ -791,7 +791,9 @@ void FunctionEmitter::lowerCall(
                 const auto closure = frame.closures.find(input);
                 if (closure != frame.closures.end()) {
                     if (auto spelled = functionValue(
-                            closure->second.first, closure->second.second, parameter)) {
+                            closure->second.first,
+                            closure->second.second,
+                            parameter)) {
                         text = std::move(*spelled);
                     }
                 }
@@ -887,16 +889,14 @@ class NodeCall final : public OperatorCall {
         std::vector<const Type *> normTypes, std::vector<const Type *> withTypes,
         std::vector<bool> withConstant, const Type *result,
         std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site,
-        std::function<std::string()> place,
-        std::function<std::string()> bridgeOperator,
+        std::function<std::string()> place, std::function<std::string()> bridgeOperator,
         std::function<std::string(const Type *)> cppType,
         std::function<std::string(size_t)> fieldName)
         : uri_(std::move(uri)), norm_(std::move(norm)), with_(std::move(with)),
           normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)),
-          withConstant_(std::move(withConstant)), result_(result),
-          site_(std::move(site)), place_(std::move(place)),
-          bridgeOperator_(std::move(bridgeOperator)), cppType_(std::move(cppType)),
-          fieldName_(std::move(fieldName)) {}
+          withConstant_(std::move(withConstant)), result_(result), site_(std::move(site)),
+          place_(std::move(place)), bridgeOperator_(std::move(bridgeOperator)),
+          cppType_(std::move(cppType)), fieldName_(std::move(fieldName)) {}
 
     std::string_view uri() const override { return uri_; }
     size_t normCount() const override { return norm_.size(); }
@@ -985,7 +985,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // call a rule sees: a rule asks for a field name after that, and the field index is a node of
     // the graph (a constant), not a value of the arguments.
     const std::vector<gc_node_ref_t> normInputs(
-        g->normInputsOf(ref).begin(), g->normInputsOf(ref).end());
+        g->normInputsOf(ref).begin(),
+        g->normInputsOf(ref).end());
     const Type *firstNormType = normTypes.empty() ? nullptr : normTypes.front();
 
     if (lowerVariable(frame, ref, uri, out) || lowerHigherOrder(frame, ref, uri, out) ||
@@ -994,27 +995,30 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     }
     const OperatorRule *rule = findOperatorRule(uri);
     // `std::mem::blocks()` reads the runtime's own block space, which is an introspection of this
-    // runtime: a program std::cpp writes has no block space of the runtime at all, so on this target
-    // the counters are not available. That is a boundary of the target, not a translation still to
-    // be written, and the two are said differently (author's ruling of 2026-10-31: A).
-    // `rand:uniform_array` and `rand:normal_array` draw from a key into a *shaped* array: the key is
-    // a C++-side value (rt::randomStream has the same philox), so naming it is wrong -- the value
-    // they build is a shaped array, and std::cpp writes none.
+    // runtime: a program std::cpp writes has no block space of the runtime at all, so on this
+    // target the counters are not available. That is a boundary of the target, not a translation
+    // still to be written, and the two are said differently (author's ruling of 2026-10-31: A).
+    // `rand:uniform_array` and `rand:normal_array` draw from a key into a *shaped* array: the key
+    // is a C++-side value (rt::randomStream has the same philox), so naming it is wrong -- the
+    // value they build is a shaped array, and std::cpp writes none.
     if (uri == "rand:uniform_array" || uri == "rand:normal_array") {
         refuse(
             g,
             ref,
             std::format(
-                "{} uses '{}' to fill a shaped array, and std::cpp writes no shaped array value: the "
+                "{} uses '{}' to fill a shaped array, and std::cpp writes no shaped array value: "
+                "the "
                 "pass has no tensor type, so the draw cannot be handed out",
                 describeFunction(g),
                 uri));
     }
-    if (uri == ":op/mem_blocks") {        refuse(
+    if (uri == ":op/mem_blocks") {
+        refuse(
             g,
             ref,
             std::format(
-                "{} reads the block counters of the Camel runtime, and a program std::cpp writes has "
+                "{} reads the block counters of the Camel runtime, and a program std::cpp writes "
+                "has "
                 "no runtime block space of its own: the counters are not available on this target",
                 describeFunction(g)));
     }
@@ -1044,8 +1048,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             bind(
                 frame,
                 ref,
-                std::format(
-                    "{}.{}", norm[0].text, program_.values.fieldName(firstNormType, i)),
+                std::format("{}.{}", norm[0].text, program_.values.fieldName(firstNormType, i)),
                 true,
                 out,
                 "field");
@@ -1057,7 +1060,9 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
             std::format(
                 "rt::fail({}, {})",
                 program_.sites.siteFor(
-                    g, ref, RuntimeDiag::FieldNotFound,
+                    g,
+                    ref,
+                    RuntimeDiag::FieldNotFound,
                     std::vector<std::string>{SiteTable::valueMark(0)}),
                 cppStringLiteral(*key)),
             false,
@@ -1098,8 +1103,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         // No standalone translation: the operator of the runtime module runs through the
         // bridge (camel/standalone/bridge.h), and the program links libcamel.
         const std::string accessor = bridgeOperator(g, ref, uri);
-        auto values = [&](const std::vector<CppValue> &args,
-                          const std::vector<const Type *> &types) {
+        auto values                = [&](const std::vector<CppValue> &args,
+                                         const std::vector<const Type *> &types) {
             std::string out;
             for (size_t i = 0; i < args.size(); ++i) {
                 const bool wide =
@@ -1193,13 +1198,13 @@ void FunctionEmitter::lowerLoop(
     if (g->loopCollectionCountOf(loop) != 0) {
         refuse(g, loop, std::format("{} has a loop that collects values", describeFunction(g)));
     }
-    const bool iterates = camel::core::loopHasIterable(g->loopKindOf(loop));
-    const auto norm     = g->normInputsOf(loop);
-    const size_t k      = norm.size() - (iterates ? 1 : 0);
-    const auto &regions = controlRegionsOf(g);
-    const auto parts    = regions.loopPartsOf(loop);
-    const auto results  = g->withInputsOf(loop);
-    const bool hasCond  = parts[0] != 0;
+    const bool iterates            = camel::core::loopHasIterable(g->loopKindOf(loop));
+    const auto norm                = g->normInputsOf(loop);
+    const size_t k                 = norm.size() - (iterates ? 1 : 0);
+    const auto &regions            = controlRegionsOf(g);
+    const auto parts               = regions.loopPartsOf(loop);
+    const auto results             = g->withInputsOf(loop);
+    const bool hasCond             = parts[0] != 0;
     const gc_node_ref_t bodyResult = results[0];
     const gc_node_ref_t condResult = hasCond ? results[1] : kInvalidNodeRef;
 
@@ -1226,8 +1231,8 @@ void FunctionEmitter::lowerLoop(
         iterates ? g->regionPorts(parts[1]).front() : static_cast<gc_node_ref_t>(kInvalidNodeRef);
     if (iterates) {
         const gc_node_ref_t iterable = norm.front();
-        array = locals_.unique(std::format("v{}_items", nextValue_++));
-        index = locals_.unique(std::format("v{}_round", nextValue_++));
+        array                        = locals_.unique(std::format("v{}_items", nextValue_++));
+        index                        = locals_.unique(std::format("v{}_round", nextValue_++));
         // A `for` walks the first dimension (design principles 4.2): on a value of several the item
         // is a row, one dimension less (`rt::atRow`), and on a value of one it is the element. An
         // item is not that on an open rank -- a value that is an element at rank 1 and a row above
@@ -1264,8 +1269,7 @@ void FunctionEmitter::lowerLoop(
                     loop,
                     std::format("{} has an interval without its two bounds", describeFunction(g)));
             }
-            const std::vector<std::string> marks{
-                SiteTable::valueMark(0), SiteTable::valueMark(1)};
+            const std::vector<std::string> marks{SiteTable::valueMark(0), SiteTable::valueMark(1)};
             out.push_back(
                 Stmt::line(
                     std::format(
@@ -1337,8 +1341,8 @@ void FunctionEmitter::lowerLoop(
                                "rt::atRow({}, {}, {})",
                                array,
                                index,
-                               program_.sites.siteFor(
-                                   g, norm.front(), RuntimeDiag::IndexOutOfRange, {}))
+                               program_.sites
+                                   .siteFor(g, norm.front(), RuntimeDiag::IndexOutOfRange, {}))
                          : std::format("{}[{}]", array, index))));
         round.push_back(Stmt::line(std::format("++{};", index)));
         frame.values[element] = CppValue{name, false};
@@ -1353,14 +1357,19 @@ void FunctionEmitter::lowerLoop(
     if (k == 1) {
         round.push_back(Stmt::line(std::format("{} = {};", state[0], withoutParentheses(next))));
     } else {
-        const Type *type  = g->node(bodyResult)->dataType();
+        const Type *type = g->node(bodyResult)->dataType();
         cppType(g, bodyResult, type);
         const std::string tuple = locals_.unique(std::format("v{}_next", nextValue_++));
-        round.push_back(Stmt::line(std::format("const auto {} = {};", tuple, withoutParentheses(next))));
+        round.push_back(
+            Stmt::line(std::format("const auto {} = {};", tuple, withoutParentheses(next))));
         for (size_t j = 0; j < k; ++j) {
             round.push_back(
                 Stmt::line(
-                    std::format("{} = {}.{};", state[j], tuple, program_.values.fieldName(type, j))));
+                    std::format(
+                        "{} = {}.{};",
+                        state[j],
+                        tuple,
+                        program_.values.fieldName(type, j))));
         }
     }
     out.push_back(Stmt::loop(std::move(round)));
@@ -1376,7 +1385,13 @@ void FunctionEmitter::lowerLoop(
         }
         const std::string name = locals_.unique(std::format("v{}_loop", nextValue_++));
         out.push_back(
-            Stmt::line(std::format("const {} {} = {}{{{}}};", cppType(g, loop, type), name, cppType(g, loop, type), list)));
+            Stmt::line(
+                std::format(
+                    "const {} {} = {}{{{}}};",
+                    cppType(g, loop, type),
+                    name,
+                    cppType(g, loop, type),
+                    list)));
         frame.values[loop] = CppValue{name, false};
     }
     frame.consumed.insert(loop);
@@ -1403,8 +1418,7 @@ bool FunctionEmitter::lowerBranch(
     // word is a branch but which still has a statement after it ends in `return ;` -- a body
     // whose value nothing spelled -- because the join is neither the tail nor anybody's input.
     Tail armTail{Tail::Kind::Discard, {}};
-    const bool resultWanted =
-        tail.kind != Tail::Kind::Discard && frame.results.count(join) > 0;
+    const bool resultWanted = tail.kind != Tail::Kind::Discard && frame.results.count(join) > 0;
     if (joinIsTail) {
         armTail            = tail;
         frame.values[join] = CppValue{"", false}; // the arms end the sequence themselves
@@ -1428,8 +1442,8 @@ bool FunctionEmitter::lowerBranch(
         const size_t joinPos = static_cast<size_t>(joinAt - order.begin());
         for (size_t k = 0; k < armCount; ++k) {
             const gc_node_ref_t entry = g->execPlan().branchArmEntriesOfNode(brch)[k];
-            const auto at = std::find(brchAt, joinAt, entry);
-            entries[k]    = at == joinAt ? joinPos : static_cast<size_t>(at - order.begin());
+            const auto at             = std::find(brchAt, joinAt, entry);
+            entries[k] = at == joinAt ? joinPos : static_cast<size_t>(at - order.begin());
         }
         // What lies before the first entry holds no statement (constants, ports, gates): it
         // gives values to the arms and is lowered here, before the branch.
@@ -1462,7 +1476,7 @@ bool FunctionEmitter::lowerBranch(
     branch.kind = Stmt::Kind::Branch;
     for (size_t k = 0; k < armCount; ++k) {
         Block body;
-        const gc_node_ref_t result = g->withInputsOf(join)[k];
+        const gc_node_ref_t result              = g->withInputsOf(join)[k];
         const std::vector<gc_node_ref_t> region = regionOf(k);
         body = lowerSequence(frame, region, resultThrough(g, result), armTail);
         for (gc_node_ref_t n : region) {
@@ -1474,7 +1488,7 @@ bool FunctionEmitter::lowerBranch(
                 // `if`: the first arm when the condition holds; a branch on a number picks the
                 // arm of that index.
                 condition = armCount == 2 ? withoutParentheses(selector)
-                                             : std::format("{} == {}", selector, k);
+                                          : std::format("{} == {}", selector, k);
             } else {
                 condition = std::format("{} == {}", selector, valueOf(frame, cases[k]).text);
             }
@@ -1555,7 +1569,7 @@ std::optional<std::string> FunctionEmitter::functionValue(
     bool dropResult = false;
     if (expected != nullptr && function->funcType() != nullptr) {
         const auto *wanted = static_cast<const camel::core::type::FunctionType *>(expected);
-        dropResult         = isVoid(wanted->exitType()) && !isVoid(function->funcType()->exitType());
+        dropResult = isVoid(wanted->exitType()) && !isVoid(function->funcType()->exitType());
     }
     std::string params, args;
     size_t i = 0;
@@ -1703,11 +1717,12 @@ void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
     for (size_t i = 0; i < items.size(); ++i) {
         list += (i ? ", " : "") + items[i];
     }
-    // A value of one dimension carries the dimension it has, as a constant does (the literal's rule):
-    // the elements alone are a value of no rank, and `shape`, `len` and `appendText` all read the rank
-    // -- a value of one element would print as the element, which is the one reading it is not. Written
-    // as a call, because with an element type an `{n}` can itself stand for (`rt::Array<T>`, a struct of
-    // one field) the braced pair is read as one more element.
+    // A value of one dimension carries the dimension it has, as a constant does (the literal's
+    // rule): the elements alone are a value of no rank, and `shape`, `len` and `appendText` all
+    // read the rank
+    // -- a value of one element would print as the element, which is the one reading it is not.
+    // Written as a call, because with an element type an `{n}` can itself stand for
+    // (`rt::Array<T>`, a struct of one field) the braced pair is read as one more element.
     //
     // A value of several dimensions is the elements and the shape in one block, and the block is
     // written as both: `rt::Array<double>{{1.0, 2.0, 2.0, 2.0}, {2, 2}}`. The constructor takes
@@ -1875,8 +1890,7 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
         fromType != nullptr &&
         (camel::core::type::isNumericScalar(fromType->code()) ||
          fromType->code() == TypeCode::Bool) &&
-        (camel::core::type::isNumericScalar(toType->code()) ||
-         toType->code() == TypeCode::Bool)) {
+        (camel::core::type::isNumericScalar(toType->code()) || toType->code() == TypeCode::Bool)) {
         // A conversion between numbers is the C++ conversion of their values. The two
         // reduced-precision types are among them: a static_cast into one of them is the store
         // rounding, and one out of one is exact (include/camel/standalone/half.h).
@@ -2050,7 +2064,8 @@ bool FunctionEmitter::lowerVariable(
         if (norm.size() == 2 && g->node(norm[1])->kind == GCNodeKind::Oper) {
             const std::string form = operatorUri(g, norm[1]);
             const bool lowered =
-                (form == ":struct/append_arr_in_place" && lowerAppendInPlace(frame, norm[1], out)) ||
+                (form == ":struct/append_arr_in_place" &&
+                 lowerAppendInPlace(frame, norm[1], out)) ||
                 (form == ":op/set_index_in_place" && lowerSetIndexInPlace(frame, norm[1], out));
             if (lowered) {
                 // The assignment stands for the variable's version, so it carries what the form
@@ -2152,16 +2167,19 @@ bool FunctionEmitter::lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block 
     std::string item     = valueOf(frame, items.front()).text;
     if (!isIdentifier(item)) {
         const std::string name = locals_.unique(std::format("item{}", nextValue_++));
-        out.push_back(Stmt::line(std::format(
-            "const {} {} = {};",
-            cppType(g, items.front(), g->node(items.front())->dataType()),
-            name,
-            withoutParentheses(item))));
+        out.push_back(
+            Stmt::line(
+                std::format(
+                    "const {} {} = {};",
+                    cppType(g, items.front(), g->node(items.front())->dataType()),
+                    name,
+                    withoutParentheses(item))));
         item = name;
     }
-    out.push_back(Stmt::line(
-        local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
-              : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
+    out.push_back(
+        Stmt::line(
+            local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
+                  : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
     frame.consumed.insert(ref);
     // This node stands for the variable's own value, so it is the variable's cell with its
     // marking, exactly as a write leaves the variable (`lowerVariable`'s assignment path): a
@@ -2195,32 +2213,36 @@ bool FunctionEmitter::lowerSetIndexInPlace(Frame &frame, gc_node_ref_t ref, Bloc
         std::string text        = valueOf(frame, arg).text;
         if (!isIdentifier(text)) {
             const std::string name = locals_.unique(std::format("item{}", nextValue_++));
-            out.push_back(Stmt::line(std::format(
-                "const {} {} = {};",
-                cppType(g, arg, g->node(arg)->dataType()),
-                name,
-                withoutParentheses(text))));
+            out.push_back(
+                Stmt::line(
+                    std::format(
+                        "const {} {} = {};",
+                        cppType(g, arg, g->node(arg)->dataType()),
+                        name,
+                        withoutParentheses(text))));
             text = name;
         }
         operand.push_back(text);
     }
     const std::vector<std::string> marks{
-        SiteTable::valueMark(0), SiteTable::valueMark(1), SiteTable::valueMark(2)};
-    const std::string site =
-        program_.sites.siteFor(g, ref, RuntimeDiag::IndexOutOfRange, marks);
-    out.push_back(Stmt::line(
-        local ? std::format(
-                    "{0} = rt::setAt(std::move({0}), {1}, {2}, {3});",
-                    cell.text,
-                    operand[0],
-                    operand[1],
-                    site)
-              : std::format(
-                    "{0}.set(rt::setAt({0}.take(), {1}, {2}, {3}));",
-                    cell.text,
-                    operand[0],
-                    operand[1],
-                    site)));
+        SiteTable::valueMark(0),
+        SiteTable::valueMark(1),
+        SiteTable::valueMark(2)};
+    const std::string site = program_.sites.siteFor(g, ref, RuntimeDiag::IndexOutOfRange, marks);
+    out.push_back(
+        Stmt::line(
+            local ? std::format(
+                        "{0} = rt::setAt(std::move({0}), {1}, {2}, {3});",
+                        cell.text,
+                        operand[0],
+                        operand[1],
+                        site)
+                  : std::format(
+                        "{0}.set(rt::setAt({0}.take(), {1}, {2}, {3}));",
+                        cell.text,
+                        operand[0],
+                        operand[1],
+                        site)));
     frame.consumed.insert(ref);
     // As the append form: the node stands for the variable's own value, the cell with its
     // marking, and a read of it dereferences the cell once.
@@ -2239,8 +2261,8 @@ bool FunctionEmitter::lowerFail(
     // `fail<'Kind'>(message)`: the kind is a constant of the graph -- the tag the program wrote,
     // which is what the fault's report is named after (design principles 3.9) -- and the message
     // is the call's argument. Both are wanted, and neither is a value of the program's own words.
-    const auto with   = g->withInputsOf(ref);
-    const auto norm   = g->normInputsOf(ref);
+    const auto with = g->withInputsOf(ref);
+    const auto norm = g->normInputsOf(ref);
     std::string kind;
     if (!with.empty()) {
         const auto *node = g->node(with[0]);

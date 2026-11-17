@@ -23,7 +23,7 @@ name = "first_step.scalar_library_vjp"
 desc = "The first step's gradient on a SCALAR model (one weight, one bias, `x = 1.5`, `t = 2.0`), by the library's `vjp(loss_plain)(0.5, 0.75)` -> `pullback(1.0)` against the engine's `with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)` plus `grad` for the bias, and against the PyTorch reading recorded beside the case (torch 2.5.1+cu121, float64, cpu): loss 0.125, dL/dw -0.75, dL/db -0.5"
 kind = "behavior"
 case = "../../cases/compile/transforms/first_step_library.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
@@ -272,7 +272,7 @@ name = "matmul_t.rank_three_is_refused_by_name"
 desc = "The product's linear call is `matmul_stated`, so the law that answers it is `matmul_stated_t`; it serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4`, with the sentence `the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently. The ranks list has one entry per operand -- the two tensors and the two stated lists -- and the `reason=` string is left unpinned because it names the helper's argument list rather than the law's"
 kind = "negative"
 case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]

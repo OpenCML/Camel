@@ -839,7 +839,7 @@ case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
 # A back end that compiles: std::nvm runs the nodes and compiles nothing, so it has no sites to
 # print and the five entries above assert that absence instead.
 backends = ["fvm"]
-args = ["-vv", "--log-include", "RefSites", "--gc-check", "foreign", "${case}", "${backend}"]
+args = ["--trace", "plan", "--gc-check", "foreign", "${case}", "${backend}"]
 expect_exit = 0
 verify_script = '''
 ({ input, assert }) => {
@@ -849,12 +849,12 @@ verify_script = '''
   const program = input.normalized.stdout.split('\n')
   const leaked = program.filter(l => l.includes('PLAN_REF_SITES '))
   assert(leaked.length === 0, 'the counted sites are not part of the program output: ' + said)
-  // And the dump is not gone: it is a log line, in the scope that names it.
+  // And the dump is not gone: it is one of the run's readings, on the channel `--trace plan`.
   const logged = merged.split('\n').filter(l => l.includes('PLAN_REF_SITES ')).map(l => l.trim())
   assert(logged.length > 0, 'the diagnostic is still printed, to the log: ' + said)
-  const shape = /^\[INFO\] <RefSites> PLAN_REF_SITES .+ at \d+ node \d+ \+\d+ -\d+ (produces|no-row)$/
+  const shape = /^PLAN_REF_SITES .+ at \d+ node \d+ \+\d+ -\d+ (produces|no-row)$/
   assert(logged.every(l => shape.test(l)),
-    'every site is one line of the RefSites diagnostic, with the plan\'s counts: ' +
+    'every site is one line of the reference-site diagnostic, with the plan\'s counts: ' +
     JSON.stringify(logged.slice(0, 3)))
 }
 '''

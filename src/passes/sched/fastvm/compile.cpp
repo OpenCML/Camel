@@ -7,6 +7,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/trace.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -698,15 +699,20 @@ static bytecode_vec_t compileRuntimeGraph(
             // for it, so a program's stdout is the program's own (author review 2026-11-16,
             // item 7). It was std::cout here until then, which put the compiler's dump among the
             // program's lines and made every plan that reads a program's output skip it.
-            CAMEL_LOG_INFO_S(
-                "RefSites",
-                "PLAN_REF_SITES {} at {} node {} +{} -{} {}",
-                graph->name(),
-                pc,
-                ref,
-                taken,
-                given,
-                produces ? "produces" : "no-row");
+            // A reading of the plan's reference sites, on the run's tracing channel
+            // (`--trace plan`, `include/camel/core/trace.h`) and not on a log scope: the tree had
+            // three ways to ask for one kind of reading (a log threshold, a log scope, an environment
+            // variable) and the author's ruling of 2026-11-16 keeps one. The text is unchanged, down
+            // to the newline the log used to add.
+            camel::core::trace(camel::core::TraceArea::Plan)
+                << std::format(
+                       "PLAN_REF_SITES {} at {} node {} +{} -{} {}\n",
+                   graph->name(),
+                   pc,
+                   ref,
+                   taken,
+                   given,
+                   produces ? "produces" : "no-row");
         }
     }
 

@@ -336,13 +336,13 @@ class ExecPlan {
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
     /// reads this, and the sum over the plan is `refGiveBacksTotal()`.
     std::vector<uint32_t> refGiveBackAt;
-    /// By topo index: the node's producing reference does not come back inside this graph. Three
+    /// By topo index: the node's producing reference does not come back inside this graph. Two
     /// reasons, and they are the same fact about the count: the program keeps the value (it is the
-    /// graph's result), a value the program keeps packs it (a closure that holds it leaves the
-    /// graph with it), or a loop reads it again after the round that read it, so the round's
-    /// give-back cannot be placed at that use (exec_plan.cpp, `repeatsWithoutMakingIt`). Either way
-    /// the graph is still one of the value's holders when the plan ends, and `refHoldsAt` takes one
-    /// hold per reference the plan does give back, so the balance is meant to end here.
+    /// graph's result), or a value the program keeps packs it (a closure that holds it leaves the
+    /// graph with it). Either way the graph is still one of the value's holders when the plan ends,
+    /// and `refHoldsAt` takes one hold per reference the plan does give back, so the balance is
+    /// meant to end here. A value a loop holds is not one of these: its row is laid at the LOOP
+    /// node's position and runs when the loop leaves (`applyRefEntriesForLoopExit`).
     std::vector<uint8_t> refKeptAt;
     /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
     /// once the node at that position has run, in the order the producing values are laid out.
@@ -562,6 +562,18 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 void applyRefEntriesForNode(
     const ExecPlan &plan, camel::core::context::Frame *frame, gc_node_ref_t node,
     slot_t produced) noexcept;
+
+/// The same rows, for the one position no operator runs: the LOOP node's own position, which is run
+/// every round and therefore cannot carry the rows of a use inside the round. What is laid there is
+/// the give-back a loop's rounds hold a value for -- the row a use inside the round cannot have
+/// (exec_plan.cpp, `loopRepeatingOver`) -- and this is called when the loop leaves, so the row runs
+/// exactly once, after the last round that could read the value. Its caller is `loopEnd`
+/// (camel/execute/loop_frame.h), which every back end reaches: the node-by-node interpreters and
+/// the taskflow scheduler through `stepLoops`, FastVM's bytecode through `LEND` in gotovm.cpp, and
+/// the JIT through `jitHelperLoopEnd`. The rows are applied by the same function an operator's rows
+/// go through, so the two cannot disagree about what a row means.
+void applyRefEntriesForLoopExit(
+    const ExecPlan &plan, camel::core::context::Frame *frame, size_t position) noexcept;
 
 /// How many boxes the node being run made: the sites bracket the operator call with it, and hand
 /// the answer to the call above.

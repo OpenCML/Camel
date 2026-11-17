@@ -16,6 +16,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/collection.h"
+#include "camel/core/trace.h"
 #include "camel/execute/cpu_isa.h"
 #include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
@@ -671,6 +672,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     std::string logPresetConsumed;
     std::string logIncludeConsumed;
+    std::string traceConsumed;
 
     auto globalOps =
         (option("-vvvv") % "log threshold: trace (shortcut)",
@@ -682,7 +684,10 @@ bool parseArgs(int argc, char *argv[]) {
          ((option("--log-preset") & value("preset", logPresetConsumed)) %
           "scope filter preset: none|wall|extra"),
          ((option("--log-include") & value("scopes", logIncludeConsumed)) %
-          "comma-separated scope prefixes (overrides preset list)"));
+          "comma-separated scope prefixes (overrides preset list)"),
+         ((option("--trace") & value("areas", traceConsumed)) %
+          "print the compiler's step-by-step readings for these areas, comma-separated: "
+          "transforms|plan|effects|fold (default: none)"));
 
     // How diagnostics are reported, for every command that compiles. The -W... options are
     // taken out of argv before clipp sees it (applyWarningArguments): their value is joined to
@@ -952,6 +957,19 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (selectedCommand == Command::Info) {
         return false;
+    }
+
+    // The trace areas a run asked for (`--trace transforms,plan`): a name that is not in the
+    // registry is refused here rather than silently tracing nothing, because a run that prints no
+    // reading and says nothing about why is the failure mode this option exists to remove.
+    if (!traceConsumed.empty()) {
+        const std::string unknown = camel::core::enableTraceAreas(traceConsumed);
+        if (!unknown.empty()) {
+            std::cerr << "Invalid --trace value: '" << unknown << "'. Expected " << camel::core::traceAreaList()
+                      << ", comma-separated." << std::endl;
+            exitCode = 1;
+            return false;
+        }
     }
 
     // Resolve input path and pass list so main does not branch on --input/--passes
