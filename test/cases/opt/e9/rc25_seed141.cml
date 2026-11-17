@@ -1,0 +1,13 @@
+func q37(a38: int, a39: bool): bool sync {
+    println('');
+    return false;
+}
+
+func main(): int sync {
+    func g56(a57: bool): string sync {
+        q37(if false then -1 else 10, false);
+        return 'r:{},'->format<2>;
+    };
+    let n61 = g56(true);
+    return 0;
+}
