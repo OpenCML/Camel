@@ -111,15 +111,50 @@ S3b 的另一条判据（`v = v->append(x)` 循环，`test/cases/consistency/new
 `test/cases/consistency/new_values/two_names_for_a_struct.cml` 与它的四条后端用例——它今天绿，靠的是计划的
 `copied`；等第 3 步开始判原地写，它就是那个会先红的地方。
 
+### 5.2 再把第 (2) 步叠上去：`loss before` 不动，但那是运气
+
+在第 5.1 节那版记账之上，把 `sgdLeaf` 的 `newLike(p)` 换成"数组自己的计数说独占就写回"
+（`p->writableInPlace() ? const_cast<Array *>(p) : newLike(p)`），一次构建后即回退。两处 TU 都重编了
+（`.../ops.cpp.o`、`.../optim.cpp.o`），读数是：
+
+| 程序 | 基线 | (1)+(2) |
+|---|---|---|
+| `examples/case-study/train.cml` `std::fvm` | `loss before: 3.7500` / `loss after: 0.0000` | **同左**（`3.7500`） |
+| 同上的 `--copies` | `sgd declared`；`step updates 1 in-place 0 by-count 0 declared 1 copied 0` | **一字未变** |
+| `test/cases/modules/nn/sgd_leaves_its_argument.cml`（叶子是 `zeros` 的紧凑数组，不是视图） | `[[0.0], [0.0]]` / `[[0.8], [0.8]]` | **`[[0.8], [0.8]]` / `[[0.8], [0.8]]`**：参数被吃掉了 |
+| `test/plans/feat/modules/nn.plan.toml` | 69/69 绿 | **63/69**：`autoencoder.opt.{nvm,tf}`、`tiny_rnn.opt.{nvm,tf}`、`siamese_shared_encoder.opt.{nvm,tf}` 六条 differential 失配 |
+
+`sgdLeaf` 里临时打的探针（只前四个叶子）说明了训练步为什么"没坏"：第一个叶子 `view=1 alone=0`，
+其后三个 `view=0 alone=1`。
+
+1. **训练步的 `3.7500` 不是证明，是运气。** 本程序的第一个叶子是 `reshape` 出来的视图，`writableInPlace()`
+   对视图恒假（`Array::writableInPlace`），所以**调用者递进来的那个叶子一次都没被写回**；之后每次复用的是 `sgd`
+   自己 `newLike` 出来的紧凑叶子（没有块、inline，计数天然是 1）。被写回的叶子本来就只有一个名字，
+   而真正有第二个名字的那个叶子被视图规则挡住了——两件事都另有原因，不是记账。
+2. **换个不是视图的形状，同一份代码就把实参吃了。** `sgd_leaves_its_argument.cml` 的叶子是 `zeros::<f32>([2,1])`
+   （紧凑、无块），探针读 `view=0 alone=1`，写回发生，`p.weight` 在调用之后印出 `[[0.8], [0.8]]`。
+   这个程序要的东西和 `train.cml:29` 的 `loss<w0, y>(X)` 是同一件事：**调用之后还要读那份值**。
+   而它的第二个名字是**调用**造的，(1a) 的三个 `:var/*` 站点一个都不在这条路上。
+3. **别的程序变红。** `feat/modules/nn` 从 69/69 掉到 63/69（`std::opt` 管线里同样的权重算出不同的值）——
+   这就是判据③。
+
+判据：① 一字未变，而且**不是 (1)+(2) 能变的**：`nn:sgd` 的那一个词由算子表单独决定
+（`src/runtime/storage_reuse.cpp#dumpStorageReuse` 的 `declaredOnly`），`planStorageReuse` 根本不访问这个节点
+（它只走 `plainForm(uri)` 有值的节点）。② 数字上过了，但按第 1 条它是"没发生"的过。③ 红。
+
+**所以 (1)+(2) 不能落地。** 要让 (2) 安全，得先回答"实参在这个调用处是不是最后一次使用"——那是第 4 步的调用点交接
+（也是第 1 步的 (b)）；要让 ① 移动，得让计划访问声明了复用的节点、并把 `decided` 交给尺子读——那是第 3 步的两半。
+
 ## 6. 这一页不改变的事
 
 - 没有扩 `setInPlaceForm` 的集合（那会把"原地形"扩到本来不是原地写的东西）；
 - 没有把 `declared` 改名成 `in-place`（那是把证据记成结论）；
-- 没有动 `modules/nn/optim.cpp`：第 4 节的无条件写回只存在于那次测量里，已回退；工作树里 `modules/nn/optim.cpp`
-  与基线逐字节相同，训练步的读数仍是 `COPIES train.cml:17:12 sgd declared` /
+- 没有动 `modules/nn/optim.cpp`：第 4 节的无条件写回与第 5.2 节的"计数说独占才写回"都只存在于那两次测量里，
+  已回退；工作树里 `modules/nn/optim.cpp` 与基线逐字节相同，训练步的读数仍是 `COPIES train.cml:17:12 sgd declared` /
   `COPIES step updates 1 in-place 0 by-count 0 declared 1 copied 0`；
 - 第 5.1 节的 `shareForSecondName` 改动同样只存在于那次测量里，已回退（补丁在工作树外的
-  `D:\Projects\Camel-wt\s3b-step1-share-structs.diff`）；落在工作树里的只有这一页、一个用例和它的计划条目；
+  `D:\Projects\Camel-wt\s3b-step1-share-structs.diff`）；落在工作树里的是这一页和两个用例
+  （`two_names_for_a_struct.cml`、`sgd_leaves_its_argument.cml`）与它们的计划条目；
 - 没有动 `src/compile/gir/builder_expr.cpp#rebindSsa`。
 - 顺带读到的一格红：`new_values.sort_rebinding.graph`（`array:sort_d_in_place` 不在 rgir 输出里）在**改动前**
   同一棵树上也红——把计划文件退回 `HEAD` 单跑该计划，49 条里仍然只有它一条红，与本页无关，没有动它。
