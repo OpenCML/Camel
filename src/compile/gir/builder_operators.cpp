@@ -2014,6 +2014,10 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     if (binding == nullptr) {
         return nullptr;
     }
+    // Design principles 3.5 (198): from the making of a closure to its last use the name may not be
+    // assigned. The name is a value here and not a cell, and the rule is about the name, so the
+    // check takes the value the binding holds now -- which is the value the closure captured.
+    requireCapturedNameWritable(ssa_.valueOf(binding), name, false, gct->origin());
     const GCT::node_ptr_t &written = gct->assignmentValue();
     Type *held                     = binding->type;
     node_handle_t value{};

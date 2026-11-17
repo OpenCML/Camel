@@ -729,6 +729,10 @@ class Builder {
     void requireCapturedNameWritable(
         node_handle_t cell, const std::string &name, bool throughCall,
         camel::source::origin_id_t at);
+    /// Whether `value` is what the `var` name `name` stands for now (stage S1's value, not a cell):
+    /// the one question the capture asks of a name it captures, so that the rule of design
+    /// principles 3.5 (198) holds for a name that has no cell to be keyed by.
+    bool isSsaValue(node_handle_t value, const std::string &name) const;
     /// Whether `node` is a capture port whose captured name is a `var` of the graph around it
     /// (`captureOriginOf_`). A capture port carries the value the name had where the closure was
     /// made (design principles 3.5, 197), so it is not a variable of the graph that reads it --
@@ -903,8 +907,21 @@ class Builder {
     /// The body of the innermost region being built, innermost last: the function body, an arm's
     /// body, a loop's body. A `var` declared in it may be SSA when the scan of that body says so.
     std::vector<const GCT::Node *> regionBodies_;
-    /// The scan of each body: for every `var` declaration in it, whether the declaration is SSA.
-    std::map<const GCT::Node *, std::unordered_map<const GCT::Node *, bool>> ssaScan_;
+    /// What the scan says about one declaration, in the two shapes a declaration of a value has:
+    /// `asValue` -- the answer every `var` was given before 2026-11-18, a value when every use stays
+    /// in a region that carries one; and `asHandle` -- the answer a `var` whose value is a counted
+    /// handle takes, which a use that only reads the name across a closure's body does not rule out.
+    /// A handle is a value (design principles 3.3, 3.5): a closure that reads the name captures the
+    /// handle itself, and the cell it used to share is what the author's answer of 2026-11-18 names
+    /// (`9d29939c4`: "a cell holding a Ref is a holder, and the cell should go"). A write across
+    /// such a region, a `var` parameter's write-back and an in-place update of a place keep the
+    /// cell, in both answers: a write needs somewhere to land that a captured value cannot give.
+    struct SsaAnswer {
+        bool asValue  = true;
+        bool asHandle = true;
+    };
+    /// The scan of each body: for every `var` declaration in it, the two answers.
+    std::map<const GCT::Node *, std::unordered_map<const GCT::Node *, SsaAnswer>> ssaScan_;
     /// Set while the link a compound assignment rebuilds (`a = a op b`) is being written, so that
     /// the write it performs is not reported as a value nobody reads.
     bool inCompoundAssignment_ = false;
@@ -913,8 +930,11 @@ class Builder {
     /// no loop head, no arm), no path of it is written, and the name is never handed to a `var`
     /// parameter, which writes a caller's cell back. Decided by one walk of the body, before any of
     /// it is built, so the decision does not depend on how the body is built.
-    std::unordered_map<const GCT::Node *, bool> scanBodyForSsa(const GCT::Node *body);
-    bool ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name);
+    std::unordered_map<const GCT::Node *, SsaAnswer> scanBodyForSsa(const GCT::Node *body);
+    /// `aHandle` says which answer the caller wants (see `SsaAnswer`): every other caller asks for
+    /// the one a declaration of a plain value takes.
+    bool ssaDeclarationIsEligible(
+        const GCT::node_ptr_t &decl, const std::string &name, bool aHandle = false);
     /// What the value a callee name denotes is, as far as this layer can say before the call is
     /// built: a function of the program, whose signature the declaration carries; an operator
     /// group, whose type the arguments choose; or nothing this scan can name.
