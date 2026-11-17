@@ -461,7 +461,13 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
             return answer(true);
         }
         const auto reach = footprintOf(graph, id);
-        return answer(!reach.has_value() || camel::core::sem::writesForTheRegion(*reach));
+        // A call whose callee this builder never registered is a node a **rewrite** made; the
+        // footprint of the body it stands in cannot place its accesses (they are the callee's), so
+        // the conservative reading is taken rather than "writes nothing" (design principles 3.3:
+        // an operator nobody declared is read conservatively). A module's body-less kernel is this
+        // shape, and `state::set` on a box is a write of a handle -- a write of the region it is
+        // written in (`test/cases/compile/ref/refwrite_shapes.cml`, line 53).
+        return answer(true);
     }
     default:
         // A branch and a loop are writes of the region they are written in when the region *they
