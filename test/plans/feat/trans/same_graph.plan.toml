@@ -1,0 +1,50 @@
+# Are two writings of one body one graph? The measure the region rule of `fd75209cc` is judged by.
+#
+# The ruling (design principles 3.1, author, 2026-11-17): a region's exit is one `GATE` whose first
+# input is the value the region hands out and whose other inputs are the nodes in the region that
+# write outside the program, and **no edge joins those writes to one another**. Its acceptance item
+# 4 is written as "swap `println(x)` and `fs::write(p, y)` and `std::gir` comes out the same".
+#
+# That sentence cannot be tested as written and this plan is what replaces it. `std::gir` prints its
+# nodes in id order and carries spans and origins, so swapping two lines renumbers them and the two
+# dumps are never the same bytes -- and the same is true of the canonical JSON dump, measured: for
+# the pair this case builds, the two documents part at byte 1279 with `n1` and `n2` being the same
+# two `DATA` nodes counted in the other order. What the criterion means is "the same nodes and the
+# same edges", and that is what `test/tools/same_graph.py` decides: it erases ids, spans, origins
+# and display labels, aligns the two sides by structure -- a node's own label together with the
+# labelled edges around it, refined to a fixed point -- and prints the symmetric difference of the
+# node and edge sets when the answer is no.
+#
+# The case is three readings and not one, because a comparator that answers `true` to everything is
+# indistinguishable from one that answers `true` to the one pair you happen to have:
+#
+#   the criterion's pair       `println` then the file write, and the write then the print. One
+#                              graph exactly when the writes are joined by no edge; on a build
+#                              where they still stand on the body's chain it reads two, and the
+#                              report names the ordering edge that divides them.
+#   the write taken out        must read two, and the difference must name the write that went.
+#   the write made a read      must read two, for the same reason.
+#
+# The two writings are generated from one template by swapping two adjacent lines, and the case
+# verifies mechanically that the two files differ by that swap and nothing else. They are not two
+# committed `.cml` files: a generated pair cannot drift apart, and adding `.cml` files would move
+# the front-end AST golden for a reason that has nothing to do with the front end.
+
+id = "trans.same_graph"
+order = 339
+tier = "fast"
+tags = ["feat", "trans", "dump", "json", "gir", "effects"]
+desc = "Two writings of one body compared as graphs: the same nodes and the same edges, ids/spans/origins erased and the two sides aligned by structure, with the symmetric difference printed when they are not one graph. Positive pair, and the two counterexamples that keep a `true` from being vacuous."
+
+[[tests]]
+name = "trans.two_writings_are_one_graph_or_the_difference_is_named"
+desc = "`println(x)` and a write to a file, written in the two orders, read as graphs: one graph when no edge joins the two writes (design principles 3.1, the ruling of 2026-11-17), and, when a build still chains them, a `false` whose symmetric difference names the ordering edge that divides them. The body with the write taken out, and the body whose write became a read of a variable, must both read `false` and name what changed -- a comparator that cannot say `false` is not a comparator."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/same_graph_writings.py"
+# `${camel}` is the compiler of the build under test, named as an argument.
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["the two writings differ by exactly this swap of two adjacent lines", "same_graph", "reading:", "two pure writings are one canonical form: PASS", "a difference is reported by the nodes and the edges it is: PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
