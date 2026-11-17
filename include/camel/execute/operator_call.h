@@ -2,16 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The one place an operator is called, and with it the one place the count's rows at that position
- * are run (camel/runtime/exec_plan.h, "The references that come back").
+ * The one place a node's rows are run, and the one place an operator is called.
  *
  * Four back ends call operators -- std::nvm, std::fvm, std::jit, and the taskflow scheduler -- and
- * each of them used to apply those rows itself, at every place a call can happen. The places that
- * forgot are exactly the places the count went missing: the SCHD instruction in gotovm.cpp and
+ * each of them used to apply the count's rows itself, at every place a call can happen. The places
+ * that forgot are exactly the places the count went missing: the SCHD instruction in gotovm.cpp and
  * fastvm.cpp's interpreter exit, and the Oper branch of TaskflowExecSchedPass::executePreparedNode.
  * A list that has to be remembered at each call site is
  * how that happens twice; here the list is one call, so no back end has a place left to forget it
  * and no back end has a place left to add a second one.
+ *
+ * `runNode` is that same call for every other node kind: a value's rows are laid out at the
+ * position of the node that runs when they are due, and only the operator kind reaches its position
+ * through an operator call. A CALL, a FILL, a COPY and the rest make and read values too -- a
+ * `state::Ref` made by a call is born with its count at the call -- so a back end that runs one of
+ * those nodes runs its position's rows here, in the place it runs the node.
  *
  * What a back end keeps for itself stays inside the callable it passes: its fault wrapping, its
  * effect site, its profiler, its optimization, and the --gc-check anchor. Those are decisions about
@@ -55,10 +60,22 @@ siteOfSlot(camel::core::context::Frame &frame, camel::runtime::gc_data_idx_t res
 /// so after this returns), so the value the callable answers is handed to the rows rather than read
 /// back out of the frame. The rows run only when the call returns: a fault leaves the count where
 /// the call left it, which is what every back end did before there was one place.
-template <typename Call> slot_t callOperator(const OperatorCallSite &site, Call &&call) {
-    const slot_t produced = std::forward<Call>(call)();
+///
+/// Every node kind a back end runs as a node reaches its position through here except two: an
+/// operator, which is `callOperator` above (the same function, named for the kind), and a LOOP
+/// node, whose position is run once per round and whose rows are its exit's --
+/// `applyRefEntriesForLoopExit`, reached from `loopEnd` by every back end.
+template <typename Run> slot_t runNode(const OperatorCallSite &site, Run &&run) {
+    const slot_t produced = std::forward<Run>(run)();
     camel::runtime::applyRefEntriesForNode(site.plan, &site.frame, site.node, produced);
     return produced;
+}
+
+/// Runs `call`, then the rows the plan has at the call's position, and answers what the operator
+/// produced. The operator kind's name for `runNode`: it is the kind that reaches its position by
+/// calling an operator.
+template <typename Call> slot_t callOperator(const OperatorCallSite &site, Call &&call) {
+    return runNode(site, std::forward<Call>(call));
 }
 
 } // namespace camel::execute

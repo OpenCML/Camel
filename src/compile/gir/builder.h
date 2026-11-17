@@ -33,6 +33,7 @@
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/resource_conflict.h"
 #include "camel/core/type/typevar.h"
+#include "ssa_env.h"
 
 namespace camel::compile::gir {
 
@@ -43,8 +44,6 @@ using data_ptr_t   = camel::core::data::data_ptr_t;
 
 using compile_graph_ptr_t   = std::shared_ptr<DraftGraphBuilder>;
 using node_handle_t         = camel::runtime::DraftNodeRef;
-using node_scope_t          = Scope<std::string, node_handle_t>;
-using node_scope_ptr_t      = std::shared_ptr<node_scope_t>;
 using graph_set_t           = std::vector<compile_graph_ptr_t>;
 using graph_set_ptr_t       = std::shared_ptr<graph_set_t>;
 using graph_scope_t         = Scope<std::string, graph_set_ptr_t>;
@@ -1112,23 +1111,12 @@ class Builder {
 
     /// A `var` whose declaration is built as a value and not as a cell
     /// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1): the name is
-    /// bound to the value in `nodeScope_`, an assignment rebinds it (`ssaAssignmentOf`), and no
-    /// cell is made, so nothing reads or writes one. One entry per declaration, in the scope that
-    /// declared it; the scope is
-    /// the region, so within it a name has one declaration and the entry *is* that declaration. The
-    /// value in the entry is the name's current one: a read takes the map, and a write replaces it.
-    struct SsaValue {
-        node_handle_t value = nullptr;
-        /// The type the cell would have held (`:var/new`'s value type, taken from the
-        /// initializer): every later write enters it, as a store into that cell did.
-        Type *type = nullptr;
-        /// The declaration the entry belongs to, which is what the scan below answers about.
-        const GCT::Node *decl = nullptr;
-    };
-    std::map<node_scope_ptr_t, std::unordered_map<std::string, SsaValue>> ssaValues_;
-    /// The entries whose declaration was found and made SSA, for the dropped-value report
-    /// (`reportDroppedEffects`): the value a write made, and where the write is written.
-    std::unordered_map<node_handle_t, camel::source::origin_id_t> ssaWrites_;
+    /// bound to the value in `nodeScope_`, an assignment rebinds the declaration
+    /// (`ssaAssignmentOf`), and no cell is made, so nothing reads or writes one. The environment is
+    /// the plan's one table -- a declaration is the unit, a region holds its declarations, and the
+    /// value each stands for now is that declaration's (`ssa_env.h`); a write, a branch's JOIN and
+    /// a loop head's phi all go through it, and no other table of SSA values exists.
+    SsaEnv ssa_;
     /// The body of the innermost region being built, innermost last: the function body, an arm's
     /// body, a loop's body. A `var` declared in it may be SSA when the scan of that body says so.
     std::vector<const GCT::Node *> regionBodies_;
@@ -1137,12 +1125,6 @@ class Builder {
     /// Set while the link a compound assignment rebuilds (`a = a op b`) is being written, so that
     /// the write it performs is not reported as a value nobody reads.
     bool inCompoundAssignment_ = false;
-    /// Set while a branch's arms are being built. `rebindSsa` changes the binding where it stands,
-    /// so the value a name had before the branch has to be taken as the first arm writes it: by the
-    /// time the join is built the binding holds the last arm's value. Without it the join carries
-    /// the wrong value into the arm that wrote nothing, which is a wrong program, not a red test.
-    bool gatheringBranchValues_ = false;
-    std::unordered_map<std::string, node_handle_t> branchBeforeValues_;
     /// The declarations that decide eligibility, once, at the declaration: a `var` is SSA exactly
     /// when every read and every write of its name lies in the region that declared it (no join,
     /// no loop head, no arm), no path of it is written, and the name is never handed to a `var`
@@ -1159,16 +1141,10 @@ class Builder {
         const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const;
     /// The signature of every function of the program, by name, filled by `scanProgramWriters`.
     std::unordered_map<std::string, std::vector<const FunctionType *>> functionSignatures_;
-    /// The SSA binding of `name` in force (the innermost scope that binds it), or null.
-    const SsaValue *ssaBindingOf(const std::string &name) const;
-    SsaValue *mutableSsaBindingOf(const std::string &name);
     /// Whether `name` stands for a value built as SSA: such a name is not a constant the compiler
     /// knows, the same way the cell it stands for was not (what it holds may be another value by
     /// the time an unrolled loop or a static key runs).
     bool nameIsSsa(const std::string &name) const;
-    /// Binds `name` to the value it now stands for: the binding the reads take, in the scope that
-    /// declared it (a write inside a nested statement list rebinds the declaration's entry).
-    void rebindSsa(const std::string &name, node_handle_t value);
     /// `x = e` where `x` is SSA: the write is the new value, and nothing is stored. Null when the
     /// link is not such an assignment.
     node_handle_t ssaAssignmentOf(const GCT::node_ptr_t &gct);
@@ -1216,14 +1192,15 @@ class Builder {
     /// this round (a read after that write takes it, as it takes a straight-line write's value).
     std::unordered_map<node_handle_t, node_handle_t> loopStatePorts_;
     std::unordered_map<node_handle_t, node_handle_t> loopStateWrites_;
-    /// The `var`s the loop being built carries as values rather than as cells (stage S3): the name
-    /// the body's region binds to a port, and that port. The head's phi is the port: its two
-    /// sources are the value the name had where the loop is written and the value the body's last
-    /// round wrote, and neither is a cell. A write of such a name is a rebinding
-    /// (`ssaAssignmentOf`) that is also the round's next value (loopStateWrites_, the same table
-    /// the cell path uses), and after the loop the name is rebound to what the head hands out
-    /// (`visitLoopNode`).
-    std::unordered_map<std::string, node_handle_t> loopSsaPorts_;
+    /// The `var`s the loop being built carries as values rather than as cells (stage S3) are the
+    /// SSA environment's: the body's region binds the name to a port and `SsaEnv::Entry::port`
+    /// holds it, so a write of the name there is the round's next state and nothing about the head
+    /// is written on the side. The head's phi is that port: its two sources are the value the name
+    /// had where the loop is written and the value the body's last round wrote, and neither is a
+    /// cell. A write of such a name is a rebinding (`ssaAssignmentOf`) that is also the round's
+    /// next value
+    /// (`loopStateWrites_`, the same table the cell path uses), and after the loop the name is
+    /// rebound to what the head hands out (`visitLoopNode`).
     /// A write of `name`, where a loop head of this build carries it as a value: the round's next
     /// value is `value`. Does nothing when no loop head carries the name -- a write of a `var` that
     /// is not loop state, of a name a closure captured, or of a name the enclosing loop keeps as a
@@ -1357,10 +1334,11 @@ class Builder {
         };
         std::unordered_map<node_handle_t, Touched> touched;
         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
-        /// The `var` names the arm built as values, and the value each ended with, in the order
-        /// they were first written there: what the branch's JOIN carries (stage S2, one per join).
-        std::unordered_map<std::string, node_handle_t> ssaWrites;
-        std::vector<std::string> ssaWriteOrder;
+        /// The `var` declarations the arm built as values, and the value each ended with, in the
+        /// order they were first written there: what the branch's JOIN carries (stage S2, one per
+        /// join). The record is the arm's, because the arm is the region that wrote them; its type
+        /// and the question the JOIN asks of it are the SSA environment's (`SsaEnv::ArmWrites`).
+        SsaEnv::ArmWrites writes;
         /// The ports of the region (a loop's condition or body), in order: the element, then the
         /// values of the state.
         std::vector<node_handle_t> ports;
@@ -1511,6 +1489,12 @@ class Builder {
     ArmBuild *activeArm() const {
         return !armStack_.empty() && armStack_.back()->graph == currGraph_.get() ? armStack_.back()
                                                                                  : nullptr;
+    }
+    /// The record of what the innermost arm has written so far, if an arm is being built: a rebind
+    /// inside it is that arm's write, and its branch's JOIN is what reads the record.
+    SsaEnv::ArmWrites *armWritesHere() {
+        ArmBuild *arm = armStack_.empty() ? nullptr : armStack_.back();
+        return arm != nullptr ? &arm->writes : nullptr;
     }
     /// Records the state of `variable` for the arm being built before it is changed.
     void noteVariable(node_handle_t variable);
