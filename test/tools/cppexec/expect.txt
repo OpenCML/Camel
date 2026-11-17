@@ -375,3 +375,10 @@ test/cases/trans/cpp/array_compare.cml
 # closed the function with `return ;`, which no C++ compiler takes in a function that returns a
 # value. Building and running it here is the claim the plan's text check cannot make.
 test/cases/opt/e9/rc17_seed193.cml
+# The value a branch hands nobody: `if` without `else`, whose arm writes the `var` the next line
+# reads. The back ends took the branch join as the variable, and the join is defined only where
+# the arm runs; here the program never enters the arm, so the answer is the value the variable was
+# made with. The C++ text stored 0 for the control and left the nested one unassigned (`= ;`).
+test/cases/opt/e9/rc21_seed429.cml
+test/cases/opt/e9/rc22_flat_if_var.cml
+test/cases/opt/e9/rc18_seed429.cml

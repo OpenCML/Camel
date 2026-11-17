@@ -2738,6 +2738,12 @@ node_handle_t Builder::buildBranch(
         branchBeforeValues_.clear();
         gatheringBranchValues_ = true;
     }
+    // The value a name had before this branch, as this branch found it. A branch built *inside* an
+    // arm registers its own join as the name's version while that arm is being built, and that join
+    // is not the value the name had before this branch: the arm that hands the branch nothing would
+    // then join the nested join, which is only defined inside the other arm (a `var` written inside
+    // a nested `if` came back as 0, and the C++ writer left the branch's temporary unassigned).
+    const std::unordered_map<node_handle_t, node_handle_t> carriedVersionsBefore = carriedVersions_;
     for (size_t i = 1; i < armEnd; i++) {
         arm_ptr_t subGraph;
         if (arms != nullptr) {
@@ -2971,7 +2977,16 @@ node_handle_t Builder::buildBranch(
             // write needs it.
             std::optional<draft_node_ref_t> beforeValue;
             if (wroteArms != armList.size()) {
-                if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
+                node_handle_t version = nullptr;
+                {
+                    // The versions the names had before this branch, not the ones a branch built
+                    // inside an arm registered while that arm was being built.
+                    auto live        = std::move(carriedVersions_);
+                    carriedVersions_ = carriedVersionsBefore;
+                    version          = valueVersionOf(variable);
+                    carriedVersions_ = std::move(live);
+                }
+                if (version != nullptr) {
                     // A version that carries the value itself -- a write, or a branch that carried
                     // an earlier write -- is the value from before this branch; one that carries
                     // the cell is a write, and what a read wants is the value it stored.
