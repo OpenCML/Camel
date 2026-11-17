@@ -239,12 +239,12 @@ def run_cpp(path: Path, passes: list, env_values: dict, expected: list, cache: d
             elif xcode < 0:
                 result = dict(outcome="CRASH", detail=f"signal {-xcode}", cpp_sha1=digest[:10])
             elif xcode != 0:
-                result = dict(outcome="RUN_ERROR", got=got[:60], cpp_sha1=digest[:10],
+                result = dict(outcome="RUN_ERROR", got=R.capped(got), cpp_sha1=digest[:10],
                               detail=f"exit {xcode}: {(xerr or xout).strip()[-200:]}")
             elif got == expected:
                 result = dict(outcome="OK", cpp_sha1=digest[:10])
             else:
-                result = dict(outcome="MISMATCH", got=got[:60], cpp_sha1=digest[:10],
+                result = dict(outcome="MISMATCH", got=R.capped(got), cpp_sha1=digest[:10],
                               detail=R.first_difference(expected, got))
     cache[digest] = result
     for f in (cpp, exe):
@@ -314,9 +314,9 @@ def one(seed: int) -> dict:
             tgt[cid] = {k: (v[:240] if isinstance(v, str) else v) for k, v in info.items()
                         if k in ("outcome", "diag", "detail", "stage", "located", "exit", "cpp_sha1")}
             if "got" in info:
-                tgt[cid]["got"] = info["got"][:6]
+                tgt[cid]["got"] = info["got"]
         crashes += info["outcome"] in ("CRASH", "HANG")
-    rec["expected"] = expected[:6]
+    rec["expected"] = expected
     if rec["bad"]:
         write_failure(seed, source, modules, expected, env_values, rec["bad"], attempts)
     shutil.rmtree(d, ignore_errors=True)
