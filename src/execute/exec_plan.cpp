@@ -918,6 +918,22 @@ bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
 /// read was released while the enum still held it -- the next operator to reach it through the
 /// variant read "the value is not a reference" (a `Ref` captured by a function the defunctionalizer
 /// lowered, read after the closure was made).
+///
+/// A call that answers a stream or a closure belongs here for the reason the FILL does: the callee
+/// has not finished with the values it was handed. A generator's body runs on the pull, and the
+/// stream the call answered is the closure over the state the body writes, so the `box` a generator
+/// was given outlives the call that gave it -- `reading(box: state::Ref<int>)` answers `int..`, and
+/// the second pull's `state::set` on it read "the value is not a reference" while the first pull had
+/// worked. Read as an ordinary use, the one use of `state::ref(0)` in `main` was that call, so the
+/// box's only reference came back at it (`stream.generator`: `std::nvm`, `std::fvm` and `std::prl`
+/// failed; `std::jit` applied no row at that position and left the box alive, which is why the four
+/// disagreed). A `Func` node is a direct call and its value is the callee's return (`GCFuncBody`),
+/// which is what the test asks.
+///
+/// A call that answers an ordinary value does not belong here: the callee has finished, so what it
+/// made holds nothing it was handed, and the reference of that use comes back at the call. That is
+/// the reading `concurrent_readers_of_a_call_box` pins -- the box `make_box(41)` answers is handed
+/// to two readers and each reader hands its own reference back where it read.
 bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
     const GCNode *node = graph.node(at);
     if (node == nullptr) {
@@ -925,6 +941,16 @@ bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
     }
     if (node->kind == GCNodeKind::Fill) {
         return true;
+    }
+    if (node->kind == GCNodeKind::Func) {
+        const camel::core::type::Type *answered =
+            node->dataType(); // the callee's return type, which is the value the node makes
+        if (answered == nullptr) {
+            return false;
+        }
+        const camel::core::type::TypeCode code = answered->code();
+        return code == camel::core::type::TypeCode::Stream ||
+               code == camel::core::type::TypeCode::Function;
     }
     if (node->kind != GCNodeKind::Oper) {
         return false;
