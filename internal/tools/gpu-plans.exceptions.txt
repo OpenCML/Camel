@@ -29,10 +29,17 @@
 # So THIRTEEN OF THESE NAMES ARE A FIX OWED, NOT A PERMISSION -- they are recorded here so that the
 # gate can run the layer without blocking merges, which is a different thing from saying the readings
 # are acceptable. The counts are deliberately unchanged: deleting them would hide the defect, and
-# nothing about being listed makes a case's failure go away. The one name that has already been fixed
-# is `grad_expand.untagged_graph_keeps_the_runtime_operator` (fixed by `d4f9d87cf`, which compares it
-# against a twin run without the pass); it is left here for the next run to report as trimable rather
-# than deleted blind.
+# nothing about being listed makes a case's failure go away. `grad_expand.untagged_graph_keeps_the_
+# runtime_operator` was the one name already fixed (`d4f9d87cf`, which compares it against a twin run
+# without the pass); it stayed here until a run reported it trimable, and that run has happened, so it
+# is deleted (2026-11-17, reading below).
+#
+# A SKIP IS NOT A PASS, and that is the sentence this file exists to keep honest. At 1m load 34.6 the
+# layer reads `total=146 pass=22 fail=0 skip=124` -- 124 of 146 skipped -- and the gate's own summary
+# then says "16 recorded name(s) no longer red ... can be trimmed". It is wrong: the same tree with the
+# layer executing (`skip=0`, `pass=131`, `fail=15`, 84 s instead of 5 s) reads all fifteen red. The
+# fifteen below were therefore NOT deleted on the strength of that run; only a reading with the cases
+# actually run may trim them.
 #
 # Two rules for editing it:
 #   * add a name only when the case is red for a reason that is demonstrably not the code's -- the
@@ -59,6 +66,3 @@ resident_graph_transfers
 # Not yet classified: bit-preservation assertions, to be split into "the device" and "the code".
 multi_state_loop_device
 static_loop_device
-
-# Already fixed; kept until a run reports it as trimable.
-grad_expand.untagged_graph_keeps_the_runtime_operator

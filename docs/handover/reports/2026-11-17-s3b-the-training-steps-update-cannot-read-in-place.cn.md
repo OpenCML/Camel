@@ -1,5 +1,11 @@
 # S3b：训练步的更新读不到 `in-place`，因为在图里它没有「原地形」也没有可证明的单元
 
+> **2026-11-17 稍后：本页第 4 步（调用点交接）已被作者回答，它不是一条待答的跨过程所有权规则。**
+> 裁定是值语义——实参绑定是一个持有者，在调用者的最后一次使用处交付，否则加一，所以只有计数为 1 时才原地
+> 复用，不需要 `move`、也不需要跨过程分析（`9699824aa`；
+> `handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`）。本页正文按当天原样保留，读第 4 步时
+> 按这一行读：它从"今天没人回答、不可做"变成"可做，尚未落地"。
+
 > 一页一结论。量的是 `camel inspect --copies`（`include/camel/runtime/storage_reuse.h#dumpStorageReuse`），
 > 在 `D:\Projects\Camel-wt\s3b` 的 `lane-s3b`（基线 `3f7debc78`，含 `5512e644b` 的复用声明、S1、S2，不含 S3）上，
 > 构建与计划都在构建主机上跑（`camel-remote.ps1`，Release）。**源码没有一处改动**（工作树只多这一页、一个用例和
