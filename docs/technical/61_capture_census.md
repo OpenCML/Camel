@@ -120,6 +120,20 @@ closures/branches），没有按算子的拆分，也没有捕获表；`std::gir
 263（撤回的那条路上读到的）、244、200，和这一次的 216；每棵树不同，而 `list_sha` 只在语料相同时才
 让两个数可比。
 
+### 3.2 又一段读数（2026-11-17，`19b14ba0f`，同一台主机，`--jobs 8`）
+
+`lane-s3b` 把两个 case 加进了 `test/cases/`（`consistency/new_values/two_names_for_a_struct.cml`、
+`modules/nn/sgd_leaves_its_argument.cml`），scope 从 3874 涨到 3876，分母换了，`list_sha` 也换了。
+**两份读数的语料不同，不许写成「216 → 219」**，各报各的：
+
+| scope | files | counted | refused | var_new | var_new_empty | capture_ports | value | total | cell_typed_nodes | list_sha |
+|-------|-------|---------|---------|---------|---------------|---------------|-------|-------|------------------|----------|
+| `test/cases/**`（默认） | 3876 | 2711 | 1163 | 219 | 41 | 170 | 2256 | 2426 | 1184 | `c43589ff653d…` |
+
+拆数仍闭合（`104 + 66 + 0 = 170`，`capture_ports_untyped=0`），`outcomes: ok=2711 refused=1163
+crashed=2 timeout=0 unreadable=0`。`capture_ports` 与 §3.1 那份相同（170），但这一栏不能说成「没动」：
+两个新 case 本来就不带按引用捕获口，而分母不同，两份数各说各的。
+
 ## 4. 全量 5689 与子集的差
 
 同一棵树（`48e12d4b8`）上 `corpus.py --scope repository` 的读数是 **repository 4129 / documents 1560
