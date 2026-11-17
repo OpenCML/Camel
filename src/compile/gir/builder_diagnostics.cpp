@@ -451,13 +451,14 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
             if (declared.mode == camel::core::sem::ResourceSignature::Mode::Concrete) {
                 return answer(camel::core::sem::writesForTheRegion(declared));
             }
-            if (const auto inferred = inferredResources_.find(callee.get());
-                inferred != inferredResources_.end()) {
-                return answer(camel::core::sem::writesForTheRegion(inferred->second));
-            }
-            // A signature that says nothing at all is a function-type parameter's: what the call
-            // reaches is the instantiation's, so it is read conservatively rather than as writing
-            // nothing (design principles 3.3).
+            // A signature that is not concrete -- no clause at all, or one a type parameter leaves
+            // open -- is read conservatively, and *only* from the declaration: the set the callee's
+            // body was measured to reach (`inferredResources_`) is the link step's answer and is not
+            // there yet for a module that has not been built, so reading it here made the same
+            // program lay different graphs depending on the order the modules loaded
+            // (`perf_fib_smoke`: the summary line `...->format<...>->println` printed or did not,
+            // and the 20 rounds and the summary were 21 lines in one run and 20 in the next).
+            // Design principles 3.3 puts the conservative reading first, and it is deterministic.
             return answer(true);
         }
         const auto reach = footprintOf(graph, id);
@@ -764,58 +765,73 @@ void Builder::layRegionWriteEdges() {
                 if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
                     return runtime::kInvalidNodeRef;
                 }
+                // Who reads what the region hands out. For an arm, the region's `owner` is the BRCH --
+                // the node whose running is the arm's running -- while the value the arm hands out is
+                // read by the JOIN the branch closes, as that JOIN's `with` input: an arm's value is
+                // nobody's norm input and the BRCH's inputs are the condition. A GATE hung on the
+                // BRCH would therefore be read by nothing, and the arm's writes would be laid on a
+                // carrier that never runs; the reader asked here is the JOIN, which is the "the
+                // JOIN's `with`" this function's own rule names. The region's value is re-pointed at
+                // the GATE in that input, so the arm runs -- and its writes run -- exactly when the
+                // value it hands out is read.
+                //
                 // The owner's inputs are read before the GATE is made: the spans look into the draft
                 // and a new node may move what they point at.
                 const auto contains = [&result](std::span<const runtime::gc_node_ref_t> inputs) {
                     return std::ranges::find(inputs, result) != inputs.end();
                 };
-                const bool ownerReadsResult = contains(draft.normInputsOf(owner)) ||
-                                              contains(draft.withInputsOf(owner));
-                std::vector<runtime::gc_node_ref_t> ownerNorm(draft.normInputsOf(owner).begin(),
-                                                              draft.normInputsOf(owner).end());
-                std::vector<runtime::gc_node_ref_t> ownerWith(draft.withInputsOf(owner).begin(),
-                                                              draft.withInputsOf(owner).end());
-                runtime::gc_node_ref_t join             = runtime::kInvalidNodeRef;
-                std::vector<runtime::gc_node_ref_t> joinSync;
-                if (!ownerReadsResult) {
-                    const runtime::DraftNodeHeader *header = draft.header(owner);
-                    if (header == nullptr || header->kind != runtime::GCNodeKind::Brch) {
-                        return runtime::kInvalidNodeRef; // nothing would read the GATE
-                    }
+                runtime::gc_node_ref_t join = runtime::kInvalidNodeRef;
+                if (const runtime::DraftNodeHeader *header = draft.header(owner);
+                    header != nullptr && header->kind == runtime::GCNodeKind::Brch) {
                     join = runtime::branchJoinOf(draft, owner);
-                    if (join == runtime::kInvalidNodeRef || !draft.alive(join)) {
-                        return runtime::kInvalidNodeRef;
+                    if (join != runtime::kInvalidNodeRef && !draft.alive(join)) {
+                        join = runtime::kInvalidNodeRef;
+                    }
+                }
+                const runtime::gc_node_ref_t reader =
+                    join != runtime::kInvalidNodeRef ? join : owner;
+                const bool readerReadsResult = contains(draft.normInputsOf(reader)) ||
+                                               contains(draft.withInputsOf(reader));
+                std::vector<runtime::gc_node_ref_t> readerNorm(draft.normInputsOf(reader).begin(),
+                                                               draft.normInputsOf(reader).end());
+                std::vector<runtime::gc_node_ref_t> readerWith(draft.withInputsOf(reader).begin(),
+                                                               draft.withInputsOf(reader).end());
+                std::vector<runtime::gc_node_ref_t> joinSync;
+                if (!readerReadsResult) {
+                    if (join == runtime::kInvalidNodeRef) {
+                        return runtime::kInvalidNodeRef; // nothing would read the GATE
                     }
                     joinSync.assign(draft.syncInputsOf(join).begin(), draft.syncInputsOf(join).end());
                 }
                 const runtime::gc_node_ref_t gate = draft.addGateNode(type);
                 draft.setNodeRegion(gate, region);
                 draft.setNormInputs(gate, norm);
-                if (ownerReadsResult) {
-                    for (runtime::gc_node_ref_t &input : ownerNorm) {
+                if (readerReadsResult) {
+                    for (runtime::gc_node_ref_t &input : readerNorm) {
                         if (input == result) {
                             input = gate;
                         }
                     }
-                    for (runtime::gc_node_ref_t &input : ownerWith) {
+                    for (runtime::gc_node_ref_t &input : readerWith) {
                         if (input == result) {
                             input = gate;
                         }
                     }
-                    draft.setNormInputs(owner, ownerNorm);
-                    draft.setWithInputs(owner, ownerWith);
+                    draft.setNormInputs(reader, readerNorm);
+                    draft.setWithInputs(reader, readerWith);
                 } else {
-                    // The owner does not read what the arm hands out, so the GATE takes the JOIN's
-                    // place in the block's chain: the JOIN's old sync predecessor becomes the
-                    // GATE's, and the JOIN waits on the GATE. That is one order edge on a JOIN that
-                    // joins no value, which carries no type and is legal there.
+                    // Nothing reads what the region hands out, so there is no data input to re-point
+                    // and the GATE takes the JOIN's place in the block's chain instead: the JOIN's
+                    // old sync predecessor becomes the GATE's, and the JOIN waits on the GATE. That
+                    // is one order edge on a JOIN that joins no value, which carries no type and is
+                    // legal there. This is the `match` arm of
+                    // `test/cases/opt/e9/rc23_seed429_sync_arm.cml`, whose JOIN joins no value at all.
                     //
                     // Legal only when the JOIN is in the GATE's own region: a sync edge that joins
-                    // two blocks is what the commit refuses ("sync edge 28 -> 5 joins two blocks:
-                    // 28 is in the block of region 2 and 5 in region 0", `perf_fib_smoke`). A JOIN
-                    // of another region is the body's or an enclosing one's, and a region whose exit
-                    // nothing of its own reads is then left as it is, like any other unreachable
-                    // GATE (`reachesBack`, above).
+                    // two blocks is what the commit refuses ("sync edge 28 -> 5 joins two blocks: 28
+                    // is in the block of region 2 and 5 in region 0"). A region whose exit nothing of
+                    // its own reads is then left as it is, like any other unreachable GATE
+                    // (`reachesBack`, above), rather than given a carrier that crosses a block cut.
                     if (draft.nodeRegion(join) != region) {
                         return runtime::kInvalidNodeRef;
                     }
