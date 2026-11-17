@@ -2130,10 +2130,17 @@ daea60557d204d99 ok test/cases/compile/var/branch_carry_both_arms_then.cml
 faf7a471321f79c8 ok test/cases/compile/var/closure_read.cml
 7e95a32da81d0116 ok test/cases/compile/var/closure_read_let.cml
 a127e58e7d85a66a ok test/cases/compile/var/compound_write_then_store.cml
+5cbf7af640c7fb75 ok test/cases/compile/var/loop_append_copies.cml
+c1863f4b68b6f37e ok test/cases/compile/var/loop_branch_write.cml
+0097cccf7e647f5c ok test/cases/compile/var/loop_compound_write.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml
+28d98696ca2a4873 ok test/cases/compile/var/loop_nested.cml
+430e0b6cb8318fd3 ok test/cases/compile/var/loop_phi_two_sources.cml
+7d1be5d3a30727cc ok test/cases/compile/var/loop_two_states.cml
 36c00bf6af90970d ok test/cases/compile/var/loop_var.cml
 9a65db17c8e1acb7 ok test/cases/compile/var/loop_write_outside_read.cml
 dbc6384762126cc9 ok test/cases/compile/var/loop_write_outside_read_let.cml
+28b5234eb4b49394 ok test/cases/compile/var/loop_write_then_read.cml
 e4d108190a15a18f ok test/cases/compile/var/step_let.cml
 6fe22c1e60003a30 ok test/cases/compile/var/step_var.cml
 751b3a4d87c66fdd ok test/cases/compile/var/unused_assigned_value.cml
@@ -2434,7 +2441,7 @@ e7b1889f9dc9f225 ok test/cases/consistency/new_values/peek_loop.cml
 14de043d78d2cc59 ok test/cases/consistency/new_values/rebinding_loop.cml
 049a04472078ee4e ok test/cases/consistency/new_values/snapshot_state.cml
 70e6af9d054009a3 ok test/cases/consistency/new_values/sort_rebinding.cml
-feda632ef6b720bc ok test/cases/consistency/new_values/two_names_for_a_struct.cml
+308d098677accb13 ok test/cases/consistency/new_values/two_names_for_a_struct.cml
 12bfa27ee5d13b4b ok test/cases/consistency/new_values/unused_in_lambda.cml
 ed04ebc79de351df ok test/cases/consistency/new_values/unused_operator.cml
 b4512ab896fc938d ok test/cases/consistency/new_values/unused_var.cml
@@ -3163,7 +3170,7 @@ dd4874766974d739 ok test/cases/modules/nn/gru_lite.cml
 f75b0caceb86d188 ok test/cases/modules/nn/matrix_factorization.cml
 d6c9b2164f447b1a ok test/cases/modules/nn/mnist.cml
 54780e3640e4943d ok test/cases/modules/nn/residual_mlp.cml
-7404ea7f087df388 ok test/cases/modules/nn/sgd_leaves_its_argument.cml
+6b80b56293348bc3 ok test/cases/modules/nn/sgd_leaves_its_argument.cml
 1081944efe74470e ok test/cases/modules/nn/siamese_shared_encoder.cml
 932e1970bcaa039d ok test/cases/modules/nn/softmax_axis_error.cml
 ffd3fa7a2b1d492a ok test/cases/modules/nn/softmax_classifier.cml
@@ -3895,7 +3902,7 @@ c1a092942caf4b56 ok test/cases/opt/algebra_rules/divergence.cml
 d48530c14f968f08 ok test/cases/opt/algebra_rules/library_only.cml
 d52d50350b44b1cb ok test/cases/opt/algebra_rules/measure.cml
 6d3d5bbeb859e306 ok test/cases/opt/algebra_rules/tensor_forms.cml
-06dbc732dcd712ef ok test/cases/opt/camel_passes/cse_subject.cml
+62c558304cee338f ok test/cases/opt/camel_passes/cse_subject.cml
 3d2a687ad74693d8 ok test/cases/opt/camel_passes/dce_subject.cml
 51d83bb71bf41e41 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
