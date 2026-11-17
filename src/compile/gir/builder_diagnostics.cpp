@@ -717,7 +717,56 @@ void Builder::layRegionWriteEdges() {
                 if (result == runtime::kInvalidNodeRef || !draft.alive(result)) {
                     return runtime::kInvalidNodeRef;
                 }
-                Type *type = nodeTypeOf(draft.ref(result));
+                // The value the region hands out is not always the node the region's own exit names.
+                // A branch carries a `var` its arms write as the branch's value (stage S2): the arm
+                // `then sync { x = 3; x = 4; println(1); println(2) }` hands the JOIN the value the
+                // write stored, while its own exit is the `sync` block's GATE over the block's tail
+                // -- the second `println`, whose type is `void`. The JOIN then reads the write's
+                // value and never the arm's exit, so the arm's statements would be hung on a node
+                // nothing reads (`test/cases/linear/runtime/order_edges_regions.cml`: the two
+                // prints did not run and the graph lost them). What the region hands out is what
+                // its reader takes from it -- for an arm, the JOIN's `with` slot of that arm -- and
+                // the GATE below forwards that value with the region's writes beside it, which is
+                // the very node the reader was reading.
+                runtime::gc_node_ref_t owner            = runtime::kInvalidNodeRef;
+                runtime::gc_node_ref_t join             = runtime::kInvalidNodeRef;
+                runtime::gc_node_ref_t reader           = runtime::kInvalidNodeRef;
+                bool readerReadsGiven                   = false;
+                runtime::gc_node_ref_t given            = result;
+                if (region != 0) {
+                    owner = runtime::decidingOwnerOfDraft(draft, region);
+                    if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
+                        return runtime::kInvalidNodeRef;
+                    }
+                    if (const runtime::DraftNodeHeader *header = draft.header(owner);
+                        header != nullptr && header->kind == runtime::GCNodeKind::Brch) {
+                        join = runtime::branchJoinOf(draft, owner);
+                        if (join != runtime::kInvalidNodeRef && !draft.alive(join)) {
+                            join = runtime::kInvalidNodeRef;
+                        }
+                    }
+                    reader = join != runtime::kInvalidNodeRef ? join : owner;
+                    const auto reads = [&draft](
+                                           std::span<const runtime::gc_node_ref_t> inputs,
+                                           runtime::gc_node_ref_t target) {
+                        return std::ranges::find(inputs, target) != inputs.end();
+                    };
+                    readerReadsGiven = reads(draft.normInputsOf(reader), given) ||
+                                       reads(draft.withInputsOf(reader), given);
+                    if (!readerReadsGiven && join != runtime::kInvalidNodeRef &&
+                        draft.region(region).kind == runtime::GCRegionKind::Arm) {
+                        // The arm's own slot: the arm reads nothing here, the JOIN does.
+                        const uint32_t index = draft.region(region).index;
+                        const auto slots     = draft.withInputsOf(join);
+                        if (index < slots.size() && slots[index] != runtime::kInvalidNodeRef &&
+                            draft.alive(slots[index]) &&
+                            nodeTypeOf(draft.ref(slots[index])) != nullptr) {
+                            given            = slots[index];
+                            readerReadsGiven = true; // the slot is the reader's own input
+                        }
+                    }
+                }
+                Type *type = nodeTypeOf(draft.ref(given));
                 if (type == nullptr) {
                     return runtime::kInvalidNodeRef;
                 }
@@ -725,12 +774,12 @@ void Builder::layRegionWriteEdges() {
                 // of the exit, so it runs whenever the exit does: adding it back would only draw a
                 // second edge to what is already behind the value.
                 std::vector<runtime::gc_node_ref_t> norm;
-                norm.push_back(result);
+                norm.push_back(given);
                 for (runtime::gc_node_ref_t write : writes) {
                     if (!draft.alive(write) || std::ranges::find(norm, write) != norm.end()) {
                         continue;
                     }
-                    if (reachesBack(result, write)) {
+                    if (reachesBack(given, write)) {
                         continue;
                     }
                     norm.push_back(write);
@@ -761,10 +810,6 @@ void Builder::layRegionWriteEdges() {
                     }
                     return gate;
                 }
-                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
-                if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
-                    return runtime::kInvalidNodeRef;
-                }
                 // Who reads what the region hands out. For an arm, the region's `owner` is the BRCH --
                 // the node whose running is the arm's running -- while the value the arm hands out is
                 // read by the JOIN the branch closes, as that JOIN's `with` input: an arm's value is
@@ -777,27 +822,12 @@ void Builder::layRegionWriteEdges() {
                 //
                 // The owner's inputs are read before the GATE is made: the spans look into the draft
                 // and a new node may move what they point at.
-                const auto contains = [&result](std::span<const runtime::gc_node_ref_t> inputs) {
-                    return std::ranges::find(inputs, result) != inputs.end();
-                };
-                runtime::gc_node_ref_t join = runtime::kInvalidNodeRef;
-                if (const runtime::DraftNodeHeader *header = draft.header(owner);
-                    header != nullptr && header->kind == runtime::GCNodeKind::Brch) {
-                    join = runtime::branchJoinOf(draft, owner);
-                    if (join != runtime::kInvalidNodeRef && !draft.alive(join)) {
-                        join = runtime::kInvalidNodeRef;
-                    }
-                }
-                const runtime::gc_node_ref_t reader =
-                    join != runtime::kInvalidNodeRef ? join : owner;
-                const bool readerReadsResult = contains(draft.normInputsOf(reader)) ||
-                                               contains(draft.withInputsOf(reader));
                 std::vector<runtime::gc_node_ref_t> readerNorm(draft.normInputsOf(reader).begin(),
                                                                draft.normInputsOf(reader).end());
                 std::vector<runtime::gc_node_ref_t> readerWith(draft.withInputsOf(reader).begin(),
                                                                draft.withInputsOf(reader).end());
                 std::vector<runtime::gc_node_ref_t> joinSync;
-                if (!readerReadsResult) {
+                if (!readerReadsGiven) {
                     if (join == runtime::kInvalidNodeRef) {
                         return runtime::kInvalidNodeRef; // nothing would read the GATE
                     }
@@ -806,14 +836,14 @@ void Builder::layRegionWriteEdges() {
                 const runtime::gc_node_ref_t gate = draft.addGateNode(type);
                 draft.setNodeRegion(gate, region);
                 draft.setNormInputs(gate, norm);
-                if (readerReadsResult) {
+                if (readerReadsGiven) {
                     for (runtime::gc_node_ref_t &input : readerNorm) {
-                        if (input == result) {
+                        if (input == given) {
                             input = gate;
                         }
                     }
                     for (runtime::gc_node_ref_t &input : readerWith) {
-                        if (input == result) {
+                        if (input == given) {
                             input = gate;
                         }
                     }
