@@ -1132,15 +1132,32 @@ class Builder {
     /// it is built, so the decision does not depend on how the body is built.
     std::unordered_map<const GCT::Node *, bool> scanBodyForSsa(const GCT::Node *body);
     bool ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name);
+    /// What the value a callee name denotes is, as far as this layer can say before the call is
+    /// built: a function of the program, whose signature the declaration carries; an operator
+    /// group, whose type the arguments choose; or nothing this scan can name.
+    ///
+    /// A `var` position is a property of a function type, so the answer to "does this call write
+    /// this argument back" is read off the value the name stands for -- its signature when it is a
+    /// function, its kind when it is a set of overloads -- never off the spelling of the name. The
+    /// spelling only says *which* value is meant (`calleeValueOf`), through the same layers
+    /// `visitDRefNode` resolves them in.
+    enum class CalleeValueKind : uint8_t { Unknown, Operator, Function };
+    struct CalleeValue {
+        CalleeValueKind kind = CalleeValueKind::Unknown;
+        std::vector<const FunctionType *> signatures;
+    };
+    /// The value the callee node names: this module's own functions, then what its imports bring
+    /// (design principles 10.2, layers 2 to 5), and the groups the compiler made for operators it
+    /// knows by id. Answered `Unknown` for a name whose value this layer cannot see -- a generic, a
+    /// decorated function, an exported value, or a name nothing declares.
+    CalleeValue calleeValueOf(const GCT::Node *callee);
     /// Whether an argument at `index` of `call` stands at a `var` parameter, which writes the
-    /// argument back: the callee's signature says, so the callee has to be a program function (a
-    /// built-in operator's parameters are never `var`, and a callee this scan cannot name is
-    /// answered as one that may write).
+    /// argument back: the callee's function type says, and a callee this scan cannot name is
+    /// answered as one that may write (a write-back lost to a value is a wrong program, a cell
+    /// costs one unit).
     bool argumentMayWriteBack(
         const GCT::Node *call, size_t index,
-        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const;
-    /// The signature of every function of the program, by name, filled by `scanProgramWriters`.
-    std::unordered_map<std::string, std::vector<const FunctionType *>> functionSignatures_;
+        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes);
     /// Whether `name` stands for a value built as SSA: such a name is not a constant the compiler
     /// knows, the same way the cell it stands for was not (what it holds may be another value by
     /// the time an unrolled loop or a static key runs).
