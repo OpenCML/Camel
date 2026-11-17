@@ -717,6 +717,27 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "rc19_seed70_builds_after_specialize"
+# The same property as agree_with_fvm for the one shape that only fails after a pass: the
+# specialization drops the argument whose formal it bound, and the writer used to spell the next
+# argument with that formal's type -- so the text did not build even though every back end ran the
+# graph correctly. The pass is handed to the writer and to std::fvm alike (both run on the same
+# graph), and the two are compared output for output. `--passes` applies to a whole list, which is
+# why this is a list of its own (test/tools/cppexec/expect_specialize.txt).
+tier = "fast"
+desc = "The program of the E9 differential's `no matching function for call to 'f1'` shape, translated by std::cpp after `std::opt::specialize`, built with the system's C++ compiler and run: it prints `r true` and exits 0, the same words std::fvm prints on the same graph. Before the fix the translation succeeded and the compiler refused the text -- the closure that fills the second surviving parameter was spelled `rt::Fn<int64_t(double)>` where the definition takes `rt::Fn<bool(rt::Str, int64_t)>` -- which is a crash class of the E9 run and not a refusal, so no diagnostic named it."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--passes", "std::opt::specialize", "--expect", "test/tools/cppexec/expect_specialize.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["PASS: 1 of 1 programs agree with std::fvm"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
 name = "every_fault_program_says_what_fvm_says"
 desc = "Every `fault_*` case in test/cases -- 50 programs, two of which std::cpp does not translate and which a refusal keeps from the comparison -- run twice: once by std::fvm, once as the program std::cpp writes, and the two reports compared word for word (stdout and stderr together, and the exit code). A fault is the language's answer, so the words of it belong to the interpreter: a back end that writes its own sentence is not translating the fault, it is inventing one -- and an invented sentence reads well, which is why it survives review. This check exists because the tensor builders' rule did exactly that: `Tensor shape cannot contain negative extents` in place of the kernel's `zeros: Shape cannot contain negative values`, found by measuring, not by reading. The remaining 48 are compared, and the set of the ones that differ has to be exactly the list test/tools/cppexec/fault_words.txt names, in both directions. That list is empty now: its one member, fault_in_sync_call.cml, differed only by the warning a call taking a `var` argument drew outside a sync block, which the ruling of 2026-11-15 (design principles 3.1, 3.5) retired -- so the line was deleted, as the file's own rule requires when a name starts agreeing. This case used to require that name in the list; it now requires the list to be empty and every one of the 48 to agree, so a new difference is still red."
 kind = "behavior"

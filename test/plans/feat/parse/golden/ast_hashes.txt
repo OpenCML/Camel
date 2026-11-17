@@ -3943,7 +3943,7 @@ f5710fdcecdb9230 ok test/cases/opt/e9/rc14_seed176.cml
 d9a107b651f8db05 ok test/cases/opt/e9/rc16_seed153.cml
 d4bfd08df25502f5 ok test/cases/opt/e9/rc17_seed193.cml
 7ad57fa2043211f1 ok test/cases/opt/e9/rc18_seed429.cml
-d9de2d864b5d6f5c ok test/cases/opt/e9/rc19_seed70.cml
+058e392d09dd83d2 ok test/cases/opt/e9/rc19_seed70.cml
 b33a38202301ae03 ok test/cases/opt/e9/rc20_seed262.cml
 e5afa48f23c582fe ok test/cases/opt/e9/rc20_seed5_arm_decl.cml
 cc17f65391f02fea ok test/cases/opt/e9/rc21_seed429.cml
