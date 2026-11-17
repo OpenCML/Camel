@@ -2853,7 +2853,7 @@ c9771f8b19215b36 ok test/cases/loops/collection_oom.cml
 7696caf3df2489cc ok test/cases/loops/discrete_loop_iterable.cml
 b43a6fd021c869a9 ok test/cases/loops/discrete_loop_state.cml
 9cafb3a68bf56041 ok test/cases/loops/discrete_struct_field.cml
-43d38f5e2e186ef1 ok test/cases/loops/dropped_effect.cml
+54bb7060962b62f9 ok test/cases/loops/dropped_effect.cml
 7e0dfa4906c0bf06 ok test/cases/loops/edges.cml
 5280f5c683631d8b ok test/cases/loops/effects.cml
 d4a03ac97f69cd33 ok test/cases/loops/err_body_type.cml
