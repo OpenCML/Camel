@@ -830,11 +830,12 @@ void Builder::scanProgramWriters() {
 
 void Builder::scanClosureLastUses() {
     closureUseOf_.clear();
-    // A closure the program binds to a name (`let g = () => x`) is used where the block that binds it
-    // names `g`: design principles 3.5 (198) takes that name's last use for the closure's. Two other
-    // shapes are left out on purpose, because this scan cannot end their stretch and a stretch cut
-    // wide is a legal program refused: a closure written at a call's argument position is used by
-    // that call, and one the program puts into another value is used to the end of the scope.
+    // A closure the program binds to a name (`let g = () => x`) is used where the block that binds
+    // it names `g`: design principles 3.5 (198) takes that name's last use for the closure's. Two
+    // other shapes are left out on purpose, because this scan cannot end their stretch and a
+    // stretch cut wide is a legal program refused: a closure written at a call's argument position
+    // is used by that call, and one the program puts into another value is used to the end of the
+    // scope.
     struct Binding {
         const GCT::Node *closure = nullptr;
         const GCT::Node *block   = nullptr;
@@ -842,9 +843,9 @@ void Builder::scanClosureLastUses() {
         size_t at = kNoSourceOffset;
     };
     // The names each block writes, with the last offset it writes them at. The block is the key and
-    // not the function: a name bound again in a block inside it is another name, and the closure the
-    // outer block bound is not used by it -- which is also why a use written in a nested block is
-    // not counted for the binding outside it (the stretch is cut short, never long).
+    // not the function: a name bound again in a block inside it is another name, and the closure
+    // the outer block bound is not used by it -- which is also why a use written in a nested block
+    // is not counted for the binding outside it (the stretch is cut short, never long).
     std::unordered_map<const GCT::Node *, std::unordered_map<std::string, size_t>> usesOfBlock;
     std::vector<Binding> bindings;
     struct Pending {
@@ -980,8 +981,9 @@ void Builder::scanClosureLastUses() {
             // closure node exactly once (its own binding) and no node carries the name. The way to
             // narrow it is to read the placement off the source -- the tuple, struct, array, `Ref`
             // or return the value is put into -- and not to keep counting names in the graph. The
-            // measured pair that makes this visible: `let h = (): int => c; let first = h(); c = c + 1`
-            // prints 0 and is legal (the last use is the call), while the shape above is refused.
+            // measured pair that makes this visible: `let h = (): int => c; let first = h(); c = c
+            // + 1` prints 0 and is legal (the last use is the call), while the shape above is
+            // refused.
             closureUseOf_[binding.closure] = {binding.at, true, binding.name};
         }
     }
@@ -1001,8 +1003,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // has not been built yet still has its body there. A call through a function value, whose
     // callee this layer does not know, is a possible write of those variables (visitLinkNode).
     scanProgramWriters();
-    // And the last use of every closure the program binds to a name, from the same trees and for the
-    // same reason: design principles 3.5 (198) makes a name unassignable from the making of a
+    // And the last use of every closure the program binds to a name, from the same trees and for
+    // the same reason: design principles 3.5 (198) makes a name unassignable from the making of a
     // closure to that use, and the end of that stretch is in the source, not in a body.
     scanClosureLastUses();
 
@@ -1140,16 +1142,27 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         claimRootNodes(firstNode);
     }
     if (ok) {
+        // A declaration's clause is a promise; the bodies measure what it actually touches, and
+        // the declaration is held to the promise (design effects plan, step 5). The measurement
+        // runs here, while the bodies are still in hand; the report runs per module below, with
+        // the other diagnostics of the module being reported.
+        //
+        // It runs before the two walks below because of the author's spec of 2026-11-17
+        // (`3e4c0929c`): a region's use of its writes is an edge laid at build time from every node
+        // whose *inferred effect* writes (a call, a loop, a branch and an operator alike), and the
+        // effect of a call is the measured signature of its callee, so the measurements have to
+        // exist before the edges are laid. The measurement reads no edge of this kind --
+        // `footprintOf` walks bodies and callee signatures -- so the two may stand in this order.
+        measureInferredResources();
+        // The edges themselves, once: what a write owes its region is no longer derived by each
+        // walk that asks what runs (the warning's, the liveness of a graph, the encode, the
+        // execution order) -- they follow these edges, and the derivation is gone.
+        layRegionWriteEdges();
         settleEffectfulGraphs();
         // A stream is read once on each execution path (design principles 5.4), which is a property
         // of the built graphs: this runs while every body is in hand and every read is a data edge
         // of the graph it was written in, before the graphs are encoded.
         settleStreamLinearity();
-        // A declaration's clause is a promise; the bodies measure what it actually touches, and
-        // the declaration is held to the promise (design effects plan, step 5). The measurement
-        // runs here, while the bodies are still in hand; the report runs per module below, with
-        // the other diagnostics of the module being reported.
-        measureInferredResources();
         // The effects that reach one resource are ordered by the order they are written in
         // (design principles 3.3). This runs on the settled measurements, before anything reads
         // the graphs as a schedule: an order edge is not a use, so it neither runs an effect nor
