@@ -915,6 +915,59 @@ bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
     return body != nullptr && body->uri() == ":enum/make";
 }
 
+/// Whether the node reads `value` and passes it on instead of ending it, so that what happens to the
+/// reference next is not this plan's to say: a direct call hands every value it reads to the callee's
+/// frame, a call through a function value hands every value it reads except the one it runs, and a
+/// field access (`Accs`, `.0` on a tuple, `s.key` on a struct) writes the field into its own slot,
+/// which is a value the reader was packed into.
+///
+/// It matters for a *packing* value and for the references the packing value holds, which is why it
+/// is asked where the packing value's end is decided rather than at the use. A callee that captures
+/// what it was given holds it after the call has returned -- `unfold` is the shape: it answers a
+/// closure that captures the `step` it was handed -- and a field access reads the tuple one of its
+/// fields at a time, so the value the reference was packed into is still the holder after the
+/// access. Read either way, this plan called the read the packing value's death: a box a closure
+/// held came back at the second `unfold` call of a `tee` (and, with `std::opt`, at the field access
+/// that unpacked the closure tuple), and the first `state::get` through the closure answered "the
+/// value is not a reference".
+///
+/// The one value a call *does* end is the callee it runs: `bump()` on a closure that captured the
+/// box reads the closure and nothing keeps it past that call, so the capture's reference still comes
+/// back at the closure's last use (`ref_one_cell_two_holders`, feat/tools `plan_refs.closure_holder`
+/// pins exactly that). The callee is a `with` input of the call, which is why the answer is read
+/// through the values each input carries: the call ends the value its callee input carries, and
+/// passes on the rest.
+///
+/// A value read by a call and *not* packed into anything keeps the plan's ordinary answer (the
+/// reference of that use comes back at the call): each use holds a reference of its own while the
+/// call runs, and a callee that keeps an argument is the callee's to hold, not this graph's to give.
+bool passesWhatItReadsOn(
+    const GCGraph &graph, gc_node_ref_t at, gc_node_ref_t value,
+    const std::vector<std::vector<gc_node_ref_t>> &carried) {
+    const GCNode *node = graph.node(at);
+    if (node == nullptr) {
+        return false;
+    }
+    switch (node->kind) {
+    case GCNodeKind::Accs:
+        return true;
+    case GCNodeKind::Func:
+        return true;
+    case GCNodeKind::Call: {
+        for (const gc_node_ref_t callee : graph.withInputsOf(at)) {
+            if (callee < carried.size() &&
+                std::find(carried[callee].begin(), carried[callee].end(), value) !=
+                    carried[callee].end()) {
+                return false; // the value the call runs: this call is where it ends
+            }
+        }
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 /// The uses of every value, and route 4's "position of the last use" column.
 ///
 /// The rule is written out in the header; what this function adds is the one thing the edges have
@@ -1162,7 +1215,12 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // Where the reference of one use comes back: the use's own position, or -- when the user
         // packs its inputs -- where the value it made is last read, which is later than the use.
         // The loop rule is asked about that position, because that is the one the row runs at.
-        const auto landingOf = [&](uint32_t usePosition) {
+        // `nullopt` says the reference does not come back in this graph at all: the packing value
+        // it was packed into is read by a node that passes it on -- a call hands it to the callee,
+        // a field access writes the field into its own slot (`passesWhatItReadsOn`) -- so the
+        // packing value does not die there and the value is one the program keeps.
+        const auto landingOf =
+            [&](uint32_t usePosition) -> std::optional<std::pair<uint32_t, bool>> {
             const gc_node_ref_t user = plan.topo[usePosition];
             if (!packsItsInputs(graph, user)) {
                 return std::pair<uint32_t, bool>{usePosition, false};
@@ -1173,6 +1231,8 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
                                                              : ExecPlan::kNoLastUse;
             if (end == ExecPlan::kNoLastUse || end >= count) {
                 end = static_cast<uint32_t>(std::min<size_t>(packerPos, count - 1));
+            } else if (passesWhatItReadsOn(graph, plan.topo[end], user, carried)) {
+                return std::nullopt;
             }
             return std::pair<uint32_t, bool>{end, true};
         };
@@ -1200,8 +1260,18 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // `1 + copies == give-backs + kept` is read from.
         uint32_t held   = 0;
         uint32_t copies = 0;
+        // Set when a use's reference leaves this graph instead of coming back here (a packing
+        // value a call is handed, or one a field access unpacks): the value is then one the program
+        // keeps, exactly as a packing value that is the graph's result makes it kept, and the row is
+        // not laid at a position where nothing dies.
+        bool leavesTheGraph = false;
         for (const uint32_t usePosition : usesAt[value]) {
-            const auto [landing, packed] = landingOf(usePosition);
+            const auto landing = landingOf(usePosition);
+            if (!landing) {
+                leavesTheGraph = true;
+                continue;
+            }
+            const auto [landingAt, packed] = *landing;
             // A use the plan runs more than once while the value it reads is made outside that
             // repetition cannot have its row at the use: the round would run it again and give the
             // reference back at the end of the first round. It is due at the exit of the outermost
@@ -1210,8 +1280,8 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
             // a reference of its own: two loops that each read the value give back at their own
             // exits, and neither one's exit is the other's.
             const auto exit =
-                counted ? loopRepeatingOver(plan, idx, landing) : std::optional<uint32_t>{};
-            const uint32_t at = exit ? *exit : landing;
+                counted ? loopRepeatingOver(plan, idx, landingAt) : std::optional<uint32_t>{};
+            const uint32_t at = exit ? *exit : landingAt;
             rows[at].push_back(
                 ExecPlan::RefGiveBack{
                     .value  = value,
@@ -1227,7 +1297,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
                 ExecPlan::RefGiveBack{.value = value, .at = plan.topo[idx], .count = 1});
             ++held;
         }
-        const bool kept         = keptByProgram[value] != 0;
+        const bool kept         = keptByProgram[value] != 0 || leavesTheGraph;
         plan.refProducedAt[idx] = 1;
         plan.refKeptAt[idx]     = kept ? 1 : 0;
         // The holds the plan takes beyond the value's own reference: one for each reference it

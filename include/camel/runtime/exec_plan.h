@@ -300,6 +300,13 @@ class ExecPlan {
     // A packing value the program keeps does not die in this graph at all, so what it packs is kept
     // with it (`refKeptAt` below): the closure holds the array that holds the box, and the box's
     // give-back cannot be placed at the array's last read.
+    // A packing value handed to a call is the same case, and it is the one the count missed: the
+    // callee may keep what it was given (a closure that captures its `step` -- `unfold` -- holds it
+    // after the call has returned), so the packing value does not die at the call either, and the
+    // reference it carries does not come back here. The call is where the value leaves this plan's
+    // sight, not where it dies; the row is not laid, and the packed value is kept.
+    // What is *not* this case: a value read by a call and packed into nothing. Each of its uses
+    // holds a reference of its own while the call runs, and that reference comes back at the call.
     // This is the class that made the half count of 2026-11-15 release live boxes: a closure
     // captured a handle, the slot that made it was cleared, and the count reached zero while the
     // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
