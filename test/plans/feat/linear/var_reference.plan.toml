@@ -1338,15 +1338,40 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 }
 """
 
-# The differential `test/cases/linear/byref/element_assigned_append.cml` states: `v = v->append<4>`
-# reaches the same three positions this lowering does -- take the array out of the cell, run the
-# in-place operator, store it back -- with `:struct/append_arr_in_place` where `arr[0] = 9` has
-# `:op/set_index_in_place`. The criterion is the same in both: the cell's "not shared" mark decides
-# whether the array is copied, and neither program copies.
+# The differential `test/cases/linear/byref/element_assigned_append.cml` used to state: `v =
+# v->append<4>` reaches the same three positions `arr[0] = 9` does -- take the array out of the
+# cell, run the in-place operator, store it back -- with `:struct/append_arr_in_place` where the
+# path write has `:op/set_index_in_place`, neither of them copying.
+#
+# That is no longer what this program builds, and the entry below is marked `known_fail` because
+# the guarantee it pins is GONE, not because a graph shape was rewritten. `v` is a same-region
+# local `var`, so since stage S1 of the direct-SSA plan it is built as the value it was given and
+# there is no cell at all (`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`): no
+# `:var/new`, no `:var/take`, and `Builder::inPlaceRebindingOf`
+# (`src/compile/gir/builder_operators.cpp`) declines for want of a cell, so the append is the
+# copying form. The two readings, taken on this tree with the ruler that plan names for the stage
+# which owns the repair:
+#
+#   camel inspect --copies test/cases/linear/byref/element_assigned_append.cml
+#     COPIES element_assigned_append.cml:11:18 append copied
+#     COPIES main updates 1 in-place 0 by-count 0 declared 0 copied 1
+#   camel inspect --copies test/cases/linear/byref/element_assigned.cml
+#     COPIES element_assigned.cml:11:8 set_index in-place
+#     COPIES main updates 1 in-place 1 by-count 0 declared 0 copied 0
+#
+# So `arr[0] = 9` on a cell still updates in place and `v = v->append<4>` on a value does not.
+# The author's amendment to that plan is what closes the gap -- its stage S3b, where an SSA value
+# handed to `append`, to a path assignment or to `sgd` at its last use reuses the input's storage,
+# read with `camel inspect --copies`. S3b has not landed, and the two routes already tried are
+# recorded as refused in
+# `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`: swapping
+# `ssaAssignmentOf` and `inPlaceRebindingOf` order, and measuring whether the count is told the
+# truth when a value is put into a container or a field capture. Neither is something this lane
+# may paper over, so the red stays and the mark below says when it expires.
 
 [[tests]]
 name = "element_assigned_append.in_place_form"
-desc = "`v = v->append<4>` on a `var` array is the in-place rebinding: the graph takes the array out of the cell (`:var/take` of `:var/new`), appends through `:struct/append_arr_in_place`, and `:op/assn_owned` stores the result into that same cell -- the cell is its first operand, the appended array its second, and the take is ordered before it. The copying form `:struct/append_arr` is not in the graph, and the cell is not read (`:var/peek`) first."
+desc = "What this entry has always asked: that `v = v->append<4>` on a `var` array reaches the in-place rebinding -- one `:var/take` of the cell, `:struct/append_arr_in_place`, `:op/assn_owned` storing it back into that cell, with the take ordered before the store and neither the copying form `:struct/append_arr` nor a `:var/peek` in the graph. It is marked `known_fail` because the program no longer builds that at all: `v` is a same-region local, so it is a value and there is no cell to take the array out of (stage S1 of the direct-SSA plan), and the append copies. The mark comes off when S3b makes `camel inspect --copies` answer in-place for this append."
 kind = "behavior"
 case = "../../../cases/linear/byref/element_assigned_append.cml"
 args = ["${case}", "std::jgir"]
@@ -1382,6 +1407,27 @@ assert(only(':struct/append_arr').length === 0, 'the copying form is not in the 
 assert(only(':var/peek').length === 0, 'the cell is not read before the write')
 }
 """
+# The mark in the shape the author's ruling of 2026-11-03 00:30 asks a mark to carry
+# (`agents/test.md`): the defect, the owner, the note, and the sentence this case prints today.
+#
+#   the defect -- `v = v->append<4>` on a same-region local `var` copies its array. The value has
+#     no cell, so `Builder::inPlaceRebindingOf` (`src/compile/gir/builder_operators.cpp`) declines
+#     and the append stays the copying form; `Builder::pathAssignmentOf` already tells the reverse
+#     case -- `arr[0] = 9` on a cell -- and it still rebinds in place.
+#   the owner  -- stage S3b (second-name counting) of
+#     `docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`. It is not a lane of its own
+#     yet, and the page named in `known_fail_reason` is why: the two routes tried so far were
+#     measured and refused, so what is missing is honest counting, not a claim order.
+#   the unhide -- when S3b lands and `camel inspect --copies
+#     test/cases/linear/byref/element_assigned_append.cml` answers `in-place` or `by-count` for
+#     the append instead of `copied`, delete every field below: the assertions above then describe
+#     this program again, and the mark would fail the run on its own (`marked known_fail ... but
+#     passes, so the mark is out of date`). Deliberately a reading and not a date.
+known_fail = true
+known_fail_owner = "stage S3b (second-name counting) of docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md -- no lane owns it yet"
+known_fail_reason = "`Builder::inPlaceRebindingOf` declines because a same-region local `var` is a value and not a cell (`src/compile/gir/builder_operators.cpp`), so `:var/take` is not in the graph and `append` copies; the repair is stage S3b of `docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`, whose two attempted routes `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md` records as refused"
+known_fail_msg = "one :var/take, got 0"
+known_fail_note = "This is not an assertion that went stale, and the entry must not be rewritten to expect the copying form: the guarantee it names -- an append at the value's last use does not copy (design principles 10.5) -- is really lost for a same-region local `var`, and `feat/linear` is the only plan that says so. Rewriting it green would pin the loss; leaving it red with no expiry would make it a red nobody ends, which is the same thing with better manners. What it reads, on this tree: `inspect --copies element_assigned_append.cml` prints `COPIES element_assigned_append.cml:11:18 append copied` (main: updates 1 copied 1), while `inspect --copies element_assigned.cml` prints `COPIES element_assigned.cml:11:8 set_index in-place` (main: in-place 1). The other four entries that went red with this one -- path_assigned.allocs.{nvm,fvm,jit,prl} -- were a different defect (a store that copied its value lost the in-place mark when it was cloned, `31b14394b`) and are green now."
 
 [[tests]]
 name = "element_assigned_append"
@@ -2705,40 +2751,39 @@ assert(!text.includes('grad '), 'no gradient is printed')
 """
 timeout_ms = 20000
 
+# These two entries pinned a refusal whose premise is gone: they required exit 1 with 'a variable
+# of a differentiable type that is declared inside the differentiated function is read there'.
+# The read that rule is about is a read of a CELL taken as a constant, and since stage S1 a
+# same-region local `var` of a body is built as the value it was given -- there is no cell for
+# this program to read (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md). What the
+# rule protected against is a gradient that would be silently wrong, and the repair it names --
+# bind the value with `let` -- is what the compiler now builds, so the gradient flows and is the
+# true one: t = (p0 * x) * 2, sum(t) = 2, d sum(t) / d p0 = 2 * x = [2, 4], sum = 6. The rule
+# itself still stands where a cell really is read, and the four entries around this one
+# (`var_tensor_read_after_write`, `var_tensor_read_after_call`, `var_tensor_read_in_callee`) keep
+# it on the wire. What these two pin now is the other direction: if this local ever went back to
+# being a cell, the run would be refused again and the entry would say so.
+
 [[tests]]
 name = "var_tensor_local.run"
-desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type declared inside the differentiated function is read there (run-time error at the gradient call)."
+desc = "Runs, and the gradient is the true one: a variable of a differentiable type declared inside the differentiated function is a same-region local, so it is built as the value it was given and not as a cell (stage S1), and the read carries the gradient instead of being a variable read taken as a constant. This was refused until the local became a value; the diagnostic's own repair was to bind it with `let`. sum(t) is 2 and d sum(t) / d p0 is 2 * x = [2, 4], summed 6."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_tensor_local.cml"
 args = ["${case}"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout = "value 2.0 grad 6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const text = input.normalized.stdout + (input.stderr || '')
-assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
-assert(text.includes('declared inside the differentiated function'), 'the diagnostic names the case: ' + text)
-assert(!text.includes('grad '), 'no gradient is printed')
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor_local.macro"
-desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type declared inside the differentiated function is read there (compile-time error of std::macro)."
+desc = "The same value and the same true gradient as `var_tensor_local.run` through the compile-time path of std::macro: a variable of a differentiable type declared inside the differentiated function is a same-region local and so a value (stage S1), not the cell whose read the old refusal was about."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_tensor_local.cml"
 args = ["${case}", "std::macro", "std::fvm"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout = "value 2.0 grad 6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const text = input.normalized.stdout + (input.stderr || '')
-assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
-assert(text.includes('declared inside the differentiated function'), 'the diagnostic names the case: ' + text)
-assert(!text.includes('grad '), 'no gradient is printed')
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
