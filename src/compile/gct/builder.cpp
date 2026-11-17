@@ -176,6 +176,28 @@ inline void setOriginFromOrigin(
         std::move(inputs)));
 }
 
+/// The parts a node already carries, so that a node visited in more than one place keeps them when
+/// the place it stands at follows the AST node it was lowered from.
+struct SemanticParts {
+    std::vector<camel::source::SemanticPart> parts;
+    std::vector<camel::source::origin_id_t> inputs;
+};
+
+inline SemanticParts ownSemanticParts(const context_ptr_t &context, const node_ptr_t &node) {
+    SemanticParts own;
+    if (!context || !node || node->origin() == camel::source::kInvalidOriginId) {
+        return own;
+    }
+    auto sourceContext = context->sourceContext();
+    const auto *bundle = sourceContext ? sourceContext->gctSemantic(node->origin()) : nullptr;
+    if (bundle == nullptr) {
+        return own;
+    }
+    own.parts  = bundle->parts;
+    own.inputs = bundle->mergedInputs;
+    return own;
+}
+
 inline void setOriginFromAst(
     const context_ptr_t &context, const node_ptr_t &node, const AST::node_ptr_t &ast,
     camel::source::OriginKind kind = camel::source::OriginKind::GctNode,
@@ -982,14 +1004,12 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("Stmt");
-    // A write has already said what it stands for, and it stands where the statement is while
-    // keeping the operator's own place among its parts (visitBinaryExpr). Deriving it from the
-    // statement node again would leave only the statement, and the store the write makes reads
-    // that part back (Builder::storeOperatorOrigin).
-    if (stmtNode == nullptr || stmtNode->type() != GCT::NodeKind::ASSIGN) {
-        setOriginFromAst(context_, stmtNode, ast, camel::source::OriginKind::GctNode, "gct.stmt");
-        registerGctSemantic(context_, stmtNode, ast);
-    }
+    // The same for a write written as a statement: the statement node gives it the place the
+    // statement stands at, and the parts it carries -- the operator's place among them -- stay its
+    // own (visitData).
+    const auto ownParts = ownSemanticParts(context_, stmtNode);
+    setOriginFromAst(context_, stmtNode, ast, camel::source::OriginKind::GctNode, "gct.stmt");
+    registerGctSemantic(context_, stmtNode, ast, ownParts.parts, ownParts.inputs);
     return stmtNode;
 }
 
@@ -2538,14 +2558,13 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("Data");
-    // A write has already said what it stands for: it is where the statement is, and the place of
-    // the operator it was written with is a part of the parts it carries (visitBinaryExpr).
-    // Deriving it from the AST node again would replace those parts with the AST node's own and
-    // leave the operator's place unreadable (Builder::storeOperatorOrigin).
-    if (dataNode == nullptr || dataNode->type() != GCT::NodeKind::ASSIGN) {
-        setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
-        registerGctSemantic(context_, dataNode, ast);
-    }
+    // A write's parts are the write's: what names its two sides and the place of the operator it
+    // was written with is what it said itself (visitBinaryExpr), and the AST node here is one
+    // expression that stands for both sides at once. Only the place the node stands at follows the
+    // AST node, as it does for every other data node.
+    const auto ownParts = ownSemanticParts(context_, dataNode);
+    setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
+    registerGctSemantic(context_, dataNode, ast, ownParts.parts, ownParts.inputs);
     return dataNode;
 }
 
