@@ -3945,6 +3945,7 @@ d4bfd08df25502f5 ok test/cases/opt/e9/rc17_seed193.cml
 7ad57fa2043211f1 ok test/cases/opt/e9/rc18_seed429.cml
 d9de2d864b5d6f5c ok test/cases/opt/e9/rc19_seed70.cml
 b33a38202301ae03 ok test/cases/opt/e9/rc20_seed262.cml
+e5afa48f23c582fe ok test/cases/opt/e9/rc20_seed5_arm_decl.cml
 cc17f65391f02fea ok test/cases/opt/e9/rc21_seed429.cml
 9aad18f25a5fa7ee ok test/cases/opt/e9/rc22_flat_if_var.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml

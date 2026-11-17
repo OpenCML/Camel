@@ -2833,7 +2833,18 @@ node_handle_t Builder::buildBranch(
             const auto before       = branchBeforeValues_.find(name);
             if (before != branchBeforeValues_.end()) {
                 Type *carriedType = valueTypeOf(nodeTypeOf(before->second));
-                bool carried      = carriedType != nullptr;
+                // The rule `builder_control.cpp:2824-2825` states, which nothing implemented until
+                // now: "A name declared inside an arm dies with it and is not carried". The record
+                // `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and
+                // that one cannot tell a name the branch found in scope from one an arm declared --
+                // so the record's presence is no proof that the name still exists here, after every
+                // arm's scope has been popped. `nameIsSsa` is that proof: it walks the scopes live
+                // now. Without it `rebindSsa` is called for a name no scope holds, and the
+                // guarantee that reads "An SSA `var` is written where its declaration is in scope"
+                // fires on `if false then sync { var v = 1; v = 2; };` (the shape S2, 243de26e5,
+                // left open). A name declared before the branch keeps its binding, so this only
+                // changes the answer for the case the guarantee already refused.
+                bool carried = carriedType != nullptr && nameIsSsa(name);
                 for (const arm_ptr_t &arm : armList) {
                     const auto wrote = arm->ssaWrites.find(name);
                     const node_handle_t value =
@@ -3846,6 +3857,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     if (!carried.empty()) {
         auto &bodyDraft = currGraph_->transaction().edit();
         std::vector<node_handle_t> components(stateCount, nullptr);
+        // Whether the declared states' next values came from the body's tuple fill (below). A
+        // component that fill does not name is read out of the tuple, and that read has to stand
+        // where the tuple stands -- in the body's region -- or it is a node of the outer region
+        // between the loop's own nodes and the LOOP that ends a round.
+        bool readFromFill      = false;
         node_handle_t returned = loopStateValueOf(bodyPart->value);
         if (declaredStates == 1) {
             components[0] = returned;
@@ -3871,6 +3887,16 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                             }
                             components[slot] = nodeDraftOf(returned)->ref(withIns[i]);
                         }
+                        // A fill names a component only when that component is one of its
+                        // with-inputs: a component its static template already holds -- the
+                        // constant of `(xs, 0.25)`, as opposed to the value of `(xs, y)` -- has no
+                        // value node and therefore no slot, so its table is shorter than the
+                        // states. One it leaves out is read out of the tuple below, which is how a
+                        // body that gave no fill at all is read: the state's next value is the
+                        // tuple's component in both shapes, and the loop's next state is not
+                        // missing it. What the fill does name keeps the value it hands on, so a
+                        // state the body handed on in place is still that value.
+                        readFromFill = fromFill;
                     }
                 }
             }
@@ -3907,6 +3933,23 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             std::iota(slots.begin(), slots.end(), size_t{0});
             const uint32_t outerRegion = bodyDraft.insertRegion();
             bodyDraft.setInsertRegion(bodyPart->region);
+            // The component a tuple fill does not name is read out of the tuple, and the read is
+            // the body's own computation, so it is made in the body's region: a node of the outer
+            // region that the body's next-state fill reads stands between the loop's nodes and the
+            // LOOP that ends a round, and the plan refuses that graph
+            // (execute/exec_plan.cpp, "not one contiguous range").
+            if (readFromFill && returned != nullptr) {
+                for (size_t j = 0; j < declaredStates; ++j) {
+                    if (components[j] != nullptr) {
+                        continue;
+                    }
+                    node_handle_t part =
+                        currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
+                    linkNodes(LinkType::Norm, returned, part);
+                    registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
+                    components[j] = part;
+                }
+            }
             result = currGraph_->addFillNode(
                 nextType,
                 runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
