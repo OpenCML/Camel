@@ -482,13 +482,16 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             return resolved;
         }
         if (header->kind == GCNodeKind::Gate) {
+            // The value a GATE hands on is its first normal input (design principles 3.1, the
+            // author's ruling of 2026-11-17); the inputs after it are the reads of the region's
+            // writes, so the canonical node behind a region's GATE is the first one.
             const auto normInputs = draft.normInputsOf(canonicalId);
             if (!normInputs.empty()) {
-                canonicalId = normInputs.back();
+                canonicalId = normInputs.front();
                 continue;
             }
             const auto withInputs = draft.withInputsOf(canonicalId);
-            canonicalId           = withInputs.empty() ? kInvalidNodeRef : withInputs.back();
+            canonicalId           = withInputs.empty() ? kInvalidNodeRef : withInputs.front();
             continue;
         }
         if (header->kind == GCNodeKind::Cast) {

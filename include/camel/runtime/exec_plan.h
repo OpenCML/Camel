@@ -607,6 +607,20 @@ void applyRefEntriesForNode(
 void applyRefEntriesForLoopExit(
     const ExecPlan &plan, camel::core::context::Frame *frame, size_t position) noexcept;
 
+/// The same rows of every loop of `frame`'s graph that the run is still inside, given back because
+/// the run is not going to leave them: a fault -- or any other exception -- unwinds past `loopEnd`'s
+/// leaving branch, so the moment those rows were waiting for never comes, and the last round's hold
+/// is never given back. The count is the number of holders (design principles 10.5), and a frame that
+/// is going back holds nothing, so the rows a loop was still holding a value for run here instead.
+///
+/// Called by each scheduler on the way out of a fault, before the frame is released: the slots still
+/// name the values at that point, and after `FramePool::release` they do not. A loop that has already
+/// left is not one of these -- `loopEnd` sets the round to a negative value on the way out and ran
+/// its rows there -- so a run that ends normally gives back nothing here, and no frame gives a row
+/// twice. A frame whose graph is not the one the plan was built for reads nothing: the round slots
+/// are the plan's, and another graph means something else by them.
+void applyRefEntriesOfOpenLoops(camel::core::context::Frame *frame) noexcept;
+
 /// How many boxes the node being run made: the sites bracket the operator call with it, and hand
 /// the answer to the call above.
 ///

@@ -1,0 +1,21 @@
+import state
+
+// A box a closure carries, read through the closure and given back when the closure goes.
+//
+// The program keeps nothing: the box is made, the closure captures it, the closure reads it twice
+// and is dropped when `main` returns. So the count the runtime keeps (`FOREIGN_RESOURCES`) has to
+// come home while the program runs -- `created=1 counted=1 released=1 live=0 disposed=0` -- and not
+// be left for the exit to dispose (`released=0 live=1 disposed=1`).
+//
+// This case exists because the reading it takes was, until 2026-11-18, taken by no plan any gate
+// runs: `test/probe/refleak/fill_carries.cml` reads it in the `probe` tier, the four plans a lane
+// reports (compile/opt/para/tools) name no probe, and on `std::prl` the answer was `released=0`
+// -- a red that could live on the trunk and report green at every merge. It is not repaired here
+// (the taskflow back end's give-back for a value a closure carries is its own piece of work); it is
+// put where a gate reads it, so the red is named by a plan instead of by a probe nobody runs.
+func main(): int sync {
+    let box = state::ref(5)
+    let read = (): int => state::get(box)
+    println(read(), read())
+    return 0
+}

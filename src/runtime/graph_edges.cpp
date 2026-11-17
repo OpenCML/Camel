@@ -694,11 +694,14 @@ class EdgeChecker {
             }
             break;
         case GCNodeKind::Gate:
-            if (!norm.empty() && type && typeOf(norm.back()) &&
-                !compatible(typeOf(norm.back()), type)) {
+            // The first input is the value the gate forwards; the ones after it are reads it takes
+            // and say nothing about what is handed on (design principles 3.1, the author's ruling of
+            // 2026-11-17, the region `GATE`).
+            if (!norm.empty() && type && typeOf(norm.front()) &&
+                !compatible(typeOf(norm.front()), type)) {
                 report(
                     ref,
-                    std::format("forwards a {} as a {}", show(typeOf(norm.back())), show(type)));
+                    std::format("forwards a {} as a {}", show(typeOf(norm.front())), show(type)));
             }
             break;
         case GCNodeKind::Cast:

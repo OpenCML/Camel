@@ -915,21 +915,38 @@ class Builder {
     /// it is built, so the decision does not depend on how the body is built.
     std::unordered_map<const GCT::Node *, bool> scanBodyForSsa(const GCT::Node *body);
     bool ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name);
+    /// What the value a callee name denotes is, as far as this layer can say before the call is
+    /// built: a function of the program, whose signature the declaration carries; an operator
+    /// group, whose type the arguments choose; or nothing this scan can name.
+    ///
+    /// A `var` position is a property of a function type, so the answer to "does this call write
+    /// this argument back" is read off the value the name stands for -- its signature when it is a
+    /// function, its kind when it is a set of overloads -- never off the spelling of the name. The
+    /// spelling only says *which* value is meant (`calleeValueOf`), through the same layers
+    /// `visitDRefNode` resolves them in.
+    enum class CalleeValueKind : uint8_t { Unknown, Operator, Function };
+    struct CalleeValue {
+        CalleeValueKind kind = CalleeValueKind::Unknown;
+        std::vector<const FunctionType *> signatures;
+    };
+    /// The value the callee node names: this module's own functions, then what its imports bring
+    /// (design principles 10.2, layers 2 to 5), and the groups the compiler made for operators it
+    /// knows by id. Answered `Unknown` for a name whose value this layer cannot see -- a generic, a
+    /// decorated function, an exported value, or a name nothing declares.
+    CalleeValue calleeValueOf(const GCT::Node *callee);
     /// Whether an argument at `index` of `call` stands at a `var` parameter, which writes the
-    /// argument back: the callee's signature says, so the callee has to be a program function (a
-    /// built-in operator's parameters are never `var`, and a callee this scan cannot name is
-    /// answered as one that may write).
+    /// argument back: the callee's function type says, and a callee this scan cannot name is
+    /// answered as one that may write (a write-back lost to a value is a wrong program, a cell
+    /// costs one unit).
     bool argumentMayWriteBack(
         const GCT::Node *call, size_t index,
-        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const;
-    /// The signature of every function of the program, by name, filled by `scanProgramWriters`.
-    std::unordered_map<std::string, std::vector<const FunctionType *>> functionSignatures_;
+        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes);
     /// Whether `name` stands for a value built as SSA: such a name is not a constant the compiler
     /// knows, the same way the cell it stands for was not (what it holds may be another value by
     /// the time an unrolled loop or a static key runs).
     bool nameIsSsa(const std::string &name) const;
-    /// `x = e` where `x` is SSA: the write is the new value, and nothing is stored. Null when the
-    /// link is not such an assignment.
+    /// `x = e` where `x` is SSA (NodeKind::ASSIGN, form Plain or Rebuilt): the write is the new
+    /// value, and nothing is stored. Null when the node is not such a write.
     node_handle_t ssaAssignmentOf(const GCT::node_ptr_t &gct);
 
     /// A `var` that does not escape becomes SSA: every read takes the value of the write that made
@@ -990,7 +1007,7 @@ class Builder {
     /// cell. Called from every place that rebinds the name, so that a write inside an arm of the
     /// body (S2's join) or inside a loop body of the body (S3's own head) reaches the head too.
     void noteLoopStateWrite(const std::string &name, node_handle_t value);
-    /// `LINK(DREF __assn__, DREF <name>, value)` where `<name>` is one of those ports: the value
+    /// `ASSIGN(Plain, DREF <name>, value)` where `<name>` is one of those ports: the value
     /// written is the loop's next state for that `var`, so the statement makes no store and the
     /// call of the assignment operator is not built at all. Null for everything else.
     node_handle_t loopStateAssignmentOf(const GCT::node_ptr_t &gct);
@@ -2592,29 +2609,20 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
-    // Once the bodies' inferred resources have been measured: connects every node whose own
-    // inferred effect writes -- an operator declared writing, a call of a body that writes, a loop
-    // or a branch whose regions write -- by a sync edge to the exit of the region it is written in
-    // (the author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit through a
-    // sync edge laid when the graph is built", calls and loops alike, whether or not its value is
-    // read). This is the one place the "used" a region owes its writes is materialized; every walk
-    // that asks what runs (the warning, the liveness of a graph, the encode, the execution order)
-    // then follows edges and never derives it again.
+    // Once the bodies' inferred resources have been measured: connects every write a region owes -- an
+    // operator whose declaration writes outside the program or to a handle -- and every branch
+    // written as a statement, by a sync edge to the exit of the region it is written in (the
+    // author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit by a sync edge
+    // laid when the graph is built"), in the order the statements are written, and only for a region
+    // that runs. This is the half of 3.1 the graph can carry; "does this region run, and which arm
+    // does this statement belong to" is the region's roots (camel/runtime/region_roots.h).
     void layRegionWriteEdges();
-    // Whether running `node` of `graph` makes a write the region that runs it owes: an operator
-    // whose declaration writes outside the program or to a handle, a call of a function whose
-    // measured signature holds such a write, a loop with one in its condition or its body, a branch
-    // with one in an arm. A write to a `var` is not one of them (the ruling of 2026-11-15).
+    // Whether `node` of `graph` is a write the region that runs it owes, in the one sense the edge
+    // below and the region's roots share: an operator whose declaration writes outside the program
+    // or to a handle (`writesForTheRegion`). A write to a `var` is not one of them (the ruling of
+    // 2026-11-15), and neither is a call, a branch or a loop: what a *statement* runs is asked by the
+    // region's roots (camel/runtime/region_roots.h), and an edge would run it instead.
     bool writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const;
-    // Whether a call of `callee` writes what the region that runs it owes, read from the measured
-    // signature (`inferredResources_`) and, for a body measured elsewhere, from its declaration.
-    // A signature that says nothing is not read as a promise of a write: a read stays as
-    // demand-driven as it was (`region_roots.read_only`), and what a region owes is a write.
-    bool calleeWritesForTheRegion(const compile_graph_ptr_t &callee) const;
-    // The write half of a signature: a parameter use that writes a handle or a resource outside the
-    // program, or an ambient use that writes. A `Variable` use -- a `var` parameter, a module `var`
-    // -- is not one (design principles 3.1 and 3.5, the ruling of 2026-11-15).
-    static bool signatureWritesForTheRegion(const camel::core::sem::ResourceSignature &signature);
     // One body's measurement as it is being walked: what it has been found to reach so far, which
     // parameter each of its ports is (the numbering a call uses), and whether a use was found that
     // the numbering cannot name at all. A body with such a use is recorded as reaching anything
@@ -2965,7 +2973,25 @@ class Builder {
     bool ruleBindingCallee_ = false;
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
+    /// A write (NodeKind::ASSIGN): the three lowerings that make it not a store -- SSA, a loop
+    /// head that carries the name, a rebinding to an in-place operator's result -- and, for the
+    /// rest, the store itself, which is the call of the store operator with the cell and the
+    /// value.
+    node_handle_t visitAssignNode(const GCT::node_ptr_t &gct);
+    /// The reference to the operator that writes the cell a write names (Plain and Rebuilt: the
+    /// group of one overload per type, by name, the rebuild under the prefix that says the compiler
+    /// made it; Compound: the compound group the node carries; Owned: the rebinding operator, by
+    /// id).
+    GCT::node_ptr_t makeStoreOperator(const GCT::node_ptr_t &gct);
+    /// The origin of that reference: the place of the operator (the token), not of the statement.
+    camel::source::origin_id_t storeOperatorOrigin(const GCT::node_ptr_t &gct);
+    /// A call. `store`, when it has a value, says this call is the store a write makes: the two
+    /// arguments are the cell and the value, the result is the cell's new state, and what the
+    /// call is worth differs from an ordinary call's (see the argument typing and the value a
+    /// write gives).
+    node_handle_t visitLinkNode(
+        const GCT::node_ptr_t &gct,
+        std::optional<GCT::AssignmentForm> store = std::nullopt);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
     ///  4.2; the rule). `expected`
@@ -3305,6 +3331,10 @@ class Builder {
     std::unordered_set<node_handle_t> unusedFallibleValues_;
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
+    /// The graph nodes that are stores, and which write each one is (AssignmentForm). Filled
+    /// where a write's store is built: the report of a dropped value and the walk that runs after
+    /// a body is built ask this, not the name of the operator the store calls.
+    std::unordered_map<node_handle_t, GCT::AssignmentForm> writeNodes_;
 
     // ---- Operator overloads of the program (design principles 10.2) ----------------------
     //
@@ -3473,13 +3503,13 @@ class Builder {
     /// A path assignment (design principles 3.5): `v.f = e`, `v[i] = e`, `v[i].f += e`, any
     /// combination of fields and indices starting at a variable `v`. The whole value of `v` is
     /// rebound to a `set` chain:
-    ///   LINK(DREF __assn__, <path>, e)  ->
-    ///   LINK(DREF __assn__, DREF v,
-    ///        LINK(DREF __set_index__, DREF v, i, LINK(DREF __set_field__, DREF v[i], f, e)))
+    ///   ASSIGN(<path>, e)  ->
+    ///   ASSIGN(Rebuilt, v,
+    ///          LINK(__set_index__, v, i, LINK(__set_field__, v[i], f, e)))
     /// and nothing downstream learns that a field or an element was written. In a sync block an
     /// array variable is written where it is: the outermost index set is the in-place form and
     /// the variable's array is the one `:var/take` gives it. Returns nullptr when `gct` is not
-    /// such an assignment (the call is then built as written).
+    /// such a write (the store is then built as written).
     node_handle_t pathAssignmentOf(const GCT::node_ptr_t &gct);
     /// The calls inPlaceRebindingOf wrote: visitLinkNode calls the in-place form of the
     /// operator they resolve to.

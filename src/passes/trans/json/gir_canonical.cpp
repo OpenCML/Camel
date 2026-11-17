@@ -912,7 +912,38 @@ class CanonicalDocument {
                         {"source", source == nullptr ? json(nullptr) : json(*source)}});
             }
         };
-        add("normal", graph->normInputsOf(ref));
+        // The writes a region's exit GATE keeps alive are siblings: nothing joins them (design
+        // principles 3.1, the author's ruling of 2026-11-17, "这些写之间不加边"), so their place in the
+        // GATE's list after the value is the order the source wrote them in -- spelling, for the same
+        // reason a capture table's order is. The slot the document prints is the node's rank in the
+        // canonical order, which `CanonicalWalk` arranges as one tie group, so two writings that swap
+        // two such lines write one document.
+        const auto normals   = graph->normInputsOf(ref);
+        const GCNode *gateNode = graph->node(ref);
+        if (gateNode != nullptr && gateNode->kind == GCNodeKind::Gate && normals.size() > 2) {
+            const auto push = [&](size_t slot, gc_node_ref_t input) {
+                const std::string *source = nodeIdOf(graph, input);
+                inputs.push_back(
+                    json{
+                        {"kind", "normal"},
+                        {"slot", slot},
+                        {"source", source == nullptr ? json(nullptr) : json(*source)}});
+            };
+            push(0, normals.front());
+            std::vector<std::pair<uint32_t, gc_node_ref_t>> slots;
+            slots.reserve(normals.size() - 1);
+            for (auto it = normals.begin() + 1; it != normals.end(); ++it) {
+                slots.emplace_back(numberOf(graph, *it), *it);
+            }
+            std::stable_sort(slots.begin(), slots.end(), [](const auto &a, const auto &b) {
+                return a.first < b.first;
+            });
+            for (size_t i = 0; i < slots.size(); ++i) {
+                push(i + 1, slots[i].second);
+            }
+        } else {
+            add("normal", normals);
+        }
         // The values a closure captured sit in the with inputs in the order of the capture table,
         // which is the order the source captured them in: spelling. The slot the document prints is
         // the value's rank in the canonical order -- the same rank the bound graph's capture port

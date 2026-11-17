@@ -75,9 +75,28 @@ enum class NodeKind : uint8_t {
     SLOOP, // `static loop`: children: TYPE, the first values, EXEC body; payload: the
            // names of the state, then the field name and its type
     SPRD,  // `..e`, a rest argument; child: the compile-time tuple it expands
+    ASSIGN, // a write of its target; children: the target, the value; tag: AssignmentForm;
+            // payload: the group of the compound operator a compound write follows
 };
 
 std::string to_string(NodeKind kind);
+
+/// What a write is. The kind says the node writes its target; the form says which write it is,
+/// since a write is not a call and the forms differ in what the write means, not in how the node
+/// is read.
+///  - Plain: `x = e`, and `v.f = e` / `v[i] = e` (the target is the path it writes). A write the
+///    program wrote.
+///  - Compound: `x op= e`, on a name or on a path. The operator it follows is the node's payload
+///    (`__assn_add__` for `+=`): that operator's set of operand types is what decides whether the
+///    compound assignment is defined, so the operator is asked, not a spelling.
+///  - Rebuilt: the whole variable's `x = ...` the graph builder rebuilds a path write into
+///    (`v.f = e` is `v = <v with the field written>`). The compiler's own write, not the
+///    program's: a value nobody takes is not reported for it.
+///  - Owned: `x = x->op<w...>()`, lowered to `__assn_owned__(x, op<w...>(x))`: the rebinding to
+///    the result of an in-place operator.
+enum class AssignmentForm : uint8_t { Plain, Compound, Rebuilt, Owned };
+
+std::string to_string(AssignmentForm form);
 
 /// What selects the arm of a BRCH node (design principles 1; all are the same structure on
 /// the graph).

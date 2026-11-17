@@ -279,6 +279,7 @@ std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 /// through the payload.
 gc_node_ref_t branchJoinOf(const GCGraph &graph, gc_node_ref_t brch);
 
+
 /// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members
 /// the aggregate has (0 when it is not one), and whether its last member may be dropped -- no root
 /// names it, nothing but the aggregate reads that member, and every reader of the aggregate reads a

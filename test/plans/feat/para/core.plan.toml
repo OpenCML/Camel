@@ -682,3 +682,27 @@ assert(counts.disposed === 0, 'so the exit had nothing left to dispose: ' + line
 }
 """
 timeout_ms = 60000
+[[tests]]
+name = "closure_capture_gives_its_box_back"
+desc = "A box a closure carries, in a program that keeps nothing: `test/cases/para/core/closure_capture_gives_its_box_back.cml` makes the box, captures it, reads it twice through the closure, and drops the closure when `main` returns. So the count has to come home while the program runs (`created=1 counted=1 released=1 live=0 disposed=0`) and not be left for the exit to dispose. This is the reading of `test/probe/refleak/fill_carries.cml` put where a gate reads it: the probe tier is named by no plan a lane reports, so a back end that keeps the box was a red that could live on the trunk and report green at every merge. It read `released=0 live=1 disposed=1` on `std::prl` and `released=1 live=0 disposed=0` on the other three when it was written (2026-11-18)."
+kind = "behavior"
+case = "../../../cases/para/core/closure_capture_gives_its_box_back.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["exit_code"]
+verify_script = """
+({ input, assert }) => {
+const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+assert(input.exit_code === 0, 'the program runs to its end: exit ' + input.exit_code)
+assert(said.join(' | ').includes('5 5'), 'the closure read the box it captured, twice: ' + said.join(' | '))
+const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+assert(line !== undefined, 'the counted blocks are read at exit: ' + said.join(' | '))
+const counts = Object.fromEntries(
+  line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+assert(counts.created === 1 && counts.counted === 1, 'the one box the program made was counted: ' + line)
+assert(counts.released === 1 && counts.live === 0, 'it came home while the program ran: ' + line)
+assert(counts.disposed === 0, 'so the exit had nothing left to dispose: ' + line)
+}
+"""
+timeout_ms = 60000

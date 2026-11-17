@@ -898,6 +898,10 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     try {
         result = fn(slots, jitCtx);
     } catch (...) {
+        // A frame goes back with a loop still open only when the run is unwinding past that loop's
+        // exit; what the loop held comes home before the slots are reset (exec_plan.h,
+        // `applyRefEntriesOfOpenLoops`).
+        camel::runtime::applyRefEntriesOfOpenLoops(frame);
         camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
         if (framePool_.isActive(frame))
             framePool_.release(frame);
@@ -924,6 +928,7 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
         // What a helper of framed code caught: located already where it is a fault.
         std::exception_ptr pending = std::move(jc->pending);
         jc->pending                = nullptr;
+        camel::runtime::applyRefEntriesOfOpenLoops(frame);
         if (framePool_.isActive(frame))
             framePool_.release(frame);
         std::rethrow_exception(pending);
@@ -933,6 +938,9 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     const ExecutionSite site =
         makePcExecutionSite(context_->sourceContext(), frame, pc, 0, "", ExecutionSiteKind::JitPc);
     const std::string graphName = frame->graphName();
+    // A loop this frame is still inside gives back what it held: the frame is released on the next
+    // line and the slots that name the value go with it (exec_plan.h, `applyRefEntriesOfOpenLoops`).
+    camel::runtime::applyRefEntriesOfOpenLoops(frame);
     if (framePool_.isActive(frame))
         framePool_.release(frame);
     const RuntimeFault fault =
@@ -1172,6 +1180,8 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
         std::sort(mine.begin(), mine.end(), [](const Frame *left, const Frame *right) {
             return reinterpret_cast<uintptr_t>(left) > reinterpret_cast<uintptr_t>(right);
         });
+        for (Frame *held : mine)
+            camel::runtime::applyRefEntriesOfOpenLoops(held);
         for (Frame *held : mine)
             framePool_.release(held);
         stackDepth_  = depthBase;

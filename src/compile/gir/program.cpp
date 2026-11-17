@@ -32,6 +32,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
@@ -642,14 +643,10 @@ size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
 void Builder::scanProgramWriters() {
     programWriters_.clear();
     programValueNames_.clear();
-    // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
-    // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
-    // principles 4.3). The variable it writes is the base of its target: the variable itself
-    // (`v = e`) or a path into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a
-    // rebinding of the variable (pathAssignmentOf).
-    const auto isAssignment = [](const std::string &group) {
-        return group.rfind("__assn", 0) == 0;
-    };
+    // The variable it writes is the base of its target: the variable itself (`v = e`) or a path
+    // into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a rebinding of the
+    // variable (pathAssignmentOf). A write is a node of kind ASSIGN: the kind, not a group's
+    // spelling, is what says so.
     // The variable a target names: the reference under the fields and indices the assignment
     // writes through.
     const auto baseOf = [](GCT::node_ptr_t target) -> GCT::node_ptr_t {
@@ -675,18 +672,6 @@ void Builder::scanProgramWriters() {
             return node;
         }
         return nullptr;
-    };
-    // The group a callee names, under the with-arguments a partial application binds
-    // (`LINK(WITH(DREF op, w...), ...)`, design principles 4.3).
-    const auto groupOf = [](GCT::node_ptr_t callee) -> const std::string * {
-        GCT::node_ptr_t node = callee;
-        if (node != nullptr && node->type() == GCT::NodeKind::WITH && node->size() > 0) {
-            node = node->at(0);
-        }
-        if (node == nullptr || node->type() != GCT::NodeKind::DREF) {
-            return nullptr;
-        }
-        return &node->name();
     };
     struct Pending {
         GCT::node_ptr_t node = nullptr;
@@ -759,29 +744,15 @@ void Builder::scanProgramWriters() {
             continue;
         }
         const GCT::Node *function = node->type() == GCT::NodeKind::FUNC ? node : current.function;
-        if (node->type() == GCT::NodeKind::FUNC && !node->name().empty() && node->size() > 0 &&
-            node->at(0) != nullptr) {
-            // The `var` positions of the program's own functions, by name. A `var` argument is
-            // read and written by the callee, so a name handed to one cannot stand for a value
-            // (stage S1 of the direct-SSA plan; Builder::argumentMayWriteBack asks this table).
-            if (auto *declared = node->at(0)->dataType(); declared != nullptr) {
-                if (const auto *signature = tt::as_ptr<FunctionType>(declared);
-                    signature != nullptr) {
-                    functionSignatures_[node->name()].push_back(signature);
-                }
-            }
-        }
         if (node->type() == GCT::NodeKind::VARI) {
             declaredNamesOf(node, declaredOf[function]);
         }
-        if (node->type() == GCT::NodeKind::LINK && node->size() >= 2) {
-            const std::string *group = groupOf(node->at(0));
-            if (group != nullptr && isAssignment(*group)) {
-                if (const GCT::node_ptr_t variable = baseOf(node->at(1)); variable != nullptr) {
-                    const std::set<std::string> &parameters = parametersIn(function);
-                    if (parameters.find(variable->name()) == parameters.end()) {
-                        programWriters_[variable->name()].insert(function);
-                    }
+        if (node->type() == GCT::NodeKind::ASSIGN) {
+            if (const GCT::node_ptr_t variable = baseOf(node->assignmentTarget());
+                variable != nullptr) {
+                const std::set<std::string> &parameters = parametersIn(function);
+                if (parameters.find(variable->name()) == parameters.end()) {
+                    programWriters_[variable->name()].insert(function);
                 }
             }
         }

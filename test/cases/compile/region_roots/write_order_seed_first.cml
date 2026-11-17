@@ -1,0 +1,15 @@
+/**
+ * `write_order_print_first.cml` with its two writes written the other way round. The order of two
+ * writes to two different resources is not an order the program can observe, so the two writings
+ * are one canonical document -- and neither is the graph's structure changed by it, which is the
+ * half of the region rule the `GATE` is (design principles 3.1, 3.4).
+ *
+ * Run: camel test/cases/compile/region_roots/write_order_seed_first.cml std::gir
+ */
+import { seed } from random
+
+func main(): int {
+    seed(7)
+    println("alpha")
+    return 0
+}
