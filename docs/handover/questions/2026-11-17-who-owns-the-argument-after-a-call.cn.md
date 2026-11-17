@@ -1,0 +1,53 @@
+# 调用之后，那个实参归谁？
+
+> 一页一问。**默认建议写死在下面，本轮按默认走，不另等。**
+
+## 这一页要的答复
+
+S3b 要 `camel inspect --copies` 对案例训练步报「原地」。查完四步（记账 → 核函数复用 → 计划判定 → 调用点交接）之后，
+唯一挡在 `in-place` 前面的东西不是尺子、不是计划、也不是计数，而是这条今天全树没有一处回答的问题：
+
+> **一个调用 `f(a)` 之后，`a` 的存储归谁？** 调用者还能不能读它？如果被调者可以在里面写，谁证明了
+> "调用者在这个调用之后不再读它"？
+
+`include/camel/core/operator_table.h#declareReusesOperand` 让 `nn:sgd` / `nn:adam` 声明「我复用入参」，
+`Array::writableInPlace()` 的答案是"这个数组的存储只有它一个名字"——而**调用处造出来的那个第二个名字
+（形参与实参是同一份值）不在它的视野里**：实参绑定不是 `:var/new`/`:var/get`/`:op/assn` 中的任何一个，
+`shareForSecondName` 的全部调用点就这三个（`src/builtin/operators/ops.cpp`）。
+
+## 证据（都是量过的读数，不另跑）
+
+1. **调用之后还要读的那份值会被吃掉。** `test/cases/modules/nn/sgd_leaves_its_argument.cml` 里叶子是
+   `zeros::<f32>([2, 1])`（紧凑、无块，`writableInPlace()` 答 true）。让核函数在"计数说独占"时写回：
+   `p.weight` 在 `sgd(p, grads, 0.1)` 之后打印 `[[0.8], [0.8]]`（基线是 `[[0.0], [0.0]]`）。
+2. **案例训练步正是依赖它。** `examples/case-study/train.cml` 第 29 行在训练之后还要 `loss<w0, y>(X)`，
+   打印 `loss before: 3.7500`。同一个形状、同一个核函数，只要实参还被读者需要，写回就是错的程序。
+3. **那次 `3.7500` 不动是运气，不是证明。** 在 `sgdLeaf` 里打探针（前四个叶子）：训练步的第一个叶子
+   `view=1 alone=0`——它是 `reshape` 出来的视图，`writableInPlace()` 对视图恒假，所以调用者递进来的那个叶子
+   一次都没被写回；其后三个 `view=0 alone=1`——复用的是 `sgd` 自己 `newLike` 出来的紧凑叶子，本来就只有一个名字。
+   真正有第二个名字的那个叶子，是被**视图规则**挡住的，不是被记账挡住的。
+4. **一打开就改坏别的程序。** 同一份复用打开后 `test/plans/feat/modules/nn.plan.toml` 从 69/69 掉到 **63/69**
+   （`autoencoder.opt.{nvm,tf}`、`tiny_rnn.opt.{nvm,tf}`、`siamese_shared_encoder.opt.{nvm,tf}` 六条 differential 失配）。
+5. **尺子也不该替它说话。** `nn:sgd` 的那个词由算子表单独决定（`src/runtime/storage_reuse.cpp#dumpStorageReuse`
+   的 `declaredOnly`），`planStorageReuse` 只访问 `plainForm(uri)` 有值的节点、根本不看它。让计划为声明了复用的节点
+   补一条分支、把 `decided` 交给尺子读，会印出「计划判了、核函数没实现」的判词——那是让数字好看的另一种形状，
+   所以没有做。
+
+## 默认建议（按此开工，不另等）
+
+1. **在调用点交接定下来之前，不打开任何跨过程的复用。** 本项停在「记账 + 不变量用例」：
+   `shareForSecondName` 认结构体/元组的那版补丁不落地（它单独做没有读数、只多分配），
+   `test/cases/consistency/new_values/two_names_for_a_struct.cml` 与
+   `test/cases/modules/nn/sgd_leaves_its_argument.cml` 两条用例落地，钉住被复用会破坏的两条不变量。
+2. **`planStorageReuse` 不为"声明了复用、但没有原地形"的算子加分支**，尺子继续印 `declared`：
+   它是"声明"，不是"测量"，而今天确实没有任何测量。
+3. **要做，先答这一页。** 三个可选的答法，作者选一个（选哪个都改变语言，不是一个车道的实现细节）：
+   - **(a) 值语义到底**：调用之后实参仍可读 ⇒ 复用需要"调用者在该调用之后不再读它"的证明，
+     也就是跨过程的最后一次使用分析；
+   - **(b) 消费语义**：`sgd` 这类算子明确吃掉实参 ⇒ 语言需要一个交出所有权的写法（如 `move(a)`），
+     并且 `train.cml` 的 `loss before` 就该改写；
+   - **(c) 只复用临时值**：`sgd(layer, grad(...), r)` 里 `layer` 不是临时值，所以这条救不了训练步——
+     若选它，S3b 对训练步的判据应当撤回。
+
+**没有任何一条是这一页能替作者定的**：`docs/design-principles.cn.md` 没覆盖它，
+而它一旦定错，错的是程序的值，不是读数。

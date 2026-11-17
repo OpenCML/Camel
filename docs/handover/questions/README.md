@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：9 页
+## 现在在等作者：11 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -18,6 +18,8 @@
 | [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ |
 | [`2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad`](2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad.cn.md) | 案例一旦改用库的 `grad`，`break_rate` 那个重写该怎么钉？ |
 | [`2026-11-16-which-channel-takes-the-walkthrough-records`](2026-11-16-which-channel-takes-the-walkthrough-records.cn.md) | 走查记录该进哪条通道：作者说「诊断通道」，而诊断通道按设计装不下它 |
+| [`2026-11-17-who-owns-a-callee-argument-after-the-call-site`](2026-11-17-who-owns-a-callee-argument-after-the-call-site.cn.md) | 一个实参在调用之后还归谁：谁回答「这次是不是最后一次使用」？ |
+| [`2026-11-17-who-owns-the-argument-after-a-call`](2026-11-17-who-owns-the-argument-after-a-call.cn.md) | 调用之后，那个实参归谁？ |
 
 ## 生成器不会删的行：119 行（页已不在 `questions/` 里）
 
