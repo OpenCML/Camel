@@ -1515,7 +1515,16 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // and rebinds the name (`ssaAssignmentOf`), and the array is copied rather than taken, since
     // there is no cell whose ownership could be kept.
     const SsaEnv::Entry *ssaTarget = isVariable(variable) ? nullptr : ssa_.find(nodeScope_, name);
-    if (!isVariable(variable) && ssaTarget == nullptr) {
+    // ...and at a `var` a loop head carries as state (loopStateAssignmentOf). The name stands for
+    // the round's value and not for a cell of this graph -- the cell is the loop's, and this body
+    // cannot reach it -- so the path is rebuilt over the value the round has so far, and the write
+    // is the round's next state: the head takes it in `AssignmentForm::Rebuilt`
+    // (loopStateAssignmentOf), the same way `ssaAssignmentOf` takes the rebuilt write of a name
+    // built as a value. Without this the write had no variable to store into and the program was
+    // refused (`ImmutablePassedToVarParam`, `AssignmentTargetNotVariable`).
+    const bool carriedState =
+        ssaTarget == nullptr && !isVariable(variable) && loopStatePorts_.contains(variable);
+    if (!isVariable(variable) && ssaTarget == nullptr && !carriedState) {
         return nullptr;
     }
     Type *rootType = ssaTarget != nullptr ? ssaTarget->type : valueTypeOf(nodeTypeOf(variable));
@@ -1564,8 +1573,14 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // `:op/assn` clear it, `:var/peek` leaves it). A control edge only orders two nodes and
     // reads no value (design principles 3.3, 3.4), so adding one cannot make this statement
     // copy; see for the measurement that shows both.
-    const bool inPlace     = ssaTarget == nullptr && synced_ && rootType->code() == TypeCode::Array;
+    //
+    // A state the head carries is no cell of this body (`carriedState`): there is nothing to take
+    // the array out of, so the round's value is read as the value it is -- the value the round
+    // wrote before this write, or the port. `:var/take` names a cell, and a port is not one.
+    const bool inPlace =
+        ssaTarget == nullptr && !carriedState && synced_ && rootType->code() == TypeCode::Array;
     node_handle_t rootRead = ssaTarget != nullptr ? ssa_.valueOf(ssaTarget)
+                             : carriedState       ? valueOf(variable)
                              : inPlace            ? peekVariable(variable)
                                                   : readVariable(variable);
     const auto make        = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
@@ -2069,8 +2084,14 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     // write is lowered (design principles 3.5: "a write to an outer `var` in a loop body becomes
     // the loop's carried state"), and it is why the `var` writing and the `let` writing are one
     // graph.
+    // The write as written, and the one a path rebuilds: that one says so in its form
+    // (AssignmentForm::Rebuilt) and is the same write -- `x.f = e` hands the head the whole value
+    // the rebuild made, exactly as `x = e` hands it the value written (pathAssignmentOf builds it
+    // over the round's own value, and ssaAssignmentOf takes the rebuilt write of a name built as a
+    // value the same way).
+    const GCT::AssignmentForm form = gct->assignmentForm();
     if (loopStatePorts_.empty() || gct->type() != GCT::NodeKind::ASSIGN ||
-        gct->assignmentForm() != GCT::AssignmentForm::Plain) {
+        (form != GCT::AssignmentForm::Plain && form != GCT::AssignmentForm::Rebuilt)) {
         return nullptr;
     }
     const auto &target = gct->assignmentTarget();

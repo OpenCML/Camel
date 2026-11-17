@@ -83,3 +83,10 @@ yield state::get(box)
 1. **当轮**：两处判断按 A 统一——计划与运行时用同一个谓词，格子装着被计数的值时，存入加一、覆盖或格子失效时减一。
 2. **随后**：生成器剩下的状态格子改成按值传递的状态元组（11-16 第 6 条的终点），格子退场，这条特例随之删除。`var Ref<int>` 与 `Ref<int>` 的类型码相同是格子时代的表示问题，格子退场后不再需要区分。
 3. 读数照默认：`var_new`（同人口）、`feat/linear`、六计划，逐名比较 `[FAIL]`。
+
+- `docs/handover/questions/2026-11-18-generator-halt-has-no-reader.cn.md` —— **已由作者答「drop the generator's halt bit」并落地**（`6ce3bf1f2` 裁定、`647b4a31a` 合入）## 裁定（已答，2026-11-18）
+
+**`9d29939c4`：a cell holding a Ref is a holder, and the cell should go.**
+⇒ 已落地一半（`lane-refcell`，`9d589d2f3`）：跨闭包读/写的 `Ref` 局部不再是格子。
+⇒ 未落地的一半与后续见 `2026-11-18-lowering-generator-state-to-gir.cn.md`。
+⇒ **本页状态已不是「待裁定」，保留原状以便回看当时的问法。**

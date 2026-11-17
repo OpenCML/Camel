@@ -96,3 +96,10 @@ develop 与作者的 `origin/fsh-dev@9f6b1700d`（**就是写那句答复的那�
 生成器用例的 gir 快照会变，这是表示变了的应有结果，重录，合并说明里写明变的是哪几张、为什么。验收：上一页的计数器用例（连续三次得 `1 2 3`）四个后端一致、计数平衡；`var_new_empty` 里生成器体局部清零。
 
 **排期**：排在下面那条 E9 返工之后。
+
+- `docs/handover/reports/2026-11-18-the-cell-a-handle-needs-no.cn.md`（`refcell` 的报告页）## 裁定（已答，2026-11-18）
+
+**`04ee677e7`：lower generator state where types are known, with `T?` slots.**
+⇒ 本页第 2 节的判断被采纳（「这一层只有 TypeVar」）；第 4 节的默认（「先只量收益面」）**已执行**：
+43 个 `:var/new/empty` 全在生成器体里、**18 个文件、30 个程序局部 + 13 个机器格子** ⇒ 槽落地时 43 → 13。
+⇒ 落地路径见 `2026-11-18-lowering-generator-state-to-gir.cn.md`（几百行、18 个文件快照会动，等点名）。

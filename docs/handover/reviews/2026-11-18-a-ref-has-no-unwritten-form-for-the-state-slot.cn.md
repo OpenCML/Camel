@@ -84,3 +84,11 @@
 所以根子在 `zeroValueOf`：状态槽不该向类型要"零值"，而该一律是 `T?` 的 `null`。按第 8 条规矩在表示处改：生成器状态槽统一为 `T?`，`zeroValueOf` 不再被状态槽调用（若它已无别的调用者就删除；`gct/builder.cpp:4096` 那个"将来要定"的门随之消失）。
 
 不走 A、D：一次 pull 里造的 `Ref` 跨 `yield` 用，是再普通不过的生成器写法（计数器、累加器），"语料里 0 例"只说明语料还没写到，不是可以拒掉它的理由。补一条用例：生成器体里 `let box = state::ref(0)`，每次 pull `state::set(box, state::get(box) + 1)` 后 `yield`，连续取三次得 `1 2 3`，四个后端一致、计数平衡。
+
+- `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`（S3b，与本页无直接关系但同属「谁持有」）## 裁定（已答，2026-11-18）
+
+**`9f6b1700d`：a generator's state slot is `T?` and starts null, as ruled 11-16, so a Ref needs no unwritten form.**
+⇒ 本页第 4 节的默认（「先量语料有没有程序跨 pull 存活，若没有就加诊断拒掉」）**作废**：
+作者说那个形态本来就该能跑，**不要加诊断**。
+⇒ 而该裁定在树上**没有落地**，见 `2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md`；
+再往下是 GIR 层，见 `2026-11-18-lowering-generator-state-to-gir.cn.md`。
