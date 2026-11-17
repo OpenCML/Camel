@@ -2,7 +2,7 @@
 
 **日期**：2026-11-18
 **提出者**：协调侧
-**状态**：待作者裁定（本页写死默认建议，并按默认当轮开工）
+**状态**：作者已裁定（`09b5130c0`：**two steps**，按第 6 节默认开工）；**第 9 节是落地的续篇：第一步「最小改动」被实测证明不存在**
 **触发**：作者裁定 `04ee677e7`「**lower generator state where types are known, with `T?` slots**」，`lane-genref` 去落地，两堵墙都是实测的
 
 ## 1. 裁定被完全采纳，而它指向的不是我原先以为的那一处
@@ -90,3 +90,87 @@
 - `docs/handover/questions/2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md` —— 本页是它的续篇（那页说「门在类型拿不到」，本页说「那扇门在 GIR」）
 - `docs/handover/questions/2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot.cn.md` —— 起点
 - `docs/handover/reports/2026-11-18-the-cell-a-handle-needs-no.cn.md`（`refcell` 报告页）
+
+## 9. 续篇：第一步（「最小改动」）**被实测证明不存在**
+
+> 作者在 `09b5130c0` 答「**lower generator state in two steps**」，本页第 6 节的默认（路 A）被采纳，`lane-genref` 去落第一步。
+> 量的结果是：**第一步不是一个「还没找到」的改动，它不是一个改动。**
+> 四种走法都死在同一件事上：**状态型必须在 `__gen_step__` 的签名建成时就已是具体类型，而签名在 body 之前建，且没有延后点。**
+> 基线：`4d48be5e4`（develop 已越过 `09b5130c0`），干净树，测量用的 patch **全部回退、零提交**。
+
+### 9.1 四种走法，各死在哪一行
+
+| # | 走法 | 死在哪 | 读数 |
+|---|---|---|---|
+| 1 | **`typeof` 包进 `T?`**：槽型取 `TupleType::nullable(typeOfPlaceholder(init))` | `src/compile/gir/builder_generics.cpp:2857`（`TypeOfNotWholeType`）：`resolveTypeOfs`（`:2767-2852`）只下探 `MatchTypeType`、具名 `Struct`、`OtherType`，**没有 `TupleType` 分支**，占位符活到整型检查 | 构建通过；`generators.cml:11`（`var i = 0`）、`:40`（`let read = …`）、`generators_body_fault.cml` 报 `typeof is written inside the larger type typeof(0)?` |
+| 2 | **换成一个洞**：槽型取 `T?` of `TypeVarType::create("$gen_slot<n>", true)` | 生成器变成泛型，**创建处的调用绑不上**：`GenericArgumentsMismatch`「leaves a type variable without a type」——第一次的状态是 `null`，**`null` 什么类型也不给** | 构建通过；`generators.cml`（两处）、`generators_local_across_yield.cml`、探针 |
+| 3 | **放宽 tuple 解析**（测量 patch：给 `resolveTypeOfs` 加 `TupleType` 分支） | 状态型**仍然不解析**：它在 **`FUNC` 的签名**里，而类型层只解析 ①被访问的 **TYPE 节点**（`:2910` `visitTypeNode`→`resolveTypeNode`）②泛型实例的**出口型**（`:2516-2522`）；**参数型从不解析**，签名又不可改（`include/camel/core/type/composite/func.h:24`「signature cannot be modified by construction」） | 构建通过；**前两堵墙当场消失**，但 `NoMatchingFunction: (typeof#0, int)，operator '='`（声明的写）与 `DynamicCastForbidden: typeof#0 → int?`（打包） |
+| 4 | **倒序**：把 arms 先降下来、再建状态型 | **不是诊断，是 GIR 的取名顺序**（读代码，未量）：arm 里的 `DRef` 必须解析到 step 的 `vari`，而 `vari` 由 `Builder::unpackSlot`（`src/compile/gct/builder.cpp:6984`）在 `fill(...)` **之前**建，它的类型来自状态成员；把 arms 建在前面，它们要读的 `vari` 还不存在 | — |
+
+⇒ **四种走法的交点只有一个**：**状态型是 step 这个函数的形状，而形状在 body 之前定；`null` 救不了它，占位符没人解析它，签名建了又不可改。**
+
+### 9.2 接缝一：谁在 arms 之后建状态型
+
+```
+⇒ 只能是「建完再改写」，而且要在 **draft graph 还没封口**时改写 —— 那里已经有同类先例：
+  `include/camel/compile/gir/draft_graph_builder.h:98`  `setExitType(Type*)`
+  （泛型实例就是这样把出口型补上的，`src/compile/gir/builder_generics.cpp:2516-2522`）
+⇒ 缺的不是机制，是**同一形状的第二半**：参数位的那一个 setter，加上**「arms 先建、vati 后建、类型最后补」**这个次序。
+⇒ **不要在 GIR 之外再造一套「迟到的类型」**（见 9.4 第 3 条）。
+```
+
+### 9.3 接缝二：谁补 `:accs` / `unwrap`
+
+```
+今天这三处都在 GCT 里，因为它们只需要「下标」：
+  `src/compile/gct/builder.cpp:6984`  `unpackSlot`（`:accs(state,i)` + 拆 `T?` + `vari`）
+  `src/compile/gct/builder.cpp:6281`  `stateZero`（第一个状态：每槽 `null`）
+  `src/compile/gct/builder.cpp:6292`  `stateNow`（`yield` 处打包）
+⇒ 状态型一迟到，`unpackSlot` 就走不到自己该走的形状：它得先知道 `:accs` 的类型。
+⇒ 改写要做的事：为每个**程序局部**在 step 头部插 `:accs` + 拆槽算子，把 arms 里对它的读改写指到新 `vari`，
+  在 `yield` 处打包；**机器自己的格子不动**（`__gen_next_*` / `__gen_match_subject_*` / `__gen_for_*` / `__gen_tuple_*`，13 个）。
+```
+
+### 9.4 三件「不要做」（今晚最贵的知识）
+
+```
+① **不要放宽 `typeof` 进 tuple / `T?`。**
+   ⇒ 走法 3 已经量过：它只拆前两堵墙，**第三堵（签名没有延后点）照样在**；
+   ⇒ 而且它会推翻一条有测试的拒绝：`typeof_inside_tuple_is_refused`
+     （`test/plans/feat/compile/static_expansion.plan.toml`）。
+   ⇒ **⇒「就算去请作者放宽也不够」——这是这一轮最值钱的读数，别再把它当备选方案。**
+② **不要把这个环当成「类型知道得更晚」。**
+   ⇒ 真问题是**类型没法延后携带**：签名在 body 之前建；`null` 绑不上洞，占位符没人解析，签名建了不可改。
+③ **不要把它当成需要设计新机制。**
+   ⇒ 在 GIR 里它只能靠「**建完再改写**」打破 —— 这是常规手法（泛型实例的出口型就是这么补的），不是新发明；
+     给「迟到的类型」另造一套载体，就是把「没有」定义第二次。
+```
+
+### 9.5 两步的读数，每一步都要能单独量
+
+```
+第一步（裸类型 + 零值起点，`zeroValueOf` 那扇门，`src/compile/gct/builder.cpp:4103`）
+  ⇒ 30 个程序局部里 **28 个**的类型有零值（**26 `int` + 2 `string`**）
+  ⇒ 读数：`var_new_empty` **43 → 15**
+  ⇒ 文件动面：**17 / 18**（唯一不动的是 `generators_match.cml`，它只有机器格子 `__gen_match_subject_0`）
+第二步（`T?` + 拆槽算子，11-16 已授权）
+  ⇒ 只剩 2 个非等不可：`generators_error_binding_across_yield.cml` 的 `e`（错误结构 `{kind,message,location}`）、
+    `generators.cml` 的 `read`（闭包 `() => int uses capture 0`）
+  ⇒ 读数：`var_new_empty` **15 → 13**
+  ⇒ 文件动面：**+2**（上面那两个），其余 16 个不再动
+探针 `docs/handover/probe-refcell/cell_holds_ref.cml`
+  ⇒ 第二步之后 `state::set(box, 5)` 才该绿：`box : Ref<int>` 属于「非等不可」那一类
+  ⇒ 第一步之后探针**应当仍然** `5 / 5 / 5 / 9` + `InvalidArgument`@`:46`（这正是「每一步都能单独量」的证明）
+每一步都要量的两行
+  ⇒ `-Check capture-census` 的 `var_new / var_new_empty / list_sha`，以及 18 个文件的 gir 逐个 diff
+  ⇒ 基线（`4d48be5e4`）：`var_new=213 var_new_empty=43 list_sha=72c1a623…`；
+     六计划 `total 5321 / pass 5299 / fail 0 / skip 2 / known 20`（compile 2627/2610、linear 861/856、opt 1538/1538、para 104、parse 121、tools 70）
+```
+
+### 9.6 要不要再问作者
+
+**不要。** 作者那句「two steps」在「建完再改写」这条路上**是可满足的**：第一步裸类型 + 零值起点，第二步 `T?` + 拆槽算子，裁定一个字都不用改。唯一曾需要作者点头的是「放宽 `typeof`」，而 9.1 走法 3 已量出**它不够** —— 所以没有可问的问题，只有要落的代码。
+
+### 9.7 一句话（给主干说明用）
+
+**作者说两步，而第一步被实测证明不存在 —— 不存在的原因不是没找到，是签名在 body 之前建、类型没有延后点，只能建完再改写。**
