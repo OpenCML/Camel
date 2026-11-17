@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：128 行（页已不在 `questions/` 里）
+## 生成器不会删的行：130 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -133,6 +133,8 @@
 | [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](../reviews/2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ | 在 `reviews/` |
 | [`2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad`](../reviews/2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad.cn.md) | 案例一旦改用库的 `grad`，`break_rate` 那个重写该怎么钉？ | 在 `reviews/` |
 | [`2026-11-16-which-channel-takes-the-walkthrough-records`](../reviews/2026-11-16-which-channel-takes-the-walkthrough-records.cn.md) | 走查记录该进哪条通道：作者说「诊断通道」，而诊断通道按设计装不下它 | 在 `reviews/` |
+| `2026-11-17-who-owns-a-callee-argument-after-the-call-site` | 一个实参在调用之后还归谁：谁回答「这次是不是最后一次使用」？ | 页不在（`questions/` 与 `reviews/` 都没有） |
+| [`2026-11-17-who-owns-the-argument-after-a-call`](../reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md) | 调用之后，那个实参归谁？ | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |

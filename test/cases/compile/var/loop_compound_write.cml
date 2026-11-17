@@ -1,0 +1,27 @@
+/**
+ * A `var` a loop body writes with a compound assignment (`total += i`), which is `LINK(__assn_add__,
+ * total, i)` and not `LINK(__assn__, ...)`: the head must see it as a write of `total` like any other,
+ * or the name is a value nothing carries and the read after the loop answers with a value from the
+ * round that last ran.
+ *
+ * Five plus zero, one and two is `8`. The body prints the value in the round that wrote it -- `5`,
+ * `6`, `8` -- and the read after the loop prints `8`. A run that printed `5`, `5`, `5` would be a body
+ * answering from before the write, and one that printed `5`, `6`, `8`, then `5` would be a head that
+ * does not carry the name at all.
+ *
+ * This shape is how `total(node: Node)` accumulates in
+ * `test/cases/compile/semantic/recursive_struct_array.cml`, which stage S3 read as `450971566189`
+ * before the head carried a compound write.
+ *
+ * Run: camel test/cases/compile/var/loop_compound_write.cml std::nvm
+ */
+func main(): int sync {
+    var total = 5
+    let _ = loop i = 0 while i < 3 do sync {
+        total += i
+        println(total)
+        i + 1
+    }
+    println(total)
+    return 0
+}

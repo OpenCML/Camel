@@ -792,26 +792,26 @@ class Builder {
     // report needs both ends of the stretch to say what it is about.
     struct CapturedVar {
         size_t capturedAt = 0;
-        // The source offset of the closure's last use, or `kNoSourceOffset` where the scan could not
-        // answer it. Nothing is reported over a stretch whose end is unknown: a report that guessed
-        // the end would refuse a program the design allows (3.5, 198 -- the rule runs from the
-        // making of the closure to its last use, and not one byte further).
+        // The source offset of the closure's last use, or `kNoSourceOffset` where the scan could
+        // not answer it. Nothing is reported over a stretch whose end is unknown: a report that
+        // guessed the end would refuse a program the design allows (3.5, 198 -- the rule runs from
+        // the making of the closure to its last use, and not one byte further).
         size_t lastUse = 0;
         // The one end the design names without an offset: a closure the program put into another
         // value -- a tuple, a struct, an array, a `Ref`, a return -- runs to the rest of the scope
-        // (design principles 3.5, 198, third case). Every write that stands after the making is then
-        // inside the stretch.
+        // (design principles 3.5, 198, third case). Every write that stands after the making is
+        // then inside the stretch.
         bool stretchToEnd = false;
         std::string closure;
     };
     std::unordered_map<node_handle_t, CapturedVar> capturedVarOf_;
-    // The last use of a closure the program binds to a name, by the FUNC node the closure is written
-    // as, with the name it is bound to. A closure written at a call's argument position is used by
-    // that call (3.5, 198) and is not a binding, so it is not here; one the program puts into
-    // another value is used to the end of the scope, which no offset here stands for, and is carried
-    // as `stretchToEnd` instead.
+    // The last use of a closure the program binds to a name, by the FUNC node the closure is
+    // written as, with the name it is bound to. A closure written at a call's argument position is
+    // used by that call (3.5, 198) and is not a binding, so it is not here; one the program puts
+    // into another value is used to the end of the scope, which no offset here stands for, and is
+    // carried as `stretchToEnd` instead.
     struct ClosureUse {
-        size_t lastUse = 0;
+        size_t lastUse    = 0;
         bool stretchToEnd = false;
         // The name the program binds the closure to (`let g = () => ...` gives `g`), which is how a
         // report shows it: the graph's own name of an anonymous function is one the compiler made.
@@ -829,11 +829,12 @@ class Builder {
     // closure the PROGRAM writes, and the compiler's own closures are not asked about (the case
     // `ok_generator_body_is_not_a_program_closure` keeps that mark visible).
     static bool compilerMadeClosure(const std::string &graphName);
-    // Whether this graph is a block the program decorated rather than a closure it wrote: a decorated
-    // block is the block as a function of no parameters, passed to its decorators and called where it
-    // is written (language reference 7.6), so the write inside it is the block's own write and not a
-    // write to a value the closure took. Which of the two a decorator makes it is a question the
-    // design does not answer, and this rule does not answer it either: it leaves the shape unreported.
+    // Whether this graph is a block the program decorated rather than a closure it wrote: a
+    // decorated block is the block as a function of no parameters, passed to its decorators and
+    // called where it is written (language reference 7.6), so the write inside it is the block's
+    // own write and not a write to a value the closure took. Which of the two a decorator makes it
+    // is a question the design does not answer, and this rule does not answer it either: it leaves
+    // the shape unreported.
     bool decoratedBlockGraph(const compile_graph_ptr_t &graph) const;
     // Whether a capture of each cell is a capture of its value, decided once per cell
     // (captureByValue): a port's type is the cell's or the value's, and every capture of the same
@@ -916,14 +917,14 @@ class Builder {
     captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
     /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
     /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
-    /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level `var`
-    /// the program is not making a value of the function for, the generator machine's step function
-    /// and a decorated block (there the write has to land in the cell). Handing the name to a call
-    /// is NOT one of them: a `var` parameter is passed in by value and passed back by value (3.5,
-    /// 192), and where the closure stands at that call's argument position its last use is the call,
-    /// so 3.5 (198) reports nothing and the program is legal -- the author's ruling of 2026-11-16.
-    /// Decided once per cell (`captureByValueOf_`): every capture of one cell has to answer the
-    /// same.
+    /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level
+    /// `var` the program is not making a value of the function for, the generator machine's step
+    /// function and a decorated block (there the write has to land in the cell). Handing the name
+    /// to a call is NOT one of them: a `var` parameter is passed in by value and passed back by
+    /// value (3.5, 192), and where the closure stands at that call's argument position its last use
+    /// is the call, so 3.5 (198) reports nothing and the program is legal -- the author's ruling of
+    /// 2026-11-16. Decided once per cell (`captureByValueOf_`): every capture of one cell has to
+    /// answer the same.
     bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin);
     /// The answer `captureByValue` records for a cell, worked out once: whether a capture of it is
     /// a capture of the value it holds rather than of its cell (design principles 3.5, 197).
@@ -939,12 +940,13 @@ class Builder {
     ///   - the body that declares the name assigns it again (`throughCall` false, the cell is the
     ///     declared one and a closure captured it earlier);
     ///   - the body hands the name to a call whose `var` parameter writes it back (`throughCall`
-    ///     true: design principles 3.5, 192 -- the write-back is an assignment written at the call).
+    ///     true: design principles 3.5, 192 -- the write-back is an assignment written at the
+    ///     call).
     /// A name of the top level of a module is left alone: its rule is the module `var`'s, not this
     /// one. Throws BuildAbortException after reporting.
-    void
-    requireCapturedNameWritable(node_handle_t cell, const std::string &name, bool throughCall,
-                                camel::source::origin_id_t at);
+    void requireCapturedNameWritable(
+        node_handle_t cell, const std::string &name, bool throughCall,
+        camel::source::origin_id_t at);
     /// Whether `node` is a capture port whose captured name is a `var` of the graph around it
     /// (`captureOriginOf_`). A capture port carries the value the name had where the closure was
     /// made (design principles 3.5, 197), so it is not a variable of the graph that reads it --
@@ -965,8 +967,9 @@ class Builder {
     /// a question about the call -- which capture still has to be linked -- and names no value.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
     /// The value the call is handed for one capture of the callee, as the current graph sees it: a
-    /// capture of a cell is that cell's nearest write (`valueVersionOf`), and a capture of a value is
-    /// a read of the variable where the call stands, never the cell (design principles 3.5, 197).
+    /// capture of a cell is that cell's nearest write (`valueVersionOf`), and a capture of a value
+    /// is a read of the variable where the call stands, never the cell (design principles 3.5,
+    /// 197).
     node_handle_t captureValueOf(const CapturedValue &captured);
     /// The link step for captures: puts the captures a call was given while it was built behind its
     /// declared `with` arguments (the callee's with-ports in order), then passes every direct call
@@ -1109,8 +1112,8 @@ class Builder {
 
     /// A `var` whose declaration is built as a value and not as a cell
     /// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1): the name is
-    /// bound to the value in `nodeScope_`, an assignment rebinds it (`ssaAssignmentOf`), and no cell
-    /// is made, so nothing reads or writes one. One entry per declaration, in the scope that
+    /// bound to the value in `nodeScope_`, an assignment rebinds it (`ssaAssignmentOf`), and no
+    /// cell is made, so nothing reads or writes one. One entry per declaration, in the scope that
     /// declared it; the scope is
     /// the region, so within it a name has one declaration and the entry *is* that declaration. The
     /// value in the entry is the name's current one: a read takes the map, and a write replaces it.
@@ -1151,10 +1154,9 @@ class Builder {
     /// argument back: the callee's signature says, so the callee has to be a program function (a
     /// built-in operator's parameters are never `var`, and a callee this scan cannot name is
     /// answered as one that may write).
-    bool argumentMayWriteBack(const GCT::Node *call,
-                              size_t index,
-                              const std::vector<std::unordered_map<std::string, const GCT::Node *>>
-                                  &scopes) const;
+    bool argumentMayWriteBack(
+        const GCT::Node *call, size_t index,
+        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const;
     /// The signature of every function of the program, by name, filled by `scanProgramWriters`.
     std::unordered_map<std::string, std::vector<const FunctionType *>> functionSignatures_;
     /// The SSA binding of `name` in force (the innermost scope that binds it), or null.
@@ -1214,6 +1216,20 @@ class Builder {
     /// this round (a read after that write takes it, as it takes a straight-line write's value).
     std::unordered_map<node_handle_t, node_handle_t> loopStatePorts_;
     std::unordered_map<node_handle_t, node_handle_t> loopStateWrites_;
+    /// The `var`s the loop being built carries as values rather than as cells (stage S3): the name
+    /// the body's region binds to a port, and that port. The head's phi is the port: its two
+    /// sources are the value the name had where the loop is written and the value the body's last
+    /// round wrote, and neither is a cell. A write of such a name is a rebinding
+    /// (`ssaAssignmentOf`) that is also the round's next value (loopStateWrites_, the same table
+    /// the cell path uses), and after the loop the name is rebound to what the head hands out
+    /// (`visitLoopNode`).
+    std::unordered_map<std::string, node_handle_t> loopSsaPorts_;
+    /// A write of `name`, where a loop head of this build carries it as a value: the round's next
+    /// value is `value`. Does nothing when no loop head carries the name -- a write of a `var` that
+    /// is not loop state, of a name a closure captured, or of a name the enclosing loop keeps as a
+    /// cell. Called from every place that rebinds the name, so that a write inside an arm of the
+    /// body (S2's join) or inside a loop body of the body (S3's own head) reaches the head too.
+    void noteLoopStateWrite(const std::string &name, node_handle_t value);
     /// `LINK(DREF __assn__, DREF <name>, value)` where `<name>` is one of those ports: the value
     /// written is the loop's next state for that `var`, so the statement makes no store and the
     /// call of the assignment operator is not built at all. Null for everything else.
@@ -3919,8 +3935,8 @@ class Builder {
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
     // Makes `result` the result of `graph` when its body set none with `return`.
     void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
-    /// The exit's anchor, made to use the write the body leaves in each `var` parameter: the cell is
-    /// the caller's and outlives the call, so the last write into it is a result of the function
+    /// The exit's anchor, made to use the write the body leaves in each `var` parameter: the cell
+    /// is the caller's and outlives the call, so the last write into it is a result of the function
     /// beside the returned value (design principles 3.1). Inside a `sync` block the chain already
     /// carries that write to the exit, and the walk here finds it there and adds nothing; outside
     /// one this edge is what keeps it, and what makes it run (3.5, F3: an effect does not vanish in

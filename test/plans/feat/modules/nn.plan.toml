@@ -1374,3 +1374,16 @@ expect_exit = 0
 expect_stdout_contains = ["adam_update_bits w0=0.0279999 w3=-0.029899 w5=-0.02849988 b1=0.060999982 scale=0.2799999993999999"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "sgd_leaves_its_argument"
+desc = "`sgd(params, g, rate)` answers a new tree and leaves the tree it was handed as it was (design principles 11.3): the leaf here is a compact array with no view and no block, the one shape for which `Array::writableInPlace()` answers true, so a kernel that writes over the leaf instead of allocating one prints the updated value for `p.weight` as well. The case study's own program reads `w0` after training (`loss<w0, y>(X)`), which is the same requirement in the shape the direct-SSA plan's S3b is about: the declaration `OperatorTable::declareReusesOperand` is a claim about an operand whose last use no one proves yet. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/modules/nn/sgd_leaves_its_argument.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[[0.0], [0.0]]\n[[0.8], [0.8]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
