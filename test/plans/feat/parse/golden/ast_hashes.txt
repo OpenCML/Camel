@@ -1718,7 +1718,7 @@ f8c4449674d9f28e ok test/cases/compile/stream/composition.cml
 1c4310b682e02014 ok test/cases/compile/stream/consumed_twice.cml
 020326f3d14d4ea3 ok test/cases/compile/stream/for_consumes.cml
 5f554763bf1e3075 ok test/cases/compile/stream/for_loop.cml
-b05dc628fcbef6e2 ok test/cases/compile/stream/generators.cml
+d963c71ca53b903e ok test/cases/compile/stream/generators.cml
 b5160be61ff8d486 ok test/cases/compile/stream/generators_body_fault.cml
 ecfdb4b981ebda05 ok test/cases/compile/stream/generators_cell_retype.cml
 daa76a5d0b6f96f2 ok test/cases/compile/stream/generators_cell_type.cml
@@ -2434,6 +2434,7 @@ e7b1889f9dc9f225 ok test/cases/consistency/new_values/peek_loop.cml
 14de043d78d2cc59 ok test/cases/consistency/new_values/rebinding_loop.cml
 049a04472078ee4e ok test/cases/consistency/new_values/snapshot_state.cml
 70e6af9d054009a3 ok test/cases/consistency/new_values/sort_rebinding.cml
+feda632ef6b720bc ok test/cases/consistency/new_values/two_names_for_a_struct.cml
 12bfa27ee5d13b4b ok test/cases/consistency/new_values/unused_in_lambda.cml
 ed04ebc79de351df ok test/cases/consistency/new_values/unused_operator.cml
 b4512ab896fc938d ok test/cases/consistency/new_values/unused_var.cml
@@ -3162,6 +3163,7 @@ dd4874766974d739 ok test/cases/modules/nn/gru_lite.cml
 f75b0caceb86d188 ok test/cases/modules/nn/matrix_factorization.cml
 d6c9b2164f447b1a ok test/cases/modules/nn/mnist.cml
 54780e3640e4943d ok test/cases/modules/nn/residual_mlp.cml
+7404ea7f087df388 ok test/cases/modules/nn/sgd_leaves_its_argument.cml
 1081944efe74470e ok test/cases/modules/nn/siamese_shared_encoder.cml
 932e1970bcaa039d ok test/cases/modules/nn/softmax_axis_error.cml
 ffd3fa7a2b1d492a ok test/cases/modules/nn/softmax_classifier.cml
@@ -4378,6 +4380,9 @@ ee049f220cbe84aa ok test/plans/feat/format/golden/when_clause.cml
 dbfdb482f9059740 ok test/plans/feat/parse/golden/rules_format.cml
 4e5ac200a628c3e7 ok test/probe/refleak/call_box.cml
 58014c5bc874530e ok test/probe/refleak/fill_carries.cml
+3cb1213dde0935ca ok test/probe/refleak/loop_nested_after.cml
+5fca407c44d1ff6e ok test/probe/refleak/loop_nested_outer_ref.cml
+a7d8cb23c13f22d4 ok test/probe/refleak/loop_outer_ref.cml
 57cb576b0ebc4428 ok test/tools/jitcov/workloads.cml
 c9fb9a1f4e7c57b9 ok test/tools/selftest/benchmark_failure.cml
 441b8418f7fdf15a ok test/tools/selftest/sweep/probe.cml
