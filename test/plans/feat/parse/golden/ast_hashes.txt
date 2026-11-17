@@ -2130,10 +2130,17 @@ daea60557d204d99 ok test/cases/compile/var/branch_carry_both_arms_then.cml
 faf7a471321f79c8 ok test/cases/compile/var/closure_read.cml
 7e95a32da81d0116 ok test/cases/compile/var/closure_read_let.cml
 a127e58e7d85a66a ok test/cases/compile/var/compound_write_then_store.cml
+5cbf7af640c7fb75 ok test/cases/compile/var/loop_append_copies.cml
+c1863f4b68b6f37e ok test/cases/compile/var/loop_branch_write.cml
+0097cccf7e647f5c ok test/cases/compile/var/loop_compound_write.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml
+28d98696ca2a4873 ok test/cases/compile/var/loop_nested.cml
+430e0b6cb8318fd3 ok test/cases/compile/var/loop_phi_two_sources.cml
+7d1be5d3a30727cc ok test/cases/compile/var/loop_two_states.cml
 36c00bf6af90970d ok test/cases/compile/var/loop_var.cml
 9a65db17c8e1acb7 ok test/cases/compile/var/loop_write_outside_read.cml
 dbc6384762126cc9 ok test/cases/compile/var/loop_write_outside_read_let.cml
+28b5234eb4b49394 ok test/cases/compile/var/loop_write_then_read.cml
 e4d108190a15a18f ok test/cases/compile/var/step_let.cml
 6fe22c1e60003a30 ok test/cases/compile/var/step_var.cml
 751b3a4d87c66fdd ok test/cases/compile/var/unused_assigned_value.cml
@@ -3936,7 +3943,7 @@ f5710fdcecdb9230 ok test/cases/opt/e9/rc14_seed176.cml
 d9a107b651f8db05 ok test/cases/opt/e9/rc16_seed153.cml
 d4bfd08df25502f5 ok test/cases/opt/e9/rc17_seed193.cml
 7ad57fa2043211f1 ok test/cases/opt/e9/rc18_seed429.cml
-d9de2d864b5d6f5c ok test/cases/opt/e9/rc19_seed70.cml
+058e392d09dd83d2 ok test/cases/opt/e9/rc19_seed70.cml
 b33a38202301ae03 ok test/cases/opt/e9/rc20_seed262.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml

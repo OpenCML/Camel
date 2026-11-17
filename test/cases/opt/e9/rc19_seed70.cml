@@ -1,19 +1,8 @@
-func f1(a2: bool, a3: (a0: float) => int, a4: (a0: string, a1: int) => bool): bool {
-    let n5 = int(3.0);
-    return false;
+func f1(b: bool, g: (p: float) => int, h: (p: string, q: int) => bool): bool {
+    return if b then g(1.0) == 0 else h('x', 1);
 }
 
-with <k33: float>
-func w32(a34: bool, a35: int): bool {
-    return match a34 {
-        case false => {
-            return f1(false, (p40: float): int => 4, (p41: string, p42: int): bool => false);
-        }
-        case true => true
-    };
-}
-
-func main(): int sync {
-    let n68 = w32<2.0>(false, 3);
+func main(): int {
+    println('r {}'->format<f1(false, (p: float): int => 1, (p: string, q: int): bool => true)>);
     return 0;
 }

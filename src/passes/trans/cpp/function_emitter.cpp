@@ -768,15 +768,27 @@ void FunctionEmitter::lowerCall(
                 describeFunction(callee)));
     }
     std::vector<std::string> args;
-    // The parameter each argument fills, in the order a direct call lists them: the normal ones,
-    // then the `with` ones (the callee's own function type).
+    // The type each argument fills, in the order a direct call lists them: the normal ports' types,
+    // then the `with` ports' -- the ports, and not the callee's declared parameter list
+    // (`funcType()`), because those two disagree exactly where this writer used to be wrong.
+    //
+    // A specialization that binds a value erases the formal from the copy and drops the argument
+    // from the call, and the copy's declared parameter list keeps the erased position: it is
+    // renumbered in its resource clause only, and its parameter list is copied as it stands
+    // (`renumberClauseAfterBindings` + `setRenumberedClause`, src/runtime/draft_inline.cpp: the
+    // shape a caller matches arguments against is the ports). Read positionally against that list,
+    // every argument after the bound one was spelled with its predecessor's type: in the E9
+    // program of seed 70 the second closure of `f1(false, g, h)` came out as
+    // `rt::Fn<int64_t(double)>` where the definition takes `rt::Fn<bool(rt::Str, int64_t)>`, and
+    // clang refused the program with "no matching function for call to 'f1'" (cell
+    // `p03_+specialize|std::cpp`). The parameter list of the definition itself is built from these
+    // same ports' types (`collectParameters`), so a call that matches the ports matches the
+    // definition by construction; a callee whose type and ports agree is unaffected.
     std::vector<const Type *> parameters;
-    if (const auto *calleeType = callee->funcType(); calleeType != nullptr) {
-        for (const Type *p : calleeType->normTypesSpan()) {
-            parameters.push_back(p);
-        }
-        for (const Type *p : calleeType->withTypesSpan()) {
-            parameters.push_back(p);
+    for (const auto ports : {callee->normPorts(), callee->withPorts()}) {
+        for (gc_node_ref_t port : ports) {
+            const auto *node = callee->node(port);
+            parameters.push_back(node != nullptr ? node->dataType() : nullptr);
         }
     }
     size_t argument = 0;
