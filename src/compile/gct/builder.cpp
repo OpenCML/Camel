@@ -6038,8 +6038,12 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // one, so a write between two `yield`s is ordered by the same rule as any other (3.4).
     const bool synced = bodyAst->loadAs<AST::StmtBlockLoad>()->synced();
 
-    const std::string pcName   = "__gen_pc__";
-    const std::string haltName = "__gen_halt__";
+    // The two cells the step unpacks out of the state: the 0th member is the point of the body the
+    // next pull starts from, the 1st says the pull in hand is done. They belong to the step and not
+    // to this body, and these two names are used only where such a cell is made, read or written:
+    // no decision below asks what a name is, so neither of them is compared to anything.
+    const std::string pcCell   = "__gen_pc__";
+    const std::string haltCell = "__gen_halt__";
     // The step's state parameter. It is named, so the port `src/compile/gir/builder_helpers.h`
     // makes for it carries the same name and the step's body can read it.
     const std::string stateParamName = "__gen_state__";
@@ -6157,22 +6161,29 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         return dataType == AST::DataType::Literal || dataType == AST::DataType::Func ||
                dataType == AST::DataType::ConstAs;
     };
-    std::vector<std::string> cellNames;
-    // The locals whose cell can be a slot of the state the machine hands from one pull to the next:
-    // those whose type has a zero value (`zeroValueOf`). The rest keep their cell, which is why the
-    // state is built beside the cells and not out of all of them.
-    std::vector<std::string> slotNames;
-    std::vector<Type *> slotTypes;
+    // A name that is a cell of this body's own, and -- where the cell's value has to outlive the
+    // pull -- the type of the state slot it travels in. `slotType` is decided where the cell is
+    // declared, by the type the cell holds: a cell whose type has a zero value (`zeroValueOf`) can
+    // be a slot, and the rest keep their cell, which is why the state is built beside the cells and
+    // not out of all of them. Nothing below asks a name what it is: a cell with a slot is the
+    // step's own local (every arm reads it there, and it needs no touch), and one without a slot
+    // stays a cell of this body.
+    struct CellDecl {
+        std::string name;
+        Type *slotType; // nullptr: a cell of this body and not a part of the state
+    };
+    std::vector<CellDecl> cells;
+    const auto isCell = [&](const std::string &name) {
+        return std::any_of(cells.begin(), cells.end(), [&](const CellDecl &cell) {
+            return cell.name == name;
+        });
+    };
     const auto addSlotCell = [&](const std::string &name,
                                  const node_ptr_t &value,
                                  const AST::node_ptr_t &ast) {
         Type *type = typeOfPlaceholder(value);
         addCellOfType(name, type, ast);
-        cellNames.push_back(name);
-        if (zeroValueOf(type) != nullptr) {
-            slotNames.push_back(name);
-            slotTypes.push_back(type);
-        }
+        cells.push_back({name, zeroValueOf(type) != nullptr ? type : nullptr});
     };
     for (size_t i = 0; i < bodyStmts->size(); ++i) {
         const auto &stmt = bodyStmts->at(i);
@@ -6210,7 +6221,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         // so an arm after a `yield` reads the same value the pull before it read.
         const std::string tupleName = "__gen_tuple_" + std::to_string(idIndex_++);
         addTypedCell(tupleName, visitData(init), stmt);
-        cellNames.push_back(tupleName);
+        cells.push_back({tupleName, nullptr});
         std::vector<std::string> names;
         for (size_t k = 0; k < refs.size(); ++k) {
             node_ptr_t element = tree_->makeAccs(k);
@@ -6223,15 +6234,22 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         destructured.push_back({stmt.get(), tupleName, names});
     }
 
-    // The state one pull hands to the next: `pc`, `halt`, and the slots a local's value travels in.
-    // It is a value, not the cells -- that is the whole of this work
-    // (`docs/handover/reports/2026-11-16-the-generator-state-travels-by-value.cn.md`). This round
-    // builds it and hands it along; the step still reads the cells, so nothing it carries is used
-    // yet, and the readings cannot move.
+    // The state one pull hands to the next: the two cells the step unpacks (`pc`, `halt`) and the
+    // slots a local's value travels in. It is a value, not a set of cells, and it is the only place
+    // the machine's own parts are kept from one pull to the next -- the generator body holds no
+    // cell for either of them (`docs/handover/reports/2026-11-16-the-generator-state-travels-by-
+    // value.cn.md`). The slots are empty today, because a program local of a generator body is a
+    // `var T` cell and a cell type has no zero value; the state carries the two control parts until
+    // the SSA step gives a local a value to travel in
+    // (`docs/handover/reports/2026-11-16-the-state-tuple-holds-nothing-but-pc-and-halt.cn.md`).
     std::vector<Type *> stateTypes;
     stateTypes.push_back(intLiteral(0)->data()->type());
     stateTypes.push_back(intLiteral(0)->data()->type());
-    stateTypes.insert(stateTypes.end(), slotTypes.begin(), slotTypes.end());
+    for (const CellDecl &cell : cells) {
+        if (cell.slotType != nullptr) {
+            stateTypes.push_back(cell.slotType);
+        }
+    }
     Type *stateType = TupleType::create(std::move(stateTypes));
     // The tuple of values a `(…)` of these nodes makes, the way `pairValue` builds one.
     const auto tupleOf = [&](const std::vector<node_ptr_t> &parts) {
@@ -6253,17 +6271,21 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // value its type starts at, and `pc`/`halt` start at zero.
     const auto stateZero = [&]() {
         std::vector<node_ptr_t> parts = {intLiteral(0), intLiteral(0)};
-        for (Type *type : slotTypes) {
-            parts.push_back(tree_->makeData(zeroValueOf(type)));
+        for (const CellDecl &cell : cells) {
+            if (cell.slotType != nullptr) {
+                parts.push_back(tree_->makeData(zeroValueOf(cell.slotType)));
+            }
         }
         return tupleOf(parts);
     };
     // The state as the pull that stands here leaves it: every slot read where the machine writes it,
     // so a `yield` packs the values this pull put there.
     const auto stateNow = [&]() {
-        std::vector<node_ptr_t> parts = {readCell(pcName), readCell(haltName)};
-        for (const std::string &name : slotNames) {
-            parts.push_back(readCell(name));
+        std::vector<node_ptr_t> parts = {readCell(pcCell), readCell(haltCell)};
+        for (const CellDecl &cell : cells) {
+            if (cell.slotType != nullptr) {
+                parts.push_back(readCell(cell.name));
+            }
         }
         return tupleOf(parts);
     };
@@ -6303,7 +6325,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // A round that sets `pc` and goes on in the same pull.
     const auto jumpTo = [&](int target) {
         node_ptr_t exec = makeExec(synced);
-        *exec << writeCell(pcName, intLiteral(target));
+        *exec << writeCell(pcCell, intLiteral(target));
         *exec << readCell(outName);
         mark(exec, at, "gct.generator.jump");
         return exec;
@@ -6311,7 +6333,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // The pull is done: the round hands the answer it built (or null at the end of the stream) on
     // with the flag saying the round has answered, so the loop stops.
     const auto stopHere = [&](node_ptr_t &exec) {
-        *exec << writeCell(haltName, intLiteral(1));
+        *exec << writeCell(haltCell, intLiteral(1));
         *exec << roundState(roundPart(readCell(outName), 0), intLiteral(1));
     };
 
@@ -6395,8 +6417,8 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                     };
                     const int resume = newArm();
                     fill(resume, stmts, i + 1, next, nextState);
-                    *exec << writeCell(pcName, intLiteral(resume));
-                    *exec << writeCell(haltName, intLiteral(1));
+                    *exec << writeCell(pcCell, intLiteral(resume));
+                    *exec << writeCell(haltCell, intLiteral(1));
                     node_ptr_t elem = declaredValue(elementOf(values), elemType, stmt);
                     // The value of the round is the answer of the pull: a `return` is written
                     // only in the step function's own body
@@ -6505,20 +6527,19 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                                     "a `loop ... for` clause reached the generator machine");
                             }
                             const std::string stateName = loopLoad->state()[0].toString();
-                            if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
-                                cellNames.end()) {
+                            if (!isCell(stateName)) {
                                 addTypedCell(stateName, visitData(init), stmt);
-                                cellNames.push_back(stateName);
+                                cells.push_back({stateName, nullptr});
                             }
                             const std::string seqName =
                                 "__gen_for_seq_" + std::to_string(idIndex_++);
                             node_ptr_t sequence = visitData(seqAst);
                             addCellOfType(seqName, typeOfPlaceholder(sequence), stmt);
-                            cellNames.push_back(seqName);
+                            cells.push_back({seqName, nullptr});
                             const std::string idxName =
                                 "__gen_for_idx_" + std::to_string(idIndex_++);
                             addTypedCell(idxName, intLiteral(0), stmt);
-                            cellNames.push_back(idxName);
+                            cells.push_back({idxName, nullptr});
                             const auto elementAt = [&]() {
                                 node_ptr_t node = tree_->makeLink(2);
                                 *node << tree_->makeDRef("__idx__") << readCell(seqName)
@@ -6526,8 +6547,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                                 return mark(node, stmt, "gct.generator.for.element");
                             };
                             const std::string binderName = loopLoad->binder().toString();
-                            if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
-                                cellNames.end()) {
+                            if (!isCell(binderName)) {
                                 // The binder's type is the type of the element the loop reads: the
                                 // same expression the loop writes into the cell, asked with
                                 // `typeof` (design principles 5.6: `typeof` gives the type a value
@@ -6536,7 +6556,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                                 // the same rule the library's `ElementOf` writes in Camel -- so the
                                 // comprehension needs no type function of its own.
                                 addTypedCell(binderName, elementAt(), stmt);
-                                cellNames.push_back(binderName);
+                                cells.push_back({binderName, nullptr});
                             }
                             const int afterPc = newArm();
                             fill(afterPc, stmts, i + 1, next, nextState);
@@ -6607,10 +6627,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                             // The initial value is evaluated where the loop stands (see the write
                             // below), once, before the first condition: a value computed there, or
                             // read from a local, is the first round's state like a constant is.
-                            if (std::find(cellNames.begin(), cellNames.end(), name) ==
-                                cellNames.end()) {
+                            if (!isCell(name)) {
                                 addTypedCell(name, visitData(eachInit), stmt);
-                                cellNames.push_back(name);
+                                cells.push_back({name, nullptr});
                             }
                             stateNames.push_back(name);
                         }
@@ -6673,14 +6692,14 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                         fill(afterMatch, stmts, i + 1, next, nextState);
                         // The matched value outlives the `yield`s the arms are cut at, so it is put
                         // in a cell where the `match` stands and the branch reads the cell. A cell
-                        // declared in the walk is captured with the others (the capture loop reads
-                        // every name in `cellNames`, which the walk filled), so an arm that starts
-                        // after a `yield` still finds it written.
+                        // declared in the walk is captured with the others (the capture loop walks
+                        // every cell this body declared, which the walk filled), so an arm that
+                        // starts after a `yield` still finds it written.
                         node_ptr_t subject = visitData(matchAst->atAs<AST::DataLoad>(0));
                         const std::string subjectCell =
-                            "__gen_match_subject_" + std::to_string(cellNames.size());
+                            "__gen_match_subject_" + std::to_string(cells.size());
                         addTypedCell(subjectCell, subject, stmt);
-                        cellNames.push_back(subjectCell);
+                        cells.push_back({subjectCell, nullptr});
                         *exec << writeCell(subjectCell, subject);
                         node_ptr_t brch = tree_->makeBrch();
                         *brch << readCell(subjectCell);
@@ -6747,12 +6766,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                                     }
                                     if (fieldType != nullptr) {
                                         cellWrites.emplace_back(field.binding, holder);
-                                        if (std::find(
-                                                cellNames.begin(),
-                                                cellNames.end(),
-                                                field.binding) == cellNames.end()) {
+                                        if (!isCell(field.binding)) {
                                             addCellOfType(field.binding, fieldType, caseNode);
-                                            cellNames.push_back(field.binding);
+                                            cells.push_back({field.binding, nullptr});
                                         }
                                     }
                                 }
@@ -6772,8 +6788,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                                     "__gen_match_bind_" + std::to_string(idIndex_++);
                                 patternBindings.push_back(holder);
                                 cellWrites.emplace_back(name, holder);
-                                if (std::find(cellNames.begin(), cellNames.end(), name) ==
-                                    cellNames.end()) {
+                                if (!isCell(name)) {
                                     Type *cellType = nullptr;
                                     if (isError) {
                                         // The error of a `T!` is not the payload the tagged value
@@ -6792,7 +6807,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                                             TypeCallType::create("PayloadOf", payloadArgument);
                                     }
                                     addCellOfType(name, cellType, caseNode);
-                                    cellNames.push_back(name);
+                                    cells.push_back({name, nullptr});
                                 }
                             }
                             const int armPc = newArm();
@@ -6939,7 +6954,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                     for (size_t k = 0; k < names.size(); ++k) {
                         const std::string nextName = "__gen_next_" + std::to_string(idIndex_++);
                         addTypedCell(nextName, readCell(names[k]), lastStmt);
-                        cellNames.push_back(nextName);
+                        cells.push_back({nextName, nullptr});
                         nextCells.push_back(nextName);
                     }
                     for (size_t k = 0; k < names.size(); ++k) {
@@ -6951,7 +6966,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                 }
             }
             if (next >= 0) {
-                *exec << writeCell(pcName, intLiteral(next));
+                *exec << writeCell(pcCell, intLiteral(next));
                 *exec << readCell(outName);
             } else {
                 stopHere(exec);
@@ -6975,24 +6990,27 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         mark(vari, at, "gct.generator.state");
         *stepBody << vari;
     };
-    unpackSlot(pcName, 0);
-    unpackSlot(haltName, 1);
-    for (size_t i = 0; i < slotNames.size(); ++i) {
-        unpackSlot(slotNames[i], 2 + i);
+    unpackSlot(pcCell, 0);
+    unpackSlot(haltCell, 1);
+    size_t slotPart = 2;
+    for (const CellDecl &cell : cells) {
+        if (cell.slotType != nullptr) {
+            unpackSlot(cell.name, slotPart++);
+        }
     }
-    *stepBody << writeCell(haltName, intLiteral(0));
+    *stepBody << writeCell(haltCell, intLiteral(0));
     fill(first, bodyStmts, 0, -1, std::string());
     // Every cell that is still a cell is read here, before any arm names `step` again: a closure
     // holds the captures its function had when it was made, so a capture made later could not be
-    // passed on. A name the state carries is the step's own local and needs no touch.
-    for (size_t i = 0; i < cellNames.size(); ++i) {
-        const std::string &name = cellNames[i];
-        if (name == pcName || name == haltName ||
-            std::find(slotNames.begin(), slotNames.end(), name) != slotNames.end()) {
+    // passed on. A cell with a slot is the step's own local -- every arm reads it there, and the
+    // state carries its value -- so it is not one of these. Which of the two a cell is was decided
+    // where it was declared (`CellDecl`), not here.
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (cells[i].slotType != nullptr) {
             continue;
         }
         node_ptr_t touch = tree_->makeNRef("__gen_touch__" + std::to_string(i));
-        *touch << readCell(name);
+        *touch << readCell(cells[i].name);
         *stepBody << touch;
     }
     node_ptr_t loopNode = tree_->makeLoop(camel::core::LoopKind::While, {outName}, std::string());
@@ -7013,7 +7031,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     node_ptr_t chain = nullptr;
     for (size_t pc = arms.size(); pc-- > 0;) {
         node_ptr_t brch = tree_->makeBrch();
-        *brch << equalTo(pcName, static_cast<int64_t>(pc));
+        *brch << equalTo(pcCell, static_cast<int64_t>(pc));
         node_ptr_t trueCase = tree_->makeCase(CaseType::True);
         *trueCase << arms[pc];
         node_ptr_t elseCase = tree_->makeCase(CaseType::Else);
