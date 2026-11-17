@@ -1,0 +1,45 @@
+/**
+ * Two names for one struct do not see each other's writes -- including a write *inside* an array
+ * the struct holds. This is the invariant the memory accounting has to keep, and it is pinned here
+ * because it is the one a change to the plan can break:
+ *
+ *   `shareForSecondName` (src/builtin/operators/ops.cpp) hands out a *second name* of a value: an
+ *   array's storage is counted for the new name, so a write in place needs the only one. It only
+ *   knows arrays today, so a struct hands out the same struct object; the leaves inside it are not
+ *   counted for the second name at all.
+ *
+ * What keeps these three writes apart today is the *plan*, not that count: every one of them is
+ * `copied` (`camel inspect --copies` prints `set_index copied` three times for this program), so
+ * the update runs the copying form and the array's own count is never asked. The day the plan
+ * decides `in-place` (or `by-count`) for a write whose array is reachable through two struct names
+ * -- the direct-SSA plan's S3b, docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md --
+ * this case is what says whether that decision is true.
+ *
+ * docs/handover/reports/2026-11-17-s3b-the-training-steps-update-cannot-read-in-place.cn.md
+ */
+
+type Bag = { label: string, xs: int[] }
+
+func main(): int sync {
+    // A second name made at a declaration: the write through `b` stays in `b`.
+    let a: Bag = { label: 'a', xs: [1, 2] }
+    var b = a
+    b.xs[0] = 9
+    b.label = 'b'
+    println(a.label, a.xs)
+    println(b.label, b.xs)
+
+    // A second name a read keeps: `kept` is the value `inner` had when it was read, and the write
+    // into the array inside it afterwards is not seen through `kept`.
+    var inner: Bag = { label: 'i', xs: [3, 4] }
+    let kept = inner
+    inner.xs[0] = 7
+    println(kept.xs, inner.xs)
+
+    // Nested: a struct in a struct, both with an array, written through a path.
+    let outer = { name: 'o', box: { label: 'x', xs: [5, 6] } }
+    var moved = outer
+    moved.box.xs[1] = 8
+    println(outer.box.xs, moved.box.xs)
+    return 0
+}
