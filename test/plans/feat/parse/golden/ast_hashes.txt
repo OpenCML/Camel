@@ -3039,7 +3039,7 @@ d707dea876283778 ok test/cases/modules/autodiff/value_with_grad.cml
 9e2e13ff8aaf332d ok test/cases/modules/autodiff/value_with_reduce.cml
 b966b4edbe6d33ee ok test/cases/modules/autodiff/value_with_refusal.cml
 b010bbe41ad042b3 ok test/cases/modules/autodiff/var_array_append.cml
-e49d6c1dfe2cfbf7 ok test/cases/modules/autodiff/var_tensor_local.cml
+cdcc678e87a12f24 ok test/cases/modules/autodiff/var_tensor_local.cml
 ded5855a8988cac1 ok test/cases/modules/autodiff/var_tensor_read.cml
 5970204562e8b701 ok test/cases/modules/autodiff/var_tensor_read_after_call.cml
 0be7907e49f17299 ok test/cases/modules/autodiff/var_tensor_read_after_write.cml
