@@ -500,7 +500,7 @@ inline AssignmentForm assignmentFormOf(const GCT::node_ptr_t &node) {
     if (group == "__assn_owned__") {
         // The compiler makes this call from an operator id, and the name is then only the node's
         // label (`internalOperatorDref`): the id is asked, so that a label is not the reference.
-        if (const auto oper = GCT::Tree::of(callee.get())->operRefOf(callee.get());
+        if (const auto oper = GCT::Tree::of(callee)->operRefOf(callee);
             oper.has_value() && *oper != camel::core::oper::AssnOwned) {
             return AssignmentForm::None;
         }
