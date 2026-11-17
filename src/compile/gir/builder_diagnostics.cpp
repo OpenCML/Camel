@@ -609,10 +609,62 @@ void Builder::layRegionWriteEdges() {
                 }
                 chains[region].push_back(ref);
             }
+            // The shape the spec names separately ("臂直接交出外面的值时 … 由区域里的 GATE 承担
+            // 出口"): an arm hands its value to the JOIN that closes its owner's branch, and when the
+            // JOIN does not take it -- a branch written as a statement joins no value, and an arm
+            // whose value is dropped joins nothing -- then nothing in the arm is reachable from the
+            // owner, so an edge to the value the arm hands out can order a write but cannot make the
+            // arm run. The exit the owner reads is a GATE of the region's own: it forwards the value
+            // the region hands out, the region's statements chain into it, and the JOIN runs after
+            // it. That is an order edge on a JOIN that joins no value, which carries no type and is
+            // legal there.
+            const auto gateExitOf = [&](uint32_t region,
+                                        runtime::gc_node_ref_t result) -> runtime::gc_node_ref_t {
+                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
+                if (owner == runtime::kInvalidNodeRef) {
+                    return runtime::kInvalidNodeRef;
+                }
+                const runtime::DraftNodeHeader *ownerHeader = draft.header(owner);
+                if (ownerHeader == nullptr ||
+                    ownerHeader->kind != runtime::GCNodeKind::Brch) {
+                    return runtime::kInvalidNodeRef; // a loop's regions carry the ports they have
+                }
+                const runtime::gc_node_ref_t join = runtime::branchJoinOf(draft, owner);
+                if (join == runtime::kInvalidNodeRef) {
+                    return runtime::kInvalidNodeRef;
+                }
+                const auto withIns = draft.withInputsOf(join);
+                if (std::ranges::find(withIns, result) != withIns.end()) {
+                    return runtime::kInvalidNodeRef; // the owner already reads what the arm gives
+                }
+                Type *type = result != runtime::kInvalidNodeRef ? nodeTypeOf(draft.ref(result))
+                                                                : nullptr;
+                if (type == nullptr) {
+                    return runtime::kInvalidNodeRef;
+                }
+                const runtime::gc_node_ref_t gate = draft.addGateNode(type);
+                draft.setNodeRegion(gate, region);
+                std::vector<runtime::gc_node_ref_t> norm{result};
+                draft.setNormInputs(gate, norm);
+                const std::span<const runtime::gc_node_ref_t> joinSync = draft.syncInputsOf(join);
+                if (!joinSync.empty()) {
+                    const runtime::gc_node_ref_t prev = joinSync.front();
+                    draft.setSyncInputs(gate, std::span<const runtime::gc_node_ref_t>(&prev, 1));
+                }
+                draft.setSyncInputs(join, std::span<const runtime::gc_node_ref_t>(&gate, 1));
+                draft.setRegionResult(region, gate);
+                return gate;
+            };
             for (const auto &[region, writes] : chains) {
-                const runtime::gc_node_ref_t exit = exitOf(region);
+                runtime::gc_node_ref_t exit = exitOf(region);
                 if (exit == runtime::kInvalidNodeRef) {
                     continue;
+                }
+                if (region != 0) {
+                    if (const runtime::gc_node_ref_t gate = gateExitOf(region, exit);
+                        gate != runtime::kInvalidNodeRef) {
+                        exit = gate;
+                    }
                 }
                 // What the exit already depends on, through every input it has (data, control,
                 // `with` and sync). A write the exit already reaches is upstream of the exit, so it
