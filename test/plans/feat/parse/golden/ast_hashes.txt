@@ -2717,6 +2717,7 @@ ebe9d0b97b5a4d01 ok test/cases/linear/byref/param_sorted.cml
 89383817c6b52708 ok test/cases/linear/byref/param_to_var_param.cml
 5b7221fdc08e8be8 ok test/cases/linear/byref/path_assigned.cml
 ce132601c3114616 ok test/cases/linear/byref/path_assigned_allocs.cml
+c85a47e9c13a8515 ok test/cases/linear/byref/ref_handle_capture.cml
 a046c74373d621a9 ok test/cases/linear/byref/var_alias_captured.cml
 713f43925e3b14c2 ok test/cases/linear/byref/var_alias_read_then_param.cml
 15cc7e3bf2dc0057 ok test/cases/linear/byref/var_alias_through_param.cml

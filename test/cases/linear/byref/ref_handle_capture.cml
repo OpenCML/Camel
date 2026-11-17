@@ -1,0 +1,44 @@
+/**
+ * A local holding a `state::Ref` is a holder, and the cell that used to stand for it is gone: a
+ * closure that reads or writes the name captures the handle (`Ref<int>` is a value), so the graph
+ * builds no `:var/new` for either declaration. The cell that used to stand here was released too
+ * early, and a read or a write through the closure answered `InvalidArgument`.
+ *
+ *   read_through_closure()    the closure reads the handle: `let read = () => state::get(box)`.
+ *   write_through_closure()   the closure writes it: `let bump = () => state::set(box, 9)`.
+ *
+ * One plan entry per fact, so a change that quietly builds the cell again turns one of them red and
+ * not merely a shape:
+ *
+ *   ref_handle_capture.graph  neither graph holds a `:var/new` node (nor a `:var/new/empty`), and
+ *                             the port the closure captures carries a value and not a cell: the
+ *                             handle is what crosses the boundary, and the cell it used to need
+ *                             does not exist;
+ *   ref_handle_capture.runs   the two reads answer `5` and `9`: one handle, one box, read and
+ *                             written across the closure.
+ */
+
+import state
+
+// A closure reading a `Ref` local.
+func read_through_closure(): int sync {
+    var box = state::ref(0)
+    state::set(box, 5)
+    let read = () => state::get(box)
+    return read()
+}
+
+// A closure writing a `Ref` local.
+func write_through_closure(): int sync {
+    var box = state::ref(0)
+    let bump = () => state::set(box, 9)
+    state::set(box, 5)
+    bump()
+    return state::get(box)
+}
+
+func main(): int sync {
+    println(read_through_closure())
+    println(write_through_closure())
+    return 0
+}
