@@ -164,8 +164,24 @@ def run_cell(source_path: Path, passes: List[str], env_values: dict, expected: L
     else:
         info.update(outcome="MISMATCH", detail=first_difference(expected, got))
     if info["outcome"] != "OK":
-        info["got"] = got[:60]
+        info["got"] = capped(got)
     return info
+
+
+GOT_LIMIT = 60
+
+
+def capped(lines: List[str]) -> List[str]:
+    """What a cell printed, cut at `GOT_LIMIT` lines -- and the cut is written into the list.
+
+    A shortened output and an output that is genuinely short read the same in a report. The first
+    version of this function cut at sixty lines and `e9diff` cut again at six, both silently: a
+    program that printed nine lines where the model says ten was read as one that printed six, and
+    a cut at six lines turns "one line is missing" into "four lines are missing". Whatever is cut
+    leaves a line that says how much was cut."""
+    if len(lines) <= GOT_LIMIT:
+        return list(lines)
+    return [*lines[:GOT_LIMIT], f"... {len(lines) - GOT_LIMIT} more line(s) truncated"]
 
 
 def first_difference(expected: List[str], got: List[str]) -> str:
