@@ -414,6 +414,13 @@ node_ptr_t Tree::makeWith(size_t argCount) {
 
 node_ptr_t Tree::makeTypeApplication() { return makeNode(NodeKind::TAPP); }
 
+node_ptr_t Tree::makeAssign(AssignmentForm form, std::string_view compoundGroup) {
+    Node *node          = makeNode(NodeKind::ASSIGN);
+    node->tag_          = static_cast<uint16_t>(form);
+    node->payload_.name = intern(std::string(compoundGroup));
+    return node;
+}
+
 node_ptr_t Tree::makeAccs(size_t index) {
     Node *node            = makeNode(NodeKind::ACCS);
     node->payload_.number = index;
@@ -645,6 +652,9 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
+    case NodeKind::ASSIGN:
+        copy->payload_.name = intern(*node->payload_.name);
+        break;
     case NodeKind::TCASE:
         if (node->typeCaseTypeCount() > 0) {
             const size_t count = node->typeCaseTypeCount();
@@ -739,6 +749,13 @@ std::string Node::toString() const {
         return "DREF: " + name();
     case NodeKind::LINK:
         return "LINK: argcnt=" + std::to_string(argCount());
+    case NodeKind::ASSIGN: {
+        std::string text = "ASSIGN: " + to_string(assignmentForm());
+        if (!assignmentOperator().empty()) {
+            text += " " + assignmentOperator();
+        }
+        return text;
+    }
     case NodeKind::WITH:
         return "WITH: argcnt=" + std::to_string(argCount());
     case NodeKind::TAPP:

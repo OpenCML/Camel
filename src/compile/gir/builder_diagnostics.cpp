@@ -1148,11 +1148,10 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // other than the write; the write has a user that takes its result as a value; or the stored
     // value is a root the walk started from (the result of a body is a node and not an edge to one
     // -- `setGraphReturnFromResult` names `returnNode` as the value itself -- so a returned value
-    // has no user to be found). A compound assignment (`__assn_add__`, `__assn_sub__`, ...)
-    // computes the value it stores itself, so it has no operand to ask about and the walk is its
-    // whole answer.
-    const auto storedValueIsRead = [&](draft_node_ref_t writeId, const std::string &name) {
-        if (name != "__assn__" && name != "__assn_owned__") {
+    // has no user to be found). A compound assignment (`+=`, `-=`, ...) computes the value it
+    // stores itself, so it has no operand to ask about and the walk is its whole answer.
+    const auto storedValueIsRead = [&](draft_node_ref_t writeId, GCT::AssignmentForm form) {
+        if (form != GCT::AssignmentForm::Plain && form != GCT::AssignmentForm::Owned) {
             return false;
         }
         const auto operands = draft.normInputsOf(writeId);
@@ -1180,8 +1179,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
                 if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
                     return true;
                 }
-                const auto userTarget = graph->operTarget(userNode);
-                if (userTarget == nullptr || !userTarget->name().starts_with("__assn")) {
+                if (!writeNodes_.contains(userNode)) {
                     return true;
                 }
             }
@@ -1219,8 +1217,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
                 if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
                     return false;
                 }
-                const auto userTarget = graph->operTarget(userNode);
-                if (userTarget == nullptr || !userTarget->name().starts_with("__assn")) {
+                if (!writeNodes_.contains(userNode)) {
                     return false;
                 }
             }
@@ -1239,10 +1236,16 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             continue;
         }
         const auto target = graph->operTarget(node);
-        if (target == nullptr || !target->name().starts_with("__assn")) {
+        if (target == nullptr) {
             continue;
         }
-        if (storedValueIsRead(id, target->name())) {
+        // The stores this builder made: a node of another kind, an ordinary call, or a store of
+        // another body is not one of them.
+        const auto write = writeNodes_.find(node);
+        if (write == writeNodes_.end()) {
+            continue;
+        }
+        if (storedValueIsRead(id, write->second)) {
             continue;
         }
         // A write that does not run cannot have a reader: nothing it would store is ever there, so

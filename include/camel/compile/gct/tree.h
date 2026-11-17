@@ -113,6 +113,10 @@ class Tree {
     node_ptr_t makeLink(size_t argCount);
     node_ptr_t makeWith(size_t argCount);
     node_ptr_t makeTypeApplication();
+    /// A write of a place (children: the target, the value). `compoundGroup` is the group of the
+    /// operator a Compound write follows (`__assn_add__` for `+=`) and is empty for every other
+    /// form.
+    node_ptr_t makeAssign(AssignmentForm form, std::string_view compoundGroup = {});
     node_ptr_t makeAccs(size_t index);
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);

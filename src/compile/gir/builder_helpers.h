@@ -19,6 +19,7 @@
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/collection.h"
@@ -41,6 +42,7 @@
 #include <atomic>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <optional>

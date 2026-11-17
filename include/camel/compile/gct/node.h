@@ -19,6 +19,8 @@
  *     FUNC, NREF, DREF  payload: the name; FUNC flags: a decorated block, a body-less
  *                       declaration of a C++ operator
  *     LINK, WITH        payload: the number of arguments written
+ *     ASSIGN            children: the target, the value; tag: AssignmentForm; payload: the group
+ *                       of the compound operator a `Compound` write follows (`__assn_add__`)
  *     ACCS              payload: the index, or the key when the flag is clear
  *     BRCH              tag: BranchKind
  *     CASE              payload: the name bound; tag: CaseType
@@ -189,6 +191,31 @@ class Node {
     size_t argCount() const {
         ASSERT(kind_ == NodeKind::LINK || kind_ == NodeKind::WITH, "The node takes no arguments");
         return static_cast<size_t>(payload_.number);
+    }
+
+    /// ASSIGN: which write it is (see AssignmentForm).
+    AssignmentForm assignmentForm() const {
+        check(NodeKind::ASSIGN);
+        return static_cast<AssignmentForm>(tag_);
+    }
+    void setAssignmentForm(AssignmentForm form) {
+        check(NodeKind::ASSIGN);
+        tag_ = static_cast<uint16_t>(form);
+    }
+    /// ASSIGN: the place written (child 0) and the value written into it (child 1).
+    node_ptr_t assignmentTarget() const {
+        check(NodeKind::ASSIGN);
+        return at(0);
+    }
+    node_ptr_t assignmentValue() const {
+        check(NodeKind::ASSIGN);
+        return at(1);
+    }
+    /// ASSIGN: the group of the operator a Compound write follows (`__assn_add__` for `+=`);
+    /// empty for every other form.
+    const std::string &assignmentOperator() const {
+        check(NodeKind::ASSIGN);
+        return *payload_.name;
     }
 
     /// EXIT: how the function is left.
