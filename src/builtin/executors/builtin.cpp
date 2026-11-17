@@ -760,6 +760,13 @@ void registerBuiltinOperatorTraits() {
         names.push_back(name);
     }
     declareBuiltinOperatorResources(names);
+    // What two of those operators answer when the value is not one of their own: the element read
+    // hands on the slot the array holds and the field read the slot the variant holds, so the plan
+    // counts them as carriers instead of reading a list of their names (src/execute/exec_plan.cpp,
+    // `forwardsItsValue`). Declared here, where the operators are registered, and at no second
+    // place.
+    registry.declareHandsOnOperandValue(":enum/field");
+    registry.declareHandsOnOperandValue(":op/idx_arr", /*onlyOutsideArrays=*/true);
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}
