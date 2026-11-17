@@ -1281,10 +1281,9 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // The value the plain operator gave is named for the assignment, so that it is computed
     // once: the assignment stores what the operator answered.
     const std::string held = bindTemporary(valueOf(plain));
-    GCT::node_ptr_t assign = make(tree_->makeLink(2));
-    *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr)
-            << make(tree_->makeDRef(held));
-    return visitLinkNode(assign);
+    GCT::node_ptr_t assign = make(tree_->makeAssign(GCT::AssignmentForm::Plain));
+    *assign << tree_->clone(operands[0].expr) << make(tree_->makeDRef(held));
+    return visitAssignNode(assign);
 }
 
 oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
@@ -1301,18 +1300,19 @@ oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
 
 node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     // The lowered form of `xs = xs->op<w...>` (and of `xs = op<w...>(xs)`, `xs = xs->op`):
-    //   LINK(DREF __assn__, DREF xs, LINK(WITH(DREF op, w...) | DREF op, DREF xs))
+    //   ASSIGN(Plain, DREF xs, LINK(WITH(DREF op, w...) | DREF op, DREF xs))
     // In a sync block only: the rewritten statement is three operations on the variable,
     // which must run together and in this order.
     const auto isDref = [](const GCT::node_ptr_t &node, std::string_view name = {}) {
         return node != nullptr && node->type() == GCT::NodeKind::DREF &&
                (name.empty() || node->name() == name);
     };
-    if (!synced_ || gct->size() != 3 || !isDref(gct->at(0), "__assn__") || !isDref(gct->at(1))) {
+    if (!synced_ || gct->type() != GCT::NodeKind::ASSIGN ||
+        gct->assignmentForm() != GCT::AssignmentForm::Plain || !isDref(gct->assignmentTarget())) {
         return nullptr;
     }
-    const GCT::node_ptr_t target = gct->at(1);
-    const GCT::node_ptr_t call   = gct->at(2);
+    const GCT::node_ptr_t target = gct->assignmentTarget();
+    const GCT::node_ptr_t call   = gct->assignmentValue();
     if (call->type() != GCT::NodeKind::LINK || call->size() != 2 ||
         !isDref(call->at(1), target->name())) {
         return nullptr;
@@ -1424,22 +1424,23 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
                                 table.inPlaceForm((*resolved)->uri()).has_value() &&
                                 (*resolved)->funcType()->exitType() != nullptr &&
                                 (*resolved)->funcType()->exitType()->equals(arrayType);
-    GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
+    GCT::node_ptr_t rebinding = make(
+        tree_->makeAssign(inPlace ? GCT::AssignmentForm::Owned : GCT::AssignmentForm::Plain),
+        gct);
     GCT::node_ptr_t applied   = make(tree_->makeLink(1), call);
     if (!inPlace) {
         // As written (with the arguments already built): `op` reports what does not fit.
         *applied << calleeCopy << tree_->clone(call->at(1));
-        *rebinding << tree_->clone(gct->at(0)) << tree_->clone(target) << applied;
-        return visitLinkNode(rebinding);
+        *rebinding << tree_->clone(target) << applied;
+        return visitAssignNode(rebinding);
     }
     GCT::node_ptr_t take = make(tree_->makeLink(1), call->at(1));
     *take << make(internalOperatorDref(camel::core::oper::VarTake), call->at(1))
           << tree_->clone(target);
     *applied << calleeCopy << take;
     inPlaceCalls_.insert(applied);
-    *rebinding << make(internalOperatorDref(camel::core::oper::AssnOwned), gct->at(0))
-               << tree_->clone(target) << applied;
-    return visitLinkNode(rebinding);
+    *rebinding << tree_->clone(target) << applied;
+    return visitAssignNode(rebinding);
 }
 
 namespace {
@@ -1460,32 +1461,37 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // `v.f = e`, `v[i] = e`, `v[i].f += e` (design principles 3.5): the whole value of the
     // variable is rebound to a `set` chain, so everything downstream sees an ordinary
     // assignment of `v`:
-    //   LINK(DREF __assn__, <path>, e)  ->
-    //   LINK(DREF __assn__, DREF v,
-    //        LINK(DREF __set_index__, DREF v, i, LINK(DREF __set_field__, DREF v[i], f, e)))
+    //   ASSIGN(<path>, e)  ->
+    //   ASSIGN(Rebuilt, v, LINK(__set_index__, v, i, LINK(__set_field__, v[i], f, e)))
     // Each step of the path is read once, and each prefix of it is named, so that the chain
     // refers to the values the reads gave and to the places they came from.
+    if (gct->type() != GCT::NodeKind::ASSIGN) {
+        return nullptr;
+    }
+    // `=` or a compound assignment (`+=`), which is the plain operator over the place's value.
+    const GCT::AssignmentForm form = gct->assignmentForm();
+    std::optional<std::string_view> plainGroup;
+    if (form == GCT::AssignmentForm::Compound) {
+        plainGroup = camel::core::plainGroupOfCompoundAssignment(gct->assignmentOperator());
+        if (!plainGroup.has_value()) {
+            return nullptr;
+        }
+    } else if (form != GCT::AssignmentForm::Plain) {
+        return nullptr; // the builder's own writes: this is not the program's path
+    }
+    // A compound write under a path is written as the plain operator over the place's value, and
+    // the path steps are the operand's own (`y.f += e` writes `y.f`).
+    const GCT::node_ptr_t &pathTarget = gct->assignmentTarget();
+    const GCT::node_ptr_t &written    = gct->assignmentValue();
     const auto isDref = [](const GCT::node_ptr_t &node, std::string_view name = {}) {
         return node != nullptr && node->type() == GCT::NodeKind::DREF &&
                (name.empty() || node->name() == name);
     };
-    if (gct->size() != 3 || !isDref(gct->at(0))) {
-        return nullptr;
-    }
-    // `=` or a compound assignment (`+=`), which is the plain operator over the place's value.
-    const std::string group = gct->at(0)->name();
-    std::optional<std::string_view> plainGroup;
-    if (group != "__assn__") {
-        plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
-        if (!plainGroup.has_value()) {
-            return nullptr;
-        }
-    }
     // The path, read from its leaf back to the variable it starts at, then in the order it is
     // written. A place is a field of a struct or tuple or an element of an array; anything else
     // (`s.0` on a string, `f().x`) is left to the call as written.
     std::vector<GCT::node_ptr_t> chain;
-    GCT::node_ptr_t root = gct->at(1);
+    GCT::node_ptr_t root = pathTarget;
     while (!isDref(root)) {
         const bool element = root->type() == GCT::NodeKind::LINK && root->size() == 3 &&
                              isDref(root->at(0), "__idx__");
@@ -1602,16 +1608,16 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     std::string assigned;
     {
         ExpectedValueScope valueScope(expectedValueType_, type);
-        node_handle_t right = valueOf(visitOperand(gct->at(2), gct));
+        node_handle_t right = valueOf(visitOperand(written, gct));
         if (nodeIsKind(right, runtime::GCNodeKind::Dref) || boundWithArgs_.contains(right)) {
-            rejectNameWithoutValue(right, "the value", gct->at(2));
+            rejectNameWithoutValue(right, "the value", written);
         }
         if (plainGroup.has_value()) {
             const std::string rightName = bindTemporary(right);
             GCT::node_ptr_t plain       = make(tree_->makeLink(2), gct);
-            *plain << make(tree_->makeDRef(std::string(*plainGroup)), gct->at(0))
+            *plain << make(tree_->makeDRef(std::string(*plainGroup)), gct)
                    << make(tree_->makeDRef(steps.back().value), chain.back())
-                   << make(tree_->makeDRef(rightName), gct->at(2));
+                   << make(tree_->makeDRef(rightName), written);
             right = visitLinkNode(plain);
         }
         // The value enters the place's type as it enters a declaration's and a parameter's
@@ -1619,14 +1625,14 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
         Type *valueType = valueTypeOf(nodeTypeOf(right));
         if (type != nullptr && valueType != nullptr && !type->equals(valueType) &&
             entersImplicitly(type, valueType)) {
-            if (node_handle_t entered = checkValue(right, type, gct->at(2))) {
+            if (node_handle_t entered = checkValue(right, type, written)) {
                 right = entered;
             }
         }
         assigned = bindTemporary(right);
     }
     // The set chain, from the deepest place to the variable.
-    GCT::node_ptr_t value = make(tree_->makeDRef(assigned), gct->at(2));
+    GCT::node_ptr_t value = make(tree_->makeDRef(assigned), written);
     for (size_t i = steps.size(); i-- > 0;) {
         const PathStep &step = steps[i];
         const bool outermost = i == 0;
@@ -1653,16 +1659,14 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
         value = call;
     }
     // The store: the variable keeps the new value, and the array as its own when it was written
-    // in place (so that the next statement may write it in place again).
-    GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
-    // `__assn__` is a group of one overload per type, chosen by the operand types (an
-    // assignment the program may also write as `=`): it has no single id and stays by name.
-    *rebinding << make(
-                      inPlace ? internalOperatorDref(camel::core::oper::AssnOwned)
-                              : tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__"),
-                      gct->at(0))
-               << tree_->clone(root) << value;
-    return visitLinkNode(rebinding);
+    // in place (so that the next statement may write it in place again). The form says which
+    // write this is: the builder's own rebuild of the whole variable (`Rebuilt`), or the
+    // rebinding to the result of the in-place operator (`Owned`).
+    GCT::node_ptr_t rebinding = make(
+        tree_->makeAssign(inPlace ? GCT::AssignmentForm::Owned : GCT::AssignmentForm::Rebuilt),
+        gct);
+    *rebinding << tree_->clone(root) << value;
+    return visitAssignNode(rebinding);
 }
 
 namespace {
@@ -1990,19 +1994,16 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     // -- and the name is rebound to it. Nothing is stored, and no cell is read or written, which
     // is the whole of the difference: what the cell did by being overwritten, the binding does by
     // being replaced.
-    // The assignment as written, and the one a path rebuilds: that one names the built-in group
-    // itself (`$builtin::__assn__`) and is the same write (pathAssignmentOf).
-    std::string calleeName;
-    if (gct->size() == 3 && gct->at(0) != nullptr && gct->at(0)->type() == GCT::NodeKind::DREF) {
-        calleeName = gct->at(0)->name();
-        if (calleeName.rfind(kBuiltinPrefix, 0) == 0) {
-            calleeName = calleeName.substr(kBuiltinPrefix.size());
-        }
-    }
-    if (gct->size() != 3 || calleeName != "__assn__") {
+    // The assignment as written, and the one a path rebuilds: that one says so in its form
+    // (AssignmentForm::Rebuilt) and is the same write (pathAssignmentOf).
+    if (gct->type() != GCT::NodeKind::ASSIGN) {
         return nullptr;
     }
-    const GCT::node_ptr_t &target = gct->at(1);
+    const GCT::AssignmentForm form = gct->assignmentForm();
+    if (form != GCT::AssignmentForm::Plain && form != GCT::AssignmentForm::Rebuilt) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t &target = gct->assignmentTarget();
     if (target == nullptr || target->type() != GCT::NodeKind::DREF) {
         // `x.f = e` and `x[i] = e`: pathAssignmentOf rebuilds the whole value and writes the
         // variable, which comes back here as a plain assignment of the name.
@@ -2013,7 +2014,7 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     if (binding == nullptr) {
         return nullptr;
     }
-    const GCT::node_ptr_t &written = gct->at(2);
+    const GCT::node_ptr_t &written = gct->assignmentValue();
     Type *held                     = binding->type;
     node_handle_t value{};
     {
@@ -2038,14 +2039,15 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     }
     // A write that came from `a op= b` is not reported: the compound assignment reads the name it
     // writes, so the report of a dropped value never stood on it (storedValueIsRead answered for
-    // the cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) names the
-    // built-in group itself and is skipped for the same reason: that rebuild reads `x`.
-    const bool reportable = !inCompoundAssignment_ && gct->at(0)->name() == "__assn__";
+    // the cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) is skipped
+    // for the same reason: that rebuild reads `x`.
+    const bool reportable =
+        !inCompoundAssignment_ && form == GCT::AssignmentForm::Plain;
     if (value != nullptr && reportable) {
-        // The write is reported where the assignment operator stands, which is where the call the
-        // store used to be took its origin from; the value's own origin is where the value begins.
-        const camel::source::origin_id_t at =
-            gct->at(0) != nullptr ? gct->at(0)->origin() : camel::source::kInvalidOriginId;
+        // The write is reported where the operator stands -- the `=` the program wrote -- which is
+        // the place the store's own reference carries (storeOperatorOrigin); the value's own origin
+        // is where the value begins.
+        const camel::source::origin_id_t at = storeOperatorOrigin(gct);
         ssa_.noteWrite(value, at != camel::source::kInvalidOriginId ? at : gct->origin());
     }
     ssa_.rebind(nodeScope_, name, value, armWritesHere());
@@ -2063,11 +2065,11 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     // write is lowered (design principles 3.5: "a write to an outer `var` in a loop body becomes
     // the loop's carried state"), and it is why the `var` writing and the `let` writing are one
     // graph.
-    if (loopStatePorts_.empty() || gct->size() != 3 || gct->at(0) == nullptr ||
-        gct->at(0)->type() != GCT::NodeKind::DREF || gct->at(0)->name() != "__assn__") {
+    if (loopStatePorts_.empty() || gct->type() != GCT::NodeKind::ASSIGN ||
+        gct->assignmentForm() != GCT::AssignmentForm::Plain) {
         return nullptr;
     }
-    const auto &target = gct->at(1);
+    const auto &target = gct->assignmentTarget();
     if (target == nullptr || target->type() != GCT::NodeKind::DREF) {
         // A path (`v.f = e`, `v[i] = e`) was rewritten into the whole variable's rebinding by
         // pathAssignmentOf above, or is left to the call as written: either way it is not this.
@@ -2087,7 +2089,7 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     node_handle_t value{};
     {
         ExpectedValueScope writeScope(expectedValueType_, stateValueType);
-        value = valueNodeOf(visit(gct->at(2)));
+        value = valueNodeOf(visit(gct->assignmentValue()));
     }
     if (value == nullptr) {
         return nullptr;
@@ -2096,7 +2098,7 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
         Type *written = valueTypeOf(nodeTypeOf(value));
         if (written != nullptr && written != stateValueType &&
             entersImplicitly(stateValueType, written)) {
-            if (node_handle_t converted = coerceTo(value, stateValueType, gct->at(2));
+            if (node_handle_t converted = coerceTo(value, stateValueType, gct->assignmentValue());
                 converted != nullptr) {
                 value = converted;
             }
@@ -2125,21 +2127,134 @@ void Builder::noteLoopStateWrite(const std::string &name, node_handle_t value) {
     }
 }
 
-node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
-    /// Clears the "the statement being built has a value nobody takes" mark for the length of a
-    /// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
-    /// an argument written inside one is not a statement of its own.
-    struct UnusedStatementScope {
-        const GCT::Node *&slot;
-        const GCT::Node *saved;
-        UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value)
-            : slot(slot), saved(slot) {
-            slot = value;
+namespace {
+
+/// Clears the "the statement being built has a value nobody takes" mark for the length of a
+/// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
+/// an argument written inside one is not a statement of its own.
+struct UnusedStatementScope {
+    const GCT::Node *&slot;
+    const GCT::Node *saved;
+    UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value) : slot(slot), saved(slot) {
+        slot = value;
+    }
+    ~UnusedStatementScope() { slot = saved; }
+    UnusedStatementScope(const UnusedStatementScope &)            = delete;
+    UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
+};
+
+} // namespace
+
+node_handle_t Builder::visitAssignNode(const GCT::node_ptr_t &gct) {
+    // A write (NodeKind::ASSIGN) is not a call. Three of the four lowerings the tier above has
+    // for a write are made here, and the fourth -- a store into a cell -- is the call the write
+    // makes, built below from the node's two sides:
+    //  - a path (`v.f = e`, `v[i] op= e`): the whole variable is rebound (pathAssignmentOf);
+    //  - a `var` built as a value (`ssaAssignmentOf`), or one a loop head carries
+    //    (`loopStateAssignmentOf`): the name is rebound, and nothing is stored;
+    //  - a rebinding to an in-place operator's result (`inPlaceRebindingOf`).
+    ENTER("ASSIGN");
+    ExpectedValueScope assignScope(expectedValueType_, nullptr);
+    const bool unusedStatement = gct == unusedStatement_;
+    const UnusedStatementScope unusedScope(unusedStatement_, nullptr);
+    if (node_handle_t rebound = pathAssignmentOf(gct)) {
+        LEAVE("ASSIGN");
+        return rebound;
+    }
+    // A write to a `var` built as a value (stage S1 of the direct-SSA plan): the name is rebound,
+    // and nothing is stored. The statement is worth the value the write gave, which is what the
+    // read of the name after it takes. A dropped assignment is a dropped value, and it is reported
+    // as one (UnusedAssignedValue) rather than as a pure call whose result nobody takes.
+    if (node_handle_t written = ssaAssignmentOf(gct)) {
+        discardedValues_.insert(written);
+        LEAVE("ASSIGN");
+        return written;
+    }
+    // A write to a `var` the loop this body belongs to carries as its own state (visitLoopNode;
+    // design principles 3.5): `x = e` in the body is the round's next value of `x`, and there is
+    // no cell to store it in -- the cell is the loop's state, and the LOOP hands the value on.
+    if (node_handle_t written = loopStateAssignmentOf(gct)) {
+        if (unusedStatement) {
+            // What this statement is worth is the loop's next state, not a value the position
+            // drops: the unused-pure-value rule (rejectUnusedPureResult) is about a value nobody
+            // wants, and this one the loop wants.
+            discardedValues_.insert(written);
         }
-        ~UnusedStatementScope() { slot = saved; }
-        UnusedStatementScope(const UnusedStatementScope &)            = delete;
-        UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
-    };
+        LEAVE("ASSIGN");
+        return written;
+    }
+    if (unusedStatement) {
+        if (node_handle_t rebound = inPlaceRebindingOf(gct)) {
+            LEAVE("ASSIGN");
+            return rebound;
+        }
+    }
+    // What is left is a store: the cell the target is, and the value written into it. The call is
+    // the one the write used to be spelled as -- a call of the group that writes its first
+    // argument -- and its form says which store this is.
+    const GCT::AssignmentForm form  = gct->assignmentForm();
+    GCT::node_ptr_t store           = tree_->makeLink(2);
+    GCT::node_ptr_t storeOperator   = makeStoreOperator(gct);
+    *store << storeOperator << tree_->clone(gct->assignmentTarget())
+           << tree_->clone(gct->assignmentValue());
+    store->setOrigin(gct->origin());
+    node_handle_t stored = visitLinkNode(store, form);
+    LEAVE("ASSIGN");
+    return stored;
+}
+
+GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
+    // The reference to the operator that writes the cell:
+    //  - `=`, and the whole variable's rebuild of a path: the group of one overload per type,
+    //    chosen by the arguments' types. It has no single id (an assignment the program may also
+    //    write as `=`), so it stays by name -- the one place a name is the reference, and here it
+    //    is the store's own name, not the write's. The rebuild says so with the prefix that marks
+    //    a name the compiler made.
+    //  - `op=`: the compound group, whose overload set is what says whether the write is defined
+    //    for these types (the node carries it, see AssignmentForm::Compound).
+    //  - the rebinding to an in-place operator's result: that operator, by id.
+    GCT::node_ptr_t dref = nullptr;
+    switch (gct->assignmentForm()) {
+    case GCT::AssignmentForm::Compound:
+        dref = tree_->makeDRef(gct->assignmentOperator());
+        break;
+    case GCT::AssignmentForm::Rebuilt:
+        dref = tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__");
+        break;
+    case GCT::AssignmentForm::Owned:
+        dref = internalOperatorDref(camel::core::oper::AssnOwned);
+        break;
+    case GCT::AssignmentForm::Plain:
+        dref = tree_->makeDRef("__assn__");
+        break;
+    }
+    dref->setOrigin(storeOperatorOrigin(gct));
+    return dref;
+}
+
+camel::source::origin_id_t Builder::storeOperatorOrigin(const GCT::node_ptr_t &gct) {
+    // The place of the operator, not of the statement: the token the program wrote (`+=`), which
+    // is where a fault of the operator is reported and where the compound rewrite reads it from
+    // (compoundAssignmentByRebinding sets the plain operator's own origin from the callee's, so
+    // that a `%=` by zero is reported at the `%=`). The node's own origin is the statement's.
+    if (const auto *bundle = gctSemantic(context_, gct)) {
+        for (const auto &part : bundle->parts) {
+            if (part.role == camel::source::SemanticRole::Operator &&
+                part.origin != camel::source::kInvalidOriginId) {
+                return part.origin;
+            }
+        }
+    }
+    return gct->origin();
+}
+
+node_handle_t Builder::visitLinkNode(
+    const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store) {
+    // A call. `store` says this call is the store a write makes: the two arguments are the cell
+    // and the value, and the result is the cell's new state. Whether a value of this call may be
+    // dropped, and which type an argument is expected to have, is asked of that.
+    const bool isAssignment = store == GCT::AssignmentForm::Plain;
+    const bool isWritten    = store.has_value() && *store != GCT::AssignmentForm::Rebuilt;
     // A call written in an extent of a signature is run by this build (foldExtentCall).
     struct ExtentCallScope {
         camel::core::type::ExtentCallEvaluator previous;
@@ -2176,44 +2291,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         node_handle_t result = visitDecoratedBlock(gct, unusedStatement);
         LEAVE("LINK");
         return result;
-    }
-    // `v.f = e`, `v[i] = e`: the path is lowered to a rebinding of the whole variable, whether
-    // the assignment's value is taken or not.
-    if (node_handle_t rebound = pathAssignmentOf(gct)) {
-        LEAVE("LINK");
-        return rebound;
-    }
-    // A write to a `var` built as a value (stage S1 of the direct-SSA plan): the name is rebound,
-    // and nothing is stored. The statement is worth the value the write gave, which is what the
-    // read of the name after it takes.
-    if (node_handle_t written = ssaAssignmentOf(gct)) {
-        // A dropped assignment is a dropped value, and it is reported as one (UnusedAssignedValue)
-        // rather than as a pure call whose result nobody takes: the write of a name is not a call
-        // that changes nothing, and the same report stands whether the statement is a `=`, a `+=`
-        // or a path the write rebuilds.
-        discardedValues_.insert(written);
-        LEAVE("LINK");
-        return written;
-    }
-    // A write to a `var` the loop this body belongs to carries as its own state (visitLoopNode;
-    // design principles 3.5, the third of the three places a write is lowered): `x = e` in the body
-    // is the round's next value of `x`, and there is no cell to store it in -- the cell is the
-    // loop's state, and the LOOP hands the value on. The statement is worth the value `e` gave.
-    if (node_handle_t written = loopStateAssignmentOf(gct)) {
-        if (unusedStatement) {
-            // What this statement is worth is the loop's next state, not a value the position
-            // drops: the unused-pure-value rule (rejectUnusedPureResult) is about a value nobody
-            // wants, and this one the loop wants.
-            discardedValues_.insert(written);
-        }
-        LEAVE("LINK");
-        return written;
-    }
-    if (unusedStatement) {
-        if (node_handle_t rebound = inPlaceRebindingOf(gct)) {
-            LEAVE("LINK");
-            return rebound;
-        }
     }
     if (gct->size() >= 1 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name().find("::") != std::string::npos) {
@@ -2357,9 +2434,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // place's type, so the call gives the value no expected type of its own; here only a
     // function type is handed on, for a lambda's unwritten parameter types (design principles
     // 5.9). Any other type leaves the value as it was.
-    const bool isAssignment = gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
-                              gct->at(0)->name() == "__assn__";
-    Type *assignedType      = nullptr;
+    Type *assignedType = nullptr;
     // The declaration of a rest function, when this call names one: its arguments are expanded
     // into a body in place of the call, and no instance is made (inlineRestCall). A pack among the
     // `with` parameters is a pack like any other -- it stands for the `with` arguments given past
@@ -4483,14 +4558,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    // How an argument is passed. A function (a graph or a function value) and assignment take
+    // How an argument is passed. A function (a graph or a function value) and a write take
     // a `var` argument as the variable itself. Any other operator with a `var` parameter mutates
     // an object in place and takes the object; the call still counts as a write of the variable
     // the object was read from. Every other parameter takes the value.
-    // A function, an assignment and a variable operator (`:var/take`, inPlaceRebindingOf) are
+    // A function, a write and a variable operator (`:var/take`, inPlaceRebindingOf) are
     // given the variable itself at a `var` position; any other operator its value.
-    const bool takesVariables = targetOperator == nullptr ||
-                                targetOperator->name().starts_with("__assn") ||
+    const bool takesVariables = targetOperator == nullptr || store.has_value() ||
                                 targetOperator->name().starts_with("__var_");
     // Whether a node stands in the block the call is written in. A version of a variable that a
     // branch arm or another block wrote is not what this call reads: what the call reads there is
@@ -4894,6 +4968,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             pendingUsesOf(use.variable).push_back({targetNode, false});
         }
     }
+    if (isWritten) {
+        // The node this store built, with the form it is: the report of a dropped value and the
+        // walk after the body is built ask this record which nodes are writes rather than the
+        // spelling of the operator they call.
+        writeNodes_[targetNode] = *store;
+    }
 
     // Outside a `sync` block there is no chain to be a statement of. Inside one, a call is a
     // statement by what its callee turns out to be (design principles 3.4): a call of a body that
@@ -4967,9 +5047,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // into). Written as a statement, or where the position wants no value at all (the last
     // statement of a `: void` body), the write stands for it: the write is what the statement
     // does.
-    const bool assignment = gct->size() == 3 && gct->at(0) != nullptr &&
-                            gct->at(0)->type() == GCT::NodeKind::DREF &&
-                            gct->at(0)->name().starts_with("__assn");
+    // Whether this call is the store a write makes (`isWritten`): the plain write, the rebinding to
+    // an in-place operator's result, and a compound one -- but not the whole variable's rebuild a
+    // path write makes, which reads the variable it writes and gives no value of its own here.
+    const bool assignment = isWritten;
     // Whether a value is wanted here: the statement's value is not dropped (`unusedStatement`),
     // and the position is not a `void` one (a body declared `: void` takes its last statement's
     // value in no position -- `visitExecNode` builds it and drops it). A position that declares no

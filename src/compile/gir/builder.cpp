@@ -817,6 +817,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitVariNode(node);
     case GCT::NodeKind::LINK:
         return visitLinkNode(node);
+    case GCT::NodeKind::ASSIGN:
+        return visitAssignNode(node);
     case GCT::NodeKind::WITH:
         return visitWithNode(node);
     case GCT::NodeKind::TAPP:

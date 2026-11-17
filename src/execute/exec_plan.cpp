@@ -1219,8 +1219,9 @@ std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced,
 camel::core::type::TypeCode countedHandleCode();
 
 /// Whether a value of this type code is one the count owns (`state::Ref`). Defined once, beside
-/// `countedHandleCode`, and asked by the plan below and by the run at the rows; the judgment was
-/// written in both places and one of the two would have changed first.
+/// `countedHandleCode`, and asked by the plan below and by the run at the rows: it was written at
+/// each of those three sites and one of the three would have changed first (author review
+/// 2026-11-17, item 9).
 bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 
 /// Whether the value the node makes is a *further holder* of an object an operand already holds: the
@@ -1584,25 +1585,30 @@ namespace {
 ///
 /// It is the handle type's own code and not `TypeCode::Ref`: that code is the compile-time
 /// reference the AST carries (`RefData`, camel/core/data/ref.h), no value of a graph has it, and
-/// comparing against it would skip every row and wire nothing. `TypeCode::Ref` is accepted beside
-/// it because it costs one comparison and a slot that somehow carries it is still not a value to
-/// count -- `retainCountNow` answers false for it either way.
+/// comparing against it would skip every row and wire nothing.
 camel::core::type::TypeCode countedHandleCode() {
     static const camel::core::type::TypeCode code = camel::core::type::RefType::get()->code();
     return code;
 }
 
 /// Whether a value of this type code is one the count owns: the reference handle the runtime counts
-/// (`state::Ref`). `TypeCode::Ref` is accepted beside it because it costs one comparison and a slot
-/// that somehow carries it is still not a value to count -- `retainCountNow` answers false for it
-/// either way.
+/// (`state::Ref`), asked once here and by nobody else.
 ///
 /// One answer, asked by both sides of the same table: the plan, which lays the rows only where a
 /// back end runs them (`valueIsCounted`), and the run, which applies a row only where the slot is
-/// one (`applyRefEntriesAtPosition`). It was written twice, and one of the two would have changed
-/// first.
+/// one (`applyRefEntriesAtPosition`). It was written three times in this file -- as
+/// `TypeCode::Ref || countedHandleCode()` at each site -- and one of the three would have changed
+/// first (author review 2026-11-17, item 9).
+///
+/// The `counted` flag this asks about has exactly one declaration, and it is not here: the module
+/// that owns the type declares it on the descriptor (`ForeignResourceDescriptor::counted`,
+/// modules/state/module.cpp `refDescriptor`), and `countedBlockOf`/`retainCountNow`/
+/// `giveBackCountNow` are the place it is read -- per *value*, at run time, which is the only
+/// moment a descriptor exists. The plan has a *type* and no value: what it can ask is the type code
+/// the descriptor is declared for, which is what this function is, so the two are one fact read at
+/// the two moments it is available and not two answers that could disagree.
 bool isCountedHandle(camel::core::type::TypeCode code) noexcept {
-    return code == camel::core::type::TypeCode::Ref || code == countedHandleCode();
+    return code == countedHandleCode();
 }
 
 /// Whether the plan says a back end runs the rows of `value`: the value is one the plan counts, so
@@ -1707,6 +1713,37 @@ void applyRefEntriesForLoopExit(
     const gc_data_idx_t slot = node < plan.dataIndexByRef.size() ? plan.dataIndexByRef[node] : 0;
     const slot_t own         = slot != 0 ? frame->get<slot_t>(slot) : NullSlot;
     applyRefEntriesAtPosition(plan, frame, position, own);
+}
+
+void applyRefEntriesOfOpenLoops(camel::core::context::Frame *frame) noexcept {
+    if (frame == nullptr) {
+        return;
+    }
+    const camel::runtime::GCGraph *graph = frame->graph();
+    if (graph == nullptr) {
+        return;
+    }
+    const ExecPlan &plan = graph->execPlan();
+    for (const ExecLoop &loop : plan.loops) {
+        if (loop.roundSlot == 0) {
+            continue;
+        }
+        // -1 is what the loop's own test writes when it stops: `loopEnd`'s leaving branch has
+        // already run this loop's rows, and running them a second time would take a hold the run
+        // never took.
+        const int64_t round =
+            camel::core::rtdata::fromSlot<int64_t>(frame->get<slot_t>(loop.roundSlot));
+        if (round < 0) {
+            continue;
+        }
+        applyRefEntriesForLoopExit(plan, frame, loop.position);
+        // The loop is no longer one the run is inside: the rows above are the ones its exit owed,
+        // and a second call on this frame -- one back end's fault path is reached from another's
+        // -- must not take them again (a second give-back would release a box the run still holds).
+        // The value is the one `loopTest` writes when its test stops the loop, and this frame is on
+        // its way back, so nothing reads it afterwards.
+        frame->set(loop.roundSlot, camel::core::rtdata::toSlot(int64_t{-1}));
+    }
 }
 
 size_t ExecPlan::refProducedTotal() const {

@@ -1576,7 +1576,7 @@ void TaskflowExecSchedPass::runItems(
                 tailNode.store(item.node, std::memory_order_release);
                 break;
             }
-            executeCallNode(graph, item.node, frame, region);
+            (void)executeCallNodeWithRows(graph, item.node, frame, region);
             break;
         case ItemKind::NativeCall:
             if (item.afterTail && tailNode.load(std::memory_order_acquire) != kInvalidNodeRef) {
@@ -1698,10 +1698,10 @@ void TaskflowExecSchedPass::runLinearBody(
                 tailNode.store(nodeRef, std::memory_order_release);
                 return;
             }
-            executeCallNode(graph, nodeRef, frame, region);
+            (void)executeCallNodeWithRows(graph, nodeRef, frame, region);
             break;
         case GCNodeKind::Call:
-            executeCallNode(graph, nodeRef, frame, region);
+            (void)executeCallNodeWithRows(graph, nodeRef, frame, region);
             break;
         case GCNodeKind::Data:
         case GCNodeKind::Port:
@@ -1807,6 +1807,29 @@ void TaskflowExecSchedPass::executeCallNode(
     frame->set(node->dataIndex, funcValueOf(graph, nodeRef, node, targetGraph, frame, result));
 }
 
+slot_t TaskflowExecSchedPass::executeCallNodeWithRows(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, TaskflowGcRegion &region) {
+    // A FUNC and a CALL are nodes like every other one: the plan lays rows at their position, and
+    // the rows are the one hook's (camel/execute/operator_call.h, `runNode`). std::nvm runs it
+    // after every kind but an operator and a LOOP, and every call instruction of the two bytecode
+    // back ends runs it; this scheduler called `executeCallNode` without it on the two paths that
+    // actually run a plan (`runItems`, `runLinearBody`), so the rows were in the table, balanced,
+    // and never run. The red that names it is a box a closure carries: `state::ref` makes it, a
+    // lambda captures it, and its give-back is laid where the closure is last read -- a CALL's
+    // position -- so `--gc-check foreign` read `released=0 live=1 disposed=1` on std::prl for a
+    // program that keeps nothing, while the other three read `released=1 live=0 disposed=0`
+    // (test/cases/para/core/closure_capture_gives_its_box_back.cml).
+    //
+    // The call leaves the region held (`executeCallNode` enters it and never leaves), so the rows
+    // run inside it exactly where the hit of a `Leaf` item runs them, and the value a call made is
+    // read back from its slot: `executeCallNode` has written it there before this returns.
+    const GCNode *node = requireNode(graph, nodeRef);
+    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+        executeCallNode(graph, nodeRef, frame, region);
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    });
+}
+
 template <typename Fill>
 slot_t TaskflowExecSchedPass::callGraph(
     GCGraph *target, GraphPlan *plan, TaskflowGcRegion &region, Fill &&fill) {
@@ -1826,6 +1849,10 @@ slot_t TaskflowExecSchedPass::callGraph(
     try {
         result = evalGraph(target, callee, region, plan);
     } catch (...) {
+        // The graph's frame goes back with a loop still open: the run is unwinding past the loop's
+        // exit, so what the loop held comes home here, while the slots still name it
+        // (camel/runtime/exec_plan.h, `applyRefEntriesOfOpenLoops`).
+        camel::runtime::applyRefEntriesOfOpenLoops(callee);
         framePool_.release(callee);
         throw;
     }
@@ -1883,6 +1910,7 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
         framePool_.release(frame);
         return result;
     } catch (...) {
+        camel::runtime::applyRefEntriesOfOpenLoops(frame);
         framePool_.release(frame);
         throw;
     }

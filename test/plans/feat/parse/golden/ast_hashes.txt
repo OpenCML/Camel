@@ -763,8 +763,8 @@ f47dcc7937755e16 ok test/cases/compile/decorators/blocks.cml
 0bd469c83e69448b ok test/cases/compile/decorators/grants.cml
 80e0a5fc46469505 no test/cases/compile/diag_fixes/leading_zero_09.cml
 607c66d8ec771881 ok test/cases/compile/diag_json/div_zero.cml
-81cb41a20026860f ok test/cases/compile/diag_json/dropped_effects.cml
-9b56cee8303fbb61 ok test/cases/compile/diag_json/dropped_effects_forward.cml
+e8e4d74fd9d1b080 ok test/cases/compile/diag_json/dropped_effects.cml
+b5b116096153f7a8 ok test/cases/compile/diag_json/dropped_effects_forward.cml
 fbbd8856a641f9d6 ok test/cases/compile/diag_json/warning_with_error.cml
 d7b17b300b7561ba ok test/cases/compile/diag_json/warnings_visible.cml
 9555801cfd01d934 ok test/cases/compile/diag_options/many_errors.cml
@@ -1529,10 +1529,12 @@ a64c7bec3b335b0b ok test/cases/compile/ref/refwrite_dead_arm.cml
 9d869d0b281097a0 ok test/cases/compile/region_roots/branch_statement_kinds.cml
 d97afa11ab4ed9b8 ok test/cases/compile/region_roots/branch_statement_untaken.cml
 86ba2d47250741aa ok test/cases/compile/region_roots/branch_value_dropped.cml
-9af1d6ae045c57d6 ok test/cases/compile/region_roots/dead_loop.cml
+4445cf743bc50dc7 ok test/cases/compile/region_roots/dead_loop.cml
 e05e0949c1dff0cf ok test/cases/compile/region_roots/plain_body.cml
 deee7e3304b108d7 ok test/cases/compile/region_roots/read_only.cml
 046adc179e055d86 ok test/cases/compile/region_roots/resource_write.cml
+b1d32c32937d4361 ok test/cases/compile/region_roots/write_order_print_first.cml
+051863c56050b864 ok test/cases/compile/region_roots/write_order_seed_first.cml
 a1b48d4570f25659 ok test/cases/compile/rest_params/lambda_rest_annotated.cml
 3c94df4143955ed7 ok test/cases/compile/rest_params/lambda_rest_forward.cml
 ee92593628a15501 ok test/cases/compile/rest_params/lambda_rest_read_as_a_value.cml
@@ -2105,7 +2107,7 @@ f3e68bd3bd0273b0 ok test/cases/compile/type_packs/zip_not_array.cml
 7fa5ed6e3aba69f1 ok test/cases/compile/type_packs/zip_values.cml
 d529cd3224042f3a ok test/cases/compile/unused_values/called_fallible.cml
 b8a05499aac6893b ok test/cases/compile/unused_values/called_fallible_pipeline.cml
-501c1d8a735d8066 ok test/cases/compile/unused_values/effect_body.cml
+9fdbb4cbd7348fe6 ok test/cases/compile/unused_values/effect_body.cml
 9adf3d7b5c9cd22e ok test/cases/compile/unused_values/effect_function_body_sync.cml
 6596f45a9706f274 ok test/cases/compile/unused_values/effect_if_else_sync.cml
 cea88fde107701f1 ok test/cases/compile/unused_values/effect_if_then_sync.cml
@@ -2548,7 +2550,7 @@ c03be9bfb2de2e2f ok test/cases/effects/callback_captured_handle_opt.cml
 3c65e5ec401bed66 ok test/cases/effects/callback_write_ignored.cml
 5fe9d0b245546d89 ok test/cases/effects/callback_write_through_parameter.cml
 5c1e0c7e893ee634 ok test/cases/effects/declared.cml
-7677381bbf7bccef ok test/cases/effects/effect_through_parameter.cml
+9db4e64f7d81d10c ok test/cases/effects/effect_through_parameter.cml
 d16de0d2827c35bc ok test/cases/effects/entries_read_external.cml
 3cd667e301c4c1c1 ok test/cases/effects/err_callee_clause_reaches.cml
 342b0783520800f2 ok test/cases/effects/err_capture_escapes.cml
@@ -4102,6 +4104,7 @@ b90bc886c8739db8 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 6182a103922f5823 ok test/cases/para/core/block_sort_merge.cml
 3b6f0e7de2defa16 ok test/cases/para/core/bootstrap_medians.cml
+50ee70bc078d694e ok test/cases/para/core/closure_capture_gives_its_box_back.cml
 2013ce9754175bb2 ok test/cases/para/core/concurrent_alloc.cml
 b5279b76c0fe923a ok test/cases/para/core/concurrent_calls.cml
 a696b18ffa86c5db ok test/cases/para/core/concurrent_readers_of_a_call_box.cml
@@ -4393,6 +4396,7 @@ ee049f220cbe84aa ok test/plans/feat/format/golden/when_clause.cml
 dbfdb482f9059740 ok test/plans/feat/parse/golden/rules_format.cml
 4e5ac200a628c3e7 ok test/probe/refleak/call_box.cml
 58014c5bc874530e ok test/probe/refleak/fill_carries.cml
+aff258e733124b0d ok test/probe/refleak/loop_fault_ref.cml
 3cb1213dde0935ca ok test/probe/refleak/loop_nested_after.cml
 5fca407c44d1ff6e ok test/probe/refleak/loop_nested_outer_ref.cml
 a7d8cb23c13f22d4 ok test/probe/refleak/loop_outer_ref.cml

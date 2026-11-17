@@ -3400,16 +3400,24 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 if (node == nullptr) {
                     return;
                 }
-                const bool assignLink =
-                    node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
-                    node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
-                    node->at(1) != nullptr && node->at(1)->type() == GCT::NodeKind::DREF;
-                const std::string callee = assignLink ? node->at(0)->name() : std::string();
-                const bool plainAssign   = assignLink && callee == "__assn__";
+                // What the node is (NodeKind::ASSIGN, with its form), read off the node instead of
+                // off a group's spelling: `x += e` writes the name exactly as `x = e` does. The
+                // target has to be the name itself for this scan to have a name to carry -- a path
+                // into a value (`v.f = e`) is the whole variable's write, which this scan is not
+                // about, and the builder's own rebuilds (`Rebuilt`, `Owned`) are not the program's
+                // writes.
+                const bool nameWrite =
+                    node->type() == GCT::NodeKind::ASSIGN &&
+                    (node->assignmentForm() == GCT::AssignmentForm::Plain ||
+                     node->assignmentForm() == GCT::AssignmentForm::Compound) &&
+                    node->assignmentTarget() != nullptr &&
+                    node->assignmentTarget()->type() == GCT::NodeKind::DREF;
+                const bool plainAssign =
+                    nameWrite && node->assignmentForm() == GCT::AssignmentForm::Plain;
                 const bool compoundAssign =
-                    assignLink && !plainAssign && callee.rfind("__assn", 0) == 0;
+                    nameWrite && node->assignmentForm() == GCT::AssignmentForm::Compound;
                 if (plainAssign || compoundAssign) {
-                    const std::string written = moduleLevelName(node->at(1)->name());
+                    const std::string written = moduleLevelName(node->assignmentTarget()->name());
                     if (compoundAssign) {
                         compoundWrites.insert(written);
                         if (seenWrites.insert(written).second) {
