@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, and the two the C++ writer left without a return value"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, and the two the C++ writer left without a return value"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -577,7 +577,13 @@ timeout_ms = 20000
 #                               draft had already erased, and the kind question read the header
 #                               the erasure took away. The liveness question is asked first now.
 #                               Two programs.
-#   rc14_seed176                `component != nullptr` in `Builder::visitLoopNode`. One program.
+#   rc14_seed176                `component != nullptr` in `Builder::visitLoopNode`: the body's next
+#                               state is a tuple, and the fill that builds it names only the
+#                               components it carries a value node for, so a component a constant in
+#                               that fill's static template holds had no value and the assembly
+#                               aborted. The component the fill does not name is read out of the
+#                               tuple now -- the read the body's value already gets when it is no
+#                               fill at all. One program.
 #   rc15_seed52                 `index < fieldCount_` in `Variant::get`, under `std::opt`, reading
 #                               field 0 of a Variant whose tag declares no field. Two programs.
 #   rc16_seed153                no result in 30 s under `std::jit` on every pipeline. One program.
@@ -591,20 +597,22 @@ timeout_ms = 20000
 #                               merge (S1), and its entry is a known failure at the end of this
 #                               section.
 #
-# Two shapes are fixed, and their programs are entries below. The first pair used to end the
+# Three shapes are fixed, and their programs are entries below. The first pair used to end the
 # process in the front end with no pass at all, on all four back ends, so both arms (with and
-# without `std::opt`) are the same claim -- the program runs, says nothing, exits 0. The second
-# (`rc17_seed193`) was in the C++ writer, so its claim is about the text the writer gives: the
-# entry below is the `std::cpp` arm, and the stronger one -- that the text builds, runs and agrees
-# with `std::fvm` -- is the program's line in `test/tools/cppexec/expect.txt`, which
-# `feat/trans/cpp.agree_with_fvm` builds and runs.
+# without `std::opt`) are the same claim -- the program runs, says nothing, exits 0. `rc14_seed176`
+# is the third, and it is the same claim on the same four back ends: its fault is in the graph
+# builder too, so no pass causes it and no pass can avoid it. The fourth (`rc17_seed193`) was in the
+# C++ writer, so its claim is about the text the writer gives: the entry below is the `std::cpp`
+# arm, and the stronger one -- that the text builds, runs and agrees with `std::fvm` -- is the
+# program's line in `test/tools/cppexec/expect.txt`, which `feat/trans/cpp.agree_with_fvm` builds
+# and runs.
 #
-# The other five shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
+# The other four shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
 # expectation is the crash states the defect as the answer, and an entry whose expectation is the
 # program's output goes red until its class is fixed. Each file is the standing reproducer of its
-# class -- `camel rc14_seed176.cml std::nvm` fires the guarantee by hand -- and its entries land
-# with its fix, as these two did. The eighth shape is the exception in the other direction: it is
-# red today and it is entered anyway, as a known failure with its owner, because the red is the
+# class -- `camel rc15_seed52.cml std::opt` fires that one's guarantee by hand -- and its entries
+# land with its fix, as these three did. The eighth shape is the exception in the other direction: it
+# is red today and it is entered anyway, as a known failure with its owner, because the red is the
 # measurement and a shape that only a report names is one the next person cannot reproduce.
 
 [[tests]]
@@ -635,6 +643,22 @@ expect_stdout_exact = ""
 name = "rc13_seed202.opt"
 desc = "The same program under the whole optimizer. The fix is in the graph builder and not in a pass, so the two arms move together."
 case = "../../../cases/opt/e9/rc13_seed202.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc14_seed176.without_the_pass"
+desc = "The program with no pass at all, on all four back ends: it runs, says nothing and exits 0. It used to end the process in `Builder::visitLoopNode` with `component != nullptr`, 'A loop state's next value is missing from the body's value': the loop declares two states and its body's next state is `(([''], false).0, 0.25)`, a tuple whose second component is a constant the fill built for it holds in its static template, so the fill's slot table names the first component only and the second had no value node in hand. Nothing about the program's own execution was at stake -- the tuple has the component -- so the reading is the one the program gives, not a refusal."
+case = "../../../cases/opt/e9/rc14_seed176.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc14_seed176.opt"
+desc = "The same program under the whole optimizer, on all four back ends: the same claim. The fault was in the graph builder, before any pass, so `std::opt` is neither its cause nor its cure."
+case = "../../../cases/opt/e9/rc14_seed176.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
