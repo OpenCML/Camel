@@ -1140,16 +1140,27 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         claimRootNodes(firstNode);
     }
     if (ok) {
+        // A declaration's clause is a promise; the bodies measure what it actually touches, and
+        // the declaration is held to the promise (design effects plan, step 5). The measurement
+        // runs here, while the bodies are still in hand; the report runs per module below, with
+        // the other diagnostics of the module being reported.
+        //
+        // It runs before the two walks below because of the author's spec of 2026-11-17
+        // (`3e4c0929c`): a region's use of its writes is an edge laid at build time from every node
+        // whose *inferred effect* writes (a call, a loop, a branch and an operator alike), and the
+        // effect of a call is the measured signature of its callee, so the measurements have to
+        // exist before the edges are laid. The measurement reads no edge of this kind --
+        // `footprintOf` walks bodies and callee signatures -- so the two may stand in this order.
+        measureInferredResources();
+        // The edges themselves, once: what a write owes its region is no longer derived by each
+        // walk that asks what runs (the warning's, the liveness of a graph, the encode, the
+        // execution order) -- they follow these edges, and the derivation is gone.
+        layRegionWriteEdges();
         settleEffectfulGraphs();
         // A stream is read once on each execution path (design principles 5.4), which is a property
         // of the built graphs: this runs while every body is in hand and every read is a data edge
         // of the graph it was written in, before the graphs are encoded.
         settleStreamLinearity();
-        // A declaration's clause is a promise; the bodies measure what it actually touches, and
-        // the declaration is held to the promise (design effects plan, step 5). The measurement
-        // runs here, while the bodies are still in hand; the report runs per module below, with
-        // the other diagnostics of the module being reported.
-        measureInferredResources();
         // The effects that reach one resource are ordered by the order they are written in
         // (design principles 3.3). This runs on the settled measurements, before anything reads
         // the graphs as a schedule: an order edge is not a use, so it neither runs an effect nor

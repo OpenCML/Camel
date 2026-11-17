@@ -1575,6 +1575,10 @@ class Builder {
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
+    // `writesForRegionOf`'s answers for the body it is walking (`layRegionWriteEdges`): the
+    // question is structural and the walk only ever goes into a strictly inner region, so one
+    // answer per node is enough and the nesting cannot make it exponential. Cleared per body.
+    mutable std::unordered_map<runtime::gc_node_ref_t, bool> regionWrites_;
     // The bodies a `sync` block's chain already answered for, and whether it may pass them by
     // (`calleeIsFreelyArranged`): a body is walked once for the whole build, not once per call.
     std::unordered_map<DraftGraphBuilder *, bool> freelyArrangedGraphs_;
@@ -2821,6 +2825,29 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
+    // Once the bodies' inferred resources have been measured: connects every node whose own
+    // inferred effect writes -- an operator declared writing, a call of a body that writes, a loop
+    // or a branch whose regions write -- by a sync edge to the exit of the region it is written in
+    // (the author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit through a
+    // sync edge laid when the graph is built", calls and loops alike, whether or not its value is
+    // read). This is the one place the "used" a region owes its writes is materialized; every walk
+    // that asks what runs (the warning, the liveness of a graph, the encode, the execution order)
+    // then follows edges and never derives it again.
+    void layRegionWriteEdges();
+    // Whether running `node` of `graph` makes a write the region that runs it owes: an operator
+    // whose declaration writes outside the program or to a handle, a call of a function whose
+    // measured signature holds such a write, a loop with one in its condition or its body, a branch
+    // with one in an arm. A write to a `var` is not one of them (the ruling of 2026-11-15).
+    bool writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const;
+    // Whether a call of `callee` writes what the region that runs it owes, read from the measured
+    // signature (`inferredResources_`) and, for a body measured elsewhere, from its declaration.
+    // A signature that says nothing is not read as a promise of a write: a read stays as
+    // demand-driven as it was (`region_roots.read_only`), and what a region owes is a write.
+    bool calleeWritesForTheRegion(const compile_graph_ptr_t &callee) const;
+    // The write half of a signature: a parameter use that writes a handle or a resource outside the
+    // program, or an ambient use that writes. A `Variable` use -- a `var` parameter, a module `var`
+    // -- is not one (design principles 3.1 and 3.5, the ruling of 2026-11-15).
+    static bool signatureWritesForTheRegion(const camel::core::sem::ResourceSignature &signature);
     // One body's measurement as it is being walked: what it has been found to reach so far, which
     // parameter each of its ports is (the numbering a call uses), and whether a use was found that
     // the numbering cannot name at all. A body with such a use is recorded as reaching anything
