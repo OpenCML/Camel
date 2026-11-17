@@ -476,11 +476,11 @@ enum class AssignmentForm : uint8_t {
     Owned,
 };
 
-inline AssignmentForm assignmentFormOf(const GCT::node_ptr_t &node) {
+inline AssignmentForm assignmentFormOf(const GCT::Node *node) {
     if (node == nullptr || node->type() != GCT::NodeKind::LINK || node->size() != 3) {
         return AssignmentForm::None;
     }
-    const GCT::node_ptr_t &callee = node->at(0);
+    const GCT::Node *callee = node->at(0);
     if (callee == nullptr || callee->type() != GCT::NodeKind::DREF) {
         return AssignmentForm::None;
     }
