@@ -6097,18 +6097,15 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         return mark(node, at, "gct.generator.pair");
     };
 
-    // The cells: `pc`, `halt`, then every local of the body in the order it is written. A
-    // declaration is hoisted only where what it holds does not depend on the point it stands at
-    // -- a constant or a lambda, which reads its cells when it is called and not now.
-    node_ptr_t outer   = makeExec(synced);
-    const auto addCell = [&](const std::string &name, node_ptr_t init, const AST::node_ptr_t &ast) {
-        node_ptr_t vari = tree_->makeVari();
-        node_ptr_t ref  = tree_->makeNRef(name);
-        *ref << init;
-        *vari << ref;
-        mark(vari, ast, "gct.generator.cell");
-        *outer << vari;
-    };
+    // The cells: every local of the body in the order it is written. The machine's own two parts
+    // -- the point the next pull starts from, and whether the pull in hand is done -- are not among
+    // them: they are the state's own members (see `stateType` below), and the step unpacks each
+    // into a cell of its own (`unpackSlot`). A cell here would be a second copy of one fact, and
+    // nothing would read it: a name in an arm resolves to the step's own local, which is what let
+    // `bc5ce2249` put the unpacking ahead of the arms. A declaration is hoisted only where what it
+    // holds does not depend on the point it stands at -- a constant or a lambda, which reads its
+    // cells when it is called and not now.
+    node_ptr_t outer = makeExec(synced);
     // A cell of a value that is written where its statement stands: the cell's type position holds
     // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
     // that creates the stream evaluates nothing (design principles 5.4). The value is written
@@ -6160,9 +6157,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         return dataType == AST::DataType::Literal || dataType == AST::DataType::Func ||
                dataType == AST::DataType::ConstAs;
     };
-    addCell(pcName, intLiteral(0), at);
-    addCell(haltName, intLiteral(0), at);
-    std::vector<std::string> cellNames = {pcName, haltName};
+    std::vector<std::string> cellNames;
     // The locals whose cell can be a slot of the state the machine hands from one pull to the next:
     // those whose type has a zero value (`zeroValueOf`). The rest keep their cell, which is why the
     // state is built beside the cells and not out of all of them.
