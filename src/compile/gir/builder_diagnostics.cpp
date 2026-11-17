@@ -530,20 +530,17 @@ void Builder::layRegionWriteEdges() {
                 }
                 return false;
             };
-            // What a region owes, per region, in node order. A statement that already waits on something
-            // of its region needs nothing: it is on a chain that reaches the region's exit by
-            // construction (that is what a `sync` block is), and an edge from it would say the same
-            // thing twice.
+            // What a region owes, per region, in node order. A statement that already waits on
+            // something of its region needs nothing: it is on a chain that reaches the region's
+            // exit by construction (that is what a `sync` block is), and an edge from it would say
+            // the same thing twice.
             //
-            // Only a region that runs owes anything: a write in a loop nothing needs or in an arm
-            // nothing takes is what `EffectNotExecuted` reports against the loop or the branch
-            // (`region_roots.dead_loop`), and an edge from it would both pull it into a plan it is
-            // not part of and fold it into its owner's warning (`reportDroppedEffects` reports one
-            // warning per dropped chain).
-            std::unordered_set<runtime::gc_node_ref_t> running;
-            for (runtime::gc_node_ref_t live : runtime::liveNodesOf(draft)) {
-                running.insert(live);
-            }
+            // Whether the region runs is *not* asked here (the author's ruling of 2026-11-17,
+            // `fd75209cc`, design principles 3.1): the writes are the front end's promise, and the
+            // GATE below is what makes them live -- "活性由 GATE 读了它这件事本身提供". Reading
+            // `liveNodesOf` here would make the promise conditional on a liveness walk that runs
+            // before the GATE exists, and then a body whose writes are not (yet) live would collect
+            // none of them and no GATE would ever be built.
             std::unordered_map<uint32_t, std::vector<runtime::gc_node_ref_t>> chains;
             for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
                 if (!draft.alive(id)) {
@@ -573,9 +570,6 @@ void Builder::layRegionWriteEdges() {
                 }
                 if (statement == runtime::kInvalidNodeRef || !draft.alive(statement)) {
                     continue;
-                }
-                if (!running.contains(statement)) {
-                    continue; // a region that does not run owes nothing
                 }
                 if (!draft.syncInputsOf(statement).empty()) {
                     continue; // already on its region's chain
