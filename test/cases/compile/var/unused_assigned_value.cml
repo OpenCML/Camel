@@ -6,7 +6,7 @@
  * value, not an effect. `x = 1` below is exactly that -- the variable is read before the write, so
  * the variable is used, and the value this write stores is not. The one diagnostic is the family's
  * ("a result nobody uses"), and it says nothing about effects or a `sync` block; `IgnoredSideEffect`
- * and `EffectNotExecuted` are the other two things and neither of them is about this.
+ * is the other thing, and it is not about this either.
  */
 
 func main(): int {

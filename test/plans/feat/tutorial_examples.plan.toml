@@ -551,11 +551,11 @@ golden = "golden/tutorial_examples/10_var_order.txt"
 
 [[tests]]
 name = "tutorial.examples.10_write_nobody_reads"
-desc = "A write nobody reads stores a value nobody uses, and the chapter's two function bodies say the same thing about it: `c = 5` is reported in `unordered` (9:7, a body that is not a `sync` block, where the write does not even run) and in `ordered` (16:7, a `sync` body, where it runs because it is a statement of the chain) -- the value it stores is read by nobody in either. Both functions still print `1`; neither report is `SemanticDiag::EffectNotExecuted` or `SemanticDiag::IgnoredSideEffect`, because a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15)."
+desc = "A write nobody reads stores a value nobody uses, and the chapter's two function bodies say the same thing about it: `c = 5` is reported in `unordered` (9:7, a body that is not a `sync` block, where the write does not even run) and in `ordered` (16:7, a `sync` body, where it runs because it is a statement of the chain) -- the value it stores is read by nobody in either. Both functions still print `1`; neither report is `SemanticDiag::IgnoredSideEffect`, because a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), and a statement that does not run is not reported at all (the ruling of 2026-11-17)."
 case = "../../../docs/tutorial/examples/10_write_nobody_reads.cml"
 golden = "golden/tutorial_examples/10_write_nobody_reads.txt"
 expect_output_contains = ["10_write_nobody_reads.cml:9:7", "10_write_nobody_reads.cml:16:7"]
-expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "is never executed"]
 
 [[tests]]
 name = "tutorial.examples.10_same_resource"

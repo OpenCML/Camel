@@ -62,20 +62,21 @@ alpha
 beta
 ```
 
-区域不运行时，区域里的写也就不执行：循环的值没人要，整个循环不执行；分支的值没人要，分支不执行。这种情形编译器给出警告 `SemanticDiag::EffectNotExecuted`，警告指向那个区域，也指向区域里的写：
+会写的语句随它所在的区域运行（2026-11-17 的裁定）：循环的值没人要，循环照样运行，循环体里的写照常执行；分支写成语句时，它取的那条臂同样运行。编译器不为"值没人要"这件事报任何诊断——一句没被执行的语句不是一件可报告的事，值没人要是关于值的事实，不是关于效应的：
 
 ```cml
 func main(): int {
-    loop s = 0 for i in [0, 1] do { println('round'); s + i }   // 值没人用：循环和循环体里的写都不执行
+    loop s = 0 for i in [0, 1] do { println('round'); s + i }   // 值没人用，循环体里的写照常执行
     return 0
 }
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The loop is never executed: nothing needs what it gives, so nothing runs it. ...
+round
+round
 ```
 
-同一个警告也用于**读**：读外部资源的结果没人用时不执行，和读一个变量没人用一样。`sync` 改变的不是"写要不要执行"，而是区域里相邻语句的先后（4.3）。
+真正不执行的是**没人要的读**：读外部资源的结果没人用时它就不执行，和读一个变量没人用一样，这条语句同样不报任何东西。`sync` 改变的不是"写要不要执行"，而是区域里相邻语句的先后（4.3）。
 
 ```cml
 func greet(): int {
@@ -94,7 +95,7 @@ hello from greet
 1
 ```
 
-警告输出到标准错误，程序照常运行。用 `-Wno-effect-not-executed` 关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../cli.cn.md)“诊断”）。
+警告输出到标准错误，程序照常运行。用 `-Wno-unused-assigned-value` 关闭某个警告、`-Wnone` 全部关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../cli.cn.md)“诊断”）。
 
 ## 4.3 `sync`
 

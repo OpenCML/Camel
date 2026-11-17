@@ -38,7 +38,7 @@ hello from greet
 Both lines are printed. The `1` that `greet` returns still does not depend on that `println`'s result, but a
 `println` is a **write**: a write to a resource outside the program is used by the region it is written in, and
 `greet`'s body is a region, so it runs -- no `sync` needed. What really is dropped for lack of a reader? A **read**:
-an external read whose result nobody uses does not run, and the compiler reports `EffectNotExecuted` for it
+an external read whose result nobody uses does not run, and nothing is reported for it
 ([language reference 4.2](../language/en/04_execution_model.md#42-evaluation-by-dependency)). A write of a handle
 (`Ref` and the other `#resource` types) has been on that same rule since the ruling of 2026-11-16
 ([design principles 3.1](../design-principles.en.md#31-evaluation-by-dependency),

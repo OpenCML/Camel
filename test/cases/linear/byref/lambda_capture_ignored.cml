@@ -3,8 +3,9 @@
  *
  * The body writes `c` and then prints it, so a body that ran would print `1`; the program prints
  * only the `0` of `main`, which is how this case proves the write did not happen instead of only
- * asserting that a warning was reported. The compiler reports the call as one that is never
- * executed (`SemanticDiag::EffectNotExecuted`). Plan linear.captured_writes, tests
+ * asserting that a warning was reported. That report no longer exists: on the build this lane
+ * measured the call runs and the body prints `1`, so this case and its plan entries are red and are
+ * reported to the author rather than rewritten here. Plan linear.captured_writes, tests
  * lambda_capture_ignored.*.
  *
  * The state is a `Ref`: a closure cannot assign a name of the body around it (design principles

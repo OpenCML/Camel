@@ -731,7 +731,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.collect_multi_state"
-desc = "A collection output in a loop with several states: the body returns `(next states..., appended element...)`, so the append is part of the result and the loop value is `(states..., collection arrays...)`; the FILL projection gives the program only the states. Before the fix the body result read the states back through an ACCS of the loop value, so the append became dead and C2's training loop stopped at `EffectNotExecuted`."
+desc = "A collection output in a loop with several states: the body returns `(next states..., appended element...)`, so the append is part of the result and the loop value is `(states..., collection arrays...)`; the FILL projection gives the program only the states. Before the fix the body result read the states back through an ACCS of the loop value, so the append became dead and C2's training loop stopped at a report that the effect never runs."
 kind = "behavior"
 case = "../../../cases/loops/loop_collect_multi.cml"
 args = ["${case}", "${backend}"]

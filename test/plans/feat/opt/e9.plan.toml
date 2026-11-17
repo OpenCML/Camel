@@ -897,7 +897,7 @@ expect_stdout_exact = "L6 5\n"
 #
 #   "by principles 3.1 and 3.4 an outside write is used by the region it runs in, so a call, loop
 #    or block that writes runs even when its value is unread; region roots follow the inferred
-#    effect and EffectNotExecuted goes."
+#    effect and the warning that named it goes."
 #
 # So the print happens and the warning stops being reported. The mechanism is an **edge that makes
 # the region's exit a place the walk reaches**, not a rule that reads the region's roots: an arm
@@ -918,7 +918,7 @@ expect_stdout_exact = "L6 5\n"
 #
 # The entry is a normal one -- an expectation that holds, not a known failure: the program prints
 # `P 5` on all four back ends. **The warning is gone because nothing is left dangling for it to
-# describe, not because the diagnostic was removed**: `SemanticDiag::EffectNotExecuted` and
+# describe, not because the diagnostic was removed**: the never-executed warning and
 # `drop_effect` are untouched, and reporting a warning that describes no defect would be the same
 # mistake in the other direction.
 
