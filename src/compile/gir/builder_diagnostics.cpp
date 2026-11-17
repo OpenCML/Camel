@@ -31,7 +31,6 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 
-#include <algorithm>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -590,13 +589,6 @@ void Builder::layRegionWriteEdges() {
             // before the GATE exists, and then a body whose writes are not (yet) live would collect
             // none of them and no GATE would ever be built.
             std::unordered_map<uint32_t, std::vector<runtime::gc_node_ref_t>> chains;
-            // Every region a write was found in, whether or not that write is hung on the GATE
-            // below. The two are not the same fact: a write already carried by its region's chain
-            // (a `sync` body's statement) needs no second reason to run, but the *region* still
-            // writes, and that is what makes a branch or a loop that owns it one of the enclosing
-            // region's writes (`test/cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is on its
-            // block's chain, and the block's chain is what is left of it).
-            std::unordered_set<uint32_t> writing;
             for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
                 if (!draft.alive(id)) {
                     continue;
@@ -627,7 +619,6 @@ void Builder::layRegionWriteEdges() {
                     continue;
                 }
                 const uint32_t region = runtime::decidingRegionOfDraft(draft, statement);
-                writing.insert(region);
                 const runtime::gc_node_ref_t exit = exitOf(region);
                 if (exit == runtime::kInvalidNodeRef || exit == statement) {
                     continue; // a write that is what the region hands out already runs with it
@@ -679,24 +670,13 @@ void Builder::layRegionWriteEdges() {
             // arm runs because its owner runs -- so what makes it run is the owner being one of the
             // enclosing region's GATE's inputs. Walked to a fixpoint, because an arm may hold a loop
             // whose body writes, and then the loop's owner is a write of the arm.
-            const auto markOwnerOf = [&draft, &chains, &writing](uint32_t region) {
+            const auto markOwnerOf = [&draft, &chains](uint32_t region) {
                 if (region == 0 || region >= draft.regionCount()) {
                     return false;
                 }
-                // A region with no owner node is a `sync` block (or an inlined body): nothing
-                // decides it, it is simply written inside its parent, so a write in it is a write
-                // of the parent. The block's own GATE carries the write; what the parent needs is
-                // the *fact*, which is what makes the branch the block is written in a write too
-                // (`test/cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is written inside
-                // `case _ => sync { q(5); return 0; }`, and the arm has no owner node of its own
-                // between the block and the branch).
                 const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
                 if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
-                    const uint32_t parent = draft.region(region).parent;
-                    if (parent == 0 || parent == region) {
-                        return false;
-                    }
-                    return writing.insert(parent).second;
+                    return false;
                 }
                 const runtime::DraftNodeHeader *header = draft.header(owner);
                 if (header == nullptr) {
@@ -711,20 +691,6 @@ void Builder::layRegionWriteEdges() {
                     statement = runtime::branchJoinOf(draft, owner);
                 } else if (header->kind == runtime::GCNodeKind::Loop) {
                     statement = owner;
-                } else if (header->kind == runtime::GCNodeKind::Join) {
-                    // A region whose owner is the JOIN that closes it: a `sync` block written
-                    // inside an arm is this shape, and so is a block a branch's arm holds. The
-                    // JOIN is the node that runs when the region does, and it stands in the
-                    // region that owns this one, so naming it there is what lets the write walk
-                    // out one level -- `q(5)` inside `case _ => sync { q(5); return 0; }`
-                    // (`test/cases/opt/e9/rc23_seed429_sync_arm.cml`) is dead without this step:
-                    // its arm is never taken because the branch it belongs to was never read.
-                    // The same region owns it when the block *is* the region's body, and an edge
-                    // there would say nothing the exit does not already say.
-                    statement = owner;
-                    if (runtime::decidingRegionOfDraft(draft, statement) == region) {
-                        return false;
-                    }
                 }
                 if (statement == runtime::kInvalidNodeRef || !draft.alive(statement)) {
                     return false;
@@ -735,19 +701,17 @@ void Builder::layRegionWriteEdges() {
                     return false;
                 }
                 bucket.push_back(statement);
-                // The region that owns the statement now writes too, so the walk goes out one more
-                // level: an arm may hold a loop whose body writes, and then the loop's owner is one
-                // of the arm's writes. `writing` is what carries that fact, because a statement
-                // already hung on its region's chain is not in `chains` at all.
-                writing.insert(runtime::decidingRegionOfDraft(draft, statement));
                 return true;
             };
             for (bool grew = true; grew;) {
                 grew = false;
-                // Sorted, so the walk visits regions in the same order every run: `writing` is a set
-                // and its own iteration order is not the draft's.
-                std::vector<uint32_t> owing(writing.begin(), writing.end());
-                std::ranges::sort(owing);
+                std::vector<uint32_t> owing;
+                owing.reserve(chains.size());
+                for (const auto &[region, writes] : chains) {
+                    if (!writes.empty()) {
+                        owing.push_back(region);
+                    }
+                }
                 for (uint32_t region : owing) {
                     grew = markOwnerOf(region) || grew;
                 }
