@@ -65,7 +65,7 @@ on the side that column reads.
 Standard output is normalized with the runner's own normalizers (`strip_ansi`,
 `normalize_newlines`, `trim_trailing_space`), so the comparison is the one the plan runner makes.
 Standard error is **not** compared: it carries diagnostics that the model has no counterpart for
-(the `EffectNotExecuted` warning, for one). The exit code is compared because the specification
+(a warning, for one). The exit code is compared because the specification
 makes `main`'s return value the program's exit code.
 
 ## Where a reading comes from

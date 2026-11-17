@@ -193,8 +193,8 @@ class Builder {
     std::unordered_map<const camel::core::module::Module *, std::unique_ptr<ModuleUnit>> units_;
     // The module being built.
     ModuleUnit *unit_ = nullptr;
-    // The module whose top level put each node on the root graph, by node id: the warnings
-    // about the top level of a module (EffectNotExecuted) are about its own nodes only.
+    // The module whose top level put each node on the root graph, by node id: a warning about
+    // an unused value at the top level of a module is about its own nodes only.
     std::vector<const ModuleUnit *> rootNodeOwners_;
     // The modules in the order they were declared.
     std::vector<ModuleUnit *> unitOrder_;
@@ -2603,25 +2603,28 @@ class Builder {
     // body it names, and nothing else looked at.
     bool bodyHoldsNoChainStatement(DraftGraphBuilder *graph);
     // Once the body of `graph` is built: records whether its exit depends on an effect, and
-    // warns (EffectNotExecuted) about the effects that the exit does not depend on.
+    // reports a value nobody uses (a write to a `var` that no read takes, a `fail` on a line of
+    // its own). A statement that does not run is not reported at all: what a region writes is a
+    // root of that region, so a call, a loop and a block run with it (the ruling of 2026-11-17).
     // With `report` false it only records whether the exit depends on an effect.
     void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
-    // Once the bodies' inferred resources have been measured: connects every write a region owes -- an
-    // operator whose declaration writes outside the program or to a handle -- and every branch
+    // Once the bodies' inferred resources have been measured: connects every write a region owes --
+    // an operator whose declaration writes outside the program or to a handle -- and every branch
     // written as a statement, by a sync edge to the exit of the region it is written in (the
     // author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit by a sync edge
-    // laid when the graph is built"), in the order the statements are written, and only for a region
-    // that runs. This is the half of 3.1 the graph can carry; "does this region run, and which arm
-    // does this statement belong to" is the region's roots (camel/runtime/region_roots.h).
+    // laid when the graph is built"), in the order the statements are written, and only for a
+    // region that runs. This is the half of 3.1 the graph can carry; "does this region run, and
+    // which arm does this statement belong to" is the region's roots
+    // (camel/runtime/region_roots.h).
     void layRegionWriteEdges();
     // Whether `node` of `graph` is a write the region that runs it owes, in the one sense the edge
     // below and the region's roots share: an operator whose declaration writes outside the program
     // or to a handle (`writesForTheRegion`). A write to a `var` is not one of them (the ruling of
-    // 2026-11-15), and neither is a call, a branch or a loop: what a *statement* runs is asked by the
-    // region's roots (camel/runtime/region_roots.h), and an edge would run it instead.
+    // 2026-11-15), and neither is a call, a branch or a loop: what a *statement* runs is asked by
+    // the region's roots (camel/runtime/region_roots.h), and an edge would run it instead.
     bool writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const;
     // One body's measurement as it is being walked: what it has been found to reach so far, which
     // parameter each of its ports is (the numbering a call uses), and whether a use was found that
@@ -2990,8 +2993,7 @@ class Builder {
     /// call is worth differs from an ordinary call's (see the argument typing and the value a
     /// write gives).
     node_handle_t visitLinkNode(
-        const GCT::node_ptr_t &gct,
-        std::optional<GCT::AssignmentForm> store = std::nullopt);
+        const GCT::node_ptr_t &gct, std::optional<GCT::AssignmentForm> store = std::nullopt);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
     ///  4.2; the rule). `expected`
@@ -3325,10 +3327,6 @@ class Builder {
     /// (UnusedFallibleValue): a statement of a body, a block's statement, the arm of an `if`
     /// without `else`, and what a `main` without a declared return type ends with.
     void reportUnusedFallibleValues();
-    /// The `T!` values already reported as UnusedFallibleValue. A statement whose value is one of
-    /// them is answered by that warning alone, not by the warning for an effect that never runs as
-    /// well: one statement, one diagnostic.
-    std::unordered_set<node_handle_t> unusedFallibleValues_;
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
     /// The graph nodes that are stores, and which write each one is (AssignmentForm). Filled

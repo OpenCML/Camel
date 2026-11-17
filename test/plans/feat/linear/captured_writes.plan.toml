@@ -894,7 +894,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.default"
-desc = "The same lambda with nothing reading the `Ref` after the call: the write does not execute. Its body prints the content after writing it, so a body that ran would print 1; the program prints only the 0 of `main`, which is the proof and not an absence of a report. Pipeline: default (no pass)."
+desc = "The same lambda with nothing reading the `Ref` after the call: the write runs anyway. An outside write is used by the region it runs in, so a call that writes runs even when nothing reads the value it gives (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and the body prints what it wrote: `1`, and then the `0` of `main`. Red when the body stops running or when the value it prints is wrong. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["${case}"]
@@ -902,15 +902,15 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === '0', `the lambda body ran: ${out}`)
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 0', `the lambda body did not write, or wrote the wrong value: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.fvm"
-desc = "The same lambda with nothing reading the `Ref` after the call: the write does not execute. Its body prints the content after writing it, so a body that ran would print 1; the program prints only the 0 of `main`. Pipeline: std::fvm."
+desc = "The same lambda with nothing reading the `Ref` after the call: the write runs anyway. An outside write is used by the region it runs in, so a call that writes runs even when nothing reads the value it gives (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and the body prints what it wrote: `1`, and then the `0` of `main`. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["${case}", "std::fvm"]
@@ -918,15 +918,15 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === '0', `the lambda body ran: ${out}`)
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 0', `the lambda body did not write, or wrote the wrong value: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
-name = "lambda_capture_ignored.warning"
-desc = "The call through a `let`-bound lambda that nothing follows is reported once, at the call: today the warning is `SemanticDiag::EffectNotExecuted` (the call is never executed, nothing depends on it), not `IgnoredSideEffect`; the write it would make is dropped with it (proved by the output of the test above). The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
+name = "lambda_capture_ignored.reports_nothing"
+desc = "The same program with the JSON output format: the call through the `let`-bound lambda runs, so the body prints `1` and `main` its `0`, and nothing is reported for it -- the write is an outside write, the region it runs in uses it (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and a warning that describes no defect would be the same mistake in the other direction. The entry used to pin the never-executed warning at the call, which named the call as never executed; it is renamed because what it pins now is the absence of a report. The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["--output-format", "json", "${case}"]
@@ -934,12 +934,10 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const diags = JSON.parse(input.stderr)
-const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
-const seen = diags.map(d => d.data.name + ' at ' + at(d))
-assert(seen.join(' | ') === 'SemanticDiag::EffectNotExecuted at 22:5', 'diagnostics: ' + seen.join(' | '))
-assert(diags[0].message === 'The call is never executed: nothing needs what it gives, so nothing runs it.',
-    'message: ' + diags[0].message)
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 | 0', `the lambda body did not write, or wrote the wrong value: ${out}`)
+const err = input.normalized.stderr.trim()
+assert(err === '', 'nothing is reported for this program: ' + err)
 }
 """
 timeout_ms = 10000

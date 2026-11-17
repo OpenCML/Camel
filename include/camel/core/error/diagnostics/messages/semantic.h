@@ -488,8 +488,7 @@ enum class SemanticDiag : uint32_t {
 
     // Warnings
     IgnoredSideEffect = 0x100002,
-    EffectNotExecuted = 0x100004,
-    // 0x90 and up, clear of what other work adds after EffectNotExecuted.
+    // 0x90 and up, clear of the warnings above.
     ExitInUnusedBranch = 0x100090,
     // Design principles log 2.11: 0xC0 and up.
     UnusedFallibleValue = 0x1000C0,

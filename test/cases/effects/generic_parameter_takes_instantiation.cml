@@ -5,8 +5,8 @@
  * `f` touches, so `noisy`, whose body prints, is a value it takes, and the call through `f` is a
  * call of a value whose resources are that argument's: an effect, carried by the resource set of
  * the value and not by a flag on its type. Here the call's result is what `apply` returns, so
- * nothing is dropped; a result nothing depended on would be reported as `EffectNotExecuted`, the
- * same warning the direct call of `noisy` gets.
+ * nothing is dropped; a result nothing depended on would be reported the same way the direct call of
+ * `noisy` was.
  */
 
 func apply(f: (x: int) => int, x: int): int {

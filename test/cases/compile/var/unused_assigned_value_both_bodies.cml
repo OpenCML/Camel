@@ -8,7 +8,7 @@
  * with no consumer of its own while its value is read by everything after it. Asking the node
  * answered the opposite of what the text says for the ordinary `t = t + 1` of a counter, and
  * `camel -Werror` refused the program with that report. Whether a write runs at all is the other
- * question, and `SemanticDiag::EffectNotExecuted` is where it is asked.
+ * question, and nothing asks it any more: a statement that does not run is not reported (2026-11-17).
  */
 
 func dropped_nsync(): int {

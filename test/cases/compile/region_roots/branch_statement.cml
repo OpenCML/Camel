@@ -8,7 +8,7 @@
  * The body here is not a `sync` block, and that was the difference: a sync edge is what carries
  * "used" from one statement to the next, so the same branches in a `sync` body ran all along,
  * while here the whole branch -- the arm that is taken and the print written in it -- was dropped
- * from the graph, and `SemanticDiag::EffectNotExecuted` named the branch. A branch the program
+ * from the graph, and the warning named the branch. A branch the program
  * cannot choose to skip is not a region nothing needs.
  *
  * `untaken` is the other half of the judgement (design principles 3.1, the reverse judgement `R2`):

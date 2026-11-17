@@ -372,7 +372,7 @@ hello from greet
 
 Both lines are printed. The return value of `println` is still needed by nobody, but it is a **write**, and a write needs no reader. Removing `sync` or adding it changes nothing here: `sync` decides order, not whether something runs (6.2).
 
-What really does not run? A **read**: an external read whose result nobody uses does not run, and the compiler reports `EffectNotExecuted` for it (chapter 5 has a `get_env` example). And a write inside a region that does not run -- a loop body nobody needs, an arm that is not taken -- goes with that region.
+What really does not run? A **read**: an external read whose result nobody uses does not run, and nothing is reported for it (chapter 5 has a `get_env` example). And a write inside a region that does not run -- a branch nobody needs, an arm that is not taken -- goes with that region; a call, a loop and a block that write run with the region they are written in (the ruling of 2026-11-17).
 
 ### 6.2 Sync blocks
 
