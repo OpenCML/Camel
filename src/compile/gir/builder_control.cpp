@@ -3490,7 +3490,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
             const SsaEnv::Entry *ssa = ssa_.find(nodeScope_, name);
-            const bool asValue = ssa != nullptr && ssa->value != nullptr && !isVariable(bound);
+            const node_handle_t value = ssa_.valueOf(ssa);
+            const bool asValue        = ssa != nullptr && value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
             // region of its own does -- the rule this loop had before S2 and S3, and the reason a
             // write inside a block of the body is left to that block: the port is read where the
@@ -3503,12 +3504,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             if (asValue) {
-                Type *stored =
-                    ssa->type != nullptr ? ssa->type : valueTypeOf(nodeTypeOf(ssa->value));
+                Type *stored = ssa->type != nullptr ? ssa->type : valueTypeOf(nodeTypeOf(value));
                 if (stored == nullptr || stored->code() == TypeCode::Void) {
                     continue;
                 }
-                node_handle_t start = underTheCopy(ssa->value);
+                node_handle_t start = underTheCopy(value);
                 if (start == nullptr) {
                     continue;
                 }
