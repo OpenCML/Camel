@@ -645,8 +645,8 @@ void Builder::scanProgramWriters() {
     programValueNames_.clear();
     // The variable it writes is the base of its target: the variable itself (`v = e`) or a path
     // into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a rebinding of the
-    // variable (pathAssignmentOf). Which groups an assignment is, the table of the operators says
-    // (`core::isAssignmentGroup`): one place, not a spelling compared here.
+    // variable (pathAssignmentOf). A write is a node of kind ASSIGN: the kind, not a group's
+    // spelling, is what says so.
     // The variable a target names: the reference under the fields and indices the assignment
     // writes through.
     const auto baseOf = [](GCT::node_ptr_t target) -> GCT::node_ptr_t {
@@ -672,18 +672,6 @@ void Builder::scanProgramWriters() {
             return node;
         }
         return nullptr;
-    };
-    // The group a callee names, under the with-arguments a partial application binds
-    // (`LINK(WITH(DREF op, w...), ...)`, design principles 4.3).
-    const auto groupOf = [](GCT::node_ptr_t callee) -> const std::string * {
-        GCT::node_ptr_t node = callee;
-        if (node != nullptr && node->type() == GCT::NodeKind::WITH && node->size() > 0) {
-            node = node->at(0);
-        }
-        if (node == nullptr || node->type() != GCT::NodeKind::DREF) {
-            return nullptr;
-        }
-        return &node->name();
     };
     struct Pending {
         GCT::node_ptr_t node = nullptr;
@@ -771,14 +759,12 @@ void Builder::scanProgramWriters() {
         if (node->type() == GCT::NodeKind::VARI) {
             declaredNamesOf(node, declaredOf[function]);
         }
-        if (node->type() == GCT::NodeKind::LINK && node->size() >= 2) {
-            const std::string *group = groupOf(node->at(0));
-            if (group != nullptr && camel::core::isAssignmentGroup(*group)) {
-                if (const GCT::node_ptr_t variable = baseOf(node->at(1)); variable != nullptr) {
-                    const std::set<std::string> &parameters = parametersIn(function);
-                    if (parameters.find(variable->name()) == parameters.end()) {
-                        programWriters_[variable->name()].insert(function);
-                    }
+        if (node->type() == GCT::NodeKind::ASSIGN) {
+            if (const GCT::node_ptr_t variable = baseOf(node->assignmentTarget());
+                variable != nullptr) {
+                const std::set<std::string> &parameters = parametersIn(function);
+                if (parameters.find(variable->name()) == parameters.end()) {
+                    programWriters_[variable->name()].insert(function);
                 }
             }
         }

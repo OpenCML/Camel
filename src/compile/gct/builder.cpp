@@ -982,8 +982,14 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("Stmt");
-    setOriginFromAst(context_, stmtNode, ast, camel::source::OriginKind::GctNode, "gct.stmt");
-    registerGctSemantic(context_, stmtNode, ast);
+    // A write has already said what it stands for, and it stands where the statement is while
+    // keeping the operator's own place among its parts (visitBinaryExpr). Deriving it from the
+    // statement node again would leave only the statement, and the store the write makes reads
+    // that part back (Builder::storeOperatorOrigin).
+    if (stmtNode == nullptr || stmtNode->type() != GCT::NodeKind::ASSIGN) {
+        setOriginFromAst(context_, stmtNode, ast, camel::source::OriginKind::GctNode, "gct.stmt");
+        registerGctSemantic(context_, stmtNode, ast);
+    }
     return stmtNode;
 }
 
@@ -2532,8 +2538,14 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("Data");
-    setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
-    registerGctSemantic(context_, dataNode, ast);
+    // A write has already said what it stands for: it is where the statement is, and the place of
+    // the operator it was written with is a part of the parts it carries (visitBinaryExpr).
+    // Deriving it from the AST node again would replace those parts with the AST node's own and
+    // leave the operator's place unreadable (Builder::storeOperatorOrigin).
+    if (dataNode == nullptr || dataNode->type() != GCT::NodeKind::ASSIGN) {
+        setOriginFromAst(context_, dataNode, ast, camel::source::OriginKind::GctNode, "gct.data");
+        registerGctSemantic(context_, dataNode, ast);
+    }
     return dataNode;
 }
 
@@ -2845,12 +2857,55 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         return nullptr;
     default: {
         // Every other operator is a call of the group the table of operator_names.cpp gives
-        // its symbol: plain, compound assignment and `=` alike.
+        // its symbol: plain and compound alike.
         const auto group = camel::core::binaryOperatorGroup(AST::to_string(binaryExpr->op()));
         GUARD(group.has_value(), "Unknown binary operation");
         if (!group)
             return nullptr;
-        opNode = tree_->makeDRef(std::string(*group));
+        const std::string groupName(*group);
+        // `a = b` and `a op= b` write the left side; they are not calls (design principles 3.5).
+        // One node of kind ASSIGN carries the two sides, and a compound assignment carries the
+        // group of the operator it follows: that operator's set of operand types is what decides
+        // whether the write is defined, so it is the operator the graph builder asks.
+        const bool compound =
+            camel::core::plainGroupOfCompoundAssignment(groupName).has_value();
+        if (groupName == "__assn__" || compound) {
+            const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
+            node_ptr_t target      = visitData(lhsASTNode);
+            node_ptr_t value       = visitData(rhsASTNode);
+            node_ptr_t write       = tree_->makeAssign(
+                compound ? AssignmentForm::Compound : AssignmentForm::Plain,
+                compound ? std::string_view(groupName) : std::string_view());
+            *write << target << value;
+            const auto operatorOrigin = findSemanticOrigin(
+                astSemantic(context_, ast), camel::source::SemanticRole::Operator);
+            // The write stands where the statement does (`x += 5`), and it keeps the operator's
+            // own place as a part of what it stands for: the token the program wrote, which is
+            // where a fault of the operator is reported (a `%=` by zero is a DivisionByZero at
+            // the `%=`, test/plans/feat/linear/operators.plan.toml). The store the write makes
+            // reads that part back, as a call reads its callee's place from the reference it was
+            // written with (Builder::storeOperatorOrigin): a node carries one origin, so the
+            // operator's place is a part of the bundle rather than the node's own origin.
+            setOriginFromAst(
+                context_,
+                write,
+                ast,
+                camel::source::OriginKind::GctNode,
+                "gct.data");
+            registerGctSemantic(
+                context_,
+                write,
+                ast,
+                {semanticPart(
+                     camel::source::SemanticRole::Operator, operatorOrigin, -1, "operator"),
+                 semanticPart(
+                     camel::source::SemanticRole::Argument, nodeOrigin(target), 0, "lhs"),
+                 semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(value), 1, "rhs")},
+                {operatorOrigin, nodeOrigin(target), nodeOrigin(value)});
+            LEAVE("BinaryExpr");
+            return write;
+        }
+        opNode = tree_->makeDRef(groupName);
     } break;
     }
     auto binaryAstBundle = astSemantic(context_, ast);
@@ -5981,9 +6036,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     };
     const auto readCell  = [&](const std::string &name) { return tree_->makeDRef(name); };
     const auto writeCell = [&](const std::string &name, node_ptr_t value) {
-        node_ptr_t link = tree_->makeLink(2);
-        *link << tree_->makeDRef("__assn__") << readCell(name) << value;
-        return link;
+        node_ptr_t write = tree_->makeAssign(AssignmentForm::Plain);
+        *write << readCell(name) << value;
+        return write;
     };
     const auto equalTo = [&](const std::string &name, int64_t value) {
         node_ptr_t link = tree_->makeLink(2);

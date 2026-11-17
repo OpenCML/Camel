@@ -3000,16 +3000,16 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             // update takes the value's storage and hands it back by rebinding the name, which needs
             // a cell to write. Two shapes, both read off the GCT node: the plain write of a place
             // (`v[i] = e`, `v.f = e`) and the write of a call over the variable itself.
-            //   LINK(<plain assignment>, <path>, e)      `v[i] = e`, `v.f = e`
-            //   LINK(<plain assignment>, v, LINK(method, v, ...))
-            //                                             `v = v->append(x)`, `v = append(v, x)`
+            //   ASSIGN(Plain, <path>, e)      `v[i] = e`, `v.f = e`
+            //   ASSIGN(Plain, v, LINK(method, v, ...))
+            //                                 `v = v->append(x)`, `v = append(v, x)`
             // The operator form `v = v + 1` (a `__`-prefixed callee) builds a new value and is not
             // one of these, so it stays a value. A shape this misses only keeps a cell, which is
             // the cheap direction; the other way round drops an in-place update, which `--copies`
             // sees.
-            if (assignmentFormOf(node) == AssignmentForm::Plain) {
-                const GCT::Node *target = node->at(1);
-                const GCT::Node *value  = node->at(2);
+            if (node->type() == GCT::NodeKind::ASSIGN &&
+                node->assignmentForm() == GCT::AssignmentForm::Plain) {
+                const GCT::Node *target = node->assignmentTarget();
                 const bool plainTarget = target != nullptr && target->type() == GCT::NodeKind::DREF;
                 if (!plainTarget) {
                     std::function<void(const GCT::Node *)> keepCell = [&](const GCT::Node *place) {

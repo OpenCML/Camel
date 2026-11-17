@@ -63,14 +63,6 @@ inline constexpr std::string_view kFailOperatorUri = ":op/fail";
 /// for any other group.
 std::optional<std::string_view> plainGroupOfCompoundAssignment(std::string_view group);
 
-/// Whether `group` is the reserved name of an operator that writes its first argument: `__assn__`
-/// (`=`), every compound form (`__assn_add__` for `+=`), and `__assn_owned__` (the rebinding to an
-/// in-place operator's result, `xs = xs->sort`). The one place that says which groups a write is:
-/// the compiler reads it where a call is asked what write it is and where an operator is asked
-/// whether its `var` parameter takes the variable itself, instead of each place comparing the
-/// group's spelling.
-bool isAssignmentGroup(std::string_view group);
-
 /// Why the operator `symbol` cannot be overloaded at all (for the diagnostic), or nullopt when
 /// it can be overloaded for some number of parameters.
 std::optional<std::string_view> whyNotOverloadable(std::string_view symbol);

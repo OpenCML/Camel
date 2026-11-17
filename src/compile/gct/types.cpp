@@ -70,6 +70,8 @@ std::string to_string(NodeKind kind) {
         return "SCOMP";
     case NodeKind::SLOOP:
         return "SLOOP";
+    case NodeKind::ASSIGN:
+        return "ASSIGN";
     default:
         throw std::runtime_error("Unknown NodeKind");
     }
@@ -85,6 +87,20 @@ using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::core::type::TypeCode;
 using camel::core::type::TypeVarType;
+
+std::string to_string(AssignmentForm form) {
+    switch (form) {
+    case AssignmentForm::Plain:
+        return "Plain";
+    case AssignmentForm::Compound:
+        return "Compound";
+    case AssignmentForm::Rebuilt:
+        return "Rebuilt";
+    case AssignmentForm::Owned:
+        return "Owned";
+    }
+    throw std::runtime_error("Unknown AssignmentForm");
+}
 
 bool isTypeOfPlaceholder(const Type *type) {
     if (type == nullptr || type->code() != TypeCode::TypeVar) {
