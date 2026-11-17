@@ -91,7 +91,6 @@ SemanticDiag::DuplicateParameter	test/cases/compile/generics/err_tf_dup.cml
 SemanticDiag::DuplicateRuleForOperator	test/cases/compile/rulesets/rulesets.err_duplicate_head.cml
 SemanticDiag::DynamicCastForbidden	test/cases/compile/collections/err_value_type.cml
 SemanticDiag::EffectInRuleCondition	test/cases/modules/rules/condition_rewrite.cml
-SemanticDiag::EffectNotExecuted	test/cases/compile/diag_json/dropped_effects_forward.cml
 SemanticDiag::ElementTypeMismatch	test/cases/compile/literals/context_struct_field_variable.cml
 SemanticDiag::EmptyArrayWithoutType	test/cases/consistency/entering/err_empty_array_untyped.cml
 SemanticDiag::EntryModuleMissingMain	docs/tutorial/examples/shapes.cml

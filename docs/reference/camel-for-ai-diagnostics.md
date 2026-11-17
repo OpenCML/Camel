@@ -293,10 +293,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CapturedVarHandedToVarParameter` | '{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure. |
 | `VarContextParameterCannotBeBound` | '{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to. |
 
-**Semantic — warnings** (`SemanticDiag`) — 16
+**Semantic — warnings** (`SemanticDiag`) — 15
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
-| `EffectNotExecuted` | {0} is never executed: {1}. |
 | `ExitInUnusedBranch` | This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function. |
 | `UnusedFallibleValue` | This value has type '{0}' and nothing uses it: an error it holds is lost{1}. |
 | `NullTestNeverNull` | {0} has type '{1}', which is never null: this test is always {2}. |

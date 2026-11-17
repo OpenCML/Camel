@@ -926,7 +926,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.reports_nothing"
-desc = "The same program with the JSON output format: the call through the `let`-bound lambda runs, so the body prints `1` and `main` its `0`, and nothing is reported for it -- the write is an outside write, the region it runs in uses it (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and a warning that describes no defect would be the same mistake in the other direction. The entry used to pin `SemanticDiag::EffectNotExecuted` at the call, which named the call as never executed; it is renamed because what it pins now is the absence of a report. The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
+desc = "The same program with the JSON output format: the call through the `let`-bound lambda runs, so the body prints `1` and `main` its `0`, and nothing is reported for it -- the write is an outside write, the region it runs in uses it (the author's ruling of 2026-11-17; design principles 3.1 and 3.4), and a warning that describes no defect would be the same mistake in the other direction. The entry used to pin the never-executed warning at the call, which named the call as never executed; it is renamed because what it pins now is the absence of a report. The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["--output-format", "json", "${case}"]

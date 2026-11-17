@@ -1,6 +1,6 @@
 /**
  * An effectful expression written outside a sync block whose result nothing uses does not run, and
- * the compiler warns about each one (SemanticDiag::EffectNotExecuted, docs/design-principles.cn.md
+ * the compiler no longer warns about them (that warning went with the region roots; docs/design-principles.cn.md
  * 3.1: evaluation is driven by dependencies, and this is the language's own reading of the rule,
  * listed in section 14 as a reading that was once mistaken for a defect).
  *

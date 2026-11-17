@@ -5,8 +5,8 @@
  * always live": either of those would answer 1 and 9 here.
  *
  * `in_the_untaken_arm` writes in the arm of `if false`, and `arm(false)` writes in the arm of a
- * condition only the run knows. Both answer 0, and both arms are still reported -- nothing will ever
- * run them, which is exactly what `EffectNotExecuted` says.
+ * condition only the run knows. Both answer 0, and nothing is reported for either arm: the diagnostic
+ * that named a statement which does not run went with the region roots (the ruling of 2026-11-17).
  *
  * Not pinned here: `arm(true)`, the arm of a branch that IS taken, in a body that is not a `sync`
  * block. It answers 0 on the tree of 2026-11-16 too, because the value of an `if` statement nobody

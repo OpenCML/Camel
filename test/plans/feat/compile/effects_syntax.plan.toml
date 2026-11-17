@@ -172,7 +172,6 @@ case = "../../../cases/effects/effect_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_output_contains = ["0 1 2 3"]
-expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"
@@ -182,7 +181,6 @@ case = "../../../cases/effects/pure_parameter_takes_pure.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
-expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "inferred.lambda_is_empty"
@@ -192,7 +190,6 @@ case = "../../../cases/effects/pure_parameter_takes_lambda.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
-expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "effect.ambient_clause_covers_body"
@@ -796,7 +793,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast", "IgnoredSideEffect", "EffectNotExecuted"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast", "IgnoredSideEffect"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()

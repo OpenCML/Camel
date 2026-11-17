@@ -66,9 +66,9 @@ hello from greet
 1
 ```
 
-What is dropped for lack of a reader is a **read**: an external read whose result nobody uses does not run, and the compiler reports `SemanticDiag::EffectNotExecuted` for it, so that a forgotten dependency does not go unnoticed. A write inside a region that does not run -- an arm that is not taken, a loop body nothing needs -- goes with that region.
+A statement that writes runs with the region it is written in, whether or not anything needs what it gives: what a region writes is a root of that region (the ruling of 2026-11-17), so a call, a loop and a block run and nothing is reported for them. What is dropped for lack of a reader is a **read**: an external read whose result nobody uses does not run, and nothing is reported for it either -- a statement that does not run is not an effect that failed to run. A write inside a region that does not run -- an arm that is not taken -- goes with that region.
 
-The warning goes to standard error and the program runs as usual. Turn it off with `-Wno-effect-not-executed`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../cli.md)).
+The warning goes to standard error and the program runs as usual. Turn one off with `-Wno-unused-assigned-value`, all of them with `-Wnone`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../cli.md)).
 
 ## 4.3 `sync`
 
@@ -208,7 +208,7 @@ func main(): int sync {
 1
 ```
 
-With nothing reading `c` afterwards, the write does not run, and the call is reported as one that is never executed. The body prints `c` after writing it, so a body that ran would print `1`; the program prints only the `0` of `main`:
+With nothing reading `c` afterwards the call still runs, because it writes: what a region writes is a root of that region (the ruling of 2026-11-17). The body prints `c` after writing it, so the program prints the `1` of the body and then the `0` of `main`, and nothing is reported:
 
 ```cml
 var c = 0
@@ -229,13 +229,7 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call is never executed: nothing needs what it gives, so nothing runs it.
-  --> drop.cml:8:5
-   |
- 8 |     f()                 // nothing reads `c` afterwards: the call does not run
-   |     ^^^
-help: This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
-
+1
 0
 ```
 

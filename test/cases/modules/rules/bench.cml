@@ -4,7 +4,7 @@
  * for the application that rewrites and for a second one that finds the fixpoint at once.
  *
  * The pass is `sync` and so are the callbacks it hands to `->`: printing is part of the pass's
- * execution, not a value left unapplied (`SemanticDiag::EffectNotExecuted`).
+ * execution, not a value left unapplied.
  */
 
 import { Rule, Run, run } from rewrite

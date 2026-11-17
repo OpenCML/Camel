@@ -129,7 +129,7 @@ expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_c
 
 [[tests]]
 name = "partial_application.var_parameter_effect"
-desc = "A `sync` function with a `var` context parameter is bound by `add<t>` in two helpers, and both bindings are refused the same way (design principles 3.5) -- the local-cell shape, where `var t` is declared in the body that binds it. What the entry pinned before -- the call recorded as a write of `t`, the call running inside a sync block, `EffectNotExecuted` outside one -- needed a function value that holds the cell, and the ruling retired exactly that. The refusal it pins now is `VarContextParameterCannotBeBound` (0x03000216), the code the rule has of its own; it used to be `ClosureAssignsCapturedName` (0x03000213) at the same two bindings."
+desc = "A `sync` function with a `var` context parameter is bound by `add<t>` in two helpers, and both bindings are refused the same way (design principles 3.5) -- the local-cell shape, where `var t` is declared in the body that binds it. What the entry pinned before -- the call recorded as a write of `t`, the call running inside a sync block, the never-executed warning outside one -- needed a function value that holds the cell, and the ruling retired exactly that. The refusal it pins now is `VarContextParameterCannotBeBound` (0x03000216), the code the rule has of its own; it used to be `ClosureAssignsCapturedName` (0x03000213) at the same two bindings."
 kind = "negative"
 case = "../../../cases/consistency/partial_application/var_parameter_effect.cml"
 args = ["-E", "short", "${case}"]

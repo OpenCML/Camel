@@ -1097,7 +1097,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gpu_scope.write_outside_a_sync_block_runs_and_is_not_warned"
-desc = "A write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15): a `println` written in a `#gpu` function body that is not a sync block runs, and no `EffectNotExecuted` is reported for it. What stays demand-driven is a read. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not -- this entry is the run without `tiles::compile`, and it is red when the print stops running or when a warning is reported for it. The one diagnostic the program does report is the tag's, which the run without the pass carries."
+desc = "A write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15): a `println` written in a `#gpu` function body that is not a sync block runs, and nothing is reported for it -- the warning that named a statement which does not run went with the region roots. What stays demand-driven is a read. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not -- this entry is the run without `tiles::compile`, and it is red when the print stops running or when a warning is reported for it. The one diagnostic the program does report is the tag's, which the run without the pass carries."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
 args = ["--output-format", "json", "${case}", "std::nvm"]
@@ -1106,7 +1106,7 @@ verify_script = """
 ({ input, assert }) => {
 const diags = JSON.parse(input.stderr)
 assert(input.normalized.stdout === 'never' + String.fromCharCode(10) + '12.0' + String.fromCharCode(10), JSON.stringify(input.normalized.stdout))
-const dropped = diags.filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+const dropped = diags.filter((d) => d.message.includes('is never executed'))
 assert(dropped.length === 0, JSON.stringify(dropped.map((d) => d.message)))
 }
 """
@@ -1115,7 +1115,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.write_outside_a_sync_block_runs_through_the_pass"
-desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, the statements of a segment become a call, and the write written outside a sync block still runs and is still not reported as EffectNotExecuted. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and the write's own region is what runs it. Red when the pass stops running the write, when it starts reporting it, or when it changes the program's line."
+desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, the statements of a segment become a call, and the write written outside a sync block still runs and is still not reported at all. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and the write's own region is what runs it. Red when the pass stops running the write, when it starts reporting it, or when it changes the program's line."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
 args = ["--devices", "cpu", "--output-format", "json", "${case}", "tiles::compile", "std::nvm"]
@@ -1128,7 +1128,7 @@ const program = lines.filter((line) => !line.startsWith('TILES_'))
 assert(JSON.stringify(program) === JSON.stringify(['never', '12.0']), input.stdout)
 const raw = input.stderr.trim()
 const diags = raw ? JSON.parse(raw) : []
-const dropped = diags.filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+const dropped = diags.filter((d) => d.message.includes('is never executed'))
 assert(dropped.length === 0, input.stderr)
 const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"main"'))
 assert(row, JSON.stringify(lines))

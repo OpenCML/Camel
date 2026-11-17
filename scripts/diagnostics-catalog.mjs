@@ -74,7 +74,7 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //   22 -> 14  `calling_incomplete` pinned `CallingIncompleteFunction`, and the counter learned the
 //             `verify_script` form (`diagnostics[0].name === 'SemanticDiag::X'`, `.code === '0x...'`),
 //             which these seven had been pinned by all along: StatementAfterReturn,
-//             UnusedFallibleValue, EffectNotExecuted, IgnoredSideEffect, NeverArgumentCall,
+//             UnusedFallibleValue, UnusedAssignedValue, IgnoredSideEffect, NeverArgumentCall,
 //             FailNotExecuted, StatementAfterFail.
 //   14 -> 6   `null_test_never_null` pinned `NullTestNeverNull`; the counter learned the rendered form
 //             a `-E short` run prints (`name=SemanticDiag::X, code=0x...`, which six had been pinned
