@@ -1214,6 +1214,19 @@ class Builder {
     /// this round (a read after that write takes it, as it takes a straight-line write's value).
     std::unordered_map<node_handle_t, node_handle_t> loopStatePorts_;
     std::unordered_map<node_handle_t, node_handle_t> loopStateWrites_;
+    /// The `var`s the loop being built carries as values rather than as cells (stage S3): the name
+    /// the body's region binds to a port, and that port. The head's phi is the port: its two sources
+    /// are the value the name had where the loop is written and the value the body's last round
+    /// wrote, and neither is a cell. A write of such a name is a rebinding (`ssaAssignmentOf`) that
+    /// is also the round's next value (loopStateWrites_, the same table the cell path uses), and
+    /// after the loop the name is rebound to what the head hands out (`visitLoopNode`).
+    std::unordered_map<std::string, node_handle_t> loopSsaPorts_;
+    /// A write of `name`, where a loop head of this build carries it as a value: the round's next
+    /// value is `value`. Does nothing when no loop head carries the name -- a write of a `var` that
+    /// is not loop state, of a name a closure captured, or of a name the enclosing loop keeps as a
+    /// cell. Called from every place that rebinds the name, so that a write inside an arm of the
+    /// body (S2's join) or inside a loop body of the body (S3's own head) reaches the head too.
+    void noteLoopStateWrite(const std::string &name, node_handle_t value);
     /// `LINK(DREF __assn__, DREF <name>, value)` where `<name>` is one of those ports: the value
     /// written is the loop's next state for that `var`, so the statement makes no store and the
     /// call of the assignment operator is not built at all. Null for everything else.

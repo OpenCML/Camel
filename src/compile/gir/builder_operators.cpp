@@ -2051,6 +2051,9 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
         ssaWrites_[value] = at != camel::source::kInvalidOriginId ? at : gct->origin();
     }
     rebindSsa(name, value);
+    // The write is the round's next state where a loop head carries the name as a value (stage S3):
+    // the head's phi takes it instead of a cell (loopStateAssignmentOf, noteLoopStateWrite).
+    noteLoopStateWrite(name, value);
     return value;
 }
 
@@ -2106,6 +2109,24 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     // hands on is the last value it wrote, as a cell would hold.
     loopStateWrites_[port] = value;
     return value;
+}
+
+void Builder::noteLoopStateWrite(const std::string &name, node_handle_t value) {
+    // The same record the cell path makes where the write stands (loopStateAssignmentOf above), for
+    // a `var` the loop head carries as a value (stage S3): the round's next state is the value just
+    // written. The write itself can stand anywhere in the body -- a statement of the body's block,
+    // an arm of a branch inside it (where S2's JOIN is the value), or a loop body inside it (where
+    // that head's value is) -- and each of those hands the value to this head when it is done, so
+    // every path that finishes a write calls this one. A name no head of this build carries is not
+    // loop state: the table has no entry and nothing is recorded.
+    if (loopSsaPorts_.empty() || value == nullptr) {
+        return;
+    }
+    const auto port = loopSsaPorts_.find(name);
+    if (port == loopSsaPorts_.end()) {
+        return;
+    }
+    loopStateWrites_[port->second] = value;
 }
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {

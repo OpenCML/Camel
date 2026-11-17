@@ -3077,8 +3077,11 @@ node_handle_t Builder::buildBranch(
     linkNodes(LinkType::Norm, brchNode, joinNode);
     if (!ssaCarried.empty()) {
         // The join is the name's value from here on: an arm that wrote it hands that value out, and
-        // the arm that wrote nothing hands out the value the name had before the branch.
+        // the arm that wrote nothing hands out the value the name had before the branch. A loop head
+        // around this branch carries the name as a value too (stage S3), and the value it carries is
+        // the join -- not the value of the arm that happened to be built last.
         rebindSsa(ssaCarried, joinNode);
+        noteLoopStateWrite(ssaCarried, joinNode);
     }
     linkArmEntries(armList, brchNode);
     // The arms of this branch exclude each other (design principles 5.4): the check on the built
@@ -3371,57 +3374,168 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         node_handle_t start = nullptr;
         std::string name;
         node_handle_t port = nullptr;
+        /// The state is a value, not a cell (stage S3): the body's name is the port, a write
+        /// rebinds it and is the round's next value, and the head's phi is the port.
+        bool ssa = false;
+        /// The head of a loop this one is written in that carries the same name, if there is one.
+        /// This loop's port speaks for the name while its body is built; when the loop is done the
+        /// enclosing head's port speaks for it again, so that the value this head hands out is
+        /// recorded on it (a loop written in a loop's body).
+        bool hasOuterSsaPort       = false;
+        node_handle_t outerSsaPort = nullptr;
     };
     std::vector<LoopCarriedState> carried;
     {
-        // The names assigned by a statement of the body's block, in the order they are written,
-        // and the names assigned anywhere below it.
+        // The names assigned by a statement of the body's block, in the order they are written; the
+        // names assigned below it in a region this loop can hand the value back out of -- an arm of
+        // a statement branch (S2's JOIN) or a loop body (that head's value, S3) -- in the order they
+        // are first written there; and the names assigned in a region it cannot (a block of its own,
+        // a closure's body, a static loop's), which are left to that region's own lowering.
         std::vector<std::string> directWrites;
+        std::vector<std::string> carriedWrites;
         std::unordered_set<std::string> seenWrites;
+        std::unordered_set<std::string> seenCarriedWrites;
         std::unordered_set<std::string> nestedWrites;
-        const std::function<void(const GCT::node_ptr_t &, bool)> scan =
-            [&](const GCT::node_ptr_t &node, bool direct) {
+        std::unordered_set<std::string> outsideWrites;
+        // Names a compound assignment writes (`x += e` is `LINK(__assn_add__, x, e)`). It is a write
+        // of the name exactly as `x = e` is: the body builds the same new value and hands it to the
+        // name. A `var` the declaration built as a value is therefore carried by the head when the
+        // body writes it this way too -- `total(node: Node)` in
+        // `test/cases/compile/semantic/recursive_struct_array.cml` accumulates with `acc += ...`, and
+        // a head that does not carry it leaves the read after the loop with a value from the round
+        // that last ran (`450971566189` where the sum is `10`). A cell keeps the shape it had: the
+        // store in the body is reachable there, so this only widens what a value carries.
+        std::unordered_set<std::string> compoundWrites;
+        const std::function<void(const GCT::node_ptr_t &, bool, bool, bool)> scan =
+            [&](const GCT::node_ptr_t &node, bool direct, bool inCarriedRegion,
+                bool inLoopBody) {
                 if (node == nullptr) {
                     return;
                 }
-                if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
+                const bool assignLink =
+                    node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
                     node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
-                    node->at(0)->name() == "__assn__" && node->at(1) != nullptr &&
-                    node->at(1)->type() == GCT::NodeKind::DREF) {
+                    node->at(1) != nullptr && node->at(1)->type() == GCT::NodeKind::DREF;
+                const std::string callee =
+                    assignLink ? node->at(0)->name() : std::string();
+                const bool plainAssign = assignLink && callee == "__assn__";
+                const bool compoundAssign =
+                    assignLink && !plainAssign && callee.rfind("__assn", 0) == 0;
+                if (plainAssign || compoundAssign) {
                     const std::string written = moduleLevelName(node->at(1)->name());
-                    if (!direct) {
+                    if (compoundAssign) {
+                        compoundWrites.insert(written);
+                        if (seenWrites.insert(written).second) {
+                            directWrites.push_back(written);
+                        }
+                    } else if (direct) {
+                        if (seenWrites.insert(written).second) {
+                            directWrites.push_back(written);
+                        }
+                    } else {
                         nestedWrites.insert(written);
-                    } else if (seenWrites.insert(written).second) {
-                        directWrites.push_back(written);
+                        if (inLoopBody || inCarriedRegion) {
+                            if (seenCarriedWrites.insert(written).second) {
+                                carriedWrites.push_back(written);
+                            }
+                        } else {
+                            outsideWrites.insert(written);
+                        }
                     }
                 }
                 for (size_t i = 0; i < node->size(); ++i) {
-                    scan(node->at(i), false);
+                    const GCT::node_ptr_t &child = node->at(i);
+                    const bool childLoopBody =
+                        node->type() == GCT::NodeKind::LOOP && node->loopBody() == child;
+                    const bool childArm =
+                        child != nullptr && (child->type() == GCT::NodeKind::CASE ||
+                                             child->type() == GCT::NodeKind::TCASE);
+                    scan(child, false, inCarriedRegion || childArm, inLoopBody || childLoopBody);
                 }
             };
         const GCT::node_ptr_t body = gct->loopBody();
         if (body != nullptr) {
             if (body->type() == GCT::NodeKind::EXEC) {
                 for (size_t i = 0; i < body->size(); ++i) {
-                    scan(body->at(i), true);
+                    scan(body->at(i), true, false, false);
                 }
             } else {
-                scan(body, true);
+                scan(body, true, false, false);
             }
         }
-        for (const std::string &name : directWrites) {
-            if (nestedWrites.contains(name)) {
-                continue; // written in a block of its own: that write is not this block's
+        // A name a region this loop cannot hand a value back out of writes keeps its cell: that is
+        // what the shape was before S2 and S3, and it is the cheap direction to be wrong in.
+        for (const std::string &name : carriedWrites) {
+            if (outsideWrites.contains(name) || seenWrites.contains(name)) {
+                continue;
             }
+            directWrites.push_back(name);
+        }
+        // The value the loop starts a `var` from is the value under the copy its declaration made:
+        // a `var` holds a value of its own, so the store the unit would have made copies the
+        // initialiser, and the `let` writing puts the value itself in the same place. The copy is
+        // therefore not part of what the two writings say, and the state starts from the value.
+        const auto underTheCopy = [&](node_handle_t value) -> node_handle_t {
+            node_handle_t start = value;
+            for (size_t depth = 0; start != nullptr && depth < 16; ++depth) {
+                if (!nodeIsKind(start, runtime::GCNodeKind::Copy)) {
+                    break;
+                }
+                const auto below = normInputsOf(start);
+                if (below.size() != 1) {
+                    break;
+                }
+                const node_handle_t next = nodeDraftOf(start)->ref(below.front());
+                if (next == nullptr) {
+                    break;
+                }
+                start = next;
+            }
+            return start;
+        };
+        for (const std::string &name : directWrites) {
             const auto resolved = nodeAt(name);
             if (!resolved.has_value()) {
                 continue;
             }
-            const node_handle_t cell = resolved.value();
-            if (!sameGraph(cell, currGraph_) || !isVariable(cell) ||
-                nodeKindOf(cell) == runtime::GCNodeKind::Port) {
+            const node_handle_t bound = resolved.value();
+            // A name the declaration built as a value (stages S1-S3) is carried as a value: the
+            // body's name is the port, and the head carries whatever the body wrote. Nothing of it
+            // is a cell, so none of the cell questions below apply.
+            const SsaValue *ssa = ssaBindingOf(name);
+            const bool asValue = ssa != nullptr && ssa->value != nullptr && !isVariable(bound);
+            // A name that is still a cell is carried only when the body's block writes it and no
+            // region of its own does -- the rule this loop had before S2 and S3, and the reason a
+            // write inside a block of the body is left to that block: the port is read where the
+            // write stands, so a write the round may skip cannot be the state. A value has no cell
+            // to fall back to, and the regions the scan lets such a name be used across (an arm,
+            // whose JOIN is the value, and a loop body, whose head is) are exactly the ones this
+            // scan hands over, so it is carried wherever one of them writes it.
+            if (!asValue &&
+                (compoundWrites.contains(name) || !seenWrites.contains(name) ||
+                 nestedWrites.contains(name))) {
+                continue;
+            }
+            if (asValue) {
+                Type *stored = ssa->type != nullptr ? ssa->type : valueTypeOf(nodeTypeOf(ssa->value));
+                if (stored == nullptr || stored->code() == TypeCode::Void) {
+                    continue;
+                }
+                node_handle_t start = underTheCopy(ssa->value);
+                if (start == nullptr) {
+                    continue;
+                }
+                carried.push_back(LoopCarriedState{nullptr, start, name, nullptr, true});
+                stateTypes.push_back(stored);
+                initial.push_back(start);
+                emptyInitial.push_back(false);
+                continue;
+            }
+            if (!sameGraph(bound, currGraph_) || !isVariable(bound) ||
+                nodeKindOf(bound) == runtime::GCNodeKind::Port) {
                 continue; // not a cell of this graph, or a `var` parameter's (the caller's)
             }
+            const node_handle_t cell = bound;
             if (escapingVariables_.contains(cell) || captureOriginOf_.contains(cell)) {
                 continue; // a closure or a call holds the cell: it stays a resource
             }
@@ -3442,26 +3556,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 if (ins.size() != 1) {
                     continue;
                 }
-                start = nodeDraftOf(cell)->ref(ins.front());
-                for (size_t depth = 0; start != nullptr && depth < 16; ++depth) {
-                    if (!nodeIsKind(start, runtime::GCNodeKind::Copy)) {
-                        break;
-                    }
-                    const auto below = normInputsOf(start);
-                    if (below.size() != 1) {
-                        break;
-                    }
-                    const node_handle_t next = nodeDraftOf(start)->ref(below.front());
-                    if (next == nullptr) {
-                        break;
-                    }
-                    start = next;
-                }
+                start = underTheCopy(nodeDraftOf(cell)->ref(ins.front()));
             }
             if (start == nullptr) {
                 continue;
             }
-            carried.push_back(LoopCarriedState{cell, start, name, nullptr});
+            carried.push_back(LoopCarriedState{cell, start, name, nullptr, false});
             stateTypes.push_back(stored);
             initial.push_back(start);
             emptyInitial.push_back(false);
@@ -3640,11 +3740,30 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         Builder &self;
         decltype(loopStatePorts_) outerPorts;
         decltype(loopStateWrites_) outerWrites;
+        decltype(loopSsaPorts_) outerSsaPorts;
         ~LoopCarriedScope() {
+            // A record this loop wrote made *on an enclosing head's port* is that head's next
+            // value, not this loop's: the port outlives this loop (a loop written in a loop's body),
+            // so its record goes back with the value the body wrote. A port of this loop's own body
+            // dies with the loop, and the record on it is dropped with the rest of the tables.
+            std::unordered_set<node_handle_t> enclosing;
+            for (const auto &entry : outerPorts) {
+                enclosing.insert(entry.first);
+            }
+            for (const auto &entry : outerSsaPorts) {
+                enclosing.insert(entry.second);
+            }
+            for (const auto &entry : self.loopStateWrites_) {
+                if (!enclosing.contains(entry.first)) {
+                    continue;
+                }
+                outerWrites[entry.first] = entry.second;
+            }
             self.loopStatePorts_  = std::move(outerPorts);
             self.loopStateWrites_ = std::move(outerWrites);
+            self.loopSsaPorts_    = std::move(outerSsaPorts);
         }
-    } carriedScope{*this, loopStatePorts_, loopStateWrites_};
+    } carriedScope{*this, loopStatePorts_, loopStateWrites_, loopSsaPorts_};
     {
         ExpectedValueScope partScope(expectedValueType_, nullptr);
         if (camel::core::loopHasCondition(kind)) {
@@ -3664,12 +3783,28 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         bodyPart =
             buildArm(gct->loopBody(), {}, runtime::GCRegionKind::LoopBody, [&](ArmBuild &part) {
                 declarePorts(part, hasIterable, gct->loopBody());
-                // The name of a carried `var` is the port the body reads and writes.
+                // The name of a carried `var` is the port the body reads and writes. A state the
+                // declaration built as a value (stage S3) binds the name to the port as that value:
+                // a read takes the port, an assignment rebinds it, and the write is the round's
+                // next state (noteLoopStateWrite). A state that is still a cell hands the name to
+                // the port and the port stands for the cell (loopStateAssignmentOf).
                 const size_t base = hasIterable ? 1 : 0;
                 for (size_t j = 0; j < carried.size(); ++j) {
                     const size_t at = base + declaredStates + j;
-                    if (at < part.ports.size()) {
-                        carried[j].port             = part.ports[at];
+                    if (at >= part.ports.size()) {
+                        continue;
+                    }
+                    carried[j].port = part.ports[at];
+                    if (carried[j].ssa) {
+                        if (const auto outer = loopSsaPorts_.find(carried[j].name);
+                            outer != loopSsaPorts_.end()) {
+                            carried[j].hasOuterSsaPort = true;
+                            carried[j].outerSsaPort    = outer->second;
+                        }
+                        loopSsaPorts_[carried[j].name] = carried[j].port;
+                        ssaValues_[nodeScope_][carried[j].name] = SsaValue{
+                            carried[j].port, stateTypes[declaredStates + j], nullptr};
+                    } else {
                         loopStatePorts_[part.ports[at]] = carried[j].cell;
                     }
                 }
@@ -4242,6 +4377,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // state the loop hands out: the ACCS of the loop's value, which is what the `let` writing's
     // destructuring is. No `:var/get` is made, and nothing of the `var`'s unit is left to read
     // (dropCarriedVariableUnits).
+    //
+    // A state the declaration built as a value (stage S3) is the head's phi for the name: the name
+    // is rebound to what the head hands out, so every read after the loop takes that value and no
+    // cell is involved anywhere. The rebinding is a write of the name in the region the loop is
+    // written in, so the head of a loop *around* this one takes it too (noteLoopStateWrite), and an
+    // arm around it has the join carry it (S2).
     for (size_t j = 0; j < carried.size(); ++j) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
@@ -4250,7 +4391,20 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Norm, loopNode, value);
             registerNodeOrigin(context_, value, gct, "gir.loop.value");
         }
-        carriedVersions_[carried[j].cell] = value;
+        if (carried[j].ssa) {
+            // The write the head hands out is recorded where the loop is written: on the head of a
+            // loop around this one, if there is one, so this loop's write is that loop's next state
+            // too. This loop's own port goes back to what it was first.
+            if (carried[j].hasOuterSsaPort) {
+                loopSsaPorts_[carried[j].name] = carried[j].outerSsaPort;
+            } else {
+                loopSsaPorts_.erase(carried[j].name);
+            }
+            noteLoopStateWrite(carried[j].name, value);
+            rebindSsa(carried[j].name, value);
+        } else {
+            carriedVersions_[carried[j].cell] = value;
+        }
     }
     if (splitApplied) {
         // The programme sees the struct, not its parts: it is rebuilt from the loop's value,

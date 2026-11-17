@@ -1,0 +1,27 @@
+/**
+ * Two outer `var`s written by one loop body: one loop head carries both, and each one's phi has its
+ * own entry value and its own back edge.
+ *
+ * `a` accumulates `i` on three rounds (0 + 1 + 2 = 3) and `b` doubles three times (1 * 2 * 2 * 2
+ * = 8). The loop head carries three states -- the declared `i`, `a` and `b` -- so the body hands
+ * them on as one tuple and the two reads after the loop take their own component.
+ *
+ * `3` and `8` together say that a loop head carries more than one value of its own (the branch's one
+ * join carries one value; a loop head does not have that limit), and that the two writes of one
+ * round are two different values and not one shared one: `a` reading `b`'s value would print 8 or
+ * `b` reading `a`'s would print 3 for both.
+ *
+ * Run: camel test/cases/compile/var/loop_two_states.cml std::nvm
+ */
+func main(): int sync {
+    var a = 0
+    var b = 1
+    let _ = loop i = 0 while i < 3 do {
+        a = a + i
+        b = b * 2
+        i + 1
+    }
+    println(a)
+    println(b)
+    return 0
+}
