@@ -38,7 +38,12 @@
 #     re-patched instead, because otherwise the run silently measures the earlier run's sources;
 #   * at the start of each run the host removes the checkouts whose worktree no longer exists here
 #     (each one holds a 130-220 MB build directory), prunes day-old scratch directories under /tmp,
-#     prints the free space it has, and refuses to build under 5 GB;
+#     prints the free space it has, and refuses to build under 5 GB. A checkout is removed only when
+#     three readings agree: this machine's `git worktree list` answered and does not name it, no
+#     directory of that name is left beside the worktrees, and nothing on the host is using it (its
+#     per-checkout lock is free, no process's cwd or executable is inside it, it was not written in
+#     the last ten minutes). A reading that failed is never read as "gone": the run then removes
+#     nothing and says why. `internal/tools/camel-remote-cleanup.test.ps1` is the proof of that;
 #   * `-Clean` drops one checkout by name when a task is finished.
 #
 # Exit code is the exit code of the build or of the plan run, or -- when -Check was given and the
@@ -395,6 +400,10 @@ $ErrorActionPreference = 'Stop'
 # camel-gate.local.json beside this script (git-ignored), and a run that needs a setting the file
 # does not carry stops here, with the file to create, instead of reaching the wrong machine.
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
+# The host-checkout sweep's reading: which worktrees still exist, read so that a failed reading is
+# kept apart from an empty one. Its own file because it is the one decision here that can delete
+# another lane's work, and `camel-remote-cleanup.test.ps1` has to be able to call it.
+. (Join-Path $PSScriptRoot 'camel-remote-live.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -1245,16 +1254,23 @@ try {
     # What the checkout should be at afterwards, and which host checkouts are still wanted. `-s` on
     # the patch and `-f` on the tar are the fast path's guard: a clean tree needs neither.
     $headSha = (git -C $Path rev-parse HEAD).Trim()
-    $liveNames = @()
-    try {
-        $liveNames = @(git -C $Path worktree list --porcelain 2>$null |
-            Where-Object { $_ -like 'worktree *' } |
-            ForEach-Object { Split-Path -Leaf $_.Substring(9).Trim() })
-    } catch {
-        # An old git without --porcelain: keep every checkout rather than delete the wrong one.
-        $liveNames = @($name)
+    # Which host checkouts are still wanted. The old code here was
+    #   try { git ... --porcelain 2>$null | ... } catch { $liveNames = @($name) }
+    # whose comment said "keep every checkout rather than delete the wrong one" and whose body did
+    # the opposite: a native command's non-zero exit does not throw, so the catch never ran, the
+    # list came back empty, and the line after it appended this run's own name -- the sweep was then
+    # told that exactly one checkout exists and removed all the others. On 2026-11-17 that killed
+    # three measurements (25/500, 200/500, 300/500) on the host where they were running. The
+    # reading now reports whether it answered, and an unanswered reading removes nothing.
+    $live = Get-CamelLiveWorktrees -Path $Path
+    $liveNames = @($live.Names)
+    $liveTrustedFlag = if ($live.Trusted) { '1' } else { '0' }
+    if ($live.Trusted) {
+        # Printed every run: when a checkout does go, this is the line that says what the run knew.
+        Write-Host ("[camel-remote] live worktrees: {0}" -f ($liveNames -join ' '))
+    } else {
+        Write-Host ("[camel-remote] not cleaning up host checkouts this run: {0}; 'could not read which worktrees exist' is not 'there are no other worktrees'" -f $live.Why)
     }
-    if ($liveNames -notcontains $name) { $liveNames += $name }
 
     Set-BuildPhase 'starting' "[camel-remote] syncing $name on $sshHost"
 
@@ -1486,7 +1502,87 @@ exec 5>&-
     }
 
     # Housekeeping first: a checkout whose local worktree is gone is only disk, and this run needs
-    # room to build. LIVE is the list of worktrees that still exist on the workstation.
+    # room to build. Which ones are gone was decided on the workstation, in camel-remote-live.ps1;
+    # this half adds the one check only the host can make -- that nothing is using the checkout --
+    # and does nothing at all when the workstation could not read its worktree list.
+    #
+    # Three conditions, and a checkout is removed only when all three hold:
+    #   (a) the workstation's `git worktree list` answered and does not name it (trusted=1);
+    #   (b) no directory with that name exists beside its worktrees (also trusted=1:
+    #       camel-remote-live.ps1 folds the filesystem reading into that one flag);
+    #   (c) nothing on the host is using it: its own per-checkout lock is free, no process's cwd or
+    #       executable lies inside it, and nothing in it changed in the last ten minutes.
+    # Anything else keeps the checkout and prints why. A failed reading is never read as "gone": the
+    # cost of keeping a dead checkout is disk, and the cost of the opposite is somebody's whole run.
+    #
+    # A single-quoted here-string: the shell's `$` must reach the host verbatim, and this fragment is
+    # also what internal/tools/camel-remote-cleanup.test.ps1 extracts and runs.
+    $cleanupGuard = @'
+# --- host cleanup guard: extracted and run by internal/tools/camel-remote-cleanup.test.ps1 ---
+cleanup_host_checkouts() {
+    local root="$1"
+    local live="$2"
+    local trusted="$3"
+    local skip="$4"
+    reclaimed=0
+    if [ "$trusted" != 1 ]; then
+        echo '[camel-remote] not removing host checkouts this run: the workstation could not say which worktrees exist, and a failed reading is not an empty one'
+        return 0
+    fi
+    local d dd n key lockf busy p t
+    for d in "$root"/*/; do
+        [ -d "$d" ] || continue
+        dd="${d%/}"
+        n=$(basename "$dd")
+        case "$n" in "$skip"|bin) continue;; esac
+        # The runner's scratch root lives next to the checkouts and is regenerated every run:
+        # removing it here is not a cleanup, and it would invalidate the cached size measurement.
+        case "$n" in *-test-tmp) continue;; esac
+        # A bare repository is not a checkout: HEAD and objects sit at its top level, and removing it
+        # would take the staging remote every lane pushes through.
+        if [ -f "$dd/HEAD" ] && [ -d "$dd/objects" ]; then continue; fi
+        # (a)+(b) the workstation's readings, which are only worth acting on when they answered.
+        case " $live " in *" $n "*) continue;; esac
+        # (c1) The run's own lock. Every checkout this script creates is created while its holder has
+        # the lock open, so a free lock means no run is inside this one -- which also covers a
+        # worktree created a second after this run read its list, the case a snapshot cannot see.
+        key=$(printf '%s' "$dd" | cksum | cut -d' ' -f1)
+        lockf="/tmp/camel-tree-$key.lock"
+        if ! flock -n "$lockf" true 2>/dev/null; then
+            echo "[camel-remote] keeping host checkout $n: a run holds its lock (or its lock file cannot be opened)"
+            continue
+        fi
+        # (c2) A build, a test, or a person inside it. The executable matters as much as the
+        # directory: a plan runs out/latest/bin/camel from a checkout whose cwd can be elsewhere.
+        busy=''
+        for p in /proc/[0-9]*; do
+            t=$(readlink "$p/cwd" 2>/dev/null) || t=''
+            case "$t" in "$dd"|"$dd"/*) busy="$p cwd=$t"; break;; esac
+            t=$(readlink "$p/exe" 2>/dev/null) || t=''
+            case "$t" in "$dd"|"$dd"/*) busy="$p exe=$t"; break;; esac
+        done
+        if [ -n "$busy" ]; then
+            echo "[camel-remote] keeping host checkout $n: a process is using it ($busy)"
+            continue
+        fi
+        # (c3) Something in it changed within ten minutes: a run that has just handed over, or one
+        # that died half-written. Ten minutes costs nothing; a wrong delete costs a whole run.
+        if [ -n "$(find "$dd" -maxdepth 3 -mmin -10 -print -quit 2>/dev/null)" ]; then
+            echo "[camel-remote] keeping host checkout $n: a file in it changed in the last 10 minutes"
+            continue
+        fi
+        # The lock is taken again for the removal itself: a run that grabbed it in the last
+        # millisecond must not have its checkout disappear underneath it.
+        if flock -n "$lockf" rm -rf "$dd" 2>/dev/null; then
+            reclaimed=1
+            echo "[camel-remote] removing host checkout $n, its worktree is gone"
+        else
+            echo "[camel-remote] keeping host checkout $n: a run took its lock while it was being removed"
+        fi
+    done
+}
+# --- end host cleanup guard ---
+'@
     $remoteScript = @"
 set -u
 R=`$HOME/camel-work/$name
@@ -1509,21 +1605,10 @@ fi
 C=`$HOME/$($cfg.hostClangEnv)
 V=`$HOME/$($cfg.hostBuildEnv)
 B=`$HOME/$($cfg.hostBenchEnv)
-LIVE='$($liveNames -join ' ')'
-reclaimed=0
-for d in "`$HOME/$($cfg.hostWorkRoot)"/*/; do
-    n=`$(basename "`$d")
-    case "`$n" in $bareLeaf|bin) continue;; esac
-    # The runner's scratch root lives next to the checkouts and is regenerated every run: removing
-    # it here is not a cleanup, and it must not invalidate the cached checkout-size measurement.
-    case "`$n" in *-test-tmp) continue;; esac
-    case " `$LIVE " in *" `$n "*) continue;; esac
-    echo "[camel-remote] removing host checkout `$n, its worktree is gone"
-    rm -rf "`$d"
-    reclaimed=1
-done
+$cleanupGuard
+cleanup_host_checkouts "`$HOME/$($cfg.hostWorkRoot)" '$($liveNames -join ' ')' '$liveTrustedFlag' '$bareLeaf'
 find /tmp -maxdepth 1 -name 'camel-remote-*' -mtime +0 -exec rm -rf {} + 2>/dev/null || true
-freekb=`$(df -P -k "`$HOME" | awk 'NR==2{print `$4}')
+freekb=`$(df -P -k "`$HOME" 2>/dev/null | awk 'NR==2{print `$4}')
 # The footprint of the checkouts is informational, but measuring it walks every file under
 # ~/camel-work (43 GB here, ~50 s on a loaded host, once per run). Keep the number in a small
 # cache and recompute it only when it is an hour old or a cleanup above actually removed something.
@@ -1532,8 +1617,19 @@ sizeage=`$(( `$(date +%s) - `$(stat -c %Y "`$sizecache" 2>/dev/null || echo 0) )
 if [ "`$reclaimed" = 1 ] || [ ! -s "`$sizecache" ] || [ "`$sizeage" -gt 3600 ]; then
     du -sm "`$HOME/$($cfg.hostWorkRoot)" 2>/dev/null | cut -f1 > "`$sizecache"
 fi
-echo "[camel-remote] host: `$((freekb/1048576)) GB free, `$(cat "`$sizecache" 2>/dev/null) MB of checkouts"
-if [ "`$freekb" -lt 5242880 ]; then echo '[camel-remote] under 5 GB free on the host; run -Clean on the worktrees that are done'; exit 3; fi
+size_mb=`$(cat "`$sizecache" 2>/dev/null)
+# `[ "" -lt 5242880 ]` is an error, not a small number: bash takes the else branch and the disk
+# guard silently does not run, which is a broken reading that looks like "there is room". Say so
+# instead, and never print the empty answer as `0 GB free`.
+case "`$freekb" in
+    ''|*[!0-9]*)
+        echo "[camel-remote] host: free space unknown (df answered '`$freekb'), `${size_mb:-?} MB of checkouts; the low-disk guard did not run"
+        ;;
+    *)
+        echo "[camel-remote] host: `$((freekb/1048576)) GB free, `${size_mb:-?} MB of checkouts"
+        if [ "`$freekb" -lt 5242880 ]; then echo '[camel-remote] under 5 GB free on the host; run -Clean on the worktrees that are done'; exit 3; fi
+        ;;
+esac
 mkdir -p "`$R"
 # `git clone` refuses a non-empty destination, and a half-removed checkout (a leftover tmp/ or
 # test/results/) leaves exactly that: on 2026-10-24 a lane's run died with exit 2 because the
