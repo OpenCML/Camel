@@ -1500,12 +1500,24 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // the successor's predecessor, that is not the successor itself and that is gone altogether
     // cannot either: an ordering joins two statements of one block, so the successor heads its own
     // block's chain instead (docs/design/effects/edges.cn.md 4.6).
+    //
+    // "Another block" is read through `sameSyncBlock`, which is the block test the rest of this file
+    // and `placeLostStatements` (src/passes/opt/generic/generic.cpp) already use, and which looks
+    // through the `Inline` region a splice gives the code it moved (docs/design/effects/edges.cn.md
+    // 5.7): that code is the code of the block it was moved into, so a predecessor still carrying
+    // the annotation of the region it came from is a predecessor of the same block. Comparing the
+    // raw `nodeRegion` instead refused that wait, and refuses it silently -- the splice has no
+    // successor to hand a place to, so the statement the erased node held keeps only the ORDER edge
+    // to the statement written after it, an order edge carries no place, and the effects it carried
+    // fall out of the execution while the graph still passes the seal check. That is how a fold
+    // after an inline lost the callee's `println` under `std::opt` (the six wrong values bisected in
+    // docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md; five of them, this line).
     const auto survives = [&](gc_node_ref_t pred, gc_node_ref_t user) {
         pred = chainExitOf(*this, pred);
         if (header(id)->kind == GCNodeKind::Join && chainEntryOf(*this, id) == pred) {
             return false;
         }
-        return pred != user && pred != id && alive(pred) && nodeRegion(pred) == nodeRegion(user);
+        return pred != user && pred != id && alive(pred) && sameSyncBlock(*this, pred, user);
     };
     // While the control kind still exists it names the same pair beside the sync edge: the two
     // orderings have to agree until the control edges go (src/runtime/graph_edges.cpp,
