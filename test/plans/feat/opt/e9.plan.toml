@@ -626,3 +626,50 @@ case = "../../../cases/opt/e9/rc13_seed202.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
+
+# --- The crash class of the 2026-11-17 reading: a name declared in an arm, written in it ---------
+#
+# `rc20_seed5_arm_decl` is the seed-5 program of the same differential, reduced by hand from 178 lines
+# to the 85 bytes below -- the whole program on one line:
+#
+#   func main(): int sync { if false then sync { var v1 = 1; v1 = 2; null; }; return 0; }
+#
+# It aborted with no pass at all, on every back end, in `Builder::rebindSsa`:
+#
+#   Camel Invariant Violation: binding != nullptr
+#   Reading: An SSA `var` is written where its declaration is in scope.
+#
+# The trigger is exactly two things at once, and each control is a program of the campaign's reduction:
+# a `var` *declared inside an arm* and *written in that same arm*. The variants -- with an `else`, as a
+# branch whose value a `let` takes, in a `match` arm, written twice -- all abort in the same place; the
+# controls do not: a `var` declared in the body and written in a nested arm (the shape `rc18_seed429`
+# has), a `var` declared in an arm and written in an arm nested in it, and a `var` declared in an arm
+# and never written again.
+#
+# What was wrong was S2's (`243de26e5`) *choice* of the name to carry, not the carrying, and not this
+# guarantee: `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and it cannot
+# tell a name the branch found in scope from one an arm declared, so a name that dies with the arm was
+# carried to a JOIN built after that arm's scope had been popped. The rule that forbids it was already
+# written in `src/compile/gir/builder_control.cpp` ("A name declared inside an arm dies with it and is
+# not carried"); nothing implemented it. The carry now asks `nameIsSsa`, which walks the scopes live at
+# the JOIN, and a name declared before the branch keeps its binding, so no other answer moved.
+#
+# That the name really does not survive the branch is a reading, not an assumption: the same name read
+# after the branch is refused -- `UnresolvedReference`, "Make sure the name is declared and in scope."
+# Carrying it out of the join would bind a name nothing can read. So the assertion stands as it is.
+
+[[tests]]
+name = "rc20_seed5_arm_decl.without_the_pass"
+desc = "The 85-byte reduction of seed 5, with no pass at all: it runs, says nothing, exits 0. It used to abort in `Builder::rebindSsa` (`binding != nullptr`) in the front end, before any pass, so this arm is the claim and `std::opt` is the same claim again below."
+case = "../../../cases/opt/e9/rc20_seed5_arm_decl.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc20_seed5_arm_decl.opt"
+desc = "The same program under the whole optimizer. The fault was in the graph builder, not in a pass, so the pass is neither what caused it nor what can avoid it."
+case = "../../../cases/opt/e9/rc20_seed5_arm_decl.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
