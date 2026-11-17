@@ -7,8 +7,11 @@
 //      operator, type and operands in order are the same are one node. This is the sweep's
 //      fixpoint, and it is the property the corpus is built for: `shared` writes `x * 7` twice
 //      over two literals, and the two literals have to be one node before the two products can.
-//   2. The two reads of a cell with a write between them are two values. The two products over
-//      them stay two nodes and read two different nodes: nothing is merged across a write.
+//   2. A product written twice over two different values is two computations. `written` rebinds
+//      the name between its two products, so they read the parameter and the value the rebinding
+//      made: both stay, and neither is one value with the other. The `3` both of them read is
+//      written twice and is one node here: the sweep merges what the source duplicated and
+//      nothing else.
 //   3. The sums the program computes are over what the source wrote: `shared`'s sum reads its one
 //      product twice, `literals`' product reads its one sum twice, and `apart`'s two sums keep
 //      their own constants (1 and 2). A pass that merged too much fails these.
@@ -38,7 +41,7 @@ const edgesInto = (g, id, kind) =>
         .sort((a, b) => a.targetIndex - b.targetIndex)
 const normal = (g, id) => edgesInto(g, id, 'normal').map((e) => node(g, e.source))
 const withs = (g, id) => edgesInto(g, id, 'context').map((e) => node(g, e.source))
-const valueUsers = (g, id) => g.edges.filter((e) => e.source === id && e.kind === 'normal')
+const constants = (g, label) => g.nodes.filter((n) => n.kind === 'DATA' && n.label === label)
 
 // A constant of the graph, as its label reads: a number or a bool. A string constant, a tensor
 // and the function value of a call are not compared here, and neither is a node of a shape this
@@ -71,23 +74,32 @@ for (const g of doc.graphs) {
     }
 }
 
-//// 2. nothing was merged across a write.
+//// 2. `written`'s product is computed twice, because the two values it reads are two values.
 
+// `cell = cell + 1` between the two `cell * 3` rebinds the name, so the second product reads the
+// sum the rebinding made and the first reads the parameter: the sweep would be merging the text
+// rather than the values if it made those two one node. The `3` both products read is the
+// duplicate the source wrote, and the count says it is one value here.
 const written = graph('written')
 const writtenProducts = written.nodes.filter((n) => n.label === ':op/mul_l')
 assert(
     writtenProducts.length === 2,
-    `the two products over the reads of the cell are not two nodes: ${writtenProducts.length}`,
+    `the two products over the two values of 'written' are not two nodes: ${writtenProducts.length}`,
 )
-const readOfProduct = (product) => normal(written, product.id)[0]
+const operands = (product) => normal(written, product.id)
+const firsts = writtenProducts.map((product) => operands(product)[0])
 assert(
-    readOfProduct(writtenProducts[0]).id !== readOfProduct(writtenProducts[1]).id,
-    `the two products over the reads of the cell share their operand (${readOfProduct(writtenProducts[0]).id}): the pass merged across a write`,
+    firsts[0].id !== firsts[1].id,
+    `the two products of 'written' share their operand (${firsts[0].id}): the sweep merged across the rebinding`,
+)
+const threes = constants(written, '3')
+assert(
+    threes.length === 1,
+    `the graph 'written' has ${threes.length} constants of 3, where the source wrote two and the sweep leaves one value`,
 )
 assert(
-    valueUsers(written, readOfProduct(writtenProducts[0]).id).length === 1 &&
-        valueUsers(written, readOfProduct(writtenProducts[1]).id).length === 1,
-    'a read of the cell is read by more than the one product it was written for',
+    writtenProducts.every((product) => operands(product)[1].id === threes[0].id),
+    `a product of 'written' does not read the one constant of 3 the sweep left: ${writtenProducts.map((product) => operands(product)[1].label).join(', ')}`,
 )
 
 //// 3. the sums the program computes are over what the source wrote.
