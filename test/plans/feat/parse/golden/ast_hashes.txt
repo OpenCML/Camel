@@ -4104,6 +4104,7 @@ b90bc886c8739db8 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 6182a103922f5823 ok test/cases/para/core/block_sort_merge.cml
 3b6f0e7de2defa16 ok test/cases/para/core/bootstrap_medians.cml
+50ee70bc078d694e ok test/cases/para/core/closure_capture_gives_its_box_back.cml
 2013ce9754175bb2 ok test/cases/para/core/concurrent_alloc.cml
 b5279b76c0fe923a ok test/cases/para/core/concurrent_calls.cml
 a696b18ffa86c5db ok test/cases/para/core/concurrent_readers_of_a_call_box.cml
