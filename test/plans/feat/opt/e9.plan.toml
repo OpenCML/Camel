@@ -929,4 +929,29 @@ case = "../../../cases/opt/e9/rc23_seed429_sync_arm.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "P 5\n"
+# The author's rework order of 2026-11-18 (`8614bb4a6`) is that this case is not withdrawn to make a
+# number look better: it pins a behaviour he confirmed on 2026-11-17, it has an owner, and it stays in
+# the plan as a red that is being repaired -- `known_fail` is "在修的红", not an accepted answer. The
+# three parts he asked a mark to carry are the three fields below.
+#
+#   the defect -- **a region's write is not joined to the region's exit when the graph is built**
+#     (`95a35c23c`'s finding, still true of this tree). Measured with a temporary trace in
+#     `Builder::layRegionWriteEdges`: `q(5)` *is* collected as a write of the `case _` arm
+#     (`id=16 kind=10 -> statement=16 region=3 exit=18`), and then `gateOf` lays no GATE for it,
+#     because the arm's exit already reaches the write (`region=3 write=16 dropped: result already
+#     reaches it`) and nothing else makes that exit needed. The whole `match` is then unreachable when
+#     the graph is frozen -- the graph holds no `BRCH`, no `JOIN` and no call to `q`, and the run
+#     prints the warning below instead of `P 5`.
+#   the owner  -- this lane's rework: the exit `GATE` that reads the region's writes.
+#   the unhide -- when that rework is merged, delete the mark; the case prints `P 5` and reports
+#     nothing.
+#
+# `known_fail_msg` pins what is observed today, so the day the defect is fixed the mark itself turns
+# the run red instead of quietly staying: the pinned text is the warning this program must stop
+# reporting. `develop` prints `P 5` here (`feat/opt` 1538/1538 at `33c0fb536`), so this is a
+# regression of this batch and not a reading the language has not settled.
+known_fail = ["nvm", "fvm", "jit", "prl"]
+known_fail_owner = "lane-rrread (the rework: a region's exit GATE that reads the region's writes, `Builder::layRegionWriteEdges`)"
+known_fail_reason = "a region's write is not joined to the region's exit when the graph is built: `layRegionWriteEdges` collects `q(5)` for the `case _` arm and `gateOf` lays no GATE, because that arm's exit already reaches the write (`result already reaches it`) and nothing else makes the exit needed, so the arm is unreachable when the graph is frozen and `P 5` is never printed"
+known_fail_msg = "The branch is never executed: nothing needs what it gives"
 

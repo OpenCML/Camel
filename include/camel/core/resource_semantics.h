@@ -268,6 +268,18 @@ inline void ambientCarriesExternal(ResourceSignature &signature) {
 /// not cover it; a `pure` target covers only a source that touches nothing.
 bool covers(const ResourceSignature &target, const ResourceSignature &source);
 
+/// Whether what a signature describes writes a resource the region that runs it owes (design
+/// principles 3.1, "对外部资源与句柄的写由所在区域用到"): a write of state outside the program --
+/// the console, the file system, a module's own state, a resource nobody itemized -- or a write of
+/// a handle, whose reader may stand in a graph this one cannot see (3.3). A read is not one: a read
+/// is a dependency like a read of a variable and runs only when something needs its value.
+///
+/// This is the resource half of "does this node write?", asked of the measurement
+/// (`Builder::footprintOf`) rather than of an operator's name, so a call, a branch and a loop are
+/// answered by what they reach exactly as an operator is; `OperatorSemantics::writesForTheRegion`
+/// asks the same two questions of a declaration, and it is where the classes below come from.
+bool writesForTheRegion(const ResourceSignature &signature);
+
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,
 /// `stderr`, `stdin`, `clock`, `env` and `fs`. They need no declaration and every module sees
 /// them; a module may still write `resource fs` to say it uses it, and a group may name them.

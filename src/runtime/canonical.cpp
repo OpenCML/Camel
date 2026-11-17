@@ -228,8 +228,24 @@ class CanonicalWalk {
             return;
         }
         active_[ref] = true;
-        for (gc_node_ref_t input : graph_.normInputsOf(ref)) {
-            number(input);
+        // A region's exit GATE reads the value the region hands out first and the writes it keeps
+        // alive after it (`Builder::layRegionWriteEdges`, design principles 3.1). Nothing joins
+        // those writes to one another -- the author's ruling of 2026-11-17 is written as "这些写之间
+        // 不加边" -- so their place in the GATE's list is the order the source wrote them in, which is
+        // spelling, and they are a tie group arranged like the capture table below. Without this the
+        // list decides the numbering: two writings that swap `println(x)` and a write to a file
+        // numbered the two in the order they were written, and the criterion of `fd75209cc` ("交换
+        // 两行的书写次序，输出相同") read two documents instead of one
+        // (`test/cases/trans/same_graph_writings.py`).
+        const std::span<const gc_node_ref_t> norms = graph_.normInputsOf(ref);
+        const GCNode *numbered                         = graph_.node(ref);
+        if (numbered != nullptr && numbered->kind == GCNodeKind::Gate && norms.size() > 2) {
+            number(norms.front());
+            arrange(std::vector<gc_node_ref_t>(norms.begin() + 1, norms.end()));
+        } else {
+            for (gc_node_ref_t input : norms) {
+                number(input);
+            }
         }
         // A closure value is a FILL of a function value (its first normal input) with the values
         // the function captured, linked as its with inputs in the order of the closure ports -- the

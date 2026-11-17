@@ -3,16 +3,18 @@
  * modifier on the type: the value `add` writes the module's `total`, so its type says so, and a
  * function-typed parameter that writes no clause is resource-generic and takes the resources of
  * the value it is instantiated with (design principles 3.3, effects plan 5). A call through the
- * parameter is therefore an effectful call: outside a sync block, a result nothing depends on
- * does not run it and is reported as `EffectNotExecuted`, exactly as calling the value directly
- * is; in a sync block it runs and the write lands.
+ * parameter is therefore an effectful call, and an effectful call written as a statement **runs**
+ * wherever it is written (design principles 3.1, the author's ruling of 2026-11-17: a call is one of
+ * the nodes a region's `GATE` reads): outside a sync block it runs because the body's GATE reads it,
+ * and inside one it runs because the chain carries it. The two readings agree, so all four numbers
+ * count the write.
  *
  * The state is a module `var` and not a `var` context parameter any more. A `var` `with`
  * parameter handed to a value is a cell that value carries, and a closure cannot assign the name
  * it captured (design principles 3.5, 197; the author's ruling of 2026-11-16), so `add<t>` was
  * refused at its own write. A module `var` is a name of the module, and a function that writes it
  * reaches a resource the same way. What this case pins -- that the call's footprint comes from the
- * value it was given and not from the parameter's clause -- is unchanged, and so are the numbers.
+ * value it was given and not from the parameter's clause -- is unchanged.
  */
 
 var total = 0
@@ -22,8 +24,8 @@ func add(x: int): int sync {
     return total
 }
 
-/// Not a sync block, and nothing depends on the call through the parameter: it does not run, and
-/// it is reported (the same warning the direct call of the value would get).
+/// Not a sync block, and nothing depends on the call through the parameter: the body's `GATE` reads
+/// it because the call's callee writes, so the call runs and the write lands.
 func dropped(f: (x: int) => int): int {
     f(1)
     return 0

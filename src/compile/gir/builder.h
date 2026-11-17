@@ -1132,15 +1132,32 @@ class Builder {
     /// it is built, so the decision does not depend on how the body is built.
     std::unordered_map<const GCT::Node *, bool> scanBodyForSsa(const GCT::Node *body);
     bool ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name);
+    /// What the value a callee name denotes is, as far as this layer can say before the call is
+    /// built: a function of the program, whose signature the declaration carries; an operator
+    /// group, whose type the arguments choose; or nothing this scan can name.
+    ///
+    /// A `var` position is a property of a function type, so the answer to "does this call write
+    /// this argument back" is read off the value the name stands for -- its signature when it is a
+    /// function, its kind when it is a set of overloads -- never off the spelling of the name. The
+    /// spelling only says *which* value is meant (`calleeValueOf`), through the same layers
+    /// `visitDRefNode` resolves them in.
+    enum class CalleeValueKind : uint8_t { Unknown, Operator, Function };
+    struct CalleeValue {
+        CalleeValueKind kind = CalleeValueKind::Unknown;
+        std::vector<const FunctionType *> signatures;
+    };
+    /// The value the callee node names: this module's own functions, then what its imports bring
+    /// (design principles 10.2, layers 2 to 5), and the groups the compiler made for operators it
+    /// knows by id. Answered `Unknown` for a name whose value this layer cannot see -- a generic, a
+    /// decorated function, an exported value, or a name nothing declares.
+    CalleeValue calleeValueOf(const GCT::Node *callee);
     /// Whether an argument at `index` of `call` stands at a `var` parameter, which writes the
-    /// argument back: the callee's signature says, so the callee has to be a program function (a
-    /// built-in operator's parameters are never `var`, and a callee this scan cannot name is
-    /// answered as one that may write).
+    /// argument back: the callee's function type says, and a callee this scan cannot name is
+    /// answered as one that may write (a write-back lost to a value is a wrong program, a cell
+    /// costs one unit).
     bool argumentMayWriteBack(
         const GCT::Node *call, size_t index,
-        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const;
-    /// The signature of every function of the program, by name, filled by `scanProgramWriters`.
-    std::unordered_map<std::string, std::vector<const FunctionType *>> functionSignatures_;
+        const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes);
     /// Whether `name` stands for a value built as SSA: such a name is not a constant the compiler
     /// knows, the same way the cell it stands for was not (what it holds may be another value by
     /// the time an unrolled loop or a static key runs).
@@ -2809,29 +2826,20 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
-    // Once the bodies' inferred resources have been measured: connects every node whose own
-    // inferred effect writes -- an operator declared writing, a call of a body that writes, a loop
-    // or a branch whose regions write -- by a sync edge to the exit of the region it is written in
-    // (the author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit through a
-    // sync edge laid when the graph is built", calls and loops alike, whether or not its value is
-    // read). This is the one place the "used" a region owes its writes is materialized; every walk
-    // that asks what runs (the warning, the liveness of a graph, the encode, the execution order)
-    // then follows edges and never derives it again.
+    // Once the bodies' inferred resources have been measured: connects every write a region owes -- an
+    // operator whose declaration writes outside the program or to a handle -- and every branch
+    // written as a statement, by a sync edge to the exit of the region it is written in (the
+    // author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit by a sync edge
+    // laid when the graph is built"), in the order the statements are written, and only for a region
+    // that runs. This is the half of 3.1 the graph can carry; "does this region run, and which arm
+    // does this statement belong to" is the region's roots (camel/runtime/region_roots.h).
     void layRegionWriteEdges();
-    // Whether running `node` of `graph` makes a write the region that runs it owes: an operator
-    // whose declaration writes outside the program or to a handle, a call of a function whose
-    // measured signature holds such a write, a loop with one in its condition or its body, a branch
-    // with one in an arm. A write to a `var` is not one of them (the ruling of 2026-11-15).
+    // Whether `node` of `graph` is a write the region that runs it owes, in the one sense the edge
+    // below and the region's roots share: an operator whose declaration writes outside the program
+    // or to a handle (`writesForTheRegion`). A write to a `var` is not one of them (the ruling of
+    // 2026-11-15), and neither is a call, a branch or a loop: what a *statement* runs is asked by the
+    // region's roots (camel/runtime/region_roots.h), and an edge would run it instead.
     bool writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const;
-    // Whether a call of `callee` writes what the region that runs it owes, read from the measured
-    // signature (`inferredResources_`) and, for a body measured elsewhere, from its declaration.
-    // A signature that says nothing is not read as a promise of a write: a read stays as
-    // demand-driven as it was (`region_roots.read_only`), and what a region owes is a write.
-    bool calleeWritesForTheRegion(const compile_graph_ptr_t &callee) const;
-    // The write half of a signature: a parameter use that writes a handle or a resource outside the
-    // program, or an ambient use that writes. A `Variable` use -- a `var` parameter, a module `var`
-    // -- is not one (design principles 3.1 and 3.5, the ruling of 2026-11-15).
-    static bool signatureWritesForTheRegion(const camel::core::sem::ResourceSignature &signature);
     // One body's measurement as it is being walked: what it has been found to reach so far, which
     // parameter each of its ports is (the numbering a call uses), and whether a use was found that
     // the numbering cannot name at all. A body with such a use is recorded as reaching anything
