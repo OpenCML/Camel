@@ -410,8 +410,8 @@ class Builder {
     std::unordered_map<const camel::core::module::Module *, std::unique_ptr<ModuleUnit>> units_;
     // The module being built.
     ModuleUnit *unit_ = nullptr;
-    // The module whose top level put each node on the root graph, by node id: the warnings
-    // about the top level of a module (EffectNotExecuted) are about its own nodes only.
+    // The module whose top level put each node on the root graph, by node id: a warning about
+    // an unused value at the top level of a module is about its own nodes only.
     std::vector<const ModuleUnit *> rootNodeOwners_;
     // The modules in the order they were declared.
     std::vector<ModuleUnit *> unitOrder_;
@@ -2820,7 +2820,9 @@ class Builder {
     // body it names, and nothing else looked at.
     bool bodyHoldsNoChainStatement(DraftGraphBuilder *graph);
     // Once the body of `graph` is built: records whether its exit depends on an effect, and
-    // warns (EffectNotExecuted) about the effects that the exit does not depend on.
+    // reports a value nobody uses (a write to a `var` that no read takes, a `fail` on a line of
+    // its own). A statement that does not run is not reported at all: what a region writes is a
+    // root of that region, so a call, a loop and a block run with it (the ruling of 2026-11-17).
     // With `report` false it only records whether the exit depends on an effect.
     void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
     // Once every body of the program is built: settles which graphs are effectful (a callee
@@ -3542,10 +3544,6 @@ class Builder {
     /// (UnusedFallibleValue): a statement of a body, a block's statement, the arm of an `if`
     /// without `else`, and what a `main` without a declared return type ends with.
     void reportUnusedFallibleValues();
-    /// The `T!` values already reported as UnusedFallibleValue. A statement whose value is one of
-    /// them is answered by that warning alone, not by the warning for an effect that never runs as
-    /// well: one statement, one diagnostic.
-    std::unordered_set<node_handle_t> unusedFallibleValues_;
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
     /// The graph nodes that are stores, and which write each one is (AssignmentForm). Filled

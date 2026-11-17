@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-322 diagnostics: 299 errors, 23 warnings. 15 carry a machine-applicable edit, 307 say why they carry none.
+321 diagnostics: 299 errors, 22 warnings. 15 carry a machine-applicable edit, 306 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -279,7 +279,6 @@ prints one entry.
 | `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
 | `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
-| `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
 | `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn | no |
@@ -9261,37 +9260,6 @@ func main(): int {
         return 0
     } else 0
     return println(c + r)
-}
-```
-
-### EffectNotExecuted
-
-`0x03100004` · Warn · `SemanticDiag::EffectNotExecuted`
-
-**Fix**
-
-None: context: the statement is reachable only from a region that never runs; the repair moves it, removes it, or takes its value, and which of those belongs to the design
-
-**Message**
-
-```text
-{0} is never executed: {1}.
-```
-
-**Help**
-
-```text
-This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
-```
-
-**Example** (`test/cases/compile/diag_options/warning.cml`, run as `camel test/cases/compile/diag_options/warning.cml`)
-
-```camel
-import { get_env } from env
-
-func main(): int {
-    get_env("CAMEL_DIAG_OPTIONS_NO_SUCH_VARIABLE")
-    return 0
 }
 ```
 

@@ -237,7 +237,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::EffectNotExecuted, code=0x03100004"]
+expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::UnusedAssignedValue, code=0x031001C3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -246,7 +246,7 @@ name = "warn.wno"
 desc = "-Wno-<name> switches a warning off; the name is matched without case, '-' and '_'."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["-Wno-effect-not-executed", "${case}"]
+args = ["-Wno-unused-assigned-value", "${case}"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'no warning: ' + input.stderr)
@@ -272,7 +272,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["-Werror", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["[Error]:", "name=SemanticDiag::EffectNotExecuted, code=0x03100004"]
+expect_stdout_contains = ["[Error]:", "name=SemanticDiag::UnusedAssignedValue, code=0x031001C3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -281,9 +281,9 @@ name = "warn.werror_name"
 desc = "-Werror=<name> does the same for one warning."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["-Werror=EffectNotExecuted", "${case}"]
+args = ["-Werror=UnusedAssignedValue", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["[Error]:", "name=SemanticDiag::EffectNotExecuted"]
+expect_stdout_contains = ["[Error]:", "name=SemanticDiag::UnusedAssignedValue"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -294,7 +294,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["-Werror=IgnoredSideEffect", "${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::EffectNotExecuted"]
+expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::UnusedAssignedValue"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -303,9 +303,9 @@ name = "warn.wno_error_name"
 desc = "-Wno-error=<name> keeps one warning a warning under -Werror."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["-Werror", "-Wno-error=effect_not_executed", "${case}"]
+args = ["-Werror", "-Wno-error=unused_assigned_value", "${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::EffectNotExecuted"]
+expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::UnusedAssignedValue"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -316,7 +316,7 @@ kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
 args = ["--error-format", "text", "-Werror", "${case}"]
 expect_exit = 1
-expect_stdout_contains = ["error[SemanticDiag::EffectNotExecuted]:", "note: this warning is reported as an error because of -Werror"]
+expect_stdout_contains = ["error[SemanticDiag::UnusedAssignedValue]:", "note: this warning is reported as an error because of -Werror"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -325,9 +325,9 @@ name = "warn.unknown_name"
 desc = "A name that is no warning is refused, with the list of warnings; a misspelt switch does not silently do nothing."
 kind = "behavior"
 case = "../../../cases/compile/diag_options/warning.cml"
-args = ["-Wno-efect-not-executed", "${case}"]
+args = ["-Wno-unused-assigned-valu", "${case}"]
 expect_exit = 1
-expect_output_contains = ["no warning is named 'efect-not-executed'", "EffectNotExecuted"]
+expect_output_contains = ["no warning is named 'unused-assigned-valu'", "UnusedAssignedValue"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -350,7 +350,7 @@ case = "../../../cases/compile/diag_options/warning.cml"
 args = ["--max-warning", "0", "${case}"]
 expect_exit = 0
 verify_script = """
-assert(!input.stderr.includes('EffectNotExecuted'), 'the warning is not shown')
+assert(!input.stderr.includes('UnusedAssignedValue'), 'the warning is not shown')
 assert(input.stderr.includes('1 more warning(s) not shown (--max-warning 0)'), input.stderr)
 """
 timeout_ms = 8000

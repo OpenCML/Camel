@@ -101,7 +101,7 @@ verify_script = '''
     'an arm that is not taken writes nothing: ' + JSON.stringify(out) +
     ' exit=' + input.exit_code + ' output=' + said)
   const names = input.diagnostics.map(d => d.name)
-  assert(names.every(n => n === 'SemanticDiag::EffectNotExecuted'),
-    'the only report an untaken arm may carry is the one that names it: ' + names.join(', '))
+  assert(names.length === 0,
+    'an untaken arm carries no report at all, now that the warning that named it is gone: ' + names.join(', '))
 }
 '''

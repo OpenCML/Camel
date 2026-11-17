@@ -232,8 +232,7 @@ help: An assignment stores a value for whatever reads the variable afterwards, a
 写着的语句随块运行），不在同步块里的那次写没有东西要它，于是整条写不执行。删掉这次赋值，或者之后读一下这个
 变量，都由你决定。
 
-没人要就不执行的那一档是**读**：一个外部读的结果没人要，它就不运行，编译器报 `SemanticDiag::EffectNotExecuted`。
-这条警告的文案**曾经**说这条语句"伸到了程序外面"，那只在"对外部资源的写是区域唯一欠的执行"的时候说得通：那时读与句柄写都得靠"之后有没有人要"来判。2026-11-16 的裁定把**句柄的写**与外部写并到同一条规则上——写由它所在的区域用到（设计原则 3.1、3.3）——所以"没人要"不再是"到程序外"的同义词，文案现在只说哪件事没发生、为什么不运行，不再替读者猜语句伸到哪里。
+没人要就不执行的那一档是**读**：一个外部读的结果没人要，它就不运行，也不报任何东西——曾经为它报的那条「未执行的效果」诊断随区域根一起撤掉了（2026-11-17 的裁定：会写的调用、循环与块随它所在的区域运行，所以「写了但不会跑」不再是一件可报告的事）。
 下面这个读没人要，所以不运行；`println` 是**写**标准输出，由写它的那块区域用到，所以照常执行：
 
 ```cml
@@ -247,13 +246,6 @@ func main(): int {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'get_env' is never executed: nothing needs what it gives, so nothing runs it.
-  --> <file>:4:5
-   |
- 4 |     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
-   |     ^^^^^^^
-help: This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
-
 7
 ```
 

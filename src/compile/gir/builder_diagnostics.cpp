@@ -1038,94 +1038,31 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     }
     reach();
 
-    std::vector<draft_node_ref_t> dropped;
+    // Which graphs hold an effect that runs. `settleEffectfulGraphs` reads this, so it is asked
+    // whether anything is reported here or not. A statement that does not run is not reported: the
+    // author's ruling of 2026-11-17 (design principles 3.1) makes what a region writes a root of
+    // that region, so a call, a loop and a block run with the region they are written in even when
+    // nothing takes the value they give. What such a statement leaves behind is a value nobody
+    // uses, and that is a value -- never an effect that failed to run.
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id) || !isEffectNode(graph.get(), draft.ref(id))) {
             continue;
         }
         if (needed.contains(id)) {
             effectfulGraphs_.insert(graph.get());
-        } else if (
-            graph != rootGraph_ || (id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
-            // On the root graph, the top level of the module being reported only: another
-            // module's top-level value that this program does not use is not a mistake.
-            // An effect whose value is a `T!` nothing takes is answered by the warning for the
-            // lost error (UnusedFallibleValue), which takes precedence over this one.
-            if (!unusedFallibleValues_.contains(draft.ref(id))) {
-                dropped.push_back(id);
-            }
         }
     }
     if (!report) {
         return;
     }
-    // One warning per dropped chain: an effect whose result feeds another dropped effect
-    // (`println(log(1))`, the statements of a dropped sync block) is reported through the
-    // last one.
-    const auto feedsDroppedEffect = [&](draft_node_ref_t start) {
-        std::unordered_set<draft_node_ref_t> seen{start};
-        std::vector<draft_node_ref_t> stack{start};
-        while (!stack.empty()) {
-            const draft_node_ref_t id = stack.back();
-            stack.pop_back();
-            for (auto users :
-                 {draft.normUsersOf(id),
-                  draft.withUsersOf(id),
-                  draft.ctrlUsersOf(id),
-                  draft.syncUsersOf(id)}) {
-                for (draft_node_ref_t user : users) {
-                    if (!seen.insert(user).second) {
-                        continue;
-                    }
-                    if (std::ranges::find(dropped, user) != dropped.end()) {
-                        return true;
-                    }
-                    stack.push_back(user);
-                }
-            }
-        }
-        return false;
-    };
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    for (draft_node_ref_t id : dropped) {
-        if (feedsDroppedEffect(id)) {
-            continue;
-        }
-        node_handle_t node = draft.ref(id);
-        std::string subject;
-        switch (nodeKindOf(node)) {
-        case runtime::GCNodeKind::Oper: {
-            subject = std::format("The call of '{}'", graph->operTarget(node)->name());
-        } break;
-        case runtime::GCNodeKind::Func:
-            subject = std::format("The call of '{}'", graph->funcTarget(node)->name());
-            break;
-        case runtime::GCNodeKind::Join:
-            subject = "The branch";
-            break;
-        case runtime::GCNodeKind::Loop:
-            subject = "The loop";
-            break;
-        default:
-            subject = "The call";
-            break;
-        }
-        camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
-        if (origin == camel::source::kInvalidOriginId && sourceContext) {
-            origin = sourceContext->debugMap().graphOrigin(graph->graphId());
-        }
-        diags_->of(SemanticDiag::EffectNotExecuted)
-            .atOrigin(origin)
-            .commit(subject, "nothing needs what it gives, so nothing runs it");
-    }
     // A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
     // 2026-11-15: assigning to a `var` is not an effect). What such a write drops is a value, and a
     // dropped value is what this says: the same thing one rule says about any value nobody uses
-    // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. The write is not
-    // an effect, so EffectNotExecuted above is not the place for it: that one is about a statement
-    // nothing needs, and the region it is written in -- a fact about the value, not about how far
-    // the statement reaches (design principles 3.1 and 3.3, the ruling of 2026-11-16: a write of a
-    // handle is used by the region it is written into, by the same rule as an outside write).
+    // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. A write is not an
+    // effect, and whether the statement it stands in runs is a fact about that statement, not about
+    // this value (design principles 3.1 and 3.3, the ruling of 2026-11-16: a write of a handle is
+    // used by the region it is written into, by the same rule as an outside write).
     //
     // What makes such a write's value dead is that no read takes it, and the walk above does not
     // answer that: it answers whether a read goes *through the write's own node*. There are two
@@ -1729,9 +1666,8 @@ void Builder::reportUnusedFallibleValues() {
     // because the error it may hold is lost without a trace. `evaluated` is the statement the value
     // is: in a sync block the statements run, and outside one a statement whose value nothing takes
     // does not run (design principles 3.1) -- and the error it would have given is lost either way,
-    // which is what this warning is about. The statement not running is what the other warning
-    // (EffectNotExecuted) is about, and this one takes precedence over it: one statement, one
-    // diagnostic.
+    // which is what this warning is about. Nothing else reports that statement: a statement whose
+    // value nobody takes is one diagnostic, this one.
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
@@ -1739,7 +1675,6 @@ void Builder::reportUnusedFallibleValues() {
             if (origin == camel::source::kInvalidOriginId && sourceContext) {
                 origin = sourceContext->debugMap().graphOrigin(graph->graphId());
             }
-            unusedFallibleValues_.insert(node);
             diags_->of(SemanticDiag::UnusedFallibleValue)
                 .atOrigin(origin)
                 .commit(type->toString(), remark);

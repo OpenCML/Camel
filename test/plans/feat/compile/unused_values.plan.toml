@@ -2,7 +2,7 @@ id = "compile.unused_values"
 order = 413
 tier = "fast"
 tags = ["feat", "compile", "diagnostics", "negative", "unused"]
-desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and the warning takes precedence over the one for a statement that does not run); an effect outside a `sync` body is EffectNotExecuted; a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs."
+desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and it is the only warning such a statement gets); a statement that does not run is not reported at all -- the diagnostic that named it went with the region roots (the ruling of 2026-11-17); a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs -- that second warning no longer exists."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -24,7 +24,7 @@ assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 5, JS
 
 [[tests]]
 name = "unused_values.fallible_body"
-desc = "The same `T!` statement in a body that is not `sync`: the call does not run, and its value is still a `T!` nothing takes. One diagnostic, UnusedFallibleValue -- not EffectNotExecuted as well."
+desc = "The same `T!` statement in a body that is not `sync`: the call does not run, and its value is still a `T!` nothing takes. One diagnostic, UnusedFallibleValue -- nothing else is reported for a statement that does not run."
 kind = "negative"
 case = "../../../cases/compile/unused_values/fallible_body.cml"
 args = ["-E", "short", "${case}"]
@@ -38,7 +38,7 @@ assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 5, JS
 
 [[tests]]
 name = "unused_values.effect_sync"
-desc = "An effect statement of a `sync` body runs: it is on the chain, so neither the unused-value warning nor EffectNotExecuted is reported, and both lines are printed in the order they are written."
+desc = "An effect statement of a `sync` body runs: it is on the chain, so neither the unused-value warning nor anything else is reported, and both lines are printed in the order they are written."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_sync.cml"
 args = ["-E", "short", "${case}"]
@@ -136,7 +136,7 @@ assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.
 assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
 """
 
-# ---- The help of EffectNotExecuted, per position (author's ruling of 2026-11-05, `080778522`) ----
+# ---- What a statement whose value nobody takes reports, per position (author's ruling of 2026-11-05, `080778522`) ----
 #
 # The help used to give two remedies that are not writings: a `sync { ... }` block put in a function
 # body (as a statement it is itself not needed, so it does not run) and a sync block bound to a name
@@ -152,7 +152,7 @@ assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, J
 
 [[tests]]
 name = "unused_values.loop_body_runs_each_round"
-desc = "An effect written as a statement of a `loop` body that is not a sync block runs in every round: the loop's value is used, so the loop runs, so the write its body holds is a root of the loop body's region (design principles 3.1, \"循环每一轮都执行\"). The three `i=` lines and then `total=3` print, and nothing is reported. The author's ruling of 2026-11-15 overrides the 2026-11-05 reading this entry used to measure, under which only `total=3` printed and the call was reported as EffectNotExecuted."
+desc = "An effect written as a statement of a `loop` body that is not a sync block runs in every round: the loop's value is used, so the loop runs, so the write its body holds is a root of the loop body's region (design principles 3.1, \"循环每一轮都执行\"). The three `i=` lines and then `total=3` print, and nothing is reported. The author's ruling of 2026-11-15 overrides the 2026-11-05 reading this entry used to measure, under which only `total=3` printed and the call was reported as one that does not run."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_loop_body_dropped.cml"
 args = ["--error-format", "text", "${case}"]
@@ -161,7 +161,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('SemanticDiag::EffectNotExecuted'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
+assert(!input.normalized.stderr.includes('is never executed'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
 }
 """
 
@@ -176,7 +176,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
 
@@ -191,7 +191,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('SemanticDiag::EffectNotExecuted'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
+assert(!input.normalized.stderr.includes('is never executed'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
 }
 """
 
@@ -216,7 +216,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === 'then=1|then=2', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
 
@@ -231,7 +231,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === 'else=1', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
 
@@ -246,6 +246,6 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === 'hello from greet', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """

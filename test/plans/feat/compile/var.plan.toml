@@ -265,7 +265,7 @@ timeout_ms = 30000
 # already read correctly, so they are what must not move, not what this entry proves.
 [[tests]]
 name = "var.parameter_write_is_the_callers_value"
-desc = "The write a function body leaves in a `var` parameter is what the caller reads afterwards: `set(a)` (a body that is not a sync block), `in_block(c)` (a `sync { ... }` block inside a body that is not sync) and a lambda leave `41`, `9` and `5` in the caller's cells, and the caller reads those values after each call; `set_sync(b)` (the whole body a sync block) and `clear(d)` (a `void` body) are the controls, correct before this change and unchanged by it. Measured with the write-back off, the three read `0 0`, `0 0`, `0 0` -- the caller's cell kept the value it started with -- while the controls read `0 42` and `0`; with the write-back on all five read what the body wrote. Red before the function's exit used the write: outside a `sync` block the write was ordered after the reads written before it and then dropped (`SemanticDiag::EffectNotExecuted`)."
+desc = "The write a function body leaves in a `var` parameter is what the caller reads afterwards: `set(a)` (a body that is not a sync block), `in_block(c)` (a `sync { ... }` block inside a body that is not sync) and a lambda leave `41`, `9` and `5` in the caller's cells, and the caller reads those values after each call; `set_sync(b)` (the whole body a sync block) and `clear(d)` (a `void` body) are the controls, correct before this change and unchanged by it. Measured with the write-back off, the three read `0 0`, `0 0`, `0 0` -- the caller's cell kept the value it started with -- while the controls read `0 42` and `0`; with the write-back on all five read what the body wrote. Red before the function's exit used the write: outside a `sync` block the write was ordered after the reads written before it and then dropped."
 kind = "behavior"
 case = "../../../cases/compile/var/var_parameter_write_at_exit.cml"
 args = ["${case}", "${run_nvm}"]
@@ -277,7 +277,7 @@ expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
 # same program's stderr held three `SemanticDiag::IgnoredSideEffect` (at 19:5, 40:5 and 57:36 --
 # `set`'s, `clear`'s and the lambda's write), each one saying the call of `<__assn__>` "is not in a
 # sync block, and it takes a var argument".
-expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -287,12 +287,12 @@ timeout_ms = 30000
 # what such a write drops when nothing reads it is a value, and the one thing to report is that the
 # value nobody uses: `SemanticDiag::UnusedAssignedValue`, the same family as `UnusedPureResult` and
 # `UnusedFallibleValue`. Measured before the ruling, the case below reported two things about one
-# write -- `IgnoredSideEffect` (the call takes a var argument) and `EffectNotExecuted` ("The
+# write -- `IgnoredSideEffect` (the call takes a var argument) and a report that the statement ("The
 # assignment has side effects but is never executed"); both of those sentences are gone, and exactly
 # one is left.
 [[tests]]
 name = "var.unused_assigned_value_is_a_dropped_value"
-desc = "A write to a `var` whose value nobody reads is a dropped value and nothing else: the case reads the variable before the write (so the variable is used) and the write's value is read by nobody (`x = 1` at 15:7), so the run's stderr holds exactly one diagnostic -- `SemanticDiag::UnusedAssignedValue` -- and neither `IgnoredSideEffect` (a write outside a `sync` block) nor `EffectNotExecuted` (a statement nothing needs, written in a region that does not run) appears. The program still prints `0`, the value it read before the write."
+desc = "A write to a `var` whose value nobody reads is a dropped value and nothing else: the case reads the variable before the write (so the variable is used) and the write's value is read by nobody (`x = 1` at 15:7), so the run's stderr holds exactly one diagnostic -- `SemanticDiag::UnusedAssignedValue` -- and no other warning appears: a write outside a `sync` block is not `IgnoredSideEffect`, and a statement nothing needs is not reported at all. The program still prints `0`, the value it read before the write."
 kind = "behavior"
 case = "../../../cases/compile/var/unused_assigned_value.cml"
 args = ["${case}", "${run_nvm}"]
@@ -348,7 +348,7 @@ timeout_ms = 30000
 #
 # The report is about the value, not about the body. A `sync` body is where a write whose value
 # nobody reads still runs -- it is a statement of the chain -- and running is the other question
-# (SemanticDiag::EffectNotExecuted). Both columns are pinned below: the writes at 17:7 and 24:7
+# (a statement that does not run). Both columns are pinned below: the writes at 17:7 and 24:7
 # store a value nothing reads and are reported in a body that is not a `sync` block and in one that
 # is, and the writes at 30:7 and 37:7 store the value their `return` reads and are reported in
 # neither. The silent half is as important as the loud half: it is the pin that the warning was not

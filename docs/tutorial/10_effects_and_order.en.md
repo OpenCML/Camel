@@ -258,12 +258,9 @@ has nothing to do with whether the write runs. The difference is the guarantee: 
 nothing that wants it and does not run at all. Remove the assignment, or read the variable after it -- either is a fix.
 
 What is really dropped for lack of a reader is a **read**: an external read whose result nobody uses does not
-run, and it is `SemanticDiag::EffectNotExecuted`. The sentence this warning prints **used to say** the statement
-"reaches outside the program", which held only while a write to something the program does not own was the one thing a
-region owed: back then a read and a handle write both had to be judged by "does anybody want it afterwards". The ruling
-of 2026-11-16 put a write of a handle on the same rule as an outside write -- the region it is written into uses it
-(design principles 3.1, 3.3) -- so "nobody needs it" is no longer another way of saying "it reaches outside", and the
-warning now says which thing did not happen and why it did not run, instead of guessing how far the statement reaches.
+run, and nothing is reported for it -- the diagnostic that used to name a statement which does not run went with the
+region roots (the ruling of 2026-11-17), because a call, a loop and a block that write run with the region they are
+written in.
 The read below is wanted by nobody, so it does not run; `println` is a
 **write** to standard output, used by the region it is written in, so it runs:
 
@@ -278,13 +275,6 @@ func main(): int {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'get_env' is never executed: nothing needs what it gives, so nothing runs it.
-  --> <file>:4:5
-   |
- 4 |     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
-   |     ^^^^^^^
-help: This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
-
 7
 ```
 
