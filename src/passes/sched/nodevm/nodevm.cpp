@@ -866,6 +866,12 @@ slot_t NodeVMSchedPass::call(
 
         return result;
     } catch (const RuntimeFault &fault) {
+        // The loops this activation is still inside give back what they held: the run is unwinding
+        // past `loopEnd`, and the frames are released below, so the slots this can read are gone a
+        // line later (camel/execute/loop_frame.h, `applyRefEntriesOfOpenLoops`).
+        framePool_.foreach([](camel::core::context::Frame *frame) {
+            camel::runtime::applyRefEntriesOfOpenLoops(frame);
+        });
         // A debugger stops here, while every frame of the stack is still alive.
         if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
             observer->faultRaised(
@@ -890,6 +896,9 @@ slot_t NodeVMSchedPass::call(
         }
         throw reportRuntimeFault(*context_, fault, site);
     } catch (Diagnostic &) {
+        framePool_.foreach([](camel::core::context::Frame *frame) {
+            camel::runtime::applyRefEntriesOfOpenLoops(frame);
+        });
         currRecursionDepth_--;
         releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {
@@ -909,6 +918,9 @@ slot_t NodeVMSchedPass::call(
         // whose top is the next frame's address, so a frame that is not released leaves the top
         // above a frame that is still in use and the next acquire hands that frame out twice; the
         // slots of the two activations then overwrite each other.
+        framePool_.foreach([](camel::core::context::Frame *frame) {
+            camel::runtime::applyRefEntriesOfOpenLoops(frame);
+        });
         currRecursionDepth_--;
         releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {

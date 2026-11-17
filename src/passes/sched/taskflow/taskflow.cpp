@@ -1826,6 +1826,10 @@ slot_t TaskflowExecSchedPass::callGraph(
     try {
         result = evalGraph(target, callee, region, plan);
     } catch (...) {
+        // The graph's frame goes back with a loop still open: the run is unwinding past the loop's
+        // exit, so what the loop held comes home here, while the slots still name it
+        // (camel/runtime/exec_plan.h, `applyRefEntriesOfOpenLoops`).
+        camel::runtime::applyRefEntriesOfOpenLoops(callee);
         framePool_.release(callee);
         throw;
     }
@@ -1883,6 +1887,7 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
         framePool_.release(frame);
         return result;
     } catch (...) {
+        camel::runtime::applyRefEntriesOfOpenLoops(frame);
         framePool_.release(frame);
         throw;
     }

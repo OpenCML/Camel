@@ -406,6 +406,7 @@ slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc) 
     try {
         result = fn(slots, ctx);
     } catch (...) {
+        camel::runtime::applyRefEntriesOfOpenLoops(newFrame);
         vm->releaseFrameUnchecked(newFrame);
         throw;
     }
