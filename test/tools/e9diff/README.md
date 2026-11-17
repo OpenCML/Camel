@@ -32,6 +32,7 @@ wants the other half can run `--matrix full --n 50`.
 ```
 python test/tools/e9diff/e9diff.py run --matrix slow --out DIR            # 50 seeds, 22 cells each
 python test/tools/e9diff/e9diff.py run --matrix full --out DIR            # 500 seeds, 99 cells each
+python test/tools/e9diff/e9diff.py compare --out DIR [--baseline FILE]    # judge a finished run again
 python test/tools/e9diff/e9diff.py analyze --out DIR
 python test/tools/e9diff/e9diff.py reduce  --out DIR --max-groups 3
 python test/tools/e9diff/e9diff.py collect --from DIR/e9_reduced          # into the fast layer
@@ -39,13 +40,25 @@ python test/tools/e9diff/e9diff.py collect --from DIR/e9_reduced --dry-run
 ```
 
 `--camel PATH` before the subcommand names the install every run measures; without it, this tree's
-`out/latest` (the rule is `test/tools/camel_arg.py`). `--out` must be outside the tree: a run
+`out/latest` (the rule is `test/tools/camel_arg.py`). `--baseline FILE` on `run` and `compare` names
+the file the run is judged against (default: `baseline.json` beside this script), and is how the
+comparison itself is exercised without editing that file. `--out` must be outside the tree: a run
 writes `e9_cells.jsonl` (one record per program), `failures/` (the programs with a finding, in the
 shape `triage.py` reads), `e9_run.json` and, after `analyze`, `e9_summary.json` and
 `e9_failing.jsonl`; after `reduce`, `e9_reduced/` and `e9_reduced.json`.
 
-`run` prints, in this order, the matrix, the pin, the seed range, the three numbers and the
-seconds it took. Exit 0 when the baseline held (or was not comparable), 1 when a number rose.
+`run` prints, in this order, the matrix, the pin, the seed range, the three numbers, a line per
+class with that class's **member seeds** (`wrong: 131 141 292 ...`), the seconds it took and the
+verdict. A count says a class moved; the seeds say which programs moved it, and they travel on stdout
+because `--out` is outside the tree and the gate does not bring it back. `compare --out DIR` prints
+the same reading and the same verdict for a run that already finished, which costs a second instead
+of the twenty-five minutes of a second run.
+
+Exit codes of `run` / `compare`: **0** when the baseline held, or when the run is one this ratchet
+does not cover (a slow run, or another seed range -- both say so); **1** when the comparison fails:
+a program worse than the baseline on the intersection, a program the run did not reach, an empty
+intersection, or a baseline that cannot be compared program by program. **"There is nothing to
+compare" is a failure, not a pass** (`## The ratchet`).
 
 ## The matrix and the judgment
 
@@ -89,12 +102,37 @@ key with `test/tools/progen/reduce.py`.
 
 ## The ratchet
 
-`baseline.json` holds the three numbers of a **full** run. `run` compares a full run over the same
-seeds with it: a number that rose exits 1, a number that fell is printed as news. A slow run is
-never compared (it is another sample of the generator, not a smaller trend), and a run over another
-seed range is not compared either -- both say so instead of reporting a silent "held".
-`--update-baseline` records a new full run, and the numbers of the run that moved it belong in that
-commit's message.
+`baseline.json` holds the three numbers of a **full** run, the population they were measured on, and
+every program's classes (`programs_by_class`). `run` compares a full run over the same seeds with it
+**program by program**, and the comparison is over the programs both runs had in their matrix:
+
+- **a program in both matrices that reaches a class the baseline's record of it did not is worse**,
+  and one worse program fails the run. `ok -> wrong` is the case this exists for; so is
+  `wrong -> wrong+run_error`, because a program that exchanges one finding for another has not
+  improved (seed 453 left the wrong class on 2026-11-17 by turning its wrong cells into
+  `RUN_ERROR`, which is not a repair). Cell counts inside a class are printed and do not decide;
+- **a population that moved is not a reason to stop comparing.** Which seeds are rejected is
+  decided by the compiler, so it moves when the compiler does: on 2026-11-17 `programs_in_matrix`
+  went `227->225` because seeds 165 and 202 stopped crashing and started being legally rejected, the
+  comparison then stopped, `-Check e9-full` exited 0, and the wrong class went from 7 programs to 12
+  while nobody was told. The programs that are still in both matrices are compared now;
+- **the two ways a program can leave the matrix are told apart, because they are not the same
+  thing.** A program the generator **rejects** now is a legal reduction -- the compiler declining a
+  program it used to accept -- printed with its diagnostic, counted, and not worse. A program the
+  run **did not reach** (no record of it at all) is a measurement that went missing, and a cell
+  nobody ran is not a cell that passed: that is worse, and it fails the run;
+- **an empty intersection fails.** "There is nothing to compare" is the strongest statement that a
+  run says nothing about the baseline; reading it as a pass is the hole this rule closes. The same
+  goes for a baseline that records no per-program classes at all when the population moved: the
+  intersection cannot be computed, and a comparison that cannot be made is a failure, so the run is
+  red until the baseline is recorded again from a run that writes them.
+
+A slow run is never compared (it is another sample of the generator, not a smaller trend), and a run
+over another seed range is not compared either -- both say so instead of reporting a silent "held".
+`--update-baseline` records a new full run, per-program classes included, and the numbers of the run
+that moved it belong in that commit's message; it judges the run against the baseline it replaces
+*before* writing, so a re-record cannot launder the movement that made somebody re-record. A ratchet
+may never be raised to make a gate green (`docs/handover/reports/`, 2026-11-17).
 
 ## What it reuses, and what the port replaced
 
