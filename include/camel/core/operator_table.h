@@ -126,9 +126,16 @@ inline constexpr OperId VarNewEmpty = 20; // ":var/new/empty"
 inline constexpr OperId VarAfter = 21; // ":var/after"
 /// Id 22 is free and stays free: it held the keeper operator a pass wrote when a removal took
 /// the last use of a node whose running is observed. The keeper is a `GATE` now -- one data port
-/// reading the value that was there, one sync predecessor naming that node, the value passed
-/// through (design principles 3.3, docs/design/effects/edges.cn.md 5.3) -- so the operator is
-/// gone, and no other operator takes its id: reusing it would make the deletion a rename.
+/// reading the value that was there, the value passed through (design principles 3.3,
+/// docs/design/effects/edges.cn.md 5.3) -- so the operator is gone, and no other operator takes
+/// its id: reusing it would make the deletion a rename.
+///
+/// Of that shape, one half is necessary and the other has been measured in one use: a sync
+/// predecessor naming the node was part of it, and 2026-11-18 (`35abac81c`) measured that the
+/// predecessor can be dropped here -- built with it and running, then built again without it and
+/// still holding, `e9` 212 cells and `feat/linear` unchanged. Whether another use needs the
+/// predecessor has not been measured, so this paragraph is not a statement that the keeper needs
+/// no order: it says which half was measured and where.
 inline constexpr OperId kWellKnownCount = 22; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
