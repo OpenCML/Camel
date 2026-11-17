@@ -134,3 +134,27 @@ verify_script = '''
   assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
 }
 '''
+
+[[tests]]
+name = "probe.loop_fault_ref.gives_back"
+desc = "The give-back at a loop's exit on the one path that leaves the loop without reaching it: a fault inside a round. `test/probe/refleak/loop_fault_ref.cml` makes a box before the loop, reads it on every round and reads it by nothing after the loop, so its give-back waits at the LOOP node's own position (`loopEnd`'s leaving branch). The third round divides by zero after it has read the box: the loop never leaves normally, no round after it runs, and nothing else reads the box, so if the fault path does not give the reference back the box stays counted until the run's own exit disposes it. The reading is `released=1 live=0` with `disposed=0` -- what a count that came home looks like -- and not `disposed=1`, which is the program's exit cleaning up after the count (design principles 10.5; author review 2026-11-17, item 10: '循环里出故障时那份引用是否归还，子代理未核实：补一条用例')."
+kind = "behavior"
+case = "../../probe/refleak/loop_fault_ref.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 1
+backends_agree = ["exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  assert(input.exit_code === 1, 'the round divides by zero and the run stops with the fault: exit ' + input.exit_code)
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  const reads = said.filter(l => l === 'box 0').length
+  assert(reads === 3, 'the three rounds read the box before the fault: ' + said.join(' | '))
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'the fault path gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the run stops: ' + line)
+  assert(/ disposed=0 /.test(line), 'the count reached zero on its own, before the exit disposed anything: ' + line)
+}
+'''

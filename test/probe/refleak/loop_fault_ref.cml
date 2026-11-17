@@ -1,0 +1,25 @@
+import state
+
+// The give-back at a loop's exit, read on the one path that leaves the loop without reaching it:
+// a fault inside a round (author review 2026-11-17, item 10: "循环里出故障时那份引用是否归还，子代理
+// 未核实：补一条用例").
+//
+// `box` is made before the loop, read on every round, and nothing reads it after the loop, so its
+// give-back waits at the LOOP node's own position and runs when the loop ends (item 6,
+// `loop_frame.h` `loopEnd`). The third round divides by zero after it has read the box: the loop
+// does not end, no round after it starts, and nothing reads the box again. The count is the
+// judgement -- if the fault path does not give the reference back, nothing else can, and the box
+// stays counted until the program's own exit disposes it.
+func read_then_fault(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 3 do sync {
+        println(`box ${state::get(box)}`)
+        println(100 / (2 - i))
+        i + 1
+    }
+    return 0
+}
+
+func main(): int sync {
+    return read_then_fault()
+}
