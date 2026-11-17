@@ -1,10 +1,10 @@
 {
  "programs_wrong": 8,
  "programs_refused": 3,
- "programs_crashed": 10,
+ "programs_crashed": 3,
  "cells_wrong": 360,
  "cells_refused": 135,
- "cells_crashed": 56,
+ "cells_crashed": 3,
  "what": "the E9 three numbers a merge is compared with (only down, never up)",
  "matrix": "full",
  "pin": "d6b2fff1f2e3e6a0ac315daa9c484ff5c97df46d camel built 2026-11-16T07:32:38",
@@ -24,5 +24,11 @@
   "REFUSED_UNLOCATED": 135,
   "RUN_ERROR": 198
  },
- "note": "recorded 2026-11-16, after RUN_ERROR appeared as a class (198 cells in the 500-seed run of that day) and over a program population the generator had changed: 273 of the 500 seeds are now rejected and 227 reach the matrix, where the 10/17/3 baseline had 180 and 320. The crash class rose from 3 programs / 3 cells to 10 / 56 before this file was written. This is a new zero, not a statement that the old numbers did not happen: do not subtract these numbers from 10/17/3, the two are not the same measurement. `crashed 10` is the zero recorded after it rose to 10: it is not a fixed 10 and it is not an acceptable 10 -- those two look identical in a file, and only this sentence tells them apart. crashed 10 是「涨到 10 之后才录的」零点；它不是「修好的 10」，也不是「可接受的 10」。"
+ "above_the_baseline": {
+  "crashed": "above the baseline and being repaired",
+  "last_measured": "crashed 6 programs / 29 cells, measured on the tree at db490a8ed (its own merge of develop at 8facb9672 plus the carry line); the same commit without that line read 13 / 71",
+  "since_that_measurement": "a934a07c1 (the loop state the body's tuple fill does not name) closes the sixth of those six, `visitLoopNode`'s `component != nullptr`; the merged tree has not been put through the full matrix again, so the current number is not written here",
+  "state": "red is the correct state: 6 > 3 and the gate says ABOVE THE BASELINE until the class is back at 3, which is what the author's ruling of 2026-11-17 asks for. Do not raise these two numbers to make the gate green; that is the one move this file exists to forbid"
+ },
+ "note": "**The two crash numbers are 3 because a baseline records the best measurement, never the latest one.** `13097d4e6` moved this file to `programs_crashed 10` / `cells_crashed 56` and called that a new zero; the author's ruling of 2026-11-17 (§4.13) is that a ratchet may not be raised -- a number that only ever goes up is not a ratchet, it is a record of whatever the tree did last -- so the two are back at 3 / 3 and the current reading is written above, as 'above the baseline, being repaired'. The gate is red on this class now. That red is the mechanism working: it says the crash class is worse than its best known state, which is true. The rest of the file (the population, the cell outcomes, the pin) describes the 2026-11-16 full run and is left as it was recorded: `273` of the 500 seeds are rejected and `227` reach the matrix. The three numbers 3 / 3 here were measured over a population of 180 programs in the matrix, so keeping the 227 population beside them makes this comparison stricter than the one they came from -- the safe direction, and the reason not to 'restore' the population fields too."
 }

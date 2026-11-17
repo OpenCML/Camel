@@ -860,3 +860,4 @@ case = "../../../cases/opt/e9/rc22_flat_if_var.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "L6 5\n"
+
