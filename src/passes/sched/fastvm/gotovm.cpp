@@ -967,6 +967,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         DEF_CMP_OP_LABEL(FGE, Float32, >=);
         DEF_CMP_OP_LABEL(DGE, Float64, >=);
     } catch (const RuntimeFault &fault) {
+        framePool_.foreach([](camel::core::context::Frame *frame) {
+            camel::runtime::applyRefEntriesOfOpenLoops(frame);
+        });
         OBSERVE_RUNTIME_FAULT(fault);
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
         s_jit_save_depth = jitSaveBase;
@@ -1005,6 +1008,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             fault,
             makePcExecutionSite(context_->sourceContext(), siteFrame, pc));
     } catch (Diagnostic &) {
+        framePool_.foreach([](camel::core::context::Frame *frame) {
+            camel::runtime::applyRefEntriesOfOpenLoops(frame);
+        });
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
         s_jit_save_depth = jitSaveBase;
 #endif
