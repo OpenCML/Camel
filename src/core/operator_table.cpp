@@ -550,6 +550,36 @@ bool OperatorTable::reusesOperand(std::string_view uri) const {
     return entries_[*id].reusesOperand;
 }
 
+void OperatorTable::declareHandsOnOperandValue(std::string_view uri, bool onlyOutsideArrays) {
+    // One field on the operator's entry, the way `declareReusesOperand` above is one: the fact is
+    // about the operator's operands and result, not a release of its semantics, and publishing it
+    // as part of a semantics record would give a builtin a declared record before the library
+    // declares its signature -- which the loader reads as a different operator (measured: writing
+    // it into the record turned `ref.array_element` red on all five back ends).
+    std::unique_lock lock(mutex_);
+    Entry &entry                   = entries_[internLocked(uri)];
+    entry.handsOnOperandValue      = true;
+    entry.handsOnOnlyOutsideArrays = onlyOutsideArrays;
+}
+
+bool OperatorTable::handsOnOperandValue(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return false;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].handsOnOperandValue;
+}
+
+bool OperatorTable::handsOnOnlyOutsideArrays(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return false;
+    }
+    std::shared_lock lock(mutex_);
+    return entries_[*id].handsOnOnlyOutsideArrays;
+}
+
 void OperatorTable::declareConversion(std::string_view uri, ConversionTypes types) {
     std::unique_lock lock(mutex_);
     entries_[internLocked(uri)].conversion = types;
