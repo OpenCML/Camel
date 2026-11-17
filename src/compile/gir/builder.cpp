@@ -696,7 +696,7 @@ void Builder::recordDeclaration(
     // A `var` built as a value is still a `var` to the program: the recorder and the tools read
     // the declaration the writer wrote, and only the shape of the graph differs (stage S1 of the
     // direct-SSA plan), so the declaration is recorded as the variable it is.
-    const bool variable = isVariable(node) || ssaBindingOf(name) != nullptr;
+    const bool variable = isVariable(node) || nameIsSsa(name);
     recorder_->valueDeclared(origin, name, valueTypeOf(nodeTypeOf(node)), variable);
     recorder_->valueBound(
         origin,

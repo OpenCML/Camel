@@ -510,12 +510,11 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     }
     bool success = insertNode(ident, bound);
     if (success && ssaValue) {
-        // The name stands for the value it was given: the binding a read takes, and the entry a
-        // write replaces. The type the entry keeps is the type the cell would have held, which is
+        // The name stands for the value it was given: the declaration the reads take, and the entry
+        // a write replaces. The type the entry keeps is the type the cell would have held, which is
         // `:var/new`'s value type, so a later write enters it as a store into that cell did.
         Type *held = bound != nullptr ? valueTypeOf(nodeTypeOf(bound)) : nullptr;
-        ssaValues_[nodeScope_][ident] =
-            SsaValue{bound, held != nullptr ? held->widened() : nullptr, gct};
+        ssa_.declare(nodeScope_, ident, gct, bound, held != nullptr ? held->widened() : nullptr);
     }
     if (success && isVar && !ssaValue) {
         originNames_.try_emplace(bound, ident);
@@ -3150,67 +3149,8 @@ bool Builder::ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::s
     return found != scanned->second.end() && found->second;
 }
 
-const Builder::SsaValue *Builder::ssaBindingOf(const std::string &name) const {
-    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
-        if (!scope->has(name, false)) {
-            continue;
-        }
-        const auto table = ssaValues_.find(scope);
-        if (table == ssaValues_.end()) {
-            return nullptr;
-        }
-        const auto found = table->second.find(name);
-        return found == table->second.end() ? nullptr : &found->second;
-    }
-    return nullptr;
-}
-
-Builder::SsaValue *Builder::mutableSsaBindingOf(const std::string &name) {
-    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
-        if (!scope->has(name, false)) {
-            continue;
-        }
-        const auto table = ssaValues_.find(scope);
-        if (table == ssaValues_.end()) {
-            return nullptr;
-        }
-        const auto found = table->second.find(name);
-        return found == table->second.end() ? nullptr : &found->second;
-    }
-    return nullptr;
-}
-
-bool Builder::nameIsSsa(const std::string &name) const { return ssaBindingOf(name) != nullptr; }
-
-void Builder::rebindSsa(const std::string &name, node_handle_t value) {
-    SsaValue *binding = mutableSsaBindingOf(name);
-    GUARD(binding != nullptr, "An SSA `var` is written where its declaration is in scope.");
-    // The value the name had before this branch, taken as the first arm writes it: the assignment
-    // below overwrites the binding, so afterwards the join could not tell it from the last arm's.
-    if (gatheringBranchValues_) {
-        branchBeforeValues_.emplace(name, binding->value);
-    }
-    binding->value = value;
-    // A write inside an arm is what the branch's JOIN carries: the arm remembers the value it ends
-    // with, and the join is where the name goes on from there (stage S2).
-    if (!armStack_.empty() && armStack_.back() != nullptr) {
-        ArmBuild *arm = armStack_.back();
-        if (arm->ssaWrites.emplace(name, value).second) {
-            arm->ssaWriteOrder.push_back(name);
-        } else {
-            arm->ssaWrites[name] = value;
-        }
-    }
-    // The binding the reads take. A write inside a nested statement list rebinds the entry of the
-    // scope that declared the name, which is the one the reads of that region look up.
-    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
-        if (!scope->has(name, false)) {
-            continue;
-        }
-        scope->map()[name] = value;
-        return;
-    }
-    GUARD(false, "An SSA `var` is written where its declaration is in scope.");
+bool Builder::nameIsSsa(const std::string &name) const {
+    return ssa_.find(nodeScope_, name) != nullptr;
 }
 
 } // namespace camel::compile::gir
