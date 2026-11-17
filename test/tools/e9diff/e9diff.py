@@ -6,6 +6,8 @@
 
     e9diff.py run     --matrix slow [--n 50]  [--start 1] --out DIR [--jobs 4]
     e9diff.py run     --matrix full [--n 500] [--start 1] --out DIR [--jobs 4] [--update-baseline]
+                      [--baseline FILE]
+    e9diff.py compare --out DIR [--baseline FILE]
     e9diff.py analyze --out DIR
     e9diff.py reduce  --out DIR [--max-groups 12]
     e9diff.py collect --from DIR [--dry-run]
@@ -28,7 +30,11 @@ The campaign runs in three tiers, and only the last one is a ratchet:
 
 `run` prints the three numbers a merge is judged by -- **wrong values**, **refusals**, **crashes**
 -- and compares them with `baseline.json` beside this script: a number that rose fails the run, a
-number that fell is printed as news to record. `analyze` groups the failing programs by root cause
+number that fell is printed as news to record. Every class's member seeds are printed on a line of
+their own beside its count, because a count says a class moved and a list of seeds says which
+programs moved it, and a seed is where a reproduction starts. `compare --out DIR` re-reads a
+finished run and judges it again (with `--baseline FILE`, against another baseline), so a judgement
+that costs 25 minutes to produce costs a second to repeat. `analyze` groups the failing programs by root cause
 (the first failing pipeline prefix on the node VM: the attribution the author fixed for this
 campaign); `reduce` shrinks one representative of each group.
 
@@ -49,6 +55,20 @@ way for a pipeline to decline and is not a finding. A program the compiler rejec
 cell (stage parse or typecheck) is a generator reject: listed, not part of the matrix. `RUN_ERROR`
 and a `FRONTEND` after the first cell are findings too and are reported beside the three numbers.
 A program counts once in every class it reaches.
+
+**The gate is per program, over the programs both runs had in their matrix.** A population that
+moved used to end the comparison and with it the gate: on 2026-11-17 `programs_in_matrix` went
+`227->225` (two seeds stopped crashing and started being legally rejected) and `-Check e9-full`
+exited 0 while the wrong class went from 7 programs to 12. So the population is not a reason to stop
+comparing -- the programs that are still measurable are compared one by one, each against its own
+outcome in `baseline.json`, and *any* one of them reaching a class it did not reach before fails the
+run. The two ways a program can leave the matrix are told apart, because they are not the same
+thing: a program the generator now **rejects** is a legal reduction (the compiler declining a
+program it used to accept -- printed, counted, not worse), while a program the run **did not reach**
+(no record of it at all) is a measurement that went missing, and a cell nobody ran is not a cell
+that passed. An **empty intersection** is a failure too: "there is nothing to compare" is the
+strongest possible statement that this run says nothing about the baseline, and a gate that reads it
+as a pass is the gate this rule exists to replace.
 
 What this replaces from the reference implementation it was ported from, which carried a module
 `common`: `SRC` is `runner.REPO_ROOT`, `CAMEL` is `runner.camel_exe()` behind `--camel` (one rule,
@@ -131,6 +151,41 @@ REFUSED = {"REFUSED_UNLOCATED"}
 CRASHED = {"CRASH", "HANG", "ERROR_NO_DIAG", "CPP_COMPILE_ERROR"}
 # Every outcome that is a finding, including the two the three numbers do not count.
 BAD = set(R.BAD) | {"CPP_COMPILE_ERROR"}
+
+# The classes one program can reach, as one word each, in the order the member lines print them.
+CLASS_TOKENS = [("wrong", WRONG), ("refused", REFUSED), ("crashed", CRASHED)]
+
+# A cell that was never run, because the program's earlier cells had already crashed `MAX_CRASHES`
+# times. It is not an outcome and not a class: it is the measurement stopping, and a class that
+# disappeared into it has not gone away -- which is why it is printed beside the three numbers and
+# why a program whose last classes are `NOT_RUN` is worse than one whose classes are the same.
+NOT_RUN = "NOT_RUN"
+
+
+def program_state(rec: dict) -> list:
+    """The classes one program in the matrix reached, as a sorted list of tokens; empty when every
+    cell is `OK`.
+
+    The three numbers are three of them. The rest are the outcomes that are findings of their own
+    (`RUN_ERROR`, and a `FRONTEND` after the first cell): a program that exchanges one finding for
+    another has not improved, and a comparison that knew only the three numbers would read that
+    exchange as a fix -- seed 453 did exactly that on 2026-11-17, leaving the wrong class by turning
+    all forty-eight of its wrong cells into `RUN_ERROR`."""
+    if not rec["cells"]:
+        # A record with no cell at all is a program the run did not measure, and it must not read as
+        # a clean one: `[]` is what every `OK` program has.
+        return ["unmeasured"]
+    outcomes = collections.Counter(rec["cells"].values())
+    tokens = [name for name, names in CLASS_TOKENS if any(o in names for o in outcomes)]
+    tokens += sorted({o.lower() for o in outcomes
+                      if o in BAD and o not in (WRONG | REFUSED | CRASHED)})
+    return tokens
+
+
+def state_text(tokens) -> str:
+    """A program's classes in one word: `ok`, `wrong`, `crashed+wrong`."""
+    return "+".join(tokens) if tokens else "ok"
+
 
 # The cells of one program that may crash before the rest are not run: a crashed process can take
 # many seconds to be collected, and 99 cells of a program whose passes crash would spend the run on
@@ -381,9 +436,14 @@ def build_id() -> str:
     return f"{tip} {exe.name} built {built}"
 
 
-def read_baseline():
+def read_baseline(path=None):
+    """The baseline file, or None when it is not there. `path` is `--baseline`, and it exists so a
+    judgement can be repeated against another file (a copy of an older one, a recording of another
+    run) without editing the one the gate reads: a comparison whose right-hand side is hard-wired is
+    a comparison nobody can test."""
+    target = Path(path) if path else BASELINE
     try:
-        return json.loads(BASELINE.read_text(encoding="utf-8"))
+        return json.loads(target.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
@@ -403,12 +463,16 @@ CLASSES = [("wrong", "programs_wrong", "cells_wrong"),
 # generator decides which seeds are rejects, and it changes -- on 2026-11-16 the same `seeds 1..500`
 # held 320 programs in the matrix under the 11-14 generator and 227 under the current one -- so a
 # comparison that only checked `matrix` and `seeds` compared two different populations and reported
-# the result as a trend. A run whose population moved is not compared, and says why.
+# the result as a trend. A moved population is *not* a reason to stop comparing any more: it is the
+# reason to compare the programs both runs had in their matrix and nothing else (`judge`), because a
+# program that left the matrix is a program whose outcome there cannot be compared with today's.
 POPULATION = ["programs_in_matrix", "generator_rejects"]
 
 
 def population_break(baseline, numbers: dict) -> str:
-    """Why this run cannot be compared with that baseline over the program population, or ''."""
+    """How this run's program population differs from that baseline's, or '' -- a reading, no longer
+    a refusal to compare. `judge` uses it to decide *what* may be compared (the intersection), and
+    to say why the three aggregate counts above are not one trend."""
     moved, unrecorded = [], []
     for key in POPULATION:
         old, new = baseline.get(key), numbers.get(key)
@@ -444,38 +508,232 @@ def class_verdicts(baseline, numbers: dict) -> list:
     return rows
 
 
-def format_class_rows(rows: list) -> list:
+def format_class_rows(rows: list, news: bool = False) -> list:
+    """One line per class. `news` is for the case where the two runs' populations differ: the counts
+    are then over two different populations and saying `verdict=worse` about them would read as a
+    trend that was not measured -- the per-program comparison is the verdict there, and these lines
+    are what it is a verdict about."""
     lines = []
     for name, old, new, verdict in rows:
         if verdict == "unrecorded":
             lines.append(f"[E9] class {name:<8} not recorded by the baseline")
             continue
+        tail = ("news, not a verdict: the populations differ" if news
+                else f"verdict={verdict}")
         lines.append(f"[E9] class {name:<8} programs {old[0]}->{new[0]}   cells {old[1]}->{new[1]}"
-                     f"   verdict={verdict}")
+                     f"   {tail}")
     return lines
 
 
-def compare_to_baseline(baseline, numbers: dict, matrix: str, seeds: str) -> tuple:
-    """(rose, fell, skipped). Only the full run is a ratchet, and only over the seeds the baseline
-    covers: two samples of the generator cannot be read as one trend, and a silent "held" over a
-    range the baseline does not cover is the reading that makes a ratchet useless. The seeds being
-    the same is necessary and not sufficient -- `population_break` is the other half, and a run it
-    refuses is reported as not comparable rather than as a number that stayed the same."""
+def member_lines(in_matrix: list) -> list:
+    """Every class's member seeds, one line per class: the evidence a count is not.
+
+    A count says a class moved; a list says which programs moved it, and a seed is where the next
+    step starts (`progen.py show --seed N` draws the program, `--out/failures/` holds it). The counts
+    alone are why every attribution of the 2026-11-17 reading had to be made on the host, by hand,
+    from a directory the gate does not bring back."""
+    lines = []
+    for name, names in CLASS_TOKENS:
+        seeds = sorted(r["seed"] for r in in_matrix
+                       if any(o in names for o in r["cells"].values()))
+        lines.append(f"[E9] {name}: {' '.join(map(str, seeds)) if seeds else '(none)'}")
+    beside = collections.defaultdict(set)
+    for r in in_matrix:
+        for outcome in set(r["cells"].values()):
+            if outcome in BAD and outcome not in (WRONG | REFUSED | CRASHED):
+                beside[outcome].add(r["seed"])
+    for outcome in sorted(beside):
+        lines.append(f"[E9] {outcome}: {' '.join(map(str, sorted(beside[outcome])))}")
+    unrun = sorted(r["seed"] for r in in_matrix if NOT_RUN in r["cells"].values())
+    lines.append(f"[E9] {NOT_RUN}: {' '.join(map(str, unrun)) if unrun else '(none)'}")
+    return lines
+
+
+def compare_states(states: dict, summary: dict) -> dict:
+    """The programs both runs had in their matrix, compared one by one.
+
+    `states` is the baseline's `programs_by_class` (seed -> the classes it reached); the run's own
+    are the summary's. It returns the whole judgement, and the two kinds of absence are the point:
+
+      worse    in both matrices and it reaches a class the baseline's record of it did not -- a
+               program that went `ok -> wrong`, or `wrong -> wrong+run_error`, has got worse even
+               when another class came down (453 left the wrong class by turning its wrong cells
+               into `RUN_ERROR`, which is not a repair);
+      better   in both matrices and a class it had is gone;
+      left     in the baseline's matrix and not in this one *because the generator rejects it now*:
+               the compiler declining a program it used to accept is a legal reduction -- printed,
+               counted, and not a regression. It is the author's rule of 2026-11-17 (165 and 202
+               stopped crashing and started being legally rejected; 273/227 became 275/225);
+      lost     in the baseline's matrix and absent from this run's records: the run did not reach
+               it. Not run is not passed, so this is a failure, and it is a different sentence from
+               `left` -- mixing the two is how a gate becomes a wall that everybody ignores.
+      entered  the other direction: a program this run has and the baseline's matrix did not. News,
+               not a regression: the baseline never measured it."""
+    base = {int(seed): list(tokens) for seed, tokens in states.items()}
+    today = {int(seed): list(tokens)
+             for seed, tokens in (summary.get("programs_by_class") or {}).items()}
+    rejected = {int(seed): (reason or "?")
+                for seed, reason in (summary.get("rejected_programs") or {}).items()}
+    unmeasured = {int(seed) for seed in (summary.get("programs_unmeasured") or [])}
+    both = sorted(set(base) & set(today))
+    worse, better = [], []
+    for seed in both:
+        old, new = set(base[seed]), set(today[seed])
+        if new - old:
+            worse.append((seed, base[seed], today[seed]))
+        elif old - new:
+            better.append((seed, base[seed], today[seed]))
+        elif not new and seed in unmeasured:
+            # Nothing reached and cells left unrun: a class that disappeared into `NOT_RUN` has not
+            # gone away, it has stopped being measured.
+            worse.append((seed, base[seed], today[seed]))
+    gone = sorted(set(base) - set(today))
+    return dict(both=both, worse=worse, better=better,
+                left=[(seed, rejected[seed]) for seed in gone if seed in rejected],
+                lost=[seed for seed in gone if seed not in rejected],
+                entered=sorted(set(today) - set(base)))
+
+
+def new_baseline(summary: dict, matrix: str, seeds: str, note: str = "") -> dict:
+    """The file `--update-baseline` writes: the three numbers, the population they were measured on,
+    and *every program's classes* (`programs_by_class`), so that the next run can be compared with
+    this one program by program even if the population moves again. Without that map the intersection
+    a moved population must be judged on cannot be computed at all, which is the state this file was
+    in on 2026-11-17: numbers and a population, no programs."""
+    numbers = {k: summary[k] for k in RATCHET}
+    numbers.update(
+        what="the E9 three numbers a merge is compared with (only down, never up)",
+        matrix=matrix, pin=summary["pin"], seeds=seeds,
+        recorded_on=datetime.date.today().isoformat(),
+        programs=summary["programs"], generator_rejects=summary["generator_rejects"],
+        programs_in_matrix=summary["programs_in_matrix"],
+        cell_outcomes=summary["cell_outcomes"],
+        programs_by_class={str(seed): tokens
+                           for seed, tokens in summary["programs_by_class"].items()})
+    if note:
+        numbers["note"] = note
+    return numbers
+
+
+def judge(baseline, summary: dict, matrix: str, seeds: str, name: str,
+          final: bool = True) -> tuple:
+    """Print the verdict of one run against one baseline and return `(exit code, what was found)`.
+
+    The comparison is per program over the programs both runs had in their matrix (`compare_states`),
+    and it is the only one that survives a moved population. Everything that is not a comparison is
+    said out loud and is a failure rather than a pass, for the reason `test/tools/e9diff/README.md`
+    gives: on 2026-11-17 the population moved by two legal rejects, the comparison stopped, the run
+    exited 0 and the wrong class went from 7 programs to 12 while nobody was told. `final=False` is a
+    recording run (`--update-baseline`): the same reading, and no verdict line, because the file that
+    is about to be written is the point the ratchet moves from and not a judgement of this one."""
+    found = dict(worse=[], better=[], left=[], lost=[], entered=[], both=[], rose={}, fell={},
+                 cannot_compare="")
     if not baseline:
-        return {}, {}, "no baseline"
+        found["cannot_compare"] = "no baseline recorded"
+        if final:
+            print(f"[E9] no baseline at {name}: a run with nothing to compare against has not been "
+                  f"judged, and a ratchet that is not there is not a pass -- record one with "
+                  f"--update-baseline")
+        return 1, found
     if baseline.get("matrix") != matrix:
-        return {}, {}, (f"the baseline is a {baseline.get('matrix')} run; only the full run is a "
-                        f"ratchet")
+        # By design, not a failure: only the full run is a ratchet (a slow run is another sample of
+        # the generator, not a smaller trend), and it says so instead of a silent "held".
+        if final:
+            print(f"[E9] baseline {name}: not compared -- the baseline is a "
+                  f"{baseline.get('matrix')} run; only the full run is a ratchet")
+        return 0, found
     if baseline.get("seeds") != seeds:
-        return {}, {}, f"the baseline covers seeds {baseline.get('seeds')}, this run is {seeds}"
-    broke = population_break(baseline, numbers)
-    if broke:
-        return {}, {}, broke
-    rose = {k: (baseline[k], numbers[k]) for k in RATCHET
-            if k in numbers and numbers[k] > baseline.get(k, numbers[k])}
-    fell = {k: (baseline[k], numbers[k]) for k in RATCHET
-            if k in numbers and numbers[k] < baseline.get(k, numbers[k])}
-    return rose, fell, ""
+        if final:
+            print(f"[E9] baseline {name}: not compared -- the baseline covers seeds "
+                  f"{baseline.get('seeds')}, this run is {seeds}")
+        return 0, found
+    moved = population_break(baseline, summary)
+    if moved:
+        print(f"[E9] baseline {name}: {moved}")
+        print("[E9] a moved population is not a reason to stop comparing: the programs this run "
+              "and the baseline both had in their matrix are compared one by one")
+    rows = class_verdicts(baseline, summary)
+    for line in format_class_rows(rows, news=bool(moved)):
+        print(line)
+    found["rose"] = {k: (baseline[k], summary[k]) for k in RATCHET
+                     if k in summary and summary[k] > baseline.get(k, summary[k])}
+    found["fell"] = {k: (baseline[k], summary[k]) for k in RATCHET
+                     if k in summary and summary[k] < baseline.get(k, summary[k])}
+    states = baseline.get("programs_by_class")
+    if not isinstance(states, dict) or not states:
+        if moved:
+            found["cannot_compare"] = ("the baseline records no per-program outcomes, so the "
+                                       "programs both runs had in their matrix cannot be found")
+            print("[E9] the baseline records no per-program outcomes, so which programs both runs "
+                  "had in their matrix cannot be found: the intersection cannot be compared, and a "
+                  "comparison that cannot be made is a failure, not a pass -- record the baseline "
+                  "again (--update-baseline) from a run that writes them")
+            if final:
+                print("[E9] the comparison cannot be made: this run is a red over a baseline that "
+                      "says nothing program by program, which is the state the gate was in on "
+                      "2026-11-17 when 12 wrong programs exited 0")
+            return 1, found
+        return _aggregate_verdict(found, final)
+    cmp = compare_states(states, summary)
+    found.update(cmp)
+    print(f"[E9] compared on the intersection: {len(cmp['both'])} program(s) in both matrices"
+          + (f"; {len(cmp['left'])} left as generator rejects" if cmp["left"] else "")
+          + (f"; {len(cmp['lost'])} never ran" if cmp["lost"] else "")
+          + (f"; {len(cmp['entered'])} entered" if cmp["entered"] else ""))
+    if cmp["entered"]:
+        print("[E9] entered the matrix (news, not a regression -- the baseline never measured "
+              "them): " + " ".join(map(str, cmp["entered"])))
+    if cmp["left"]:
+        print("[E9] left the matrix because the generator rejects them now (legal, not worse): "
+              + ", ".join(f"{seed} ({reason})" for seed, reason in cmp["left"]))
+    if cmp["better"]:
+        print("[E9] better: " + " ".join(f"{seed} {state_text(old)}->{state_text(new)}"
+                                        for seed, old, new in cmp["better"]))
+    if cmp["worse"]:
+        print("[E9] worse: " + " ".join(str(seed) for seed, _old, _new in cmp["worse"]))
+        for seed, old, new in cmp["worse"]:
+            print(f"[E9]   seed {seed}: {state_text(old)} -> {state_text(new)}")
+    if cmp["lost"]:
+        print("[E9] LOST: " + " ".join(map(str, cmp["lost"])) + " -- the baseline had these in its "
+              "matrix and this run has no record of them; a program that was not run is not a "
+              "program that passed")
+    if not cmp["both"]:
+        print("[E9] the intersection is empty: no program was in both runs' matrix, so there is "
+              "nothing to compare -- and \"nothing to compare\" is a failure, not a pass")
+        return 1, found
+    if found["worse"] or found["lost"]:
+        if final:
+            print(f"[E9] ABOVE THE BASELINE: {len(found['worse'])} program(s) worse and "
+                  f"{len(found['lost'])} lost, on the intersection")
+        return 1, found
+    if found["rose"] and not moved:
+        if final:
+            print("[E9] ABOVE THE BASELINE: "
+                  + ", ".join(f"{k} {base}->{now}" for k, (base, now) in found["rose"].items()))
+        return 1, found
+    if found["fell"] and not moved:
+        print("[E9] below the baseline (record it with --update-baseline): "
+              + ", ".join(f"{k} {base}->{now}" for k, (base, now) in found["fell"].items()))
+    if final:
+        print("[E9] baseline held: no program in the intersection got worse")
+    return 0, found
+
+
+def _aggregate_verdict(found: dict, final: bool) -> tuple:
+    """The comparison of a baseline that predates `programs_by_class`, over a population that did not
+    move: the six numbers, as this tool always compared them. Kept so that an old baseline is still
+    read the way it was recorded instead of being called unrecordable."""
+    if found["fell"]:
+        print("[E9] below the baseline (record it with --update-baseline): "
+              + ", ".join(f"{k} {base}->{now}" for k, (base, now) in found["fell"].items()))
+    if found["rose"]:
+        if final:
+            print("[E9] ABOVE THE BASELINE: "
+                  + ", ".join(f"{k} {base}->{now}" for k, (base, now) in found["rose"].items()))
+        return 1, found
+    if final:
+        print("[E9] baseline held: no number rose")
+    return 0, found
 
 
 def run_summary(rows: list, matrix: str, seeds: str) -> dict:
@@ -486,7 +744,14 @@ def run_summary(rows: list, matrix: str, seeds: str) -> dict:
                    generator_rejects=len(rejected),
                    reject_reasons=dict(collections.Counter(r["rejected"] for r in rejected)),
                    programs_in_matrix=len(in_matrix), cells_per_program=len(CELLS),
-                   cells_total=sum(len(r["cells"]) for r in in_matrix))
+                   cells_total=sum(len(r["cells"]) for r in in_matrix),
+                   # The per-program half of the reading: which classes each program in the matrix
+                   # reached, and which seeds are rejects and why. It is what a later run is
+                   # compared with (`compare_states`), and what `--update-baseline` writes down.
+                   programs_by_class={r["seed"]: program_state(r) for r in in_matrix},
+                   rejected_programs={r["seed"]: (r["rejected"] or "?") for r in rejected},
+                   programs_unmeasured=sorted(r["seed"] for r in in_matrix
+                                              if NOT_RUN in r["cells"].values()))
     summary.update(three_numbers(in_matrix))
     return summary
 
@@ -537,60 +802,44 @@ def cmd_run(a) -> int:
           f"crashed {summary['cells_crashed']})")
     if summary["other_findings"]:
         print(f"[E9] beside the three numbers: {summary['other_findings']}")
+    # Each class's member seeds, on a line of their own: this is the evidence, and it travels on
+    # stdout because `--out` is outside the tree and the gate does not bring it back.
+    for line in member_lines([r for r in rows if not r.get("rejected")]):
+        print(line)
     print(f"[E9] {seconds:.0f} s, {a.jobs} programs at a time, "
           f"{summary['cells_total'] / max(seconds, 1e-9):.1f} cells/s")
     # The verdict is read against the baseline this run found, before anything is written: a
     # re-record that reported only "held" -- because it then compared the file it had just written
     # with itself -- would launder the very movement that made somebody re-record.
-    old_baseline = read_baseline()
-    rose, fell, skipped = compare_to_baseline(old_baseline, summary, matrix, seeds_text)
-    rows = []
-    if not skipped and old_baseline:
-        rows = class_verdicts(old_baseline, summary)
-        for line in format_class_rows(rows):
-            print(line)
-    if a.update_baseline:
-        if matrix != "full":
-            print("[E9] the ratchet is the full run; --update-baseline refused", file=sys.stderr)
-        else:
-            numbers = {k: summary[k] for k in RATCHET}
-            numbers.update(
-                what="the E9 three numbers a merge is compared with (only down, never up)",
-                matrix=matrix, pin=summary["pin"], seeds=seeds_text,
-                recorded_on=datetime.date.today().isoformat(),
-                programs=summary["programs"], generator_rejects=summary["generator_rejects"],
-                programs_in_matrix=summary["programs_in_matrix"],
-                cell_outcomes=summary["cell_outcomes"])
-            if a.baseline_note:
-                numbers["note"] = a.baseline_note
-            # `ensure_ascii=False`: the note is written in whatever language whoever records it
-            # thinks in, and a note that reads `\u4e2d\u6587` is a note nobody reads before
-            # subtracting one baseline from another.
-            BASELINE.write_text(json.dumps(numbers, indent=1, ensure_ascii=False) + "\n",
-                                encoding="utf-8", newline="\n")
-            print(f"[E9] baseline written: {BASELINE}")
-            if skipped:
-                print(f"[E9] recorded as the new zero; the baseline it replaced was not "
-                      f"comparable -- {skipped}")
-            else:
-                worse = [name for name, _old, _new, verdict in rows if verdict == "worse"]
-                print("[E9] recorded as the new zero"
-                      + (f"; against the baseline it replaced, {', '.join(worse)} was worse"
-                         if worse else "; against the baseline it replaced, nothing was worse")
-                      + " -- the new file is the point this ratchet moves from, not a judgement "
-                        "that the old numbers did not happen")
-            return 0
-    if skipped:
-        print(f"[E9] baseline {BASELINE.name}: not compared -- {skipped}")
-        return 0
-    if fell:
-        print("[E9] below the baseline (record it with --update-baseline): "
-              + ", ".join(f"{k} {base}->{now}" for k, (base, now) in fell.items()))
-    if rose:
-        print("[E9] ABOVE THE BASELINE: "
-              + ", ".join(f"{k} {base}->{now}" for k, (base, now) in rose.items()))
-        return 1
-    print("[E9] baseline held: no number rose")
+    target = Path(a.baseline).resolve() if a.baseline else BASELINE
+    old_baseline = read_baseline(target)
+    code, found = judge(old_baseline, summary, matrix, seeds_text, target.name,
+                        final=not a.update_baseline)
+    if not a.update_baseline:
+        return code
+    if matrix != "full":
+        print("[E9] the ratchet is the full run; --update-baseline refused", file=sys.stderr)
+        return code
+    numbers = new_baseline(summary, matrix, seeds_text, a.baseline_note)
+    # `ensure_ascii=False`: the note is written in whatever language whoever records it thinks in,
+    # and a note that reads `\u4e2d\u6587` is a note nobody reads before subtracting one baseline
+    # from another.
+    target.write_text(json.dumps(numbers, indent=1, ensure_ascii=False) + "\n",
+                      encoding="utf-8", newline="\n")
+    print(f"[E9] baseline written: {target}")
+    against = []
+    if found["worse"]:
+        against.append(f"{len(found['worse'])} program(s) worse ("
+                       + " ".join(str(seed) for seed, _old, _new in found["worse"]) + ")")
+    if found["lost"]:
+        against.append(f"{len(found['lost'])} lost (" + " ".join(map(str, found["lost"])) + ")")
+    if found["cannot_compare"]:
+        against.append(f"the baseline it replaced was not comparable: {found['cannot_compare']}")
+    print("[E9] recorded as the new zero"
+          + (f"; against the baseline it replaced, {', '.join(against)}" if against
+             else "; against the baseline it replaced, nothing was worse")
+          + " -- the new file is the point this ratchet moves from, not a judgement that the old "
+            "numbers did not happen")
     return 0
 
 
@@ -713,6 +962,10 @@ def cmd_analyze(a) -> int:
           f"{len(summary['root_causes'])} root cause(s)")
     print(f"[E9] wrong {summary['programs_wrong']}  refused {summary['programs_refused']}  "
           f"crashed {summary['programs_crashed']}")
+    # The classes' members, one line each: `run` prints them too, and the seeds are what an
+    # attribution quoting a count cannot say.
+    for line in member_lines(in_matrix):
+        print(line)
     for group in summary["root_causes"]:
         print(f"  {group['programs']:3d} programs  {group['key']}")
         print(f"      seeds {' '.join(map(str, group['seeds'][:16]))}"
@@ -727,6 +980,48 @@ def cmd_analyze(a) -> int:
                           for p, n in sorted(summary["legal_refusals_cells_per_pipeline"].items())))
     print(f"[E9] wrote {OUT / 'e9_summary.json'} and {OUT / 'e9_failing.jsonl'}")
     return 0
+
+
+# -------------------------------------------------------------------------------------- re-judging
+def cmd_compare(a) -> int:
+    """Judge a finished run again, without running it again.
+
+    A full run is 25 minutes on this host and its `--out` is outside the tree, so re-reading one --
+    or asking "what would this baseline have said about that run?" -- was not possible: every
+    attribution of a reading had to be made by hand on the host. This reads `--out` and answers it,
+    and `--baseline FILE` is how the comparison itself is tested: a recording of the same run must
+    pass, a copy of an older one must fail, and neither costs a compiler."""
+    global OUT, CELLS
+    OUT = Path(a.out).resolve()
+    rows = load_cells(OUT)
+    if not rows:
+        return 2
+    CELLS = [tuple(cid.split("|")) for cid in rows[0]["cells"]] or CELLS
+    recorded = {}
+    path = OUT / "e9_run.json"
+    if path.exists():
+        try:
+            recorded = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            recorded = {}
+    matrix = recorded.get("matrix") or "full"
+    seeds = recorded.get("seeds") or f"{rows[0]['seed']}..{rows[-1]['seed']}"
+    summary = run_summary(rows, matrix, seeds)
+    # The pin is the run's own: this is a reading of that run, not of whatever this checkout is.
+    summary["pin"] = recorded.get("pin") or summary["pin"]
+    print(f"[E9] re-reading {OUT}: matrix {matrix}, seeds {seeds}")
+    print(f"[E9] pin {summary['pin']}")
+    print(f"[E9] wrong {summary['programs_wrong']}  refused {summary['programs_refused']}  "
+          f"crashed {summary['programs_crashed']}     "
+          f"(cells: wrong {summary['cells_wrong']}, refused {summary['cells_refused']}, "
+          f"crashed {summary['cells_crashed']})")
+    if summary["other_findings"]:
+        print(f"[E9] beside the three numbers: {summary['other_findings']}")
+    for line in member_lines([r for r in rows if not r.get("rejected")]):
+        print(line)
+    target = Path(a.baseline).resolve() if a.baseline else BASELINE
+    code, _found = judge(read_baseline(target), summary, matrix, seeds, target.name)
+    return code
 
 
 # ---------------------------------------------------------------------------------------- reduction
@@ -955,11 +1250,24 @@ def main(argv=None) -> int:
     p.add_argument("--out", required=True, help="where the run writes, outside the tree")
     p.add_argument("--jobs", type=int, default=4, help="programs at a time")
     p.add_argument("--update-baseline", action="store_true",
-                   help=f"record this run's three numbers in {BASELINE.name} (full matrix only)")
+                   help=f"record this run's three numbers and its per-program classes in "
+                        f"{BASELINE.name} (full matrix only)")
     p.add_argument("--baseline-note", default="",
                    help=f"a line written into {BASELINE.name} beside the numbers: why this zero was "
                         f"taken, in the words of whoever took it")
+    # Which file the run is judged against. Empty is `baseline.json` beside this script, which is
+    # the one the gate reads; another one is how the comparison itself is exercised (a recording of
+    # the same run has to pass, a copy of an older one has to fail) without editing that file.
+    p.add_argument("--baseline", default="",
+                   help=f"the baseline to judge against, and to write with --update-baseline "
+                        f"(default: {BASELINE.name} beside this script)")
     p.set_defaults(fn=cmd_run)
+    p = sub.add_parser("compare")
+    p.add_argument("--out", required=True, help="the --out of a finished `run`")
+    p.add_argument("--baseline", default="",
+                   help=f"the baseline to judge against (default: {BASELINE.name} beside this "
+                        f"script)")
+    p.set_defaults(fn=cmd_compare)
     p = sub.add_parser("analyze")
     p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_analyze)
