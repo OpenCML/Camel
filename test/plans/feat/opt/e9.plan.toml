@@ -738,3 +738,33 @@ case = "../../../cases/opt/e9/rc22_flat_if_var.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "L6 5\n"
+
+# --- The effect that does not run, which the author ruled must ---------------------------------
+#
+# `rc23_seed429_sync_arm` is the smallest program of a shape the E9 run reports as a wrong value
+# and the compiler reported as a warning: a `sync` block inside the value of a binding nobody reads,
+# holding an outside write (`q(5)` prints).
+#
+# The author ruled on 2026-11-17 (`e480c0995`):
+#
+#   "by principles 3.1 and 3.4 an outside write is used by the region it runs in, so a call, loop
+#    or block that writes runs even when its value is unread; region roots follow the inferred
+#    effect and EffectNotExecuted goes."
+#
+# So the print happens and the warning stops being reported: the region roots follow the node's
+# inferred effect (camel/runtime/region_roots.h, kGCNodeFlagWritesForTheRegion), so the `match`
+# whose arm writes is a root of `main`'s body and runs with it. The two facts that make this the
+# *minimal* program, both measured: dropping the `var v` declaration and its write makes the print
+# come back (the branch is then needed for the print alone), and the write itself is not an effect
+# (3.5), which is what kept the branch unneeded before the fix.
+#
+# The entry is a normal one -- an expectation that holds, not a known failure: the program prints
+# `P 5` on all four back ends.
+
+[[tests]]
+name = "rc23_seed429_sync_arm.runs"
+desc = "An outside write inside a `sync` arm of a `match` whose value nobody reads: by 3.1 and 3.4 the write runs with the region it is written in, so the program prints `P 5`, exits 0, and reports nothing."
+case = "../../../cases/opt/e9/rc23_seed429_sync_arm.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "P 5\n"
