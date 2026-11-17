@@ -4,3 +4,4 @@ warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is 
  18 |     x = 1;
     |       ^
 help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+

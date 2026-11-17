@@ -953,5 +953,5 @@ expect_stdout_exact = "P 5\n"
 known_fail = ["nvm", "fvm", "jit", "prl"]
 known_fail_owner = "lane-rrread (the rework: a region's exit GATE that reads the region's writes, `Builder::layRegionWriteEdges`)"
 known_fail_reason = "a region's write is not joined to the region's exit when the graph is built: `layRegionWriteEdges` collects `q(5)` for the `case _` arm and `gateOf` lays no GATE, because that arm's exit already reaches the write (`result already reaches it`) and nothing else makes the exit needed, so the arm is unreachable when the graph is frozen and `P 5` is never printed"
-known_fail_msg = "The branch is never executed: nothing needs what it gives"
+known_fail_msg = "expect_stdout_exact differs"
 
