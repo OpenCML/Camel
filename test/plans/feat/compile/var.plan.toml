@@ -494,6 +494,53 @@ assert(!text.includes(':var/get'), `and no read of a cell either: ${text.slice(0
 """
 timeout_ms = 30000
 
+# --- An arm that declares the name again (the declaration, not the name) --------------------------
+#
+# `test/cases` holds no `.cml` that declares a `var` inside a `then` / `else` arm -- measured across
+# the whole corpus, not assumed -- so this shape had never been asked either way. It is not a corner:
+# a region declares a name at most once, and two regions that write the same name are two
+# declarations, so the JOIN's carried fact is a declaration's value and not a name's.
+#
+# The pair below is two-sided, the way the loop's entries above are: the first pins the numbers (the
+# arm's `x` is the arm's, the enclosing `x` is still its initialiser, on all four back ends), the
+# second pins that both are values and not cells, so the first is a pin of the JOIN and not of a cell
+# that happened to print the right number.
+
+[[tests]]
+name = "var.arm_declares_the_name_again_and_the_enclosing_value_stays"
+desc = "An arm that declares `x` again (`var x = 5; x = 7`) writes only its own `x`: the read after the branch is still the enclosing `var x = 0`, which the program never assigned. Four back ends, one answer. A 7 means the JOIN carried the arm's declaration out by name, into a declaration the program never wrote."
+kind = "behavior"
+case = "../../../cases/compile/var/arm_shadow_var.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0', `the enclosing x was never assigned, so it is still 0: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.arm_shadow_is_a_value_not_a_cell"
+desc = "The same program under `std::jgir` holds no `:var/new` and no `:var/get`: both `x`s are built as values, so the entry above is a pin of the JOIN rather than of a cell. A cell here would let the entry above pass for the wrong reason."
+kind = "behavior"
+case = "../../../cases/compile/var/arm_shadow_var.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(!text.includes(':var/new'), `both x are values, so the graph holds no :var/new: ${text.slice(0, 400)}`)
+assert(!text.includes(':var/get'), `and no read of a cell either: ${text.slice(0, 400)}`)
+}
+"""
+timeout_ms = 30000
+
 # --- A `var` written inside a loop body is the loop head's phi (stage S3) -------------------------
 #
 # The author's third place (design principles 3.5: "a write to an outer `var` in a loop body becomes

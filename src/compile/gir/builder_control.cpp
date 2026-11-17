@@ -2732,18 +2732,16 @@ node_handle_t Builder::buildBranch(
         }
     };
     const size_t armEnd = arms != nullptr ? arms->size() + 1 : gct->size();
-    // The pre-branch values are taken while the arms are built (Builder::rebindSsa).
-    const bool outerGathering = gatheringBranchValues_;
-    if (!outerGathering) {
-        branchBeforeValues_.clear();
-        gatheringBranchValues_ = true;
-    }
     // The value a name had before this branch, as this branch found it. A branch built *inside* an
     // arm registers its own join as the name's version while that arm is being built, and that join
     // is not the value the name had before this branch: the arm that hands the branch nothing would
     // then join the nested join, which is only defined inside the other arm (a `var` written inside
     // a nested `if` came back as 0, and the C++ writer left the branch's temporary unassigned).
     const std::unordered_map<node_handle_t, node_handle_t> carriedVersionsBefore = carriedVersions_;
+    // The pre-branch values are taken while the arms are built (SsaEnv::rebind). The gathering is
+    // open for exactly as long as they are, and every branch that opens it closes it, nested or
+    // not.
+    ssa_.beginBranch();
     for (size_t i = 1; i < armEnd; i++) {
         arm_ptr_t subGraph;
         if (arms != nullptr) {
@@ -2811,62 +2809,35 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
-    if (!outerGathering) {
-        gatheringBranchValues_ = false;
-    }
+    // Every branch that began the gathering ends it here, nested or not: the outermost one's
+    // records are the ones the joins above read, and the depth is what says whether a branch is
+    // open at all.
+    ssa_.endBranch();
     // A `var` an arm writes as a value is carried by the branch's JOIN (stage S2). The join has one
-    // value slot, so the scan lets a branch write one such name and no more; an arm that writes
-    // nothing hands out the value the name had before the branch, which is why the pre-branch value
-    // is taken while the arms are built (Builder::rebindSsa).
+    // value slot, so the scan lets a branch write one declaration and no more; an arm that writes
+    // nothing hands out the value the declaration had before the branch, which is why the
+    // pre-branch value is taken while the arms are built (SsaEnv::rebind). What the arms wrote is
+    // theirs; the question the join asks of it is the environment's.
     std::string ssaCarried;
     {
-        std::set<std::string> writtenNames;
+        std::vector<const SsaEnv::ArmWrites *> writes;
+        writes.reserve(armList.size());
         for (const arm_ptr_t &arm : armList) {
-            for (const std::string &name : arm->ssaWriteOrder) {
-                writtenNames.insert(name);
-            }
+            writes.push_back(&arm->writes);
         }
-        // A name declared inside an arm dies with it and is not carried; only a name that already
-        // had a value before the branch has one to hand to the arm that writes nothing.
-        if (writtenNames.size() == 1) {
-            const std::string &name = *writtenNames.begin();
-            const auto before       = branchBeforeValues_.find(name);
-            if (before != branchBeforeValues_.end()) {
-                Type *carriedType = valueTypeOf(nodeTypeOf(before->second));
-                // The rule `builder_control.cpp:2824-2825` states, which nothing implemented until
-                // now: "A name declared inside an arm dies with it and is not carried". The record
-                // `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and
-                // that one cannot tell a name the branch found in scope from one an arm declared --
-                // so the record's presence is no proof that the name still exists here, after every
-                // arm's scope has been popped. `nameIsSsa` is that proof: it walks the scopes live
-                // now. Without it `rebindSsa` is called for a name no scope holds, and the
-                // guarantee that reads "An SSA `var` is written where its declaration is in scope"
-                // fires on `if false then sync { var v = 1; v = 2; };` (the shape S2, 243de26e5,
-                // left open). A name declared before the branch keeps its binding, so this only
-                // changes the answer for the case the guarantee already refused.
-                bool carried = carriedType != nullptr && nameIsSsa(name);
-                for (const arm_ptr_t &arm : armList) {
-                    const auto wrote = arm->ssaWrites.find(name);
-                    const node_handle_t value =
-                        wrote != arm->ssaWrites.end() ? wrote->second : before->second;
-                    if (!carried || value == nullptr ||
-                        valueTypeOf(nodeTypeOf(value)) != carriedType) {
-                        carried = false;
-                        break;
-                    }
-                }
-                if (carried) {
-                    auto &carryDraft = currGraph_->transaction().edit();
-                    for (const arm_ptr_t &arm : armList) {
-                        const auto wrote = arm->ssaWrites.find(name);
-                        const node_handle_t value =
-                            wrote != arm->ssaWrites.end() ? wrote->second : before->second;
-                        carryDraft.setRegionResult(arm->region, nodeIdOf(value));
-                    }
-                    joinType   = carriedType;
-                    ssaCarried = name;
-                }
+        const auto typeOf = [this](node_handle_t value) {
+            return value != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+        };
+        if (const auto carry = ssa_.branchCarry(writes, nodeScope_, typeOf)) {
+            // The arm that wrote hands the join its value, and the arm that wrote nothing hands the
+            // value the declaration had before the branch: that is the arm's result, so a read
+            // after the branch that takes the join reads what the branch gave the name.
+            auto &carryDraft = currGraph_->transaction().edit();
+            for (size_t a = 0; a < armList.size(); ++a) {
+                carryDraft.setRegionResult(armList[a]->region, nodeIdOf(carry->values[a]));
             }
+            joinType   = carry->type;
+            ssaCarried = carry->name;
         }
     }
     if (joinType != nullptr && !absentElse && !joinsNoValue) {
@@ -3103,7 +3074,7 @@ node_handle_t Builder::buildBranch(
         // the arm that wrote nothing hands out the value the name had before the branch. A loop
         // head around this branch carries the name as a value too (stage S3), and the value it
         // carries is the join -- not the value of the arm that happened to be built last.
-        rebindSsa(ssaCarried, joinNode);
+        ssa_.rebind(nodeScope_, ssaCarried, joinNode, armWritesHere());
         noteLoopStateWrite(ssaCarried, joinNode);
     }
     linkArmEntries(armList, brchNode);
@@ -3400,12 +3371,6 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         /// The state is a value, not a cell (stage S3): the body's name is the port, a write
         /// rebinds it and is the round's next value, and the head's phi is the port.
         bool ssa = false;
-        /// The head of a loop this one is written in that carries the same name, if there is one.
-        /// This loop's port speaks for the name while its body is built; when the loop is done the
-        /// enclosing head's port speaks for it again, so that the value this head hands out is
-        /// recorded on it (a loop written in a loop's body).
-        bool hasOuterSsaPort       = false;
-        node_handle_t outerSsaPort = nullptr;
     };
     std::vector<LoopCarriedState> carried;
     {
@@ -3524,8 +3489,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // A name the declaration built as a value (stages S1-S3) is carried as a value: the
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
-            const SsaValue *ssa = ssaBindingOf(name);
-            const bool asValue  = ssa != nullptr && ssa->value != nullptr && !isVariable(bound);
+            const SsaEnv::Entry *ssa = ssa_.find(nodeScope_, name);
+            const bool asValue = ssa != nullptr && ssa->value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
             // region of its own does -- the rule this loop had before S2 and S3, and the reason a
             // write inside a block of the body is left to that block: the port is read where the
@@ -3756,26 +3721,29 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     arm_ptr_t condPart;
     arm_ptr_t bodyPart;
     // The body's own names of the `var`s it carries are ports of its region, and a write to one of
-    // them is the round's next value (loopStateAssignmentOf). Both tables are this loop's, and are
-    // put back as they were when it is built: a loop written in a body of its own has its own.
+    // them is the round's next value (loopStateAssignmentOf). The two tables of that record are
+    // this loop's, and are put back as they were when it is built: a loop written in a body of its
+    // own has its own. Which head a name belongs to is not a table of its own -- the SSA
+    // environment keeps the port on the declaration, so the innermost head is the one a write
+    // inside the body finds and the enclosing one is what a write after the loop finds.
+    std::unordered_set<node_handle_t> enclosingPorts;
+    for (const auto &entry : loopStatePorts_) {
+        enclosingPorts.insert(entry.first);
+    }
+    for (const node_handle_t port : ssa_.portsInScope(nodeScope_)) {
+        enclosingPorts.insert(port);
+    }
     struct LoopCarriedScope {
         Builder &self;
         decltype(loopStatePorts_) outerPorts;
         decltype(loopStateWrites_) outerWrites;
-        decltype(loopSsaPorts_) outerSsaPorts;
+        std::unordered_set<node_handle_t> enclosing;
         ~LoopCarriedScope() {
             // A record this loop wrote made *on an enclosing head's port* is that head's next
             // value, not this loop's: the port outlives this loop (a loop written in a loop's
             // body), so its record goes back with the value the body wrote. A port of this loop's
             // own body dies with the loop, and the record on it is dropped with the rest of the
             // tables.
-            std::unordered_set<node_handle_t> enclosing;
-            for (const auto &entry : outerPorts) {
-                enclosing.insert(entry.first);
-            }
-            for (const auto &entry : outerSsaPorts) {
-                enclosing.insert(entry.second);
-            }
             for (const auto &entry : self.loopStateWrites_) {
                 if (!enclosing.contains(entry.first)) {
                     continue;
@@ -3784,9 +3752,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             }
             self.loopStatePorts_  = std::move(outerPorts);
             self.loopStateWrites_ = std::move(outerWrites);
-            self.loopSsaPorts_    = std::move(outerSsaPorts);
         }
-    } carriedScope{*this, loopStatePorts_, loopStateWrites_, loopSsaPorts_};
+    } carriedScope{*this, loopStatePorts_, loopStateWrites_, std::move(enclosingPorts)};
     {
         ExpectedValueScope partScope(expectedValueType_, nullptr);
         if (camel::core::loopHasCondition(kind)) {
@@ -3819,14 +3786,17 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                     }
                     carried[j].port = part.ports[at];
                     if (carried[j].ssa) {
-                        if (const auto outer = loopSsaPorts_.find(carried[j].name);
-                            outer != loopSsaPorts_.end()) {
-                            carried[j].hasOuterSsaPort = true;
-                            carried[j].outerSsaPort    = outer->second;
-                        }
-                        loopSsaPorts_[carried[j].name] = carried[j].port;
-                        ssaValues_[nodeScope_][carried[j].name] =
-                            SsaValue{carried[j].port, stateTypes[declaredStates + j], nullptr};
+                        // The body's `x` is this head's port, and a write of it is the round's next
+                        // state of that port. Anything still live outside this body keeps its own
+                        // declaration and its own value: which port a name belongs to is not
+                        // recorded by name, so this loop's port speaks for the name while its body
+                        // is built and the enclosing head's speaks for it again once the body is
+                        // done.
+                        ssa_.declarePort(
+                            nodeScope_,
+                            carried[j].name,
+                            carried[j].port,
+                            stateTypes[declaredStates + j]);
                     } else {
                         loopStatePorts_[part.ports[at]] = carried[j].cell;
                     }
@@ -4451,14 +4421,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (carried[j].ssa) {
             // The write the head hands out is recorded where the loop is written: on the head of a
             // loop around this one, if there is one, so this loop's write is that loop's next state
-            // too. This loop's own port goes back to what it was first.
-            if (carried[j].hasOuterSsaPort) {
-                loopSsaPorts_[carried[j].name] = carried[j].outerSsaPort;
-            } else {
-                loopSsaPorts_.erase(carried[j].name);
-            }
+            // too. This loop's own port went back with the body it was declared in, so the name
+            // here is the enclosing declaration's again -- the one whose port, if any, takes this
+            // record.
             noteLoopStateWrite(carried[j].name, value);
-            rebindSsa(carried[j].name, value);
+            ssa_.rebind(nodeScope_, carried[j].name, value, armWritesHere());
         } else {
             carriedVersions_[carried[j].cell] = value;
         }
