@@ -602,7 +602,10 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Gate: {
             const auto normInputs = graph->normInputsOf(runtimeNodeIndex);
             if (!normInputs.empty()) {
-                const auto valueInput = normInputs.back();
+                // The value a GATE hands on is its first normal input (design principles 3.1, the
+                // author's ruling of 2026-11-17); the inputs after it are the reads of the region's
+                // writes and are not what it produces.
+                const auto valueInput = normInputs.front();
                 if (auto it = valueProducerMap.find(valueInput); it != valueProducerMap.end()) {
                     valueProducerMap[runtimeNodeIndex] = it->second;
                 }

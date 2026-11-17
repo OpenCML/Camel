@@ -776,6 +776,12 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // was the liveness answer).
             const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
             const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
+            // A gate may also wait through **what it reads**: the inputs after the value are nodes
+            // whose running the gate's own value depends on, so it is an order of its own and not a
+            // wait that went missing (design principles 3.1, the author's ruling of 2026-11-17: the
+            // region `GATE` is `[the value the region hands out, the region's writes...]`, one node
+            // per region, and it waits on nothing else -- "这些写之间不加边").
+            const bool holdsReads = graph->normInputsOf(ref).size() > 1;
             // This is an assertion, not a rule programs reach. Measured: payload validation does
             // run on the execution path (three graphs validated for a small program, five with a
             // fault-injection pass in the pipeline), but a gate whose waits are all taken away
@@ -785,7 +791,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // committed and ran with no error, and that gate was gone afterwards (2 gates before
             // it, 1 after). If this ever fires, either `dceDraft` stopped removing such a gate or
             // the builder started writing one that nothing waits on.
-            if (!hasWaitEdge && !isSyncStatement) {
+            if (!hasWaitEdge && !isSyncStatement && !holdsReads) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
@@ -1170,19 +1176,21 @@ void emitDraftPayload(
         return begin;
     };
 
-    // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
-    // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
-    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here. The
-    // owner of this rule is the encoder -- the payload plan in this file -- not the draft's
-    // writers: it is the place that decides what the frozen graph holds, which is where the
-    // order-edge filter sits too.
+    // A GATE forwards its **first** norm input: FastVM reads the producer, NodeVM reads the gate's
+    // slot, so the slot must be the input's. The inputs after the first are the reads the gate takes
+    // and are not what it hands on (design principles 3.1, the author's ruling of 2026-11-17: "第一个
+    // 输入是区域交出的值，其余输入是区域里 ... 会写外部资源或句柄的节点"). Rewrites that rebind a
+    // gate's input (inlining binds parameter gates to the caller's arguments) leave a stale slot, so
+    // it is derived here. The owner of this rule is the encoder -- the payload plan in this file --
+    // not the draft's writers: it is the place that decides what the frozen graph holds, which is
+    // where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
         for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
             const DraftNodeHeader *h = draft.header(id);
             if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
                 return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
             }
-            id = draft.normInputsOf(id).back();
+            id = draft.normInputsOf(id).front();
         }
         return static_cast<gc_slot_idx_t>(0);
     };

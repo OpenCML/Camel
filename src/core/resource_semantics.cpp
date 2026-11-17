@@ -449,6 +449,45 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     return true;
 }
 
+bool writesForTheRegion(const ResourceSignature &signature) {
+    // The two questions of OperatorSemantics::writesForTheRegion, asked of a signature: a write
+    // that reaches state outside the program, and a write of a handle. The class test is that
+    // file's `reachesOutside`, spelled the same way and for the same reason -- a variable and an
+    // object are the program's own, a handle is a value whose readers this graph cannot see.
+    const auto outside = [](ResourceClass cls) {
+        switch (cls) {
+        case ResourceClass::Variable:
+        case ResourceClass::Object:
+        case ResourceClass::Handle:
+            return false;
+        case ResourceClass::Ambient:
+        case ResourceClass::Foreign:
+        case ResourceClass::Unknown:
+            break;
+        }
+        return true;
+    };
+    for (const ResourceSignature::ParamUse &use : signature.params) {
+        if (writes(use.mode) && (outside(use.cls) || use.cls == ResourceClass::Handle)) {
+            return true;
+        }
+    }
+    for (const ResourceSignature::AmbientUse &use : signature.ambient) {
+        // An ambient resource is state the program does not own, by definition: writing one is a
+        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        if (writes(use.mode)) {
+            return true;
+        }
+    }
+    for (ResourceClass cls : signature.anyOf) {
+        // A resource the walk could not name: read conservatively, as an undeclared operator is.
+        if (outside(cls)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string resourceDisplayName(std::string_view key) {
     const size_t colon = key.find(':');
     if (colon == std::string_view::npos || (colon + 1 < key.size() && key[colon + 1] == ':')) {
