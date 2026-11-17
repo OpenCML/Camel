@@ -1508,7 +1508,7 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // The path starts at a `var` built as a value as well: `x.f = e` rebuilds the whole value
     // and rebinds the name (`ssaAssignmentOf`), and the array is copied rather than taken, since
     // there is no cell whose ownership could be kept.
-    const SsaValue *ssaTarget = isVariable(variable) ? nullptr : ssaBindingOf(name);
+    const SsaEnv::Entry *ssaTarget = isVariable(variable) ? nullptr : ssa_.find(nodeScope_, name);
     if (!isVariable(variable) && ssaTarget == nullptr) {
         return nullptr;
     }
@@ -2008,8 +2008,8 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
         // variable, which comes back here as a plain assignment of the name.
         return nullptr;
     }
-    const std::string name  = moduleLevelName(target->name());
-    const SsaValue *binding = ssaBindingOf(name);
+    const std::string name       = moduleLevelName(target->name());
+    const SsaEnv::Entry *binding = ssa_.find(nodeScope_, name);
     if (binding == nullptr) {
         return nullptr;
     }
@@ -2046,9 +2046,9 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
         // store used to be took its origin from; the value's own origin is where the value begins.
         const camel::source::origin_id_t at =
             gct->at(0) != nullptr ? gct->at(0)->origin() : camel::source::kInvalidOriginId;
-        ssaWrites_[value] = at != camel::source::kInvalidOriginId ? at : gct->origin();
+        ssa_.noteWrite(value, at != camel::source::kInvalidOriginId ? at : gct->origin());
     }
-    rebindSsa(name, value);
+    ssa_.rebind(nodeScope_, name, value, armWritesHere());
     // The write is the round's next state where a loop head carries the name as a value (stage S3):
     // the head's phi takes it instead of a cell (loopStateAssignmentOf, noteLoopStateWrite).
     noteLoopStateWrite(name, value);
@@ -2116,15 +2116,13 @@ void Builder::noteLoopStateWrite(const std::string &name, node_handle_t value) {
     // an arm of a branch inside it (where S2's JOIN is the value), or a loop body inside it (where
     // that head's value is) -- and each of those hands the value to this head when it is done, so
     // every path that finishes a write calls this one. A name no head of this build carries is not
-    // loop state: the table has no entry and nothing is recorded.
-    if (loopSsaPorts_.empty() || value == nullptr) {
+    // loop state: the environment holds no port for it and nothing is recorded.
+    if (value == nullptr) {
         return;
     }
-    const auto port = loopSsaPorts_.find(name);
-    if (port == loopSsaPorts_.end()) {
-        return;
+    if (const node_handle_t port = ssa_.portOf(nodeScope_, name); port != nullptr) {
+        loopStateWrites_[port] = value;
     }
-    loopStateWrites_[port->second] = value;
 }
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {

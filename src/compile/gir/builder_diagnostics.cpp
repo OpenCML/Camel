@@ -1197,7 +1197,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // value the region goes on to hand on -- the body's result, a statement of a sync chain -- is
     // seeded into `needed` and is read; a value nothing takes at all is the dropped one. What is
     // reported, and where, is what the store's own report said: the assignment as written.
-    for (const auto &[value, origin] : ssaWrites_) {
+    for (const auto &[value, origin] : ssa_.writes()) {
         if (value == nullptr || nodeGraphOf(value) != graph.get() ||
             needed.contains(nodeIdOf(value))) {
             continue;

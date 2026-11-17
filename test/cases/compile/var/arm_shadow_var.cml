@@ -1,0 +1,30 @@
+/**
+ * A `var` declared inside an arm is a declaration of its own, and it dies with the arm. The `x`
+ * outside the branch is never assigned by this program, so the read after the branch is still the
+ * initialiser 0 -- even though the arm wrote 7 to the `x` it declared.
+ *
+ * A 7 here is the defect this case exists for: the JOIN would have carried the arm's value out by
+ * *name*, into an enclosing declaration the program never wrote -- a value nobody assigned, which
+ * is a wrong program and not a representation of one. The SSA information of a build is one fact
+ * per declaration, not per name: a region declares a name at most once, so two regions that write
+ * the same name are two declarations
+ * (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, 1.1).
+ *
+ * The arm prints nothing on purpose: a `println` written as a statement inside an arm is a defect
+ * of its own on this tip (the branch-arm invariant; `var.loop_carry_write_in_an_arm` is two
+ * regions away from it), and it would stop the program before the number this case is about.
+ * Nothing under `test/cases` declares a `var` inside a `then` / `else` arm, so this shape had
+ * never been asked either way -- neither proved nor disproved.
+ *
+ * Run: camel test/cases/compile/var/arm_shadow_var.cml
+ */
+func main(): int {
+    var x = 0;
+    let c = 1;
+    if c > 0 then {
+        var x = 5;
+        x = 7;
+    }
+    let shown = println(x);
+    return 0
+}

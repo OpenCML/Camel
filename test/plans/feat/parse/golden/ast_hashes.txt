@@ -2120,6 +2120,7 @@ a697f497a304c872 ok test/cases/compile/unused_values/fallible_sync.cml
 3c286fa1686be1d8 ok test/cases/compile/unused_values/pure_body.cml
 95ed7504bd6f8377 ok test/cases/compile/unused_values/pure_sync.cml
 f7d270690e555876 ok test/cases/compile/var/arm_let.cml
+ba3b7192c1382858 ok test/cases/compile/var/arm_shadow_var.cml
 39a8067622656c5a ok test/cases/compile/var/arm_var.cml
 acd621d26ef7b049 ok test/cases/compile/var/branch_carry_both_arms_else.cml
 daea60557d204d99 ok test/cases/compile/var/branch_carry_both_arms_then.cml
@@ -4103,6 +4104,7 @@ f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 3b6f0e7de2defa16 ok test/cases/para/core/bootstrap_medians.cml
 2013ce9754175bb2 ok test/cases/para/core/concurrent_alloc.cml
 b5279b76c0fe923a ok test/cases/para/core/concurrent_calls.cml
+a696b18ffa86c5db ok test/cases/para/core/concurrent_readers_of_a_call_box.cml
 c55e011422ffd499 ok test/cases/para/core/concurrent_recursion.cml
 9ed3137575be6b23 ok test/cases/para/core/file_chunk_hash.cml
 138cf38f4c67c08c ok test/cases/para/core/filter_keeps_all.cml
