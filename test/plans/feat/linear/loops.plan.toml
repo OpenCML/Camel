@@ -421,13 +421,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.dropped_effect"
-desc = "A loop whose value nothing uses, outside a sync block, does not run and is reported as `The loop` not executed; the function's own value is printed."
+desc = "A loop whose value nothing uses, outside a sync block, runs anyway: a loop is one of its region's writes when what runs inside it writes, so a call, loop or block that writes runs even when nothing reads the value it gives (design principles 3.1, the author's ruling of 2026-11-17). The body prints `0`, `1`, `2` in that order and the function's own value is printed after them, and nothing is reported -- the entry used to pin the loop as never executed, which the ruling retired."
 kind = "behavior"
 case = "../../../cases/loops/dropped_effect.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
-expect_output_contains = ["The loop is never executed: nothing needs what it gives", "SemanticDiag::EffectNotExecuted"]
-expect_stdout_contains = ["5"]
+expect_output_not_contains = ["The loop is never executed", "SemanticDiag::EffectNotExecuted"]
+expect_stdout_exact = "0\n1\n2\n5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
