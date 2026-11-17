@@ -1,0 +1,1 @@
+func main(): int sync { if false then sync { var v1 = 1; v1 = 2; null; }; return 0; }

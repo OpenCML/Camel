@@ -7,6 +7,11 @@
 //   written    two reads of a cell with a write between them: two values, so the two products
 //              must stay two nodes, whatever the 3 literals do
 //   apart      `x + 1` and `x + 2`: two constants of different value, no expression to merge
+//
+// `written`'s cell is held by the write a callee may make: a `var` whose every use stays in the
+// region that declared it is compiled as a value (a rebinding, not a cell), so a corpus that
+// means to hold a cell has to hand it to something that may write it back. `bump` is that
+// something, and it computes the same value the source's own `cell = cell + 1` did.
 
 func shared(x: int): int {
     let a = x * 7
@@ -20,10 +25,16 @@ func literals(): int {
     return a * b
 }
 
+/// The write between the two reads: a `var` parameter the callee may write back, which is what
+/// makes `written`'s name a cell rather than a value.
+func bump(var v: int): void sync {
+    v = v + 1
+}
+
 func written(x: int): int sync {
     var cell = x
     let a = cell * 3
-    cell = cell + 1
+    bump(cell)
     let b = cell * 3
     return a + b
 }

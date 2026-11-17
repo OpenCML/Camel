@@ -2441,7 +2441,7 @@ e7b1889f9dc9f225 ok test/cases/consistency/new_values/peek_loop.cml
 14de043d78d2cc59 ok test/cases/consistency/new_values/rebinding_loop.cml
 049a04472078ee4e ok test/cases/consistency/new_values/snapshot_state.cml
 70e6af9d054009a3 ok test/cases/consistency/new_values/sort_rebinding.cml
-feda632ef6b720bc ok test/cases/consistency/new_values/two_names_for_a_struct.cml
+308d098677accb13 ok test/cases/consistency/new_values/two_names_for_a_struct.cml
 12bfa27ee5d13b4b ok test/cases/consistency/new_values/unused_in_lambda.cml
 ed04ebc79de351df ok test/cases/consistency/new_values/unused_operator.cml
 b4512ab896fc938d ok test/cases/consistency/new_values/unused_var.cml
@@ -3170,7 +3170,7 @@ dd4874766974d739 ok test/cases/modules/nn/gru_lite.cml
 f75b0caceb86d188 ok test/cases/modules/nn/matrix_factorization.cml
 d6c9b2164f447b1a ok test/cases/modules/nn/mnist.cml
 54780e3640e4943d ok test/cases/modules/nn/residual_mlp.cml
-7404ea7f087df388 ok test/cases/modules/nn/sgd_leaves_its_argument.cml
+6b80b56293348bc3 ok test/cases/modules/nn/sgd_leaves_its_argument.cml
 1081944efe74470e ok test/cases/modules/nn/siamese_shared_encoder.cml
 932e1970bcaa039d ok test/cases/modules/nn/softmax_axis_error.cml
 ffd3fa7a2b1d492a ok test/cases/modules/nn/softmax_classifier.cml
@@ -3902,7 +3902,7 @@ c1a092942caf4b56 ok test/cases/opt/algebra_rules/divergence.cml
 d48530c14f968f08 ok test/cases/opt/algebra_rules/library_only.cml
 d52d50350b44b1cb ok test/cases/opt/algebra_rules/measure.cml
 6d3d5bbeb859e306 ok test/cases/opt/algebra_rules/tensor_forms.cml
-06dbc732dcd712ef ok test/cases/opt/camel_passes/cse_subject.cml
+62c558304cee338f ok test/cases/opt/camel_passes/cse_subject.cml
 3d2a687ad74693d8 ok test/cases/opt/camel_passes/dce_subject.cml
 51d83bb71bf41e41 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
@@ -3945,6 +3945,9 @@ d4bfd08df25502f5 ok test/cases/opt/e9/rc17_seed193.cml
 7ad57fa2043211f1 ok test/cases/opt/e9/rc18_seed429.cml
 058e392d09dd83d2 ok test/cases/opt/e9/rc19_seed70.cml
 b33a38202301ae03 ok test/cases/opt/e9/rc20_seed262.cml
+e5afa48f23c582fe ok test/cases/opt/e9/rc20_seed5_arm_decl.cml
+cc17f65391f02fea ok test/cases/opt/e9/rc21_seed429.cml
+9aad18f25a5fa7ee ok test/cases/opt/e9/rc22_flat_if_var.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
