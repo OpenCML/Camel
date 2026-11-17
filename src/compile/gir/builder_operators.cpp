@@ -2044,10 +2044,10 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     const bool reportable =
         !inCompoundAssignment_ && form == GCT::AssignmentForm::Plain;
     if (value != nullptr && reportable) {
-        // The write is reported where the `=` stands, which is the origin the node carries (the
-        // front end gives a write the operator's place); the value's own origin is where the value
-        // begins.
-        const camel::source::origin_id_t at = gct->origin();
+        // The write is reported where the operator stands -- the `=` the program wrote -- which is
+        // the place the store's own reference carries (storeOperatorOrigin); the value's own origin
+        // is where the value begins.
+        const camel::source::origin_id_t at = storeOperatorOrigin(gct);
         ssa_.noteWrite(value, at != camel::source::kInvalidOriginId ? at : gct->origin());
     }
     ssa_.rebind(nodeScope_, name, value, armWritesHere());
