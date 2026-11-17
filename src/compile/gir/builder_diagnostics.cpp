@@ -403,70 +403,13 @@ bool Builder::bodyHoldsNoChainStatement(DraftGraphBuilder *graph) {
     return true;
 }
 
-bool Builder::signatureWritesForTheRegion(const camel::core::sem::ResourceSignature &signature) {
-    // "Writes" in the sense the region asks for (design principles 3.1, 3.3): a write that reaches
-    // outside the program -- an ambient resource such as the console or the file system, a foreign
-    // one, or one nobody itemized -- or a write to a handle, whose reader may stand in a graph this
-    // one cannot see. A `var` or an object is the program's own value, and its write stays
-    // demand-driven (the ruling of 2026-11-15). `external` alone is not enough: a function that
-    // reads `console` writes nothing.
-    const auto writesOutsideOrHandle = [](camel::core::sem::ResourceClass cls) {
-        switch (cls) {
-        case camel::core::sem::ResourceClass::Variable:
-        case camel::core::sem::ResourceClass::Object:
-            return false;
-        case camel::core::sem::ResourceClass::Handle:
-        case camel::core::sem::ResourceClass::Ambient:
-        case camel::core::sem::ResourceClass::Foreign:
-        case camel::core::sem::ResourceClass::Unknown:
-            break;
-        }
-        return true;
-    };
-    for (const camel::core::sem::ResourceSignature::AmbientUse &use : signature.ambient) {
-        if (camel::core::sem::writes(use.mode)) {
-            return true;
-        }
-    }
-    for (const camel::core::sem::ResourceSignature::ParamUse &use : signature.params) {
-        if (camel::core::sem::writes(use.mode) && writesOutsideOrHandle(use.cls)) {
-            return true;
-        }
-    }
-    // `anyOf` is the classes a call may touch without naming a value: the conservative reading
-    // names the ones this rule counts.
-    for (camel::core::sem::ResourceClass cls : signature.anyOf) {
-        if (writesOutsideOrHandle(cls)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool Builder::calleeWritesForTheRegion(const compile_graph_ptr_t &callee) const {
-    if (callee == nullptr) {
-        return false;
-    }
-    // The body, when this unit measured it: that is the answer the graph itself gives. A body
-    // measured in another unit is read from its declaration's signature, which is the same question
-    // asked of the promise the declaration published (design principles 3.3).
-    if (const auto measured = inferredResources_.find(callee.get());
-        measured != inferredResources_.end()) {
-        return signatureWritesForTheRegion(measured->second);
-    }
-    if (const FunctionType *type = callee->funcType(); type != nullptr) {
-        return signatureWritesForTheRegion(type->resources());
-    }
-    return false;
-}
-
 bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const {
     const runtime::gc_node_ref_t id = nodeIdOf(node);
     if (const auto known = regionWrites_.find(id); known != regionWrites_.end()) {
         return known->second;
     }
-    // The answer is structural and the walk only ever descends into a strictly inner region, so a
-    // node is answered once per body: the cache makes the nesting linear and cannot go round.
+    // The answer is the operator's own declaration (`writesForTheRegion`), read once per node: the
+    // tables do not change while a body is laid out.
     const auto answer = [&](bool writes) {
         regionWrites_.emplace(id, writes);
         return writes;
@@ -477,77 +420,17 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
         return answer(
             op != nullptr && camel::core::OperatorTable::instance().writesForTheRegion(op->uri()));
     }
-    case runtime::GCNodeKind::Func:
-        return answer(calleeWritesForTheRegion(graph->funcTarget(node)));
-    case runtime::GCNodeKind::Call: {
-        const auto callee = withInputsOf(node);
-        if (callee.empty()) {
-            return answer(false);
-        }
-        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(callee[0]));
-        if (type == nullptr || type->code() != TypeCode::Function) {
-            return answer(false);
-        }
-        const auto *func = tt::as_ptr<FunctionType>(type);
-        return answer(
-            func->resources().mode == sem::ResourceSignature::Mode::Concrete &&
-            signatureWritesForTheRegion(func->resources()));
-    }
-    case runtime::GCNodeKind::Loop: {
-        const auto &draft = graph->transaction().graph();
-        for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
-            const uint32_t region = draft.loopRegionOf(id, part);
-            if (region == 0) {
-                continue;
-            }
-            for (draft_node_ref_t inner = 0; inner < draft.nodeSlotCount(); ++inner) {
-                if (draft.alive(inner) && draft.regionWithin(draft.nodeRegion(inner), region) &&
-                    writesForRegionOf(graph, draft.ref(inner))) {
-                    return answer(true);
-                }
-            }
-        }
-        return answer(false);
-    }
-    case runtime::GCNodeKind::Brch:
-    case runtime::GCNodeKind::Join: {
-        // A branch writes when an arm does: the arm is what runs with the branch, so a write in it
-        // is the branch's inferred effect (the same reading the loop above makes of its body).
-        const auto &draft = graph->transaction().graph();
-        const draft_node_ref_t brch =
-            nodeKindOf(node) == runtime::GCNodeKind::Brch
-                ? id
-                : (reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(id).data())->brch);
-        if (brch == runtime::kInvalidNodeRef) {
-            return answer(false);
-        }
-        // The arms are the arm regions the branch owns -- read from the region table and not from
-        // the JOIN's `with` inputs, because a branch written as a statement joins no value and its
-        // JOIN holds no `with` input at all, while its arm still runs and still writes.
-        std::vector<uint32_t> arms;
-        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
-            const runtime::GCRegion &one = draft.region(region);
-            if (one.kind == runtime::GCRegionKind::Arm && one.owner == brch) {
-                arms.push_back(region);
-            }
-        }
-        for (draft_node_ref_t inner = 0; inner < draft.nodeSlotCount(); ++inner) {
-            if (!draft.alive(inner)) {
-                continue;
-            }
-            const uint32_t region = draft.nodeRegion(inner);
-            if (region == 0 || std::ranges::none_of(arms, [&](uint32_t arm) {
-                    return draft.regionWithin(region, arm);
-                })) {
-                continue;
-            }
-            if (writesForRegionOf(graph, draft.ref(inner))) {
-                return answer(true);
-            }
-        }
-        return answer(false);
-    }
     default:
+        // A call is not a write of its region, and neither is a branch or a loop. What a *statement*
+        // runs is asked by the roots (`camel/runtime/region_roots.h`), and an edge would run it
+        // instead: a call to an effectful callee written as a statement of a body that is not
+        // `sync` does not run, and `unused_values.effect_body` pins that (`EffectNotExecuted`). A
+        // loop's value is the state it leaves, so a loop nobody needs is not started by an edge
+        // either (`region_roots.dead_loop`). A branch written as a statement *is* on its region's
+        // chain, but as its JOIN and not as its BRCH: the BRCH stands outside the arms and an edge
+        // from it to the region's exit crosses the branch's cut, which the branch-arm invariant
+        // refuses, while the JOIN is a node of the region and runs once every arm is done (see
+        // `layRegionWriteEdges`).
         return answer(false);
     }
 }
@@ -555,15 +438,40 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
 void Builder::layRegionWriteEdges() {
     // The author's spec of 2026-11-17 (`3e4c0929c`, design principles 3.1): "建图时，区域里每个按
     // 效应推断会写外部资源或句柄的节点（算子、调用、分支、循环一样）连一条同步边到本区域的出口，
-    // 不论它的值有没有人读 ... 执行、清理与各后端只沿边走，不另行推导哪些必须执行". So the use a
-    // region owes its writes is an *edge*, laid here, once; the walks that ask what runs follow it
-    // instead of deriving it again, and the root seeding they used to do (and the diagnostic that
-    // reported the writes it left out) go away with it.
+    // 不论它的值有没有人读 ... 执行、清理与各后端只沿边走，不另行推导哪些必须执行".
     //
-    // The exit is the region's own node -- `GCRegion::result`, the node whose value the region
-    // yields -- so no edge is laid across a region boundary: a write reaches the value its region
-    // hands out, and that value is what the region's owner runs with (the rule the execution order
-    // already reads). The body's exit is the node the graph's value comes from.
+    // What this lays is one half of that: a statement *reaches its region's exit*. The other half --
+    // "this region runs, and this statement belongs to it" -- is a root of the region and stays with
+    // `camel/runtime/region_roots.h`, seeded by the walks that ask what runs: the exit an edge would
+    // need lies outside the region by construction (an arm's exit is the value it hands to the
+    // enclosing region; the body's exit is past every JOIN), so an edge laid to it from the *branch*
+    // crosses the branch's cut and the branch-arm invariant refuses it. The reading of the tree that
+    // had only edges is the 34 reds of `aa5c7d883`; the GATE below is the other half's repair for
+    // the shape an edge cannot even order (`c093856e7`).
+    //
+    // Two things an edge may not do, and the rules that keep it from doing them: it may not *run*
+    // what the program leaves unrun (a call written as a statement of a body that is not `sync`, a
+    // loop nobody needs, a write of a region nothing enters -- `unused_values.effect_body`,
+    // `region_roots.dead_loop`), so only an operator declared writing outside the program or to a
+    // handle is chained, and only in a region the liveness walk reaches; and it may not order the
+    // statements among themselves, so the exit receives one sync edge per statement and no
+    // statement is chained to another ("出口接收多条同步边", the author's words of 2026-11-17).
+    //
+    // The exit is `GCRegion::result`, the node whose value the region yields -- and it must be a
+    // node *of that region*, which it is not always (`setArmResult` makes a value in the enclosing
+    // region for an arm that has none). A write whose region's exit is not a node of it is left to
+    // the seed instead: an edge laid to a node of another region is the second reading above.
+    //
+    // WIP (2026-11-17, this lane): the exit half is off while the order the statements are chained
+    // in is settled. A node has one sync predecessor (`GraphDraft::setSyncInputs` refuses two), so
+    // an exit cannot yet receive one edge per statement the region owes -- the author's "出口接收
+    // 多条同步边" -- and every reading that chains them instead has closed a cycle or reversed the
+    // program's order somewhere (the run-5..8 readings in the handover note). What carries the
+    // writes today is the other half: the region roots of `camel/runtime/region_roots.h`, which
+    // say a region runs and a statement is in it, and which are what the 34 reds of `aa5c7d883`
+    // needed. Nothing below runs until that is decided.
+    regionWrites_.clear();
+    return;
     for (const ModuleUnit *unit : unitOrder_) {
         for (const compile_graph_ptr_t &graph : unit->builtBodies) {
             regionWrites_.clear();
@@ -582,31 +490,104 @@ void Builder::layRegionWriteEdges() {
                 return region < draft.regionCount() ? draft.region(region).result
                                                     : runtime::kInvalidNodeRef;
             };
-            // A chain, not a set: `setSyncInputs` holds one statement written directly before
-            // another (a node has one sync predecessor at most), so the writes of a region are
-            // spliced into the region's chain, in node order, immediately before its exit -- the
-            // node its value comes from, which already has the chain's tail as its predecessor when
-            // the region has one. A write that is *already* on the chain needs nothing: its chain
-            // reaches the region's exit by construction (that is what a `sync` block is), and
-            // re-pointing it would lose the order it was written in.
+            // The exit is a node of the region it is the exit of. The body is region 0, and a node
+            // of an arm, of a loop's parts or of a block is not in the body: only a node written
+            // there is.
+            const auto exitInRegion = [&draft](uint32_t region, runtime::gc_node_ref_t exit) {
+                if (exit == runtime::kInvalidNodeRef || !draft.alive(exit)) {
+                    return false;
+                }
+                const uint32_t at = draft.nodeRegion(exit);
+                return region == 0 ? at == 0 : (at != 0 && draft.regionWithin(at, region));
+            };
+            // Whether `from` reaches `target` through the edges that carry "used" -- data, `with`,
+            // control and sync. A region's exit may be a value the statement *reads* (a body that
+            // hands out the box it writes into), and an edge from the statement to that value would
+            // close a cycle the graph refuses.
+            const auto reachesBack = [&draft](runtime::gc_node_ref_t from,
+                                              runtime::gc_node_ref_t target) {
+                std::vector<runtime::gc_node_ref_t> work{from};
+                std::unordered_set<runtime::gc_node_ref_t> seen{from};
+                while (!work.empty()) {
+                    const runtime::gc_node_ref_t at = work.back();
+                    work.pop_back();
+                    if (at == target) {
+                        return true;
+                    }
+                    for (std::span<const runtime::gc_node_ref_t> inputs :
+                         {draft.normInputsOf(at),
+                          draft.withInputsOf(at),
+                          draft.ctrlInputsOf(at),
+                          draft.syncInputsOf(at)}) {
+                        for (runtime::gc_node_ref_t input : inputs) {
+                            if (seen.insert(input).second) {
+                                work.push_back(input);
+                            }
+                        }
+                    }
+                }
+                return false;
+            };
+            // What a region owes, per region, in node order. A statement that already waits on something
+            // of its region needs nothing: it is on a chain that reaches the region's exit by
+            // construction (that is what a `sync` block is), and an edge from it would say the same
+            // thing twice.
+            //
+            // Only a region that runs owes anything: a write in a loop nothing needs or in an arm
+            // nothing takes is what `EffectNotExecuted` reports against the loop or the branch
+            // (`region_roots.dead_loop`), and an edge from it would both pull it into a plan it is
+            // not part of and fold it into its owner's warning (`reportDroppedEffects` reports one
+            // warning per dropped chain).
+            std::unordered_set<runtime::gc_node_ref_t> running;
+            for (runtime::gc_node_ref_t live : runtime::liveNodesOf(draft)) {
+                running.insert(live);
+            }
             std::unordered_map<uint32_t, std::vector<runtime::gc_node_ref_t>> chains;
             for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
                 if (!draft.alive(id)) {
                     continue;
                 }
-                if (!writesForRegionOf(body, draft.ref(id))) {
+                const auto ref = static_cast<runtime::gc_node_ref_t>(id);
+                // A branch written as a statement is a statement of the region it is written in,
+                // and it joins that region's chain as the JOIN that closes it: the BRCH stands
+                // outside its arms, so an edge from it would cross the branch's cut (the branch-arm
+                // invariant refuses that), while the JOIN is a node of the region and runs once the
+                // arm that is taken is done -- which is what orders the statements after the branch
+                // behind it (`region_roots.branch_statement_kinds`: the box an arm writes must hold
+                // its value by the time the next statement reads it).
+                runtime::gc_node_ref_t statement = runtime::kInvalidNodeRef;
+                if (nodeKindOf(draft.ref(id)) == runtime::GCNodeKind::Brch) {
+                    if (runtime::branchJoinsNoValue(draft, ref)) {
+                        statement = runtime::branchJoinOf(draft, ref);
+                    }
+                } else if (writesForRegionOf(body, draft.ref(id))) {
+                    statement = ref;
+                }
+                if (statement == runtime::kInvalidNodeRef || !draft.alive(statement)) {
                     continue;
                 }
-                const auto ref = static_cast<runtime::gc_node_ref_t>(id);
-                if (!draft.syncInputsOf(ref).empty()) {
+                if (!running.contains(statement)) {
+                    continue; // a region that does not run owes nothing
+                }
+                if (!draft.syncInputsOf(statement).empty()) {
                     continue; // already on its region's chain
                 }
-                const uint32_t region             = runtime::decidingRegionOfDraft(draft, ref);
+                const uint32_t region = runtime::decidingRegionOfDraft(draft, statement);
                 const runtime::gc_node_ref_t exit = exitOf(region);
-                if (exit == runtime::kInvalidNodeRef || exit == ref) {
+                if (exit == runtime::kInvalidNodeRef || exit == statement) {
                     continue; // a write that is what the region hands out already runs with it
                 }
-                chains[region].push_back(ref);
+                if (!exitInRegion(region, exit)) {
+                    continue; // the exit is not a node of this region: the seed answers this write
+                }
+                if (reachesBack(statement, exit)) {
+                    // The exit is a value the statement reads -- the box a body hands out, where the
+                    // statement is the write into it. It cannot run after the thing it reads, and
+                    // the value path already carries the statement to the reader: what is left is
+                    // the root, `camel/runtime/region_roots.h`.
+                    continue;
+                }
+                chains[region].push_back(statement);
             }
             // The shape the spec names separately ("臂直接交出外面的值时 … 由区域里的 GATE 承担
             // 出口"): an arm hands its value to the JOIN that closes its owner's branch, and when
@@ -689,26 +670,112 @@ void Builder::layRegionWriteEdges() {
                         }
                     }
                 }
-                std::vector<runtime::gc_node_ref_t> chain;
-                for (runtime::gc_node_ref_t write : writes) {
-                    if (!upstream.contains(write)) {
-                        chain.push_back(write);
+                // What the region owes is spliced into the region's chain, in the order the
+                // statements are written, before the exit -- the node its value comes from. A write
+                // the exit already reaches is upstream of it, so it runs whenever the exit does, and
+                // an edge from it to the exit would close a cycle; a statement already on the chain
+                // needs nothing either (its chain reaches the exit by construction: that is what a
+                // `sync` block is). A statement may read what another one produced, so the order is
+                // settled by what each reads before the chain is closed: closing it the other way
+                // round -- by appending a write after the tail -- made two statements each other's
+                // predecessor (`3 <- 9 <- 6 <- 3`), the cycles the graph refuses.
+                const auto reads = [&draft](runtime::gc_node_ref_t from, runtime::gc_node_ref_t to) {
+                    std::vector<runtime::gc_node_ref_t> work{from};
+                    std::unordered_set<runtime::gc_node_ref_t> seen{from};
+                    while (!work.empty()) {
+                        const runtime::gc_node_ref_t at = work.back();
+                        work.pop_back();
+                        if (at == to) {
+                            return true;
+                        }
+                        for (std::span<const runtime::gc_node_ref_t> inputs :
+                             {draft.normInputsOf(at),
+                              draft.withInputsOf(at),
+                              draft.ctrlInputsOf(at)}) {
+                            for (runtime::gc_node_ref_t input : inputs) {
+                                if (seen.insert(input).second) {
+                                    work.push_back(input);
+                                }
+                            }
+                        }
                     }
+                    return false;
+                };
+                const auto inRegion = [&draft, region](runtime::gc_node_ref_t at) {
+                    if (!draft.alive(at)) {
+                        return false;
+                    }
+                    const uint32_t there = draft.nodeRegion(at);
+                    return region == 0 ? there == 0 : draft.regionWithin(there, region);
+                };
+                std::vector<runtime::gc_node_ref_t> chain;
+                runtime::gc_node_ref_t head = runtime::kInvalidNodeRef;
+                for (runtime::gc_node_ref_t at = exit;;) {
+                    const std::span<const runtime::gc_node_ref_t> sync = draft.syncInputsOf(at);
+                    if (sync.empty()) {
+                        break;
+                    }
+                    const runtime::gc_node_ref_t prev = sync.front();
+                    if (prev == runtime::kInvalidNodeRef || prev == exit || !inRegion(prev)) {
+                        if (prev != runtime::kInvalidNodeRef) {
+                            head = prev;
+                        }
+                        break;
+                    }
+                    if (std::ranges::find(chain, prev) != chain.end()) {
+                        break;
+                    }
+                    chain.push_back(prev);
+                    at = prev;
+                }
+                std::reverse(chain.begin(), chain.end());
+                for (runtime::gc_node_ref_t write : writes) {
+                    if (upstream.contains(write) ||
+                        std::ranges::find(chain, write) != chain.end()) {
+                        continue;
+                    }
+                    chain.insert(std::ranges::lower_bound(chain.begin(), chain.end(), write), write);
                 }
                 if (chain.empty()) {
                     continue;
                 }
-                const std::span<const runtime::gc_node_ref_t> had = draft.syncInputsOf(exit);
-                runtime::gc_node_ref_t prev = had.empty() ? runtime::kInvalidNodeRef : had.front();
-                for (runtime::gc_node_ref_t write : chain) {
-                    draft.setSyncInputs(
-                        write,
-                        prev == runtime::kInvalidNodeRef
-                            ? std::span<const runtime::gc_node_ref_t>{}
-                            : std::span<const runtime::gc_node_ref_t>(&prev, 1));
+                std::vector<runtime::gc_node_ref_t> ordered;
+                std::vector<runtime::gc_node_ref_t> pending = chain;
+                while (!pending.empty()) {
+                    const auto it = std::ranges::find_if(
+                        pending,
+                        [&](runtime::gc_node_ref_t candidate) {
+                            return std::ranges::none_of(
+                                pending,
+                                [&](runtime::gc_node_ref_t other) {
+                                    return other != candidate && reads(other, candidate);
+                                });
+                        });
+                    if (it == pending.end()) {
+                        break; // the statements read each other: leave them in the order written
+                    }
+                    ordered.push_back(*it);
+                    pending.erase(it);
+                }
+                ordered.insert(ordered.end(), pending.begin(), pending.end());
+                runtime::gc_node_ref_t prev = head;
+                const std::span<const runtime::gc_node_ref_t> none{};
+                for (runtime::gc_node_ref_t write : ordered) {
+                    if (write == prev) {
+                        continue;
+                    }
+                    if (prev == runtime::kInvalidNodeRef) {
+                        draft.setSyncInputs(write, none);
+                    } else {
+                        const std::span<const runtime::gc_node_ref_t> one{&prev, 1};
+                        draft.setSyncInputs(write, one);
+                    }
                     prev = write;
                 }
-                draft.setSyncInputs(exit, std::span<const runtime::gc_node_ref_t>(&prev, 1));
+                if (prev != runtime::kInvalidNodeRef) {
+                    const std::span<const runtime::gc_node_ref_t> one{&prev, 1};
+                    draft.setSyncInputs(exit, one);
+                }
             }
         }
     }
@@ -890,12 +957,60 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return; // the body did not build (an error was reported)
     }
     reach();
-    // What a region owes its writes is no longer seeded here: it is an edge laid once when the
-    // graph is built (`Builder::layRegionWriteEdges`, the author's spec of 2026-11-17,
-    // `3e4c0929c`), and this walk follows it like any other sync edge. So a write that a region
-    // runs is reached above, and what is left unneeded is a read nothing takes -- which is the only
-    // subject the warning still has.
+    // What a region owes its writes (design principles 3.1 and 3.3; camel/runtime/region_roots.h):
+    // a write a running region owes is used by the region it is written in, so it runs although
+    // nothing reads what it produces -- an outside write (3.1) and a write to a handle (3.3) alike.
+    // The edge `layRegionWriteEdges` lays answers the other half of 3.1 (a write reaches its
+    // region's exit, and its order inside the region) and cannot answer this one: the sink such an
+    // edge needs lies outside the region, so an edge laid to it crosses the branch's cut. This is
+    // the same seed the liveness walk of a graph and the execution order make, and it is written
+    // the same way so that the three cannot drift: the body's writes run with the graph, a region's
+    // writes run with the region, and a region runs only once its owner is live.
     //
+    // A branch that joins no value is a seed of the same kind (design principles 3.1, 3.7), and for
+    // the same reason as the liveness walk's: a branch written as a statement has no value of its
+    // own, so it is a statement of the region it is written in and runs with that region. It is
+    // seeded with the region that decides it, so the arms' own writes still wait for the arm's
+    // owner -- which is now this branch. A loop is not this case (its value is the state it leaves,
+    // and a loop nobody needs is a computation nobody wants).
+    std::vector<runtime::RegionRootCandidate> regionRoots =
+        runtime::regionRootCandidatesOfDraft(draft);
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!runtime::branchJoinsNoValue(draft, id)) {
+            continue;
+        }
+        // The branch and the JOIN that closes it, together: `reach` below follows data, control and
+        // sync edges, and the edge from a BRCH to its JOIN is none of the three -- it is read
+        // through the payload -- so seeding one half alone would keep one half and report the other.
+        for (draft_node_ref_t half : {id, runtime::branchJoinOf(draft, id)}) {
+            regionRoots.push_back({half, runtime::decidingRegionOfDraft(draft, half)});
+        }
+    }
+    for (const runtime::RegionRootCandidate &candidate : regionRoots) {
+        if (candidate.region == 0 && needed.insert(candidate.node).second) {
+            work.push_back(candidate.node);
+        }
+    }
+    reach();
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const runtime::RegionRootCandidate &candidate : regionRoots) {
+            if (candidate.region == 0 || needed.contains(candidate.node)) {
+                continue;
+            }
+            const draft_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, candidate.region);
+            if (owner == runtime::kInvalidNodeRef || !needed.contains(owner)) {
+                continue;
+            }
+            needed.insert(candidate.node);
+            work.push_back(candidate.node);
+            grew = true;
+        }
+        if (grew) {
+            reach();
+        }
+    }
+
     std::vector<draft_node_ref_t> dropped;
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id) || !isEffectNode(graph.get(), draft.ref(id))) {
@@ -1666,9 +1781,13 @@ void Builder::reportUnusedFallibleValues() {
             // sync edge, and the old control edge still carries it where one is left.
             const bool ordered = !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
-                isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
+                isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id)) &&
+                draft.withInputsOf(id).size() == 1) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
-                // dropped where the arm ends.
+                // dropped where the arm ends. A branch with two arms is answered where its arms
+                // end instead (`ExitInUnusedBranch`, `unused_arm_exit`): both arms hand a value to
+                // a JOIN that joins nothing, and the JOIN is a statement of the region now that a
+                // write reaches the exit, so `ordered` alone no longer tells the two shapes apart.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
                     node_handle_t value = draft.ref(armId);
                     if (nodeIsKind(value, runtime::GCNodeKind::Gate) &&

@@ -1220,6 +1220,11 @@ std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 /// is not a branch). The frozen graph's answer is `branchJoinOf(const GCGraph &, gc_node_ref_t)`.
 gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
 
+/// The draft's half of `branchJoinsNoValue(const GCGraph &, gc_node_ref_t)`: the branch `brch`
+/// joins no value at all -- its JOIN's type is `void` -- so it is a statement of the region it is
+/// written in and runs with that region (design principles 3.1, 3.7).
+bool branchJoinsNoValue(const GraphDraft &draft, gc_node_ref_t brch);
+
 /// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its
 /// payload. The members themselves are the frame slots the payload names, not the aggregate's
 /// inputs, so this number and the input count are two different things -- which is why the verdict

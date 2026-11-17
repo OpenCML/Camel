@@ -279,6 +279,14 @@ std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 /// through the payload.
 gc_node_ref_t branchJoinOf(const GCGraph &graph, gc_node_ref_t brch);
 
+/// The branch `brch` joins no value at all (design principles 3.1, 3.7): its JOIN's type is `void`,
+/// so nothing can need the branch into an execution and nothing can leave it out of one -- it is a
+/// statement of the region it is written in, and that region running is its running. A branch whose
+/// JOIN does join a value is not this case: `let unused = if ...` is a branch whose value nobody
+/// reads, and a computation nobody wants. The two live in this one predicate because every walk that
+/// asks what runs must read them the same way.
+bool branchJoinsNoValue(const GCGraph &graph, gc_node_ref_t brch);
+
 /// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members
 /// the aggregate has (0 when it is not one), and whether its last member may be dropped -- no root
 /// names it, nothing but the aggregate reads that member, and every reader of the aggregate reads a
