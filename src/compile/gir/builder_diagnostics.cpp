@@ -545,17 +545,27 @@ void Builder::layRegionWriteEdges() {
             // The exit is a node of the region it is the exit of. The body is region 0, and a node
             // of an arm, of a loop's parts or of a block is not in the body: only a node written
             // there is.
+            //
+            // The one shape that is not a node *of* its region is a region's own `result`: what an
+            // arm hands out need not be built inside the arm. A constant the arm ends with is
+            // placed in the region that encloses it (the arm's `result` names it all the same), and
+            // the write rule is about the value the reader takes, not about where the value was
+            // built -- `test/cases/compile/ref/refwrite_shapes.cml` writes into a box and then
+            // hands out a `1`, and refusing that exit left the write carried by nothing.
             const auto exitInRegion = [&draft](uint32_t region, runtime::gc_node_ref_t exit) {
                 if (exit == runtime::kInvalidNodeRef || !draft.alive(exit)) {
                     return false;
+                }
+                if (region != 0 && region < draft.regionCount() &&
+                    draft.region(region).result == exit) {
+                    return true;
                 }
                 const uint32_t at = draft.nodeRegion(exit);
                 return region == 0 ? at == 0 : (at != 0 && draft.regionWithin(at, region));
             };
             // Whether `from` reaches `target` through the edges that carry "used" -- data, `with`,
-            // control and sync. A region's exit may be a value the statement *reads* (a body that
-            // hands out the box it writes into), and an edge from the statement to that value would
-            // close a cycle the graph refuses.
+            // control and sync: the reading is "`target` is upstream of `from`", because the walk
+            // follows inputs.
             const auto reachesBack =
                 [&draft](runtime::gc_node_ref_t from, runtime::gc_node_ref_t target) {
                     std::vector<runtime::gc_node_ref_t> work{from};
@@ -580,6 +590,43 @@ void Builder::layRegionWriteEdges() {
                     }
                     return false;
                 };
+            // Whether the statement *writes* the value the region's exit names -- the box a region
+            // hands out, where the statement is the write into it (the operator's declaration says
+            // which operand of it, if any, the operator writes in place).
+            //
+            // It is the one shape the "the statement reads the exit" reading below must not leave
+            // out. A write into the box a region hands out reads that box, so the reading sees the
+            // statement and the exit as the same value and concludes the box carries the write --
+            // which is false: the box carries its own value, the write changes what it holds, and
+            // no edge says so. `test/cases/compile/ref/refwrite_shapes.cml`'s `r6` shape is that
+            // body (`return c` after `state::set(c, 3)`): it answered 0, the value the box started
+            // with, because the write was left on no chain and no GATE read it.
+            const auto writesTheExit = [&draft, body](
+                                           runtime::gc_node_ref_t statement,
+                                           runtime::gc_node_ref_t exit) {
+                if (nodeKindOf(draft.ref(statement)) != runtime::GCNodeKind::Oper) {
+                    return false;
+                }
+                const auto &op = body->operTarget(draft.ref(statement));
+                if (op == nullptr) {
+                    return false;
+                }
+                const auto &table = camel::core::OperatorTable::instance();
+                const auto oper   = table.lookup(op->uri());
+                if (!oper.has_value()) {
+                    return false;
+                }
+                for (const auto &[isWith, inputs] :
+                     {std::pair{false, draft.normInputsOf(statement)},
+                      std::pair{true, draft.withInputsOf(statement)}}) {
+                    for (size_t index = 0; index < inputs.size(); ++index) {
+                        if (inputs[index] == exit && table.writesOperand(*oper, isWith, index)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
             // What a region owes, per region, in node order: every statement in it that writes,
             // whatever else the statement already waits on.
             //
@@ -636,12 +683,16 @@ void Builder::layRegionWriteEdges() {
                 // (`test/ cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is the last statement of
                 // the block `case _ => sync { q(5); return 0; }`, and with it hung on the exit the
                 // block's own GATE is read, the arm runs and `q(5)` prints).
-                if (reachesBack(statement, exit)) {
-                    // The exit is a value the statement reads -- the box a body hands out, where
-                    // the statement is the write into it. The statement is then *upstream* of the
-                    // exit (the exit depends on it), so it runs whenever the exit does and the GATE
-                    // below leaves it out of its inputs: an edge from it would close a cycle the
-                    // graph refuses, and a second reason for it to run would say nothing new.
+                // A statement that reads the exit is not hung a second time: the exit is a value it
+                // reads, so a write that only *reads* it runs whenever the exit does and the GATE
+                // below leaves it out of its inputs -- an edge from it would close a cycle the
+                // graph refuses, and a second reason for it to run would say nothing new.
+                //
+                // A write into the exit is the exception, and it is the whole reason this reading
+                // is asked rather than assumed: the box a region hands out is a value the write
+                // *changes*, not one it is behind, so the box carries nothing of it
+                // (`writesTheExit` above, and `refwrite_shapes.cml`'s `r6`).
+                if (reachesBack(statement, exit) && !writesTheExit(statement, exit)) {
                     continue;
                 }
                 chains[region].push_back(statement);
