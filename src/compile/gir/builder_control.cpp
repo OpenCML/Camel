@@ -2833,7 +2833,18 @@ node_handle_t Builder::buildBranch(
             const auto before       = branchBeforeValues_.find(name);
             if (before != branchBeforeValues_.end()) {
                 Type *carriedType = valueTypeOf(nodeTypeOf(before->second));
-                bool carried      = carriedType != nullptr;
+                // The rule `builder_control.cpp:2824-2825` states, which nothing implemented until
+                // now: "A name declared inside an arm dies with it and is not carried". The record
+                // `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and
+                // that one cannot tell a name the branch found in scope from one an arm declared --
+                // so the record's presence is no proof that the name still exists here, after every
+                // arm's scope has been popped. `nameIsSsa` is that proof: it walks the scopes live
+                // now. Without it `rebindSsa` is called for a name no scope holds, and the
+                // guarantee that reads "An SSA `var` is written where its declaration is in scope"
+                // fires on `if false then sync { var v = 1; v = 2; };` (the shape S2, 243de26e5,
+                // left open). A name declared before the branch keeps its binding, so this only
+                // changes the answer for the case the guarantee already refused.
+                bool carried = carriedType != nullptr && nameIsSsa(name);
                 for (const arm_ptr_t &arm : armList) {
                     const auto wrote = arm->ssaWrites.find(name);
                     const node_handle_t value =
