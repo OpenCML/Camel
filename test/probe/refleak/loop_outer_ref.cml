@@ -1,0 +1,23 @@
+import state
+
+// The smallest program of the give-back at a loop's exit (author review 2026-11-16, item 6: "a
+// `Ref` read from inside a loop has no give-back at the loop's end").
+//
+// `box` is made before the loop, read on every round, and nothing reads it after the loop: once the
+// loop has left, no use is left to come back at. The row that would come back at the read cannot be
+// laid there -- the round runs it again, and the second round would read a box the count had already
+// released -- so it waits at the LOOP node's own position, which is where the loop ends. Before that
+// position carried a give-back, the plan still read balanced (the reference was called `kept`) and
+// the box stayed counted for the life of the program.
+func read_only(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 3 do sync {
+        println(`box ${state::get(box)}`)
+        i + 1
+    }
+    return 0
+}
+
+func main(): int sync {
+    return read_only()
+}
