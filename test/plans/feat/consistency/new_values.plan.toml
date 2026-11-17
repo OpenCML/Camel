@@ -390,7 +390,7 @@ for (const line of ops) {
 
 [[tests]]
 name = "new_values.two_names_for_a_struct"
-desc = "Two names for one struct do not see each other's writes, including a write inside an array the struct holds: `var b = a` then `b.xs[0] = 9` leaves `a.xs` as it was; a read `let kept = inner` is not changed by a later write into `inner`; a struct in a struct written through a path. The invariant the memory accounting has to keep when the plan starts deciding writes in place. Alike on the four back ends."
+desc = "Two names for one struct do not see each other's writes, including a write inside an array the struct holds: `var b = a` then `b.xs[0] = 9` leaves `a.xs` as it was; a read `let kept = inner` is not changed by a later write into `inner`; a struct in a struct written through a path. The invariant the memory accounting has to keep when the plan starts deciding writes in place: two names are two holders, and reuse in place happens only at count one (the author's answer, `9699824aa`). Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/two_names_for_a_struct.cml"
 args = ["${case}", "${backend}"]
