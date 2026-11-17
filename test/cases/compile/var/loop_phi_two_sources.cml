@@ -1,0 +1,26 @@
+/**
+ * A loop head's phi, read from both of its sources: the value from before the loop and the value
+ * the body wrote.
+ *
+ * `total` is given `5`, written to `10` where the loop stands, and the body adds `i` on three
+ * rounds. The loop head therefore carries two different values: the entry value (10, the value the
+ * name held where the loop begins) and the back edge (10 + 0 + 1 + 2 = 13). `13` is what the read
+ * after the loop must print. `8` means the entry value was the initialiser `5` -- the value the cell
+ * was made with -- instead of the last write before the loop; `6`, `9` or `11` mean a round's
+ * increment went to the head twice or not at all.
+ *
+ * Written as the loop's own state the same program is
+ * `let (_, total) = loop i = 0, acc = total while i < 3 do (i + 1, acc + i)`.
+ *
+ * Run: camel test/cases/compile/var/loop_phi_two_sources.cml std::nvm
+ */
+func main(): int sync {
+    var total = 5
+    total = total * 2
+    let _ = loop i = 0 while i < 3 do {
+        total = total + i
+        i + 1
+    }
+    println(total)
+    return 0
+}

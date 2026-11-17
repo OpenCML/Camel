@@ -1512,8 +1512,7 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     if (!isVariable(variable) && ssaTarget == nullptr) {
         return nullptr;
     }
-    Type *rootType =
-        ssaTarget != nullptr ? ssaTarget->type : valueTypeOf(nodeTypeOf(variable));
+    Type *rootType = ssaTarget != nullptr ? ssaTarget->type : valueTypeOf(nodeTypeOf(variable));
     if (rootType == nullptr) {
         return nullptr;
     }
@@ -1561,8 +1560,8 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // copy; see for the measurement that shows both.
     const bool inPlace     = ssaTarget == nullptr && synced_ && rootType->code() == TypeCode::Array;
     node_handle_t rootRead = ssaTarget != nullptr ? ssaTarget->value
-                              : inPlace         ? peekVariable(variable)
-                                                : readVariable(variable);
+                             : inPlace            ? peekVariable(variable)
+                                                  : readVariable(variable);
     const auto make        = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
         node->setOrigin(at->origin());
         return node;
@@ -1994,8 +1993,7 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     // The assignment as written, and the one a path rebuilds: that one names the built-in group
     // itself (`$builtin::__assn__`) and is the same write (pathAssignmentOf).
     std::string calleeName;
-    if (gct->size() == 3 && gct->at(0) != nullptr &&
-        gct->at(0)->type() == GCT::NodeKind::DREF) {
+    if (gct->size() == 3 && gct->at(0) != nullptr && gct->at(0)->type() == GCT::NodeKind::DREF) {
         calleeName = gct->at(0)->name();
         if (calleeName.rfind(kBuiltinPrefix, 0) == 0) {
             calleeName = calleeName.substr(kBuiltinPrefix.size());
@@ -2010,8 +2008,8 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
         // variable, which comes back here as a plain assignment of the name.
         return nullptr;
     }
-    const std::string name    = moduleLevelName(target->name());
-    const SsaValue *binding   = ssaBindingOf(name);
+    const std::string name  = moduleLevelName(target->name());
+    const SsaValue *binding = ssaBindingOf(name);
     if (binding == nullptr) {
         return nullptr;
     }
@@ -2039,18 +2037,21 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
         value = entered;
     }
     // A write that came from `a op= b` is not reported: the compound assignment reads the name it
-    // writes, so the report of a dropped value never stood on it (storedValueIsRead answered for the
-    // cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) names the
+    // writes, so the report of a dropped value never stood on it (storedValueIsRead answered for
+    // the cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) names the
     // built-in group itself and is skipped for the same reason: that rebuild reads `x`.
     const bool reportable = !inCompoundAssignment_ && gct->at(0)->name() == "__assn__";
     if (value != nullptr && reportable) {
         // The write is reported where the assignment operator stands, which is where the call the
         // store used to be took its origin from; the value's own origin is where the value begins.
-        const camel::source::origin_id_t at = gct->at(0) != nullptr ? gct->at(0)->origin()
-                                                                    : camel::source::kInvalidOriginId;
+        const camel::source::origin_id_t at =
+            gct->at(0) != nullptr ? gct->at(0)->origin() : camel::source::kInvalidOriginId;
         ssaWrites_[value] = at != camel::source::kInvalidOriginId ? at : gct->origin();
     }
     rebindSsa(name, value);
+    // The write is the round's next state where a loop head carries the name as a value (stage S3):
+    // the head's phi takes it instead of a cell (loopStateAssignmentOf, noteLoopStateWrite).
+    noteLoopStateWrite(name, value);
     return value;
 }
 
@@ -2106,6 +2107,24 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     // hands on is the last value it wrote, as a cell would hold.
     loopStateWrites_[port] = value;
     return value;
+}
+
+void Builder::noteLoopStateWrite(const std::string &name, node_handle_t value) {
+    // The same record the cell path makes where the write stands (loopStateAssignmentOf above), for
+    // a `var` the loop head carries as a value (stage S3): the round's next state is the value just
+    // written. The write itself can stand anywhere in the body -- a statement of the body's block,
+    // an arm of a branch inside it (where S2's JOIN is the value), or a loop body inside it (where
+    // that head's value is) -- and each of those hands the value to this head when it is done, so
+    // every path that finishes a write calls this one. A name no head of this build carries is not
+    // loop state: the table has no entry and nothing is recorded.
+    if (loopSsaPorts_.empty() || value == nullptr) {
+        return;
+    }
+    const auto port = loopSsaPorts_.find(name);
+    if (port == loopSsaPorts_.end()) {
+        return;
+    }
+    loopStateWrites_[port->second] = value;
 }
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
@@ -4509,11 +4528,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     node_handle_t{},
                     LinkType::Norm};
             }
-            // A name bound by `let` is refused with the reason that names it, and it is refused here
+            // A name bound by `let` is refused with the reason that names it, and it is refused
+            // here
             // -- before the write path below decides how to remember the argument, and before the
             // shape check -- because the specific reason must answer for a position where the
             // generic one could also apply. `let k = 0; k = 5` used to be answered with
-            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), and `AssignmentTargetNotVariable`
+            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), and
+            // `AssignmentTargetNotVariable`
             // ("the target must be a variable") replaced it when the write path stopped asking this
             // question; a diagnostic that does not say what to change is not the one to keep.
             if (const auto immutable = immutableNameOf(arg.expr)) {
@@ -4535,10 +4556,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         nodeAt(name).has_value()) {
                         node_handle_t node = resolveNodeByRef(name);
                         // The name a closure captured is a PORT and not a variable once the capture
-                        // is by value (design principles 3.5, 197): a value has nowhere to write, so
-                        // the rule that answers the write is the capture's, and the general
-                        // "the target must be a variable" would name neither the rule nor the way
-                        // out. `requireCapturedNameWritable` answers it for a cell and a port alike
+                        // is by value (design principles 3.5, 197): a value has nowhere to write,
+                        // so the rule that answers the write is the capture's, and the general "the
+                        // target must be a variable" would name neither the rule nor the way out.
+                        // `requireCapturedNameWritable` answers it for a cell and a port alike
                         // (`captureOriginOf_`), and stays silent where the general rule governs.
                         if (node != nullptr && captureOriginOf_.contains(node)) {
                             requireCapturedNameWritable(node, name, false, arg.expr->origin());
@@ -4610,12 +4631,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // the first write made: the port carries that version as a data edge, and the
                 // control input the writer used to stand in for it is gone with it
                 // (a capture of a cell is linked the same way, Builder::captureValueOf;
-                // Builder::valueVersionOf says what a version is). The version is the cell the write
-                // stored into -- `:op/assn` gives that cell back as its own value -- so the callee
-                // still writes the variable's one cell, and the write the callee does is recorded
-                // where the call is built (recordWrite). The `var` position of an assignment or of a
-                // variable operator is the write itself rather than a read of the cell, so it keeps
-                // the cell (docs/design/effects/edges.cn.md 5.6).
+                // Builder::valueVersionOf says what a version is). The version is the cell the
+                // write stored into -- `:op/assn` gives that cell back as its own value -- so the
+                // callee still writes the variable's one cell, and the write the callee does is
+                // recorded where the call is built (recordWrite). The `var` position of an
+                // assignment or of a variable operator is the write itself rather than a read of
+                // the cell, so it keeps the cell (docs/design/effects/edges.cn.md 5.6).
                 if (named && targetOperator == nullptr) {
                     if (node_handle_t version = valueVersionOf(variable);
                         version != nullptr && inSameRegion(version, targetNode)) {
@@ -4813,11 +4834,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             writingGraphs.push_back(value.get());
         }
         unit_->pendingIgnoredWrites.push_back(
-            {std::move(writingGraphs),
-             capturedWrites,
-             gct->origin(),
-             subject,
-             "it writes"});
+            {std::move(writingGraphs), capturedWrites, gct->origin(), subject, "it writes"});
     }
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {

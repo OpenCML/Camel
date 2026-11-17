@@ -1,0 +1,24 @@
+/**
+ * An update inside a loop body -- `xs = xs->append<i>` -- which is what `camel inspect --copies`
+ * has something to say about.
+ *
+ * The value is a `var` written in the loop body, so it is the loop's carried state and the append
+ * runs once per round: the read after the loop prints `3`. The copies verdict for the append is the
+ * other half of the reading: this case exists so that a change to how a loop-carried `var` is built
+ * cannot quietly turn that update from `in-place` (or `by-count`) into `copied` without a line of
+ * the reading changing. In-place reuse is stage S3b's work, not this one's, and a `copied` here is
+ * not a red -- but a verdict that differs from the one before the change is a regression to report,
+ * which is why the plan pins it rather than leaving it unread.
+ *
+ * Run: camel test/cases/compile/var/loop_append_copies.cml std::nvm
+ *      camel inspect --copies test/cases/compile/var/loop_append_copies.cml
+ */
+func main(): int sync {
+    var xs: int[] = []
+    let _ = loop i = 0 while i < 3 do sync {
+        xs = xs->append<i>
+        i + 1
+    }
+    println(len(xs), xs)
+    return 0
+}

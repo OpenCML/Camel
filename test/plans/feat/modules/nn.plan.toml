@@ -1377,7 +1377,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "sgd_leaves_its_argument"
-desc = "`sgd(params, g, rate)` answers a new tree and leaves the tree it was handed as it was (design principles 11.3): the leaf here is a compact array with no view and no block, the one shape for which `Array::writableInPlace()` answers true, so a kernel that writes over the leaf instead of allocating one prints the updated value for `p.weight` as well. The case study's own program reads `w0` after training (`loss<w0, y>(X)`), which is the same requirement in the shape the direct-SSA plan's S3b is about: the declaration `OperatorTable::declareReusesOperand` is a claim about an operand whose last use no one proves yet. Alike on the four back ends."
+desc = "`sgd(params, g, rate)` answers a new tree and leaves the tree it was handed as it was (design principles 11.3): the leaf here is a compact array with no view and no block, the one shape for which `Array::writableInPlace()` answers true, so a kernel that writes over the leaf instead of allocating one prints the updated value for `p.weight` as well. The case study's own program reads `w0` after training (`loss<w0, y>(X)`), which is the same requirement in the shape the direct-SSA plan's S3b is about: `OperatorTable::declareReusesOperand` is a claim about an operand, and the call site does not make the count at its last use yet -- the answer is that the argument binding is a holder, handed on at the caller's last use and added otherwise, so reuse in place happens only at count one (`9699824aa`). Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/modules/nn/sgd_leaves_its_argument.cml"
 args = ["${case}", "${backend}"]

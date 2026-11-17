@@ -3,6 +3,8 @@
  * from where the pull before stopped (language reference 7.3.1).
  */
 
+import state
+
 // Three `yield`s and a `var` the body writes between them: the cell lives in the function's own
 // body, so the second pull reads what the first one wrote.
 func count(): int.. sync {
@@ -29,13 +31,15 @@ func sign(x: int): int.. sync {
     yield 0
 }
 
-// What the author ruled: a closure the body made before a `yield` reads the cell a later pull
-// wrote through it -- `read()` is 5 here, not 0.
-func reading(): int.. sync {
-    var x    = 0
-    let read = () => x
+// What the author ruled (2026-11-16): a closure the body made before a `yield` captures by value
+// like any other closure, so a name it mentions may not be assigned from the closure's creation to
+// its last use (design principles 3.5). The box is the way out that rule names: the handle is
+// captured by value, and the value a later pull writes into the box is what `read()` gives -- 5
+// here, not 0.
+func reading(box: state::Ref<int>): int.. sync {
+    let read = () => state::get(box)
     yield 0
-    x = 5
+    state::set(box, 5)
     yield read()
 }
 
@@ -44,6 +48,6 @@ func main(): int sync {
     println(loop acc = 0 for q in quad() do acc * 100 + q.0 * 10 + q.1)
     println(loop acc = 0 for v in sign(3) do acc * 10 + v)
     println(loop acc = 0 for v in sign(-3) do acc * 10 + v)
-    println(loop acc = 0 for v in reading() do acc * 10 + v)
+    println(loop acc = 0 for v in reading(state::ref(0)) do acc * 10 + v)
     return 0
 }

@@ -1,0 +1,25 @@
+/**
+ * The value read inside the round that wrote it, and the value read after the loop: the write is one
+ * write, and both reads see it.
+ *
+ * The body prints `1`, `2`, `3` as it goes and the read after the loop prints `3`. A read in the
+ * body that answered the value from before the write (`0`, `1`, `2`) would be reading a cell the
+ * write had not reached; a body that printed its own value twice would say so here, because the
+ * printed sequence is the write's one value per round.
+ *
+ * This is the reading the `[0, 1, 25, 3]` regression was found by: a change that looks more SSA but
+ * writes the value twice prints a sequence that is not this one, and no single number pins it -- the
+ * three body values and the fourth line do.
+ *
+ * Run: camel test/cases/compile/var/loop_write_then_read.cml std::nvm
+ */
+func main(): int sync {
+    var total = 0
+    let _ = loop i = 0 while i < 3 do sync {
+        total = total + 1
+        println(total)
+        i + 1
+    }
+    println(total)
+    return 0
+}
