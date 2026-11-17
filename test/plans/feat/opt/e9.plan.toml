@@ -692,3 +692,49 @@ known_fail_owner = "the S1 line that `1e8e390b6` ('gir: build a same-region loca
 known_fail_reason = "`builder_expr.cpp(3148)` `Builder::rebindSsa`, `binding != nullptr`, 'An SSA `var` is written where its declaration is in scope.': the arm of the `if` is a `sync { }` body that declares `var v57` and writes it with `+=`, and the write asks for the SSA binding of a name that arm's own body did not bind. Before the S1 work the same write went through the cell path and the program ran; the eight programs of the E9 run that crash here (seeds 5, 85, 134, 214, 229, 262, 272, 427) are the measurement of the move, and this 8-line program is the reduction of seed 262"
 known_fail_msg = "binding != nullptr"
 known_fail_note = "The account of the baseline, so the next reader can check it: the 2026-11-17 08:02 run reported `wrong 8 / refused 3 / crashed 10` over 227 programs and 273 generator rejects. This lane's two fixes take four of those ten out of the crash class (165 and 202 are now `SemanticDiag::ClosureAssignsCapturedName`, 193 and 289 now translate and run), and the merged develop takes seven new programs in (5, 134, 214, 229, 262, 272, 427), while seed 85 stays in the class and moves from `Variant::get` to this one: 10 - 4 + 7 = 13, which is what the full run on this tree reports. The baseline is not moved to 13: a gate that is red because of a regression is the gate doing its work, and this entry is the shape's reproducer until the S1 line closes it"
+
+# --- The shape that was never a compile error ------------------------------------------------
+#
+# `rc18_seed429` was clustered by E9 as a `std::cpp` compile error: clang said `expected
+# expression` at a `v1_branch = ;` the writer left. It is not a writer's shape. Behind it is a
+# value the branch hands nobody: after an `if` with no `else`, a read of the `var` the arm wrote
+# took the branch's JOIN as the variable's version, and that join carries no value -- the arm that
+# hands the branch nothing has nothing to hand. So the read took a node that is defined only where
+# the other arm runs, and the two paths disagreed about what that costs:
+#
+#   * `std::nvm`, `std::fvm`, `std::jit` answered 0 for a variable that is 5 (measured on
+#     `rc21_seed429`, whose answer is 5 on all four back ends, and whose answer was 0 on all four
+#     before this fix) -- a silent wrong value, the kind no differential comparison can catch,
+#     because all the back ends were wrong together;
+#   * `std::cpp` left the branch's temporary unassigned in one arm: `v1_branch = ;`, which clang
+#     refuses.
+#
+# `rc21_seed429` is the smallest program of the shape (the write inside a nested `if`), and
+# `rc22_flat_if_var` is the control: the same `if` without `else` and without the nesting, where
+# the back ends were right and `std::cpp` was wrong (its text stored 0 where the answer is 5).
+# Both are in `test/tools/cppexec/expect.txt` too, so the C++ path is not only read here: the
+# program is translated, built, run and compared with `std::fvm`.
+
+[[tests]]
+name = "rc18_seed429.runs"
+desc = "The reduced program of the seed: it must run, print `L6 0` and exit 0. `v53` is 0 and the branch is not taken, so the answer is the value the variable was made with."
+case = "../../../cases/opt/e9/rc18_seed429.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L6 0\n"
+
+[[tests]]
+name = "rc21_seed429.runs"
+desc = "The smallest program of the shape: `var v = 5`, an `if` with no `else` whose arm writes `v` inside a nested `if`, then a read of `v`. The answer is 5 -- the branch is not taken -- and all three back ends answered 0 before this fix."
+case = "../../../cases/opt/e9/rc21_seed429.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L6 5\n"
+
+[[tests]]
+name = "rc22_flat_if_var.runs"
+desc = "The control: the same `if` without `else` and no nesting. The back ends answered 5 all along; the C++ text answered 0, which is why this one is also a line in `test/tools/cppexec/expect.txt`."
+case = "../../../cases/opt/e9/rc22_flat_if_var.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L6 5\n"
