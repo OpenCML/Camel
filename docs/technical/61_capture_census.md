@@ -100,6 +100,26 @@ closures/branches），没有按算子的拆分，也没有捕获表；`std::gir
 闭包的口。这不是口径错误，是实现的现状：生成器状态今天就是靠一个编译器造的闭包在两次拉取之间传递的。
 要让它从 `capturePorts` 里消失，得等实现换成「生成器状态作为值在拉取之间传递」，不能靠脚本改口径。
 
+### 3.1 合并读数（2026-11-17，`10b73723d`，同一台主机，`--jobs 8`）
+
+合并 `lane-e9crash` 之后的一次读数，命令就是闸门的 `-Check capture-census`：
+
+| scope | files | counted | refused | var_new | var_new_empty | capture_ports | value | total | cell_typed_nodes | list_sha |
+|-------|-------|---------|---------|---------|---------------|---------------|-------|-------|------------------|----------|
+| `test/cases/**`（默认） | 3874 | 2709 | 1163 | 216 | 41 | 170 | 2256 | 2426 | 1177 | `6a5b52d04d89…` |
+
+拆数闭合：`104 + 66 + 0 = 170`（`generator` 104、`closure` 66、`unknown` 0），`capture_ports_untyped`
+是 0。`outcomes: ok=2709 refused=1163 crashed=2 timeout=0 unreadable=0`：那 2 个没给出图的文件是
+`test/cases/opt/e9/` 里按缺陷留着的复现程序（`rc14_seed176` 与 `rc20_seed262`，两者都停在图构造器
+里），脚本因此以退出码 2 说「a census over a set it lost files from is not a census」——它不拿一份
+少了文件的清单当普查。
+
+**与作者的预测对不上，原样记下**：作者说 `var_new` 在 S1 应 293、在 S2 应 275，这一次实测是 216。
+预测与实测不同，差异不解释掉、也不去挑一棵对得上预测的树：`293`/`275` 是预测，`216` 是在
+`list_sha=6a5b52d04d89…` 这份语料上的实测。路上测过的数是 228（`3ae5faa53`）、以及协调者记录里的
+263（撤回的那条路上读到的）、244、200，和这一次的 216；每棵树不同，而 `list_sha` 只在语料相同时才
+让两个数可比。
+
 ## 4. 全量 5689 与子集的差
 
 同一棵树（`48e12d4b8`）上 `corpus.py --scope repository` 的读数是 **repository 4129 / documents 1560
