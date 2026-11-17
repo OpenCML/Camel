@@ -10,7 +10,7 @@
 ```
 树    D:\Projects\Camel-wt\e9bisect，分支 lane-e9bisect
 sha   d63e84d397（= 建树时的 origin/develop）；量的时候 rev-list --count origin/develop..lane-e9bisect = 0，
-      写完本页 = 1（本页唯一这一笔，`git diff --numstat HEAD~1 HEAD` 就是 `236 0` 这一行）
+      写完本页 = 1（本页唯一这一笔，`git diff --numstat HEAD~1 HEAD` 是 `237 0` 这一行）
       host /home/zjwei/camel-work/e9bisect，git HEAD d63e84d39，status 0 行，
       out/latest/build-info.json = d63e84d397 (clean) / 1341 source files / fingerprint 0a244f6e8c6f
 构建  [1/726] Building CXX object modules/tensor/CMakeFiles/tensor_cmo_objects.dir/Release/kernels/gradient_generic.cpp.o
@@ -235,3 +235,7 @@ feat/tools      70 /   70 / 0
 - 宿主不是安静机器：plan 那段 `1m load 19.91`（gate 自己打的 `> 8` 警告），六计划的**个数**不受影响，
   但秒数不要与安静机器的读数比。
 - **判据本身没有错**：六条都不是「用例要的行为不符合现行裁定」，所以没有触发「停手报我」。
+> **更正（2026-11-18，由协调侧核出）**：本页初稿在第 13 行写的是 `236 0`，实际是 `237 0`。
+> 原因不是笔误：**写这一行的时候，这一行本身还没被写进去。** 任何「这一笔有多少行」的说法，如果它就在那一笔里面，它数的总是**比最终少一行** —— 它数的是自己还没有的最后一行。
+> 今晚同类事故共三次（`src/compile/gct/` 里 `halt` 的注释行数记成 4、实为 5；本页；以及一次派工提示里的数）。
+> **⇒ 一个在自己的产物里数产物大小的数，必须由产物之外的人量。**
