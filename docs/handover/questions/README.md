@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：131 行（页已不在 `questions/` 里）
+## 生成器不会删的行：132 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -133,6 +133,7 @@
 | [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](../reviews/2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ | 在 `reviews/` |
 | [`2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad`](../reviews/2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad.cn.md) | 案例一旦改用库的 `grad`，`break_rate` 那个重写该怎么钉？ | 在 `reviews/` |
 | [`2026-11-16-which-channel-takes-the-walkthrough-records`](../reviews/2026-11-16-which-channel-takes-the-walkthrough-records.cn.md) | 走查记录该进哪条通道：作者说「诊断通道」，而诊断通道按设计装不下它 | 在 `reviews/` |
+| [`2026-11-17-does-an-effect-inside-a-binding-nobody-reads-still-happen`](../reviews/2026-11-17-does-an-effect-inside-a-binding-nobody-reads-still-happen.cn.md) | 写在一个没人读的绑定里的效应，还发生吗？ | 在 `reviews/` |
 | [`2026-11-17-is-a-fixed-compile-error-one-defect-or-two`](../reviews/2026-11-17-is-a-fixed-compile-error-one-defect-or-two.cn.md) | 四个格从「编译错」变成「算错」之后，E9 该把它算一个缺陷还是两个 | 在 `reviews/` |
 | `2026-11-17-who-owns-a-callee-argument-after-the-call-site` | 一个实参在调用之后还归谁：谁回答「这次是不是最后一次使用」？ | 页不在（`questions/` 与 `reviews/` 都没有） |
 | [`2026-11-17-who-owns-the-argument-after-a-call`](../reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md) | 调用之后，那个实参归谁？ | 在 `reviews/` |
