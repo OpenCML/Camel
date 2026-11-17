@@ -274,21 +274,10 @@ bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
 std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 
 /// The JOIN that closes the branch `brch` (`kInvalidNodeRef` for a node that is not a branch). It
-/// is the branch's other half -- the arm that is taken hands it the value -- and the walks that ask
-/// what the program runs seed the two together, because the edge between them is read through the
-/// payload and is none of data, control or sync: a walk that followed only those three would keep
-/// one half and drop the other.
+/// is the branch's other half -- the arm that is taken hands it the value -- and a walk that reads
+/// only data, control and sync edges keeps the two together because the edge between them is read
+/// through the payload.
 gc_node_ref_t branchJoinOf(const GCGraph &graph, gc_node_ref_t brch);
-
-/// Whether `brch` is a branch that joins no value: the JOIN it closes carries `void`, which is the
-/// type the build gives the join of a branch written as a statement whose value nobody takes, and
-/// of one written at a position that takes no value at all (design principles 3.1, 3.7: an `if`
-/// without `else` has no value). Such a branch is a statement of the region it is written in and
-/// has nothing else to be -- no value of its own can make anything run it -- so it runs because
-/// that region runs, and the walks that ask what the program runs seed it as a root (a branch is
-/// entered by the arm that is taken, so the arms' own writes stay the roots of the arms). The draft
-/// side of the same question is `branchJoinsNoValue(const GraphDraft &, gc_node_ref_t)`.
-bool branchJoinsNoValue(const GCGraph &graph, gc_node_ref_t brch);
 
 /// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members
 /// the aggregate has (0 when it is not one), and whether its last member may be dropped -- no root
