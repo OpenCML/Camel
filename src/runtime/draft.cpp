@@ -1579,13 +1579,27 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // it, and the shortcut beside the path the graph already had (`pred -> id -> user`). That is
     // the design's rule for deleting a node, which reconnects the order edges through it
     // (docs/design/effects/edges.cn.md 4: `A -> B -> C` keeps `A -> C` once `B` goes). It is
-    // written in the control kind for the paths that have not moved onto the sync edge yet. A node
-    // that keeps a
-    // wait of its own is left alone. A GATE is what this was first needed for: the commit refuses
-    // one that waits for nothing (src/runtime/graph.cpp, the GATE check). What the node waited on
-    // through neither kind -- a read of a `var` reads its writer through the data port alone -- is
-    // not here to hand on: the fold that would remove such a read keeps it instead
-    // (src/compile/gir/builder_expr.cpp, `collapseNonEscapingVariableReads`).
+    // written in the control kind for the paths that have not moved onto the sync edge yet.
+    //
+    // The wait goes to a successor in one of two cases and to no other: the successor waited on
+    // this node -- the wait it had here is the one about to evaporate, and `A -> C` is what
+    // replaces it -- or the successor waited on nothing at all. A GATE is what the second case was
+    // first needed for: the commit refuses one that waits for nothing (src/runtime/graph.cpp, the
+    // GATE check). A successor that waits on something else and never waited on this node is left
+    // alone: its wait is the block's chain, and this node was not part of it.
+    //
+    // The first case is what the two-case reading adds. The test used to be "no wait of its own",
+    // which answers the same question only while a successor has one wait or none. A successor can
+    // have two -- the inlined body's completion *and* the call whose gate is going -- and then the
+    // old test left it alone and the wait the erased gate carried went to nobody. That is the
+    // splice: the gate standing for the call carries the statement written before the call, the
+    // statement written after it waits on the body's tail, and `1 -> 13 -> 15` lost its `1 -> 15`.
+    // The effect then stood on nothing while the graph still passed every other check, which is
+    // seed 311 of the six wrong values (docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md).
+    //
+    // What the node waited on through neither kind -- a read of a `var` reads its writer through
+    // the data port alone -- is not here to hand on: the fold that would remove such a read keeps
+    // it instead (src/compile/gir/builder_expr.cpp, `collapseNonEscapingVariableReads`).
     const auto keepWaiting = [&](gc_node_ref_t user) {
         if (user == id || !alive(user)) {
             return;
@@ -1593,15 +1607,26 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
         if (header(user) == nullptr) {
             return;
         }
-        for (gc_node_ref_t pred : ctrlInputsOf(user)) {
-            if (pred != id) {
-                return;
+        // Whether `user` names the node being erased as one of its waits, and whether it waits on
+        // anything else. Asked of both kinds, because a node half-way through the migration from
+        // control edges to sync edges can carry the same pair in either.
+        bool waitedOnId = false;
+        bool waitedElsewhere = false;
+        const auto noteWait = [&](gc_node_ref_t pred) {
+            if (pred == id) {
+                waitedOnId = true;
+            } else {
+                waitedElsewhere = true;
             }
+        };
+        for (gc_node_ref_t pred : ctrlInputsOf(user)) {
+            noteWait(pred);
         }
         for (gc_node_ref_t pred : syncInputsOf(user)) {
-            if (pred != id) {
-                return;
-            }
+            noteWait(pred);
+        }
+        if (!waitedOnId && waitedElsewhere) {
+            return;
         }
         for (gc_node_ref_t pred : syncInputs) {
             if (survives(pred, user)) {
