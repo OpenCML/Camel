@@ -1883,11 +1883,13 @@ void Builder::collapseNonEscapingVariableReads() {
         }
         byCell[info.cell].push_back({read, info.source});
     }
-    // Every exit of this fold is counted, because three times now a condition was written, compiled,
-// and had no effect -- each time found by guessing at readings. The counts go to stderr when
-// CAMEL_LOG_DEBUG is set: initial (the value `:var/new` made, only for a variable never written),
-// loop (carried state, not folded), join (a branch's value merge point), write (the value a write
-// wrote), nothing (a source the fold does not stand for, or the read kept for another reason).
+    // Every exit of this fold is counted, because three times now a condition was written,
+    // compiled,
+    // and had no effect -- each time found by guessing at readings. The counts go to stderr when
+    // CAMEL_LOG_DEBUG is set: initial (the value `:var/new` made, only for a variable never
+    // written), loop (carried state, not folded), join (a branch's value merge point), write (the
+    // value a write wrote), nothing (a source the fold does not stand for, or the read kept for
+    // another reason).
     static int foldTookInitial_ = 0;
     static int foldSawLoop_     = 0;
     static int foldTookJoin_    = 0;
@@ -1989,19 +1991,19 @@ void Builder::collapseNonEscapingVariableReads() {
                 // A read wants the value written last before it. No write before it means the
                 // variable has not been written yet, and then it is the value `:var/new` made.
                 node_handle_t candidate = nullptr;
-                size_t writesSeen        = 0;
+                size_t writesSeen       = 0;
                 if (const auto it = writesOf_.find(cell); it != writesOf_.end()) {
                     writesSeen = it->second.size();
-                    // A read inside an arm, a loop body or a loop condition of a cell that is written
-                    // somewhere does not see `:var/new`'s value. In a loop it sees the value the
-                    // previous turn carried, which the LOOP hands on and no write of the body stands
-                    // for: `write_in_loop.cml` (`x = x + 1`) read the value `:var/new` made on every
-                    // turn, so the turns wrote `1` and the read after the loop answered `1` instead
-                    // of `3`. In an arm it may see a value another arm wrote, or the one a write
-                    // before the branch produced: `warnings_visible.cml` (`var c = 0; inc(c); if
-                    // c > 0 then { c += 10 }`) read the initial `0` inside the arm and answered `1`
-                    // where `11` is what the program says. So such a read keeps its `:var/get`, and
-                    // that is decided before the initial value is handed out.
+                    // A read inside an arm, a loop body or a loop condition of a cell that is
+                    // written somewhere does not see `:var/new`'s value. In a loop it sees the
+                    // value the previous turn carried, which the LOOP hands on and no write of the
+                    // body stands for: `write_in_loop.cml` (`x = x + 1`) read the value `:var/new`
+                    // made on every turn, so the turns wrote `1` and the read after the loop
+                    // answered `1` instead of `3`. In an arm it may see a value another arm wrote,
+                    // or the one a write before the branch produced: `warnings_visible.cml` (`var c
+                    // = 0; inc(c); if c > 0 then { c += 10 }`) read the initial `0` inside the arm
+                    // and answered `1` where `11` is what the program says. So such a read keeps
+                    // its `:var/get`, and that is decided before the initial value is handed out.
                     if (writesSeen > 0) {
                         const auto readRegionId = draft.nodeRegion(readId);
                         const auto readKind     = draft.region(readRegionId).kind;
@@ -2010,7 +2012,8 @@ void Builder::collapseNonEscapingVariableReads() {
                             readKind == camel::runtime::GCRegionKind::LoopCond) {
                             ++foldTookNothing_;
                             folddebug::out() << std::format(
-                                "[DBG-W] read={} writes={} readregion={} candidate=- kind=- region=- took=region-read\n",
+                                "[DBG-W] read={} writes={} readregion={} candidate=- kind=- "
+                                "region=- took=region-read\n",
                                 static_cast<unsigned>(readId),
                                 writesSeen,
                                 static_cast<int>(readRegionId));
@@ -2024,26 +2027,34 @@ void Builder::collapseNonEscapingVariableReads() {
                     // questions: only "no write before it" licenses `:var/new`'s value.
                     bool aCallWroteBeforeTheRead = false;
                     for (const node_handle_t exit : it->second) {
-                        if (nodeIdOf(exit) >= readId) { continue; }
+                        if (nodeIdOf(exit) >= readId) {
+                            continue;
+                        }
                         if (nodeKindOf(exit) != camel::runtime::GCNodeKind::Oper) {
                             aCallWroteBeforeTheRead = true;
                             continue;
                         }
                         const auto ins = draft.normInputsOf(nodeIdOf(exit));
-                        if (ins.empty() || ins[0] != cellId) { continue; }
+                        if (ins.empty() || ins[0] != cellId) {
+                            continue;
+                        }
                         candidate = exit;
                     }
                     if (aCallWroteBeforeTheRead) {
                         ++foldTookNothing_;
                         folddebug::out() << std::format(
-                            "[DBG-W] read={} writes={} candidate=none kind=- region=- took=call-write\n",
+                            "[DBG-W] read={} writes={} candidate=none kind=- region=- "
+                            "took=call-write\n",
                             static_cast<unsigned>(readId),
                             writesSeen);
                         continue;
                     }
                 }
                 if (candidate == nullptr) {
-                    if (cellInputs.empty()) { ++foldTookNothing_; continue; }
+                    if (cellInputs.empty()) {
+                        ++foldTookNothing_;
+                        continue;
+                    }
                     version = cellInputs[0];
                     ++foldTookInitial_;
                     folddebug::out() << std::format(
@@ -2056,11 +2067,10 @@ void Builder::collapseNonEscapingVariableReads() {
                     // fold does not stand for it here (a region is laid out as one piece).
                     const auto regionId = draft.nodeRegion(nodeIdOf(candidate));
                     const auto kind     = draft.region(regionId).kind;
-                    const bool refused =
-                        kind == camel::runtime::GCRegionKind::Arm ||
-                        kind == camel::runtime::GCRegionKind::LoopCond ||
-                        kind == camel::runtime::GCRegionKind::LoopBody ||
-                        kind == camel::runtime::GCRegionKind::Dead;
+                    const bool refused  = kind == camel::runtime::GCRegionKind::Arm ||
+                                          kind == camel::runtime::GCRegionKind::LoopCond ||
+                                          kind == camel::runtime::GCRegionKind::LoopBody ||
+                                          kind == camel::runtime::GCRegionKind::Dead;
                     folddebug::out() << std::format(
                         "[DBG-W] read={} writes={} candidate={} kind={} region={} took={}\n",
                         static_cast<unsigned>(readId),
@@ -2074,13 +2084,13 @@ void Builder::collapseNonEscapingVariableReads() {
                         continue;
                     }
                     const auto w = draft.normInputsOf(nodeIdOf(candidate));
-                    version = w[1];
+                    version      = w[1];
                     ++foldTookFold_;
                 }
             } else if (nodeKindOf(source) == camel::runtime::GCNodeKind::Loop) {
-                // A write inside a loop is carried state: the version a read after the loop takes is
-                // the loop, which is not a value the fold can stand in for (schedule item 3). Folding
-                // it would answer with the value from before the loop.
+                // A write inside a loop is carried state: the version a read after the loop takes
+                // is the loop, which is not a value the fold can stand in for (schedule item 3).
+                // Folding it would answer with the value from before the loop.
                 ++foldSawLoop_;
                 continue;
             } else {
@@ -2139,9 +2149,10 @@ void Builder::collapseNonEscapingVariableReads() {
             // read orders the version, and what the read ordered is ordered by the version
             // (docs/design/effects/edges.cn.md 4). `eraseNode` splices a chain *over* the node it
             // removes (A -> B -> C becomes A -> C), which keeps the ordering only when the read had
-            // a predecessor; a read at the head of a chain -- the one a BRCH keeps to say "read this
-            // before the branch" -- has none, so its edge would go with it and the branch would lose
-            // the order a later pass reads as its execution order (order_edges_regions.gir).
+            // a predecessor; a read at the head of a chain -- the one a BRCH keeps to say "read
+            // this before the branch" -- has none, so its edge would go with it and the branch
+            // would lose the order a later pass reads as its execution order
+            // (order_edges_regions.gir).
             draft.replaceOrderEdgesAt(readId, version);
             // The read's users take the version's value; the read node is not needed any more.
             draft.replaceAllValueUses(readId, version);
@@ -2158,13 +2169,15 @@ void Builder::dropCarriedVariableUnits() {
     // The users of a node, of every kind. They are read from the draft and not from a record this
     // builder keeps: a capture, a `var` argument, a region result and a chain all name a node
     // through the draft, and an edge is the only thing an erasure can take away.
-    const auto usersOf = [&](camel::runtime::gc_node_ref_t id, std::vector<camel::runtime::gc_node_ref_t> *out) {
+    const auto usersOf = [&](camel::runtime::gc_node_ref_t id,
+                             std::vector<camel::runtime::gc_node_ref_t> *out) {
         bool any = false;
-        for (auto users : {draft.normUsersOf(id),
-                           draft.withUsersOf(id),
-                           draft.ctrlUsersOf(id),
-                           draft.syncUsersOf(id),
-                           draft.orderUsersOf(id)}) {
+        for (auto users :
+             {draft.normUsersOf(id),
+              draft.withUsersOf(id),
+              draft.ctrlUsersOf(id),
+              draft.syncUsersOf(id),
+              draft.orderUsersOf(id)}) {
             any = any || !users.empty();
             if (out != nullptr) {
                 out->insert(out->end(), users.begin(), users.end());
@@ -2259,11 +2272,12 @@ void Builder::dropCarriedVariableUnits() {
         }
         // The block's own GATEs go with the store. The arm of a `sync` block hands its value out
         // through GATEs that wait for the statement before them, and now that the branch takes the
-        // value the write wrote, nothing reads those GATEs. They are collected as a set: a GATE that
-        // only waits on what is already in the set, or on nothing at all, is part of the unit, and a
-        // GATE may wait on the store while the store waits on it.Only a GATE or a COPY in the region
-        // of a store is taken this way: an operator or a call stands for a statement the program
-        // wrote, and a node a region hands out is that region's result and is not a unit's part.
+        // value the write wrote, nothing reads those GATEs. They are collected as a set: a GATE
+        // that only waits on what is already in the set, or on nothing at all, is part of the unit,
+        // and a GATE may wait on the store while the store waits on it.Only a GATE or a COPY in the
+        // region of a store is taken this way: an operator or a call stands for a statement the
+        // program wrote, and a node a region hands out is that region's result and is not a unit's
+        // part.
         std::unordered_set<camel::runtime::gc_node_ref_t> doomed = stores;
         for (bool changed = true; changed;) {
             changed = false;
@@ -2278,7 +2292,8 @@ void Builder::dropCarriedVariableUnits() {
                 }
                 bool inStoreRegion = false;
                 for (camel::runtime::gc_node_ref_t store : stores) {
-                    inStoreRegion = inStoreRegion || draft.nodeRegion(store) == draft.nodeRegion(id);
+                    inStoreRegion =
+                        inStoreRegion || draft.nodeRegion(store) == draft.nodeRegion(id);
                 }
                 if (!inStoreRegion) {
                     continue;
@@ -2351,8 +2366,7 @@ void Builder::dropCarriedVariableUnits() {
             if (inputs.size() == 1) {
                 below = inputs[0];
             }
-            if (node != cellId &&
-                header->kind != camel::runtime::GCNodeKind::Data &&
+            if (node != cellId && header->kind != camel::runtime::GCNodeKind::Data &&
                 header->kind != camel::runtime::GCNodeKind::Copy) {
                 break;
             }
@@ -2809,21 +2823,33 @@ namespace {
 /// they do, such a name keeps its cell.
 bool opensRegion(GCT::NodeKind kind) {
     switch (kind) {
-        case GCT::NodeKind::CASE:
-        case GCT::NodeKind::EXEC:
-        case GCT::NodeKind::LOOP:
-        case GCT::NodeKind::FUNC:
-        case GCT::NodeKind::TMTCH:
-        case GCT::NodeKind::TCASE:
-        case GCT::NodeKind::SFOR:
-        case GCT::NodeKind::SLOOP:
-        case GCT::NodeKind::SACC:
-        case GCT::NodeKind::SCOMP:
-            return true;
-        default:
-            return false;
+    case GCT::NodeKind::CASE:
+    case GCT::NodeKind::EXEC:
+    case GCT::NodeKind::LOOP:
+    case GCT::NodeKind::FUNC:
+    case GCT::NodeKind::TMTCH:
+    case GCT::NodeKind::TCASE:
+    case GCT::NodeKind::SFOR:
+    case GCT::NodeKind::SLOOP:
+    case GCT::NodeKind::SACC:
+    case GCT::NodeKind::SCOMP:
+        return true;
+    default:
+        return false;
     }
 }
+
+/// What a region does with a `var` that is read and written from outside it: an arm hands the value
+/// to the branch's JOIN (stage S2), a loop body hands it to the loop head's port (stage S3), and
+/// every other region -- a closure's body, a block of its own, a static loop's body, a loop's
+/// condition -- has nowhere to put it, so a name used across one of those keeps its cell.
+enum class SsaRegion : uint8_t { Other, Arm, LoopBody };
+
+/// One region the walk below is inside: the depth of the body it holds, and what it can carry.
+struct OpenRegion {
+    size_t contentDepth = 0;
+    SsaRegion kind      = SsaRegion::Other;
+};
 } // namespace
 
 std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::Node *body) {
@@ -2835,7 +2861,10 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
     // callee writes the caller's cell back, and a value has nowhere to write).
     std::unordered_map<const GCT::Node *, bool> eligible;
     std::unordered_map<const GCT::Node *, size_t> declaredIn;
-    std::set<size_t> armDepths;
+    // The regions the walk is inside, outermost first: the chain between a declaration and a use is
+    // what says whether the value can be carried (a branch's JOIN or a loop head), and the
+    // innermost arm decides which join's one-value limit a write counts against.
+    std::vector<OpenRegion> regions;
     std::map<size_t, std::set<const GCT::Node *>> branchWrites;
     std::vector<std::unordered_map<std::string, const GCT::Node *>> scopes(1);
     const auto lookup = [&](const std::string &name) -> const GCT::Node * {
@@ -2850,16 +2879,29 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
     const auto use = [&](const GCT::Node *decl, size_t depth, const GCT::Node *call, size_t index) {
         bool &answer = eligible[decl];
         if (declaredIn[decl] != depth) {
-            // Across a region the value has to be carried into it. One shape is carried without a
-            // new mechanism: a write inside the arm of a statement branch of the declaration's own
-            // region, where the branch's JOIN carries the value (stage S2). A join carries one
-            // value, so a branch whose arms write two names carries neither -- settled after the
-            // walk, and the build side carries exactly what this allows.
-            const bool armOfStatementBranch =
-                depth == declaredIn[decl] + 1 && armDepths.count(depth) != 0;
-            if (!armOfStatementBranch) {
+            // Across a region the value has to be carried into it. The regions that carry one are
+            // the arm of a statement branch, whose JOIN carries it (stage S2), and a loop body,
+            // whose head carries it (stage S3); every region between the declaration and the use
+            // has to be one of those, one inside the other, and nothing else. A closure body, a
+            // block of its own, a static loop's body and a loop's condition have nowhere to put the
+            // value, so a name used across one of them keeps its cell.
+            const size_t declared = declaredIn[decl];
+            bool carried          = depth > declared;
+            for (const OpenRegion &region : regions) {
+                if (region.contentDepth <= declared) {
+                    continue;
+                }
+                if (region.kind == SsaRegion::Other) {
+                    carried = false;
+                    break;
+                }
+            }
+            if (!carried) {
                 answer = false;
-            } else {
+            } else if (!regions.empty() && regions.back().kind == SsaRegion::Arm) {
+                // One join carries one value: a branch whose arms write two names carries neither,
+                // settled after the walk. A loop head carries as many values as its body writes, so
+                // a write inside a loop body is not counted here.
                 branchWrites[depth].insert(decl);
             }
         }
@@ -2867,8 +2909,13 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             answer = false; // written by the callee through its `var` parameter
         }
     };
-    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t, bool)> walk =
-        [&](const GCT::Node *node, size_t depth, const GCT::Node *call, size_t index, bool statement) {
+    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t, bool, bool)> walk =
+        [&](const GCT::Node *node,
+            size_t depth,
+            const GCT::Node *call,
+            size_t index,
+            bool statement,
+            bool loopBody) {
             if (node == nullptr || node->type() == GCT::NodeKind::TYPE) {
                 return;
             }
@@ -2878,41 +2925,48 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                 }
                 return;
             }
-            const bool declares = node->type() == GCT::NodeKind::VARI ||
-                                  node->type() == GCT::NodeKind::NREF;
+            const bool declares =
+                node->type() == GCT::NodeKind::VARI || node->type() == GCT::NodeKind::NREF;
             // The declaration's own region is the one it is written in, so a `var` in an arm is at
             // the arm's depth and a use of it in an enclosing block is across a region.
-            const bool region = node != body && opensRegion(node->type());
+            const bool region  = node != body && opensRegion(node->type());
             const size_t inner = declares ? depth : (region ? depth + 1 : depth);
-            // The arms of a statement branch are the one depth whose writes are carried (S2). A
-            // branch whose value is used fills the join's only value slot with its own value, so its
-            // arms are not carried -- the red line, settled before any carry is written.
-            const bool statementBranch =
-                statement && (node->type() == GCT::NodeKind::CASE ||
-                              node->type() == GCT::NodeKind::TCASE);
+            // The arms of a statement branch are a depth whose writes are carried (S2), and a loop
+            // body is another (S3). A branch whose value is used fills the join's only value slot
+            // with its own value, so its arms are not carried -- the red line, settled before any
+            // carry is written.
+            const bool statementBranch = statement && (node->type() == GCT::NodeKind::CASE ||
+                                                       node->type() == GCT::NodeKind::TCASE);
             // Anything written directly in a region body is a statement of that body.
             const bool childStatement = region || node == body;
             if (region) {
                 scopes.emplace_back();
-                if (statementBranch) {
-                    armDepths.insert(inner);
-                }
+                // A loop node is a region of the walk like its body is: what the head carries is
+                // read in the body and in the loop's own initial values, and the head hands it out
+                // after the loop. Its condition is a region of its own inside it and carries
+                // nothing (S3's boundary: a name used in a loop's condition keeps its cell).
+                const bool carries = loopBody || node->type() == GCT::NodeKind::LOOP;
+                regions.push_back(
+                    OpenRegion{
+                        inner,
+                        statementBranch ? SsaRegion::Arm
+                                        : (carries ? SsaRegion::LoopBody : SsaRegion::Other)});
             }
             if (declares) {
                 // `var x = e` is a `VARI` over the one name it declares. Any other shape (the names
                 // of a destructuring declaration) is left to the declarations below, which bind
                 // each of those names as a name this scan does not build as a value.
                 const GCT::Node *nameNode = node;
-                const bool single =
-                    node->type() == GCT::NodeKind::NREF ||
-                    (node->size() == 1 && node->at(0) != nullptr &&
-                     node->at(0)->type() == GCT::NodeKind::NREF);
+                const bool single         = node->type() == GCT::NodeKind::NREF ||
+                                            (node->size() == 1 && node->at(0) != nullptr &&
+                                             node->at(0)->type() == GCT::NodeKind::NREF);
                 if (!single) {
                     for (size_t i = 0; i < node->size(); ++i) {
-                        walk(node->at(i), inner, nullptr, 0, childStatement);
+                        walk(node->at(i), inner, nullptr, 0, childStatement, false);
                     }
                     if (region) {
                         scopes.pop_back();
+                        regions.pop_back();
                     }
                     return;
                 }
@@ -2920,26 +2974,23 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                     nameNode = node->at(0);
                 }
                 // The initializer is read before the name stands for anything.
-                const GCT::Node *initializer =
-                    nameNode->size() > 0 ? nameNode->at(0) : nullptr;
+                const GCT::Node *initializer = nameNode->size() > 0 ? nameNode->at(0) : nullptr;
                 // A `var` whose initializer is a type (`var x: T = ...`, or a cell whose value is
                 // written where it stands) is the cell itself, not a value over it.
                 const bool typed =
                     initializer != nullptr && initializer->type() == GCT::NodeKind::TYPE;
                 if (!typed && initializer != nullptr) {
-                    walk(initializer, depth, nullptr, 0, false);
+                    walk(initializer, depth, nullptr, 0, false, false);
                 }
                 if (node->type() == GCT::NodeKind::VARI && !typed) {
-                    eligible[nameNode] = true;
+                    eligible[nameNode]   = true;
                     declaredIn[nameNode] = depth;
                 }
                 scopes.back()[nameNode->name()] =
                     node->type() == GCT::NodeKind::VARI && !typed ? nameNode : nullptr;
                 if (region) {
                     scopes.pop_back();
-                    if (statementBranch) {
-                        armDepths.erase(inner);
-                    }
+                    regions.pop_back();
                 }
                 return;
             }
@@ -2952,15 +3003,15 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             //   LINK(__assn__, <path>, e)                  `v[i] = e`, `v.f = e`
             //   LINK(__assn__, v, LINK(method, v, ...))    `v = v->append(x)`, `v = append(v, x)`
             // The operator form `v = v + 1` (a `__`-prefixed callee) builds a new value and is not
-            // one of these, so it stays a value. A shape this misses only keeps a cell, which is the
-            // cheap direction; the other way round drops an in-place update, which `--copies` sees.
+            // one of these, so it stays a value. A shape this misses only keeps a cell, which is
+            // the cheap direction; the other way round drops an in-place update, which `--copies`
+            // sees.
             if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
                 node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
                 node->at(0)->name() == "__assn__") {
                 const GCT::Node *target = node->at(1);
                 const GCT::Node *value  = node->at(2);
-                const bool plainTarget =
-                    target != nullptr && target->type() == GCT::NodeKind::DREF;
+                const bool plainTarget = target != nullptr && target->type() == GCT::NodeKind::DREF;
                 if (!plainTarget) {
                     std::function<void(const GCT::Node *)> keepCell = [&](const GCT::Node *place) {
                         if (place == nullptr) {
@@ -2987,20 +3038,26 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                 // `element_assigned_append`); making that append in-place again is S3b's work.
             }
             for (size_t i = 0; i < node->size(); ++i) {
+                // A loop's body is the region its head carries values around (S3): the walk says
+                // so for that child and for nothing else -- a loop's condition, initial values and
+                // sequence stand where the loop is written.
+                const bool childLoopBody =
+                    node->type() == GCT::NodeKind::LOOP && node->loopBody() == node->at(i);
                 if (isCall) {
-                    walk(node->at(i), inner, node, i, childStatement);
+                    walk(node->at(i), inner, node, i, childStatement, childLoopBody);
                 } else {
-                    walk(node->at(i), inner, nullptr, 0, childStatement);
+                    walk(node->at(i), inner, nullptr, 0, childStatement, childLoopBody);
                 }
             }
             if (region) {
                 scopes.pop_back();
+                regions.pop_back();
             }
         };
-    walk(body, 0, nullptr, 0, false);
-    // A branch that writes two declarations carries neither: its JOIN has one value slot. The census
-    // over the corpus found that shape only in a generator's carried state, which a capture keeps a
-    // cell anyway; if a plain branch ever writes two names, S2 has to grow the tuple form.
+    walk(body, 0, nullptr, 0, false, false);
+    // A branch that writes two declarations carries neither: its JOIN has one value slot. The
+    // census over the corpus found that shape only in a generator's carried state, which a capture
+    // keeps a cell anyway; if a plain branch ever writes two names, S2 has to grow the tuple form.
     for (const auto &[depth, names] : branchWrites) {
         if (names.size() >= 2) {
             for (const GCT::Node *decl : names) {
@@ -3012,8 +3069,7 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
 }
 
 bool Builder::argumentMayWriteBack(
-    const GCT::Node *call,
-    size_t index,
+    const GCT::Node *call, size_t index,
     const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const {
     // A `var` parameter is two-way: the callee reads the argument and writes into it, so the
     // argument cannot be a value. Only the callee's signature says which position that is.
@@ -3023,7 +3079,7 @@ bool Builder::argumentMayWriteBack(
     if (call->type() != GCT::NodeKind::LINK && call->type() != GCT::NodeKind::WITH) {
         return false;
     }
-    const bool byWith = call->type() == GCT::NodeKind::WITH;
+    const bool byWith       = call->type() == GCT::NodeKind::WITH;
     const GCT::Node *callee = call->at(0);
     if (callee == nullptr) {
         return true; // nothing to name the callee by: answered as one that may write
@@ -3038,8 +3094,7 @@ bool Builder::argumentMayWriteBack(
         return true; // a lambda written where the callee stands: its parameters are not read here
     }
     const std::string &name = callee->name();
-    if (name.rfind(kBuiltinPrefix, 0) == 0 || name.rfind("__", 0) == 0 ||
-        name.rfind(":", 0) == 0) {
+    if (name.rfind(kBuiltinPrefix, 0) == 0 || name.rfind("__", 0) == 0 || name.rfind(":", 0) == 0) {
         // A name the compiler made for an operator or a built-in group (`__assn__`, `__add__`,
         // `:op/assn_i`): no parameter of those is a `var`, and the assignment's write is the
         // rebinding rather than a call.
