@@ -166,12 +166,13 @@ expect_stdout_exact = "4\n8\n"
 
 [[tests]]
 name = "effect.through_parameter"
-desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add` writes the module's `total`, so a call through the parameter is an effectful call. Outside a sync block a result nothing depends on does not run it and is reported (EffectNotExecuted, the same warning the direct call of the value gets); inside one it runs and the write lands. The reads after the calls show both. Classified as borrowing the retired shape: the state moved from a `var` context parameter, which a value cannot assign, to a module `var`, and the four numbers are unchanged."
+desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add` writes the module's `total`, so a call through the parameter is an effectful call -- and an effectful call written as a statement runs wherever it is written (design principles 3.1, the author's ruling of 2026-11-17: a call is one of the nodes a region's `GATE` reads). Outside a sync block the body's GATE reads it, inside one the chain carries it, so both writes land and all four numbers count them. Nothing is reported: a statement a GATE reads is a statement that runs. Classified as borrowing the retired shape: the state moved from a `var` context parameter, which a value cannot assign, to a module `var`."
 kind = "behavior"
 case = "../../../cases/effects/effect_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:28:", "0 0 1 2"]
+expect_output_contains = ["0 1 2 3"]
+expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"

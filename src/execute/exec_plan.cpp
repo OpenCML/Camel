@@ -987,6 +987,47 @@ bool passesWhatItReadsOn(
     }
 }
 
+/// The data predecessors of `at` whose values it reads **as values**: all of them, except for a
+/// region's exit `GATE`, whose first normal input is the value it forwards and whose normal inputs
+/// after it are the reads it takes of the region's writes (`Builder::layRegionWriteEdges`, design
+/// principles 3.1, the author's ruling of 2026-11-17: "第一个输入是区域交出的值，其余输入是区域里按
+/// 效应推断会写外部资源或句柄的节点"). The gate *waits* on those writes -- that wait is the whole of
+/// what makes them live, and it is what `liveNodesOf` reads -- and hands nothing of theirs on, so it
+/// neither carries their value (`carried`) nor holds a reference to it (`usesAt`).
+///
+/// Read as uses, they held a reference the gate never takes, and the plan's answer disagreed with
+/// the run: `ref.reduce_takes_its_initial` laid the accumulator's give-back at the exit gate as well
+/// as at the read and took the second hold that pays for it, and std::fvm and std::jit -- which
+/// apply no rows at a gate's position, because a gate compiles to nothing -- never gave it back
+/// (`released=0 live=1 disposed=1`). The same misreading turned the operator's own `void` value in
+/// `ref.foreach_gives_back` from "nothing reads it" into a use at the exit, which moved its
+/// give-back off the operator's position. A gate's trailing input is a wait, not a use.
+std::vector<gc_node_ref_t> dataPredecessorsReadAsValues(const GCGraph &graph, gc_node_ref_t at) {
+    // The reads a gate takes and hands nothing of on: its normal inputs after the first. The first
+    // is the value, so it stays; and the list is deduplicated where it is laid, so one node cannot
+    // be both.
+    std::vector<gc_node_ref_t> waits;
+    if (const GCNode *node = graph.node(at); node != nullptr && node->kind == GCNodeKind::Gate) {
+        const std::span<const gc_node_ref_t> norms = graph.normInputsOf(at);
+        for (size_t i = 1; i < norms.size(); ++i) {
+            waits.push_back(norms[i]);
+        }
+    }
+    std::vector<gc_node_ref_t> read;
+    for (const camel::execute::ExecutionPredecessor &predecessor :
+         camel::execute::executionPredecessorsOf(graph, at)) {
+        if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
+            predecessor.node >= graph.nodeCount()) {
+            continue;
+        }
+        if (std::find(waits.begin(), waits.end(), predecessor.node) != waits.end()) {
+            continue;
+        }
+        read.push_back(predecessor.node);
+    }
+    return read;
+}
+
 /// The uses of every value, and route 4's "position of the last use" column.
 ///
 /// The rule is written out in the header; what this function adds is the one thing the edges have
@@ -1014,7 +1055,9 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 
     // The values each node carries: `{its own}` for a producer, the union of its inputs for a node
     // that only carries a value on (a JOIN, a GATE, a port). A constant carries nothing: the
-    // program holds it, and the graph neither takes nor gives it.
+    // program holds it, and the graph neither takes nor gives it. A region's exit GATE carries only
+    // what its **first** input carries: the normal inputs after it are the writes it waits on, and
+    // `dataPredecessorsReadAsValues` says why that is not a use.
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
@@ -1028,13 +1071,8 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
             carried[at].push_back(at);
             continue;
         }
-        for (const camel::execute::ExecutionPredecessor &predecessor :
-             camel::execute::executionPredecessorsOf(graph, at)) {
-            if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
-                predecessor.node >= nodeCount) {
-                continue;
-            }
-            for (const gc_node_ref_t value : carried[predecessor.node]) {
+        for (const gc_node_ref_t predecessor : dataPredecessorsReadAsValues(graph, at)) {
+            for (const gc_node_ref_t value : carried[predecessor]) {
                 if (std::find(carried[at].begin(), carried[at].end(), value) == carried[at].end()) {
                     carried[at].push_back(value);
                 }
@@ -1059,20 +1097,15 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
     // A value's uses, by position: every node that reads it (through forwarding) is one use. A use
     // by a node that packs its inputs (`packsItsInputs`) is also recorded against that node,
     // because the reference is then held by the value the packing node made and comes back when
-    // *that* dies.
+    // *that* dies. A read a gate takes to order a write is not one of these (`dataPredecessorsReadAsValues`).
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
             continue;
         }
         const bool packs = packsItsInputs(graph, at);
-        for (const camel::execute::ExecutionPredecessor &predecessor :
-             camel::execute::executionPredecessorsOf(graph, at)) {
-            if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
-                predecessor.node >= nodeCount) {
-                continue;
-            }
-            for (const gc_node_ref_t value : carried[predecessor.node]) {
+        for (const gc_node_ref_t predecessor : dataPredecessorsReadAsValues(graph, at)) {
+            for (const gc_node_ref_t value : carried[predecessor]) {
                 usesAt[value].push_back(static_cast<uint32_t>(idx));
                 if (packs && std::find(packersOf[value].begin(), packersOf[value].end(), at) ==
                                  packersOf[value].end()) {

@@ -49,18 +49,16 @@ assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
 """
 
 [[tests]]
-name = "unused_values.effect_body"
-desc = "An effect statement of a body that is not `sync` never runs: one diagnostic, EffectNotExecuted, and the call it names prints nothing."
-kind = "negative"
+name = "unused_values.a_call_that_writes_runs"
+desc = "A call written as a statement of a body that is not `sync` is one of that body's writes when its callee writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the call runs: the print happens and no diagnostic is reported. It replaces `unused_values.effect_body`, which pinned the reading the ruling reversed -- a call to an effectful callee in the graph and in nothing else -- and it pins the other half of the same program: the call runs, the callee still hands its value on, and the two lines keep the order they are written in."
+kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_body.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
-expect_stdout_starts_with = "4\n"
+expect_stdout_exact = "never printed\n4\n"
 verify_script = """
-assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'SemanticDiag::EffectNotExecuted', input.diagnostics[0].name)
-assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
-assert(!input.normalized.stdout.includes('never printed'), input.stdout)
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+assert(input.normalized.stdout.includes('never printed'), input.stdout)
 """
 
 [[tests]]

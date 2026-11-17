@@ -158,8 +158,12 @@ std::optional<type::Type *> nodeResultType(const GraphDraft &draft, gc_node_ref_
     case GCNodeKind::Oper:
         return operResultType(draft, id);
     case GCNodeKind::Gate: {
+        // The **first** input is the value a gate forwards (design principles 3.1, the author's
+        // ruling of 2026-11-17: "第一个输入是区域交出的值，其余输入是区域里按效应推断会写外部资源或句柄
+        // 的节点"). The inputs after it are the reads the gate takes, whose types are not its own --
+        // exactly what `Copy` above does, and what the schedulers and the C++ backend already read.
         const auto inputs = draft.normInputsOf(id);
-        return inputs.empty() ? std::nullopt : std::optional(typeOf(draft, inputs.back()));
+        return inputs.empty() ? std::nullopt : std::optional(typeOf(draft, inputs.front()));
     }
     case GCNodeKind::Copy: {
         const auto inputs = draft.normInputsOf(id);
