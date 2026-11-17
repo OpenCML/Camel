@@ -1689,17 +1689,31 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
 }
 
 node_handle_t Builder::secondNameOf(node_handle_t value) {
-    // A value handed out again as a name of its own. The twin of the `:var/get` above, for a name
-    // that has no cell to read (`Builder::valueOf`, a state the loop head carries): what a `let`
-    // binds is a value, and a value with two names must not be changed through one of them
-    // (design principles 10.5). The value keeps its own storage, so the write further down the
-    // round copies and the name keeps what it was given. Only arrays have storage a write could
-    // reach: every other value is handed out as it is (`shareForSecondName` says the same thing).
+    // A name bound to a value, where there is no cell to read it out of: a `var x = <the state>`
+    // hands the state to a new cell and `:var/new` counts what it is given, but a `let` has no cell,
+    // and the name it binds has to be a read of its own -- a node of the value at this statement,
+    // not the state it was read from (design principles 10.5). Otherwise every use of the name
+    // would take the state where the use stood, and `let kept = xs` followed by `xs[i] = i + 1`
+    // would read the write (`Builder::valueOf`, the round's value at the place of the read).
     Type *type = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
-    if (type == nullptr || type->code() != TypeCode::Array) {
+    if (type == nullptr) {
         return value;
     }
-    return variableOperator(camel::core::oper::CopyArray, value);
+    if (type->code() == TypeCode::Array) {
+        // An array carries storage a write further down the round reaches in place, and there is no
+        // count on this path to stop it: the name leaves with its own storage instead
+        // (`:struct/copy_arr`, the operator the loop rewrite gives a carried array, and the same
+        // answer `shareForSecondName` gives for an array the reads do not share).
+        return variableOperator(camel::core::oper::CopyArray, value);
+    }
+    // Every other value has no storage a write could reach, so the value itself is what the name
+    // holds, and the keeper gives the value a place of its own to be read from: the GATE of
+    // docs/design/effects/edges.cn.md 5.3 and operator_table.h:127-131, a region of one data port
+    // reading the value, passed through. No sync predecessor: what the name needs is a place for
+    // the value, not an order for it. It carries no count, as a value with no storage needs none.
+    node_handle_t keeper = currGraph_->addGateNode(nodeTypeOf(value));
+    linkNodes(LinkType::Norm, value, keeper);
+    return keeper;
 }
 
 node_handle_t
@@ -1710,8 +1724,13 @@ Builder::secondNameOfCarriedName(const GCT::node_ptr_t &initializer, node_handle
         initializer->size() != 0) {
         return value;
     }
+    // A carried state reaches the body as one of two things: a port that stands for a cell
+    // (`loopStatePorts_`, the cell form) or a name the body's scope declares as the port itself
+    // (`SsaEnv::declarePort`, the value form stage S3 built).
     const auto bound = nodeAt(moduleLevelName(initializer->name()));
-    if (!bound.has_value() || !loopStatePorts_.contains(bound.value())) {
+    const bool carried = (bound.has_value() && loopStatePorts_.contains(bound.value())) ||
+                         ssa_.portOf(nodeScope_, initializer->name()) != nullptr;
+    if (!carried) {
         return value;
     }
     return secondNameOf(value);
