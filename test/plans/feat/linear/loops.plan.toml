@@ -841,3 +841,23 @@ expect_exit = 0
 expect_stdout_exact = "box 0\nbox 0\nbox 0\n0\nset 1\nset 2\nset 3\n0\n3\n4\n6\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# A `let` in a loop body that names a state the loop head carries is a name of the round's value of
+# its own (`:struct/copy_arr`, the same operator the loop rewrite gives a carried array): the path
+# write after it copies, so the name keeps the value the round started with.
+# Before this entry the name was the carried port itself and every use of it read the round's
+# value where the use stood, which is why the same program printed the write instead (1 0 0,
+# 1 2 0, 1 2 3) while the round's start values are 0 0 0, 1 0 0 and 1 2 0.
+[[tests]]
+name = "loops.second_name_in_round"
+desc = "A name bound to a state the loop head carries reads the value the round started with: `let kept = xs` followed by `xs[i] = i + 1` prints the round's start value (0 0 0, 1 0 0, 1 2 0) and not the value the write made, and `xs` after the loop is [1, 2, 3]. The name is given its own storage (Builder::secondNameOfCarriedName), so the write copies instead of changing what it holds; before that the name was the port and answered with the round's value where the use stood."
+kind = "behavior"
+case = "../../../cases/linear/runtime/second_name_in_round.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "0 0 0\n1 0 0\n1 2 0\n[1, 2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
