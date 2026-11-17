@@ -2819,6 +2819,7 @@ ed839a06bfe0e847 ok test/cases/linear/runtime/recursion_depth_limit.cml
 431b45ba8bfcf34c ok test/cases/linear/runtime/same_resource_order.cml
 b199f1e857512d01 ok test/cases/linear/runtime/same_resource_order_call.cml
 50482ac490770e33 ok test/cases/linear/runtime/second_name_in_round.cml
+b62ac03619715cd4 ok test/cases/linear/runtime/second_name_in_round_scalar.cml
 f6283621ba8bf8a6 ok test/cases/linear/runtime/sync_block_order.cml
 5a3ccda81ed8cc21 ok test/cases/linear/runtime/sync_literal_operands.cml
 38a87f91ff7ddedf ok test/cases/linear/runtime/var_between_statements.cml
