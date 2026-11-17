@@ -2700,7 +2700,7 @@ f1961aa372c30a49 ok test/cases/linear/byref/element_assigned.cml
 46b39920af429b7c ok test/cases/linear/byref/element_assigned_copy.cml
 26bd5decfc969c75 ok test/cases/linear/byref/field_assigned.cml
 160a4367f09242cd ok test/cases/linear/byref/inplace_write_then_read.cml
-ff20ae56a12cd333 ok test/cases/linear/byref/lambda_capture_ignored.cml
+5f9cec376883eca8 ok test/cases/linear/byref/lambda_capture_ignored.cml
 930dc2f3a06fd3a6 ok test/cases/linear/byref/lambda_capture_write.cml
 938ec16b6da17038 ok test/cases/linear/byref/let_alias_to_var_param.cml
 a289636a8695d642 ok test/cases/linear/byref/let_appended.cml
