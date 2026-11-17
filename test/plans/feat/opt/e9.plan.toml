@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, the two the C++ writer left without a return value, and the five statements a chain splice used to drop -- a `println` that stopped running, or ran after the statement written after it, in five of the six wrong values the merge `2779ad600` turned correct"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, the two the C++ writer left without a return value, and the six statements a chain splice used to drop -- a `println` that stopped running, or ran after the statement written after it -- in the six wrong values that class produced: five turned correct by the merge `2779ad600`, the sixth by `f77e57f9d`"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -994,10 +994,12 @@ expect_stdout_exact = "P 5\n"
 # not green. On `2779ad600` all five read correctly with no pass at all, so the pair stands here as
 # it does for every other program in this file.
 #
-# `311`, the sixth, is deliberately not here. `std::opt::inline` on it stops the `println('MAIN')`
-# written before a macro expanded in an argument from running, `sameSyncBlock` does not reach it,
-# and it reads the same wrong answer on `2779ad600` as on `2779ad600^1`. A `known_fail` would
-# record a wrong answer as the expected one: the answer is to fix it.
+# `311`, the sixth, was deliberately not here while it was red. `std::opt::inline` on it stops the
+# `println('MAIN')` written before a macro expanded in an argument from running, `sameSyncBlock` does
+# not reach it, and it read the same wrong answer on `2779ad600` as on `2779ad600^1`. A `known_fail`
+# would have recorded a wrong answer as the expected one: the answer was to fix it, and `f77e57f9d`
+# did (`GraphDraft::closeChainOver`, src/runtime/draft.cpp). Its entry is the section at the end of
+# this file, and it is four cells rather than the pair the five above have.
 
 [[tests]]
 name = "rc24_seed131.without_the_pass"
@@ -1184,6 +1186,120 @@ verify_script = """
 const lines = input.normalized.stdout.split('\n')
 assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
 assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+# --- The sixth: the wait a splice let evaporate behind a macro expanded in an argument ----------
+#
+# `rc29_seed311` is the 20-line program of the sixth figure of
+# `docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md` section 4 (reproduced 5/5), and
+# it is the sixth of the six wrong values the merge `2779ad600` turned correct -- the one that merge
+# left wrong. Under `std::macro std::opt::inline` the `println('')` written *before* the call does
+# not run, so the program prints one blank line where it should print two. The inline expands the
+# macro call `f1(true, 10.0)` into the argument slot; the statement written before the call hangs on
+# the chain by an ORDER edge only, and the gate standing for that call carries it. `closeChainOver`
+# would not hand that wait on: the successor it named already had two waits -- the inlined body's
+# completion *and* the call whose gate was going -- and the test it asked was "does this successor
+# wait on anything else", which answers the right question only while a successor has one wait or
+# none.
+#
+# The repair is `f77e57f9d` (`GraphDraft::closeChainOver`, src/runtime/draft.cpp): the condition a
+# predecessor's wait is kept by now reads "the successor waited on this node -- its own wait is the
+# one going away -- or it waits on nothing", so two waits no longer refuse the hand-on and the wait
+# evaporates into the chain instead of into nobody.
+#
+# Four cells, and the shape of the set is the claim this entry makes:
+#
+#   without_the_pass  the reference: two blank lines with no pass at all. Nothing the ladder does is
+#                     what the fault needed, so what the ladder prints is held to what the program
+#                     prints -- the entry names no number that the program itself does not give.
+#   macro_inline      `std::macro std::opt::inline`, the ladder the bisection named: the same two
+#                     lines. Before `f77e57f9d` this cell reads one, and it is the red this pins.
+#   macro_only        `std::macro` alone: the same two lines, on both sides of the repair.
+#   inline_only       `std::opt::inline` alone: the same two lines, on both sides of the repair.
+#
+# The last two are the reverse pin, and they are the reason the ladder cell is worth writing at all.
+# `std::opt` as a whole was measured green on this program before and after the repair (by the lane
+# that measured the six), and so is each of these two passes on its own. A mark on `std::opt` would
+# sit where it was green all along, and a later regression in the *pair* -- the only shape this
+# program has ever been wrong in -- would be hidden by passes that still cancel it out. Three cells
+# that stay green while one flips is "only the pair was ever broken"; one green cell on the whole
+# ladder would only say "the ladder is green today".
+
+[[tests]]
+name = "rc29_seed311.without_the_pass"
+desc = "`rc29_seed311` with no pass at all: two blank lines -- `main`'s `println('')` and the one in `q18` it calls. This is the reference cell: the program is right without any pass, so the three cells below are held to this reading and not to a number written here."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc29_seed311.macro_inline"
+desc = "`rc29_seed311` under the ladder the bisection named, `std::macro std::opt::inline`: the same two blank lines. Before `f77e57f9d` only one line was printed -- the `println('')` written before the call stopped running once the inline expanded the macro `f1(true, 10.0)` into the argument slot, and `closeChainOver` refused to keep that statement's wait. This cell is what pins the repair; the two below say the defect was the pair alone."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "std::macro", "std::opt::inline", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc29_seed311.macro_only"
+desc = "`rc29_seed311` under `std::macro` alone: the same two blank lines. The first reverse pin -- the expansion by itself was never the defect, so a red here would be a different one, and this cell is what says the ladder cell above cannot be read as `std::macro` being broken."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "std::macro", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc29_seed311.inline_only"
+desc = "`rc29_seed311` under `std::opt::inline` alone: the same two blank lines. The second reverse pin -- the inline by itself was never the defect either; only the two passes together lose the statement, which is what the ladder cell above holds, and this one is what keeps that claim from being a claim about the inline."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
 }
 """
 timeout_ms = 20000

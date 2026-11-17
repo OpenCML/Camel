@@ -3959,6 +3959,7 @@ d21139e934c8f512 ok test/cases/opt/e9/rc25_seed141.cml
 09d11a6644d49da4 ok test/cases/opt/e9/rc26_seed417.cml
 e654f72a906352a6 ok test/cases/opt/e9/rc27_seed419.cml
 4cfe730fe8f4e825 ok test/cases/opt/e9/rc28_seed484.cml
+781cabcf211bd05e ok test/cases/opt/e9/rc29_seed311.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
