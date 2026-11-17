@@ -1,11 +1,11 @@
 /**
- * The same lambda with nothing written after the call that reads `c`: the write is not executed.
+ * The same lambda with nothing reading the `Ref` after the call: the write runs anyway.
  *
- * The body writes `c` and then prints it, so a body that ran would print `1`; the program prints
- * only the `0` of `main`, which is how this case proves the write did not happen instead of only
- * asserting that a warning was reported. The compiler reports the call as one that is never
- * executed (`SemanticDiag::EffectNotExecuted`). Plan linear.captured_writes, tests
- * lambda_capture_ignored.*.
+ * The body writes `c` and then prints it, so the program prints `1` and then the `0` of `main`:
+ * an outside write is used by the region it runs in, so a call, loop or block that writes runs
+ * even when its value is unread (the author's ruling of 2026-11-17, on principles 3.1 and 3.4).
+ * A `Ref` box counts as outside (3.1, 2026-11-16), so the call runs, prints, and the compiler
+ * reports nothing for it. Plan linear.captured_writes, tests lambda_capture_ignored.*.
  *
  * The state is a `Ref`: a closure cannot assign a name of the body around it (design principles
  * 3.5), while a handle is a value it may capture.
