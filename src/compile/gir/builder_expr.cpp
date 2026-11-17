@@ -514,7 +514,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         // a write replaces. The type the entry keeps is the type the cell would have held, which is
         // `:var/new`'s value type, so a later write enters it as a store into that cell did.
         Type *held = bound != nullptr ? valueTypeOf(nodeTypeOf(bound)) : nullptr;
-        ssa_.declare(nodeScope_, ident, gct, bound, held != nullptr ? held->widened() : nullptr);
+        ssa_.declare(nodeScope_, ident, gct, held != nullptr ? held->widened() : nullptr);
     }
     if (success && isVar && !ssaValue) {
         originNames_.try_emplace(bound, ident);

@@ -23,15 +23,12 @@ node_handle_t SsaEnv::ArmWrites::valueOf(decl_key_t decl) const {
 }
 
 SsaEnv::decl_key_t SsaEnv::declare(
-    const node_scope_ptr_t &region, const std::string &name, const GCT::Node *decl,
-    node_handle_t value, Type *type) {
+    const node_scope_ptr_t &region, const std::string &name, const GCT::Node *decl, Type *type) {
     Region &table = regions_[region];
-    table.scope   = region.get();
     decl_key_t key{};
     if (const auto bound = table.bindings.find(name); bound != table.bindings.end()) {
         // The region already declares the name. A region declares one name once, so this is the
-        // same declaration, taking the value it was built with (the declaration site binds the name
-        // and then fills the entry).
+        // same declaration, taking the value the region has since bound the name to.
         key = bound->second;
     } else {
         key = nextKey_++;
@@ -40,11 +37,10 @@ SsaEnv::decl_key_t SsaEnv::declare(
     Entry &entry = table.entries[key];
     entry.key    = key;
     entry.name   = name;
-    entry.value  = value;
     entry.type   = type;
     entry.decl   = decl;
     entry.port   = nullptr;
-    entry.region = table.scope;
+    entry.region = region;
     decls_[key]  = &entry;
     return key;
 }
@@ -52,10 +48,11 @@ SsaEnv::decl_key_t SsaEnv::declare(
 void SsaEnv::declarePort(
     const node_scope_ptr_t &region, const std::string &name, node_handle_t port, Type *type) {
     // A port is the region's own binding of the name, so the declaration of the enclosing region is
-    // not the one this region means: the name is this region's, and the head's port is its value.
-    // The write the head hands on is recorded against the port, which is why the port is kept on
-    // the entry and not only as its value: the value moves with every write of the body.
-    const decl_key_t key               = declare(region, name, nullptr, port, type);
+    // not the one this region means: the name is this region's, and the head's port is the value the
+    // region binds it to. The write the head hands on is recorded against the port, which is why the
+    // port is kept on the entry and not only as its value: the value moves with every write of the
+    // body.
+    const decl_key_t key               = declare(region, name, nullptr, type);
     regions_[region].entries[key].port = port;
 }
 
@@ -91,6 +88,15 @@ SsaEnv::Entry *SsaEnv::mutableFind(const node_scope_ptr_t &from, const std::stri
     return const_cast<Entry *>(static_cast<const SsaEnv *>(this)->find(from, name));
 }
 
+node_handle_t SsaEnv::valueOf(const Entry *entry) const {
+    if (entry == nullptr || entry->region == nullptr) {
+        return nullptr;
+    }
+    // The declaration's own region's binding of the name, and nothing outside it: a region that
+    // shadows the name holds another declaration, which is not this one's value.
+    return entry->region->get(entry->name, false).value_or(nullptr);
+}
+
 node_handle_t SsaEnv::portOf(const node_scope_ptr_t &from, const std::string &name) const {
     const Entry *entry = find(from, name);
     return entry == nullptr ? nullptr : entry->port;
@@ -117,26 +123,24 @@ void SsaEnv::rebind(
     Entry *entry = mutableFind(from, name);
     GUARD(entry != nullptr, "An SSA `var` is written where its declaration is in scope.");
     // The value the declaration had where this branch was entered, taken as the first arm writes
-    // it: the assignment below replaces it, so afterwards the join could not tell it from the last
-    // arm's.
+    // it: the write below replaces the binding, so afterwards the join could not tell it from the
+    // last arm's.
     if (branchDepth_ > 0) {
-        before_.emplace(entry->key, entry->value);
+        before_.emplace(entry->key, valueOf(entry));
     }
-    entry->value = value;
-    // A write inside an arm is what that branch's JOIN carries: the arm keeps that it ended the
-    // declaration at this value, and the join is where it goes on from.
-    if (arm != nullptr) {
-        arm->record(entry->key, value);
-    }
-    // The binding the reads take. A write inside a nested statement list rebinds the declaration of
-    // the region that holds it, which is the entry the reads of that region look up -- and the
-    // ordinary name table has to say the same thing, or a read that does not ask the environment (a
-    // capture, a recorder, the scan of a loop's carried state) would read the value written before.
+    // The write itself, in the one place the value lives: the region's own binding of the name,
+    // which is the binding every read of it takes -- the read of a use site, a capture, a recorder,
+    // the scan of a loop's carried state. Nothing else is kept in step with it.
     for (node_scope_ptr_t scope = from; scope != nullptr; scope = scope->outer()) {
         if (!scope->has(name, false)) {
             continue;
         }
         scope->map()[name] = value;
+        // A write inside an arm is what that branch's JOIN carries: the arm keeps that it ended the
+        // declaration at this value, and the join is where it goes on from.
+        if (arm != nullptr) {
+            arm->record(entry->key, value);
+        }
         return;
     }
     GUARD(false, "An SSA `var` is written where its declaration is in scope.");
