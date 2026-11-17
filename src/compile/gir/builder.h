@@ -2910,6 +2910,23 @@ class Builder {
     node_handle_t readVariable(node_handle_t variable);
     // `:var/get` or `:var/peek` applied to `variable`, recorded as a read.
     node_handle_t readVariableThrough(node_handle_t variable, camel::core::OperId oper);
+    /**
+     * `value` as a name of its own: the second name `:var/get` makes for a read out of a cell, for
+     * a value a name is bound to where there is no cell to read -- a state a loop head carries
+     * (secondNameOfCarriedName). The value's storage is the resource (design principles 10.5), so
+     * the value that has storage a write could reach leaves with its own (`:struct/copy_arr`, the
+     * operator the loop rewrite already uses for a carried array); every other value, a scalar
+     * above all, is handed out as it is (`shareForSecondName` says the same thing).
+     */
+    node_handle_t secondNameOf(node_handle_t value);
+    /**
+     * `value`, read as it is by `initializer`, as a second name when `initializer` is a name the
+     * loop head carries: a `let` binds the name to the value the round had at that statement, and
+     * the name has to be one of that value's names, or the path write further down the body would
+     * change what the name holds (valueOf, design principles 10.5). Any other initializer, and a
+     * `var` (whose cell counts what it is given), come back unchanged.
+     */
+    node_handle_t secondNameOfCarriedName(const GCT::node_ptr_t &initializer, node_handle_t value);
     // The value `variable` holds (`:var/peek`): the same as readVariable, but the variable keeps
     // its array available for writing in place (the read does not take the array away).
     node_handle_t peekVariable(node_handle_t variable);

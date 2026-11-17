@@ -2,7 +2,7 @@
 
 **日期**：2026-11-18
 **提出者**：协调侧
-**状态**：作者已裁定（`09b5130c0`：**two steps**，按第 6 节默认开工）；**第 9 节是落地的续篇：第一步「最小改动」被实测证明不存在**
+**状态**：作者已裁定（`09b5130c0`：**two steps**，按第 6 节默认开工）；**第 9 节是落地的续篇：第一步「最小改动」被实测证明不存在**；**第 10 节（`f9d374161` 之后）把 9.2 的「一个 setter」量翻了 —— 开工前先读 10.1**
 **触发**：作者裁定 `04ee677e7`「**lower generator state where types are known, with `T?` slots**」，`lane-genref` 去落地，两堵墙都是实测的
 
 ## 1. 裁定被完全采纳，而它指向的不是我原先以为的那一处
@@ -123,6 +123,10 @@
 ⇒ **不要在 GIR 之外再造一套「迟到的类型」**（见 9.4 第 3 条）。
 ```
 
+> **已被 10.1 推翻（2026-11-18 夜，`lane-girstep` 量）：** 「缺的是**参数位那一个 setter**」不成立 ——
+> 缺口在**三处**（端口 / `pack` / `call`），三处都要求「类型已知之后**重建 body**」。原文保留，作为被量推翻的
+> 那句话，不要按它开工。
+
 ### 9.3 接缝二：谁补 `:accs` / `unwrap`
 
 ```
@@ -189,3 +193,96 @@
 1. **接缝**：参数位的 setter 与"臂先建、状态型最后补"的次序（9.2）。这是两条路都绕不开的那一步，单独做、单独量：做完之后状态型能拿到真类型，快照按文件逐个看动面。
 2. **全部槽一律 `T?`、起点一律 `null`**，读槽用 11-16 授权的带检查拆开算子；`zeroValueOf` 不再被状态槽调用，`gct/builder.cpp:4103` 那扇门删除。读数：`var_new_empty` 43 → 13，探针 `cell_holds_ref.cml` 转绿，计数器用例 `1 2 3`。
 拆开的代价（每次读多一次带检查的拆开）由优化遍去掉能证明非空的那些，不靠"有零值就不用 `T?`"来省。
+
+## 10. 续篇（2026-11-18 夜，`lane-girstep`）：9.2 的「一个 setter」被量推翻
+
+> 裁定：作者 `f9d374161`（**`rework: every state slot is T? starting null, no zero-value split`**；同一笔采纳
+> 「**the first step of lowering generator state needs a build-then-rewrite seam**」）。
+> 本节是**测量，不是意见**：基线 `86606c969`（= `origin/develop`，`git fetch` exit 0，未前进），干净树，
+> **零源码改动、零提交、零重录**。它只回答一句：**作者那句话，在这个读数下还成不成立。**
+> ⇒ 结论：**前提不成立**，所以这一节不落代码，先把「不成立在哪」钉住。
+
+### 10.1 三处，不是一处
+
+```
+① 端口：enterScope（src/compile/gir/builder.cpp:323-376）→ createCompileGraph
+   （src/compile/gir/builder_helpers.h:417-444）逐个 addPortNode(type)。
+   ⇒ 事后 setFuncType **不改端口**，而 body 里每个 :accs 的类型都从端口来；
+   ⇒ draft 没有改节点/端口型的 API：retype.h 那套是**冻图**重建，retypeDraft 明写
+     「Node kinds, node ids, the five input lists … are left exactly as they are」（include/camel/runtime/retype.h:21）。
+② pack：yield 处 stateNow（src/compile/gct/builder.cpp:6289）要把局部装进 `T?`，走
+   coerceTo → castNodeTo（src/compile/gir/builder_literal.cpp:507-523）
+   ⇒ **建图时就要具体类型** —— 9.1 走法 1 的 `DynamicCastForbidden: typeof#0 → int?` 就是这一行。
+   ⇒ 9.3 的清单（accs / unpack / pack）**没有把它算成一处墙**，而它比签名更硬。
+③ call：每个 yield 的 stream 值都 call `__gen_step__(state)`，visitLinkNode
+   （src/compile/gir/builder_operators.cpp:2284）在建图时就按被调签名解析参数
+   ⇒ **第一处 call 就死**（9.1 走法 2 的 `GenericArgumentsMismatch` 就死在「创建处」）。
+⇒ ⇒ **「建完再改写签名」不够**：那些 call 已经按旧签名检查过、参数也已按旧型 `coerce` 过。
+   ⇒ 能成的只有两条：**类型已知之后把 step 的 body 重建一遍**，或者**把生成器整体下移到 GIR**。
+⇒ ⇒ 9.2 的「缺的是参数位那一个 setter」**作废**（不是被改写，是被量推翻）。
+⇒ 次序也不成立：9.2 的「arms 先建、vati 后建」正是 `bc5ce2249` 量过会失败的形状（提交说明：
+   「a local declared after the arms would leave them reading the enclosing body's cells」）；
+   而 draft 没有重指边的 API（唯一的 rewiring 在 opt 层 `src/passes/opt/generic/writings_extract.cpp`）。
+```
+
+### 10.2 (B) 的三条：每条都要一个「怎么量它成立」的读数
+
+```
+① 诊断去重
+   探测遍会把同一批诊断再发一遍。权威是 userSink()（src/compile/gir/builder.h:2885）；探测遍进 scratch
+   sink 并丢弃。
+   量法：a) census 的 refused 数（`86606c969` 上 = 1163）与 refused_first 列表逐字不变；
+        b) 生成器体里带错的用例仍**只**打一行、位置不变 ——
+           generators_read_before_declaration ⇒ UnresolvedReference @9:11；
+           generators_cell_retype ⇒ NoMatchingFunction @14:5（test/plans/feat/compile/stream.plan.toml 两条都钉住行/列）。
+        ⇒ 任何一条变成两行、或位置移一格，这一条就不成立。
+② idIndex_（src/compile/gct/builder.cpp:276/6228 一带的 `idIndex_++`）
+   探测遍建的节点要不要占 id：不占 ⇒ 重建时 id 全变（`__g_<n>__` 名字变，17 个文件的快照为一个与语义
+   无关的原因而动）；占 ⇒ 有洞。
+   量法：**一个不该被这条改动碰到的文件，dump 必须逐字节相同**，不是「节点数相同」：
+        generators_match.cml（它唯一的 :var/new/empty 是机器格子 `__gen_match_subject_0`）与
+        generators_early_stop.cml（一个 :var/new/empty 都没有）的 `std::jgir` 与改动前同 sha；
+        并且 generators.cml 里 `__g_<n>__` / `__gen_*` 的名字与改动前同名。
+③ module 注册（`context_->importModule` / `registerGenericTemplates` / `lambdaGraphs_` / `defaults_`）
+   探测遍若碰到真注册，要么幂等、要么可回滚。
+   量法：a) ① 里那两条 dump；b) feat/modules 与 feat/parse 的读数不动；c) `-Check camel-for-ai`
+        （读模块声明）不动；d) census 的 refused 列表不变（注册若改了名字解析，被拒的用例会先动）。
+```
+
+### 10.3 两个「人口对不上」，分开写（混在一起就会变成矛盾）
+
+```
+① 文件数：**18 是 census 的口**（30 个程序局部落在 18 个文件）；**17 是我 dump 的口**（我 dump 了 24 个
+   生成器/探针文件，其中 17 个带 :var/new/empty，共 42 个节点；最多 generators_shapes_consumed 12 个，
+   generators.cml 2 个）。两个数不矛盾：census 的 43 含 13 个机器格子，我只数了我挑的 24 个文件，
+   差的那一个在语料别处 ⇒ 引用时写「18（census）/ 17（dump）」。
+② list_sha：§9.5 的 `72c1a623…` 是 `4d48be5e4` 那棵树；今晚 `86606c969` 上量到 `1a01d883…`，
+   而 `var_new=213`、`var_new_empty=43` 一字未变，files 3891 → 3892
+   ⇒ **语料动了、计数没动**。差如果两个人口同时变了，它就还不是一个差；只变了一个，就要先报。
+```
+
+### 10.4 11-16 授权了，但表里还没有位置
+
+```
+include/camel/core/operator_table.h:132  `kWellKnownCount = 22`（id 1..21；id 22 明写留空，见 `:127-131`
+「reusing it would make the deletion a rename」）⇒ 新算子只能占 **23**。
+`:op/tag_null_value` 是**不检查**的那个（src/builtin/operators/tagged.cpp:39-41，null 返回零槽）。
+而「起点 null」在**每个 pull 的头部**都要拆一次（不是只在某个分支的 arm 里），第一次 pull 的槽必然为 null
+⇒ 它不是替代品；「检查 / 不检查」是裁定，不是实现细节。
+```
+
+### 10.5 会先翻的不是快照，是一条断言
+
+```
+test/plans/feat/compile/stream.plan.toml:1205-1211（generator_cell_type_from_first_write）的 verify_script：
+  graphs['labels'] 里恰有 1 个名为 's' 的节点，且 outputType 是 'var string'
+⇒ 今天那个节点是**外层格子**；裁定之后格子退休，名为 's' 的只剩 step 的局部，而它在 `__gen_step__` 图里
+⇒ 这条会从 1 变成 0 —— **它钉住的正是裁定要拆掉的东西。**
+⇒ ⇒ 所以「先重录快照」不够：这条要先改断言（改断言要作者点头），它是 17 个文件里第一个必须变的。
+```
+
+### 10.6 一句话（这一节要交给作者的）
+
+**「建完再改写」要重写的是 body 的建，不是签名的字：端口建时定死、pack 要具体类型、call 在建图时就检查
+—— 三处都指向「类型已知之后把 body 重建一遍」，而这句话不是 9.2 那句「一个 setter」能兑现的。**
+⇒ 9.6 的「不要问」也随之作废：现在要问的不是「两步怎么落」，是「重建 body」这条路作者认不认。

@@ -1,0 +1,23 @@
+type P = { x: int, y: int }
+
+func operator <(a: P, b: P): bool {
+    return false;
+}
+
+func main(): int sync {
+    let n37 = '';
+    let h41 = (p39: int): int => sync {
+        println('');
+        return 0;
+    };
+    let n46 = loop s42 = ({ x: 0, y: 0 } < { x: 0, y: 0 }), c43 = (match n37 {
+        case 'ab' => 1.0
+        case 'k9' => 0.25
+        case _ => 0.25
+    }) for q44 in [false] do sync {
+        let n45 = h41(int(c43));
+        println('L5 {}'->format<[{ x: 0, y: 0 }]>);
+        return (false, 1.0);
+    };
+    return 0;
+}

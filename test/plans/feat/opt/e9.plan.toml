@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, and the two the C++ writer left without a return value"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, the two the C++ writer left without a return value, and the five statements a chain splice used to drop -- a `println` that stopped running, or ran after the statement written after it, in five of the six wrong values the merge `2779ad600` turned correct"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -953,4 +953,238 @@ expect_stdout_exact = "P 5\n"
 # here before that batch (`feat/opt` 1538/1538 at `33c0fb536`), so the mark was a regression of the
 # batch that added it and not a reading the language had not settled -- the tree is back to that
 # reading, and no new mark replaces it.
+
+# --- The five statements a chain splice used to drop -------------------------------------------
+#
+# The E9 differential campaign put six reduced programs in one class: under `std::opt`, or a prefix
+# of the ladder, a statement that prints stopped running, or ran after the statement written after
+# it. One place lost all six -- `GraphDraft::closeChainOver` (`src/runtime/draft.cpp`) kept the wait
+# of a predecessor only when `nodeRegion(pred)` was the user's region, and a splice gives the code
+# it moves an `Inline` region, so a predecessor still carrying the annotation of the region it came
+# from was refused -- and the repair reads "another block" through `sameSyncBlock`, the block test
+# the rest of that file and `placeLostStatements` already use (merge `2779ad600`,
+# docs/design/effects/edges.cn.md 4.6 and 5.7).
+#
+# Five of the six turned correct with it and the sixth did not; these five entries are those five,
+# the bisection's own reductions (docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md,
+# section 4), 10 to 23 lines each. Each is one pair: the reading with no pass at all, which the
+# optimized run is held to, and the shortest prefix of the ladder the bisection named as the one
+# that loses the statement. Both cells of all five were measured on the `draft.cpp` of `2779ad600^1`
+# and on the one of `2779ad600` (the file swapped in place and rebuilt either way, `std::nvm`,
+# `--gc generational`), which is where the before/after sentence in each entry comes from:
+#
+#   rc24_seed131  devirtualize + inline + fold  `L5 [{ x: 0, y: 0 }]` then the blank line: the
+#                                               closure's `println('')` moved to the end of the output
+#   rc25_seed141  inline + fold                 no line at all; the called function's `println` does
+#                                               not run
+#   rc26_seed417  inline + fold                 only `L4 0 0`; the inlined statement's `println` is gone
+#   rc27_seed419  inline + cse                  no line at all; `q21`'s `println` does not run
+#   rc28_seed484  inline + fold                 no line at all; `q27`'s `println` does not run
+#
+# The shorter prefixes are green even before the repair, measured rather than assumed, and that is
+# what makes the pair worth writing: `std::opt::fold` alone reads all five correctly, `inline + fold`
+# is green on `rc24_seed131`, and `std::opt::cse` alone is green on `rc27_seed419`. The trigger is a
+# statement a splice has already moved into an `Inline` region and the fold then replaces -- exactly
+# the annotation `closeChainOver` had to look through -- so `rc24_seed131`, whose trigger also needs
+# the `devirtualize` in front of the inline, is the one whose prefix is three passes long.
+# `std::opt` as a whole was red on all five before the repair and is green on all five after it on
+# all four back ends, so the prefix below is the narrow reading of the same fact, not a weaker one.
+#
+# The bisection report wrote that these could only be single-cell cases because the no-pass cell is
+# not green. On `2779ad600` all five read correctly with no pass at all, so the pair stands here as
+# it does for every other program in this file.
+#
+# `311`, the sixth, is deliberately not here. `std::opt::inline` on it stops the `println('MAIN')`
+# written before a macro expanded in an argument from running, `sameSyncBlock` does not reach it,
+# and it reads the same wrong answer on `2779ad600` as on `2779ad600^1`. A `known_fail` would
+# record a wrong answer as the expected one: the answer is to fix it.
+
+[[tests]]
+name = "rc24_seed131.without_the_pass"
+desc = "`rc24_seed131` with no pass at all: a blank line, then `L5 [{ x: 0, y: 0 }]`. The order is the reading -- the blank line is the closure's `println('')` at the point the loop body calls it, before the body's own line. First wrong prefix: `std::opt::devirtualize std::opt::inline std::opt::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc24_seed131.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL5 [{ x: 0, y: 0 }]\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L5 [{ x: 0, y: 0 }]', `second line is ${JSON.stringify(lines[1])}, not "L5 [{ x: 0, y: 0 }]"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc24_seed131.devirtualize_inline_fold"
+desc = "`rc24_seed131` under the prefix the bisection named: the same two lines in the same order. Before the repair the line came first and the blank line last -- the closure's print moved to the end of the output, which is what a `println` left holding only the ORDER edge to the statement written after it looks like. `std::opt::fold` alone and `inline + fold` both read it correctly (measured), so the `devirtualize` in front of them is part of the trigger."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc24_seed131.cml"
+args = ["${case}", "--gc", "generational", "std::opt::devirtualize", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL5 [{ x: 0, y: 0 }]\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L5 [{ x: 0, y: 0 }]', `second line is ${JSON.stringify(lines[1])}, not "L5 [{ x: 0, y: 0 }]"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc25_seed141.without_the_pass"
+desc = "`rc25_seed141` with no pass at all: one blank line -- `q37`'s `println('')` runs when `g56` calls it. First wrong prefix: `std::opt::inline std::opt::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc25_seed141.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc25_seed141.inline_fold"
+desc = "`rc25_seed141` under `std::opt::inline std::opt::fold`: one blank line, as with no pass at all. Before the repair the program printed nothing -- `fold` folds the argument `if false then -1 else 10` to `10`, the call `q37(10, false)` is inlined, and the statement the inline moved lost its place, so the callee's `println` never ran. `std::opt::fold` alone reads it correctly (measured): the inline has to come first."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc25_seed141.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc26_seed417.without_the_pass"
+desc = "`rc26_seed417` with no pass at all: a blank line, then `L4 0 0`. First wrong prefix: `std::opt::inline std::opt::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc26_seed417.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L4 0 0', `second line is ${JSON.stringify(lines[1])}, not "L4 0 0"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc26_seed417.inline_fold"
+desc = "`rc26_seed417` under `std::opt::inline std::opt::fold`: the same two lines. Before the repair only `L4 0 0` was printed -- the `if true then true else false` in the argument folds, the body of `q31` the inline moved in loses its place, and the `println` in it stops running. `std::opt::fold` alone reads it correctly (measured); the bisection's own probe is that either replacement alone keeps the line, so the pair needs the inline in front of the fold."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc26_seed417.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 0\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L4 0 0', `second line is ${JSON.stringify(lines[1])}, not "L4 0 0"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc27_seed419.without_the_pass"
+desc = "`rc27_seed419` with no pass at all: one blank line -- `q21`'s `println('')` runs. First wrong prefix: `std::opt::inline std::opt::cse` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc27_seed419.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc27_seed419.inline_cse"
+desc = "`rc27_seed419` under `std::opt::inline std::opt::cse`: one blank line, as with no pass at all. Before the repair nothing was printed -- `cse` merges the two null tests on `o44` (`n50 = o44 != null` and `if o44 == null`) into one place, and the `q21` call written between them, once the inline had moved it in, lost its place. `std::opt::cse` alone reads it correctly (measured): the inline in front of it is part of the trigger."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc27_seed419.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::cse", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc28_seed484.without_the_pass"
+desc = "`rc28_seed484` with no pass at all: one blank line -- `q27`'s `println('')` runs. First wrong prefix: `std::opt::inline std::opt::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc28_seed484.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc28_seed484.inline_fold"
+desc = "`rc28_seed484` under `std::opt::inline std::opt::fold`: one blank line, as with no pass at all. Before the repair nothing was printed -- `fold` folds `true && true` (the JOIN and BRCH go with it) and the `:struct/concat_arr` of `concat([false], [false])` in the same stretch, and `q27`'s call, once the inline had moved it in, lost its place. `std::opt::fold` alone reads it correctly (measured): the statement has to be inside an `Inline` region first."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc28_seed484.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
 

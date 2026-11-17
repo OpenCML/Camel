@@ -1,0 +1,24 @@
+// A name bound to a state the loop head carries holds the value the round started with, not the
+// value the round goes on to write: the reads after the path write see the array as the round
+// found it. The name is a name of that value of its own, so the write that changes the variable
+// copies instead of changing what the name holds (design principles 10.5; `Builder::valueOf` reads
+// the carried state out without a cell to count, `Builder::secondNameOfCarriedName` is where the
+// name is given its own storage).
+//
+// The three numbers `kept` prints are the round's start value -- 0 0 0, then 1 0 0, then 1 2 0 --
+// and `xs` ends at the value the three writes made. Before that, the name was the port itself:
+// every use of `kept` read the round's value where the use stood, so it printed the write that
+// came before it (1 0 0, 1 2 0, 1 2 3).
+
+func main(): int sync {
+    var xs: int[] = [0, 0, 0]
+    let _ = loop i = 0 while i < 3 do sync {
+        let kept = xs
+        xs[i] = i + 1
+        xs = xs
+        println(kept[0], kept[1], kept[2])
+        i + 1
+    }
+    println(xs)
+    return 0
+}

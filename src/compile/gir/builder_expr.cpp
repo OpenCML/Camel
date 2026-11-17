@@ -441,6 +441,12 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
             node = newVariableOfType(visitTypeNode(gct->at(0)));
         } else {
             node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+            // A `let` names a value, not the name it was read from: a state the loop head carries
+            // is read out here, and what the name takes is a second name of it (secondNameOf), so
+            // the writes further down the body copy instead of changing what it holds.
+            if (!isVar) {
+                node = secondNameOfCarriedName(gct->at(0), node);
+            }
         }
     } catch (const BuildAbortException &) {
         // The initializer is in error, so the name is not declared. Uses of it are
@@ -1680,6 +1686,35 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
     stampPermissions(node);
     linkNodes(LinkType::Norm, input, node);
     return node;
+}
+
+node_handle_t Builder::secondNameOf(node_handle_t value) {
+    // A value handed out again as a name of its own. The twin of the `:var/get` above, for a name
+    // that has no cell to read (`Builder::valueOf`, a state the loop head carries): what a `let`
+    // binds is a value, and a value with two names must not be changed through one of them
+    // (design principles 10.5). The value keeps its own storage, so the write further down the
+    // round copies and the name keeps what it was given. Only arrays have storage a write could
+    // reach: every other value is handed out as it is (`shareForSecondName` says the same thing).
+    Type *type = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return value;
+    }
+    return variableOperator(camel::core::oper::CopyArray, value);
+}
+
+node_handle_t
+Builder::secondNameOfCarriedName(const GCT::node_ptr_t &initializer, node_handle_t value) {
+    // A `var x = <the state>` hands the state to a new cell, and `:var/new` counts what it is
+    // given; a `let` has no cell, so the read itself is where the count has to be made.
+    if (initializer == nullptr || initializer->type() != GCT::NodeKind::DREF ||
+        initializer->size() != 0) {
+        return value;
+    }
+    const auto bound = nodeAt(moduleLevelName(initializer->name()));
+    if (!bound.has_value() || !loopStatePorts_.contains(bound.value())) {
+        return value;
+    }
+    return secondNameOf(value);
 }
 
 node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {

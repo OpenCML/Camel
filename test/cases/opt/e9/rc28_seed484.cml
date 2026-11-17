@@ -1,0 +1,11 @@
+func q27(a28: int, a29: bool): bool sync {
+    println('');
+    return false;
+}
+
+func main(): int sync {
+    let n43 = true && true;
+    q27(0, false);
+    let n46 = [(false, 0) for q44 in concat([false], [false]) if false];
+    return 0;
+}
