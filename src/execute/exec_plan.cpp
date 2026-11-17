@@ -852,16 +852,20 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 /// for a handle read out of a variant and used afterwards (a `Ref` a defunctionalized closure
 /// carried, read after the call through the value).
 ///
-/// `:op/idx_arr`'s element read declares it for the same reason and by the same measurement: an
-/// element of `xs` is the slot the array holds (`Array::getSlot`,
-/// src/builtin/operators/struct.cpp#__index_arr__), and no reference is taken for it -- the array
-/// is what holds it. Read as a producer, `xs[0]` looked like a value born with a reference of its
-/// own, and the plan gave that reference back at the element's last use: the box was released while
-/// the array still held it (and while the box was still read later), so `state::set(xs[0], 5)`
-/// wrote through a released handle and `state::get` on either name answered "the value is not a
-/// reference". With the element read forwarding, the value at the index is the array's, so its
-/// reference comes back where the array dies -- and the reference of a handle packed into the array
-/// comes back with it, after the last read of any element.
+/// `:op/idx_arr`'s element read declares it because what it answers is the slot the array holds
+/// (`Array::getSlot`, src/builtin/operators/struct.cpp#__index_arr__) and not a value of its own: the
+/// *uses* of what it hands on are the array's, so an element read is not where the box's reference
+/// from the array comes back. That is all this predicate says. Read as a producer, `xs[0]` looked
+/// like a value born with a reference of its own, and the plan gave that reference back at the
+/// element's last use: the box was released while the array still held it (and while the box was
+/// still read later), so `state::set(xs[0], 5)` wrote through a released handle and `state::get` on
+/// either name answered "the value is not a reference".
+///
+/// The other half is not this predicate's: the read hands on a counted value, so the value it hands
+/// on is a further holder of the box and the plan takes a reference for it at the read
+/// (`takesTheReferenceForItsValue`, and the author's ruling of 2026-11-18 in the header, "the
+/// references that come back"). Carrying and holding are two answers: which value a use belongs to,
+/// and how many references the box has.
 ///
 /// A row of a higher-rank array is NOT one of these, and its declaration says so
 /// (`handsOnOnlyOutsideArrays`): `xs[i]` on a value with more than one dimension makes a value of
@@ -1186,6 +1190,60 @@ camel::core::type::TypeCode countedHandleCode();
 /// written in both places and one of the two would have changed first.
 bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 
+/// Whether the value the node makes is a *further holder* of an object an operand already holds: the
+/// node answers a value it was given, and the operator takes no reference for it. The count is the
+/// number of holders (design principles 10.5), so such a value has a reference of its own, and the
+/// plan is where it is taken -- the operator does not take it.
+///
+/// The author's ruling of 2026-11-18 (`812afad5c`), answering the question this lane's predecessor
+/// raised in `docs/handover/reviews/questions-2026-11-17-two-rulings.cn.md`: "an element read of a
+/// counted value is a further holder, so the plan retains there and the run-time skip goes". Read
+/// out of an array, a counted element is one holder (the array holds it) plus one (the value the read
+/// hands on), so the plan takes a hold at the read and gives it back where that value is last read.
+///
+/// Two facts answer it, and they are declarations the tree already has:
+///
+///   * what the operator says it hands on (`OperatorTable::handsOnOperandValue`): `:op/idx_arr`
+///     answers the slot the array holds and `:enum/field` the slot the variant holds, and neither
+///     takes a reference for it. `carried` still names what the *uses* belong to -- the array, or the
+///     variant -- so what this adds is the holder, not a second reading of who carries what.
+///   * a counted result with a counted operand of the same type: the node may answer the very value
+///     it was given, and the operator takes no reference for it either. `reduce` is the shape -- it
+///     answers its accumulator, so a `state::Ref` as its `initial` makes the node's value the
+///     initial's box -- and it is the case the run-time skip was written for: without a hold here,
+///     the hold the initial's own row gives back at the operator's position released the box while
+///     the node's value still named it (`ref.reduce_takes_its_initial` answered "the value is not a
+///     reference"). No operator can declare this one statically: whether the fold answers its
+///     accumulator is its element function's answer, and the plan does not read that.
+bool takesTheReferenceForItsValue(const GCGraph &graph, gc_node_ref_t at) {
+    const GCNode *node = graph.node(at);
+    if (node == nullptr || node->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const camel::core::type::Type *type = node->dataType();
+    if (type == nullptr || !isCountedHandle(type->code())) {
+        return false;
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(at);
+    if (body != nullptr &&
+        camel::core::OperatorTable::instance().handsOnOperandValue(body->uri())) {
+        return true;
+    }
+    for (const camel::execute::ExecutionPredecessor &predecessor :
+         camel::execute::executionPredecessorsOf(graph, at)) {
+        if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data) {
+            continue;
+        }
+        const GCNode *operand = graph.node(predecessor.node);
+        const camel::core::type::Type *operandType =
+            operand != nullptr ? operand->dataType() : nullptr;
+        if (operandType != nullptr && operandType->code() == type->code()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Whether the count applies to the value the node makes: its type is the reference handle the
 /// runtime counts (`countedHandleCode`). The plan lays the rows of such a value out where a back
 /// end runs them; every other value's rows keep the position the last-use column gives them,
@@ -1216,6 +1274,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     const auto &keptByProgram = uses.keptByProgram;
     plan.refHoldsAt.assign(count, 0);
     plan.refProducedAt.assign(count, 0);
+    plan.refTakesAt.assign(count, 0);
     plan.refKeptAt.assign(count, 0);
     plan.refGiveBackOffsets.assign(count + 1, 0);
     plan.refEntryOffsets.assign(count + 1, 0);
@@ -1228,8 +1287,20 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     std::vector<std::vector<gc_node_ref_t>> holds(count);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t value = plan.topo[idx];
-        if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
-            continue; // a forwarder, a port, a constant, or a node the plan does not run
+        if (value >= nodeCount) {
+            continue; // a node the plan does not run
+        }
+        // The values the table carries: `{its own}` for a producer, the union of its inputs for a
+        // carrier (a JOIN, a GATE, a port, `:enum/field`, `:op/idx_arr`). A carrier's own value can
+        // still be a counted handle that is a further holder of what it handed on
+        // (`takesTheReferenceForItsValue`): `carried` says whose *uses* these are, and that is the
+        // array for an element read, but the read holds the box too and the plan is where that
+        // reference is taken. So such a value has rows of its own, laid the same way a producer's
+        // are and with one hold more: its own, which its operator did not take.
+        const bool made    = !carried[value].empty() && carried[value].front() == value;
+        const bool takesIt = takesTheReferenceForItsValue(graph, value);
+        if (!made && !takesIt) {
+            continue; // a forwarder, a port, a constant, or a value nothing counts
         }
         // Where the reference of one use comes back: the use's own position, or -- when the user
         // packs its inputs -- where the value it made is last read, which is later than the use.
@@ -1255,7 +1326,27 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
             }
             return std::pair<uint32_t, bool>{end, true};
         };
-        const uint32_t uses = static_cast<uint32_t>(usesAt[value].size());
+        // The uses of the value. The table names them for a value it carries; for a value only the
+        // reader makes (a further holder) the uses are the nodes that read what it handed on, and
+        // they are read off the same edges the walk above reads.
+        std::vector<uint32_t> usePositions = usesAt[value];
+        if (!made) {
+            for (size_t reader = 0; reader < count; ++reader) {
+                const gc_node_ref_t user = plan.topo[reader];
+                if (user >= nodeCount) {
+                    continue;
+                }
+                for (const camel::execute::ExecutionPredecessor &predecessor :
+                     camel::execute::executionPredecessorsOf(graph, user)) {
+                    if (predecessor.kind == camel::execute::ExecutionPredecessor::Kind::Data &&
+                        predecessor.node == value) {
+                        usePositions.push_back(static_cast<uint32_t>(reader));
+                        break;
+                    }
+                }
+            }
+        }
+        const uint32_t uses = static_cast<uint32_t>(usePositions.size());
         // Where a row is written: the position it is due at, and never any other. A give-back is
         // due at the node whose use of the value it comes back for (the use's landing position: its
         // own position, or -- when the user packs its inputs -- the last use of the value it packed
@@ -1284,7 +1375,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // keeps, exactly as a packing value that is the graph's result makes it kept, and the row
         // is not laid at a position where nothing dies.
         bool leavesTheGraph = false;
-        for (const uint32_t usePosition : usesAt[value]) {
+        for (const uint32_t usePosition : usePositions) {
             const auto landing = landingOf(usePosition);
             if (!landing) {
                 leavesTheGraph = true;
@@ -1317,13 +1408,24 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
             ++held;
         }
         const bool kept         = keptByProgram[value] != 0 || leavesTheGraph;
-        plan.refProducedAt[idx] = 1;
+        // A further holder's value is not born with a reference the operator took: the plan takes
+        // it, at this node's position, and `refTakesAt` is that answer (`refProducedAt` keeps the
+        // one it means -- a value made with a reference of its own -- and `rowsOfValueAreExecuted`
+        // admits both, because both have rows that run).
+        if (takesIt) {
+            plan.refTakesAt[idx] = 1;
+        } else {
+            plan.refProducedAt[idx] = 1;
+        }
         plan.refKeptAt[idx]     = kept ? 1 : 0;
-        // The holds the plan takes beyond the value's own reference: one for each reference it
-        // gives back, less that own reference, and one more when the graph keeps it. Every row is
-        // written now -- there is no position that cannot take one -- so this is `uses - 1` again,
-        // and a loop's exits are counted one each because each of them gives one back.
-        copies = held + (kept ? 1u : 0u) - 1u;
+        // The holds the plan takes, beyond the reference a value is born with: one for each
+        // reference it gives back, less that own reference, and one more when the graph keeps it.
+        // Every row is written now -- there is no position that cannot take one -- so this is
+        // `uses - 1` again, and a loop's exits are counted one each because each of them gives one
+        // back. A further holder adds one: the hold the operator did not take is the plan's, and it
+        // is what `2746e4025` was missing -- with no hold at the read, the release the array's own
+        // hold is made of took the box to zero while the value the read handed on still named it.
+        copies = static_cast<uint32_t>(held + (kept ? 1u : 0u) + (takesIt ? 1u : 0u)) - 1u;
         for (uint32_t take = 0; take < copies; ++take) {
             holds[idx].push_back(value);
         }
@@ -1477,6 +1579,12 @@ bool isCountedHandle(camel::core::type::TypeCode code) noexcept {
 /// this must *not* ask is the producing node's kind -- that was the leak of 2026-11-16: the rows of
 /// a box a call made were in the table, the balance read them, `found` counted the box, and no back
 /// end ever applied them.
+///
+/// Two columns answer it and they are the two ways a value comes into this table: `refProducedAt`,
+/// a value made with a reference of its own, and `refTakesAt`, a value that is a further holder of
+/// an object an operand already holds and whose reference the plan takes. Both have rows; asking
+/// only the first would leave a further holder's hold and its give-back in the table and no back end
+/// applying them, which is the same leak from the other side.
 bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept {
     if (plan.graph == nullptr || value >= plan.topoIndexByRef.size()) {
         return false;
@@ -1485,28 +1593,7 @@ bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept 
     if (position == ExecPlan::kNotInPlan || position >= plan.refProducedAt.size()) {
         return false;
     }
-    return plan.refProducedAt[position] != 0;
-}
-
-/// The object the value of `position` is, when that value is one this count owns, and `nullptr`
-/// when it is not a counted handle. The node's output slot carries the type before a back end
-/// publishes the value into it -- the frame is laid out from the node's type -- so this reads the
-/// code the entry loop below reads for the value's own row.
-camel::core::rtdata::Object *objectOfTheOwnValue(
-    const ExecPlan &plan, camel::core::context::Frame *frame, size_t position,
-    slot_t produced) noexcept {
-    const gc_node_ref_t own = plan.topo[position];
-    if (own >= plan.dataIndexByRef.size()) {
-        return nullptr;
-    }
-    const gc_data_idx_t slot = plan.dataIndexByRef[own];
-    if (slot == 0) {
-        return nullptr;
-    }
-    if (!isCountedHandle(frame->codeAt(slot))) {
-        return nullptr;
-    }
-    return camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(produced);
+    return plan.refProducedAt[position] != 0 || plan.refTakesAt[position] != 0;
 }
 
 /// The rows of one position of `topo`: the holds a value taken at that position and the references
@@ -1523,11 +1610,6 @@ void applyRefEntriesAtPosition(
     if (entries.empty()) {
         return;
     }
-    // The object the node's own value is, when that value is a counted handle: a node that hands
-    // back a value it was given makes its value *be* that value's object, and the reference the
-    // last use would give back below is then the one the node's value is born with.
-    camel::core::rtdata::Object *const ownObject =
-        objectOfTheOwnValue(plan, frame, position, produced);
     for (const ExecPlan::RefEntry &entry : entries) {
         if (!rowsOfValueAreExecuted(plan, entry.value)) {
             continue;
@@ -1551,17 +1633,6 @@ void applyRefEntriesAtPosition(
         camel::core::rtdata::Object *object =
             camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(value);
         if (object == nullptr) {
-            continue;
-        }
-        // The node has just published this very object as its own value, so the reference that
-        // would come back here is the one its value is born with: the last use takes the
-        // producing reference over (exec_plan.h, "the references that come back") and a node
-        // that hands a value back hands that take-over on. `reduce` returns its accumulator, so
-        // a `state::Ref` as its `initial` makes its value the initial's box; giving the
-        // initial's reference back here took the count to zero while the node's value still
-        // named it. The value's own row, at its last use, is the one that brings the count
-        // home.
-        if (entry.kind == ExecPlan::RefEntryKind::GiveBack && !ownValue && object == ownObject) {
             continue;
         }
         for (uint32_t taken = 0; taken < entry.count; ++taken) {

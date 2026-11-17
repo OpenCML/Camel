@@ -283,15 +283,22 @@ class ExecPlan {
     // uses of the values it carries, so the arm whose value the JOIN hands on is the one whose
     // reference comes back, whichever arm runs.
     //
-    // A node whose value *is* a value it was given hands that value's reference on. The last use
-    // takes the producing reference over, and this node hands the take-over to its own value: the
-    // row that would have given the reference back at this node's position is not executed when the
-    // node's own value is the very object the row belongs to. `reduce` is the shape: it returns its
-    // accumulator, so a `state::Ref` as its `initial` makes the node's value the initial's box. The
-    // rows of the value the node makes are laid out like any produced value's -- it is born with
-    // one (that take-over), takes `copies`, and gives back at its own uses. Whether the node handed
-    // a given value back is what the object is, not what the plan says, so the rule is applied when
-    // the rows run (`applyRefEntriesAtPosition`), not when they are laid out.
+    // A node whose value is an object one of its operands already holds makes that value a *further
+    // holder* of it, and its operator takes no reference for it. The count is the number of holders
+    // (design principles 10.5), so the reference is the plan's to take: one hold at the node's
+    // position, given back where that value is last read, with every other producer's rows
+    // (`refTakesAt`). An element read of a counted value is the shape the author ruled on
+    // (2026-11-18, `812afad5c`): "an element read of a counted value is a further holder, so the
+    // plan retains there and the run-time skip goes". `reduce` is the other one -- it returns its
+    // accumulator, so a `state::Ref` as its `initial` makes the node's value the initial's box.
+    //
+    // There used to be a rule applied when the rows ran instead: a give-back row whose object was
+    // the very object the node's own value held was skipped, because the node's value was read as
+    // taking that reference over. It answered the same question at run time, in one place, with an
+    // object comparison -- and it was the only thing keeping `ref.reduce_takes_its_initial` green,
+    // while the fact it stood for (the box read out of an array is held by the read too) had no
+    // plan-side answer at all. Both are the plan's now, and `applyRefEntriesAtPosition` skips
+    // nothing.
     //
     // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
     // aggregate out of the values it is given -- does not end when the FILL has run: the packing
@@ -338,6 +345,15 @@ class ExecPlan {
     /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
     /// constant, nor a node that only forwards).
     std::vector<uint8_t> refProducedAt;
+    /// By topo index: the node makes a value that is a *further holder* of an object an operand
+    /// already holds, and its operator took no reference for it -- so the plan takes that reference
+    /// at this node's position (`takesTheReferenceForItsValue`, src/execute/exec_plan.cpp). The
+    /// author's ruling of 2026-11-18 (`812afad5c`): "an element read of a counted value is a further
+    /// holder, so the plan retains there and the run-time skip goes". It is a column of its own and
+    /// not `refProducedAt` because the two say different things about the count: a value made this
+    /// way is not born with a reference of its own, so it is not one of the `1 + copies` the balance
+    /// is read from, while it does have rows a back end runs.
+    std::vector<uint8_t> refTakesAt;
     /// By topo index: how many holds a back end takes when this node has run -- keyed the way an
     /// instruction is, as `refGiveBackAt` is for the references that come back, so that these two
     /// columns are the whole schedule a back end reads. The holds are always taken at the node that

@@ -111,7 +111,9 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         }
         for (size_t i = 0; i < plan.topo.size(); ++i) {
             const gc_node_ref_t ref = plan.topo[i];
-            if (i < plan.refProducedAt.size() && plan.refProducedAt[i] != 0) {
+            if (i < plan.refProducedAt.size() &&
+                (plan.refProducedAt[i] != 0 ||
+                 (i < plan.refTakesAt.size() && plan.refTakesAt[i] != 0))) {
                 const GCNode *node = graph->node(ref);
                 os << "PLAN_REFS " << name << " at " << i << " value " << ref << " kind "
                    << (node == nullptr ? -1 : static_cast<int>(node->kind)) << " copies "
