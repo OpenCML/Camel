@@ -34,8 +34,8 @@ export func fold_zero_adds::<F>(f: F): F! when is_function::<F>() {
 export func log_result(f: (x: float) => float): ((x: float) => float uses console)! {
     return edit f as d: (x: float) => float uses console {
         let out = exit_of(d)
-        let p = inline(out, (y: float) => println(`result = ${y}`), out)
-        order(p, out)
+        let w = inline(out, (y: float) => sync { println(`result = ${y}`); y }, out)
+        replace(out, w)
     }
 }
 
@@ -113,8 +113,8 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 
 | 算子 | 作用 | 说明 |
 |---|---|---|
-| `replace(old, new)` | 把读 `old` 的值的地方改为读 `new` | 现有；类型必须相容。只搬数据边，不删任何东西：`old` 若是会写的节点，它到区域出口的同步边还在，照样执行 |
-| `erase(n)` | 删一个值没人读的节点 | 现有；对任何节点一样，效应节点也用它删。值还有人读就先 `replace`；效应节点在链上的位置交给后继 |
+| `replace(old, new)` | 把 `old` 的读者改接到 `new` | 现有；类型必须相容。`new` 自己（及其上游）对 `old` 的读不改接，所以"给一个值套一层"（`new` 读 `old`）是常见用法。`old` 的读者里若有区域出口的 `GATE`（`old` 是一个写），它也一起改接，于是这个写随之消失——点名了它，就是显式的 |
+| `erase(n)` | 删一个节点 | 现有；对任何节点一样，效应节点也用它删（连同它在出口 `GATE` 上的那一份用处）。值还有人读就先 `replace` |
 | `eval(n)` | 把 `n` 就地算成常量 | 现有 |
 | `inline(at, fn, args...)` | 在 `at` 所在的区域里，把函数值 `fn` 的体以 `args` 为实参拼进来，交出结果节点 | **新增**。新节点只能由已类型检查的 Camel 代码产生，不提供"按算子名直接造节点" |
 | `outline(nodes)` | 把图里的一段提成一个函数值 | **新增**，`inline` 的反向。交出的是检查过的函数值，不带草稿句柄，可以交出块 |
@@ -135,7 +135,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 ## 8. 检查与错误报告
 
 **块内每一步（当场失败，指出这一步的源码位置）**：
-- `replace`：新旧值类型相容；`new` 不是 `old` 的下游（不成环）；`new` 在 `old` 的使用者看得见的区域里。
+- `replace`：新旧值类型相容；改接之后不成环；`new` 在被改接的读者看得见的区域里。
 - `erase`：节点没人读、不是效应、不是锚点。
 - `inline`：实参类型与 `fn` 的形参相符；实参在 `at` 的区域里看得见。
 - `outline`：这段只经由明确的入口取值、只经由明确的出口交值；不含锚点。
@@ -203,7 +203,7 @@ replace(a, b)
 **负责人 2026-11-17 已定**：
 - 图操作只写在规则、`view`、`edit` 三处，聚合成运行时的原子操作，不展开编译成图；`view` 保留，是读图的唯一入口。
 - 编译完成后没有块节点：每个块是算子表里一个按块体规范形式命名的算子，参数按规范形式中第一次使用的先后排列；算子允许不终止（第 5 节）。
-- 加 `outline`，与 `inline` 互为反向；按本质命名：`graft` 改为 `inline`（调用并当场展开），提取改为 `outline`（把一段收回成函数），删除 `add_constant`。不设 `drop_effect`：效应节点由区域出口的同步边用到，`replace` 只搬数据边，删它用 `erase`，不为效应另设算子。`view`、`edit` 两个关键字定名。
+- 加 `outline`，与 `inline` 互为反向；按本质命名：`graft` 改为 `inline`（调用并当场展开），提取改为 `outline`（把一段收回成函数），删除 `add_constant`。不设 `drop_effect`：区域里的写由前端在建图时接到区域出口的 `GATE`（原则 3.1），此后它和别的节点一样，点名它的 `replace` 或 `erase` 才让它消失，不为效应另设算子。往图里插入一个写，由插入它的代码自己让它被用到：拼进一个带 `sync` 的函数再 `replace` 接上（第 2 节 `log_result`）。编辑操作不维护"区域用到写"，提交也不重连；遍把区域拆开重组时，写的用处由遍自己负责（9.5），要核对就显式用 `check_pass_boundary`。`view`、`edit` 两个关键字定名。
 - 用户只看到图；调度与执行安排是后端自己的步骤，不是编译器的产物，也不对用户开放。
 - 读图作为一种效应挂在块上（第 9 节）。
 
