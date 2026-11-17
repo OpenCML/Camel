@@ -304,13 +304,22 @@ class ExecPlan {
     // captured a handle, the slot that made it was cleared, and the count reached zero while the
     // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
     //
-    // What this table does not decide: a value a callee keeps, or one a later graph reads, is a
-    // holder no edge of this graph shows. Counting those is the rest of the way to route 4. Until
-    // they are counted, the rows are laid out where the graph's own holds can see them, and the
-    // rows of a value a CALL or a FILL makes are written where an operator's site runs them
-    // (`planRefRows`): the leak of 2026-11-16 was that those rows were laid out at the CALL or the
-    // FILL, no back end ran them (`applyRefEntriesForNode` is reached at operator sites), and a
-    // count no edge explains stayed above zero while the plan read balanced.
+    // What this table does decide: where each row runs. A row is written at the position it is due
+        // at and is never moved from there -- the node that makes the value for the reference nothing
+        // reads, and the node whose use ends for every other row (`planRefRows`). Every back end runs
+        // a node's rows when that node has run: the operator's through `callOperator`, every other
+        // kind's through the same hook at the place that node is executed
+        // (`applyRefEntriesForNode`, include/camel/execute/operator_call.h). A CALL and a FILL are
+        // nodes of that kind: they make values and they read values, so their positions carry rows
+        // as an operator's do. The holds are the producer's, because the edge from a producer to
+        // each of its readers is the only edge that orders a hold before every reader; a row moved
+        // to "the next operator" has no such edge and a parallel back end may run it early, which is
+        // what the rework of 2026-11-17 removed.
+        //
+        // A position with no instruction of its own in a bytecode back end is a port or a GATE:
+        // both only carry another value's slot and are not where the plan's rows for a counted value
+        // are read (a GATE reads nothing of the value it forwards), so the slot table below leaves
+        // them out and their entry is the carrying node's.
     struct RefGiveBack {
         gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
         gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
@@ -324,13 +333,11 @@ class ExecPlan {
     std::vector<uint8_t> refProducedAt;
     /// By topo index: how many holds a back end takes when this node has run -- keyed the way an
     /// instruction is, as `refGiveBackAt` is for the references that come back, so that these two
-    /// columns are the whole schedule a back end reads. It is also the only column of the holds
-    /// (author review 2026-11-16, item 7): a value's copies were never a position of their own, and
-    /// the second column that said otherwise -- `refCopiesAt`, which kept the same numbers at the
-    /// value's own position -- disagreed with this one exactly where the leak was, at a value a
-    /// CALL or a FILL makes, whose node writes no rows and whose hold is taken at the first
-    /// operator position that writes one of its rows (exec_plan.cpp, `planRefRows`). A reader that
-    /// wants one value's holds sums the `Retain` entries that name it (`refEntries`).
+    /// columns are the whole schedule a back end reads. The holds are always taken at the node that
+    /// makes the value (author review 2026-11-17): that node has a data edge to every reader, so its
+    /// position is the one place a hold is ordered before all of them, whatever order a parallel back
+    /// end runs the readers in. A reader that wants one value's holds sums the `Retain` entries that
+    /// name it (`refEntries`).
     std::vector<uint32_t> refHoldsAt;
     /// By topo index: how many references come back when this node has run. The same schedule as
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
@@ -406,21 +413,23 @@ class ExecPlan {
     std::vector<uint32_t> refEntryOffsets;
     std::vector<RefEntry> refEntries;
     std::span<const RefEntry> refEntriesAt(size_t topoIndex) const;
-    /// By data slot: the operator node that makes the slot's value, and `kInvalidNodeRef` for a
-    /// slot no operator makes. A back end that runs bytecode has the instruction's destination slot
-    /// where the node-form back ends have the node, and the rows are keyed by the node; this is
-    /// that translation, filled once with the rows, so that all four back ends reach the count
-    /// through the same one function. Only an operator claims a slot: a port, a GATE and a JOIN
-    /// carry another node's slot and make no value, so a lookup that landed on one of them would
-    /// apply a row at the wrong place.
-    std::vector<uint32_t> refOperNodeBySlot;
-    /// The operator node that makes the value in `slot`; `kInvalidNodeRef` when no operator makes
-    /// it (including every static slot, which the negative index says is a constant).
+    /// By data slot: the node whose rows run where the instruction that writes the slot runs, and
+    /// `kInvalidNodeRef` for a slot no such node writes. A back end that runs bytecode has the
+    /// instruction's destination slot where the node-form back ends have the node, and the rows are
+    /// keyed by the node; this is that translation, filled once with the rows, so that all four back
+    /// ends reach the count through the same one function. Filled for the kinds that have an
+    /// instruction of their own writing their own slot -- the operator, the two calls, a FILL, a
+    /// COPY, an ACCS and a JOIN -- and never for a port or a GATE: both only carry another node's
+    /// slot, so a lookup that landed on one of them would apply a row at the wrong place.
+    std::vector<uint32_t> refRowNodeBySlot;
+    /// The node whose rows run where the instruction that writes `slot` runs; `kInvalidNodeRef` when
+    /// no such node writes it (including every static slot, which the negative index says is a
+    /// constant).
     gc_node_ref_t refNodeOfSlot(gc_data_idx_t slot) const {
-        if (slot <= 0 || static_cast<size_t>(slot) >= refOperNodeBySlot.size()) {
+        if (slot <= 0 || static_cast<size_t>(slot) >= refRowNodeBySlot.size()) {
             return kInvalidNodeRef;
         }
-        return refOperNodeBySlot[static_cast<size_t>(slot)];
+        return refRowNodeBySlot[static_cast<size_t>(slot)];
     }
     /// How many entries of each kind the plan holds, which is the balance read row by row:
     /// `produced + retains == giveBacks + kept`.
@@ -528,19 +537,18 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 /// ---- The count, executed at a node's position -------------------------------------------------
 //
 // `refEntriesAt` is what the plan says about a position; this is the one function that does it, and
-// all four back ends call it at the site where the node's operator has run -- the same site the
-// anchor above is asked at, for the same reason: it is the one place every back end reaches with
-// both the node and the value it just made.
+// all four back ends call it at the site where a node has run -- the same site the anchor above is
+// asked at, for the same reason: it is the one place every back end reaches with both the node and
+// the value it just made.
 //
 // It runs the `Retain` rows through `retainCountNow` (one holder more) and the `GiveBack` rows
-// through `giveBackCountNow` (one holder less, and the resource goes when that was the last). Two
-// filters decide which rows run, and both are the author's: a row is skipped whole when the value
-// it names is not a slot of that reference type, and a value's rows are skipped whole -- the holds
-// and the give-backs together -- unless the node that makes the value is an OPERATOR. The second is
-// what keeps the count from being applied at the wrong place: an operator's output is the one kind
-// every back end makes at this site, so `Retain` and `GiveBack` are taken in pairs; a value a call
-// or a FILL makes would have its holds taken on one path and its give-backs on another, and a
-// give-back with no hold behind it is a reference given back before its last use.
+// through `giveBackCountNow` (one holder less, and the resource goes when that was the last). One
+// filter decides which rows run: a row is skipped whole when the value it names is not a slot of
+// that reference type. The other filter the earlier version had -- a value's rows ran only when the
+// node that made it was an OPERATOR -- is gone (author review 2026-11-16, item 5): a CALL and a FILL
+// make values too, their rows were laid out and never run, and the box a call made kept its count
+// for ever while the plan read balanced. `rowsOfValueAreExecuted` now asks only whether the plan
+// counts the value at all, so the rows of every value the plan counts run wherever they were laid.
 //
 // `produced` is the value the node just made -- the slot the operator wrote, or wrote through the
 // scheduler (bytecode stores `bc->result` after this returns, so a back end that runs bytecode
@@ -554,11 +562,11 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 // This is the one entry point, and it is the same one for all four back ends -- no back end derives
 // which rows are due from what it knows about the instruction it is running. The two things a back
 // end supplies are the node it has just run and the value that run made; a back end that holds a
-// slot and not a node asks the plan which operator makes that slot's value (`refNodeOfSlot`), and
-// that lookup is the plan's table and not a second reading of the program. Its only caller is
-// `camel::execute::callOperator` (include/camel/execute/operator_call.h): every back end calls an
-// operator through that, so a place that calls an operator has no way to skip the rows and no way
-// to run them twice.
+// slot and not a node asks the plan which node's rows run at that slot (`refNodeOfSlot`), and that
+// lookup is the plan's table and not a second reading of the program. Its callers are
+// `camel::execute::callOperator` for the operator kind and `camel::execute::runNode` for every other
+// node kind a back end runs (include/camel/execute/operator_call.h): both reach this one function, so
+// a place that runs a node has no way to skip the rows and no way to run them twice.
 void applyRefEntriesForNode(
     const ExecPlan &plan, camel::core::context::Frame *frame, gc_node_ref_t node,
     slot_t produced) noexcept;

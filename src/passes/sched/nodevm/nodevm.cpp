@@ -829,6 +829,18 @@ slot_t NodeVMSchedPass::call(
             // A group's tail computed this node's value in one pass (the switch above is the
             // operator's own execution, which the group replaced).
         node_done:;
+            // The rows the plan has at this node's position, for every kind whose rows are its own.
+            // Two kinds keep theirs elsewhere: an operator's run inside `callOperator` above, and a
+            // LOOP node's at its exit (`applyRefEntriesForLoopExit`, reached from `stepLoops`). A
+            // CALL and a FILL are nodes of this loop too, so a value a call made is born with its
+            // count where the call ran -- before every reader, because the edge the plan has from
+            // the call to each reader is also what runs this node first
+            // (camel/execute/operator_call.h, `runNode`).
+            if (n->kind != GCNodeKind::Oper && n->kind != GCNodeKind::Loop) {
+                (void)camel::execute::runNode({*currPlan, *currFrame, nodeRef}, [&] {
+                    return n->dataIndex == 0 ? NullSlot : currFrame->get<slot_t>(n->dataIndex);
+                });
+            }
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "NodeVM",
                 "Executed node [{}/{}]: ref={}",

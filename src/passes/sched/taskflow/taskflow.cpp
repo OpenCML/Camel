@@ -1940,6 +1940,19 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
 
 slot_t TaskflowExecSchedPass::executeLinearNode(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
+    // The same rows as the task path's, at the same place: the node, then its position's rows
+    // (`executePreparedNode`). The two kinds that keep theirs elsewhere are the same two.
+    const auto *node = requireNode(graph, nodeRef);
+    if (node->kind == GCNodeKind::Oper || node->kind == GCNodeKind::Loop) {
+        return executeLinearNodeBody(graph, nodeRef, frame, plan);
+    }
+    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+        return executeLinearNodeBody(graph, nodeRef, frame, plan);
+    });
+}
+
+slot_t TaskflowExecSchedPass::executeLinearNodeBody(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     const auto *node = requireNode(graph, nodeRef);
 
     switch (node->kind) {
@@ -2318,7 +2331,27 @@ slot_t TaskflowExecSchedPass::executePreparedBranchArm(
 slot_t TaskflowExecSchedPass::executePreparedNode(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf,
     const RuntimeBuildInfo *buildInfo) {
-    const auto *node = requireNode(graph, nodeRef);
+    // One node, then the rows the plan has at that node's position (camel/execute/operator_call.h,
+    // `runNode`): the same hook an operator reaches through `callOperator`, at the place this
+    // scheduler runs every other kind of node. A CALL and a FILL are nodes here too, so the count a
+    // value a call made is born with is taken where that call ran -- before every reader, because
+    // the edge from the call to each reader is the graph's, and the task graph is built from those
+    // edges alone (`connectRuntimeDependencies`). Two kinds keep their rows where they were: an
+    // operator, because `callOperator` has already run them by the time the body returns, and a LOOP
+    // node, whose position runs every round and whose rows run at its exit (`loopEnd`).
+    const GCNode *node = requireNode(graph, nodeRef);
+    if (node->kind == GCNodeKind::Oper || node->kind == GCNodeKind::Loop) {
+        return executePreparedNodeBody(graph, nodeRef, frame, sf, buildInfo);
+    }
+    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+        return executePreparedNodeBody(graph, nodeRef, frame, sf, buildInfo);
+    });
+}
+
+slot_t TaskflowExecSchedPass::executePreparedNodeBody(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf,
+    const RuntimeBuildInfo *buildInfo) {
+    const GCNode *node = requireNode(graph, nodeRef);
 
     switch (node->kind) {
     case GCNodeKind::Data:
