@@ -462,16 +462,18 @@ void Builder::layRegionWriteEdges() {
     // region for an arm that has none). A write whose region's exit is not a node of it is left to
     // the seed instead: an edge laid to a node of another region is the second reading above.
     //
-    // WIP (2026-11-17, this lane): the exit half is off while the order the statements are chained
-    // in is settled. A node has one sync predecessor (`GraphDraft::setSyncInputs` refuses two), so
-    // an exit cannot yet receive one edge per statement the region owes -- the author's "出口接收
-    // 多条同步边" -- and every reading that chains them instead has closed a cycle or reversed the
-    // program's order somewhere (the run-5..8 readings in the handover note). What carries the
-    // writes today is the other half: the region roots of `camel/runtime/region_roots.h`, which
-    // say a region runs and a statement is in it, and which are what the 34 reds of `aa5c7d883`
-    // needed. Nothing below runs until that is decided.
+    // WIP (2026-11-17, this lane): the splicing half is off while the order the statements are
+    // chained in is settled. A node has one sync predecessor (`GraphDraft::setSyncInputs` refuses
+    // two), so an exit cannot yet receive one edge per statement the region owes -- the author's
+    // "出口接收多条同步边" -- and every reading that chains them instead has closed a cycle or
+    // reversed the program's order somewhere (the run-5..8 readings in the handover note). What is
+    // left on is the part the exit *representation* already holds: a region that hands its value
+    // to a JOIN which does not take it gets a GATE of its own as its exit (`gateExitOf`), so the
+    // arm's write is carried by `opt/e9/rc23_seed429_sync_arm` down the value path. What carries
+    // the writes otherwise is the other half, the region roots of `camel/runtime/region_roots.h`,
+    // which say a region runs and a statement is in it, and which are what the 34 reds of
+    // `aa5c7d883` needed. The splice after the GATE does not run until that is decided.
     regionWrites_.clear();
-    return;
     for (const ModuleUnit *unit : unitOrder_) {
         for (const compile_graph_ptr_t &graph : unit->builtBodies) {
             regionWrites_.clear();
@@ -557,8 +559,14 @@ void Builder::layRegionWriteEdges() {
                 // its value by the time the next statement reads it).
                 runtime::gc_node_ref_t statement = runtime::kInvalidNodeRef;
                 if (nodeKindOf(draft.ref(id)) == runtime::GCNodeKind::Brch) {
-                    if (runtime::branchJoinsNoValue(draft, ref)) {
-                        statement = runtime::branchJoinOf(draft, ref);
+                    // A branch that joins no value: the JOIN that closes it has no value type, so
+                    // the branch is a statement of the region it is written in (design principles
+                    // 3.1, 3.7). A branch whose JOIN joins a value nobody reads is not this shape
+                    // (`region_roots.branch_value_dropped`), which is why the test is on the JOIN.
+                    const runtime::gc_node_ref_t join = runtime::branchJoinOf(draft, ref);
+                    if (join != runtime::kInvalidNodeRef && draft.alive(join) &&
+                        isVoidGraphExitType(nodeTypeOf(draft.ref(join)))) {
+                        statement = join;
                     }
                 } else if (writesForRegionOf(body, draft.ref(id))) {
                     statement = ref;
@@ -645,6 +653,8 @@ void Builder::layRegionWriteEdges() {
                         exit = gate;
                     }
                 }
+                continue; // WIP: the splice waits on a representation that holds more than one
+                          // sync input; the GATE above and the roots below carry the running.
                 // What the exit already depends on, through every input it has (data, control,
                 // `with` and sync). A write the exit already reaches is upstream of the exit, so it
                 // runs whenever the exit does -- and an edge from it to the exit would close a
@@ -957,59 +967,6 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return; // the body did not build (an error was reported)
     }
     reach();
-    // What a region owes its writes (design principles 3.1 and 3.3; camel/runtime/region_roots.h):
-    // a write a running region owes is used by the region it is written in, so it runs although
-    // nothing reads what it produces -- an outside write (3.1) and a write to a handle (3.3) alike.
-    // The edge `layRegionWriteEdges` lays answers the other half of 3.1 (a write reaches its
-    // region's exit, and its order inside the region) and cannot answer this one: the sink such an
-    // edge needs lies outside the region, so an edge laid to it crosses the branch's cut. This is
-    // the same seed the liveness walk of a graph and the execution order make, and it is written
-    // the same way so that the three cannot drift: the body's writes run with the graph, a region's
-    // writes run with the region, and a region runs only once its owner is live.
-    //
-    // A branch that joins no value is a seed of the same kind (design principles 3.1, 3.7), and for
-    // the same reason as the liveness walk's: a branch written as a statement has no value of its
-    // own, so it is a statement of the region it is written in and runs with that region. It is
-    // seeded with the region that decides it, so the arms' own writes still wait for the arm's
-    // owner -- which is now this branch. A loop is not this case (its value is the state it leaves,
-    // and a loop nobody needs is a computation nobody wants).
-    std::vector<runtime::RegionRootCandidate> regionRoots =
-        runtime::regionRootCandidatesOfDraft(draft);
-    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!runtime::branchJoinsNoValue(draft, id)) {
-            continue;
-        }
-        // The branch and the JOIN that closes it, together: `reach` below follows data, control and
-        // sync edges, and the edge from a BRCH to its JOIN is none of the three -- it is read
-        // through the payload -- so seeding one half alone would keep one half and report the other.
-        for (draft_node_ref_t half : {id, runtime::branchJoinOf(draft, id)}) {
-            regionRoots.push_back({half, runtime::decidingRegionOfDraft(draft, half)});
-        }
-    }
-    for (const runtime::RegionRootCandidate &candidate : regionRoots) {
-        if (candidate.region == 0 && needed.insert(candidate.node).second) {
-            work.push_back(candidate.node);
-        }
-    }
-    reach();
-    for (bool grew = true; grew;) {
-        grew = false;
-        for (const runtime::RegionRootCandidate &candidate : regionRoots) {
-            if (candidate.region == 0 || needed.contains(candidate.node)) {
-                continue;
-            }
-            const draft_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, candidate.region);
-            if (owner == runtime::kInvalidNodeRef || !needed.contains(owner)) {
-                continue;
-            }
-            needed.insert(candidate.node);
-            work.push_back(candidate.node);
-            grew = true;
-        }
-        if (grew) {
-            reach();
-        }
-    }
 
     std::vector<draft_node_ref_t> dropped;
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {

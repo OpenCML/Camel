@@ -142,29 +142,21 @@ executionPredecessorsOf(const camel::runtime::GCGraph &graph, gc_node_ref_t ref)
         predecessors.push_back(ExecutionPredecessor{node, kind});
     };
     // The order the walk of computeExecutionOrder takes them in, which is also the order the plan
-    // is laid out in: control inputs, then the statement a sync edge writes before this one, then
-    // the data ports (normal role before context role, edges.cn.md 1.5), then what only orders.
-    //
-    // A statement written before this one runs before this one's *arguments*, because that is the
-    // order the program is written in: `println(a); println(noisy(4))` prints `a` first and the
-    // call of `noisy` after, although its value is an input of the second statement
-    // (`diag_json.dropped_effects`). The same order is what runs the effect in the arm of a branch
-    // written as a statement before a read of the box in the next statement of the region
-    // (`region_roots.branch_statement_kinds`): the branch is the statement before, and the read is
-    // an argument of the statement after.
+    // is laid out in: control inputs, then the data ports (normal role before context role,
+    // edges.cn.md 1.5), then the statements of a sync chain, then what only orders.
     for (gc_node_ref_t input : graph.ctrlInputsOf(ref)) {
         append(input, ExecutionPredecessor::Kind::Control);
-    }
-    // A sync edge carries "used" and an order at once (edges.cn.md 1.5): the statement written
-    // before this one runs before it, exactly as a control input does.
-    for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
-        append(edge.pred, ExecutionPredecessor::Kind::Sync);
     }
     for (gc_node_ref_t input : graph.normInputsOf(ref)) {
         append(input, ExecutionPredecessor::Kind::Data);
     }
     for (gc_node_ref_t input : graph.withInputsOf(ref)) {
         append(input, ExecutionPredecessor::Kind::Data);
+    }
+    // A sync edge carries "used" and an order at once (edges.cn.md 1.5): the statement written
+    // before this one runs before it, exactly as a control input does.
+    for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+        append(edge.pred, ExecutionPredecessor::Kind::Sync);
     }
     // An order edge only orders: neither end is made to run by it (edges.cn.md 2).
     for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
@@ -231,44 +223,10 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         std::vector<gc_node_ref_t> fromExit{startRef};
         reachBack(fromExit, used);
         live = used;
-        // The second seed is 3.1's other root of a region (camel/runtime/region_roots.h): a write
-        // a running region owes is used by the region it is written in, so the region's running runs
-        // it although nothing reads what it produces -- an outside write and a write to a handle
-        // (3.3) alike. The edge `Builder::layRegionWriteEdges` lays answers the other half of 3.1
-        // (a write reaches its region's exit, and its order inside the region) and cannot answer
-        // this one: the sink such an edge needs lies outside the region. Written in the body, a
-        // write runs whenever the graph runs -- and a graph is planned as it is invoked, so the
-        // body's writes come in here without a condition. Written in an arm or in a loop, it runs
-        // with that region, so it is seeded below with the region's result and under the same
-        // owner-live condition: a write in an arm nothing takes, or in a loop nothing needs, is not
-        // part of the execution (`SemanticDiag::EffectNotExecuted` names the branch or the loop).
-        //
-        // The nodes are laid out by the walk at the end of this function, which visits every node
-        // `live` holds, and the members of a control region are laid out as that region's piece
-        // whatever brought them in, so seeding here is all a write needs.
-        std::vector<camel::runtime::RegionRootCandidate> regionRoots =
-            camel::runtime::regionRootCandidatesOf(*graph);
-        // A branch that joins no value is a root of the same kind (design principles 3.1, 3.7): it
-        // is a statement of the region it is written in, and that region running is its running.
-        // Seeded under the same owner-live condition below, so a branch inside an arm nothing takes
-        // still waits for that arm. A loop is not this case (its value is the state it leaves).
-        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-            if (!camel::runtime::branchJoinsNoValue(*graph, ref)) {
-                continue;
-            }
-            // The branch and the JOIN that closes it go in together: the arm's value reaches the
-            // JOIN by a `with` edge, and the plan wants both ends of the piece whenever it has one.
-            for (gc_node_ref_t half : {ref, camel::runtime::branchJoinOf(*graph, ref)}) {
-                regionRoots.push_back({half, camel::runtime::decidingRegionOf(*graph, half)});
-            }
-        }
-        for (const camel::runtime::RegionRootCandidate &candidate : regionRoots) {
-            if (candidate.region != 0) {
-                continue;
-            }
-            std::vector<gc_node_ref_t> body{candidate.node};
-            reachBack(body, live);
-        }
+        // The writes a region owes are not seeded here: they reach the region's exit by the sync
+        // edge laid when the graph was built (`Builder::layRegionWriteEdges`, the author's spec of
+        // 2026-11-17, `3e4c0929c`), and the walk above follows sync edges like any other. What is
+        // seeded below is only what the ruling above names -- the results of the regions.
         // The seed is the region's result, and the ruling above says why: a region runs because its
         // owner runs. So a region is seeded only once its owner is in the execution. Seeding every
         // region of the graph instead laid out the members of a region whose owner nothing reached,
@@ -305,20 +263,6 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                     continue;
                 }
                 seeds.push_back(region->result);
-            }
-            // 3.1's other root, under the same condition: the writes a running region owes
-            // (camel/runtime/region_roots.h; the body's came in above).
-            for (const camel::runtime::RegionRootCandidate &candidate : regionRoots) {
-                if (candidate.region == 0 || live[candidate.node]) {
-                    continue;
-                }
-                const gc_node_ref_t owner =
-                    camel::runtime::decidingOwnerOf(*graph, candidate.region);
-                if (owner == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(owner) ||
-                    !live[owner]) {
-                    continue;
-                }
-                seeds.push_back(candidate.node);
             }
             if (!seeds.empty()) {
                 reachBack(seeds, live);
