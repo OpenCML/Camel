@@ -1565,7 +1565,7 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // reads no value (design principles 3.3, 3.4), so adding one cannot make this statement
     // copy; see for the measurement that shows both.
     const bool inPlace     = ssaTarget == nullptr && synced_ && rootType->code() == TypeCode::Array;
-    node_handle_t rootRead = ssaTarget != nullptr ? ssaTarget->value
+    node_handle_t rootRead = ssaTarget != nullptr ? ssa_.valueOf(ssaTarget)
                              : inPlace            ? peekVariable(variable)
                                                   : readVariable(variable);
     const auto make        = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
