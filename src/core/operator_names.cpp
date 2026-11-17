@@ -86,6 +86,15 @@ std::optional<std::string_view> plainGroupOfCompoundAssignment(std::string_view 
     return std::nullopt;
 }
 
+bool isAssignmentGroup(std::string_view group) {
+    // `=` and the rebinding to an in-place operator's result are groups of their own; the compound
+    // assignments are the table above, where each one is the plain operator it follows.
+    if (group == "__assn__" || group == "__assn_owned__") {
+        return true;
+    }
+    return plainGroupOfCompoundAssignment(group).has_value();
+}
+
 std::optional<std::string_view>
 overloadableOperatorGroup(std::string_view symbol, size_t paramCount) {
     for (const OverloadableForm &form : kForms) {

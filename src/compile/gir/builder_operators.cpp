@@ -1308,7 +1308,7 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
         return node != nullptr && node->type() == GCT::NodeKind::DREF &&
                (name.empty() || node->name() == name);
     };
-    if (!synced_ || gct->size() != 3 || !isDref(gct->at(0), "__assn__") || !isDref(gct->at(1))) {
+    if (!synced_ || assignmentFormOf(gct) != AssignmentForm::Plain || !isDref(gct->at(1))) {
         return nullptr;
     }
     const GCT::node_ptr_t target = gct->at(1);
@@ -1475,7 +1475,7 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // `=` or a compound assignment (`+=`), which is the plain operator over the place's value.
     const std::string group = gct->at(0)->name();
     std::optional<std::string_view> plainGroup;
-    if (group != "__assn__") {
+    if (assignmentFormOf(gct) != AssignmentForm::Plain) {
         plainGroup = camel::core::plainGroupOfCompoundAssignment(group);
         if (!plainGroup.has_value()) {
             return nullptr;
@@ -1992,14 +1992,8 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     // being replaced.
     // The assignment as written, and the one a path rebuilds: that one names the built-in group
     // itself (`$builtin::__assn__`) and is the same write (pathAssignmentOf).
-    std::string calleeName;
-    if (gct->size() == 3 && gct->at(0) != nullptr && gct->at(0)->type() == GCT::NodeKind::DREF) {
-        calleeName = gct->at(0)->name();
-        if (calleeName.rfind(kBuiltinPrefix, 0) == 0) {
-            calleeName = calleeName.substr(kBuiltinPrefix.size());
-        }
-    }
-    if (gct->size() != 3 || calleeName != "__assn__") {
+    const AssignmentForm form = assignmentFormOf(gct);
+    if (form != AssignmentForm::Plain && form != AssignmentForm::Rebuilt) {
         return nullptr;
     }
     const GCT::node_ptr_t &target = gct->at(1);
@@ -2038,9 +2032,9 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
     }
     // A write that came from `a op= b` is not reported: the compound assignment reads the name it
     // writes, so the report of a dropped value never stood on it (storedValueIsRead answered for
-    // the cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) names the
-    // built-in group itself and is skipped for the same reason: that rebuild reads `x`.
-    const bool reportable = !inCompoundAssignment_ && gct->at(0)->name() == "__assn__";
+    // the cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) is skipped
+    // for the same reason: that rebuild reads `x`.
+    const bool reportable = !inCompoundAssignment_ && form == AssignmentForm::Plain;
     if (value != nullptr && reportable) {
         // The write is reported where the assignment operator stands, which is where the call the
         // store used to be took its origin from; the value's own origin is where the value begins.
@@ -2063,8 +2057,7 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     // write is lowered (design principles 3.5: "a write to an outer `var` in a loop body becomes
     // the loop's carried state"), and it is why the `var` writing and the `let` writing are one
     // graph.
-    if (loopStatePorts_.empty() || gct->size() != 3 || gct->at(0) == nullptr ||
-        gct->at(0)->type() != GCT::NodeKind::DREF || gct->at(0)->name() != "__assn__") {
+    if (loopStatePorts_.empty() || assignmentFormOf(gct) != AssignmentForm::Plain) {
         return nullptr;
     }
     const auto &target = gct->at(1);
@@ -2357,8 +2350,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // place's type, so the call gives the value no expected type of its own; here only a
     // function type is handed on, for a lambda's unwritten parameter types (design principles
     // 5.9). Any other type leaves the value as it was.
-    const bool isAssignment = gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
-                              gct->at(0)->name() == "__assn__";
+    const bool isAssignment = assignmentFormOf(gct) == AssignmentForm::Plain;
     Type *assignedType      = nullptr;
     // The declaration of a rest function, when this call names one: its arguments are expanded
     // into a body in place of the call, and no instance is made (inlineRestCall). A pack among the
@@ -4490,7 +4482,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // A function, an assignment and a variable operator (`:var/take`, inPlaceRebindingOf) are
     // given the variable itself at a `var` position; any other operator its value.
     const bool takesVariables = targetOperator == nullptr ||
-                                targetOperator->name().starts_with("__assn") ||
+                                camel::core::isAssignmentGroup(targetOperator->name()) ||
                                 targetOperator->name().starts_with("__var_");
     // Whether a node stands in the block the call is written in. A version of a variable that a
     // branch arm or another block wrote is not what this call reads: what the call reads there is
@@ -4967,9 +4959,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // into). Written as a statement, or where the position wants no value at all (the last
     // statement of a `: void` body), the write stands for it: the write is what the statement
     // does.
-    const bool assignment = gct->size() == 3 && gct->at(0) != nullptr &&
-                            gct->at(0)->type() == GCT::NodeKind::DREF &&
-                            gct->at(0)->name().starts_with("__assn");
+    const bool assignment = isWrittenAssignment(assignmentFormOf(gct));
     // Whether a value is wanted here: the statement's value is not dropped (`unusedStatement`),
     // and the position is not a `void` one (a body declared `: void` takes its last statement's
     // value in no position -- `visitExecNode` builds it and drops it). A position that declares no

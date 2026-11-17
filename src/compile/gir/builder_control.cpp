@@ -3400,14 +3400,17 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 if (node == nullptr) {
                     return;
                 }
-                const bool assignLink =
-                    node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
-                    node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
-                    node->at(1) != nullptr && node->at(1)->type() == GCT::NodeKind::DREF;
-                const std::string callee = assignLink ? node->at(0)->name() : std::string();
-                const bool plainAssign   = assignLink && callee == "__assn__";
-                const bool compoundAssign =
-                    assignLink && !plainAssign && callee.rfind("__assn", 0) == 0;
+                // What the call says it is (AssignmentForm), read off the node instead of off the
+                // group's spelling: `x += e` writes the name exactly as `x = e` does. The target
+                // has to be the name itself for this scan to have a name to carry -- a path into a
+                // value (`v.f = e`) is the whole variable's write, which this scan is not about.
+                const AssignmentForm form = assignmentFormOf(node);
+                const bool isNameTarget =
+                    node->size() == 3 && node->at(1) != nullptr &&
+                    node->at(1)->type() == GCT::NodeKind::DREF;
+                const bool nameWrite      = form != AssignmentForm::None && isNameTarget;
+                const bool plainAssign    = nameWrite && form == AssignmentForm::Plain;
+                const bool compoundAssign = nameWrite && form == AssignmentForm::Compound;
                 if (plainAssign || compoundAssign) {
                     const std::string written = moduleLevelName(node->at(1)->name());
                     if (compoundAssign) {

@@ -32,6 +32,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
@@ -642,14 +643,10 @@ size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
 void Builder::scanProgramWriters() {
     programWriters_.clear();
     programValueNames_.clear();
-    // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
-    // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
-    // principles 4.3). The variable it writes is the base of its target: the variable itself
-    // (`v = e`) or a path into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a
-    // rebinding of the variable (pathAssignmentOf).
-    const auto isAssignment = [](const std::string &group) {
-        return group.rfind("__assn", 0) == 0;
-    };
+    // The variable it writes is the base of its target: the variable itself (`v = e`) or a path
+    // into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a rebinding of the
+    // variable (pathAssignmentOf). Which groups an assignment is, the table of the operators says
+    // (`core::isAssignmentGroup`): one place, not a spelling compared here.
     // The variable a target names: the reference under the fields and indices the assignment
     // writes through.
     const auto baseOf = [](GCT::node_ptr_t target) -> GCT::node_ptr_t {
@@ -776,7 +773,7 @@ void Builder::scanProgramWriters() {
         }
         if (node->type() == GCT::NodeKind::LINK && node->size() >= 2) {
             const std::string *group = groupOf(node->at(0));
-            if (group != nullptr && isAssignment(*group)) {
+            if (group != nullptr && camel::core::isAssignmentGroup(*group)) {
                 if (const GCT::node_ptr_t variable = baseOf(node->at(1)); variable != nullptr) {
                     const std::set<std::string> &parameters = parametersIn(function);
                     if (parameters.find(variable->name()) == parameters.end()) {

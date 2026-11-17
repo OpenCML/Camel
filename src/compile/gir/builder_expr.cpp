@@ -2998,16 +2998,16 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                                 node->type() == GCT::NodeKind::TAPP;
             // A `var` an in-place operator rewrites keeps its cell (S1's scope, ahead of S3b): the
             // update takes the value's storage and hands it back by rebinding the name, which needs
-            // a cell to write. Two shapes, both read off the GCT:
-            //   LINK(__assn__, <path>, e)                  `v[i] = e`, `v.f = e`
-            //   LINK(__assn__, v, LINK(method, v, ...))    `v = v->append(x)`, `v = append(v, x)`
+            // a cell to write. Two shapes, both read off the GCT node: the plain write of a place
+            // (`v[i] = e`, `v.f = e`) and the write of a call over the variable itself.
+            //   LINK(<plain assignment>, <path>, e)      `v[i] = e`, `v.f = e`
+            //   LINK(<plain assignment>, v, LINK(method, v, ...))
+            //                                             `v = v->append(x)`, `v = append(v, x)`
             // The operator form `v = v + 1` (a `__`-prefixed callee) builds a new value and is not
             // one of these, so it stays a value. A shape this misses only keeps a cell, which is
             // the cheap direction; the other way round drops an in-place update, which `--copies`
             // sees.
-            if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
-                node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
-                node->at(0)->name() == "__assn__") {
+            if (assignmentFormOf(node) == AssignmentForm::Plain) {
                 const GCT::Node *target = node->at(1);
                 const GCT::Node *value  = node->at(2);
                 const bool plainTarget = target != nullptr && target->type() == GCT::NodeKind::DREF;

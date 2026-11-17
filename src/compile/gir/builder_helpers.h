@@ -19,6 +19,7 @@
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/collection.h"
@@ -41,6 +42,7 @@
 #include <atomic>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <optional>
@@ -452,6 +454,70 @@ using camel::core::operatorSymbolOf;
 /// `filter` and `map` of a list comprehension). No program can write it, and no declaration
 /// of the program is looked at when it is resolved.
 constexpr std::string_view kBuiltinPrefix = "$builtin::";
+
+/// The write a call of a GCT node is, read off the node (design principles 3.5). Every place that
+/// lowers a write has to tell "this is a write of a variable" from "this is a call", and two of
+/// them have to tell the write the program wrote from the one the builder rebuilds for it. The
+/// judgement is the node's and is made here, once: the node's kind (a LINK of three arguments,
+/// the callee first), the operator group the callee names (`core::isAssignmentGroup` says which
+/// groups write their first argument), and the operator id where the compiler made the callee by
+/// id rather than by a group's name.
+enum class AssignmentForm : uint8_t {
+    /// Not a call of an assignment group: an ordinary call, a branch, a declaration.
+    None,
+    /// `x = e`, as the program wrote it.
+    Plain,
+    /// `x += e` (and the other compound forms), as the program wrote it.
+    Compound,
+    /// The whole variable's `x = ...` that a path assignment is rebuilt into (`v.f = e`): the
+    /// compiler's own reference to `__assn__`, written under `kBuiltinPrefix`, not the program's.
+    Rebuilt,
+    /// `__assn_owned__`: the rebinding to the result of an in-place operator.
+    Owned,
+};
+
+inline AssignmentForm assignmentFormOf(const GCT::node_ptr_t &node) {
+    if (node == nullptr || node->type() != GCT::NodeKind::LINK || node->size() != 3) {
+        return AssignmentForm::None;
+    }
+    const GCT::node_ptr_t &callee = node->at(0);
+    if (callee == nullptr || callee->type() != GCT::NodeKind::DREF) {
+        return AssignmentForm::None;
+    }
+    // The group the callee names, under the compiler's own prefix when the compiler wrote it.
+    std::string_view group = callee->name();
+    bool compilerWroteIt   = false;
+    if (group.rfind(kBuiltinPrefix, 0) == 0) {
+        group.remove_prefix(kBuiltinPrefix.size());
+        compilerWroteIt = true;
+    }
+    if (group == "__assn__") {
+        return compilerWroteIt ? AssignmentForm::Rebuilt : AssignmentForm::Plain;
+    }
+    if (!camel::core::isAssignmentGroup(group)) {
+        return AssignmentForm::None;
+    }
+    if (group == "__assn_owned__") {
+        // The compiler makes this call from an operator id, and the name is then only the node's
+        // label (`internalOperatorDref`): the id is asked, so that a label is not the reference.
+        if (const auto oper = GCT::Tree::of(callee.get())->operRefOf(callee.get());
+            oper.has_value() && *oper != camel::core::oper::AssnOwned) {
+            return AssignmentForm::None;
+        }
+        return AssignmentForm::Owned;
+    }
+    // What is left of the assignment groups are the compound forms, each one the plain operator
+    // over the place's value.
+    return AssignmentForm::Compound;
+}
+
+/// Whether the form is a write the program wrote, or the rebinding to an in-place operator's
+/// result that stands in its place: every form but the one a path assignment is rebuilt into,
+/// which is the compiler's own write of the variable and not a call the program made.
+inline bool isWrittenAssignment(AssignmentForm form) {
+    return form == AssignmentForm::Plain || form == AssignmentForm::Compound ||
+           form == AssignmentForm::Owned;
+}
 
 /// Whether a value of this type can hold a function value: a function itself, or a composite that
 /// can carry one (a tuple or struct field, an array element). A body whose result is of such a type
