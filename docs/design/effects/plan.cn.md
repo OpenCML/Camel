@@ -72,7 +72,7 @@
 
 1. `docs/language/04_execution_model.md:150-194` 仍写 `wait` 与前缀 `sync func`，而 3.3/§14.2 已退役；代码也仍接受（`builder_diagnostics.cpp` 的注释还按旧写法解释）。步骤 9 一并改。
 2. `IgnoredSideEffect`（"既没 wait 也不在 sync 块"）、`VarParamInAsyncFunction`、`CapturedWriteInAsyncFunction` 三条警告的前提是"块外不自动排序"。步骤 6 之后前提消失；步骤 9 删除或重写，不能留一条已经不成立的理由。
-3. `EffectNotExecuted` 的判定是布尔"有没有外部效应"（`builder_diagnostics.cpp#EffectNotExecuted`），不是资源摘要；步骤 6 以后仍用它，但"没被依赖的效应"与"资源冲突"要分清：前者仍警告，后者由控制边解决，不再需要 `wait`。
+3. ~~原第 3 项已作废~~：它讲的 `EffectNotExecuted` **这个名字在 `src/` 与 `include/` 里已一处不剩**（2026-11-18 核实，`git grep` 零命中），所以"这个判定的口径是布尔还是资源摘要"已无对象。**本项连同步骤 9 里为它保留的动作一并删除**；若以后重新引入同名诊断，按当时的判定重写，不要回抄这一段。
 4. 运行期 `requiredOrderings` 已经能列出"应该有序但没连边"的对（`src/runtime/resources.cpp#requiredOrderings`），但只有 `test::resources` 用；没有任何门禁。步骤 6 把它变成建图的判据与验收。
 
 ---

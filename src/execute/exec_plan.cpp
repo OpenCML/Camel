@@ -853,13 +853,13 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 /// carried, read after the call through the value).
 ///
 /// `:op/idx_arr`'s element read declares it because what it answers is the slot the array holds
-/// (`Array::getSlot`, src/builtin/operators/struct.cpp#__index_arr__) and not a value of its own: the
-/// *uses* of what it hands on are the array's, so an element read is not where the box's reference
-/// from the array comes back. That is all this predicate says. Read as a producer, `xs[0]` looked
-/// like a value born with a reference of its own, and the plan gave that reference back at the
-/// element's last use: the box was released while the array still held it (and while the box was
-/// still read later), so `state::set(xs[0], 5)` wrote through a released handle and `state::get` on
-/// either name answered "the value is not a reference".
+/// (`Array::getSlot`, src/builtin/operators/struct.cpp#__index_arr__) and not a value of its own:
+/// the *uses* of what it hands on are the array's, so an element read is not where the box's
+/// reference from the array comes back. That is all this predicate says. Read as a producer,
+/// `xs[0]` looked like a value born with a reference of its own, and the plan gave that reference
+/// back at the element's last use: the box was released while the array still held it (and while
+/// the box was still read later), so `state::set(xs[0], 5)` wrote through a released handle and
+/// `state::get` on either name answered "the value is not a reference".
 ///
 /// The other half is not this predicate's: the read hands on a counted value, so the value it hands
 /// on is a further holder of the box and the plan takes a reference for it at the read
@@ -923,12 +923,12 @@ bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
 /// has not finished with the values it was handed. A generator's body runs on the pull, and the
 /// stream the call answered is the closure over the state the body writes, so the `box` a generator
 /// was given outlives the call that gave it -- `reading(box: state::Ref<int>)` answers `int..`, and
-/// the second pull's `state::set` on it read "the value is not a reference" while the first pull had
-/// worked. Read as an ordinary use, the one use of `state::ref(0)` in `main` was that call, so the
-/// box's only reference came back at it (`stream.generator`: `std::nvm`, `std::fvm` and `std::prl`
-/// failed; `std::jit` applied no row at that position and left the box alive, which is why the four
-/// disagreed). A `Func` node is a direct call and its value is the callee's return (`GCFuncBody`),
-/// which is what the test asks.
+/// the second pull's `state::set` on it read "the value is not a reference" while the first pull
+/// had worked. Read as an ordinary use, the one use of `state::ref(0)` in `main` was that call, so
+/// the box's only reference came back at it (`stream.generator`: `std::nvm`, `std::fvm` and
+/// `std::prl` failed; `std::jit` applied no row at that position and left the box alive, which is
+/// why the four disagreed). A `Func` node is a direct call and its value is the callee's return
+/// (`GCFuncBody`), which is what the test asks.
 ///
 /// A call that answers an ordinary value does not belong here: the callee has finished, so what it
 /// made holds nothing it was handed, and the reference of that use comes back at the call. That is
@@ -1017,14 +1017,15 @@ bool passesWhatItReadsOn(
 /// region's exit `GATE`, whose first normal input is the value it forwards and whose normal inputs
 /// after it are the reads it takes of the region's writes (`Builder::layRegionWriteEdges`, design
 /// principles 3.1, the author's ruling of 2026-11-17: "第一个输入是区域交出的值，其余输入是区域里按
-/// 效应推断会写外部资源或句柄的节点"). The gate *waits* on those writes -- that wait is the whole of
-/// what makes them live, and it is what `liveNodesOf` reads -- and hands nothing of theirs on, so it
-/// neither carries their value (`carried`) nor holds a reference to it (`usesAt`).
+/// 效应推断会写外部资源或句柄的节点"). The gate *waits* on those writes -- that wait is the whole
+/// of what makes them live, and it is what `liveNodesOf` reads -- and hands nothing of theirs on,
+/// so it neither carries their value (`carried`) nor holds a reference to it (`usesAt`).
 ///
 /// Read as uses, they held a reference the gate never takes, and the plan's answer disagreed with
-/// the run: `ref.reduce_takes_its_initial` laid the accumulator's give-back at the exit gate as well
-/// as at the read and took the second hold that pays for it, and std::fvm and std::jit -- which
-/// apply no rows at a gate's position, because a gate compiles to nothing -- never gave it back
+/// the run: `ref.reduce_takes_its_initial` laid the accumulator's give-back at the exit gate as
+/// well as at the read and took the second hold that pays for it, and std::fvm and std::jit --
+/// which apply no rows at a gate's position, because a gate compiles to nothing -- never gave it
+/// back
 /// (`released=0 live=1 disposed=1`). The same misreading turned the operator's own `void` value in
 /// `ref.foreach_gives_back` from "nothing reads it" into a use at the exit, which moved its
 /// give-back off the operator's position. A gate's trailing input is a wait, not a use.
@@ -1123,7 +1124,8 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
     // A value's uses, by position: every node that reads it (through forwarding) is one use. A use
     // by a node that packs its inputs (`packsItsInputs`) is also recorded against that node,
     // because the reference is then held by the value the packing node made and comes back when
-    // *that* dies. A read a gate takes to order a write is not one of these (`dataPredecessorsReadAsValues`).
+    // *that* dies. A read a gate takes to order a write is not one of these
+    // (`dataPredecessorsReadAsValues`).
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
@@ -1250,23 +1252,24 @@ camel::core::type::TypeCode countedHandleCode();
 /// 2026-11-17, item 9).
 bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 
-/// Whether the value the node makes is a *further holder* of an object an operand already holds: the
-/// node answers a value it was given, and the operator takes no reference for it. The count is the
-/// number of holders (design principles 10.5), so such a value has a reference of its own, and the
-/// plan is where it is taken -- the operator does not take it.
+/// Whether the value the node makes is a *further holder* of an object an operand already holds:
+/// the node answers a value it was given, and the operator takes no reference for it. The count is
+/// the number of holders (design principles 10.5), so such a value has a reference of its own, and
+/// the plan is where it is taken -- the operator does not take it.
 ///
 /// The author's ruling of 2026-11-18 (`812afad5c`), answering the question this lane's predecessor
-/// raised in `docs/handover/reviews/questions-2026-11-17-two-rulings.cn.md`: "an element read of a
-/// counted value is a further holder, so the plan retains there and the run-time skip goes". Read
-/// out of an array, a counted element is one holder (the array holds it) plus one (the value the read
-/// hands on), so the plan takes a hold at the read and gives it back where that value is last read.
+/// raised in `docs/handover/questions/questions-2026-11-17-two-rulings.cn.md`: "an element read of
+/// a counted value is a further holder, so the plan retains there and the run-time skip goes". Read
+/// out of an array, a counted element is one holder (the array holds it) plus one (the value the
+/// read hands on), so the plan takes a hold at the read and gives it back where that value is last
+/// read.
 ///
 /// Two facts answer it, and they are declarations the tree already has:
 ///
 ///   * what the operator says it hands on (`OperatorTable::handsOnOperandValue`): `:op/idx_arr`
 ///     answers the slot the array holds and `:enum/field` the slot the variant holds, and neither
-///     takes a reference for it. `carried` still names what the *uses* belong to -- the array, or the
-///     variant -- so what this adds is the holder, not a second reading of who carries what.
+///     takes a reference for it. `carried` still names what the *uses* belong to -- the array, or
+///     the variant -- so what this adds is the holder, not a second reading of who carries what.
 ///   * a counted result with a counted operand of the same type: the node may answer the very value
 ///     it was given, and the operator takes no reference for it either. `reduce` is the shape -- it
 ///     answers its accumulator, so a `state::Ref` as its `initial` makes the node's value the
@@ -1467,7 +1470,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
                 ExecPlan::RefGiveBack{.value = value, .at = plan.topo[idx], .count = 1});
             ++held;
         }
-        const bool kept         = keptByProgram[value] != 0 || leavesTheGraph;
+        const bool kept = keptByProgram[value] != 0 || leavesTheGraph;
         // A further holder's value is not born with a reference the operator took: the plan takes
         // it, at this node's position, and `refTakesAt` is that answer (`refProducedAt` keeps the
         // one it means -- a value made with a reference of its own -- and `rowsOfValueAreExecuted`
@@ -1477,7 +1480,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         } else {
             plan.refProducedAt[idx] = 1;
         }
-        plan.refKeptAt[idx]     = kept ? 1 : 0;
+        plan.refKeptAt[idx] = kept ? 1 : 0;
         // The holds the plan takes, beyond the reference a value is born with: one for each
         // reference it gives back, less that own reference, and one more when the graph keeps it.
         // Every row is written now -- there is no position that cannot take one -- so this is
@@ -1648,8 +1651,8 @@ bool isCountedHandle(camel::core::type::TypeCode code) noexcept {
 /// Two columns answer it and they are the two ways a value comes into this table: `refProducedAt`,
 /// a value made with a reference of its own, and `refTakesAt`, a value that is a further holder of
 /// an object an operand already holds and whose reference the plan takes. Both have rows; asking
-/// only the first would leave a further holder's hold and its give-back in the table and no back end
-/// applying them, which is the same leak from the other side.
+/// only the first would leave a further holder's hold and its give-back in the table and no back
+/// end applying them, which is the same leak from the other side.
 bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept {
     if (plan.graph == nullptr || value >= plan.topoIndexByRef.size()) {
         return false;
