@@ -944,14 +944,13 @@ expect_stdout_exact = "P 5\n"
 #     prints the warning below instead of `P 5`.
 #   the owner  -- this lane's rework: the exit `GATE` that reads the region's writes.
 #   the unhide -- when that rework is merged, delete the mark; the case prints `P 5` and reports
-#     nothing.
+#     nothing. The rework landed in the merge that brought `f850a2505` (a region's exit GATE forwards
+#     the value its reader takes), the run below passed on all four back ends, and the four fields are
+#     gone; what stays is this record of what the mark was and why it had to come off.
 #
-# `known_fail_msg` pins what is observed today, so the day the defect is fixed the mark itself turns
-# the run red instead of quietly staying: the pinned text is the warning this program must stop
-# reporting. `develop` prints `P 5` here (`feat/opt` 1538/1538 at `33c0fb536`), so this is a
-# regression of this batch and not a reading the language has not settled.
-known_fail = ["nvm", "fvm", "jit", "prl"]
-known_fail_owner = "lane-rrread (the rework: a region's exit GATE that reads the region's writes, `Builder::layRegionWriteEdges`)"
-known_fail_reason = "a region's write is not joined to the region's exit when the graph is built: `layRegionWriteEdges` collects `q(5)` for the `case _` arm and `gateOf` lays no GATE, because that arm's exit already reaches the write (`result already reaches it`) and nothing else makes the exit needed, so the arm is unreachable when the graph is frozen and `P 5` is never printed"
-known_fail_msg = "expect_stdout_exact differs"
+# The four fields are gone: `known_fail_msg` pinned the warning, the warning stopped being reported
+# when the rework landed, and the entry reads `P 5` on all four back ends. `develop` printed `P 5`
+# here before that batch (`feat/opt` 1538/1538 at `33c0fb536`), so the mark was a regression of the
+# batch that added it and not a reading the language had not settled -- the tree is back to that
+# reading, and no new mark replaces it.
 

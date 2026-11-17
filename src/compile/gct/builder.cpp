@@ -5984,15 +5984,18 @@ value, and each pull runs the body on from where the pull before it stopped.
 
 The machine is the one docs/design/io-concurrency-streams/plan.cn.md slice E describes, with the
 state kept the way this language can keep it:
-  - the `pc` cell says which point of the body the next pull starts from, and the `halt` cell
-    says the pull in hand is done;
+  - the `pc` cell says which point of the body the next pull starts from. That is the whole of the
+    state's own part: whether the pull in hand is done is the round's flag and not the generator's
+    (`roundState` below), and that flag is all the machine's `loop` stops on
+    (`docs/handover/reports/2026-11-18-the-generator-state-holds-only-pc.cn.md`);
   - every local that lives across a `yield` is a cell of the function's own body. That is the
     machine's own bookkeeping and not the meaning of `var`: `var` is a name that may be bound
     again, and a closure captures the value the name held where the closure is written (design
     principles 3.5). A closure the body makes never gets the cell through a capture port, and a
     write of the name after the closure is made and before its last use is refused where it stands
     (`SemanticDiag::CapturedVarWrittenAfterTheClosure`, 198);
-  - `step` is one function: a `loop` while `halt == 0` around a branch on `pc`. A stretch with
+  - `step` is one function: a `loop` while the round it was handed has not answered, around a
+    branch on `pc`. A stretch with
     no `yield` runs inside one round of that loop, so a `yield` is the only thing that leaves;
     the value of a round is the answer of the pull -- the element and the rest of the stream at a
     `yield`, the state it has had since the last one anywhere else -- and the value of the loop
@@ -6038,12 +6041,16 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // one, so a write between two `yield`s is ordered by the same rule as any other (3.4).
     const bool synced = bodyAst->loadAs<AST::StmtBlockLoad>()->synced();
 
-    // The two cells the step unpacks out of the state: the 0th member is the point of the body the
-    // next pull starts from, the 1st says the pull in hand is done. They belong to the step and not
-    // to this body, and these two names are used only where such a cell is made, read or written:
-    // no decision below asks what a name is, so neither of them is compared to anything.
-    const std::string pcCell   = "__gen_pc__";
-    const std::string haltCell = "__gen_halt__";
+    // The cell the step unpacks out of the state: the 0th member is the point of the body the next
+    // pull starts from. It belongs to the step and not to this body, and the name is used only where
+    // such a cell is made, read or written: no decision below asks what a name is, so the name is
+    // compared to nothing.
+    // The state carried a second member until 2026-11-18: a `halt` bit the author had dropped
+    // (`6ce3bf1f2`, "answer: drop the generator's halt bit"). It was written where a round answered
+    // and read only where the state was packed, so it decided nothing, and the round's own flag
+    // already says the pull in hand is done
+    // (`docs/handover/reports/2026-11-18-the-generator-state-holds-only-pc.cn.md`).
+    const std::string pcCell = "__gen_pc__";
     // The step's state parameter. It is named, so the port `src/compile/gir/builder_helpers.h`
     // makes for it carries the same name and the step's body can read it.
     const std::string stateParamName = "__gen_state__";
@@ -6101,14 +6108,13 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         return mark(node, at, "gct.generator.pair");
     };
 
-    // The cells: every local of the body in the order it is written. The machine's own two parts
-    // -- the point the next pull starts from, and whether the pull in hand is done -- are not among
-    // them: they are the state's own members (see `stateType` below), and the step unpacks each
-    // into a cell of its own (`unpackSlot`). A cell here would be a second copy of one fact, and
-    // nothing would read it: a name in an arm resolves to the step's own local, which is what let
-    // `bc5ce2249` put the unpacking ahead of the arms. A declaration is hoisted only where what it
-    // holds does not depend on the point it stands at -- a constant or a lambda, which reads its
-    // cells when it is called and not now.
+    // The cells: every local of the body in the order it is written. The machine's own part -- the
+    // point the next pull starts from -- is not among them: it is the state's own member (see
+    // `stateType` below), and the step unpacks it into a cell of its own (`unpackSlot`). A cell here
+    // would be a second copy of one fact, and nothing would read it: a name in an arm resolves to
+    // the step's own local, which is what let `bc5ce2249` put the unpacking ahead of the arms. A
+    // declaration is hoisted only where what it holds does not depend on the point it stands at --
+    // a constant or a lambda, which reads its cells when it is called and not now.
     node_ptr_t outer = makeExec(synced);
     // A cell of a value that is written where its statement stands: the cell's type position holds
     // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
@@ -6234,16 +6240,16 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         destructured.push_back({stmt.get(), tupleName, names});
     }
 
-    // The state one pull hands to the next: the two cells the step unpacks (`pc`, `halt`) and the
-    // slots a local's value travels in. It is a value, not a set of cells, and it is the only place
-    // the machine's own parts are kept from one pull to the next -- the generator body holds no
-    // cell for either of them (`docs/handover/reports/2026-11-16-the-generator-state-travels-by-
-    // value.cn.md`). The slots are empty today, because a program local of a generator body is a
-    // `var T` cell and a cell type has no zero value; the state carries the two control parts until
-    // the SSA step gives a local a value to travel in
-    // (`docs/handover/reports/2026-11-16-the-state-tuple-holds-nothing-but-pc-and-halt.cn.md`).
+    // The state one pull hands to the next: the cell the step unpacks (`pc`) and the slots a local's
+    // value travels in. It is a value, not a set of cells, and it is the only place the machine's own
+    // part is kept from one pull to the next -- the generator body holds no cell for it
+    // (`docs/handover/reports/2026-11-16-the-generator-state-travels-by-value.cn.md`). The slots are
+    // empty today, because a program local of a generator body is a `var T` cell and a cell type has
+    // no zero value; the state carries `pc` alone until the SSA step gives a local a value to travel
+    // in. What the tuple held on 2026-11-16 -- `S = (pc, halt)` -- is the reading of
+    // `docs/handover/reports/2026-11-16-the-state-tuple-holds-nothing-but-pc-and-halt.cn.md`, kept as
+    // it was written: the `halt` member left the tuple on 2026-11-18.
     std::vector<Type *> stateTypes;
-    stateTypes.push_back(intLiteral(0)->data()->type());
     stateTypes.push_back(intLiteral(0)->data()->type());
     for (const CellDecl &cell : cells) {
         if (cell.slotType != nullptr) {
@@ -6268,9 +6274,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         return node;
     };
     // What the next pull starts from: nothing has been written into the slots yet, so each holds the
-    // value its type starts at, and `pc`/`halt` start at zero.
+    // value its type starts at, and `pc` starts at zero.
     const auto stateZero = [&]() {
-        std::vector<node_ptr_t> parts = {intLiteral(0), intLiteral(0)};
+        std::vector<node_ptr_t> parts = {intLiteral(0)};
         for (const CellDecl &cell : cells) {
             if (cell.slotType != nullptr) {
                 parts.push_back(tree_->makeData(zeroValueOf(cell.slotType)));
@@ -6281,7 +6287,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // The state as the pull that stands here leaves it: every slot read where the machine writes it,
     // so a `yield` packs the values this pull put there.
     const auto stateNow = [&]() {
-        std::vector<node_ptr_t> parts = {readCell(pcCell), readCell(haltCell)};
+        std::vector<node_ptr_t> parts = {readCell(pcCell)};
         for (const CellDecl &cell : cells) {
             if (cell.slotType != nullptr) {
                 parts.push_back(readCell(cell.name));
@@ -6297,8 +6303,8 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // first round: with a local cell there, the test is folded to `flag == 0` at build time
     // (`src/compile/gir/builder_expr.cpp`, `collapseNonEscapingVariableReads`) and the round never
     // stops. A state, by contrast, is the one road the loop's condition reads round by round.
-    // Measured: a step whose `pc`/`halt` are its own cells hangs every generator case on this tree
-    // (the flag is `0 == 0` in the graph); with the flag carried as the round's value the stream
+    // Measured: a step whose `pc` and whose flag are its own cells hangs every generator case on this
+    // tree (the flag is `0 == 0` in the graph); with the flag carried as the round's value the stream
     // plan is back to the tree's own reading.
     const auto roundState = [&](node_ptr_t answer, node_ptr_t answered) {
         // The answer is the state's first part, so it is the answer type the pull hands out and not
@@ -6333,7 +6339,6 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // The pull is done: the round hands the answer it built (or null at the end of the stream) on
     // with the flag saying the round has answered, so the loop stops.
     const auto stopHere = [&](node_ptr_t &exec) {
-        *exec << writeCell(haltCell, intLiteral(1));
         *exec << roundState(roundPart(readCell(outName), 0), intLiteral(1));
     };
 
@@ -6418,7 +6423,6 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                     const int resume = newArm();
                     fill(resume, stmts, i + 1, next, nextState);
                     *exec << writeCell(pcCell, intLiteral(resume));
-                    *exec << writeCell(haltCell, intLiteral(1));
                     node_ptr_t elem = declaredValue(elementOf(values), elemType, stmt);
                     // The value of the round is the answer of the pull: a `return` is written
                     // only in the step function's own body
@@ -6991,14 +6995,12 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         *stepBody << vari;
     };
     unpackSlot(pcCell, 0);
-    unpackSlot(haltCell, 1);
-    size_t slotPart = 2;
+    size_t slotPart = 1;
     for (const CellDecl &cell : cells) {
         if (cell.slotType != nullptr) {
             unpackSlot(cell.name, slotPart++);
         }
     }
-    *stepBody << writeCell(haltCell, intLiteral(0));
     fill(first, bodyStmts, 0, -1, std::string());
     // Every cell that is still a cell is read here, before any arm names `step` again: a closure
     // holds the captures its function had when it was made, so a capture made later could not be
