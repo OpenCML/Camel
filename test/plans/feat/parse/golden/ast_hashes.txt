@@ -4393,6 +4393,7 @@ ee049f220cbe84aa ok test/plans/feat/format/golden/when_clause.cml
 dbfdb482f9059740 ok test/plans/feat/parse/golden/rules_format.cml
 4e5ac200a628c3e7 ok test/probe/refleak/call_box.cml
 58014c5bc874530e ok test/probe/refleak/fill_carries.cml
+aff258e733124b0d ok test/probe/refleak/loop_fault_ref.cml
 3cb1213dde0935ca ok test/probe/refleak/loop_nested_after.cml
 5fca407c44d1ff6e ok test/probe/refleak/loop_nested_outer_ref.cml
 a7d8cb23c13f22d4 ok test/probe/refleak/loop_outer_ref.cml
