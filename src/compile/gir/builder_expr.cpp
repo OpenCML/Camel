@@ -40,6 +40,7 @@ inline std::ostream &out() { return camel::core::trace(camel::core::TraceArea::F
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/ref.h"
 
 #include <atomic>
 #include <cctype>
@@ -502,7 +503,17 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1: same-region local
     // `var`s). The decision is the scan's, taken once, before this body was built, so it is the
     // same for every build of the body and does not depend on how the body is built.
-    const bool ssaValue = isVar && !typedCell && ssaDeclarationIsEligible(gct, ident);
+    //
+    // A `var` whose value is a counted handle is a value in one more shape: a closure that only
+    // reads the name captures the handle itself and the cell is not there to be shared. A cell
+    // holding a handle is the shape the author answered on 2026-11-18 (`9d29939c4`: "a cell holding
+    // a Ref is a holder, and the cell should go"): the plan gave the cell's hold no row and the run
+    // found no handle to count, so a box behind such a cell was released while the name still held
+    // it -- `state::get` of a disposed handle. A handle is a value and a name of one needs no cell
+    // (design principles 3.5), so the cell goes rather than being taught to hold.
+    Type *heldValue = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
+    const bool aHandle = isVar && !typedCell && RefType::is(heldValue);
+    const bool ssaValue = isVar && !typedCell && ssaDeclarationIsEligible(gct, ident, aHandle);
     node_handle_t bound = (isVar && !typedCell && !ssaValue) ? newVariable(node) : node;
     if (isVar && !ssaValue) {
         // The cell is created by its declaration: that is its place in the source.
@@ -2849,16 +2860,23 @@ struct OpenRegion {
     size_t contentDepth = 0;
     SsaRegion kind      = SsaRegion::Other;
 };
+
+/// The scan's walk: a node, the region depth it stands at, the call it is an argument of (null when
+/// it is not one of a call's arguments) and that argument's index, whether it stands in a statement,
+/// whether it is a loop's body, and whether it is written -- an assignment's target -- or read.
+using SsaWalk =
+    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t, bool, bool, bool)>;
 } // namespace
 
-std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::Node *body) {
+std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSsa(
+    const GCT::Node *body) {
     // One walk of the body, before any of it is built: every `var` declaration in it, and whether
     // the declaration may be built as a value. The answer is about the declaration and nothing
     // else, so two builds of the same body decide the same way. A name belongs to the declaration
     // the innermost scope binds it to, and a use rules the declaration out when it stands in
     // another region (the value would have to be carried into it) or at a `var` parameter (the
     // callee writes the caller's cell back, and a value has nowhere to write).
-    std::unordered_map<const GCT::Node *, bool> eligible;
+    std::unordered_map<const GCT::Node *, SsaAnswer> eligible;
     std::unordered_map<const GCT::Node *, size_t> declaredIn;
     // The regions the walk is inside, outermost first: the chain between a declaration and a use is
     // what says whether the value can be carried (a branch's JOIN or a loop head), and the
@@ -2875,8 +2893,12 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
         }
         return nullptr;
     };
-    const auto use = [&](const GCT::Node *decl, size_t depth, const GCT::Node *call, size_t index) {
-        bool &answer = eligible[decl];
+    const auto use = [&](const GCT::Node *decl,
+                         size_t depth,
+                         const GCT::Node *call,
+                         size_t index,
+                         bool written) {
+        SsaAnswer &answer = eligible[decl];
         if (declaredIn[decl] != depth) {
             // Across a region the value has to be carried into it. The regions that carry one are
             // the arm of a statement branch, whose JOIN carries it (stage S2), and a loop body,
@@ -2884,20 +2906,31 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             // has to be one of those, one inside the other, and nothing else. A closure body, a
             // block of its own, a static loop's body and a loop's condition have nowhere to put the
             // value, so a name used across one of them keeps its cell.
-            const size_t declared = declaredIn[decl];
-            bool carried          = depth > declared;
+            const size_t declared   = declaredIn[decl];
+            bool carried            = depth > declared;
+            bool carriedAsAHandle   = depth > declared;
             for (const OpenRegion &region : regions) {
                 if (region.contentDepth <= declared) {
                     continue;
                 }
                 if (region.kind == SsaRegion::Other) {
                     carried = false;
-                    break;
+                    // A read of a handle across such a region is not a use that has to be carried:
+                    // the closure captures the value, which is what a handle is (design principles
+                    // 3.5, and the author's answer `9d29939c4`). A write is: it has to land
+                    // somewhere the closure and the body share, and a value is not such a place.
+                    if (written) {
+                        carriedAsAHandle = false;
+                    }
                 }
             }
             if (!carried) {
-                answer = false;
-            } else if (!regions.empty() && regions.back().kind == SsaRegion::Arm) {
+                answer.asValue = false;
+            }
+            if (!carriedAsAHandle) {
+                answer.asHandle = false;
+            }
+            if (carried && !regions.empty() && regions.back().kind == SsaRegion::Arm) {
                 // One join carries one value: a branch whose arms write two names carries neither,
                 // settled after the walk. A loop head carries as many values as its body writes, so
                 // a write inside a loop body is not counted here.
@@ -2905,22 +2938,23 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             }
         }
         if (call != nullptr && argumentMayWriteBack(call, index, scopes)) {
-            answer = false; // written by the callee through its `var` parameter
+            answer.asValue  = false; // written by the callee through its `var` parameter
+            answer.asHandle = false;
         }
     };
-    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t, bool, bool)> walk =
-        [&](const GCT::Node *node,
+    SsaWalk walk = [&](const GCT::Node *node,
             size_t depth,
             const GCT::Node *call,
             size_t index,
             bool statement,
-            bool loopBody) {
+            bool loopBody,
+            bool written) {
             if (node == nullptr || node->type() == GCT::NodeKind::TYPE) {
                 return;
             }
             if (node->type() == GCT::NodeKind::DREF) {
                 if (const GCT::Node *decl = lookup(node->name())) {
-                    use(decl, depth, call, index);
+                    use(decl, depth, call, index, written);
                 }
                 return;
             }
@@ -2961,7 +2995,7 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                                              node->at(0)->type() == GCT::NodeKind::NREF);
                 if (!single) {
                     for (size_t i = 0; i < node->size(); ++i) {
-                        walk(node->at(i), inner, nullptr, 0, childStatement, false);
+                        walk(node->at(i), inner, nullptr, 0, childStatement, false, false);
                     }
                     if (region) {
                         scopes.pop_back();
@@ -2979,10 +3013,10 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                 const bool typed =
                     initializer != nullptr && initializer->type() == GCT::NodeKind::TYPE;
                 if (!typed && initializer != nullptr) {
-                    walk(initializer, depth, nullptr, 0, false, false);
+                    walk(initializer, depth, nullptr, 0, false, false, false);
                 }
                 if (node->type() == GCT::NodeKind::VARI && !typed) {
-                    eligible[nameNode]   = true;
+                    eligible[nameNode]   = SsaAnswer{};
                     declaredIn[nameNode] = depth;
                 }
                 scopes.back()[nameNode->name()] =
@@ -3018,7 +3052,8 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                         }
                         if (place->type() == GCT::NodeKind::DREF) {
                             if (const GCT::Node *decl = lookup(place->name())) {
-                                eligible[decl] = false;
+                                eligible[decl].asValue  = false;
+                                eligible[decl].asHandle = false;
                             }
                         }
                         for (size_t i = 0; i < place->size(); ++i) {
@@ -3042,10 +3077,18 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                 // sequence stand where the loop is written.
                 const bool childLoopBody =
                     node->type() == GCT::NodeKind::LOOP && node->loopBody() == node->at(i);
+                // The target of an assignment is written, and a write is what a region that carries
+                // nothing cannot hold (see `use`). A place's write (`v[i] = e`) keeps its cell by
+                // the answer above; what this says is that the name itself is written, so a read
+                // across a closure is the only use a handle's cell does not have to be kept for.
+                const bool childWritten =
+                    node->type() == GCT::NodeKind::ASSIGN &&
+                    node->assignmentForm() != GCT::AssignmentForm::Rebuilt &&
+                    node->assignmentTarget() == node->at(i);
                 if (isCall) {
-                    walk(node->at(i), inner, node, i, childStatement, childLoopBody);
+                    walk(node->at(i), inner, node, i, childStatement, childLoopBody, childWritten);
                 } else {
-                    walk(node->at(i), inner, nullptr, 0, childStatement, childLoopBody);
+                    walk(node->at(i), inner, nullptr, 0, childStatement, childLoopBody, childWritten);
                 }
             }
             if (region) {
@@ -3053,14 +3096,15 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                 regions.pop_back();
             }
         };
-    walk(body, 0, nullptr, 0, false, false);
+    walk(body, 0, nullptr, 0, false, false, false);
     // A branch that writes two declarations carries neither: its JOIN has one value slot. The
     // census over the corpus found that shape only in a generator's carried state, which a capture
     // keeps a cell anyway; if a plain branch ever writes two names, S2 has to grow the tuple form.
     for (const auto &[depth, names] : branchWrites) {
         if (names.size() >= 2) {
             for (const GCT::Node *decl : names) {
-                eligible[decl] = false;
+                eligible[decl].asValue  = false;
+                eligible[decl].asHandle = false;
             }
         }
     }
@@ -3318,7 +3362,8 @@ bool Builder::argumentMayWriteBack(
     return false;
 }
 
-bool Builder::ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name) {
+bool Builder::ssaDeclarationIsEligible(
+    const GCT::node_ptr_t &decl, const std::string &name, bool aHandle) {
     // A module's top level is not a region of a body: its `var`s are cells every function of the
     // module reaches, and they stay cells until stage S5. A declaration the scan never saw is not
     // one of the body's own, and is answered as a cell.
@@ -3331,7 +3376,10 @@ bool Builder::ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::s
         scanned = ssaScan_.emplace(body, scanBodyForSsa(body)).first;
     }
     const auto found = scanned->second.find(decl);
-    return found != scanned->second.end() && found->second;
+    if (found == scanned->second.end()) {
+        return false;
+    }
+    return aHandle ? found->second.asHandle : found->second.asValue;
 }
 
 bool Builder::nameIsSsa(const std::string &name) const {

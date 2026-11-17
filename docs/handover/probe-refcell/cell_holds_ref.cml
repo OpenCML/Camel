@@ -1,0 +1,61 @@
+// Probe for the question "a cell holding a Ref": the four shapes in which a `state::Ref` may end
+// up in a cell, read through `test::plan_refs` and `--gc-check foreign` in one pipeline.
+//
+// This file sits under docs/handover/, which the AST corpus walks past, so it moves no recorded
+// reading. It is a probe, not a case: it is not selected by any plan of the tree.
+
+import state
+
+// The author's minimal example, without the generator: a `let` bound to a box, written, read.
+func plain_let(): int sync {
+    let box = state::ref(0)
+    state::set(box, 5)
+    return state::get(box)
+}
+
+// The same program with `var`: the name is a cell when its reads and writes are not all in the
+// region that declares it. Here they are, so this one is built as a value (stage S1).
+func var_same_region(): int sync {
+    var box = state::ref(0)
+    state::set(box, 5)
+    return state::get(box)
+}
+
+// A cell that holds a box: the read is in another graph, so the `var` is a cell (`:var/new`) and
+// the closure takes the cell.
+func cell_read_by_closure(): int sync {
+    var box = state::ref(0)
+    state::set(box, 5)
+    let read = () => state::get(box)
+    return read()
+}
+
+// A cell that holds a box and is written through the cell after the read was made: the cell is
+// written by the closure's own graph as well.
+func cell_written_and_read(): int sync {
+    var box = state::ref(0)
+    let bump = () => state::set(box, 9)
+    state::set(box, 5)
+    bump()
+    return state::get(box)
+}
+
+// The generator of the question's example: `yield` in the body, the box made before it.
+func gen(): int.. sync {
+    let box = state::ref(0)
+    state::set(box, 5)
+    yield state::get(box)
+}
+
+func drain(): int sync {
+    loop acc = 0 for v in gen() do sync { acc + v }
+}
+
+func main(): int sync {
+    println(plain_let())
+    println(var_same_region())
+    println(cell_read_by_closure())
+    println(cell_written_and_read())
+    println(drain())
+    return 0
+}
