@@ -339,6 +339,15 @@ param(
     # matches, which would turn a golden into whatever the tree happens to produce, while a name
     # selected here can only move the lines it names.
     [string[]]$AstOnly = @(),
+    # With -UpdateAstHashes, a `test/plans/feat/parse/golden/ast_hashes.txt` path this recording may
+    # take the row out of (repeatable). A re-record is a whole-table rewrite: a row leaves the record
+    # when the tree that records does not hold its file, which is how a bulk re-record on a tree
+    # missing seven `.cml` files deleted their seven rows on 2026-11-17 (`agents/test.md`). The
+    # write-back therefore refuses to drop a row while that file is still here, and refuses a bulk
+    # re-record that drops any row at all; this switch is how a case that really is deleted leaves
+    # the record, and each name is printed as it is written. Names are paths as the record spells
+    # them (`test/cases/parse/x.cml`), and the host takes them as `--drop`.
+    [string[]]$AstDrop = @(),
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
@@ -592,6 +601,63 @@ if ($NoGpuWatch -and $gpuReadingWanted) {
     Write-Host "[camel-remote] -NoGpuWatch: the gpu plans were not run, so this run prints no gpu reading (test/plans/gpu is observed and never gates a known red; see the header)"
 }
 
+# `-UpdateAstHashes` may not take a row out of the AST record while the file that row records is
+# still here, and a bulk re-record may not take one out at all. This is that rule as a function, so
+# it can be read and exercised without a host: it takes the record's lines before and after and
+# answers what would be dropped, in three classes. The write-back below prints the answer and writes
+# nothing when it refuses.
+#
+# The three conditions of the failure -- the record gets shorter, the rows it loses still name a
+# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The bulk
+# condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
+# with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
+# parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
+# were in neither that tree nor its base branch, so no `Test-Path` could have seen the loss; a bulk
+# rewrite could have known it was rewriting the whole table. `27de8a3df` put the rows back by hand,
+# and `agents/test.md` now carries the rule this function enforces.
+function Get-AstDropVerdict {
+    param(
+        [AllowEmptyCollection()][string[]]$Before = @(),
+        [AllowEmptyCollection()][string[]]$After = @(),
+        [AllowEmptyCollection()][string[]]$Drop = @(),
+        [string]$Root = '.',
+        [bool]$Bulk = $true
+    )
+    # A line is `<16 hex> <ok|no> <path>`, and the question is about the paths: a hash that moved is
+    # one line lost and one line gained, never a row that went, so a set of whole lines would call
+    # every re-read row a deletion.
+    $pathOf = { param($line) $fields = $line -split ' ', 3; if ($fields.Count -lt 3) { '' } else { $fields[2] } }
+    $rows = [ordered]@{}
+    foreach ($line in $Before) {
+        $path = & $pathOf $line
+        if ($path -and -not $rows.Contains($path)) { $rows[$path] = $line }
+    }
+    $kept = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($line in $After) {
+        $path = & $pathOf $line
+        if ($path) { [void]$kept.Add($path) }
+    }
+    # A probe is recorded under a name of the record's own (`probes/probe_xxx.cml`) and no file
+    # answers to it: a line that goes is a probe probes.py no longer makes, not a file the
+    # repository lost.
+    $dropped = @($rows.Keys | Where-Object { -not $kept.Contains($_) -and -not $_.StartsWith('probes/') })
+    $unnamed = @($dropped | Where-Object { $Drop -notcontains $_ })
+    $stillHere = @($unnamed | Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf })
+    $deleted = @($unnamed | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) })
+    [pscustomobject]@{
+        Rows      = $rows
+        OldCount  = @($Before).Count
+        NewCount  = @($After).Count
+        Dropped   = $dropped
+        Named     = @($dropped | Where-Object { $Drop -contains $_ })
+        StillHere = $stillHere
+        Deleted   = $deleted
+        Unused    = @(@($Drop) | Where-Object { $_ -and $dropped -notcontains $_ })
+        Bulk      = $Bulk
+        Refused   = ($stillHere.Count -gt 0 -or ($Bulk -and $deleted.Count -gt 0))
+    }
+}
+
 # A reading taken on a loaded host is not comparable to one taken on a quiet one: this machine also
 # runs every other lane's build, and several lanes at -Jobs 8 is more work than there are cores. So
 # every run states the host's load before and after, and says so when it is high enough that a
@@ -638,6 +704,12 @@ if ($branch -eq 'HEAD') {
 # read it, and a request nobody carries out must not look like one that ran.
 if ($AstOnly.Count -gt 0 -and -not $UpdateAstHashes) {
     Write-Host "[camel-remote] -AstOnly names what -UpdateAstHashes rewrites; give -UpdateAstHashes, or drop -AstOnly"
+    exit 2
+}
+# The same rule for the other side of the same stage: `-AstDrop` is a permission the write-back
+# reads, and with no write-back there is nothing that could honour it.
+if ($AstDrop.Count -gt 0 -and -not $UpdateAstHashes) {
+    Write-Host "[camel-remote] -AstDrop names a row -UpdateAstHashes may lose; give -UpdateAstHashes, or drop -AstDrop"
     exit 2
 }
 
@@ -1246,6 +1318,9 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # `(NOT REBUILT -- may be stale)` to that line rather than leaving it looking like a fresh build.
     $astBuiltNote = if ($NoBuild) { ' (NOT REBUILT -- may be stale)' } else { '' }
     $astOnlyArgs = ($AstOnly | ForEach-Object { " --only '$_'" }) -join ''
+    # The rows the recording may lose, by path as the record spells it: the host's guard refuses a
+    # drop it was not told about, and this is what tells it (`check.py`, `--drop`).
+    $astDropArgs = ($AstDrop | ForEach-Object { " --drop '$_'" }) -join ''
 # The file `-FetchFile` asks for, sent back the same way the AST record is: base64 between two
 # markers, after the plan. It runs after `RUN_EXIT` so a record the plan wrote is complete, and it
 # names the path when the host has nothing there -- a fetch that silently sends nothing would look
@@ -1268,7 +1343,7 @@ fi
 echo '__CAMEL_REMOTE_AST_START__'
 echo "[machine] out/TAG/bin/camel-parsecheck built $(date -r out/TAG/bin/camel-parsecheck '+%Y-%m-%d %H:%M')NOTE"
 echo '[camel-remote] recording the AST snapshot (frontend.ast_snapshot) on the host'
-CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --updateONLY 2>&1
+CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --updateONLYDROP 2>&1
 astc=$?
 echo "AST_UPDATE_EXIT=$astc"
 if [ $astc -ne 0 ]; then
@@ -1278,7 +1353,7 @@ fi
 echo '__CAMEL_REMOTE_AST_FILE_BEGIN__'
 base64 "$R/test/plans/feat/parse/golden/ast_hashes.txt"
 echo '__CAMEL_REMOTE_AST_FILE_END__'
-'@.Replace('TAG', $verifyTag).Replace('NOTE', $astBuiltNote).Replace('ONLY', $astOnlyArgs)
+'@.Replace('TAG', $verifyTag).Replace('NOTE', $astBuiltNote).Replace('ONLY', $astOnlyArgs).Replace('DROP', $astDropArgs)
     } else { ':' }
 
     # One block per checker: a header naming it and the command it runs, the command's own stdout and
@@ -1902,6 +1977,14 @@ exit `$code
     # stream carried the payload to its end marker, and the run did not fail -- so a failed or truncated
     # stage leaves the file exactly as it was. The text is written as UTF-8 without a BOM and with LF
     # endings, because the record is compared byte for byte by `check.py` on a Linux host.
+    #
+    # A fourth condition now precedes the write: the record may not lose a row while the file that row
+    # records is still here (`$astStillHere` below). This is the tree the record belongs to, so it is
+    # the only place the question "does that file exist" has the answer that matters -- the host
+    # records from its own checkout, which can be missing files this tree has (`eaa3ecb8c`,
+    # `agents/test.md`). A row that goes has to be named by -AstDrop, and a bulk re-record may not
+    # lose one at all; the refusal prints the rows it would have dropped, with their recorded hash,
+    # and writes nothing.
 # The file `-FetchFile` asked for. Written after the run, on the same rule as the AST record:
 # the host sent it base64 between two markers, a payload that does not decode is reported and
 # nothing is written, and a directory the path needs is created first.
@@ -1941,18 +2024,52 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
             $astText = [System.Text.Encoding]::UTF8.GetString(
                 [System.Convert]::FromBase64String($astPayload)) -replace "`r`n", "`n"
             $astBefore = if (Test-Path -LiteralPath $astTarget) { @(Get-Content -LiteralPath $astTarget) } else { @() }
-            [System.IO.File]::WriteAllText($astTarget, $astText, (New-Object System.Text.UTF8Encoding($false)))
-            $astAfter = @(Get-Content -LiteralPath $astTarget)
-            $astBeforeSet = [System.Collections.Generic.HashSet[string]]::new()
-            foreach ($astLine in $astBefore) { [void]$astBeforeSet.Add($astLine) }
-            $astAfterSet = [System.Collections.Generic.HashSet[string]]::new()
-            foreach ($astLine in $astAfter) { [void]$astAfterSet.Add($astLine) }
-            $astAdded = @($astAfter | Where-Object { -not $astBeforeSet.Contains($_) })
-            $astRemoved = @($astBefore | Where-Object { -not $astAfterSet.Contains($_) })
-            Write-Host ("[camel-remote] AST snapshot: {0} lines recorded, {1} added and {2} removed ({3})" -f `
-                $astAfter.Count, $astAdded.Count, $astRemoved.Count, $astTarget)
-            foreach ($astLine in $astAdded) { Write-Host ("[camel-remote]   + {0}" -f $astLine) }
-            foreach ($astLine in $astRemoved) { Write-Host ("[camel-remote]   - {0}" -f $astLine) }
+            $astNewLines = @($astText -split "`n" | Where-Object { $_ -ne '' })
+            # What this write would take out of the record, and whether it is allowed to (`Get-AstDropVerdict`
+            # above carries the rule). `$astBefore.Count` is the record's line count before the write, which
+            # is the number a reader compares: a re-record that makes the file shorter is the reading the
+            # guard exists to stop from being silent.
+            $astVerdict = Get-AstDropVerdict -Before $astBefore -After $astNewLines -Drop $AstDrop -Root $Path -Bulk ($AstOnly.Count -eq 0)
+            if ($astVerdict.Refused) {
+                $astWhy = if ($astVerdict.StillHere.Count -gt 0) {
+                    "and {0} of them name a .cml file this tree still has" -f $astVerdict.StillHere.Count
+                } else {
+                    'and this is a bulk re-record (no -AstOnly), which may not lose a row'
+                }
+                Write-Host ("[camel-remote] AST snapshot: refusing the write-back: the record would go from {0} line(s) to {1}, {2}" -f `
+                    $astVerdict.OldCount, $astVerdict.NewCount, $astWhy)
+                foreach ($astPath in @($astVerdict.StillHere + $astVerdict.Deleted)) {
+                    Write-Host ("[camel-remote]   - {0}" -f $astVerdict.Rows[$astPath])
+                }
+                Write-Host "[camel-remote] re-record on a tree that holds them (git merge origin/develop first), or name the rows that really should go: -AstDrop '<path>'"
+                Write-Host ("[camel-remote] nothing was written; {0} is unchanged ({1} line(s))" -f $astTarget, $astVerdict.OldCount)
+                $code = 2
+            } else {
+                [System.IO.File]::WriteAllText($astTarget, $astText, (New-Object System.Text.UTF8Encoding($false)))
+                $astAfter = @(Get-Content -LiteralPath $astTarget)
+                $astBeforeSet = [System.Collections.Generic.HashSet[string]]::new()
+                foreach ($astLine in $astBefore) { [void]$astBeforeSet.Add($astLine) }
+                $astAfterSet = [System.Collections.Generic.HashSet[string]]::new()
+                foreach ($astLine in $astAfter) { [void]$astAfterSet.Add($astLine) }
+                $astAdded = @($astAfter | Where-Object { -not $astBeforeSet.Contains($_) })
+                $astRemoved = @($astBefore | Where-Object { -not $astAfterSet.Contains($_) })
+                Write-Host ("[camel-remote] AST snapshot: {0} lines recorded, {1} added and {2} removed ({3})" -f `
+                    $astAfter.Count, $astAdded.Count, $astRemoved.Count, $astTarget)
+                foreach ($astLine in $astAdded) { Write-Host ("[camel-remote]   + {0}" -f $astLine) }
+                foreach ($astLine in $astRemoved) { Write-Host ("[camel-remote]   - {0}" -f $astLine) }
+                if ($astVerdict.Deleted.Count -gt 0) {
+                    Write-Host ("[camel-remote] AST snapshot: dropped {0} row(s) whose .cml file no longer exists (删掉 {0} 条，对应文件已不存在): {1}" -f `
+                        $astVerdict.Deleted.Count, ($astVerdict.Deleted -join ', '))
+                }
+                if ($astVerdict.Named.Count -gt 0) {
+                    Write-Host ("[camel-remote] AST snapshot: {0} row(s) dropped as named by -AstDrop: {1}" -f `
+                        $astVerdict.Named.Count, ($astVerdict.Named -join ', '))
+                }
+                if ($astVerdict.Unused.Count -gt 0) {
+                    Write-Host ("[camel-remote] AST snapshot: -AstDrop named {0} path(s) that no row was dropped for: {1}" -f `
+                        $astVerdict.Unused.Count, ($astVerdict.Unused -join ', '))
+                }
+            }
         }
     }
 
