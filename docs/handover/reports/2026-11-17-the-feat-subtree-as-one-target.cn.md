@@ -40,6 +40,8 @@
 | `test/plans/debug`（`-Config Debug -Tier debug`） | 2 | 3 | 3 | 3 | 0 | 0 | 0 | — |
 | `test/plans/gpu`（`-Tier all`） | 6 | 125 | 146 | 22 | 0 | 0 | **124** | **本轮不能量**（124/146 skip） |
 
+- 上表是**修之前**在 `fe4dd1afa` 上的读数。第九节那两条落地后，`test/plans/feat` 顶层再跑一次读
+  `[SUMMARY] total: 445, pass: 442, fail: 1, skip: 2`（剩下的那条 `fail` 是 `06_let_to_var`，归文档账）。
 - **`test/plans/feat` 的目录目标会递归**：给目录名会跑整棵子树（354 文件）。要那 10 个顶层文件，
   只能把文件名逐个点名（点名的计划文件按「整份跑」处理，不受 tier 过滤）。
 - `perf` 的 22 个文件全是 `milestone` / `slow`，**没有一个是 fast**——所以 `--tier fast` 选 0 条，
