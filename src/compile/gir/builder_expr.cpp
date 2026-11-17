@@ -3067,11 +3067,209 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
     return eligible;
 }
 
+Builder::CalleeValue Builder::calleeValueOf(const GCT::Node *callee) {
+    CalleeValue value;
+    if (callee == nullptr) {
+        return value;
+    }
+    // An operator the compiler made for this node (`:op/assn_i`, `:enum/field`): the id is what
+    // names it, and its overloads are a group rather than a function value. Whether such a group
+    // writes an argument back is the group's own business -- for the assignment it is the rebinding
+    // the builder writes (`ssaAssignmentOf`), not a `var` parameter of a call -- so it is not a
+    // write-back this scan counts.
+    if (GCT::Tree::of(callee)->operRefOf(callee).has_value()) {
+        value.kind = CalleeValueKind::Operator;
+        return value;
+    }
+    const std::string &written = callee->name();
+    // `$builtin::__assn__`: the group the compiler names when it rewrites an assignment it handles
+    // itself. The built-in module is where the build resolves it (visitDRefNode), and it is a
+    // group, so the answer is the same as for any other operator.
+    if (written.starts_with(kBuiltinPrefix)) {
+        if (context_ != nullptr) {
+            const auto entity =
+                context_->importModule("")->getNativeEntity(Reference(written.substr(
+                    kBuiltinPrefix.size())));
+            if (entity.has_value() && entity->isOperGroup()) {
+                value.kind = CalleeValueKind::Operator;
+            }
+        }
+        return value;
+    }
+    // This module's own functions: their graphs exist from the moment the module is declared, and
+    // the signature each carries is the one its declaration wrote (design principles 10.2, layers
+    // 1 and 2; a name this body binds was answered before this is asked).
+    if (const ModuleUnit *unit = currentModuleUnit(); unit != nullptr) {
+        if (auto graphs = unit->graphScope->get(moduleLevelName(written), false);
+            graphs.has_value()) {
+            for (const auto &graph : **graphs) {
+                if (graph != nullptr) {
+                    value.signatures.push_back(graph->funcType());
+                }
+            }
+            if (!value.signatures.empty()) {
+                value.kind = CalleeValueKind::Function;
+                return value;
+            }
+        }
+    }
+    // The signatures the values a name can stand for carry, in one place: the graphs of the
+    // functions declared under it, and the template of a generic one (its declared type is what
+    // the name stands for until a call instantiates it). A decorated name is deliberately left
+    // out: what it stands for is the decorated graph, whose type is not the declaration's, and a
+    // call written as a `var` argument reads the declaration's marks -- reading the decorated
+    // type here would turn a cell into a value.
+    const auto collectSignatures = [&value](
+                                       const graph_scope_ptr_t &graphs,
+                                       const template_scope_ptr_t &templates,
+                                       const std::string &name) -> bool {
+        value.signatures.clear();
+        if (graphs != nullptr) {
+            if (auto found = graphs->get(name, false); found.has_value()) {
+                for (const auto &graph : **found) {
+                    if (graph != nullptr) {
+                        value.signatures.push_back(graph->funcType());
+                    }
+                }
+            }
+        }
+        if (value.signatures.empty() && templates != nullptr) {
+            if (auto found = templates->get(name);
+                found.has_value() && static_cast<bool>(found.value())) {
+                // Every overload of the name is a template of its own; the union of their
+                // declared types is what the name stands for until a call instantiates one.
+                for (const auto &tmpl : *found.value().group()) {
+                    if (tmpl == nullptr) {
+                        continue;
+                    }
+                    const FunctionType *signature = tmpl->funcType;
+                    if (signature == nullptr && tmpl->func != nullptr && tmpl->func->size() > 0 &&
+                        tmpl->func->at(0) != nullptr) {
+                        signature = tt::as_ptr<FunctionType>(tmpl->func->at(0)->dataType());
+                    }
+                    if (signature != nullptr) {
+                        value.signatures.push_back(signature);
+                    }
+                }
+            }
+        }
+        return !value.signatures.empty();
+    };
+    // The entity an import layer brings, read the same way.
+    const auto collectFromEntity = [&value](const camel::core::module::entity &entity) -> bool {
+        if (entity.isOperGroup()) {
+            value.kind = CalleeValueKind::Operator;
+            return true;
+        }
+        if (camel::core::module::detail::EntityAccess::isGraphSet(entity)) {
+            for (const auto &graph : *asCompileGraphSet(
+                     camel::core::module::detail::EntityAccess::graphSet(entity))) {
+                if (graph != nullptr) {
+                    value.signatures.push_back(graph->funcType());
+                }
+            }
+            if (!value.signatures.empty()) {
+                value.kind = CalleeValueKind::Function;
+                return true;
+            }
+        }
+        if (camel::core::module::detail::EntityAccess::isGenericTemplate(entity)) {
+            for (const auto &tmpl : genericTemplatesOfEntity(entity)) {
+                if (tmpl == nullptr) {
+                    continue;
+                }
+                const FunctionType *signature = tmpl->funcType;
+                if (signature == nullptr && tmpl->func != nullptr && tmpl->func->size() > 0 &&
+                    tmpl->func->at(0) != nullptr) {
+                    signature = tt::as_ptr<FunctionType>(tmpl->func->at(0)->dataType());
+                }
+                if (signature != nullptr) {
+                    value.signatures.push_back(signature);
+                }
+            }
+            if (!value.signatures.empty()) {
+                value.kind = CalleeValueKind::Function;
+                return true;
+            }
+        }
+        return false; // a decorated one or an exported value: the type is not read here
+    };
+    const ModuleUnit *unit = currentModuleUnit();
+    // This module's own functions, by the name the module declares them under (design principles
+    // 10.2, layers 1 and 2; a name this body binds was answered before this is asked).
+    if (unit != nullptr &&
+        collectSignatures(
+            unit->graphScope, unit->templateScope,
+            moduleLevelName(written))) {
+        value.kind = CalleeValueKind::Function;
+        return value;
+    }
+    // A function declared in a body of this one, in the scopes between here and the module's top
+    // level: those are functions the program made where it stands, and their declarations carry
+    // the same types.
+    if (unit != nullptr) {
+        for (graph_scope_ptr_t scope = graphScope_; scope != nullptr && scope != unit->graphScope;
+             scope                   = scope->outer()) {
+            if (auto found = scope->get(written, false); found.has_value()) {
+                for (const auto &graph : **found) {
+                    if (graph != nullptr) {
+                        value.signatures.push_back(graph->funcType());
+                    }
+                }
+                if (!value.signatures.empty()) {
+                    value.kind = CalleeValueKind::Function;
+                    return value;
+                }
+            }
+        }
+    }
+    // Layers 3 to 5, in the order visitDRefNode reads them: a name imported by name, then a name
+    // a `using namespace` in force brings, then a spelling an import brings (operators take their
+    // overloads from every layer), then the ambient ones.
+    std::optional<camel::core::module::entity> entity;
+    if (module_->hasImportedRef(written, ImportLayer::Named)) {
+        entity = importedEntity(written, ImportLayer::Named);
+    }
+    if (!entity.has_value()) {
+        if (auto match = throughUsing(written, const_cast<GCT::Node *>(callee));
+            match.has_value()) {
+            if (!match->ownName.empty()) {
+                // A name of this module, opened by a `using namespace` of one of its namespaces.
+                if (unit != nullptr &&
+                    collectSignatures(
+                        unit->graphScope, unit->templateScope,
+                        match->ownName)) {
+                    value.kind = CalleeValueKind::Function;
+                    return value;
+                }
+            } else if (match->entity.has_value()) {
+                if (collectFromEntity(*match->entity)) {
+                    return value;
+                }
+            }
+        }
+    }
+    if (!entity.has_value()) {
+        if (isOperatorName(written) || module_->hasImportedRef(written)) {
+            entity = importedEntity(written);
+        } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
+            entity = importedEntity(written, ImportLayer::Ambient);
+        }
+    }
+    if (!entity.has_value()) {
+        return value;
+    }
+    collectFromEntity(*entity);
+    return value;
+}
+
 bool Builder::argumentMayWriteBack(
     const GCT::Node *call, size_t index,
-    const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const {
+    const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) {
     // A `var` parameter is two-way: the callee reads the argument and writes into it, so the
-    // argument cannot be a value. Only the callee's signature says which position that is.
+    // argument cannot be a value. Which position that is, the callee's function type says -- the
+    // `var` marks its parameters carry -- so the answer is read off the value the callee name
+    // stands for and never off the spelling of the name.
     if (call == nullptr || index == 0) {
         return false; // the callee itself is named, not handed
     }
@@ -3092,40 +3290,27 @@ bool Builder::argumentMayWriteBack(
     if (callee == nullptr || callee->type() != GCT::NodeKind::DREF) {
         return true; // a lambda written where the callee stands: its parameters are not read here
     }
-    const std::string &name = callee->name();
-    if (name.rfind(kBuiltinPrefix, 0) == 0 || name.rfind("__", 0) == 0 || name.rfind(":", 0) == 0) {
-        // A name the compiler made for an operator or a built-in group (`__assn__`, `__add__`,
-        // `:op/assn_i`): no parameter of those is a `var`, and the assignment's write is the
-        // rebinding rather than a call.
-        return false;
-    }
     for (size_t i = scopes.size(); i-- > 0;) {
-        if (scopes[i].contains(name)) {
+        if (scopes[i].contains(callee->name())) {
             return true; // a name this body binds: a function value whose parameters are unknown
         }
     }
-    // The name the program declares the function with, and the qualified spelling of it tallied
-    // under the same declaration (`m::f` and `f` are one function).
-    std::string plain = name;
-    if (const auto last = name.rfind("::"); last != std::string::npos) {
-        plain = name.substr(last + 2);
-    }
-    auto found = functionSignatures_.find(plain);
-    if (found == functionSignatures_.end()) {
-        found = functionSignatures_.find(name);
-    }
-    if (found == functionSignatures_.end()) {
-        // Nothing of this program is named so, and this scan cannot say what the callee reads and
-        // writes: answered as one that may write, because a write-back lost to a value is a wrong
-        // program while a cell costs one unit.
+    const CalleeValue value = calleeValueOf(callee);
+    if (value.kind == CalleeValueKind::Unknown) {
+        // Nothing of this program is named so in a way this scan can see, and this scan cannot say
+        // what the callee reads and writes: answered as one that may write, because a write-back
+        // lost to a value is a wrong program while a cell costs one unit.
         return true;
     }
-    for (const FunctionType *signature : found->second) {
+    if (value.kind == CalleeValueKind::Operator) {
+        return false;
+    }
+    const size_t at = index - 1;
+    for (const FunctionType *signature : value.signatures) {
         if (signature == nullptr) {
             continue;
         }
         const size_t count = byWith ? signature->withTypesCount() : signature->normTypesCount();
-        const size_t at    = index - 1;
         if (at < count && (byWith ? signature->withIsVarAt(at) : signature->normIsVarAt(at))) {
             return true;
         }
