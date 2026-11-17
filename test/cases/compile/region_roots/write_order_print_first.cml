@@ -1,0 +1,20 @@
+/**
+ * The writing-freedom reading of the region rule (design principles 3.1, the author's ruling of
+ * 2026-11-17): two statements of a body that is not `sync`, each a write to a **different** resource
+ * outside the program -- the console, and the generator `random` seeds -- and neither value read by
+ * anything.
+ *
+ * Both are writes of region 0, so both are inputs of the body's one `GATE`, and **no edge joins
+ * them**: which of the two is written first is not something the graph says, so this program and
+ * `write_order_seed_first.cml` are one canonical document (`test/tools/writing-freedom.mjs
+ * --group region_write`).
+ *
+ * Run: camel test/cases/compile/region_roots/write_order_print_first.cml std::gir
+ */
+import { seed } from random
+
+func main(): int {
+    println("alpha")
+    seed(7)
+    return 0
+}

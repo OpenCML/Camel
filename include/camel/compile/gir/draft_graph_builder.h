@@ -182,6 +182,14 @@ class DraftGraphBuilder {
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
         return funcTarget(ref(nodeId));
     }
+    /// Whether a FUNC node names a body this builder registered. A FUNC node a **rewrite** made (a
+    /// rule that built one before its target existed, or one that rebuilds a body) can be in the
+    /// draft with no target, and `funcTarget` refuses that rather than answering nothing: a caller
+    /// that asks what the call reaches has to ask this first.
+    bool hasFuncTarget(runtime::DraftNodeRef node) const {
+        return funcTargets_.contains(node.id);
+    }
+    bool hasFuncTarget(runtime::gc_node_ref_t nodeId) const { return hasFuncTarget(ref(nodeId)); }
     const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
         return drefTarget(ref(nodeId));

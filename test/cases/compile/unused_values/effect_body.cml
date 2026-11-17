@@ -1,7 +1,13 @@
 /**
- * An effect written as a statement of a body that is not `sync`: nothing depends on it, so it
- * never runs, and the warning says so (EffectNotExecuted). It is the only diagnostic for the
- * statement -- its result is not a `T!` and it is not a pure value either.
+ * A call written as a statement of a body that is not `sync` is one of that body's writes when its
+ * callee writes (design principles 3.1, the author's ruling of 2026-11-17: "算子、调用、分支、循环一
+ * 样"), so the body's `GATE` reads it and it runs: the print happens, and nothing is reported.
+ *
+ * This is one of the shapes whose reading the ruling reversed. While an effect stood on the *region*
+ * rather than on a node that reads it, `report(tag)` was in the graph and in nothing else -- "nothing
+ * needs what it gives, so nothing runs it" -- and this case pinned that silence. What is pinned now is
+ * the other half: the call runs, `quiet` still hands out 4, and the two lines come out in the order
+ * the program writes them.
  */
 
 func report(tag: string): int sync {

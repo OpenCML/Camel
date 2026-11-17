@@ -66,22 +66,18 @@ assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diag
 }
 """
 timeout_ms = 20000
-
 [[tests]]
-name = "region_roots.dead_loop"
-desc = "The boundary of the rule: a write is a root of its region and a region runs because its owner runs, so the print in a loop whose value nobody takes does not run, and SemanticDiag::EffectNotExecuted still names the loop and the write."
-kind = "negative"
+name = "region_roots.a_loop_that_writes_runs"
+desc = "A loop written in a body is one of that body's writes when what runs inside it writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the loop runs even though nothing needs its value: three rounds, three lines, no diagnostic. It used to be the negative case next door -- the loop nobody needed was not started and `EffectNotExecuted` named it -- and the ruling removed the reading that made a loop's running conditional on its value being read."
+kind = "behavior"
 case = "../../../cases/compile/region_roots/dead_loop.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
+expect_stdout_exact = "round\nround\nround\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === '', `the loop body does not run, so nothing is printed, got: ${out}`)
-assert(input.normalized.stderr.includes('The loop is never executed: nothing needs what it gives'), `the loop is what does not run, and the warning says so: ${input.normalized.stderr}`)
-assert(input.diagnostics.length === 2, `the loop and the write in its body, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
-assert(input.diagnostics.every(d => d.name === 'SemanticDiag::EffectNotExecuted'), `expected only EffectNotExecuted, got ${input.diagnostics.map(d => d.name).join(', ')}`)
+assert(input.diagnostics.length === 0, `a loop that writes runs because its region's GATE reads it, so nothing is reported, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
@@ -196,3 +192,25 @@ assert(input.diagnostics[0].name === 'SemanticDiag::EffectNotExecuted', `expecte
 }
 """
 timeout_ms = 20000
+
+# The writing-freedom reading of the same rule (design principles 3.1, the author's ruling of
+# 2026-11-17): the writes of a region are the inputs of its one `GATE`, and no edge joins them, so
+# two writings that put two writes to two different resources in the two possible orders are **one**
+# canonical document. Read by `test/tools/writing-freedom.mjs`; the two cases are
+# `test/cases/compile/region_roots/write_order_{print,seed}_first.cml`.
+#
+# It is the reading the rule it replaces could not produce: chaining the writes into the region's exit
+# made the second write wait on the first, so swapping the two lines changed the graph. And it is the
+# half `region_roots.resource_write` cannot see: that case says the write runs, this one says it is not
+# ordered against the other.
+[[tests]]
+name = "region_roots.writing_freedom_of_two_writes"
+desc = "Two writes of one body to two different resources, written in the two possible orders, are one canonical graph: the region's writes are siblings -- the inputs of one `GATE` -- and neither is ordered against the other (design principles 3.1, 3.4)."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "region_write"]
+expect_exit = 0
+expect_stdout_contains = ["expect=same-graph", "[graph] seed_first same_graph"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

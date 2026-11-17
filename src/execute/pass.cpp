@@ -1985,11 +1985,9 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
-/// the graph reads -- or a place in its block's chain, or the region it is written in (a write to a
-/// resource outside the program, which a running region uses). The chain is carried as two edge
-/// kinds while the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the
-/// control one), so a place in it is a sync or control edge either way, read from the edges
-/// themselves.
+/// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
+/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
+/// so a place in it is a sync or control edge either way, read from the edges themselves.
 ///
 /// An order edge is not one of them: it orders two nodes that both run and makes neither of them
 /// run (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read
@@ -1998,6 +1996,15 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 ///
 /// An effect with none of these is in the graph and in no chain: nothing makes it run, which is
 /// what a rewrite that removes its last reader and forgets to hand its place on leaves behind.
+///
+/// There used to be a third credential beside these two: a write to a resource outside the program
+/// was held to stand on "the region it is written in", decided by reading the operator's resource
+/// class here (the author's ruling of 2026-11-15, "区域的根"). The author's ruling of 2026-11-17
+/// (`fd75209cc`, design principles 3.1) moved that promise to the front end: every region's exit is
+/// a `GATE` whose inputs are the region's value and its writes, so such a write is read by the
+/// GATE and stands on it as it stands on any other read of its value. What is left here is the two
+/// edge readings, and the answer for a write is the graph's own: `Builder::layRegionWriteEdges` is
+/// the one place that knows a region owes it.
 bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     if (!graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty()) {
         return true;
@@ -2009,22 +2016,6 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
     if (!graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
         !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty()) {
         return true;
-    }
-    // The third credential (design principles 3.1, the author's ruling of 2026-11-15, "区域的根"):
-    // a write a running region owes is used by the region it is written in -- "一个区域运行时，区域里
-    // 对外部资源的写都被用到 ... 非同步函数体里的裸语句 println(x) 照样执行" -- so it runs with
-    // neither a reader nor a place in a chain, and the region is what stands under it. A write to a
-    // handle is one of them (design principles 3.3: "对 `Ref` 的写由之后的读者用到", and the reader
-    // may be in a graph this one cannot see). The reading itself is `camel/runtime/region_roots.h`
-    // (resource class, never an operator name); this gate asks the same predicate so that the three
-    // walks that decide what a region runs and the check on what a pass returns do not drift apart.
-    if (const camel::runtime::GCNode *node = graph.node(ref);
-        node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
-        const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
-        if (body != nullptr &&
-            camel::core::OperatorTable::instance().writesForTheRegion(body->uri())) {
-            return true;
-        }
     }
     return false;
 }

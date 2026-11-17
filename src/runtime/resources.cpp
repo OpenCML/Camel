@@ -85,13 +85,15 @@ namespace {
 
 // ---- Small helpers ----------------------------------------------------------------------------
 
-/// The value a GATE forwards, followed to the first node that is not a GATE.
+/// The value a GATE forwards, followed to the first node that is not a GATE. The value is the GATE's
+/// first normal input (design principles 3.1, the author's ruling of 2026-11-17); what follows it in
+/// the input list is the reads a region's writes are held by.
 gc_node_ref_t throughGates(const GCGraph &graph, gc_node_ref_t ref) {
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(ref); ++hops) {
         if (graph.node(ref)->kind != GCNodeKind::Gate || graph.normInputsOf(ref).empty()) {
             break;
         }
-        ref = graph.normInputsOf(ref).back();
+        ref = graph.normInputsOf(ref).front();
     }
     return ref;
 }

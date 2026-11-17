@@ -138,13 +138,15 @@ type::FunctionType *operatorOverloadType(
 }
 
 bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
-    // The slot `id` reads: a GATE forwards the slot of its value input.
+    // The slot `id` reads: a GATE forwards the slot of its **first** normal input, the value the
+    // region hands on (design principles 3.1, the author's ruling of 2026-11-17). The inputs after
+    // it are the reads of the region's writes; they are not the value.
     for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
         const DraftNodeHeader *h = draft.header(id);
         if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
             break;
         }
-        id = draft.normInputsOf(id).back();
+        id = draft.normInputsOf(id).front();
     }
     // Every user of that slot, through the GATEs that forward it. A GATE reached along two
     // paths is looked at once: a shared DAG of GATEs would otherwise cost a walk per path.
@@ -199,7 +201,8 @@ WrittenSlots::WrittenSlots(const GraphTransaction &transaction)
     for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
         const auto *h = draft.header(id);
         if (h && h->kind == GCNodeKind::Gate && !draft.normInputsOf(id).empty()) {
-            parent[root(id)] = root(draft.normInputsOf(id).back());
+            // A GATE belongs with the value it forwards: its first normal input.
+            parent[root(id)] = root(draft.normInputsOf(id).front());
         }
     }
     for (gc_node_ref_t id = 0; id < parent.size(); ++id) {

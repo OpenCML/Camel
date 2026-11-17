@@ -770,12 +770,14 @@ gc_node_ref_t GraphDraft::resolveForwardedValueRef(gc_node_ref_t id) const {
         }
         const auto normInputs = normInputsOf(current);
         if (!normInputs.empty()) {
-            current = normInputs.back();
+            // The value a GATE hands on is its first normal input; the ones after it are the reads
+            // of the region's writes (design principles 3.1, the author's ruling of 2026-11-17).
+            current = normInputs.front();
             continue;
         }
         const auto withInputs = withInputsOf(current);
         if (!withInputs.empty()) {
-            current = withInputs.back();
+            current = withInputs.front();
             continue;
         }
         return kInvalidNodeRef;
@@ -2407,7 +2409,7 @@ size_t GraphDraft::eraseOrphanedChainGates() {
             continue;
         }
         const gc_node_ref_t value =
-            normInputsOf(id).empty() ? kInvalidNodeRef : normInputsOf(id).back();
+            normInputsOf(id).empty() ? kInvalidNodeRef : normInputsOf(id).front();
         const std::vector<gc_node_ref_t> predecessors(
             syncInputsOf(id).begin(),
             syncInputsOf(id).end());
@@ -2490,7 +2492,17 @@ size_t GraphDraft::dissolveUnorderedGates() {
                 !ctrlInputsOf(id).empty() || normInputsOf(id).empty()) {
                 continue;
             }
-            const gc_node_ref_t value = normInputsOf(id).back();
+            // A gate that reads more than the value it forwards is not plain forwarding: the inputs
+            // after the first are reads it takes, and the last of them is often the only read a
+            // region's write has (design principles 3.1, the author's ruling of 2026-11-17: the
+            // region `GATE` of `Builder::layRegionWriteEdges` is `[the value, the region's writes...]`).
+            // Dissolving it would take that read with it and the write would stop running, which is
+            // the one thing this walk may not do; the gate is kept and orders its reads by reading
+            // them.
+            if (normInputsOf(id).size() > 1) {
+                continue;
+            }
+            const gc_node_ref_t value = normInputsOf(id).front();
             // Plain forwarding is a gate **with a data user**: dissolving it hands that user the
             // value the gate carried, so nothing stops running (src/compile/gir/graph_encode.cpp
             // quotes the answer that settled it). A gate with no data user and no wait forwards

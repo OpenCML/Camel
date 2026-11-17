@@ -656,14 +656,19 @@ gc_node_ref_t resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, gc
         if (current->kind != camel::runtime::GCNodeKind::Gate) {
             return currentIndex;
         }
+        // The value a GATE hands on is its **first** normal input (design principles 3.1, the
+        // author's ruling of 2026-11-17: "第一个输入是区域交出的值，其余输入是区域里 ... 会写外部
+        // 资源或句柄的节点"). The inputs after the first are the reads the region's writes are held
+        // by; reading the last one here is what made a body returning `x + 1` hand on the value of
+        // its last write instead (`test/cases/compile/diag_json/dropped_effects_forward.cml`).
         const auto normInputs = graph->normInputsOf(currentIndex);
         if (!normInputs.empty()) {
-            currentIndex = normInputs.back();
+            currentIndex = normInputs.front();
             continue;
         }
         const auto withInputs = graph->withInputsOf(currentIndex);
         if (!withInputs.empty()) {
-            currentIndex = withInputs.back();
+            currentIndex = withInputs.front();
             continue;
         }
         return camel::runtime::kInvalidNodeRef;
@@ -687,7 +692,7 @@ gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
         }
         const auto normInputs = graph->normInputsOf(current);
         if (!normInputs.empty()) {
-            current = normInputs.back();
+            current = normInputs.front();
             continue;
         }
         // The value a GATE forwards is its data input; when it has none, what it waits on is all

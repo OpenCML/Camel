@@ -57,11 +57,17 @@
  *     operators one side has and the other does not.
  *
  * A group says what its two writings must be. `expect = 'identical'`, the default, is the reading a
- * group takes when the two writings change no meaning: one canonical document, byte for byte. A
- * group with `expect = 'differs'` is the counterexample -- a writing whose two sides order
- * something observable -- and its reading is the opposite one: the same two statements swapped must
- * part. Without one of each, "identical" proves nothing: an implementation that put nothing on any
- * chain would pass every `identical` case.
+ * group takes when the two writings change no meaning: one canonical document, byte for byte.
+ * `expect = 'same-graph'` is the same claim about a pair whose two sides **cannot** share bytes,
+ * because the dump numbers its nodes in the order they are written: swapping two statements renumbers
+ * them, so the documents part even when the graph is one. The reading there is the graph itself --
+ * the same nodes by what they say, and the same edges between them under that correspondence -- and a
+ * byte difference is accepted only when that reading holds; when the byte comparison does match it is
+ * still reported as `identical`, because the stronger reading was met. A group with
+ * `expect = 'differs'` is the counterexample -- a writing whose two sides order something observable
+ * -- and its reading is the opposite one: the same two statements swapped must part. Without one of
+ * each, "identical" proves nothing: an implementation that put nothing on any chain would pass every
+ * `identical` case.
  *
  * Usage: node writing-freedom.mjs --group var|spelling|chainpure|... [--camel <path>]
  *
@@ -219,6 +225,27 @@ const GROUPS = {
             ['second', 'test/cases/compile/chain/fault_call_second.cml'],
         ],
     },
+    // The region rule of the author's ruling of 2026-11-17 (design principles 3.1): a region's exit
+    // is one `GATE` whose inputs are the value the region hands out and the nodes in it that write
+    // outside the program, and **no edge joins the writes to one another** ("这些写之间不加边"). Two
+    // writes to two different resources, written in the two possible orders, must therefore be one
+    // graph: the order of two writes on two resources is not an order the program can observe, and a
+    // graph that said it was would be the reading this rule replaced.
+    //
+    // `same-graph` and not `identical`, and the reason is in the dump and not in the front end: the
+    // canonical document numbers its nodes in the order they are written, so swapping the two
+    // statements renumbers two of them and no two dumps of two writings can share bytes while they
+    // are also the *same* document. What the reading keeps is what the ruling is about: the same
+    // nodes by kind, operator and value, and the same edges between them (there is no edge between
+    // the two writes in either), under the correspondence that survives renumbering.
+    region_write: {
+        expect: 'same-graph',
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['print_first', 'test/cases/compile/region_roots/write_order_print_first.cml'],
+            ['seed_first', 'test/cases/compile/region_roots/write_order_seed_first.cml'],
+        ],
+    },
 }
 
 const groupName = argv.get('--group')
@@ -319,6 +346,49 @@ function operatorCounts(document) {
     return counts
 }
 
+/// What a node says, with nothing about *where* it stands: its kind, its payload, its value. `id` is
+/// the node's position in the dump and `type` is an index into the document's type table, and both
+/// follow the order the nodes are written in, so neither can be part of a reading that is not about
+/// that order. Everything else is kept, so two nodes with different kinds, operators or values do not
+/// read as the same node.
+function nodeContentKey(node) {
+    const content = {}
+    for (const key of Object.keys(node).sort()) {
+        if (key === 'id' || key === 'type') continue
+        content[key] = sortedDeep(node[key])
+    }
+    return JSON.stringify(content)
+}
+
+/// A graph with no node numbers in it: the nodes by what they say (sorted, so the order the dump
+/// wrote them in is not read), and every edge as the pair of node contents it joins plus its kind.
+/// Two documents spell the same graph when these agree, whatever the two dumps numbered the nodes.
+function renumberedShape(document) {
+    return (document.graphs || []).map((graph) => {
+        const nodes = graph.nodes || []
+        const byId = new Map(nodes.map((node) => [node.id, nodeContentKey(node)]))
+        const edges = edgesOf(graph)
+            .map((edge) => `${byId.get(edge.source)} --${edge.kind}--> ${byId.get(edge.target)}`)
+            .sort()
+        return { nodes: nodes.map(nodeContentKey).sort(), edges }
+    })
+}
+
+/// Whether two canonical documents are one graph up to the numbers the dump gave its nodes, and the
+/// one line to say so. Only the graphs are read: the rest of the document is the dump's own header.
+function sameGraphReading(referenceDocument, document) {
+    if (referenceDocument === null || document === null) return { same: false, line: '' }
+    const reference = renumberedShape(referenceDocument)
+    const other = renumberedShape(document)
+    const same = JSON.stringify(reference) === JSON.stringify(other)
+    const nodes = reference.reduce((sum, graph) => sum + graph.nodes.length, 0)
+    const edges = reference.reduce((sum, graph) => sum + graph.edges.length, 0)
+    return {
+        same,
+        line: `nodes=${nodes} edges=${edges} graphs=${reference.length}`,
+    }
+}
+
 /// The shape of a difference between two canonical documents, as lines of a report. Empty when a
 /// document is not the canonical JSON GIR -- the byte report above it is then the whole answer.
 function shapeOfDifference(referenceLabel, referenceDocument, label, document) {
@@ -374,10 +444,12 @@ function shapeOfDifference(referenceLabel, referenceDocument, label, document) {
     return lines
 }
 
-/// One phase of one case, compared against the reference case: `true` when the two documents are
-/// the same bytes, `false` when they part, and `null` when a side did not finish (nothing was
-/// compared, so no reading of the group's expectation is possible).
-function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
+/// One phase of one case, compared against the reference case: `'identical'` when the two documents
+/// are the same bytes, `'same-graph'` when they part only in the numbers the dump gave its nodes (and
+/// the group reads the graph, `expect = 'same-graph'`), `'differs'` when they part for a reason that
+/// survives that reading, and `null` when a side did not finish (nothing was compared, so no reading
+/// of the group's expectation is possible).
+function report(phase, passes, referenceLabel, referenceRun, label, caseRun, expectation = 'identical') {
     // A side that did not finish has no document to compare: say which side, why, and the first line
     // of the diagnostic it wrote. The write reports a diagnostic to standard output, so the reason is
     // read there first and on standard error second.
@@ -398,7 +470,22 @@ function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
             `[${phase}] ${label} identical bytes=${caseRun.stdout.length} ` +
                 `sha256=${sha256(caseRun.stdout).slice(0, 16)}`,
         )
-        return true
+        return 'identical'
+    }
+    // The bytes part. For a group that reads the graph, the documents may still be one graph: a dump
+    // that numbers its nodes in the order they are written numbers two swapped statements differently,
+    // and that is not a difference in the graph. The reading is taken before the difference is
+    // reported, because a difference that does not survive it is not a difference this group has an
+    // opinion about.
+    if (expectation === 'same-graph') {
+        const reading = sameGraphReading(canonicalJson(referenceRun.stdout), canonicalJson(caseRun.stdout))
+        if (reading.same) {
+            console.log(
+                `[${phase}] ${label} same_graph first_difference_byte=${offset} ${reading.line} ` +
+                    `(the two dumps number their nodes differently; the graph is one)`,
+            )
+            return 'same-graph'
+        }
     }
     const at = lineAndColumn(referenceRun.stdout, offset)
     const atCase = lineAndColumn(caseRun.stdout, offset)
@@ -425,7 +512,7 @@ function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
         console.log(line)
     }
     console.log(`  phase: ${phase} (${passes.join(' ')})`)
-    return false
+    return 'differs'
 }
 
 /// Whether a canonical node is the one a selector names: `kind` is the node's kind, `op` its
@@ -513,11 +600,13 @@ function checkDisjoint(phase, label, document) {
 
 const [referenceLabel, referenceCase] = cases[0]
 // What this group's readings must be, and the reading it is checked against: `identical` for a
-// writing that changes no meaning, `differs` for the counterexample that orders something
-// observable. A group says one or the other and never both, so "the two documents are the same"
+// writing that changes no meaning, `same-graph` for one whose two sides cannot share bytes because
+// the dump numbers its nodes in the order they are written, `differs` for the counterexample that
+// orders something observable. A group says one and never two, so "the two documents are the same"
 // is a claim about this pair and not a claim about every pair.
 const expectation = group.expect || 'identical'
-const expectIdentical = expectation !== 'differs'
+const expectVerdicts =
+    expectation === 'differs' ? ['differs'] : expectation === 'same-graph' ? ['identical', 'same-graph'] : ['identical']
 console.log(`writing-freedom: group=${groupName} reference=${referenceLabel} expect=${expectation}`)
 for (const [label, file] of cases) {
     console.log(`  case ${label}: ${path.relative(ROOT, file)}`)
@@ -528,18 +617,17 @@ for (const [phase, passes] of group.phases) {
     const runs = cases.map(([label, file]) => [label, run(file, passes)])
     const referenceRun = runs[0][1]
     for (const [label, caseRun] of runs.slice(1)) {
-        const same = report(phase, passes, referenceLabel, referenceRun, label, caseRun)
-        if (same === null) {
+        const verdict = report(phase, passes, referenceLabel, referenceRun, label, caseRun, expectation)
+        if (verdict === null) {
             // A side did not finish: the reading above says which one and why, and nothing was
             // compared, so the group's expectation is neither met nor broken -- it is not read.
             ok = false
             continue
         }
-        if (same !== expectIdentical) {
+        if (!expectVerdicts.includes(verdict)) {
             ok = false
             console.log(
-                `[${phase}] ${label} reads ${same ? 'identical' : 'differs'}, and this group ` +
-                    `expects ${expectation}`,
+                `[${phase}] ${label} reads ${verdict}, and this group expects ${expectation}`,
             )
         }
     }
