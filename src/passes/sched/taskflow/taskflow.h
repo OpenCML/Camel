@@ -623,6 +623,15 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void executeCallNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         TaskflowGcRegion &region);
+    /// The call *and* the rows the plan has at its node's position: `executeCallNode` is the call
+    /// itself, and a FUNC or a CALL is a node like every other one whose position may hold rows --
+    /// the give-back of a box a closure carries is laid where the closure is last read, which is a
+    /// call's position. `executeLinearNode` and `executePreparedNode` already run the rows around
+    /// these two kinds; this is the same answer for the two paths that run a plan (see the
+    /// definition). A tail call never reaches here: it does not come back to run anything.
+    slot_t executeCallNodeWithRows(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        TaskflowGcRegion &region);
     // Where the element calls of a higher-order operator come from: the operator node (a call
     // that is too deep is reported there) and the calls open on the thread that started the
     // operator, which every element continues from on the thread that runs it.
