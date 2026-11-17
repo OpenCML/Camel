@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：133 行（页已不在 `questions/` 里）
+## 生成器不会删的行：135 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -137,6 +137,7 @@
 | [`2026-11-17-is-a-fixed-compile-error-one-defect-or-two`](../reviews/2026-11-17-is-a-fixed-compile-error-one-defect-or-two.cn.md) | 四个格从「编译错」变成「算错」之后，E9 该把它算一个缺陷还是两个 | 在 `reviews/` |
 | `2026-11-17-who-owns-a-callee-argument-after-the-call-site` | 一个实参在调用之后还归谁：谁回答「这次是不是最后一次使用」？ | 页不在（`questions/` 与 `reviews/` 都没有） |
 | [`2026-11-17-who-owns-the-argument-after-a-call`](../reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md) | 调用之后，那个实参归谁？ | 在 `reviews/` |
+| [`2026-11-18-retract-rc23-two-orders`](../reviews/2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |
@@ -149,4 +150,5 @@
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |
 | [`questions-2026-11-17-two-rulings`](../reviews/questions-2026-11-17-two-rulings.cn.md) | 两个必须由作者裁定的口子（2026-11-17 23:40） | 在 `reviews/` |
+| [`questions-2026-11-18-rc23-two-orders`](../reviews/questions-2026-11-18-rc23-two-orders.cn.md) | rc23：两条指令互相冲突，而它现在是合入的唯一闸门 | 在 `reviews/` |
 | [`the-switch-that-reaches-no-target`](../reviews/the-switch-that-reaches-no-target.md) | The switch that reaches no target | 在 `reviews/` |

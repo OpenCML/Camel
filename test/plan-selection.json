@@ -193,6 +193,11 @@
             "plans": ["feat/opt/progen.plan.toml", "smoke", "feat/consistency/runner.plan.toml"]
         },
         {
+            "comment": "The same-graph comparator (test/tools/same_graph.py): its case is the tool itself, so a change there selects the plan that runs it -- `feat/trans/same_graph` -- and that plan is fast, so the rule carries no layer. This rule comes before the general test/tools rule below, which it replaces for this file. The plan is named and runs in full because the whole of what the tool decides is which readings a pair of writings gets: the verdict on the criterion's own pair, the pair of pure writings that says the canonical form is order-independent at all, and the two counterexamples that keep a `true` from being vacuous.",
+            "paths": ["test/tools/same_graph.py"],
+            "plans": ["feat/trans/same_graph.plan.toml"]
+        },
+        {
             "comment": "The other test harnesses (cppexec, parsecheck, jitcov, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
             "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
