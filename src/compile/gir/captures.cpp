@@ -64,6 +64,12 @@ node_handle_t Builder::captureInto(
     (void)captureInto(graph->outerGraph(), origin, name);
 
     const bool isVar = isVariable(origin);
+    // A name the program declares with `var` is a name even where it stands for a value and not a
+    // cell: design principles 3.5 (198) refuses assigning it from the making of this closure to its
+    // last use, and that rule is about the name, not about where its value is kept. A `var` whose
+    // value is a handle is a value and its cell is gone (`9d29939c4`), so the record is kept for the
+    // value the name stood for where the capture is written -- that value is what the closure holds.
+    const bool namedVar = isVar || isSsaValue(origin, name);
     // A function value holds the captures its graph had when it was made; a direct call is
     // given a capture made later at the link step (linkCaptureSites), but not one of a
     // variable: the call has been ordered among the uses of the variables it was known to use
@@ -138,7 +144,7 @@ node_handle_t Builder::captureInto(
         // more (dropCarriedVariableUnits).
         valueCapturedCells_.insert(origin);
     }
-    if (isVar && !compilerMadeClosure(graph->name()) && !decoratedBlockGraph(graph)) {
+    if (namedVar && !compilerMadeClosure(graph->name()) && !decoratedBlockGraph(graph)) {
         // Design principles 3.5 (198): from the making of this closure to its last use the name may
         // not be assigned, or the closure would go on holding a value the name no longer has. Where
         // the closure stands is the start of that stretch, and `closureUseOf_` (the scan before
@@ -360,6 +366,14 @@ bool Builder::compilerMadeClosure(const std::string &graphName) {
 bool Builder::decoratedBlockGraph(const compile_graph_ptr_t &graph) const {
     const auto found = graph == nullptr ? graphGctOf_.end() : graphGctOf_.find(graph.get());
     return found != graphGctOf_.end() && found->second != nullptr && found->second->decoratedBlock();
+}
+
+bool Builder::isSsaValue(node_handle_t value, const std::string &name) const {
+    if (value == nullptr || name.empty()) {
+        return false;
+    }
+    const SsaEnv::Entry *entry = ssa_.find(nodeScope_, name);
+    return entry != nullptr && ssa_.valueOf(entry) == value;
 }
 
 void Builder::requireCapturedNameWritable(
