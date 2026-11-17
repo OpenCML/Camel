@@ -3902,7 +3902,7 @@ c1a092942caf4b56 ok test/cases/opt/algebra_rules/divergence.cml
 d48530c14f968f08 ok test/cases/opt/algebra_rules/library_only.cml
 d52d50350b44b1cb ok test/cases/opt/algebra_rules/measure.cml
 6d3d5bbeb859e306 ok test/cases/opt/algebra_rules/tensor_forms.cml
-62c558304cee338f ok test/cases/opt/camel_passes/cse_subject.cml
+7383e8fa8ba75f15 ok test/cases/opt/camel_passes/cse_subject.cml
 3d2a687ad74693d8 ok test/cases/opt/camel_passes/dce_subject.cml
 51d83bb71bf41e41 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml

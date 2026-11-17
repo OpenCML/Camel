@@ -33,7 +33,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "camel_passes.cse.subject"
-desc = "The corpus before any pass: `shared` writes `x * 7` twice over two separate 7s, `literals` has two constants of 7 that its one product reads, and `written` has two 3s beside the two products over two different reads of the cell."
+desc = "The corpus before any pass: `shared` writes `x * 7` twice over two separate 7s, `literals` has two constants of 7 that its one product reads, and `written` has two 3s beside two products over two different values -- the parameter, and the sum the rebinding between them made."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
 args = ["${case}", "std::jgir"]
 verify_script_path = "../../../cases/opt/camel_passes/cse_subject.mjs"
@@ -65,7 +65,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
 name = "camel_passes.cse.property"
-desc = "What opt::cse leaves: no graph keeps two nodes that are one value, the two products over two reads of a written cell stay two nodes over two different reads, `shared`'s sum reads its one product twice, `literals`' product reads one value twice, and `apart`'s two sums keep the constants 1 and 2."
+desc = "What opt::cse leaves: no graph keeps two nodes that are one value, `written`'s twice-written product stays two nodes over the two different values it reads while its twice-written 3 is one node, `shared`'s sum reads its one product twice, `literals`' product reads one value twice, and `apart`'s two sums keep the constants 1 and 2."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
 args = ["${case}", "opt::cse", "std::jgir"]
 verify_script_path = "../../../cases/opt/camel_passes/cse_property.mjs"
