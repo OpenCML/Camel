@@ -14,9 +14,13 @@
 // `-Check e9-full` is the whole command and nobody retypes the tool's command line.
 //
 // It adds no judgement of its own. The tool compares the run with `test/tools/e9diff/baseline.json`
-// and exits 1 when a number rose, 0 when the baseline held or was not comparable; this script
-// passes that code through, prints the tool's own output verbatim, and adds one machine-readable
-// line naming the three numbers so a lane can paste them.
+// and exits 1 when the comparison fails -- a program worse than the baseline on the intersection of
+// the two runs' programs, a program the run did not reach, or an intersection and a per-program
+// record that cannot be computed at all (a comparison that cannot be made is not a pass); it exits 0
+// when the baseline held or when the run is one this ratchet does not cover (a slow run, or another
+// seed range, both of which say so). This script passes that code through, prints the tool's own
+// output verbatim, and adds one machine-readable line naming the three numbers so a lane can paste
+// them.
 //
 // Usage (what the table entry passes, plus the optional overrides):
 //   node scripts/check-e9-full.mjs --matrix full [--camel out/latest/bin/camel] [--jobs 4]
@@ -114,7 +118,19 @@ console.log(`[e9-full] ${python} ${TOOL} ${args.join(' ')}`)
 const result = await run(python, [TOOL, ...args])
 
 const numbers = /\[E9\] wrong (\d+)\s+refused (\d+)\s+crashed (\d+)/.exec(result.stdout)
-const verdict = /\[E9\] (baseline held|ABOVE THE BASELINE|below the baseline|baseline [\w.]+: not compared|recorded as the new zero)/.exec(result.stdout)
+// The verdict in the tool's own words: one phrase per outcome it can print, most decisive first.
+// The order is not the order they appear in the output -- a run whose population moved prints
+// `not compared` *and* `the comparison cannot be made`, and the second is the one that decides.
+const VERDICT_PHRASES = [
+    'the comparison cannot be made',
+    'the intersection is empty',
+    'ABOVE THE BASELINE',
+    'below the baseline',
+    'baseline held',
+    'recorded as the new zero',
+    'not compared',
+]
+const verdict = VERDICT_PHRASES.find((phrase) => result.stdout.includes(phrase))
 const seconds = /\[E9\] (\d+) s,/.exec(result.stdout)
 // The seed range the tool itself printed, so a short run cannot be read as the ratchet's run.
 const seeds = /\[E9\] matrix \w+: \d+ pipelines, \d+ cells per program, seeds ([\d.]+)/.exec(result.stdout)
@@ -132,7 +148,7 @@ console.log(
     `refused=${numbers ? numbers[2] : 'unknown'} ` +
     `crashed=${numbers ? numbers[3] : 'unknown'} ` +
     `seconds=${seconds ? seconds[1] : 'unknown'} ` +
-    `verdict=${verdict ? verdict[1].toLowerCase().replaceAll(' ', '-') : 'unknown'} ` +
+    `verdict=${verdict ? verdict.toLowerCase().replaceAll(' ', '-') : 'unknown'} ` +
     `exit=${result.code}${result.signal ? ` signal=${result.signal}` : ''} out=${out}`,
 )
 if (opts.record && result.code === 0) {
