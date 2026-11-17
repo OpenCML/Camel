@@ -585,7 +585,11 @@ timeout_ms = 20000
 #                               tuple now -- the read the body's value already gets when it is no
 #                               fill at all. One program.
 #   rc15_seed52                 `index < fieldCount_` in `Variant::get`, under `std::opt`, reading
-#                               field 0 of a Variant whose tag declares no field. Two programs.
+#                               field 0 of a Variant whose tag declares no field. The value was the
+#                               unit variant of the closure family, built correctly with no field;
+#                               what read field 0 of it was the `:enum/field` of the *other* arm, which
+#                               `foldDraft` evaluates on purpose once the value is a constant. Two
+#                               programs -- seeds 52 and 85 -- with one crash point between them.
 #   rc16_seed153                no result in 30 s under `std::jit` on every pipeline. One program.
 #   rc17_seed193                clang: "non-void function 'lambda' should return a value": the
 #                               writer left the lambda's `return` with no value, because the
@@ -597,7 +601,7 @@ timeout_ms = 20000
 #                               merge (S1), and its entry is a known failure at the end of this
 #                               section.
 #
-# Four shapes are fixed, and their programs are entries below. The first pair used to end the
+# Five shapes are fixed, and their programs are entries below. The first pair used to end the
 # process in the front end with no pass at all, on all four back ends, so both arms (with and
 # without `std::opt`) are the same claim -- the program runs, says nothing, exits 0. `rc14_seed176`
 # is the second, and it is the same claim on the same four back ends: its fault is in the graph
@@ -607,13 +611,15 @@ timeout_ms = 20000
 # program's line in `test/tools/cppexec/expect.txt`, which `feat/trans/cpp.agree_with_fvm` builds
 # and runs. The fourth (`rc18_seed429`, with `rc21_seed429` and `rc22_flat_if_var`) was a value the
 # branch handed nobody, misread as a writer's compile error; its section is below, and its programs
-# are lines in the same file.
+# are lines in the same file. The fifth is `rc15_seed52`, which is also the one entry here whose two
+# arms are *not* the same claim: it never aborted without a pass, and it aborted on every back end
+# with one, because the read that went past the variant is the fold's.
 #
-# The other three shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
+# The other two shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
 # expectation is the crash states the defect as the answer, and an entry whose expectation is the
 # program's output goes red until its class is fixed. Each file is the standing reproducer of its
-# class -- `camel rc15_seed52.cml std::opt` fires that one's guarantee by hand -- and its entries
-# land with its fix, as these four did. The eighth shape is the exception in the other direction: it
+# class -- `camel rc16_seed153.cml std::jit` fires that one's by hand -- and its entries
+# land with its fix, as these five did. The eighth shape is the exception in the other direction: it
 # is red today and it is entered anyway, as a known failure with its owner, because the red is the
 # measurement and a shape that only a report names is one the next person cannot reproduce.
 
@@ -645,6 +651,22 @@ expect_stdout_exact = ""
 name = "rc13_seed202.opt"
 desc = "The same program under the whole optimizer. The fix is in the graph builder and not in a pass, so the two arms move together."
 case = "../../../cases/opt/e9/rc13_seed202.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc15_seed52.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0. It was clean before the fix too, and that is the reading that places the fault: the abort needs `std::opt` because only the fold executes a `:enum/field` of an arm the constant's tag does not select. On all four back ends."
+case = "../../../cases/opt/e9/rc15_seed52.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc15_seed52.opt"
+desc = "The same program under the whole optimizer, on all four back ends: the same claim. It used to stop the process in `Variant::get` (`index < fieldCount_`) -- \"reading field 0 of a Variant whose tag 1 declares 0 field(s)\" -- because `:enum/field` answered a value of the other variant with a read past the end of it. The case its tag does not select reads as no value now, which is what the tagged lowerings answer, so the fold's early evaluation of that arm changes nothing."
+case = "../../../cases/opt/e9/rc15_seed52.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
