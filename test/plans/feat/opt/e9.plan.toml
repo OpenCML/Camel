@@ -597,21 +597,23 @@ timeout_ms = 20000
 #                               merge (S1), and its entry is a known failure at the end of this
 #                               section.
 #
-# Three shapes are fixed, and their programs are entries below. The first pair used to end the
+# Four shapes are fixed, and their programs are entries below. The first pair used to end the
 # process in the front end with no pass at all, on all four back ends, so both arms (with and
 # without `std::opt`) are the same claim -- the program runs, says nothing, exits 0. `rc14_seed176`
-# is the third, and it is the same claim on the same four back ends: its fault is in the graph
-# builder too, so no pass causes it and no pass can avoid it. The fourth (`rc17_seed193`) was in the
+# is the second, and it is the same claim on the same four back ends: its fault is in the graph
+# builder too, so no pass causes it and no pass can avoid it. The third (`rc17_seed193`) was in the
 # C++ writer, so its claim is about the text the writer gives: the entry below is the `std::cpp`
 # arm, and the stronger one -- that the text builds, runs and agrees with `std::fvm` -- is the
 # program's line in `test/tools/cppexec/expect.txt`, which `feat/trans/cpp.agree_with_fvm` builds
-# and runs.
+# and runs. The fourth (`rc18_seed429`, with `rc21_seed429` and `rc22_flat_if_var`) was a value the
+# branch handed nobody, misread as a writer's compile error; its section is below, and its programs
+# are lines in the same file.
 #
-# The other four shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
+# The other three shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
 # expectation is the crash states the defect as the answer, and an entry whose expectation is the
 # program's output goes red until its class is fixed. Each file is the standing reproducer of its
 # class -- `camel rc15_seed52.cml std::opt` fires that one's guarantee by hand -- and its entries
-# land with its fix, as these three did. The eighth shape is the exception in the other direction: it
+# land with its fix, as these four did. The eighth shape is the exception in the other direction: it
 # is red today and it is entered anyway, as a known failure with its owner, because the red is the
 # measurement and a shape that only a report names is one the next person cannot reproduce.
 
