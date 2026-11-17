@@ -84,3 +84,11 @@
 2. **就地更新不能丢**：S1 写着"`v = v->append(x)` 不再就地改写，每次出新数组，是性能线的账"。这条不能放到另一条线：负责人定 `var` 方案时的前提就是"`params.w -= …` 与训练循环的写法不变，而且原地进行"（原则 3.5）。就地靠的是值的计数为 1 时原地更新（10.5），执行计划的 `planStorageReuse` 已经在回答"这次更新能不能复用入参的存储"。所以在 S3 之后加一段 **S3b**：SSA 的值在最后一次使用处交给 `append`、路径赋值、`sgd` 一类更新时，复用入参存储；判据是 `camel inspect --copies`（没有就先做一个最小版）对 `v = v->append(x)` 循环与案例训练步报"原地"。S3b 不过，第一件不算完成。
 3. **4 个"判不了"按函数值的类型判**（见问题页 (b) 的答复），不留"判不了"。
 4. **模块级 `var` 的 10 个**：原则 3.5 规定顶层 `var` 是编译错误。它们不进 `Ref<T>` 的"以后"，作为 S8 跟在 S7 之后：用例改成 `let` 或 `Ref`，加上编译错误，门二与 `handedOver_`/`programWriters_` 随之删除。第一件的终值因此是 64（只剩生成器自己的状态），不是 78。
+
+## 后续实测（2026-11-17，`lane-sortd`）
+
+S3b 的入口已经有人试过一次并被量回：把 `ssaAssignmentOf` 的认领让给 `inPlaceRebindingOf`，确实能让
+`camel inspect --copies` 报「原地」（`main` 从 `copied 9` 变成 `by-count 9`），但程序会静默印错值
+（`sort_rebinding.cml` 的 `before` 印成 `[1, 2, 3]`，该是 `[3, 1, 2]`）——`writableInPlace()` 数不到
+另一个还活着的名字。机制、逐字输出与判据见
+`docs/handover/reports/2026-11-17-the-claim-order-is-not-the-root-the-count-is.cn.md`。

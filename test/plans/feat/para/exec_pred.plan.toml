@@ -53,6 +53,12 @@ desc = "The nodes one node waits for have one implementation, and the differenti
 # The six differential entries compare what two back ends print, which catches an answer that makes
 # a program print the wrong thing and cannot catch an answer that is merely larger than it should
 # be: an extra predecessor that orders two nodes which were already in that order changes no line.
+# What a `sync` block's chain carries is not every statement, either: design principles 3.4 read
+# with 3.1 keeps a pure, infallible call off the chain (`c7cb7f32f`, "keep a pure, infallible call
+# out of a `sync` block's chain"), so in `linear.cml` the link is written between the statements
+# that print and `step`'s calls are what those statements read rather than what they wait on. The
+# text below is the reading on this side of that change; on the other side the same dump listed
+# `control:` and `sync:` on the pure call's own nodes, which is what the entry held until then.
 # The three structural entries at the end close that: `std::tfdump` writes, after its digraph, what
 # every node that runs waits for and the kind of edge that says so, one node per line and sorted
 # (`# <node> <- [<kind>:<node>, ...]`), read from camel::execute::executionPredecessorsOf. The
@@ -169,7 +175,7 @@ order 30
 
 [[tests]]
 name = "linear.predecessors"
-desc = "The linear chain's predecessor set, line by line: what every node that runs waits for, and the kind of edge that says so. The two calls the last line adds are the case's only unordered pair (`# 11 <- [data:9, data:10]`), and the order edges the builder writes before the printing statements are in it too, which the plan now waits for like NodeVM does."
+desc = "The linear chain's predecessor set, line by line: what every node that runs waits for, and the kind of edge that says so. The two calls the last line adds are the case's only unordered pair (`# 11 <- [data:9, data:10]`). The chain orders the five printing statements and nothing else -- a pure, infallible call is not a statement of a `sync` block (design principles 3.4 read with 3.1, c7cb7f32f), so `step` is only these nodes' data -- and the order edges the builder writes before the printing statements are in it too, which the plan now waits for like NodeVM does."
 case = "../../../cases/para/exec_pred/linear.cml"
 args = ["${case}", "std::tfdump"]
 verify_script = """({ input, assert }) => {
@@ -186,24 +192,24 @@ const want = `# predecessors: what each node that runs waits for, and the edge t
 # 0 <- []
 # 1 <- [data:0]
 # 2 <- []
-# 3 <- [control:1, sync:1, data:2]
+# 3 <- [data:2]
 # 4 <- []
-# 5 <- [order:1, control:3, data:3, sync:3, data:4]
-# 6 <- [data:3, control:5, sync:5]
+# 5 <- [control:1, order:1, sync:1, data:3, data:4]
+# 6 <- [data:3]
 # 7 <- []
-# 8 <- [order:5, control:6, data:6, sync:6, data:7]
-# 9 <- [data:3, control:8, sync:8]
-# 10 <- [data:6, control:9, sync:9]
+# 8 <- [control:5, order:5, sync:5, data:6, data:7]
+# 9 <- [data:3]
+# 10 <- [data:6]
 # 11 <- [data:9, data:10]
 # 12 <- []
-# 13 <- [order:8, control:10, sync:10, data:11, data:12]
+# 13 <- [control:8, order:8, sync:8, data:11, data:12]
 # 14 <- []
-# 15 <- [control:13, sync:13, data:14]
+# 15 <- [data:14]
 # 16 <- []
-# 17 <- [control:15, sync:15, data:16]
+# 17 <- [data:16]
 # 18 <- []
 # 19 <- [data:15, data:17]
-# 20 <- [order:13, control:17, sync:17, data:18, data:19]
+# 20 <- [control:13, order:13, sync:13, data:18, data:19]
 # 21 <- []
 # 22 <- [control:20, sync:20, data:21]
 # graph step
