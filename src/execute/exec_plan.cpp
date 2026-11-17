@@ -1084,13 +1084,17 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 /// `state::get` on a disposed box, "the value is not a reference", on the second round of a loop
 /// that read it correctly on the first.
 ///
-/// The answer for such a use is not another position: the loop's frame is one of the value's
-/// holders until the loop ends, and no position of the plan runs once at that moment -- the LOOP
-/// node's own position is run every round, and the count is applied at operator sites, where a
-/// LOOP node is not one. So the reference stays held (`refKeptAt`'s other reason), which is the
-/// conservative direction the count takes whenever it cannot name the last use, and the balance
-/// still holds: the holds the plan takes are exactly the references it gives back.
-bool repeatsWithoutMakingIt(const ExecPlan &plan, size_t produced, size_t at) {
+/// The answer for such a use is not another position inside the round: the loop's frame is one of
+/// the value's holders until the loop ends, and the one position of the plan that runs once at that
+/// moment is the LOOP node's own position -- every other position the round runs is run again, and
+/// the LOOP node is not an operator, so the count is not applied there by a back end. It is applied
+/// there by the loop itself: `loopEnd` (camel/execute/loop_frame.h) hands the rows laid at the LOOP
+/// node's position to `applyRefEntriesForLoopExit` when the loop leaves (author review 2026-11-16,
+/// item 6, the give-back at the loop's exit). This function names that loop -- the outermost one
+/// whose round runs the use and does not make the value, because that is the last round the value
+/// must live through -- and `nullopt` when the use is not inside such a loop.
+std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced, size_t at) {
+    std::optional<uint32_t> exit;
     for (const ExecLoop &loop : plan.loops) {
         if (at < loop.begin || at > loop.position) {
             continue;
@@ -1098,9 +1102,17 @@ bool repeatsWithoutMakingIt(const ExecPlan &plan, size_t produced, size_t at) {
         if (produced >= loop.begin && produced <= loop.position) {
             continue; // the value is one of the round's own: hold and give-back are per round
         }
-        return true;
+        if (!exit || loop.position > *exit) {
+            exit = loop.position;
+        }
     }
-    return false;
+    return exit;
+}
+
+/// Whether the plan runs the position `at` more than once while the value made at `produced` is
+/// held from outside that repetition (`loopRepeatingOver`).
+bool repeatsWithoutMakingIt(const ExecPlan &plan, size_t produced, size_t at) {
+    return loopRepeatingOver(plan, produced, at).has_value();
 }
 
 /// The type code of the reference handle the runtime counts (`state::Ref`); defined below, beside
@@ -1205,8 +1217,11 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
             return std::nullopt;
         };
         // The uses whose reference cannot come back where it is written: the row would run inside a
-        // loop's round for a value that loop does not make (`repeatsWithoutMakingIt`).
-        uint32_t heldByRounds = 0;
+        // loop's round for a value that loop does not make (`repeatsWithoutMakingIt`). Where the
+        // give-back of those uses comes back: the exit of the outermost loop that repeats over one
+        // of them (`loopRepeatingOver`). One row for the value, because it is the value's own
+        // reference the rounds hold, and `loopEnd` runs it once when that loop leaves.
+        std::optional<uint32_t> heldExit;
         // The rows written, the rows no position could take, and the holds taken beyond the value's
         // own reference -- the three numbers `1 + copies == give-backs + kept` is read from.
         uint32_t held   = 0;
@@ -1217,8 +1232,18 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         uint32_t firstRowAt = static_cast<uint32_t>(count);
         for (const uint32_t usePosition : usesAt[value]) {
             const auto [landing, packed] = landingOf(usePosition);
-            if (repeatsWithoutMakingIt(plan, idx, landing)) {
-                ++heldByRounds;
+            // Only a value the count applies to has a row whose position means anything: another
+            // value's rows are inert wherever they are written (`valueIsCounted`), so they keep
+            // the position they had and this rule does not move them.
+            const auto exit = counted ? loopRepeatingOver(plan, idx, landing)
+                                      : std::optional<uint32_t>{};
+            if (exit) {
+                // The row cannot land at the use: the round runs it again. It lands at the LOOP
+                // node's position of the outermost loop the use runs in, where `loopEnd` runs it
+                // when that loop leaves -- the moment the reference stops being needed.
+                if (!heldExit || *exit > *heldExit) {
+                    heldExit = *exit;
+                }
                 continue;
             }
             const auto at = rowPositionAt(landing);
@@ -1247,15 +1272,24 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
                 ++held;
             }
         }
-        const bool kept         = keptByProgram[value] != 0 || heldByRounds != 0 || lost != 0;
+        if (heldExit) {
+            // One row for the value, at the loop's exit: the rounds hold the value's own reference,
+            // so the reference that comes back there is that one, however many rounds read it.
+            // `loopEnd` applies what is laid at the LOOP node's position when the loop leaves.
+            rows[*heldExit].push_back(
+                ExecPlan::RefGiveBack{.value = value, .at = plan.topo[*heldExit], .count = 1});
+            firstRowAt = std::min(firstRowAt, *heldExit);
+        }
+        const bool kept         = keptByProgram[value] != 0 || lost != 0;
         plan.refProducedAt[idx] = 1;
         plan.refKeptAt[idx]     = kept ? 1 : 0;
         // The holds the plan takes beyond the value's own reference: one for each reference it
         // gives back, less that own reference, and one more when the graph keeps it. With every row
-        // written this is the answer the column had before -- `uses - 1`, or `uses - heldByRounds`
-        // for a value a loop held -- and a row no position took lowers it by one, because the
-        // reference that row would have given back is then one the program still holds.
-        copies = held + (kept ? 1u : 0u) - 1u;
+        // written this is the answer the column had before -- `uses - 1`, and the same for a value
+        // a loop held, whose one give-back at the loop's exit stands in for the row of the use that
+        // repeats -- and a row no position took lowers it by one, because the reference that row
+        // would have given back is then one the program still holds.
+        copies = held + (heldExit ? 1u : 0u) + (kept ? 1u : 0u) - 1u;
         if (counted && copies != 0 && !rowRunsAt(static_cast<uint32_t>(idx))) {
             // The value's own position takes no hold, so they are taken at the first position that
             // writes one of the value's rows: before that row's give-back, where the value is held.
@@ -1498,6 +1532,22 @@ void applyRefEntriesForNode(
         return;
     }
     applyRefEntriesAtPosition(plan, frame, position, produced);
+}
+
+void applyRefEntriesForLoopExit(
+    const ExecPlan &plan, camel::core::context::Frame *frame, size_t position) noexcept {
+    if (frame == nullptr || plan.graph == nullptr || position >= plan.topo.size()) {
+        return;
+    }
+    // The rows the rounds held a value for are laid at the LOOP node's own position, and this is
+    // the only moment that position is run: `loop.position` runs every round, so the rows there
+    // are not an operator's rows but the loop's own exit (exec_plan.cpp, `loopRepeatingOver`). The
+    // LOOP node's value is the loop's state after the last round -- `loopEnd` has just brought it
+    // up to date -- so it is read from the frame here, not passed in as a call's result.
+    const gc_node_ref_t node = plan.topo[position];
+    const gc_data_idx_t slot = node < plan.dataIndexByRef.size() ? plan.dataIndexByRef[node] : 0;
+    const slot_t own         = slot != 0 ? frame->get<slot_t>(slot) : NullSlot;
+    applyRefEntriesAtPosition(plan, frame, position, own);
 }
 
 size_t ExecPlan::refProducedTotal() const {

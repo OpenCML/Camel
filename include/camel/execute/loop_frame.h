@@ -242,6 +242,16 @@ inline bool loopEnd(
                 value->set(j, frame.get<slot_t>(loop.stateSlots[j]), shape.valueType);
             }
         }
+        // The plan's count is applied at the position of the node that ran; the LOOP node's own
+        // position is the one position that runs every round and that no operator covers, and this
+        // is the moment it means: the loop is leaving, so what the rounds held a value for comes
+        // back (camel/runtime/exec_plan.h, `applyRefEntriesForLoopExit`; author review 2026-11-16,
+        // item 6 -- the give-back at the loop's exit). The loop's value is final here, which is why
+        // this runs after the tuple above was brought up to date.
+        if (const camel::runtime::GCGraph *graph = frame.graph()) {
+            camel::runtime::applyRefEntriesForLoopExit(
+                graph->execPlan(), &frame, loop.position);
+        }
         return false;
     }
     if (!loop.stateComponents) {
