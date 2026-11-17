@@ -1115,6 +1115,12 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                             callCount);
                         --nestedCalls_;
                         cur->set(bc->result, value);
+                        // The rows the plan has at this call's position, the same ones
+                        // gotovm.cpp's `label_CALL` runs (camel/execute/operator_call.h,
+                        // `runNode`).
+                        (void)camel::execute::runNode(
+                            camel::execute::siteOfSlot(*cur, bc->result),
+                            [&] { return value; });
                     }
                     break;
                 }

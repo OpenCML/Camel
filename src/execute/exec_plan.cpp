@@ -915,6 +915,60 @@ bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
     return body != nullptr && body->uri() == ":enum/make";
 }
 
+/// Whether the node reads `value` and passes it on instead of ending it, so that what happens to
+/// the reference next is not this plan's to say: a direct call hands every value it reads to the
+/// callee's frame, a call through a function value hands every value it reads except the one it
+/// runs, and a field access (`Accs`, `.0` on a tuple, `s.key` on a struct) writes the field into
+/// its own slot, which is a value the reader was packed into.
+///
+/// It matters for a *packing* value and for the references the packing value holds, which is why it
+/// is asked where the packing value's end is decided rather than at the use. A callee that captures
+/// what it was given holds it after the call has returned -- `unfold` is the shape: it answers a
+/// closure that captures the `step` it was handed -- and a field access reads the tuple one of its
+/// fields at a time, so the value the reference was packed into is still the holder after the
+/// access. Read either way, this plan called the read the packing value's death: a box a closure
+/// held came back at the second `unfold` call of a `tee` (and, with `std::opt`, at the field access
+/// that unpacked the closure tuple), and the first `state::get` through the closure answered "the
+/// value is not a reference".
+///
+/// The one value a call *does* end is the callee it runs: `bump()` on a closure that captured the
+/// box reads the closure and nothing keeps it past that call, so the capture's reference still
+/// comes back at the closure's last use (`ref_one_cell_two_holders`, feat/tools
+/// `plan_refs.closure_holder` pins exactly that). The callee is a `with` input of the call, which
+/// is why the answer is read through the values each input carries: the call ends the value its
+/// callee input carries, and passes on the rest.
+///
+/// A value read by a call and *not* packed into anything keeps the plan's ordinary answer (the
+/// reference of that use comes back at the call): each use holds a reference of its own while the
+/// call runs, and a callee that keeps an argument is the callee's to hold, not this graph's to
+/// give.
+bool passesWhatItReadsOn(
+    const GCGraph &graph, gc_node_ref_t at, gc_node_ref_t value,
+    const std::vector<std::vector<gc_node_ref_t>> &carried) {
+    const GCNode *node = graph.node(at);
+    if (node == nullptr) {
+        return false;
+    }
+    switch (node->kind) {
+    case GCNodeKind::Accs:
+        return true;
+    case GCNodeKind::Func:
+        return true;
+    case GCNodeKind::Call: {
+        for (const gc_node_ref_t callee : graph.withInputsOf(at)) {
+            if (callee < carried.size() &&
+                std::find(carried[callee].begin(), carried[callee].end(), value) !=
+                    carried[callee].end()) {
+                return false; // the value the call runs: this call is where it ends
+            }
+        }
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
 /// The uses of every value, and route 4's "position of the last use" column.
 ///
 /// The rule is written out in the header; what this function adds is the one thing the edges have
@@ -1109,12 +1163,6 @@ std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced,
     return exit;
 }
 
-/// Whether the plan runs the position `at` more than once while the value made at `produced` is
-/// held from outside that repetition (`loopRepeatingOver`).
-bool repeatsWithoutMakingIt(const ExecPlan &plan, size_t produced, size_t at) {
-    return loopRepeatingOver(plan, produced, at).has_value();
-}
-
 /// The type code of the reference handle the runtime counts (`state::Ref`); defined below, beside
 /// the filter that reads it at run time, so that the plan and the count ask one question.
 camel::core::type::TypeCode countedHandleCode();
@@ -1160,9 +1208,6 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     std::vector<std::vector<ExecPlan::RefGiveBack>> rows(count);
     // The holds, one per reference taken beyond a value's own, by the position that takes it.
     std::vector<std::vector<gc_node_ref_t>> holds(count);
-    // Which control region a position is in: a row moves inside the region its use is in, so that
-    // it runs exactly when that use does.
-    const camel::runtime::ControlRegions controls(graph);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t value = plan.topo[idx];
         if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
@@ -1171,7 +1216,12 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // Where the reference of one use comes back: the use's own position, or -- when the user
         // packs its inputs -- where the value it made is last read, which is later than the use.
         // The loop rule is asked about that position, because that is the one the row runs at.
-        const auto landingOf = [&](uint32_t usePosition) {
+        // `nullopt` says the reference does not come back in this graph at all: the packing value
+        // it was packed into is read by a node that passes it on -- a call hands it to the callee,
+        // a field access writes the field into its own slot (`passesWhatItReadsOn`) -- so the
+        // packing value does not die there and the value is one the program keeps.
+        const auto landingOf =
+            [&](uint32_t usePosition) -> std::optional<std::pair<uint32_t, bool>> {
             const gc_node_ref_t user = plan.topo[usePosition];
             if (!packsItsInputs(graph, user)) {
                 return std::pair<uint32_t, bool>{usePosition, false};
@@ -1182,127 +1232,84 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
                                                              : ExecPlan::kNoLastUse;
             if (end == ExecPlan::kNoLastUse || end >= count) {
                 end = static_cast<uint32_t>(std::min<size_t>(packerPos, count - 1));
+            } else if (passesWhatItReadsOn(graph, plan.topo[end], user, carried)) {
+                return std::nullopt;
             }
             return std::pair<uint32_t, bool>{end, true};
         };
         const uint32_t uses = static_cast<uint32_t>(usesAt[value].size());
-        // Where a row of this value may be written. A row is due where its use lands, and a value
-        // the count applies to has its rows written where a back end runs them: the site of an
-        // operator, which is where all four back ends apply them (`applyRefEntriesForNode`). A
-        // CALL, a FILL and a node the plan only forwards write no rows at their own position, so a
-        // row due there moves to the next operator of the same control region -- it runs when the
-        // use does, and later is the safe direction, a reference given back after the use that ends
-        // it. A row with no such position behind it cannot run at all, and the value is then kept:
-        // the conservative direction, a leak, and never an unmatched hold.
+        // Where a row is written: the position it is due at, and never any other. A give-back is
+        // due at the node whose use of the value it comes back for (the use's landing position: its
+        // own position, or -- when the user packs its inputs -- the last use of the value it packed
+        // them into), and the reference of a value nothing reads is due at the node that made it.
+        // That position is the node's own place in the plan, and every back end runs a node's rows
+        // when that node has run (`applyRefEntriesForNode`, one hook, `callOperator` for the
+        // operator kind and the node's own execution for the others). So the edge that makes a node
+        // read the value is also what makes the row run after that read.
         //
-        // What this fixes (author review 2026-11-16, item 5): the rows of a value a CALL or a FILL
-        // makes were laid out and never run, so the box the call made kept its count for ever while
-        // the plan read balanced (`test::plan_refs` and the anchor's `found` both count it).
-        const bool counted   = valueIsCounted(graph, value);
-        const auto rowRunsAt = [&](uint32_t at) {
-            const GCNode *node = graph.node(plan.topo[at]);
-            return node != nullptr && node->kind == GCNodeKind::Oper;
-        };
-        const auto rowPositionAt = [&](uint32_t due) -> std::optional<uint32_t> {
-            if (!counted) {
-                return due;
-            }
-            for (uint32_t at = due; at < count; ++at) {
-                if (!rowRunsAt(at) || repeatsWithoutMakingIt(plan, idx, at) ||
-                    controls.controlOf(plan.topo[at]) != controls.controlOf(plan.topo[due])) {
-                    continue;
-                }
-                return at;
-            }
-            return std::nullopt;
-        };
-        // The uses whose reference cannot come back where it is written: the row would run inside a
-        // loop's round for a value that loop does not make (`repeatsWithoutMakingIt`). Where the
-        // give-back of those uses comes back: the exit of the outermost loop that repeats over one
-        // of them (`loopRepeatingOver`). One row for the value, because it is the value's own
-        // reference the rounds hold, and `loopEnd` runs it once when that loop leaves.
-        std::optional<uint32_t> heldExit;
-        // The rows written, the rows no position could take, and the holds taken beyond the value's
-        // own reference -- the three numbers `1 + copies == give-backs + kept` is read from.
+        // The rule used to be different: a row due at a node that is not an operator moved forward
+        // to the next operator of the same control region, and "later is the safe direction". That
+        // is only true in one linear order. The plan has no edge between a position and the next
+        // position, so a parallel back end (taskflow only connects what the graph connects) may run
+        // the receiving operator before the use it was moved from, and the reference comes back
+        // while a reader is still live (author review 2026-11-17, the rework of this function).
+        // The same argument is why the holds are taken at the node that made the value and not at
+        // the first position that writes one of its rows: only the producing node has an edge to
+        // every reader, so only there is the hold taken before all of them.
+        const bool counted = valueIsCounted(graph, value);
+        // The rows written, and the holds taken beyond the value's own reference -- the two numbers
+        // `1 + copies == give-backs + kept` is read from.
         uint32_t held   = 0;
-        uint32_t lost   = 0;
         uint32_t copies = 0;
-        // The first position that writes one of this value's rows: where its holds are taken,
-        // before the give-back of that row and in the same control region.
-        uint32_t firstRowAt = static_cast<uint32_t>(count);
+        // Set when a use's reference leaves this graph instead of coming back here (a packing
+        // value a call is handed, or one a field access unpacks): the value is then one the program
+        // keeps, exactly as a packing value that is the graph's result makes it kept, and the row
+        // is not laid at a position where nothing dies.
+        bool leavesTheGraph = false;
         for (const uint32_t usePosition : usesAt[value]) {
-            const auto [landing, packed] = landingOf(usePosition);
-            // Only a value the count applies to has a row whose position means anything: another
-            // value's rows are inert wherever they are written (`valueIsCounted`), so they keep
-            // the position they had and this rule does not move them.
+            const auto landing = landingOf(usePosition);
+            if (!landing) {
+                leavesTheGraph = true;
+                continue;
+            }
+            const auto [landingAt, packed] = *landing;
+            // A use the plan runs more than once while the value it reads is made outside that
+            // repetition cannot have its row at the use: the round would run it again and give the
+            // reference back at the end of the first round. It is due at the exit of the outermost
+            // loop that repeats over it (`loopRepeatingOver`), which is the one position of the
+            // plan that runs once when the reading stops. One row per use, because each use holds
+            // a reference of its own: two loops that each read the value give back at their own
+            // exits, and neither one's exit is the other's.
             const auto exit =
-                counted ? loopRepeatingOver(plan, idx, landing) : std::optional<uint32_t>{};
-            if (exit) {
-                // The row cannot land at the use: the round runs it again. It lands at the LOOP
-                // node's position of the outermost loop the use runs in, where `loopEnd` runs it
-                // when that loop leaves -- the moment the reference stops being needed.
-                if (!heldExit || *exit > *heldExit) {
-                    heldExit = *exit;
-                }
-                continue;
-            }
-            const auto at = rowPositionAt(landing);
-            if (!at) {
-                ++lost;
-                continue;
-            }
-            rows[*at].push_back(
+                counted ? loopRepeatingOver(plan, idx, landingAt) : std::optional<uint32_t>{};
+            const uint32_t at = exit ? *exit : landingAt;
+            rows[at].push_back(
                 ExecPlan::RefGiveBack{
                     .value  = value,
-                    .at     = plan.topo[*at],
+                    .at     = plan.topo[at],
                     .count  = 1,
                     .packed = packed});
-            firstRowAt = std::min(firstRowAt, *at);
             ++held;
         }
         if (uses == 0 && keptByProgram[value] == 0) {
-            // Born with a reference nothing reads: it comes back as soon as the value exists.
-            const auto at = rowPositionAt(static_cast<uint32_t>(idx));
-            if (!at) {
-                ++lost;
-            } else {
-                rows[*at].push_back(
-                    ExecPlan::RefGiveBack{.value = value, .at = plan.topo[*at], .count = 1});
-                firstRowAt = std::min(firstRowAt, *at);
-                ++held;
-            }
+            // Born with a reference nothing reads: it comes back as soon as the value exists, at
+            // the node that made it.
+            rows[idx].push_back(
+                ExecPlan::RefGiveBack{.value = value, .at = plan.topo[idx], .count = 1});
+            ++held;
         }
-        if (heldExit) {
-            // One row for the value, at the loop's exit: the rounds hold the value's own reference,
-            // so the reference that comes back there is that one, however many rounds read it.
-            // `loopEnd` applies what is laid at the LOOP node's position when the loop leaves.
-            rows[*heldExit].push_back(
-                ExecPlan::RefGiveBack{.value = value, .at = plan.topo[*heldExit], .count = 1});
-            firstRowAt = std::min(firstRowAt, *heldExit);
-        }
-        const bool kept         = keptByProgram[value] != 0 || lost != 0;
+        const bool kept         = keptByProgram[value] != 0 || leavesTheGraph;
         plan.refProducedAt[idx] = 1;
         plan.refKeptAt[idx]     = kept ? 1 : 0;
         // The holds the plan takes beyond the value's own reference: one for each reference it
-        // gives back, less that own reference, and one more when the graph keeps it. With every row
-        // written this is the answer the column had before -- `uses - 1`, and the same for a value
-        // a loop held, whose one give-back at the loop's exit stands in for the row of the use that
-        // repeats -- and a row no position took lowers it by one, because the reference that row
-        // would have given back is then one the program still holds.
-        copies = held + (heldExit ? 1u : 0u) + (kept ? 1u : 0u) - 1u;
-        if (counted && copies != 0 && !rowRunsAt(static_cast<uint32_t>(idx))) {
-            // The value's own position takes no hold, so they are taken at the first position that
-            // writes one of the value's rows: before that row's give-back, where the value is held.
-            for (uint32_t take = 0; take < copies; ++take) {
-                holds[firstRowAt].push_back(value);
-            }
-            plan.refHoldsAt[firstRowAt] += copies;
-        } else {
-            for (uint32_t take = 0; take < copies; ++take) {
-                holds[idx].push_back(value);
-            }
-            plan.refHoldsAt[idx] += copies;
+        // gives back, less that own reference, and one more when the graph keeps it. Every row is
+        // written now -- there is no position that cannot take one -- so this is `uses - 1` again,
+        // and a loop's exits are counted one each because each of them gives one back.
+        copies = held + (kept ? 1u : 0u) - 1u;
+        for (uint32_t take = 0; take < copies; ++take) {
+            holds[idx].push_back(value);
         }
+        plan.refHoldsAt[idx] += copies;
     }
     plan.refGiveBackAt.assign(count, 0);
     for (size_t idx = 0; idx < count; ++idx) {
@@ -1341,33 +1348,52 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     }
 
     // The slot-to-node half of the same table, for the back ends that run bytecode: an instruction
-    // has a destination slot where the node form has the node. Only an operator claims its slot --
-    // a port, a GATE and a JOIN carry another node's slot and make no value of their own, so a
+    // has a destination slot where the node form has the node. The entry is the node whose rows run
+    // where the instruction that writes `slot` runs, so it is filled for the kinds that have an
+    // instruction of their own writing their own slot -- the operator, the two calls, a FILL, a
+    // COPY, an ACCS and a JOIN -- and not for a port or a GATE: both only carry another node's slot
+    // (the bytecode compile gives a GATE its producer's pc and compiles a PORT into nothing), so a
     // lookup that found one of them would apply a row at the wrong place. Built once with the rows,
-    // so the run pays one array read and not a table search on the operator's path.
+    // and only for the positions that have one, so the run pays one array read on the operator's
+    // path and an empty table everywhere else.
+    const auto runsItsOwnInstruction = [](GCNodeKind kind) {
+        switch (kind) {
+        case GCNodeKind::Oper:
+        case GCNodeKind::Call:
+        case GCNodeKind::Func:
+        case GCNodeKind::Fill:
+        case GCNodeKind::Copy:
+        case GCNodeKind::Cast:
+        case GCNodeKind::Accs:
+        case GCNodeKind::Join:
+            return true;
+        default:
+            return false;
+        }
+    };
     gc_data_idx_t widest = 0;
     for (size_t idx = 0; idx < count; ++idx) {
-        if (plan.refProducedAt[idx] == 0) {
+        if (plan.refEntryOffsets[idx] == plan.refEntryOffsets[idx + 1]) {
             continue;
         }
         const GCNode *node = graph.node(plan.topo[idx]);
-        if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
+        if (node == nullptr || !runsItsOwnInstruction(node->kind) || node->dataIndex <= 0) {
             continue;
         }
         widest = std::max(widest, node->dataIndex);
     }
-    plan.refOperNodeBySlot.assign(
+    plan.refRowNodeBySlot.assign(
         static_cast<size_t>(widest) + 1,
         static_cast<uint32_t>(kInvalidNodeRef));
     for (size_t idx = 0; idx < count; ++idx) {
-        if (plan.refProducedAt[idx] == 0) {
+        if (plan.refEntryOffsets[idx] == plan.refEntryOffsets[idx + 1]) {
             continue;
         }
         const GCNode *node = graph.node(plan.topo[idx]);
-        if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
+        if (node == nullptr || !runsItsOwnInstruction(node->kind) || node->dataIndex <= 0) {
             continue;
         }
-        plan.refOperNodeBySlot[static_cast<size_t>(node->dataIndex)] = plan.topo[idx];
+        plan.refRowNodeBySlot[static_cast<size_t>(node->dataIndex)] = plan.topo[idx];
     }
 }
 
@@ -1415,11 +1441,11 @@ camel::core::type::TypeCode countedHandleCode() {
 
 /// Whether the plan says a back end runs the rows of `value`: the value is one the plan counts, so
 /// it has rows to run. The kind of node that makes it is not part of the answer: a CALL and a FILL
-/// make a value as an operator does, they only have no site of their own to write its rows at, and
-/// `planRefRows` writes those rows at the first operator position after the moment they are due.
-/// The question this must *not* ask is the producing node's kind -- that was the leak of
-/// 2026-11-16: the rows of a box a call made were in the table, the balance read them, `found`
-/// counted the box, and no back end ever applied them.
+/// make a value as an operator does, and every back end runs their position's rows where it runs
+/// the node (camel/execute/operator_call.h, `runNode`; exec_plan.cpp, `planRefRows`). The question
+/// this must *not* ask is the producing node's kind -- that was the leak of 2026-11-16: the rows of
+/// a box a call made were in the table, the balance read them, `found` counted the box, and no back
+/// end ever applied them.
 bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept {
     if (plan.graph == nullptr || value >= plan.topoIndexByRef.size()) {
         return false;

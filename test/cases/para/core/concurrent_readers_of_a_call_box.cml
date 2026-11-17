@@ -1,0 +1,43 @@
+/**
+ * Two readers of one box that a call made, under the parallel scheduler.
+ *
+ * `make_box` answers a `state::Ref<int>` the call made; `take_late` and `take_now` both read that
+ * same handle. `take_late` waits before it reads, so the reader that was written first is the one
+ * that finishes last, and the reader written second finishes while it is still sleeping. `junk` has
+ * an edge to none of them, so the scheduler may run it at once -- which is where a row that was
+ * moved off a call's own position lands, and why the box has to be held by the count from the node
+ * that made it.
+ *
+ * The case is read for three things: the value the program prints, the counted blocks the four
+ * back ends report at exit (`--gc-check foreign`), and the plan's own table (`test::plan_refs`),
+ * which must balance with the hold taken where the box is made rather than after the first reader.
+ */
+
+import state
+import { sleep } from process
+
+func make_box(v: int): state::Ref<int> {
+    return state::ref(v)
+}
+
+func take_late(r: state::Ref<int>): int sync {
+    sleep(0.05)
+    return state::get(r)
+}
+
+func take_now(r: state::Ref<int>): int {
+    return state::get(r)
+}
+
+func both(n: int): int {
+    let r = make_box(41)
+    let late = take_late(r)
+    let now = take_now(r)
+    let junk = n * 3
+    return late + now + (junk - junk)
+}
+
+func main(): int sync {
+    println(both(7))
+    return 0
+}

@@ -22,9 +22,9 @@
 #include "camel/utils/log.h"
 
 #include "camel/core/context/frame.h"
-#include "camel/core/mm.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 
 #include <algorithm>
 #include <span>
@@ -754,7 +754,10 @@ slot_t NodeVMSchedPass::call(
                             // (camel/execute/operator_call.h), like every other operator call's.
                             camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
                                 evalMarkedOperator(
-                                    body->oper, currRuntimeGraph, nodeRef, *currFrame);
+                                    body->oper,
+                                    currRuntimeGraph,
+                                    nodeRef,
+                                    *currFrame);
                                 return n->dataIndex == 0 ? slot_t{0}
                                                          : currFrame->get<slot_t>(n->dataIndex);
                             });
@@ -773,8 +776,7 @@ slot_t NodeVMSchedPass::call(
                 // counters, so a program that does not pass it reads nothing here and takes the
                 // same path as before -- and the answer is only reported: it cannot refuse the
                 // value, change the frame, or move this node to another order.
-                const bool anchorWanted =
-                    camel::core::mm::allocatorChecks().printForeignResources;
+                const bool anchorWanted = camel::core::mm::allocatorChecks().printForeignResources;
                 camel::runtime::CountedBoxesBracket boxes;
                 if (anchorWanted) {
                     boxes.begin();
@@ -784,15 +786,20 @@ slot_t NodeVMSchedPass::call(
                 // run, run whether or not the anchor above was asked for -- counting is what
                 // releases a box (design principles 10.5) and the flag only says whether the
                 // process reports what it released.
-                const slot_t result = camel::execute::callOperator(
-                    {*currPlan, *currFrame, nodeRef},
-                    [&] {
+                const slot_t result =
+                    camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
                         return evalNativeOperator(
-                            currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
+                            currRuntimeGraph,
+                            en,
+                            *currPlan,
+                            *currFrame,
+                            opFunc);
                     });
                 if (anchorWanted) {
                     camel::runtime::noteCountedCreationForNode(
-                        currRuntimeGraph, nodeRef, boxes.sinceBegin());
+                        currRuntimeGraph,
+                        nodeRef,
+                        boxes.sinceBegin());
                 }
 
                 currFrame->set(n->dataIndex, result);
@@ -829,6 +836,18 @@ slot_t NodeVMSchedPass::call(
             // A group's tail computed this node's value in one pass (the switch above is the
             // operator's own execution, which the group replaced).
         node_done:;
+            // The rows the plan has at this node's position, for every kind whose rows are its own.
+            // Two kinds keep theirs elsewhere: an operator's run inside `callOperator` above, and a
+            // LOOP node's at its exit (`applyRefEntriesForLoopExit`, reached from `stepLoops`). A
+            // CALL and a FILL are nodes of this loop too, so a value a call made is born with its
+            // count where the call ran -- before every reader, because the edge the plan has from
+            // the call to each reader is also what runs this node first
+            // (camel/execute/operator_call.h, `runNode`).
+            if (n->kind != GCNodeKind::Oper && n->kind != GCNodeKind::Loop) {
+                (void)camel::execute::runNode({*currPlan, *currFrame, nodeRef}, [&] {
+                    return n->dataIndex == 0 ? NullSlot : currFrame->get<slot_t>(n->dataIndex);
+                });
+            }
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "NodeVM",
                 "Executed node [{}/{}]: ref={}",

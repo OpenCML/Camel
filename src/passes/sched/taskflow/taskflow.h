@@ -660,6 +660,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     slot_t executeLinearNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         const GraphPlan *plan = nullptr);
+    /// The node itself, with no count around it: `executeLinearNode` runs its position's rows after
+    /// it, the way `executePreparedNode` does for the task path.
+    slot_t executeLinearNodeBody(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        const GraphPlan *plan = nullptr);
     /// Runs a marked operator by the way its declaration says it calls its function; the value of
     /// `attempt` (which the scheduler runs itself), nullopt for the others (their result is in
     /// the node's slot).
@@ -683,6 +688,12 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         const GraphPlan *plan = nullptr);
     slot_t executePreparedNode(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        tf::Subflow &sf, const RuntimeBuildInfo *buildInfo);
+    /// The node itself, with no count around it: `executePreparedNode` runs its position's rows
+    /// after it (camel/execute/operator_call.h, `runNode`), and this is what one node does when it
+    /// runs.
+    slot_t executePreparedNodeBody(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         tf::Subflow &sf, const RuntimeBuildInfo *buildInfo);
     slot_t executePreparedBranchArm(

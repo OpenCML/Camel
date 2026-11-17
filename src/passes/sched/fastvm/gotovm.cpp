@@ -325,10 +325,18 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         currFrame                = lastFrame;
 
         Bytecode &lbc = bytecodes_[pc];
-        fastFrameSetSlot(
-            currFrame,
-            lbc.result,
-            camel::passes::sched::fastvm::funcValueForCall(&lbc, currFrame, result));
+        const slot_t callerValue =
+            camel::passes::sched::fastvm::funcValueForCall(&lbc, currFrame, result);
+        fastFrameSetSlot(currFrame, lbc.result, callerValue);
+        // The rows the plan has at the position of the call this returns into: `pc` is still the
+        // FUNC instruction the callee was entered from, and `lbc.result` is the slot the plan keys
+        // that node by. The interpreter enters a direct call by moving the program counter into the
+        // callee, so this -- the caller's own continuation, once the callee's value exists -- is
+        // the place the call's node has run (camel/execute/operator_call.h, `runNode`). A value a
+        // call made is born with its count here, before the next instruction can read it.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, lbc.result), [&] {
+            return callerValue;
+        });
 
         NEXT();
     }
@@ -484,6 +492,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             }
             slot_t result = fastFrameGetSlot(currFrame, wargs[static_cast<size_t>(brIndex)]);
             fastFrameSetSlot(currFrame, bc->result, result);
+            // The rows the plan has at this JOIN's position (camel/execute/operator_call.h,
+            // `runNode`): the arm value this node hands on is a use of its own, and the plan laid
+            // that use's reference down at the node whose value it is handed to.
+            (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+                return result;
+            });
         }
         NEXT();
     }
@@ -506,6 +520,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         writeComputedGotoFillSlots(currFrame, bc, srcObj, srcType, fillBody);
 
         currFrame->set(bc->result, srcObj);
+        // The rows the plan has at this FILL's position, in the place the node ran
+        // (camel/execute/operator_call.h, `runNode`): a FILL makes a value and reads the values it
+        // packs, and its position is the one the plan laid its rows out at.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+            return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+        });
 
         NEXT();
     }
@@ -545,6 +565,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         _timer.resume();
 
         currFrame->set(bc->result, result);
+        // The rows the plan has at this call's position (camel/execute/operator_call.h, `runNode`):
+        // the count a value a call made is born with is taken where the call ran, and the uses the
+        // call made of a value it was given come back here.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+            return result;
+        });
 
         NEXT();
     }
