@@ -387,3 +387,14 @@ for (const line of ops) {
 }
 }
 """
+
+[[tests]]
+name = "new_values.two_names_for_a_struct"
+desc = "Two names for one struct do not see each other's writes, including a write inside an array the struct holds: `var b = a` then `b.xs[0] = 9` leaves `a.xs` as it was; a read `let kept = inner` is not changed by a later write into `inner`; a struct in a struct written through a path. The invariant the memory accounting has to keep when the plan starts deciding writes in place: two names are two holders, and reuse in place happens only at count one (the author's answer, `9699824aa`). Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/two_names_for_a_struct.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "a [1, 2]\nb [9, 2]\n[3, 4] [7, 4]\n[5, 6] [5, 8]\n"

@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, and the two a cell handle outlived by its node ended in a SIGSEGV"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, and the two the C++ writer left without a return value"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -581,19 +581,31 @@ timeout_ms = 20000
 #   rc15_seed52                 `index < fieldCount_` in `Variant::get`, under `std::opt`, reading
 #                               field 0 of a Variant whose tag declares no field. Two programs.
 #   rc16_seed153                no result in 30 s under `std::jit` on every pipeline. One program.
-#   rc17_seed193                clang: "non-void function 'lambda' should return a value". Two.
+#   rc17_seed193                clang: "non-void function 'lambda' should return a value": the
+#                               writer left the lambda's `return` with no value, because the
+#                               branch that gave it was no longer the sequence's last word. Two.
 #   rc18_seed429                clang: "expected expression" at a `= ;` the C++ writer left. One.
 #   rc19_seed70                 clang: "no matching function for call to 'f1'". One program.
+#   rc20_seed262                `binding != nullptr` in `Builder::rebindSsa`. Eight programs, and
+#                               the one shape here that is not this lane's: it arrived with the
+#                               merge (S1), and its entry is a known failure at the end of this
+#                               section.
 #
-# The first shape is fixed, and its two programs are entries below: they used to end the process
-# in the front end with no pass at all, on all four back ends, so both arms (with and without
-# `std::opt`) are the same claim -- the program runs, says nothing, exits 0.
+# Two shapes are fixed, and their programs are entries below. The first pair used to end the
+# process in the front end with no pass at all, on all four back ends, so both arms (with and
+# without `std::opt`) are the same claim -- the program runs, says nothing, exits 0. The second
+# (`rc17_seed193`) was in the C++ writer, so its claim is about the text the writer gives: the
+# entry below is the `std::cpp` arm, and the stronger one -- that the text builds, runs and agrees
+# with `std::fvm` -- is the program's line in `test/tools/cppexec/expect.txt`, which
+# `feat/trans/cpp.agree_with_fvm` builds and runs.
 #
-# The other six shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
+# The other five shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
 # expectation is the crash states the defect as the answer, and an entry whose expectation is the
 # program's output goes red until its class is fixed. Each file is the standing reproducer of its
 # class -- `camel rc14_seed176.cml std::nvm` fires the guarantee by hand -- and its entries land
-# with its fix, as this one's did.
+# with its fix, as these two did. The eighth shape is the exception in the other direction: it is
+# red today and it is entered anyway, as a known failure with its owner, because the red is the
+# measurement and a shape that only a report names is one the next person cannot reproduce.
 
 [[tests]]
 name = "rc12_seed165.without_the_pass"
@@ -671,5 +683,52 @@ name = "rc20_seed5_arm_decl.opt"
 desc = "The same program under the whole optimizer. The fault was in the graph builder, not in a pass, so the pass is neither what caused it nor what can avoid it."
 case = "../../../cases/opt/e9/rc20_seed5_arm_decl.cml"
 args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+[[tests]]
+name = "rc17_seed193.std_cpp"
+desc = "The writer's text for the program of the `non-void function 'lambda' should return a value` shape: the branch that gives the lambda's value is no longer the sequence's last word (`let n67 = len(...)` stands after it), so its join was neither the tail nor anybody's input and the writer ended the function with `return ;`. What is held here is that the text carries no bare `return` -- the run that builds and runs it is the program's line in `test/tools/cppexec/expect.txt`."
+case = "../../../cases/opt/e9/rc17_seed193.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_output_not_contains = ["return ;", "return;"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+
+[[tests]]
+name = "rc17_seed193.runs"
+desc = "The same program on the four back ends: it runs, says nothing, exits 0. The fault was in the writer, so this arm is the control -- the program never depended on the C++ path to run."
+case = "../../../cases/opt/e9/rc17_seed193.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+# --- The eighth shape of the 2026-11-17 reading: the same line closes it ----------------------
+#
+# `rc20_seed262` is the reduced program of the eighth shape of that full run: `sync { }` as the arm
+# of an `if`, holding a `var` that the arm writes with `+=`. `camel rc20_seed262.cml std::nvm` stopped
+# in the graph builder --
+#
+#   Location   : ../src/compile/gir/builder_expr.cpp(3148)
+#   Function   : void camel::compile::gir::Builder::rebindSsa(const std::string &, node_handle_t)
+#   Guarantee  : binding != nullptr
+#   Reading    : An SSA `var` is written where its declaration is in scope.
+#
+# -- on the write, which asked for the SSA binding of a name the arm's own body did not bind. The
+# `if` is `false` and the arm never runs, so nothing about the program's own execution was at stake:
+# the builder asks the question while it is constructing the arm, and the answer was the same on all
+# four back ends (it is before any of them).
+#
+# This entry came in with the merge carrying that red as a known failure, and the owner it named was
+# wrong: it blamed the S1 line that makes a same-region local `var` a value (`1e8e390b6`). The shape
+# arrives with S2's carry (`243de26e5`) instead, and the reading that decides it is that reverting
+# that commit alone makes the reduced program run. It is the same shape as `rc20_seed5_arm_decl`
+# above, and the same one line closes it, so the mark is gone: what is held now is that the program
+# runs. The output is still not named, because the program says nothing on either side of the fix.
+
+[[tests]]
+name = "rc20_seed262.without_the_pass"
+desc = "The program with no pass at all: it runs, says nothing and exits 0. It used to stop in the graph builder at `rebindSsa`'s `binding != nullptr`, and was carried here as a known failure under an owner that named S1; the carry's own choice of name is what it was, and the arm's name is no longer carried out of the join."
+case = "../../../cases/opt/e9/rc20_seed262.cml"
+args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""

@@ -1,0 +1,26 @@
+import state
+
+// The loop's give-back and the use that comes after it, one box read from inside two nested loops
+// and then again after both (author review 2026-11-16, item 6).
+//
+// The rounds of the inner loop read `box`; the outer loop does not make it either, so the reference
+// has to be held until the *outer* loop's exit -- the inner loop's exit is reached once per outer
+// round, and a give-back there would release the box on the way into the second round. The read
+// after the loops is the other half: the exit's give-back must not take the box the later read
+// still needs, so the plan takes one hold for it (`copies 1`) and that read gives the last one back.
+func nested_after(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 2 do sync {
+        loop j = 0 while j < 2 do sync {
+            state::set(box, state::get(box) + 1)
+            j + 1
+        }
+        i + 1
+    }
+    return state::get(box)
+}
+
+func main(): int sync {
+    println(nested_after())
+    return 0
+}

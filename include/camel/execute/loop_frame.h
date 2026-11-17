@@ -191,12 +191,12 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             ::Array *array = frame.get<::Array *>(loop.iterableSlot);
             // The sequence is an array, or it is not. The slot's declared type says `Array` for a
             // `Tensor` whose rank is not fixed, and such a value may turn out to have no
-            // dimension: a value with no dimension is the element itself, stored as the scalar it is
-            // rather
-            // than as an array, and the round an array of open rank hands over is the array of no
-            // dimension holding the element (loopRoundValue). Neither has a first dimension to
-            // take elements from, so neither is a sequence: refused here, where the loop reads its
-            // sequence, rather than taken as a loop of no round at all (requireFirstDimension).
+            // dimension: a value with no dimension is the element itself, stored as the scalar it
+            // is rather than as an array, and the round an array of open rank hands over is the
+            // array of no dimension holding the element (loopRoundValue). Neither has a first
+            // dimension to take elements from, so neither is a sequence: refused here, where the
+            // loop reads its sequence, rather than taken as a loop of no round at all
+            // (requireFirstDimension).
             requireFirstDimension(array, loop.origin);
             if (static_cast<size_t>(round) >= array->size()) {
                 stop = true;
@@ -204,7 +204,8 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
                 // The round's value: what a round hands over follows the type its port declares,
                 // and that port is the element port (loopRoundValue).
                 element = loopRoundValue(
-                    array, static_cast<size_t>(round),
+                    array,
+                    static_cast<size_t>(round),
                     frame.typeAt<camel::core::type::Type>(loop.slots[first]));
             }
         }
@@ -242,6 +243,15 @@ inline bool loopEnd(
                 value->set(j, frame.get<slot_t>(loop.stateSlots[j]), shape.valueType);
             }
         }
+        // The plan's count is applied at the position of the node that ran; the LOOP node's own
+        // position is the one position that runs every round and that no operator covers, and this
+        // is the moment it means: the loop is leaving, so what the rounds held a value for comes
+        // back (camel/runtime/exec_plan.h, `applyRefEntriesForLoopExit`; author review 2026-11-16,
+        // item 6 -- the give-back at the loop's exit). The loop's value is final here, which is why
+        // this runs after the tuple above was brought up to date.
+        if (const camel::runtime::GCGraph *graph = frame.graph()) {
+            camel::runtime::applyRefEntriesForLoopExit(graph->execPlan(), &frame, loop.position);
+        }
         return false;
     }
     if (!loop.stateComponents) {
@@ -273,8 +283,8 @@ inline bool loopEnd(
 /// The `roundDone` of an interpreter whose rounds end in `safepoint()`: a memory limit hit there by
 /// a loop that collects is reported at the loop (loop_driver.h, takeLoopRound).
 template <typename Safepoint> inline auto loopRoundSafepoint(Safepoint &&safepoint) {
-    return [safepoint = std::forward<Safepoint>(safepoint)](
-               const camel::runtime::ExecLoop &loop, size_t) {
+    return [safepoint =
+                std::forward<Safepoint>(safepoint)](const camel::runtime::ExecLoop &loop, size_t) {
         try {
             safepoint();
         } catch (const camel::core::mm::MemoryExhausted &e) {

@@ -493,3 +493,231 @@ assert(!text.includes(':var/get'), `and no read of a cell either: ${text.slice(0
 }
 """
 timeout_ms = 30000
+
+# --- A `var` written inside a loop body is the loop head's phi (stage S3) -------------------------
+#
+# The author's third place (design principles 3.5: "a write to an outer `var` in a loop body becomes
+# the loop's carried state"). Before S3 a write inside a loop body kept the name a cell for the rest
+# of its life: the body's write was a store, the read in the next round was a `:var/get`, and the
+# loop's state was the cell. The graph ran -- the readings below were the right numbers before this
+# stage too, because a cell with one store per round is a correct program -- and that is exactly why
+# the numbers alone are not the acceptance: what S3 changes is *how many writings* one value has.
+# The criterion is two-sided and both sides are pinned here:
+#
+#   * the head carries the name as a value: the LOOP's state is the name, the body's port is the
+#     value, a write rebinds it, and no `:var/new` or `:var/get` is in the graph (entries 7 and 8,
+#     and `var.a_loop_assignment_is_the_loops_state` above, which is the canonical-graph half);
+#   * the value is still the one the program wrote: every number below is the number the cell
+#     lowering printed, so the stage bought a shape and not a different answer. The five shapes are
+#     one loop and one name (13), two names in one head (3, 8), two heads nested (6), an arm inside
+#     a head (22), and a read inside the round that wrote it (1, 2, 3, 3): the `[0, 1, 25, 3]`
+#     incident's shape is the last of them, and it is pinned by all four lines rather than one.
+#
+# The corpus contains no case of this shape -- measured, not assumed: the census after S2 reads
+# `var_new=228` and after S3 it is read again, and the number moves by exactly the units these six
+# programs have, never by more. These six are therefore the only thing that holds S3 up.
+#
+#   phi_two_sources   13  the entry value is the last write before the loop (10), not the
+#                         initialiser (5); the back edge is 10 + 0 + 1 + 2
+#   two_states         3  `a` accumulates `i`: one head, two values, each with its own back edge
+#                      8  ... and `b` doubles three times
+#   nested             6  three outer rounds of two inner ones: two heads, two phis, one value
+#   write_in_an_arm      --  does not compile, before this stage or after it: S2's join inside S3's
+#                         head reaches the branch-arm invariant, and the entry is a known failure
+#   write_then_read  1,2,3  the value read in the round that wrote it
+#                    3  ... and after the loop
+#   append             3  the value is an array the body appends to, so the copies reading applies
+[[tests]]
+name = "var.loop_carry_phi_two_sources"
+desc = "`var total = 5; total = total * 2; loop i = 0 while i < 3 do { total = total + i }` then read `total` prints `13`. The head's phi has two sources and both are read: the entry value is 10 (the last write before the loop, not the initialiser 5, which would print 8) and the back edge is 10 + 0 + 1 + 2."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_phi_two_sources.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '13', `10 before the loop plus 0+1+2 in the body is 13; 8 means the entry value was the initialiser 5, 6/9/11 mean a round's increment went to the head twice or not at all: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.loop_carry_two_states"
+desc = "Two `var`s written by one loop body print `3` and `8`: one head carries both, each with its own entry value and its own back edge, so a head is not limited to one carried value the way a branch's join is. `b` reading `a`'s value would print 8 for both, and `a` reading `b`'s would print 3 for both."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_two_states.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(['3', '8']), `a accumulates 0+1+2 and b doubles three times: ${out.join(' / ')}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.loop_carry_nested"
+desc = "Three outer rounds of two inner rounds each add one and the read after both loops prints `6`: the write leaves the inner head and then the outer one, two phis for one value. `1` means only the last round reached the read, `2` or `3` that the inner head's value stopped at the outer body instead of going round the outer head."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_nested.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '6', `three rounds of two additions: 6, not 1 (only the last round), not 2 or 3 (the value stopped at the outer body): ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.loop_carry_write_in_an_arm"
+desc = "A `var` written inside an arm of a statement branch *inside* a loop body: four rounds, +10 on the even ones and +1 on the odd ones, so the read after the loop is `22`. It does not compile today -- the compiler stops with `Runtime graph 'main' breaks the branch-arm invariant: OPER :io/println reads JOIN ..., which lies in an arm of BRCH ... that may not be taken` -- and the same message was measured before stage S3, so the shape is red for a reason this stage does not touch. The entry states what the program says (22) and is marked known-failing: an unexpected pass is reported, so a fix shows up here. It is also the one entry that moves the run's `known failures` count: the whole `feat/compile` + `feat/opt` run reads 16 known before this stage and 17 after it, and that seventeenth red is this compiler error, not a repair and not a new defect."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_branch_write.cml"
+args = ["${case}", "${run_nvm}"]
+known_fail = true
+known_fail_owner = "the branch-arm invariant of the graph and the `e9crash` line's neighbouring defect: the same shape as reads bound to a void join after a branch, one region deeper (an arm of a statement branch inside a loop body). This lane put the mark here and owns the reading only; whoever settles how a branch's value leaves the arm owns the fix"
+known_fail_reason = "the program does not produce a wrong number, it produces an internal error of the compiler, and the reason is a violated graph invariant rather than a known-wrong answer: the arm of the statement branch inside the loop body is lowered as `BRCH 24` with two `CASE` arms, the JOIN `12` that carries what the arms wrote is built *inside* that arm (`JOIN 12` is a node of the arm's region, not of the loop body), and `:io/println` (`OPER 26`), which stands after the loop, is bound to it. Reading `JOIN 12` from there is reading a value produced in an arm that may not be taken, which is exactly what `docs/technical/17_graph_rewrite_api_contracts.md` 4.1 forbids, so the verifier stops. Nothing about that is new: the same reading is measured before stage S3 and after it, so S3 neither caused it nor hides it"
+known_fail_note = "Not fixed here on purpose: an internal error caused by a violated invariant belongs to whoever defines that invariant, and this lane met it while composing S2's join with S3's loop head rather than while carrying a value. Two ways out and it is not this lane's call which: the loop head could take the arm's join as its state (the head's port then stands outside the arm and the read after the loop names it), or the branch could hand a value out of the arm instead of leaving the join inside it. The reading is pinned so that either fix lands here as an unexpected pass instead of as a number quietly changing"
+known_fail_msg = "breaks the branch-arm invariant"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '22', `10 + 1 + 10 + 1: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.loop_carry_write_then_read"
+desc = "The value read in the round that wrote it and after the loop: the body prints `1`, `2`, `3` and the read after the loop prints `3`. This is the `[0, 1, 25, 3]` incident's shape, and one number cannot pin it -- a body that answered the value from before the write would print `0`, `1`, `2`, and one that wrote the value twice would print a sequence that is not this one."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_write_then_read.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(['1', '2', '3', '3']), `one write per round, read in the round and after it: ${out.join(' / ')}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.loop_carry_compound_write"
+desc = "A body that writes the state with `total += i` -- `LINK(__assn_add__, ...)`, not `LINK(__assn__, ...)`. Five plus zero, one and two is `8`; the body prints `5`, `6`, `8` and the read after the loop prints `8`. Before the head carried a compound write this printed values from the round that last ran (the sum was wrong in `recursive_struct_array.cml`: `450971566189` for `10`), so the entry pins the sequence and not just the total."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_compound_write.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(['5', '6', '8', '8']), `the value in the round that wrote it, and after the loop: ${out.join(' / ')}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.loop_carry_append_is_the_state"
+desc = "`var xs: int[] = []; loop i = 0 while i < 3 do { xs = xs->append<i> }` then `println(len(xs), xs)` prints `3 [0, 1, 2]`: the array is the head's carried state and one append runs per round. The same program is the copies reading below, where the verdict for that append is pinned."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_append_copies.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '3 [0, 1, 2]', `three rounds, three elements, in the order they were appended: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+# The head's phi read off the graph itself: the LOOP node has two normal inputs (the declared `i`
+# and the name's entry value), and its body region hands back one value -- the back edge -- which is
+# not either of them. That is what "the head carries the name as a value" means in the document, and
+# it is the shape criterion in a form a machine reads: without the two inputs the name would be a
+# constant of the loop; without the region's result the body would not hand anything on.
+[[tests]]
+name = "var.loop_head_phi_has_two_sources"
+desc = "`loop_phi_two_sources.cml` under `std::jgir`: one LOOP node with two normal inputs (the declared `i` and the name's entry value), its `loop_body` region handing back a value that is neither of them, and no `:var/new`/`:var/get` in the graph. The two inputs *and* the region's own result are the phi's two sources; the graph is where they are read."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_phi_two_sources.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs || []
+const nodes = graphs.flatMap((g) => g.nodes || [])
+const edges = graphs.flatMap((g) => g.edges || [])
+const regions = graphs.flatMap((g) => g.regions || [])
+const loops = nodes.filter((n) => n.kind === 'LOOP')
+assert(loops.length === 1, `one loop head in this program: ${loops.length}`)
+const loop = loops[0]
+const entry = edges.filter((e) => e.target === loop.id && e.kind === 'normal').map((e) => e.source)
+const body = regions.find((r) => r.owner === loop.id && r.kind === 'loop_body')
+assert(body !== undefined, `the loop has a body region: ${JSON.stringify(regions.map((r) => [r.kind, r.owner]))}`)
+assert(typeof body.result === 'string', `the body region hands a value back: ${JSON.stringify(body)}`)
+assert(entry.length === 2, `the entry value and the declared state are the head's two inputs: ${JSON.stringify(entry)}`)
+assert(entry.includes(body.result) === false, `the back edge is the body's value and not the entry value (${body.result}): ${JSON.stringify(entry)}`)
+const varNodes = nodes.map((n) => String(n.label || '')).filter((l) => l.indexOf(':var/') === 0)
+assert(varNodes.length === 0, `the head carries a value, so the graph holds no cell operator: ${varNodes.join(', ')}`)
+}
+"""
+timeout_ms = 30000
+
+# Two names in one head, read off the graph: a branch's join carries one value and a loop head does
+# not have that limit, so the two states this body writes are two components of the loop's value and
+# neither of them is a cell.
+[[tests]]
+name = "var.loop_carry_two_names_are_two_states"
+desc = "`loop_two_states.cml` under `std::jgir`: one LOOP node with three normal inputs (the declared `i` and the two names' entry values) and no `:var/new`/`:var/get`. Two writes in one round are two states of one head, which is the reading a branch's join cannot have."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_two_states.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const graphs = doc.graphs || []
+const nodes = graphs.flatMap((g) => g.nodes || [])
+const edges = graphs.flatMap((g) => g.edges || [])
+const loops = nodes.filter((n) => n.kind === 'LOOP')
+assert(loops.length === 1, `one loop head: ${loops.length}`)
+const entry = edges.filter((e) => e.target === loops[0].id && e.kind === 'normal').map((e) => e.source)
+assert(entry.length === 3, `the declared state and the two written names: ${JSON.stringify(entry)}`)
+const varNodes = nodes.map((n) => String(n.label || '')).filter((l) => l.indexOf(':var/') === 0)
+assert(varNodes.length === 0, `neither name is a cell: ${varNodes.join(', ')}`)
+}
+"""
+timeout_ms = 30000
+
+# The copies reading is the other half of "one writing": a value that is the loop's state and is
+# updated by an append is exactly the shape S3b has to make in-place, and a `copied` here is not a
+# red for S3 (that is S3b's criterion) -- but a verdict that differs from the one before this stage
+# is a regression, so the summary line is pinned as it stands.
+[[tests]]
+name = "var.loop_carry_append_copies_verdict"
+desc = "`camel inspect --copies` on the append-in-a-loop program: the plan's verdict for the append, pinned. S3 changes the value's shape from a cell to the head's state; the pin is that the verdict it reports stays what it was before the change."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/compile/var/loop_append_copies.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_stdout_matches = ["^COPIES .* updates [0-9]+ in-place [0-9]+ by-count [0-9]+ declared [0-9]+ copied 0$"]
+timeout_ms = 30000

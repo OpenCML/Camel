@@ -369,3 +369,9 @@ test/cases/modules/stdlib/array_kernels_read_back.cml
 # constant key prints the same order compiled or interpreted, byte for byte.
 test/cases/trans/cpp/shuffle_reads_back.cml
 test/cases/trans/cpp/array_compare.cml
+# The E9 crash campaign's `non-void function 'lambda' should return a value` program: a lambda
+# whose last word is a branch but which still has a statement after it. The writer left the value
+# of the branch's join nowhere -- it was neither the sequence's tail nor anybody's input -- and
+# closed the function with `return ;`, which no C++ compiler takes in a function that returns a
+# value. Building and running it here is the claim the plan's text check cannot make.
+test/cases/opt/e9/rc17_seed193.cml
