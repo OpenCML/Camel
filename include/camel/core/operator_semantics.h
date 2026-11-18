@@ -525,6 +525,10 @@ struct OperatorSemantics {
     /// region that runs it owe its running" (the region's roots, camel/runtime/region_roots.h).
     /// Reading `console` or `env` is the first without being the second; writing a `Ref` is the
     /// second without being the first.
+    ///
+    /// The test itself is `sem::writesForTheRegion` (resource_semantics.h): a declaration is
+    /// stated as the signature a measured body also gives (`signatureOf`), so a declaration and a
+    /// measurement cannot disagree about what a write is (daily review 2026-11-18, item 3).
     bool writesForTheRegion() const;
     /// It can raise a fault. The fault table decides: a declared empty table is an operator with
     /// no fault path at all, and an operator that declares none may fault (design principles

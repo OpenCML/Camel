@@ -454,26 +454,27 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     return true;
 }
 
+bool reachesOutside(ResourceClass cls) {
+    switch (cls) {
+    case ResourceClass::Variable:
+    case ResourceClass::Object:
+    case ResourceClass::Handle:
+        return false;
+    case ResourceClass::Ambient:
+    case ResourceClass::Foreign:
+    case ResourceClass::Unknown:
+        break;
+    }
+    return true;
+}
+
 bool writesForTheRegion(const ResourceSignature &signature) {
-    // The two questions of OperatorSemantics::writesForTheRegion, asked of a signature: a write
-    // that reaches state outside the program, and a write of a handle. The class test is that
-    // file's `reachesOutside`, spelled the same way and for the same reason -- a variable and an
-    // object are the program's own, a handle is a value whose readers this graph cannot see.
-    const auto outside = [](ResourceClass cls) {
-        switch (cls) {
-        case ResourceClass::Variable:
-        case ResourceClass::Object:
-        case ResourceClass::Handle:
-            return false;
-        case ResourceClass::Ambient:
-        case ResourceClass::Foreign:
-        case ResourceClass::Unknown:
-            break;
-        }
-        return true;
-    };
+    // A write that reaches state outside the program, and a write of a handle: the two questions
+    // design principles 3.1 asks of a region's roots. The classes come from `reachesOutside`,
+    // which is also what `OperatorSemantics::external` reads, so "outside the program" is one
+    // class test for the effect and for the write.
     for (const ResourceSignature::ParamUse &use : signature.params) {
-        if (writes(use.mode) && (outside(use.cls) || use.cls == ResourceClass::Handle)) {
+        if (writes(use.mode) && (reachesOutside(use.cls) || use.cls == ResourceClass::Handle)) {
             return true;
         }
     }
@@ -486,7 +487,7 @@ bool writesForTheRegion(const ResourceSignature &signature) {
     }
     for (ResourceClass cls : signature.anyOf) {
         // A resource the walk could not name: read conservatively, as an undeclared operator is.
-        if (outside(cls)) {
+        if (reachesOutside(cls)) {
             return true;
         }
     }
