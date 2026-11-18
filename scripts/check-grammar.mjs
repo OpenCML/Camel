@@ -55,9 +55,9 @@ const TOKEN_CLASSES = new Set(['IDENTIFIER', 'INTEGER', 'REAL', 'STRING', 'MULTI
 // token_kinds.def. A production may quote one where the parser decides on the text (`tag` in
 // `tag x on nodes`, `on` and `read_by` in the same production, design principles 6.2);
 // `struct`, `tuple` and `leaf` in a `match type` case (they stay ordinary names elsewhere);
-// `resource`, `unordered`, `uses` and `pure` in a resource declaration and a function's
-// resource clause (design effects plan 3.1). The table lives in scripts/context-keywords.mjs,
-// with the reading of the parser that each word depends on.
+// `resource`, `unordered`, `readonly`, `uses` and `pure` in a resource declaration and a
+// function's resource clause (design effects plan 3.1, design principles 9.12). The table lives
+// in scripts/context-keywords.mjs, with the reading of the parser that each word depends on.
 const CONTEXTUAL = new Set(CONTEXT_KEYWORDS.map((entry) => entry.word))
 // Productions parsed inside the function of another one.
 const FOLDED = {
