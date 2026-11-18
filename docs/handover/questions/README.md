@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：30 页
+## 现在在等作者：31 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -32,6 +32,7 @@
 | [`2026-11-18-retract-rc23-two-orders`](2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） |
 | [`2026-11-18-specialization-carries-its-ports-one-place-over`](2026-11-18-specialization-carries-its-ports-one-place-over.cn.md) | Specialization publishes its ports one place over from its own signature |
 | [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at`：语句上「占据位置」，纯节点上「只选区域」——答复已给（`e55cd6157`） |
+| [`2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch`](2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md) | The citation check demands a design page that by design lives only on the author's branch |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 |
 | [`2026-11-18-the-witness-a-transpose-needs-has-no-channel`](2026-11-18-the-witness-a-transpose-needs-has-no-channel.cn.md) | 转置要一条残差当「零的见证」：那条通道 11-04 被删了，而它今天必须回来 —— 但回哪一半？ |
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ |
