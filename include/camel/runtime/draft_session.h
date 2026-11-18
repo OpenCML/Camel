@@ -157,6 +157,17 @@ class RuntimeGraphDraftSession {
     /// Makes the graphs of `program` that `work()` lacks, and `graph`, visible to the drafts.
     void adoptProgram(const Program &program) const;
     void adoptGraph(GCGraph *graph) const;
+    /// A graph this transaction **made**, not one of the program's edited: the function value
+    /// `outline` hands out names one, and so does anything that builds a graph in a draft instead
+    /// of editing an existing one. What a commit delivers is the draft: the graphs the root
+    /// reaches *and the graphs this edit made* (docs/design/graph-editing 2.5), so a made graph is
+    /// delivered whether or not a draft names it yet -- while `adoptGraph` alone only makes it
+    /// visible to the drafts, and a graph nothing names is in no closure and so was dropped.
+    /// The graph is taken into the work table (`adoptGraph`) and encoded by the next commit as a
+    /// version the program did not hold, beside the graphs the root reaches.
+    void noteMadeGraph(GCGraph *graph);
+    /// The graphs this transaction made, in the order they were made.
+    const std::vector<GCGraph *> &madeGraphs() const { return madeGraphs_; }
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
     /// The context of the program the session rewrites.
     const camel::core::context::context_ptr_t &context() const { return context_; }
@@ -308,6 +319,10 @@ class RuntimeGraphDraftSession {
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).
     std::unordered_set<GCGraph *> edited_;
+    /// The graphs this transaction made but the program does not have (`noteMadeGraph`), in the
+    /// order they were made: they are delivered by every commit of the session, the closure being
+    /// the graphs the root reaches and these.
+    std::vector<GCGraph *> madeGraphs_;
     struct DraftRefs {
         uint64_t revision = 0;
         bool valid        = false;
@@ -326,6 +341,10 @@ class RuntimeGraphDraftSession {
         uint64_t epoch = 0;
         uint64_t table = 0;
         size_t drafts  = 0;
+        /// The graphs this transaction made when the closure was collected. They are part of what
+        /// the commit delivers and no draft has to name them, so a closure collected before one
+        /// was made is not the closure of this session any more.
+        size_t made    = 0;
         GCGraph *root  = nullptr;
         std::vector<GCGraph *> graphs;
     };
