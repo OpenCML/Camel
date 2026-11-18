@@ -1091,6 +1091,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kCommitOrderTestPass, CommitOrderTestPass),
         TEST_PASS(kCommitEffectTestPass, CommitEffectTestPass),
         TEST_PASS(kCommitLegalSpliceTestPass, CommitLegalSpliceTestPass),
+        TEST_PASS(kValueRetypeTwiceTestPass, ValueRetypeTwiceTestPass),
         TEST_PASS(kCommitExitRegionTestPass, CommitExitRegionTestPass),
         TEST_PASS(kCommitCycleTestPass, CommitCycleTestPass),
         TEST_PASS(kCommitAncestorTestPass, CommitAncestorTestPass),

@@ -287,3 +287,14 @@ case = "../../../cases/opt/commit_checks/port_type.cml"
 args = ["${case}", "test::commit_made_graph_ports", "std::nvm"]
 expect_exit = 42
 expect_stdout_contains = ["commit_made_graph_ports: a made graph has no signature the program held, so the port question is owed to it because it was made", "made graph 'made$mismatch' declares parameter 0 as 'i32' and its port node carries an 'f32'", "refused at the commit: Runtime graph 'made$mismatch' publishes a signature of another type than the ports it holds", "declares parameter 0 as 'i32', and its port node 0 carries a 'f32'", "made graph 'made$match' declares parameter 0 as 'i32' and its port node carries an 'i32'", "the commit published it, and nothing was refused", "made graph, port of another type -> refused=1, port of the declared type -> published=1"]
+# 幂等小测试：同一个调用点、同一个 slot 两次 `materializeStaticValue`。第一次给一个 clause，第二次给
+# 更宽的那个；要读的是**编码后的程序说哪一个**。这是「一轮加宽之后调用点还慢一轮」那个问句的机械版，
+# 答案只可能是两句之一：第二次的类型活到了编码里（缺陷不在草稿接口），或者第一次的还在（缺陷在这里）。
+[[tests]]
+name = "commit_refusal.value_retype_twice"
+desc = "A call site retyped twice through materializeStaticValue carries the second type into the encoded program."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::value_retype_twice", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["value_retype_twice: graph '__root__' names 'main'", "the two clauses differ: yes", "first uses var stdout, second uses var stdout, var retype_twice", "value_retype_twice: the encode says uses var stdout, var retype_twice"]
