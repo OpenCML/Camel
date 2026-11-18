@@ -1018,3 +1018,127 @@ CommitTierTestPass::apply(const camel::runtime::Program *program, std::ostream &
     // boundary check reads next must be the fixture, not the graph they published.
     return program;
 }
+
+/// Two writes to the console in the body of one graph, written as two statements of one `sync`
+/// block: `second` waits for `first`, and `readsFirst` says whether the value of `first` is what
+/// `second` prints. The two fixtures the reading needs differ only there -- a pair whose whole order
+/// is the chain between them (which an edit can take away) and a pair a data edge orders as well
+/// (which it cannot).
+struct ChainedPrints {
+    const GCGraph *graph = nullptr;
+    gc_node_ref_t first  = kInvalidNodeRef;
+    gc_node_ref_t second = kInvalidNodeRef;
+    bool readsFirst      = false;
+};
+
+/// Whether `node` is a node of `graph` that writes the console. `println` in the prelude is
+/// `#op(':io/println')` (stdlib/prelude.cml), so a node with this uri writes `stdout` and a node this
+/// file writes it at too is a second writer of one resource.
+bool isPrint(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+    return body != nullptr && std::string_view(body->uri()) == kPrintUri;
+}
+
+bool readsValue(const GCGraph &graph, gc_node_ref_t reader, gc_node_ref_t value) {
+    for (gc_node_ref_t input : graph.normInputsOf(reader)) {
+        if (input == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The first chained pair of prints in the program whose second write reads its first the given way.
+ChainedPrints findChainedPrints(const Program &program, bool readsFirst) {
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (!isPrint(*graph, ref)) {
+                continue;
+            }
+            for (gc_node_ref_t wait : graph->waitInputsOf(ref)) {
+                if (!isPrint(*graph, wait)) {
+                    continue;
+                }
+                const bool reads = readsValue(*graph, ref, wait);
+                if (reads == readsFirst) {
+                    return ChainedPrints{graph, wait, ref, reads};
+                }
+            }
+        }
+    }
+    return {};
+}
+
+const camel::runtime::Program *
+CommitInPlaceTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    out << "commit_inplace: the tier is which edit the draft used, not whether it made a node\n"
+        << std::flush;
+    const ChainedPrints byChain   = findChainedPrints(*program, false);
+    const ChainedPrints byValue   = findChainedPrints(*program, true);
+    if (byChain.graph == nullptr || byValue.graph == nullptr) {
+        out << "commit_inplace: the program has no pair of console writes chained in one sync block "
+               "and ordered only by that chain, or none ordered by a value, so nothing is there to "
+               "be unordered\n";
+        return program;
+    }
+    const std::span<const gc_node_ref_t> none;
+    // The edit, and it is the same one in both drafts: the second write is taken out of its block's
+    // chain -- no control input, no sync input. No node is made, none is erased, no operator is
+    // swapped. Under a tier read off `made` this commit was asked nothing at all.
+    const auto clearTheChain = [&](const ChainedPrints &pair) -> bool {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(const_cast<GCGraph *>(pair.graph)).edit();
+        draft.setCtrlInputs(pair.second, none);
+        draft.setSyncInputs(pair.second, none);
+        draft.setOrderInputs(pair.second, none);
+        out << "commit_inplace: graph '" << pair.graph->name() << "': node " << pair.second
+            << " waited for node " << pair.first << " and now waits for nothing"
+            << "; the draft makes no node and records " << draft.lowLevelEdits().size()
+            << " node(s) changed in place\n"
+            << std::flush;
+        try {
+            session.commit();
+            out << "commit_inplace: asked the effect and the order checks (the table's last row: an "
+                   "edge taken away owes all six), and published\n"
+                << std::flush;
+            return true;
+        } catch (const GraphCommitRefused &refused) {
+            out << "commit_inplace: asked the effect and the order checks (the table's last row: an "
+                   "edge taken away owes all six), and refused, check="
+                << commitCheckName(refused.violation().check) << '\n'
+                << std::flush;
+            return false;
+        }
+    };
+    // The pair whose whole order was the chain: the two writes are now ordered by nothing, and the
+    // commit that publishes that is the defect.
+    const bool publishedUnordered = clearTheChain(byChain);
+    out << "commit_inplace: two writes to stdout with no edge ordering either before the other --"
+        << (publishedUnordered ? " the commit published it, which is the defect\n"
+                               : " refused\n")
+        << std::flush;
+    // The pair a data edge orders as well: the same edit, the same question, and nothing broken.
+    const bool publishedOrdered = clearTheChain(byValue);
+    out << "commit_inplace: the same edit on a pair the second write reads the first one's value "
+           "from --"
+        << (publishedOrdered ? " published, which is the answer: the question was asked and the "
+                               "graph did not break it\n"
+                             : " refused, which would mean the tier refuses an in-place edit as "
+                               "such\n")
+        << std::flush;
+    out << "commit_inplace: unordered-published=" << publishedUnordered
+        << " ordered-published=" << publishedOrdered << '\n'
+        << std::flush;
+    // The program is handed back unchanged: the two commits above are the reading.
+    return program;
+}

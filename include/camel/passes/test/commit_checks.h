@@ -139,6 +139,37 @@ class CommitTierTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * Reads the half of the tier that "did the draft make a node" cannot see: an edit that makes **no**
+ * node and changes the graph all the same. The table of `docs/design/graph-editing/README.cn.md` 8.1
+ * makes the tier a fact about *which edit was used*, and its last row is the low-level interface --
+ * "add an edge, change an operator" -- which owes all six checks whatever it made. A commit that
+ * read only the nodes a draft made asked nothing of such an edit and published it.
+ *
+ * `test/cases/opt/commit_checks/inplace_edit.cml` is the fixture: two functions that each write the
+ * console twice inside one `sync` block. The edit is one and it is the same in both: the second write
+ * is taken out of its block's chain (`setCtrlInputs` and `setSyncInputs`, both empty). Nothing is
+ * made, nothing is erased, no operator is swapped.
+ *
+ *   * in `twice` neither write reads the other, so the chain was the only thing ordering them: the
+ *     commit must be asked the order check, and that check must refuse it. Before this pass's tier
+ *     existed the commit was not asked anything and published two writes to one resource that the
+ *     program leaves free to happen in either order.
+ *   * in `carries` the second write reads the first one's value, so a data edge orders them with the
+ *     chain gone: the same edit, asked the same question, publishes. Without that half "it was
+ *     refused" would only mean "an in-place edit is always refused", which is a reading of nothing.
+ *
+ * The pass returns the program it was given: the commits are the reading, and what runs next must be
+ * the fixture.
+ */
+inline constexpr const char *kCommitInPlaceTestPass = "test::commit_inplace";
+class CommitInPlaceTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the one question about a read across regions that the *port* rule of the seal
  * (`checkGraphCrossReferences`, src/runtime/graph_edges.cpp) does not ask, against the rule that
  * does ask it: `validateRuntimeBranchArms` ("a node reads only nodes that run whenever it runs").
