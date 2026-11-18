@@ -6258,6 +6258,24 @@ nothing and is not an error.
 - Example (a fragment, not compiled): `order(t, a, b)`
 - Why it is not compiled: t is an open transaction and a, b are nodes of its graph
 
+#### `inline`
+
+```camel
+inline: (t: Txn<F>, at: Node, fn: G) => Node uses var t when is_function::<G>()
+```
+
+Splices the body of the function value `fn` into the region `at` is in and gives the node that
+holds the body's value. `at` decides the place as well: a statement of its block's chain (a
+call, an effect, a node that may fault) hands that place over to the code the body becomes, and
+the statement is gone afterwards -- what it held is read from the body's value; a node that
+stands in no chain only selects the region, is left as it is, and the ordering of the body's
+writes among the accesses already there is `order`'s to say. `fn` takes no arguments, and only a
+function value that captures no variable can be expanded.
+
+- Failure: fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, or when the transaction is over.
+- Example (a fragment, not compiled): `inline(t, n, () => 0)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
+
 #### `add_constant`
 
 ```camel
