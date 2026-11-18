@@ -554,7 +554,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
-383eb3177311c4eb ok stdlib/vjp.cml
+328db940e2249591 ok stdlib/vjp.cml
 f70d4e57b1f9b14e ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
@@ -4408,7 +4408,9 @@ ee049f220cbe84aa ok test/plans/feat/format/golden/when_clause.cml
 1cd6acaa4ddb89ba ok test/plans/feat/modules/golden/with_format.cml
 98da696befc2f9f3 ok test/plans/feat/parse/golden/numbers_format.cml
 dbfdb482f9059740 ok test/plans/feat/parse/golden/rules_format.cml
+c70d450a79b66c2a ok test/probe/refleak/box_of_a_round.cml
 4e5ac200a628c3e7 ok test/probe/refleak/call_box.cml
+78ec32e2c198050b ok test/probe/refleak/call_box_loop_outer.cml
 58014c5bc874530e ok test/probe/refleak/fill_carries.cml
 aff258e733124b0d ok test/probe/refleak/loop_fault_ref.cml
 3cb1213dde0935ca ok test/probe/refleak/loop_nested_after.cml
