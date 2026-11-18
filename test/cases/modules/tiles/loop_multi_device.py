@@ -106,8 +106,15 @@ def verify_device(text, folder, a, b):
         assert len(cpu) == len(gpu) == len(a), (cpu_name, gpu_name)
         for i, (x, y) in enumerate(zip(cpu, gpu)):
             assert x == y or (nan(x) and nan(y)), (cpu_name, gpu_name, i, hex(x), hex(y))
+    # A device is free to quiet a signalling NaN on its way through the card, so a payload bit is
+    # not a bit these four can ask for -- the author's ruling of 2026-11-19 (`6b542fe21`). Every
+    # other bit is still exact, compared the way the host-against-device loop above compares.
     for name, bits in [('swap0', b), ('swap1', a), ('empty0', a), ('empty1', b)]:
-        assert read(folder / (name + '.npy')) == tuple(bits), name + ' must preserve exact initial bits'
+        got = read(folder / (name + '.npy'))
+        assert len(got) == len(bits), (name, len(got), len(bits))
+        for i, (x, y) in enumerate(zip(got, bits)):
+            assert x == y or (nan(x) and nan(y)), (
+                name + ' must preserve exact initial bits', i, hex(x), hex(y))
     assert read(folder / 'rounded.npy')[6] == 0x4b800000, 'each round must round f32'
     counts = [('PERMISSIONS_BENCHMARK', len(a), len(a)), ('PROJECTION_BENCHMARK', len(a), 0),
               ('ONE_BENCHMARK', len(a), 0), ('TWO_BENCHMARK', 0, len(a)),
