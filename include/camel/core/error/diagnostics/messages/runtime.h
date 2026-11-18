@@ -34,6 +34,8 @@ enum class RuntimeDiag : uint32_t {
     ExitTypeMismatch          = 0x0001AE,
     PassBoundaryPorts         = 0x000013,
     PassEffectContainment     = 0x0001AF,
+    PassEffectBeyondType      = 0x0001B0,
+    PassEffectOrder           = 0x0001B1,
     MacroEvaluationFailed     = 0x00000E,
     EntryArgumentMissing      = 0x000010,
     EntryArgumentInvalid      = 0x000011,
@@ -113,7 +115,7 @@ enum class RuntimeDiag : uint32_t {
     // `docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`). No other fault in
     // this table is of that kind, so the code says so in its own words and it is never isolated by
     // `attempt` (`isIsolatableFault`: a defect of the compiler is not a fault of the program).
-    NullSlotUnwrapped = 0x0001B0,
+    NullSlotUnwrapped = 0x0001B2,
     // Warnings (severity bits = Warn).
     PassesNeverRun                = 0x10000F,
     ConstantExpressionFaults      = 0x100015,
