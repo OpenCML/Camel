@@ -95,9 +95,9 @@ const SHEETS = [
     {
         name: '17_rule_saturate',
         source: 'examples/17_rule.cml',
-        passes: ['std::opt::saturate', 'std::rgir'],
+        passes: ['std::cxx::saturate', 'std::rgir'],
         cluster: 'doubled',
-        title: 'std::opt::saturate：一个值的几种写法都留着',
+        title: 'std::cxx::saturate：一个值的几种写法都留着',
     },
 ];
 

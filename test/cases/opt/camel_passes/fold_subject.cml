@@ -10,7 +10,7 @@
 // Every value is printed, so a folded operation feeds an effect and not the graph's own exit: in a
 // function graph the returned value is also the graph's exit and output value, and a node that
 // anchors its graph cannot be replaced (docs/technical/45_graph_module.md). The front end turns a
-// branch over constants (`&&`, `||`, an `if` on constants) into a BRCH/JOIN; `std::opt::fold`
+// branch over constants (`&&`, `||`, an `if` on constants) into a BRCH/JOIN; `std::cxx::fold`
 // reduces that to a constant too and this pass leaves it, because evaluating an operation is not
 // folding the branch structure around it. The two literals of one expression are folded by the
 // front end before either pass runs, which is why the corpus reaches its chains through `let`s.

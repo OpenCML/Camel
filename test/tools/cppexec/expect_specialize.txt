@@ -1,6 +1,6 @@
-# Programs whose translation by std::cpp, *after* `std::opt::specialize`, must build, run and agree
+# Programs whose translation by std::cpp, *after* `std::cxx::specialize`, must build, run and agree
 # with std::fvm (standard output and exit code). Read by
-#   python3 test/tools/cppexec/run.py --passes std::opt::specialize --expect <this file>
+#   python3 test/tools/cppexec/run.py --passes std::cxx::specialize --expect <this file>
 # which the plan test/plans/feat/trans/cpp.plan.toml runs as
 # `rc19_seed70_builds_after_specialize`.
 #
@@ -11,7 +11,7 @@
 #
 # Keep it small: every entry is one C++ compilation.
 #
-# rc19_seed70: `std::opt::specialize` binds `false` into `f1`'s first parameter, so the copy takes
+# rc19_seed70: `std::cxx::specialize` binds `false` into `f1`'s first parameter, so the copy takes
 # two arguments and the call passes two. The writer read the callee's declared parameter list by
 # position, which still stated the erased one, and spelled the closure at the last position with its
 # predecessor's type -- `rt::Fn<int64_t(double)>` where the definition takes

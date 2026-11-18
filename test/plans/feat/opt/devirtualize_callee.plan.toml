@@ -3,7 +3,7 @@ order = 340
 tier = "fast"
 tags = ["feat", "opt", "devirtualize", "typecheck"]
 
-# `std::opt::devirtualize` turns a call through a value into a direct call once it knows which
+# `std::cxx::devirtualize` turns a call through a value into a direct call once it knows which
 # function the value is (src/runtime/draft_inline.cpp#devirtualizeStaticCallInDraft). A call site
 # says only what it passes and what it hands on; the signature is the callee's. So the question
 # these cases ask is what happens to a CALL that has been pointed at a function its arguments do not
@@ -32,7 +32,7 @@ name = "callee_fits.arity"
 desc = "A call through a static function value, both calls devirtualized: `std::stats` before the pass reads 3 calls through a value and no direct call, the same line after it reads 0 and 3, and the program prints 7 + 10 = 17. This is the reverse proof: the two calls the cases below build do get rewritten when the callee fits."
 kind = "behavior"
 case = "../../../cases/opt/devirtualize/recallee_arity.cml"
-args = ["${case}", "std::stats", "std::opt::devirtualize", "std::stats", "std::fvm"]
+args = ["${case}", "std::stats", "std::cxx::devirtualize", "std::stats", "std::fvm"]
 expect_exit = 0
 verify_script = """
 const lines = input.normalized.stdout.trim().split('\n')
@@ -51,7 +51,7 @@ name = "callee_fits.type"
 desc = "The same for the type half: 3 calls through a value become 3 direct calls, and the program prints `3 2`."
 kind = "behavior"
 case = "../../../cases/opt/devirtualize/recallee_type.cml"
-args = ["${case}", "std::stats", "std::opt::devirtualize", "std::stats", "std::fvm"]
+args = ["${case}", "std::stats", "std::cxx::devirtualize", "std::stats", "std::fvm"]
 expect_exit = 0
 verify_script = """
 const lines = input.normalized.stdout.trim().split('\n')
@@ -83,14 +83,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "callee_arity.devirtualize_refused"
-desc = "The retarget and then std::opt::devirtualize: the pass rewrites the CALL into a direct call of the function the value is, and the commit refuses it -- 17_graph_rewrite_api_contracts 4 rule 7 (a FUNC's arguments equal the callee's ports) -- naming the callee and both counts. Refused, which is the reading this case pins; the reason is the commit's, not a diagnostic of the pass."
+desc = "The retarget and then std::cxx::devirtualize: the pass rewrites the CALL into a direct call of the function the value is, and the commit refuses it -- 17_graph_rewrite_api_contracts 4 rule 7 (a FUNC's arguments equal the callee's ports) -- naming the callee and both counts. Refused, which is the reading this case pins; the reason is the commit's, not a diagnostic of the pass."
 kind = "behavior"
 case = "../../../cases/opt/devirtualize/recallee_arity.cml"
-args = ["${case}", "test::recallee_arity", "std::opt::devirtualize", "std::stats"]
+args = ["${case}", "test::recallee_arity", "std::cxx::devirtualize", "std::stats"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout
-assert(out.includes("Pass 'std::opt::devirtualize' failed with an internal error"), out)
+assert(out.includes("Pass 'std::cxx::devirtualize' failed with an internal error"), out)
 assert(out.includes("Runtime graph 'main' has FUNC node 4 passing 2 arguments and 0 'with' arguments to 'shift1', which takes 1 and 0."), out)
 assert(out.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), out)
 """
@@ -99,14 +99,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "callee_type.devirtualize_refused"
-desc = "The type half: the retarget and then std::opt::devirtualize, and the commit refuses the direct call it wrote -- 17_graph_rewrite_api_contracts 4.2, the arguments compatible with the callee's parameters -- saying which argument lands in which parameter of which function."
+desc = "The type half: the retarget and then std::cxx::devirtualize, and the commit refuses the direct call it wrote -- 17_graph_rewrite_api_contracts 4.2, the arguments compatible with the callee's parameters -- saying which argument lands in which parameter of which function."
 kind = "behavior"
 case = "../../../cases/opt/devirtualize/recallee_type.cml"
-args = ["${case}", "test::recallee_type", "std::opt::devirtualize", "std::stats"]
+args = ["${case}", "test::recallee_type", "std::cxx::devirtualize", "std::stats"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout
-assert(out.includes("Pass 'std::opt::devirtualize' failed with an internal error"), out)
+assert(out.includes("Pass 'std::cxx::devirtualize' failed with an internal error"), out)
 assert(out.includes("Runtime graph 'main' breaks its edge invariants (1 violation(s)):"), out)
 assert(out.includes("graph 'main' node 3 (10): passes a int as ordinary argument 0 of 'takes_text', which takes a string."), out)
 assert(out.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), out)

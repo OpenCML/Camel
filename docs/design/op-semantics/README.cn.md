@@ -526,7 +526,7 @@ initial  base                                     // 输出从 base 开始；Com
 
 ### 6.1 裁定（第 7 节，照录要点）
 
-设计原则 7.3、7.4 补充了以下规则的例外：`std::opt::algebra`（含 `std::opt` 内的算式阶段）
+设计原则 7.3、7.4 补充了以下规则的例外：`std::cxx::algebra`（含 `std::opt` 内的算式阶段）
 默认允许局部重结合和系数合并，不要求节点显式授予 `reassociate`。遍参数 `safe_fp=true`
 将此阶段限制为严格等价变换。该策略不传播节点许可，也不默认授予 FMA、精度变化、近似函数
 或特殊值假设；其余遍和算子的以下契约保持。参数是遍自身的策略，不是后端的全局许可。
@@ -702,9 +702,9 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 ### 7.4 二元代数律与数值策略（2026-10-19 审查后）
 
-归约律说的是"一串贡献怎样合并"；`+`、`-`、`*` 这类二元算子还有自己的代数事实，改写遍（`std::opt::algebra`）要用，却不该靠名字认。`OperatorSemantics::binary`（`sem::BinaryAlgebra`，`camel/core/operator_semantics.h`）按元素类型声明 `BinaryLaw`：是否可交换、是否在位上精确可结合（回绕的整数是，浮点不是）、中性元的位型、"对哪个算子分配"（乘对加）、"是哪个算子的减"（减是加的减）。`elementOf` 说明一个操作数或结果的类型对应哪个元素类型，`elementwise` 说明算子逐元素作用在聚合（张量）上，系数是标量常量。
+归约律说的是"一串贡献怎样合并"；`+`、`-`、`*` 这类二元算子还有自己的代数事实，改写遍（`std::cxx::algebra`）要用，却不该靠名字认。`OperatorSemantics::binary`（`sem::BinaryAlgebra`，`camel/core/operator_semantics.h`）按元素类型声明 `BinaryLaw`：是否可交换、是否在位上精确可结合（回绕的整数是，浮点不是）、中性元的位型、"对哪个算子分配"（乘对加）、"是哪个算子的减"（减是加的减）。`elementOf` 说明一个操作数或结果的类型对应哪个元素类型，`elementwise` 说明算子逐元素作用在聚合（张量）上，系数是标量常量。
 
-`std::opt::algebra` 在算子表里找"声明了对另一个算子分配、且二者都可交换"的算子对，把它们当作乘与加，再找声明了"是该加法的减"的算子；内建的 `:op/add_i/l/f/d` 与张量的 `tensor:add`、`subtract`、`multiply`（float32 元素）同样处理，核心里不再有算子 URI 清单。张量的规则多一条限制：被合并的两项必须与结果同类型（不做广播），系数是元素类型精确表示的标量常量。整数张量不在其内：内核对整数的契约没有声明为精确可结合。
+`std::cxx::algebra` 在算子表里找"声明了对另一个算子分配、且二者都可交换"的算子对，把它们当作乘与加，再找声明了"是该加法的减"的算子；内建的 `:op/add_i/l/f/d` 与张量的 `tensor:add`、`subtract`、`multiply`（float32 元素）同样处理，核心里不再有算子 URI 清单。张量的规则多一条限制：被合并的两项必须与结果同类型（不做广播），系数是元素类型精确表示的标量常量。整数张量不在其内：内核对整数的契约没有声明为精确可结合。
 
 7.3 的"默认放宽"是**策略**，不是节点的许可：`sem::NumericPolicy`（`defaultGrants` 加上"节点自带的许可算不算"）有三个取值——`explicitOnly()`（只认节点写的）、`relaxed()`（默认，附带 `reassociate`）、`strict()`（`safe_fp=true`：默认什么都不给，节点的许可也不算）。改写遍问 `policy.permits(节点许可, 所需许可)`；`reorderFreedom(law, 节点许可, policy)` 与 `reorderFreedomOf(graph, node, policy)` 是同一个问题在归约上的形式，`core.reorder` 事实用 `explicitOnly()`。Tiles 的 `relaxed` 掩码（`cuda.cpp`、`schedule.cpp`）仍是它自己的一份，等它改读这里的策略。
 
@@ -1167,7 +1167,7 @@ bool any        = graph->hasNodePermissions();
 ```
 
 - 许可只由程序写 `@numeric(...)` 授予（函数或块，词法上嵌在其中的臂、循环体、lambda 一起），被调用的函数不继承；没有模块级默认、没有命令行开关，**`tiles.run` 等入口不接受许可**。
-- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 不把许可不同的节点合并。`tensor::fuse` 不合并节点：它把融合组与库实现的选择记成节点属性（`tensor.fusion`、`tensor.kernel`），图上保留原算子，各节点仍带自己的许可（9.6）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
+- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::cxx::cse` 不把许可不同的节点合并。`tensor::fuse` 不合并节点：它把融合组与库实现的选择记成节点属性（`tensor.fusion`、`tensor.kernel`），图上保留原算子，各节点仍带自己的许可（9.6）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
 - 编译缓存的键要包含用到的每个 `OperatorKey` 与每个节点的许可（10.6 的 (iii)）。
 - 许可只允许、不要求：没有许可时必须给规范结果；有许可时给规范结果也总是对的。
 
@@ -1281,7 +1281,7 @@ auto cached = facts.get<MyLayout>(kLayout, fact::Anchor{graph, ref}, target); //
 
 登记的规则（违反时 `std::invalid_argument`，消息里有键与原因）：键是 `owner.name`；同一个键再登记必须是同一种（版本、值类型、类、范围），返回同一个编号；必须给 `print`；`Dependency::Cone` 必须给锥散列。与目标无关、可由程序推出的结果（例如 Tiles 自己的下标映射复合）可以登记为 `Derived`，带 `compute` 时 `FactStore::verify` 能重算比较。
 
-**印记怎样保护 Tiles**：每条事实带着它锚点所在各图的 `(lineage, serial)`、算子声明的纪元（若种类读声明）与目标散列；每次读都比较（发布构建里也比较），任何一项不同就读为"没有"并删除。`serial` 在某个遍真的改了这张图、或改了它直接间接调用的图时才变（`std::opt::inline`、`std::opt` 的各部分、`std::macro`、特化都经由同一个提交）；所以特化成新形状的图是另一张图，旧图上的布局不会被错用；`declareSemantics` 改了算子的声明，读声明的事实全部过期；换了设备或编译选项，`targetHash` 不同。事实是进程内的；跨进程的编译缓存仍由 Tiles 自己保存，键按 10.6 (iii)。
+**印记怎样保护 Tiles**：每条事实带着它锚点所在各图的 `(lineage, serial)`、算子声明的纪元（若种类读声明）与目标散列；每次读都比较（发布构建里也比较），任何一项不同就读为"没有"并删除。`serial` 在某个遍真的改了这张图、或改了它直接间接调用的图时才变（`std::cxx::inline`、`std::opt` 的各部分、`std::macro`、特化都经由同一个提交）；所以特化成新形状的图是另一张图，旧图上的布局不会被错用；`declareSemantics` 改了算子的声明，读声明的事实全部过期；换了设备或编译选项，`targetHash` 不同。事实是进程内的；跨进程的编译缓存仍由 Tiles 自己保存，键按 10.6 (iii)。
 
 ### 14.4 第四阶段给 Tiles 的（`lane/opsem-p4`）
 

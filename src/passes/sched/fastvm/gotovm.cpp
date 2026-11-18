@@ -690,7 +690,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         // activation, so folding the entry's call of its callee into the entry's activation would
         // leave one activation fewer on the stack and lift the limit by one -- which is what a
         // graph whose entry call is a direct call (`FUNC main`) rather than a call through a
-        // function value did, after std::opt::devirtualize. The count of open calls must not
+        // function value did, after std::cxx::devirtualize. The count of open calls must not
         // depend on how a call is spelled (camel/execute/limits.h), so the entry's callee gets an
         // activation of its own, exactly as the value-call spelling gives it one. Every other tail
         // call reuses its caller's activation as before.

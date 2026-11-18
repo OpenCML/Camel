@@ -55,15 +55,15 @@ kind = "negative"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "simplify::tabled", "counts::report", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["PassNeedsExtraction", "counts::report", "std::opt::extract"]
+expect_output_contains = ["PassNeedsExtraction", "counts::report", "std::cxx::extract"]
 timeout_ms = 10000
 
 [[tests]]
 name = "rules.saturation_then_the_extract_pass"
-desc = "With std::opt::extract after the saturation, the program is back to one writing per value and runs."
+desc = "With std::cxx::extract after the saturation, the program is back to one writing per value and runs."
 kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
-args = ["${case}", "simplify::tabled", "std::opt::extract", "${backend}"]
+args = ["${case}", "simplify::tabled", "std::cxx::extract", "${backend}"]
 backends = ["nvm", "fvm"]
 expect_exit = 0
 expect_stdout_contains = ["56 42\n"]
@@ -302,7 +302,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_simplify"
-desc = "rules::simplify, the library pass, folds x*3 + x*5 and ((x+0)*3)*2 as std::opt::algebra does, and the program prints what it printed."
+desc = "rules::simplify, the library pass, folds x*3 + x*5 and ((x+0)*3)*2 as std::cxx::algebra does, and the program prints what it printed."
 kind = "behavior"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "counts::report", "rules::simplify", "counts::report", "std::nvm"]
@@ -1840,10 +1840,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "opt_saturate_rhs_from_an_enclosing_region"
-desc = "The same program through the pipeline's saturation: std::opt::saturate keeps the writings it may, the next pass extracts one per value, and the run gives the program's meaning."
+desc = "The same program through the pipeline's saturation: std::cxx::saturate keeps the writings it may, the next pass extracts one per value, and the run gives the program's meaning."
 kind = "behavior"
 case = "../../../cases/modules/rules/saturate_outer_operand.cml"
-args = ["${case}", "std::opt::saturate", "std::nvm"]
+args = ["${case}", "std::cxx::saturate", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "saturated false true false\n"
 timeout_ms = 20000
@@ -1854,7 +1854,7 @@ desc = "A loop whose condition reads one of two states, in a graph with classes 
 kind = "behavior"
 case = "../../../cases/modules/rules/saturate_loop_unread_state.cml"
 backends = ["nvm", "fvm"]
-args = ["${case}", "std::opt::saturate", "${backend}"]
+args = ["${case}", "std::cxx::saturate", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "3\n"
 timeout_ms = 20000
@@ -1864,7 +1864,7 @@ name = "opt_saturate_program_importing_str"
 desc = "A program that imports str (whose cut has a loop of that shape) goes through the pipeline's saturation and runs."
 kind = "behavior"
 case = "../../../cases/modules/rules/saturate_imports_str.cml"
-args = ["${case}", "std::opt::saturate", "std::nvm"]
+args = ["${case}", "std::cxx::saturate", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "true\n"
 timeout_ms = 20000

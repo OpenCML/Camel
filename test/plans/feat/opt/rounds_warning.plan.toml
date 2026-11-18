@@ -80,10 +80,10 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rounds.fold_only"
-desc = "One pass of the loop is not the loop: std::opt::fold alone runs no rounds, so it says nothing about a bound it never reached, and the program prints 820."
+desc = "One pass of the loop is not the loop: std::cxx::fold alone runs no rounds, so it says nothing about a bound it never reached, and the program prints 820."
 kind = "behavior"
 case = "../../../cases/opt/generic/rounds_exhausted.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout.trim() === '820', 'stdout: ' + JSON.stringify(input.normalized.stdout))

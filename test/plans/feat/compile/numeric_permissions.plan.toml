@@ -49,10 +49,10 @@ all(28, '')                          // blocky outside its block
 
 [[tests]]
 name = "graph.inline"
-desc = "std::opt::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
+desc = "std::cxx::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
 kind = "behavior"
 case = "../../../cases/compile/numeric/permissions.cml"
-args = ["${case}", "std::opt::inline", "std::gir"]
+args = ["${case}", "std::cxx::inline", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -66,10 +66,10 @@ assert(at(23).every((l) => l.includes('numeric="reassociate, contract"')), 'the 
 
 [[tests]]
 name = "cse"
-desc = "std::opt::cse merges `a * b` with `a * b` of the same permissions, and not across them: one product without permissions, one with contract."
+desc = "std::cxx::cse merges `a * b` with `a * b` of the same permissions, and not across them: one product without permissions, one with contract."
 kind = "behavior"
 case = "../../../cases/compile/numeric/cse.cml"
-args = ["${case}", "std::opt::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -82,10 +82,10 @@ assert(muls.filter((l) => !l.includes('numeric=')).length === 1, 'one product ha
 
 [[tests]]
 name = "cse.result"
-desc = "The program after std::opt::cse prints the canonical result."
+desc = "The program after std::cxx::cse prints the canonical result."
 kind = "behavior"
 case = "../../../cases/compile/numeric/cse.cml"
-args = ["${case}", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::cxx::cse", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "18.0\n"
 

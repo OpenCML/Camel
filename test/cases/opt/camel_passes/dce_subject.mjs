@@ -1,4 +1,4 @@
-// The corpus the property guard of `opt::dce` is about, one pass before it: after `std::opt::inline`
+// The corpus the property guard of `opt::dce` is about, one pass before it: after `std::cxx::inline`
 // runs and before the sweep, `chain` holds the values nobody reads. A guard that examined nothing
 // would pass on a graph that has nothing to remove, so this entry runs the same case with the
 // inlining and without the sweep, and asserts the dead chain is there: a product no node reads,

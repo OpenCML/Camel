@@ -19,10 +19,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_untaken.fold"
-desc = "std::opt::fold does not fold `1 / 0`: the program prints 7 and exits 0 as without passes, and one warning ConstantExpressionFaults on stderr points at the division (line 16, column 29)."
+desc = "std::cxx::fold does not fold `1 / 0`: the program prints 7 and exits 0 as without passes, and one warning ConstantExpressionFaults on stderr points at the division (line 16, column 29)."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
@@ -36,10 +36,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_untaken.fold_simplify_fvm"
-desc = "The warning is given once per expression in a pipeline: std::opt::fold and then std::opt (which runs fold again in every round) print one line, and the program runs as without passes on FastVM."
+desc = "The warning is given once per expression in a pipeline: std::cxx::fold and then std::opt (which runs fold again in every round) print one line, and the program runs as without passes on FastVM."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt::fold", "std::opt", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::opt", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
@@ -68,10 +68,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_untaken.inline_no_fold"
-desc = "A pipeline without fold (std::opt::inline) says nothing: the warning belongs to the pass that would have folded the expression."
+desc = "A pipeline without fold (std::cxx::inline) says nothing: the warning belongs to the pass that would have folded the expression."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
@@ -98,10 +98,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_reached.fold"
-desc = "With std::opt::fold the program behaves the same (3.9): 'before', then the division by zero at the same position, exit 1. The warning on stderr names that position before the run."
+desc = "With std::cxx::fold the program behaves the same (3.9): 'before', then the division by zero at the same position, exit 1. The warning on stderr names that position before the run."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
@@ -134,17 +134,17 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constant_fault_reached.json"
-desc = "With --output-format json the warning is one JSON array on stderr (severity Warn, stage pass:std::opt::fold, the position of the division), and stdout is the program's output followed by the error array, which holds the error only."
+desc = "With --output-format json the warning is one JSON array on stderr (severity Warn, stage pass:std::cxx::fold, the position of the division), and stdout is the program's output followed by the error array, which holds the error only."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
-args = ["--output-format", "json", "${case}", "std::opt::fold", "std::opt"]
+args = ["--output-format", "json", "${case}", "std::cxx::fold", "std::opt"]
 expect_exit = 1
 verify_script = """
 const warnings = JSON.parse(input.stderr)
 assert(warnings.length === 1, 'one warning: ' + input.stderr)
 const w = warnings[0]
 assert(w.severity === 'Warn' && w.data.name === 'RuntimeDiag::ConstantExpressionFaults' && w.code === '0x04100015', JSON.stringify(w))
-assert(w.data.stage === 'pass:std::opt::fold', 'stage ' + w.data.stage)
+assert(w.data.stage === 'pass:std::cxx::fold', 'stage ' + w.data.stage)
 assert(w.range.start.line === 9 && w.range.start.character === 14, JSON.stringify(w.range))
 assert(input.normalized.stdout.startsWith('before\n'), input.normalized.stdout)
 const errors = JSON.parse(input.normalized.stdout.slice('before\n'.length))
@@ -156,10 +156,10 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fail_is_intended.fold"
-desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::opt::fold folds the program without a ConstantExpressionFaults warning."
+desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::cxx::fold folds the program without a ConstantExpressionFaults warning."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 verify_script = """
 assert(input.normalized.stdout === '3\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))

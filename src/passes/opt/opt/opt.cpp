@@ -18,7 +18,7 @@ OptimizeRewritePass::apply(const camel::runtime::Program *program, std::ostream 
 
 const camel::runtime::Program *
 OptimizeSaturatePass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    // The laws live once, in stdlib/rules.cml (as they do for std::opt::algebra): this pass is
+    // The laws live once, in stdlib/rules.cml (as they do for std::cxx::algebra): this pass is
     // `opt::saturate`, the library's saturation without its extraction, so a caller sees the state with several
     // writings. The two parameters are the library pass's own (design principles 9.3).
     const PassRunResult result = applyRegisteredPass(

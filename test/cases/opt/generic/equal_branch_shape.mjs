@@ -8,7 +8,7 @@
 // that classification; they are not the assertion.
 //
 // What the pipeline does to the first branch's value is the property that separates the entries:
-// `std::inline` (and `std::inline std::opt::cse`) keep the source's arithmetic, so the value the
+// `std::cxx::inline` (and `std::cxx::inline std::cxx::cse`) keep the source's arithmetic, so the value the
 // branch prints is its product with itself; `std::opt` folds the equal arms' product into the
 // constant 4.0 and keeps it ordered after the branch, leaves the branch whose arms differ (2.0,
 // 3.0) its product, and passes the branch of signed zeros through the neutral law of `* 1.0`

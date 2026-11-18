@@ -46,9 +46,9 @@ golden = "golden/partial_application_values.txt"
 
 [[tests]]
 name = "partial_application.values.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/partial_application/values.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 golden = "golden/partial_application_values.txt"
 
@@ -62,9 +62,9 @@ golden = "golden/partial_application_values.txt"
 
 [[tests]]
 name = "partial_application.values.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/partial_application/values.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 golden = "golden/partial_application_values.txt"
 

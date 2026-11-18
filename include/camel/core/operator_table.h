@@ -239,7 +239,7 @@ struct OperatorTraits {
  * whose result a type can fix: the shape of a tensor whose type carries its shape, its element
  * count, one of its dimensions. `statics` holds the arguments that are constants (aligned with
  * `types`); `allocator` holds any object the value needs. Returns nullopt when the types do not
- * fix the result. std::opt::fold uses these to turn such results into constants once shape
+ * fix the result. std::cxx::fold uses these to turn such results into constants once shape
  * specialization has put the facts into the types.
  */
 using TypeFolder = std::function<std::optional<slot_t>(

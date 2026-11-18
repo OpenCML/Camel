@@ -69,8 +69,8 @@ Deviations from the proposal below:
 ```text
 source ── compile ──> GIR
   ── std::macro ──────────── grad(f) runs here: f's graph -> derivative graph
-  ── std::opt::devirtualize / std::opt::specialize / std::opt::inline
-  ── std::opt::fold / cse / dce, tensor::fuse, ...
+  ── std::cxx::devirtualize / std::cxx::specialize / std::cxx::inline
+  ── std::cxx::fold / cse / dce, tensor::fuse, ...
   ── execution pass (std::nvm, std::fvm)      -> runs the program
      or translation pass (onnx::export, ...)   -> emits a format
 ```
@@ -96,13 +96,13 @@ macro evaluation and optimization. The fixed runtime seed makes backend results
 repeatable; it does not make random draws compile-time constants. This example
 keeps the derivative arithmetic visible even when all entry arguments are bound.
 
-`std::opt::algebra` is a general scalar arithmetic pass, included after CSE in each
+`std::cxx::algebra` is a general scalar arithmetic pass, included after CSE in each
 `std::opt` round; it has no knowledge of autodiff. In `collapse_random.cml` it turns
 the shared `t = (x + 1) * 3; t + t` into `(x + 1) * 6` and the analogous unit-seed
 path into `x * 2`, reducing main's derivative arithmetic from six nodes to four.
 Default algebra permits local reassociation, so bitwise equality with the original
 program is not promised. Use `'std::opt safe_fp=true'` or the standalone
-`'std::opt::algebra safe_fp=true'` to restrict this stage to exact float rewrites;
+`'std::cxx::algebra safe_fp=true'` to restrict this stage to exact float rewrites;
 the coefficient doubling above is exact and remains enabled in safe mode.
 
 Matching inspects only adjacent scalar add/multiply nodes and direct constants;
@@ -127,7 +127,7 @@ into its own arm.
   derivative like user code.
 - **Without `std::macro`, or with it after an inlining pass**, `grad` runs with
   the program on the graphs the passes left. The inlining engine
-  (`std::opt::inline`, `std::opt`, `std::opt`; `MacroOperandGraphs` in
+  (`std::cxx::inline`, `std::opt`, `std::opt`; `MacroOperandGraphs` in
   `src/passes/opt/inline/engine.cpp`) therefore inlines nothing into the
   graphs an unexpanded macro operator can still reach: its function operand
   and what that calls or holds as a function constant. Calls of those
@@ -141,7 +141,7 @@ into its own arm.
   the `grad` call to get the optimizations back.
 
 Other rewrites of a function that `grad` later differentiates at run time
-(`std::opt::cse`, `std::opt::fold`) keep the result valid but may change its
+(`std::cxx::cse`, `std::cxx::fold`) keep the result valid but may change its
 floating-point rounding, because the derivative is built from a different
 expression.
 
@@ -234,7 +234,7 @@ inlining remove the closures.
 
 - **Static callee.** If the callee is a static value, it is devirtualized before
   the transform: macro-time values, closures with static captures, and values
-  folded by `std::opt::fold`.
+  folded by `std::cxx::fold`.
 - **Dynamic callee with a known function type.** Function values that flow
   into differentiated code must be differentiable. The transform wraps them:
   a closure parameter `f: (x: Tensor) => Tensor` of a differentiated function
@@ -267,7 +267,7 @@ How (`modules/autodiff/pullback.cpp`):
   captured value) and a call that returns one. "Evident" means that the graph
   itself says which function the value is: a constant function, or a
   `FILL FunctionClosure` over one. Afterwards the call of the value is a call
-  of a closure built in the graph. Inlining is `std::opt::inline`'s own
+  of a closure built in the graph. Inlining is `std::cxx::inline`'s own
   (`camel::passes::opt::inlineCallInOrder`), so the order and the effects of the
   inlined code are kept by the same code as in the pass; a callee value behind
   the gates an inlined call puts on its arguments is seen through.
@@ -439,8 +439,8 @@ unrolling, branch selection, shape facts). These move to general passes:
 
 - **Shape specialization:** bind the example input types (`float32[64, 784]`, or with a dynamic batch dimension) to the function's ports and
   re-run operator inference, so shapes live in node types.
-- **Static simplification:** `std::opt::devirtualize` / `std::opt::specialize` /
-  `std::opt::inline` / `std::opt::fold` / branch pruning / `dce` until a fixpoint.
+- **Static simplification:** `std::cxx::devirtualize` / `std::cxx::specialize` /
+  `std::cxx::inline` / `std::cxx::fold` / branch pruning / `dce` until a fixpoint.
 - **`onnx::export` (a module-contributed translation pass):** lowers the
   resulting graph node by node, `BRCH`/`JOIN` to `If`, reading shapes and
   dtypes from node types. It reports anything left over (calls, unsupported

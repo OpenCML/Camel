@@ -75,7 +75,7 @@ class ShareBranchArmTestPass : public RuntimeGraphRewritePass {
 ///    different type (no argument of the call is compatible with the port it lands in).
 ///
 /// The cases use them to ask two questions at once: does the commit refuse such a CALL, and does a
-/// pass that knows the callee (std::opt::devirtualize) write a direct call it cannot justify. The
+/// pass that knows the callee (std::cxx::devirtualize) write a direct call it cannot justify. The
 /// pass writes the retarget and nothing else; whether the program is accepted is the answer.
 class RecalleeArityTestPass : public RuntimeGraphRewritePass {
   public:

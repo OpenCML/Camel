@@ -54,8 +54,8 @@ INPUT SETS (`--sets small,medium,large,modules`; default all):
            (default 1,2,4,8,16,32,64,128), in the shapes flat, chain and fan
 
 Pipelines per input: `compile` (`std::null`: everything up to the graph, nothing executed);
-for inputs that can run, `passes` (std::macro, the four std::opt sub-passes, std::opt::inline,
-std::opt::specialize, then std::null), and the back ends std::nvm, std::fvm, std::jit, and
+for inputs that can run, `passes` (std::macro, the four std::opt sub-passes, std::cxx::inline,
+std::cxx::specialize, then std::null), and the back ends std::nvm, std::fvm, std::jit, and
 std::bc (bytecode compiled and printed, not executed: an upper bound of what std::fvm
 spends before it executes).
 
@@ -87,8 +87,8 @@ sys.path.insert(0, str(REPO / "test" / "tools" / "scale"))
 
 import gen_modules  # noqa: E402
 
-PASS_PIPELINE = ["std::macro", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt",
-                 "std::opt::inline", "std::opt::specialize", "std::null"]
+PASS_PIPELINE = ["std::macro", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce", "std::opt",
+                 "std::cxx::inline", "std::cxx::specialize", "std::null"]
 PIPELINES = {
     "compile": ["std::null"],
     "passes": PASS_PIPELINE,
@@ -765,7 +765,7 @@ def cmd_check(_args) -> int:
                          if r["pipeline"] != "fvm" else "pass:std::fvm"):
                 if kind not in phases:
                     problems.append(f"{name}: no phase '{kind}'")
-            if r["pipeline"] == "passes" and "pass:std::opt::inline" not in phases:
+            if r["pipeline"] == "passes" and "pass:std::cxx::inline" not in phases:
                 problems.append(f"{name}: the passes are not phases")
             # The module numbers. `counters.modules` counts every module compiled from Camel
             # source, libraries included; `modules_user` is the program's own modules (what the

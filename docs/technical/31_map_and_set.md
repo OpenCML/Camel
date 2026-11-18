@@ -520,15 +520,15 @@ and a `Set<T>` as an array, in key order.
   that of an undisturbed run and every verification is `ok`. Under the moving collector one
   such run relocated 864 map tables, 344 set tables and 1608 strings (`--gc-check moves`).
 - **Passes.** The operators are pure operators without a registered folder, and a `CAST` to
-  a module type is not folded, so `std::opt::fold` leaves them and CSE/DCE treat them like
-  any pure operator. The test programs print the same through `std::opt`, `std::opt::inline`,
-  `std::macro std::opt`, `std::opt::inline std::opt`, `std::opt::fold std::opt::cse std::opt::dce`
+  a module type is not folded, so `std::cxx::fold` leaves them and CSE/DCE treat them like
+  any pure operator. The test programs print the same through `std::opt`, `std::cxx::inline`,
+  `std::macro std::opt`, `std::cxx::inline std::opt`, `std::cxx::fold std::cxx::cse std::cxx::dce`
   and `std::opt`.
 - **Constants.** `std::macro` evaluates a macro function ahead of time and stores its result
   in the static area of the calling graph; a `Map` or `Set` result is then a `DATA` node.
   Its keys and values (strings, arrays, other maps, function values) are carried over with
   it (section 2). Verified with and without `std::macro`, through `std::opt` and
-  `std::opt::inline`, on the four backends, and under heap verification with a collection at
+  `std::cxx::inline`, on the four backends, and under heap verification with a collection at
   every allocation.
 - **`std::cpp`, `onnx::export`.** Each refuses the graph with `TranslationRefused` and a
   position (at the array the collection is built from, which they do not translate either).
@@ -623,7 +623,7 @@ Each is implemented as recommended here; the tag is in the code.
 
 - **No compile-time construction outside `std::macro`.** `[...] as Map<...>` of a literal is
   checked at compile time (key type, duplicate keys) but built by the `CAST` each time it is
-  executed. `std::opt::fold` does not fold a `CAST` to a module type, nor an operator over a
+  executed. `std::cxx::fold` does not fold a `CAST` to a module type, nor an operator over a
   collection (none has a folder registered). A program that wants the table built once puts
   it in a `#macro func` and runs `std::macro`, which works (section 8).
 - **`map_values`, `filter` and friends are not in the library** (section 6.2): generic

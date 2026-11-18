@@ -7,8 +7,8 @@ defects that survived on the v0.2.43 pin. Four of them still failed:
 |---|---|---|
 | `rc00_seed27.cml` | `std::opt std::nvm` | SIGSEGV |
 | `rc03_seed30.cml` | `std::opt` | branch-arm invariant: `DATA 30 runs between BRCH 7 and its JOIN 6 and belongs to no arm` |
-| `rc04_seed72.cml` | `std::opt::inline` | edge invariants: `node 24 lies on a cycle of inputs: 24 <- 27 <- 38 <- 24` |
-| `rc05_seed104.cml` | `std::opt::fold` | branch-arm invariant: `GATE 28 reads OPER 21 (:mark/filter_arr), which lies in an arm of BRCH 24` |
+| `rc04_seed72.cml` | `std::cxx::inline` | edge invariants: `node 24 lies on a cycle of inputs: 24 <- 27 <- 38 <- 24` |
+| `rc05_seed104.cml` | `std::cxx::fold` | branch-arm invariant: `GATE 28 reads OPER 21 (:mark/filter_arr), which lies in an arm of BRCH 24` |
 
 They are copies, unedited, kept under the name the archive gives them. The expected behaviour of
 every one is the behaviour the program has without the optimization passes: exit 0 and no output

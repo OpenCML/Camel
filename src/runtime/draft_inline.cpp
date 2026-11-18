@@ -499,7 +499,7 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             // Looking through it bound the unconverted constant to the parameter (f(i as
             // float) computed with 0.0...035 instead of 7.0). Only a CAST between equal
             // types forwards its input; a constant under any other CAST becomes a static
-            // value when std::opt::fold has evaluated the conversion.
+            // value when std::cxx::fold has evaluated the conversion.
             const auto normInputs = draft.normInputsOf(canonicalId);
             const DraftNodeHeader *source =
                 normInputs.empty() ? nullptr : draft.header(normInputs.front());

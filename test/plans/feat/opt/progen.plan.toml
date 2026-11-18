@@ -5,7 +5,7 @@ tags = ["feat", "opt", "progen", "differential"]
 
 [[tests]]
 name = "progen_check"
-desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::opt::inline, std::opt, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch holds only seeds whose every cell passes today; the seeds left out and the defects they show are recorded in test/cases/opt/progen/README.md and in CHECK_EXCLUDED of progen.py."
+desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch holds only seeds whose every cell passes today; the seeds left out and the defects they show are recorded in test/cases/opt/progen/README.md and in CHECK_EXCLUDED of progen.py."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/progen/progen.py"
@@ -50,7 +50,7 @@ timeout_ms = 300000
 # records the generator version with it, or it names a program the next version will not generate.
 [[tests]]
 name = "progen_seed_4"
-desc = "Seed 4 of `generate.VERSION` 8 through the cross matrix, alone: 41 cells (25 rewrite sequences on the node VM, and no rewrite, std::opt::inline, std::opt, std::opt and std::macro std::opt on the three other schedulers) all print the reference output. The four `inline` cells used to end in SIGSEGV; `edeaa9c41` fixed it, and `test/cases/opt/inline/loop_wait_after_inline.cml` is the 25-line reduction of the shape (`f8(...)` inside `let n69 = concat(...)` of `main`, whose spliced body owns a loop carrying the wait of the statement the call was written after). A red here is that crash returning: the entry reads `0 wrong` and `PASS`, and the program is `progen.py show --seed 4`."
+desc = "Seed 4 of `generate.VERSION` 8 through the cross matrix, alone: 41 cells (25 rewrite sequences on the node VM, and no rewrite, std::cxx::inline, std::opt, std::opt and std::macro std::opt on the three other schedulers) all print the reference output. The four `inline` cells used to end in SIGSEGV; `edeaa9c41` fixed it, and `test/cases/opt/inline/loop_wait_after_inline.cml` is the 25-line reduction of the shape (`f8(...)` inside `let n69 = concat(...)` of `main`, whose spliced body owns a loop carrying the wait of the statement the call was written after). A red here is that crash returning: the entry reads `0 wrong` and `PASS`, and the program is `progen.py show --seed 4`."
 kind = "behavior"
 # A reading on every run, not only when someone runs the milestone layer: measured at 5.4 s on
 # 2026-11-15, so it is in the fast layer while the batch it belongs to stays in the milestone one.
@@ -66,7 +66,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "progen_fixed"
-desc = "The archived progen findings that are recorded as fixed (test/cases/opt/progen/findings.json, key `fixed`): reduced programs on which std::opt::inline, std::opt or a pass after them ran code of a branch arm that is not taken, dropped or reordered an effect of a sync block, produced a wrong value, or crashed. Each runs under the rewrite sequence it was found with and under std::opt::inline, std::opt, std::opt::inline std::opt::dce, std::opt and std::opt::specialize, on the node VM, the bytecode VM, the JIT and the parallel scheduler, and every run must print exactly the output the generator's reference evaluator computed."
+desc = "The archived progen findings that are recorded as fixed (test/cases/opt/progen/findings.json, key `fixed`): reduced programs on which std::cxx::inline, std::opt or a pass after them ran code of a branch arm that is not taken, dropped or reordered an effect of a sync block, produced a wrong value, or crashed. Each runs under the rewrite sequence it was found with and under std::cxx::inline, std::opt, std::cxx::inline std::cxx::dce, std::opt and std::cxx::specialize, on the node VM, the bytecode VM, the JIT and the parallel scheduler, and every run must print exactly the output the generator's reference evaluator computed."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/progen/progen.py"

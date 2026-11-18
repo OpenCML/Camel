@@ -70,10 +70,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.inline"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt::inline."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -182,10 +182,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_inline"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::opt::inline."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
+args = ["${case}", "std::macro", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -230,10 +230,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.inline_fvm"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt::inline std::fvm."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::cxx::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -389,10 +389,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.inline"
-desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt::inline."
+desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -501,10 +501,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.macro_inline"
-desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::opt::inline."
+desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::macro std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
+args = ["${case}", "std::macro", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -549,10 +549,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.inline_fvm"
-desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::opt::inline std::fvm."
+desc = "A(i + 1); modify(i) in a sync body: the value read by `+` is the old one and the read after modify the new one. Pipeline: std::cxx::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -732,10 +732,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_value.inline"
-desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::opt::inline."
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_value.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

@@ -1444,7 +1444,7 @@ bool FunctionEmitter::lowerBranch(
         frame.values[join] = CppValue{"", false};
     }
 
-    // The form std::opt::inline leaves: an arm's nodes lie between the BRCH and the JOIN in the
+    // The form std::cxx::inline leaves: an arm's nodes lie between the BRCH and the JOIN in the
     // execution order, each arm as one piece starting at its entry (the node std::fvm jumps
     // to, resolveRuntimeBranchArmEntry) and running to the next arm's entry or the JOIN.
     const auto brchAt = std::find(order.begin(), order.end(), brch);

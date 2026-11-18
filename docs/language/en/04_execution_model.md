@@ -330,7 +330,7 @@ A program is processed by the sequence of passes on the command line: `camel fil
 | `std::jit` | Bytecode VM with JIT compilation; graphs that cannot be compiled are executed by the interpreter |
 | `std::prl` | Parallel scheduling: nodes that do not depend on each other can execute concurrently |
 | `std::macro` | Evaluates macro calls ahead of time |
-| `std::opt`, `std::opt::inline`, `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::opt` | Optimisation |
+| `std::opt`, `std::cxx::inline`, `std::cxx::fold`, `std::cxx::cse`, `std::cxx::dce`, `std::opt` | Optimisation |
 | `std::rgir`, `std::gir` | Print the graph (DOT format) without running it |
 | `std::stats` | Prints statistics of the graph and passes the graph on unchanged |
 | `onnx::export`, `std::cpp` | Translate to an ONNX model, to C++ source |

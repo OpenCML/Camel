@@ -345,7 +345,7 @@ void syncChainOrdering() {
 /// so an ordering edge whose two ends a data path already orders says nothing and is dropped
 /// (`reduceDocumentOrdering`, the canonical export). A graph a pass edits keeps it: the data path
 /// there is a path the pass may still rewrite, so the edge is the conservative answer
-/// (`reduceOrderDependencies`, `std::opt::order`). Both readings are one walk with one criterion;
+/// (`reduceOrderDependencies`, `std::cxx::order`). Both readings are one walk with one criterion;
 /// what differs is which edges order and which are candidates.
 void documentOrdering() {
     // An `order` edge a data path covers: the document drops it, the pass keeps it.

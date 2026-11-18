@@ -178,7 +178,8 @@ std::vector<std::string> readersOf(attr::AttrSetId tags);
 /// the same name twice is harmless.
 void declareReader(std::string_view pass);
 /// Whether `written` names a registered reader: the registered pass itself or a path below it
-/// (the registered `std::opt` matches `std::opt::inline`).
+/// (the registered `std::cxx` matches `std::cxx::fold`; `std::opt` is the default pipeline's own
+/// name, and a tag that reads the optimizer names it).
 bool isReader(std::string_view written);
 
 /// Records that the pass `pass` reads the tag `tag`: a Camel pass writes `#reads(tag, ...)` on

@@ -583,10 +583,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.for_loop_fvm"
-desc = "The same case through `std::opt::inline std::fvm`: a loop over a stream is an ordinary LOOP node with an ordinary CALL per round, so the bytecode back end runs it unchanged."
+desc = "The same case through `std::cxx::inline std::fvm`: a loop over a stream is an ordinary LOOP node with an ordinary CALL per round, so the bytecode back end runs it unchanged."
 kind = "behavior"
 case = "../../../cases/compile/stream/for_loop.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_contains = ["6", "0", "3", "3 6"]
 expect_output_not_contains = ["UnknownInternalError"]
@@ -595,10 +595,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.for_loop_jit"
-desc = "The same case through `std::opt::inline std::opt std::jit`: the JIT back end runs the same LOOP node, so the four back ends agree on a loop over a stream."
+desc = "The same case through `std::cxx::inline std::opt std::jit`: the JIT back end runs the same LOOP node, so the four back ends agree on a loop over a stream."
 kind = "behavior"
 case = "../../../cases/compile/stream/for_loop.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout_contains = ["6", "0", "3", "3 6"]
 expect_output_not_contains = ["UnknownInternalError"]
@@ -652,10 +652,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.unfold_fvm"
-desc = "The same case through `std::opt::inline std::fvm`: a stream from `unfold` is an ordinary closure and a round an ordinary call, so the bytecode back end runs it unchanged."
+desc = "The same case through `std::cxx::inline std::fvm`: a stream from `unfold` is an ordinary closure and a round an ordinary call, so the bytecode back end runs it unchanged."
 kind = "behavior"
 case = "../../../cases/compile/stream/unfold.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_contains = ["6", "0"]
 expect_output_not_contains = ["UnknownInternalError"]

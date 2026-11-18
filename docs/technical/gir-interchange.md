@@ -133,7 +133,7 @@ order that cannot be derived:
 - **Before the `sync` and `order` edges are written, the graph is reduced**: an edge goes away
   when a path of at least two edges between its two ends already orders them, inside the region
   that holds it. The path may use any edge that orders -- data, `sync`, `order` and the `control`
-  waits -- and the reduction is the transitive reduction `std::opt::order` makes over order edges
+  waits -- and the reduction is the transitive reduction `std::cxx::order` makes over order edges
   (`camel::runtime::reduceDocumentOrdering` shares its walk, bounded the same way).
 - **What survives is the order that would be lost otherwise.** `x += 1` and its split spelling,
   whose graphs differ only in an order edge a data path already implies, write the same document,

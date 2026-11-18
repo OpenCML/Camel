@@ -72,12 +72,12 @@
 
 ## 3. `inlineCallableInDraft` 契约（当前实现）
 
-**与 `std::opt::inline` pass 的区分**（阅读本节时请先建立预期）：
+**与 `std::cxx::inline` pass 的区分**（阅读本节时请先建立预期）：
 
 - **`inlineCallableInDraft`**：通用的内联原语；只要调用方传入合法的 `FUNC` 节点，就展开它的被调图。
-- **`std::opt::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
-  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::opt::inline::small`（Small）、
-  `std::opt::inline::arm`（Arm，分支臂的被调图，不要求小）、`std::opt::inline::hybrid` / `std::opt::inline`（Hybrid，
+- **`std::cxx::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
+  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::cxx::small`（Small）、
+  `std::cxx::arm`（Arm，分支臂的被调图，不要求小）、`std::cxx::hybrid` / `std::cxx::inline`（Hybrid，
   默认）。对递归的限制、`blockCallsToSccEntryCallees`、大小与增长预算等选择规则见
   [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 与 §6.1，本文不重复。
 

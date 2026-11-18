@@ -1128,7 +1128,7 @@ struct PairCall {
 /// removed node leaves), so a pass that replaces a node with a rule's right side appends the nodes
 /// it makes *after* the ones already reading them. Swept by descending id, such a graph visits the
 /// new node before the node that feeds it, the cotangent is not there yet, and the walk drops it
-/// without a word: `(x * 2.0 + x * 3.0) * 4.0` folded to `(x * 5.0) * 4.0` by `std::opt::algebra`
+/// without a word: `(x * 2.0 + x * 3.0) * 4.0` folded to `(x * 5.0) * 4.0` by `std::cxx::algebra`
 /// made `transpose` of it answer 0.0 where the unoptimized program answers 20.0
 /// (`test/cases/compile/transforms/transpose_after_algebra.cml`).
 ///

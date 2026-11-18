@@ -98,10 +98,10 @@ assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'l
 
 [[tests]]
 name = "rewrite_inline"
-desc = "Facts computed before std::opt::inline, when no pass adds an operator declaration (the epoch is the same before and after): the graphs the rewrite did not change keep every fact, of every kind; on main, which gets the callees' bodies, the conservative kinds are stale and the shapes of the nodes it left where they were stay valid (Dependency::Node), while the shapes of the nodes it touched read stale. Everything stale is computed again, no readable fact is stale afterwards, and every stored fact equals a fresh computation."
+desc = "Facts computed before std::cxx::inline, when no pass adds an operator declaration (the epoch is the same before and after): the graphs the rewrite did not change keep every fact, of every kind; on main, which gets the callees' bodies, the conservative kinds are stale and the shapes of the nodes it left where they were stay valid (Dependency::Node), while the shapes of the nodes it touched read stale. Everything stale is computed again, no readable fact is stale afterwards, and every stored fact equals a fresh computation."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
-args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
+args = ["${case}", "test::facts_seed", "std::cxx::inline", "test::facts_check"]
 
 expect_exit = 0
 verify_script = """
@@ -128,10 +128,10 @@ for (const l of [
 // Inlining adds no operator declaration: the epoch is the same seed and check, and on the graphs
 // the pass did not change no fact of any kind is stale.
 assert(num(/FACTS epoch seed=(\d+)/, 'seed epoch') === num(/FACTS epoch check=(\d+)/, 'check epoch'),
-  'std::opt::inline declared an operator; this case asserts that it does not')
+  'std::cxx::inline declared an operator; this case asserts that it does not')
 for (const g of ['layer', 'total', 'count', 'twice']) {
   assert(num(new RegExp(`FACTS seed revision ${g} (\\d+)`), `${g} seed revision`) ===
-    num(new RegExp(`FACTS check revision ${g} (\\d+)`), `${g} check revision`), `${g} changed under std::opt::inline`)
+    num(new RegExp(`FACTS check revision ${g} (\\d+)`), `${g} check revision`), `${g} changed under std::cxx::inline`)
   const kinds = out.split('\n').filter(l => l.startsWith(`FACTS graph kind ${g} `))
   assert(kinds.length > 0, `${g} has no per-kind line`)
   for (const k of kinds) assert(k.endsWith('stale=0'), `${g}: a fact is stale although the pass changed neither its graph nor a declaration: ${k}`)

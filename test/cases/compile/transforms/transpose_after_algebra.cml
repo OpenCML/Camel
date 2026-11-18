@@ -1,4 +1,4 @@
-// The transpose of a graph `std::opt::algebra` has already rewritten: the two paths answer the same
+// The transpose of a graph `std::cxx::algebra` has already rewritten: the two paths answer the same
 // numbers.
 //
 // `linear(x) = 2*x + 3*x` is the shape the combining law fires on. `float_combine` replaces the sum
