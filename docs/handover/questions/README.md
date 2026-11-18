@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：8 页
+## 现在在等作者：9 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -15,6 +15,7 @@
 | [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | 一条豁免该不该连「它记的那条原因」一起校验——原因不再成立时，它还是豁免吗？ |
 | [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ |
 | [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
+| [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
 | [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
 | [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
 
