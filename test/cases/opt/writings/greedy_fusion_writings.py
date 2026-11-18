@@ -83,6 +83,11 @@ EXE, ARGV = camel_from_argv(ROOT)
 STRICT = "--require-one-form" in ARGV
 TOOL = ROOT / "test" / "tools" / "same_graph.py"
 PASS_SOURCE = HERE / "greedy_fuse.cml.in"
+# The other half of plan item (a): the same transform against torch.fx, where `Graph.nodes` is the
+# order the Python ran in. It is not run here -- it needs a Python with `torch`, which the build host
+# does not have, so the ECOOP side runs it -- but a case that names a control has to say whether the
+# control is there, or half the criterion has no counterpart and nobody notices.
+FX_CONTROL = ROOT / "test" / "cases" / "opt" / "writings" / "fx_greedy_fusion.py"
 
 # The program of plan 丙's item (a): one function that computes `x*2 + y*3 + x*y`, and an entry that
 # calls it. The multiplications are written as three statements so that swapping two of them swaps
@@ -207,6 +212,14 @@ def main():
 
     say(f"programs: {scratch}")
     say(f"transform: {PASS_SOURCE.relative_to(ROOT).as_posix()} -> {scratch / 'greedy.cml'}")
+    present = FX_CONTROL.is_file()
+    say(f"control (torch.fx, run on the ECOOP side; this host has no torch): "
+        f"{FX_CONTROL.relative_to(ROOT).as_posix()} {'present' if present else 'MISSING'}")
+    if not present:
+        failures.append(
+            f"the torch.fx control is not in the tree at {FX_CONTROL.relative_to(ROOT).as_posix()}, "
+            f"so item (a)'s second half has no counterpart to run"
+        )
 
     # -- the transform asks no writing-visible query: read from its own source ------------------
     source = PASS_SOURCE.read_text(encoding="utf-8")

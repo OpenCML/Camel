@@ -38,11 +38,19 @@
 # strict line, which the merge of 丙.1 turns this plan into, is the same command with
 # `--require-one-form` added to `args`: it fails until the two writings fuse to one canonical form.
 #
+# Item (c), wall clock of two unrelated effects: `effect_parallel_clock.py` runs one program that
+# writes two different files, each after a sleep, on the serial and the parallel back end, alternating
+# them, and prints the median and the range of its runs plus the parallel back end's own decision for
+# the program. **Nothing here is a bound on wall clock** -- the entry exists so that the measurement is
+# a thing the tree runs and not a script nobody runs, and what it asserts is that the harness ran and
+# stated a reading. The reading itself (whether the two effects overlap) is on
+# `docs/handover/reports/2026-11-18-eco-measurements.cn.md`, where a number belongs.
+#
 # The torch.fx control of the same item is `test/cases/opt/writings/fx_greedy_fusion.py`. It is not a
 # test here: it needs a Python with `torch`, which the build host does not have, and a plan entry
-# that skips for want of an interpreter would put a skip in the gate where there is nothing to
-# measure. It is run on the ECOOP side, and its source is quoted in
-# `docs/handover/reports/2026-11-18-eco-measurements.cn.md`.
+# that skipped for want of an interpreter would put a skip in the gate where there is nothing to
+# measure. It is run on the ECOOP side, its source is quoted in the report, and the (a) case reports
+# whether it is in the tree.
 
 id = "opt.writings"
 order = 484
@@ -58,6 +66,18 @@ case = "../../../cases/opt/writings/greedy_fusion_writings.py"
 # `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
-expect_stdout_contains = ["the transform asks no writing-visible query (id/name/origin/show): PASS", "the two writings differ by exactly this swap of two adjacent lines (2 <-> 3):", "reading: raw_one_form", "reading: changes_the_graph", "reading: renamed", "reading: swapped", "reading: swapped_and_renamed", "reading: different_constant", "sha256=", "the greedy fusion is not a no-op, a rename fuses to the same graph, and a different constant does not: PASS"]
+expect_stdout_contains = ["the transform asks no writing-visible query (id/name/origin/show): PASS", "control (torch.fx, run on the ECOOP side; this host has no torch): test/cases/opt/writings/fx_greedy_fusion.py present", "the two writings differ by exactly this swap of two adjacent lines (2 <-> 3):", "reading: raw_one_form", "reading: changes_the_graph", "reading: renamed", "reading: swapped", "reading: swapped_and_renamed", "reading: different_constant", "sha256=", "the greedy fusion is not a no-op, a rename fuses to the same graph, and a different constant does not: PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "opt.writings.two_effects_wall_clock"
+desc = "Item (c): one program writes two different files, each after a 200 ms sleep, on `std::nvm` and on `std::prl` with four workers, alternating the two back ends, and the median and the range of three runs each are printed with the parallel back end's own decision for the program (`0 run as task graphs` when it kept the graph serial). The entry asserts that the measurement ran and stated a reading, not that a wall clock fell on either side of a bound: a bound in the fast gate is a flake, and the plan asks this item for a number."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/writings/effect_parallel_clock.py"
+args = ["${case}", "--camel", "${camel}", "--runs", "3"]
+expect_exit = 0
+expect_stdout_contains = ["two effects, two different files", "wall clock", "serial    n=3", "parallel  n=3", "median serial / median parallel =", "reading: the two effects", "the parallel back end's decision for the program (std::prl diag=true):", "is serial: runs as bytecode"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
