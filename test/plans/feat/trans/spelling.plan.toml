@@ -34,10 +34,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::SpellingNotDeclared"
 expect_diagnostic_code = "0x030001D5"
-expect_output_contains = [
-    "This body reads the spelling of the program, and its type does not declare it.",
-    "[the first reading of the spelling in this body: it is what the type would have to declare at",
-]
+expect_output_contains = ["This body reads the spelling of the program, and its type does not declare it.", "[the first reading of the spelling in this body: it is what the type would have to declare at"]
 
 [[tests]]
 name = "spelling_declared_compiles"
