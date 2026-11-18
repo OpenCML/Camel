@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：29 页
+## 现在在等作者：30 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -20,6 +20,7 @@
 | [`2026-11-16-which-channel-takes-the-walkthrough-records`](2026-11-16-which-channel-takes-the-walkthrough-records.cn.md) | 走查记录该进哪条通道：作者说「诊断通道」，而诊断通道按设计装不下它 |
 | [`2026-11-17-does-an-effect-inside-a-binding-nobody-reads-still-happen`](2026-11-17-does-an-effect-inside-a-binding-nobody-reads-still-happen.cn.md) | 写在一个没人读的绑定里的效应，还发生吗？ |
 | [`2026-11-17-is-a-fixed-compile-error-one-defect-or-two`](2026-11-17-is-a-fixed-compile-error-one-defect-or-two.cn.md) | 四个格从「编译错」变成「算错」之后，E9 该把它算一个缺陷还是两个 |
+| [`2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain`](2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain.cn.md) | A call to a pure function has no place on the chain, so two of the three rows read the same |
 | [`2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked`](2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md) | 一个装着 Ref 的格子，计划期算持有者、运行期不算句柄 |
 | [`2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot`](2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot.cn.md) | 生成器状态槽要存一个 `Ref`，而 `Ref` 没有「未写」的形态 |
 | [`2026-11-18-a-value-made-per-round-needs-a-version-per-round`](2026-11-18-a-value-made-per-round-needs-a-version-per-round.cn.md) | 一轮造一个值、循环之后还要读它，计划该怎么数它？ |
