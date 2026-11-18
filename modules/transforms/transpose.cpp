@@ -7,7 +7,7 @@
 #include "node_order.h"
 #include "rule_expand.h"
 #include "split.h"
-#include "exit_gate.h"
+#include "camel/runtime/graph.h"
 
 #include "camel/core/derivative.h"
 #include "camel/core/forward.h"
@@ -37,6 +37,9 @@
 #include <vector>
 
 namespace camel::transforms {
+
+using camel::runtime::gateWaitsOf;
+using camel::runtime::valueBehindGates;
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
@@ -3689,7 +3692,7 @@ bool buildTransposeMember(
             case rt::GCNodeKind::Gate: {
                 // The gate forwards its first input and waits on the rest (xit_gate.h): the
                 // cotangent goes to the value, never to a statement the gate waits on.
-                const gc_node_ref_t forwarded = exitValueOf(*function, ref);
+                const gc_node_ref_t forwarded = valueBehindGates(*function, ref);
                 if (forwarded != rt::kInvalidNodeRef) {
                     addCotangent(forwarded, cotangent[ref]);
                 }

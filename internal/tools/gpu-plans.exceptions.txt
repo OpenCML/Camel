@@ -22,9 +22,14 @@
 #                                                         co-tenant on the card: outlining counts
 #                                                         five where ten regions were outlined.
 #
-# The other two are bit-preservation assertions (`static_loop_device`: "empty loop changes initial
-# bits"; `multi_state_loop_device`: "swap1 must preserve exact initial bits") and are not yet split
-# into "the card moved the bits" and "Camel moved the bits".
+# The other two -- `static_loop_device` and `multi_state_loop_device` -- were SPLIT on 2026-11-19,
+# not relabelled: the device-written bits differ from the input only by quieting a signalling NaN
+# (`0x400000` set in the mantissa), and the same tree under `--devices cpu` preserves every bit, so
+# the card moves them and Camel does not. The author then ruled (`6b542fe21`) that a device run may
+# quiet a signalling NaN, so those four clauses compare NaN as NaN, the way the rest of those two
+# files already compares a host run against a device run; both cases are green and their entries
+# here are gone. The page that asked:
+# `docs/handover/questions/2026-11-19-the-card-quiets-signalling-nans.cn.md`.
 #
 # So THIRTEEN OF THESE NAMES ARE A FIX OWED, NOT A PERMISSION -- they are recorded here so that the
 # gate can run the layer without blocking merges, which is a different thing from saying the readings
@@ -88,6 +93,5 @@ preferred_resident_execution.nvm :: 0x040001B0
 preferred_resident_execution.prl :: 0x040001B0
 resident_graph_transfers :: 0x040001B0
 
-# Not yet classified: bit-preservation assertions, to be split into "the device" and "the code".
-multi_state_loop_device :: swap1-must-preserve-exact-initial-bits
-static_loop_device :: empty-loop-changes-initial-bits
+# Nothing is listed as unclassified any more: the two bit-preservation names were fixed on
+# 2026-11-19 by asking the device for the bits it can promise (see the ruling above).

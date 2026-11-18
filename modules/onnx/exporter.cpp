@@ -858,8 +858,8 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         // Exported values are never mutated in place, so a copy can share its source.
         return eval(act, g->normInputsOf(ref).front());
     case GCNodeKind::Gate: {
-        const auto norm = g->normInputsOf(ref);
-        return eval(act, norm.empty() ? g->withInputsOf(ref).back() : norm.back());
+        // A gate forwards its first ordinary input; the rest are the waits it keeps alive.
+        return eval(act, camel::runtime::forwardedInputOf(*g, ref));
     }
     case GCNodeKind::Fill:
         return evalFill(act, ref);
@@ -1921,8 +1921,7 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     case GCNodeKind::Copy:
         return evalLoopBody(act, g->normInputsOf(ref).front(), loop);
     case GCNodeKind::Gate: {
-        const auto norm = g->normInputsOf(ref);
-        return evalLoopBody(act, norm.empty() ? g->withInputsOf(ref).back() : norm.back(), loop);
+        return evalLoopBody(act, camel::runtime::forwardedInputOf(*g, ref), loop);
     }
     case GCNodeKind::Cast: {
         // A cast is not a decision: the branch under it decides whether the recursion goes on,
@@ -3093,14 +3092,14 @@ std::optional<Value> Evaluator::deferredElement(
             return std::nullopt;
         }
         const auto norm = g->normInputsOf(source);
-        if (header->kind == GCNodeKind::Gate && norm.empty()) {
-            const auto with = g->withInputsOf(source);
-            if (with.empty()) {
+        if (header->kind == GCNodeKind::Gate) {
+            // The value is the gate's first ordinary input, then its first context input.
+            source = camel::runtime::forwardedInputOf(*g, source);
+            if (source == camel::runtime::kInvalidNodeRef) {
                 return std::nullopt;
             }
-            source = with.back();
         } else if (!norm.empty()) {
-            source = norm.back();
+            source = norm.front();
         } else {
             return std::nullopt;
         }
@@ -3685,12 +3684,24 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         const auto forwards = [g](gc_node_ref_t ref) {
             for (;;) {
                 const GCNodeKind kind = g->node(ref)->kind;
-                if (kind != GCNodeKind::Gate && kind != GCNodeKind::Copy) {
+                if (kind == GCNodeKind::Gate) {
+                    // A gate forwards its first ordinary input (camel/runtime/graph.h).
+                    const gc_node_ref_t forwarded =
+                        camel::runtime::forwardedInputOf(*g, ref);
+                    if (forwarded == camel::runtime::kInvalidNodeRef) {
+                        return ref;
+                    }
+                    ref = forwarded;
+                    continue;
+                }
+                if (kind != GCNodeKind::Copy) {
                     return ref;
                 }
                 const auto norm = g->normInputsOf(ref);
-                const auto with = g->withInputsOf(ref);
-                ref             = norm.empty() ? with.back() : norm.back();
+                if (norm.empty()) {
+                    return ref;
+                }
+                ref = norm.front();
             }
         };
         const auto assigned = g->normInputsOf(last);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "split.h"
-#include "exit_gate.h"
+#include "camel/runtime/graph.h"
 
 #include "refusal_readings.h"
 
@@ -33,6 +33,9 @@
 #include <vector>
 
 namespace camel::transforms {
+
+using camel::runtime::gateWaitsOf;
+using camel::runtime::valueBehindGates;
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
@@ -152,13 +155,13 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
 /// The node a value is read through with the gates that only forward it stripped (the same walk
 /// `buildVmapGraph` takes to the exit): a gate consumes what it carries and produces that value.
 ///
-/// The walk itself is `exit_gate.h#exitValueOf`, and it reads the gate's **first** input: since
+/// The walk itself is `camel/runtime/graph.h#valueBehindGates`, and it reads the gate's **first** input: since
 /// `0780a83bd` a gate is `GATE(value, writes...)`, so the walk that took the last input read the
 /// last *write* as the value in any body that printed something (author, 2026-11-18: "`ungated` 剥
 /// `GATE` 时取的是 `norm.back()` -- 最后一个输入，在有写的函数里那就是最后那次写，不是值"). The
 /// reading is one function in one header so `split`, `transpose` and `vmap` cannot disagree.
 gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
-    return exitValueOf(*graph, ref);
+    return valueBehindGates(*graph, ref);
 }
 
 /// The data ports of `ref`, in port order: the ordinary ones and then the context ones. The effect
@@ -840,7 +843,7 @@ struct Half {
         }
         case rt::GCNodeKind::Gate: {
             // A gate forwards its **first** input; every input after it is a statement the gate
-            // waits on (`exit_gate.h`, author `0780a83bd`). The value is what a reader of the gate
+            // waits on (`camel/runtime/graph.h`, author `0780a83bd`). The value is what a reader of the gate
             // reads, and it is what this half copies.
             //
             // The waits are refused here rather than dropped: a half that copied the value and left
@@ -850,7 +853,7 @@ struct Half {
             // exists, this is a refusal and not a silent wrong answer (author, 2026-11-18: a cut
             // placed a print where the result should be, because the gate's last input was read as
             // the value).
-            const std::span<const gc_node_ref_t> waits = exitWaitsOf(*source, ref);
+            const std::span<const gc_node_ref_t> waits = gateWaitsOf(*source, ref);
             if (!waits.empty()) {
                 return refuseAt(
                     refusal,
@@ -861,7 +864,7 @@ struct Half {
                     "the cut does not carry a statement across yet: a half would either drop the "
                     "print or run it where it was not written");
             }
-            const gc_node_ref_t forwarded = exitValueOf(*source, ref);
+            const gc_node_ref_t forwarded = valueBehindGates(*source, ref);
             if (forwarded == rt::kInvalidNodeRef) {
                 return refuseAt(
                     refusal,
