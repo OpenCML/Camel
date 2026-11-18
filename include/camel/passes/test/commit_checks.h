@@ -238,6 +238,11 @@ class CommitLoopBodyReadTestPass : public RuntimeGraphRewritePass {
  * graph whose parameter types are the same, and the commit must publish it -- without it, "it was
  * refused" would mean only "a signature was replaced", which is a reading of neither rule and would
  * make every legitimately retyped graph unpublishable.
+ *
+ * The commit asks that of every graph it encodes now
+ * (`camel::runtime::validateRuntimeGraphPortTypes`), so this pass reads the refusal the seal gives and
+ * not the only place the two lists are compared: a graph the compiler built for itself is asked the
+ * same question, which is how the specialization's own shift was found.
  */
 inline constexpr const char *kCommitPortTypeTestPass = "test::commit_port_type";
 class CommitPortTypeTestPass : public RuntimeGraphRewritePass {

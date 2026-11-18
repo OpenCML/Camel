@@ -4042,7 +4042,7 @@ f0b01c65986bb7e0 ok test/cases/opt/generic/shape_unroll.cml
 de3e406180e622d0 ok test/cases/opt/generic/simplify_growth_budget.cml
 6e049f32641aa4d2 ok test/cases/opt/generic/specialization_survives_the_round.cml
 ff29b73c6d55f04c ok test/cases/opt/generic/specialize_dim_name_grow.cml
-6f7e7285e09f50b7 ok test/cases/opt/generic/specialize_dim_name_recursion.cml
+43c6da1e73777594 ok test/cases/opt/generic/specialize_dim_name_recursion.cml
 b7750f6e46e1b0ef ok test/cases/opt/generic/specialize_element_type_nest.cml
 255c3206c87d68ba ok test/cases/opt/generic/specialize_growing_shape.cml
 b6badc1cf8776018 ok test/cases/opt/generic/specialize_growing_shape_more_levels.cml

@@ -562,7 +562,8 @@ CommitPortTypeTestPass::apply(const camel::runtime::Program *program, std::ostre
     }
     out << "commit_port_type: a graph publishes one statement about one parameter twice -- as a port "
            "node a call site is checked against and as an entry of the signature the value and the "
-           "entry arguments are read through -- and nothing asks whether the two agree\n"
+           "entry arguments are read through -- and the commit asks whether the two agree of every "
+           "graph it encodes, so a graph that says two things about one parameter is refused\n"
         << std::flush;
     const SignatureTrio trio = findSignatureTrio(*program);
     if (trio.taken == nullptr) {
