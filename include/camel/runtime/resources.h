@@ -351,8 +351,29 @@ std::string toString(const GraphFootprint &footprint);
 //           through the loop node. A resource a declaration names `unordered` carries no promise
 //           and is passed over (principle 3.3).
 //
-// The reading is per graph because a commit edits graphs; which of them it must answer for, and for
-// which nodes, is the caller's question (`commitViolation`'s `made` and `askOrder`).
+// The reading is per graph because a commit edits graphs; which of them it must answer for is the
+// caller's question (`commitViolation`'s `made`), and which regions inside one are the commit's is
+// `made`'s too (the regions those nodes are in, and every region around them).
+//
+// Three more things the author's rework of 2026-11-18 makes part of the same commitment (the review
+// page `docs/handover/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`, and the
+// rework that answers it). Two of them are asked by the seal every commit already runs, and are said
+// here so that a reader of this file knows where each of the four lands:
+//
+//   Exit    the value the graph hands on is read at its exit, and the exit must be a node of the
+//           function body (region 0). Asked in the seal (`validateRuntimeGraphPayloadImpl`,
+//           src/runtime/graph.cpp), in every build and of every commit: it is a property of the
+//           graph published, not of what the commit added, so it is not one of the two checks
+//           below and does not read the tier.
+//   Cycle   a graph that closes a cycle of inputs has no order any back end can run. Asked by the
+//           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build, before
+//           the two checks below -- one reading, not a second copy of it here.
+//   Tier    the two checks above (effect, order) are asked by what the draft added, not by what the
+//           build is (the ruling of 2026-11-18, which replaces the one of 2026-11-16): a draft that
+//           added no access owes no answer about them -- the public edits of the graph module keep
+//           both promises -- and a draft that spliced a node with an access in is asked in every
+//           build. `commitAddsAccess` is that question, and it is the whole of the tier: what a run
+//           asks is decided by what the run added.
 
 enum class CommitCheck : uint8_t {
     Effect = 0, // the body reaches past the type
@@ -373,28 +394,37 @@ struct CommitViolation {
     std::string text;
 };
 
-/// The pair of questions analysis 4.1 asks of a commit, answered for one graph: does its body stay
-/// inside the effect its own type declares, and do two conflicting accesses in one region have a
-/// path that orders them. Both read the accesses their nodes' operator declarations give them
-/// (principle 3.3), bottom-up, and neither reads an operator's name.
+/// The questions a commit answers, asked of one graph: does its body stay inside the effect its own
+/// type declares, and do two conflicting accesses in one region have a path that orders them? Both
+/// are asked when the draft added an access, in every build.
 ///
-/// `made` is what the commit made here, and it scopes the order question only: a pair is judged when
-/// at least one of its two nodes is one this commit made, because an ordering the program already
-/// lacked before the commit is not this commit's to answer for. `askOrder` says whether the question
-/// is asked at all -- a commit that made no node cannot have added a write and cannot have dropped an
-/// order edge (the public edits of the graph module keep both promises), so it has nothing to answer
-/// for in ordering. Containment is a property of the graph as a whole -- the body either fits the
-/// type it publishes or it does not -- so it is asked whatever `made` is.
+/// `made` is what the commit made here, and it scopes both questions twice over:
+///
+///   * whether they are asked at all -- `commitAddsAccess` says it, and it is the whole tier (the
+///     ruling of 2026-11-18): a commit that made no node adding an access cannot have added one
+///     past the type and cannot have dropped an order edge (the public edits of the graph module
+///     keep both promises), so it owes no answer about either, in any build;
+///   * which regions of the graph it answers for -- the region each made node is in, and every
+///     region around it up to the body (the same ruling, second half). Judging only the pairs that
+///     name a made node is not enough: an owner node stands in the region it sits in for all the
+///     accesses under it, so a write spliced deep inside a branch changes what the branch node
+///     carries in the region outside while neither node of a pair there is one this commit made.
 std::optional<CommitViolation> commitViolation(
-    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
-    bool askOrder = true);
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {});
 
-/// A commit that would publish a graph breaking one of the two promises above: the body stays
-/// inside the effect its own type declares, and two conflicting accesses in one region have a path
-/// ordering them. The refusal is carried whole so that a caller which catches it reports the same
-/// diagnostic the reading named, with the same graph, nodes and source position; `what()` is that
-/// line. It is thrown where the graphs of a commit are read (draft_session.cpp), which is the one
-/// place a graph becomes a graph either commit path can publish.
+/// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
+/// effect outside the program). This is the tier of the ruling of 2026-11-18. It takes no build:
+/// what a run asks is decided by what the run added, and a build that answered differently would be
+/// a second answer to one question.
+bool commitAddsAccess(
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made);
+
+/// A commit that would publish a graph breaking one of the two promises above: the body stays inside
+/// the effect its own type declares, and two conflicting accesses in one region have a path ordering
+/// them. The refusal is carried whole so that a caller which catches it reports the same diagnostic
+/// the reading named, with the same graph, nodes and source position; `what()` is that line. It is
+/// thrown where the graphs of a commit are read (draft_session.cpp), which is the one place a graph
+/// becomes a graph either commit path can publish.
 class GraphCommitRefused : public std::runtime_error {
   public:
     explicit GraphCommitRefused(CommitViolation violation)
@@ -413,13 +443,17 @@ void reportCommitViolation(
     const std::shared_ptr<camel::core::context::Context> &ctx, const std::string &site,
     const CommitViolation &violation);
 
-/// Whether a commit asks the two checks above. The ruling of 2026-11-15 stopped asking them of a
-/// rewrite whose only interface is the graph module, because such a rewrite cannot make a node that
-/// carries an access and cannot drop an edge that orders one; the ruling of 2026-11-16 keeps that
-/// saving only where it is paid for -- a shipped build (`NDEBUG`) does not ask, a debug build asks,
-/// and a test asks through `setCommitChecksEnabled`. Asking is a build's answer, so it is one cell
-/// and not a setting of each call site: `camel::execute::camelPassCommitChecksEnabled` reads this
-/// same cell (src/execute/pass.cpp), and the two paths cannot drift into two answers.
+/// Whether a pass written in Camel is asked the call-site containment check of the pass boundary
+/// (`camel::execute::passBoundaryViolation`, src/execute/pass.cpp). The ruling of 2026-11-15 stopped
+/// asking it of a pass whose only rewriting interface is the graph module, because such a pass
+/// cannot make a node that carries an access; the ruling of 2026-11-16 reads that theorem where a
+/// build can afford it -- a shipped build (`NDEBUG`) does not ask, a debug build asks, and a test
+/// asks through `setCommitChecksEnabled` -- and the two paths read one cell so they cannot drift.
+///
+/// This cell is the pass boundary's answer and no longer the commit's: the commit checks are asked
+/// by what the draft added (`commitAddsAccess`), in every build (the ruling of 2026-11-18). A cell
+/// that decided both would be one setting with two meanings, which is how the tier of the commit
+/// came to be read as a build's answer when it was a fact about the draft.
 bool commitChecksEnabled();
 void setCommitChecksEnabled(bool enabled);
 

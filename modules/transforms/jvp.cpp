@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "jvp.h"
+#include "exit_gate.h"
 
 #include "refusal_readings.h"
 #include "rule_expand.h"
@@ -2515,7 +2516,21 @@ bool liftGraph(
                 exitPair != nullptr ? static_cast<Type *>(exitPair) : valueTypeOf(oldValue);
             const gc_node_ref_t gate =
                 draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
-            draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&out, 1));
+            // The waits are the gate's **trailing ordinary inputs** (author,  780a83bd: "a
+            // gate's trailing input is a wait rather than a use"), so the lifted gate carries the
+            // same list after the pair it forwards -- not a sync edge, which is the shape the
+            // producer stopped writing. A wait that was not copied is not re-added: the lift copies
+            // every node of the body, so this is a wait outside it and naming it here would move a
+            // statement from another graph.
+            std::vector<gc_node_ref_t> gateInputs;
+            gateInputs.push_back(out);
+            for (gc_node_ref_t wait : exitWaitsOf(function, originalExit)) {
+                if (wait < function.nodeCount() && copied[wait]) {
+                    gateInputs.push_back(copyOf[wait]);
+                }
+            }
+            draft.setNormInputs(
+                gate, std::span<const gc_node_ref_t>(gateInputs.data(), gateInputs.size()));
             for (gc_node_ref_t edge : function.syncInputsOf(originalExit)) {
                 if (edge < function.nodeCount() && copied[edge]) {
                     (void)draft.appendChainStatement(gate, copyOf[edge]);
