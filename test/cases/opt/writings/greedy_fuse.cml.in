@@ -1,0 +1,57 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The greedy fusion transform the ECOOP measurement is taken with (plan of 2026-11-18, 丙's
+// acceptance item (a)). It is copied into the scratch directory of `greedy_fusion_writings.py` as
+// `greedy.cml`, so that the module is found beside the program it is run on; it is not a `.cml` file
+// in the tree on purpose, for the reason `test/cases/trans/same_graph_writings.py` states: every
+// `.cml` file is covered by the front-end AST golden, and a fixture must not move that golden for a
+// reason that has nothing to do with the front end.
+//
+// What it does: `nodes(g)` names the graph's nodes in the order the build keeps them. Take the
+// multiplications among them, in that order, and pair them two at a time -- the first with the
+// second, the third with the fourth, and the odd one out left alone. Each pair is **fused into one
+// node**.
+//
+// Why the second of a pair is replaced by the first: this interface cannot create an operation node
+// (a transaction creates constants, and `eval` folds one; there is no "make me an `:op/mul`"), so
+// fusing a pair means the pair becomes one node -- the second is absorbed into the first with
+// `replace`. The reading does not rest on what the fused node computes. It rests on **which two
+// multiplications were chosen**, and that is decided by the order `nodes` gives them.
+//
+// It asks nothing else. No `id`, no `name`, no `origin`, no `show`: those are the writing-visible
+// queries plan 丙.2 puts behind a declared capability. A transform that asked none of them can
+// still depend on exactly one thing besides the graph -- the order of `nodes` -- and that is the
+// quantity the criterion is about.
+
+import { starts_with } from str
+import { Node, Graph, Txn, nodes, op, op_name, open, replace, commit, graphs_of } from graph
+
+func isMul(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o)->starts_with<':op/mul'>
+    }
+}
+
+/// Fuses the pairs of `ms` from index `i` on, two at a time, and answers how many it fused.
+func fuseFrom::<F>(t: Txn<F>, ms: Node[], i: int): int sync {
+    if i + 1 >= len(ms) then 0 else sync {
+        replace(t, ms[i + 1], ms[i])
+        1 + fuseFrom(t, ms, i + 2)
+    }
+}
+
+func fuseAll::<F>(t: Txn<F>, gs: Graph[], i: int): int sync {
+    if i >= len(gs) then 0 else sync {
+        fuseFrom(t, nodes(gs[i])->filter<isMul>, 0) + fuseAll(t, gs, i + 1)
+    }
+}
+
+/// The greedy fusion of one program: every graph's multiplications paired in `nodes` order.
+export func fuse::<F>(p: F): F! sync {
+    let t = open(p)
+    let gs = graphs_of(p)
+    let _ = fuseAll(t, gs, 0)
+    return commit(t)
+}
