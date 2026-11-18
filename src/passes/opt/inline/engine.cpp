@@ -776,6 +776,27 @@ class CallBook {
     uint64_t global_ = 0;
 };
 
+/// Whether a node sits in a region this pass's inlining put down (an `Inline` region, or one
+/// nested in it): the nodes a splice brought into the graph, as opposed to the ones the program
+/// wrote there.
+bool inSplicedRegion(const camel::runtime::GraphDraft &draft, gc_node_ref_t id) {
+    uint32_t region = draft.nodeRegion(id);
+    for (size_t step = 0; step < draft.regionCount(); ++step) {
+        if (region == 0 || region >= draft.regionCount()) {
+            return false;
+        }
+        const camel::runtime::GCRegion &record = draft.region(region);
+        if (record.kind == GCRegionKind::Inline) {
+            return true;
+        }
+        if (record.parent == region) {
+            return false;
+        }
+        region = record.parent;
+    }
+    return false;
+}
+
 /// The rewritten program, or nullptr when nothing changed. `growthSpent` counts the nodes copied
 /// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudget). `declinedOut`
 /// receives the direct calls the last round examined and did not inline, with the reason: the
@@ -954,10 +975,16 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     // arms are regions of this graph, so the exporter evaluates the branch and
                     // calls an arm's closure inside its If. No rewrite across the branch is needed,
                     // and the sibling JOINs such a rewrite would add are not executable.
+                    //
+                    // A gate orders the callee value without changing it (`sync` code gates a callee
+                    // after the previous statement), so the callee is read through it: the value a
+                    // GATE hands on is the value it was given, and leaving the gate in front of the
+                    // callee hid every callee this stage can name -- the projection a differentiated
+                    // body reads its pullback out of is behind exactly such a gate. The FUNC keeps the
+                    // gate as a control input (keepCalleeOrdering), so the ordering the gate carried
+                    // stays where the statement wrote it.
                     if (camel::runtime::devirtualizeStaticCallInDraft(
-                            session,
-                            transaction,
-                            callNodeId)) {
+                            session, transaction, callNodeId, /*unwrapGatedCallee=*/true)) {
                         changed = true;
                         if (lastChangedOut) {
                             *lastChangedOut = nextGraph;
@@ -1111,6 +1138,34 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
             }
             if (restartRound) {
                 break;
+            }
+            // A body spliced into this graph brings its calls with it. Before the splice, a call
+            // whose callee is a tuple projection read a tuple another graph built (`sq.fwd`'s
+            // `(value, pullback)`); after it, that tuple is a FILL of this graph and the callee is
+            // nameable from here. Devirtualizing those calls is the difference between publishing a
+            // call that names its callee and one the effect resolver has to read as "writes
+            // everything": a differentiated body's two calls sit in one region and neither writes,
+            // so leaving them unnamed costs the graph the order completeness Analysis 4.1 asks for,
+            // where naming them costs nothing. Only the calls a splice brought in are taken: a call
+            // the program wrote keeps whatever form it had, which is `std::opt::devirtualize`'s
+            // business and not this pass's.
+            if (config.enableInlining) {
+                for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                    if (!draft.alive(id)) {
+                        continue;
+                    }
+                    const camel::runtime::DraftNodeHeader *header = draft.header(id);
+                    if (header == nullptr || header->kind != GCNodeKind::Call ||
+                        !inSplicedRegion(draft, id)) {
+                        continue;
+                    }
+                    if (camel::runtime::devirtualizeStaticCallInDraft(
+                            session, transaction, id, /*unwrapGatedCallee=*/true)) {
+                        changed        = true;
+                        roundChanged   = true;
+                        graphRewritten = true;
+                    }
+                }
             }
             if (!graphRewritten && candidates.empty()) {
                 callBook.examined(
