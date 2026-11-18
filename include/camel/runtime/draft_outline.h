@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph_txn.h"
 
 #include <string_view>
 #include <vector>
@@ -34,24 +34,20 @@ struct DraftOutlineResult {
     explicit operator bool() const { return graph != nullptr; }
 };
 
-/// The boundary a group of nodes has: the values it reads from outside, in the order a port is made
-/// of each, and the one value it hands on. Throws `std::runtime_error` naming the rule the group
-/// breaks when it is not a segment with such a boundary -- an empty group, a node the transaction
-/// does not hold, a node that anchors its graph, a node that carries an access or an ordering, no
-/// value out or more than one.
-struct DraftOutlineBoundary {
-    std::vector<gc_node_ref_t> entries;
-    gc_node_ref_t result = kInvalidNodeRef;
-};
-DraftOutlineBoundary draftOutlineBoundary(
-    const GraphDraft &draft, std::span<const gc_node_ref_t> group);
-
 /// Makes the group a graph of its own in `session`'s program and puts a call of it where the group's
 /// value stood, so that the copy the group's nodes became is reached through that call (the call is
 /// what a pass reads the new function with, and what `inline` expands again).
 ///
+/// The group must be a segment with a boundary the reader in `draft_outline.cpp` accepts: the values
+/// it reads from outside, in the order a port is made of each, and exactly one value it hands on. A
+/// group with no such boundary (an empty one, a node the transaction does not hold, a node that
+/// anchors its graph, a node that carries an access or an ordering, no value out or more than one) is
+/// refused with the rule it breaks. That reader takes the draft and its one caller is this function,
+/// so it stays in that file: a declaration here would be surface nothing outside can call, and it
+/// would put the type's name in a header that otherwise never names it.
+///
 /// The new graph's signature is read from the group: one ordinary parameter per entry, in the order
-/// `draftOutlineBoundary` gives them, and the result's type as the exit type. The group's nodes are
+/// the boundary reader gives them, and the result's type as the exit type. The group's nodes are
 /// copied, not moved: nothing a group does can be copied without its type, its operator and what
 /// reads it, and the copy is the graph's body while the group's own nodes are erased once nothing in
 /// the draft reads them any more.

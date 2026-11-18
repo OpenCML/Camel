@@ -96,7 +96,20 @@ std::string namingOf(const GraphDraft &draft, gc_node_ref_t id) {
     return "a name this layer does not read";
 }
 
-} // namespace
+/// The boundary a group of nodes has: the values it reads from outside, in the order a port is made
+/// of each, and the one value it hands on. A group whose boundary is not that shape is refused with
+/// the rule it breaks rather than guessed at (an empty group, a node the transaction does not hold,
+/// a node that anchors its graph, a node that carries an access or an ordering, no value out or more
+/// than one).
+///
+/// It is this file's reader, not a declaration in `draft_outline.h`: it takes the draft, and its one
+/// caller is `outlineDraftNodes` below, which already has the draft through the transaction it was
+/// given. Written into the header it would be interface surface that nothing outside this file can
+/// call, and it would put the type's name in a header that otherwise never names it.
+struct DraftOutlineBoundary {
+    std::vector<gc_node_ref_t> entries;
+    gc_node_ref_t result = kInvalidNodeRef;
+};
 
 DraftOutlineBoundary draftOutlineBoundary(const GraphDraft &draft, std::span<const gc_node_ref_t> group) {
     if (group.empty()) {
@@ -209,6 +222,8 @@ DraftOutlineBoundary draftOutlineBoundary(const GraphDraft &draft, std::span<con
     }
     return boundary;
 }
+
+} // namespace
 
 DraftOutlineResult outlineDraftNodes(
     RuntimeGraphDraftSession &session, GraphTransaction &transaction,
