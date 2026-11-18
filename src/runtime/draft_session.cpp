@@ -1592,9 +1592,17 @@ const Program *RuntimeGraphDraftSession::commitChecked() {
     return commit();
 }
 
-const Program *RuntimeGraphDraftSession::commit(bool detached) {
+const Program *RuntimeGraphDraftSession::commit(bool detached) { return runCommit(false, detached); }
+
+const Program *RuntimeGraphDraftSession::prepared() { return runCommit(true, false); }
+
+const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
+    }
+    if (!staged) {
+        // The staged program is what `prepared` handed its caller; this run makes its own.
+        staged_.reset();
     }
 
     // A port written at a node the draft does not have cannot be encoded: the writer of the graph
@@ -1874,6 +1882,20 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             allocate(holder);
             encode(holder);
         }
+    }
+
+    if (staged) {
+        // The encode and nothing after it: the program these drafts would publish, before the
+        // checks that judge it and before anything is delivered. A pass that has to state the type
+        // its own edit needs -- `tiles`, whose bodies now hold a device submission and so reach the
+        // ambient `tiles:driver` -- reads the body here, through the same `bodySignature` the
+        // commit's check reads, and states the widened type on the draft before the commit that
+        // judges it (the ruling of 2026-11-18, `f61196246`: the pass declares the widened type at
+        // the commit). A staged run delivers nothing and makes no revision: the program of this
+        // session is still the one it was opened over, and only the encode's copies are new.
+        staged_.reset();
+        staged_ = ProgramHold(*context_, committed);
+        return staged_.get();
     }
 
     for (GCGraph *graph : order) {
