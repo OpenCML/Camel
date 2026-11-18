@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：19 页
+## 现在在等作者：21 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -18,6 +18,7 @@
 | [`2026-11-19-a-tuple-flows-into-an-operator-s-arguments`](2026-11-19-a-tuple-flows-into-an-operator-s-arguments.cn.md) | 元组当值流进了算子实参 |
 | [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
 | [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
+| [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 让入口图打包，并把呈现取第 0 份：方案定稿与两次失败的机制 |
 | [`2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other`](2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md) | 去掉打包位与从声明算，互为前提 |
 | [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 |
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
@@ -28,6 +29,7 @@
 | [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 |
 | [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve.cn.md) | 那 13 条期望的 `TILES_OUTLINED 10`，模型被实测推翻了 |
 | [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） |
+| [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 
