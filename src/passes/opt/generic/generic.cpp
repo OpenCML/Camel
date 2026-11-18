@@ -255,10 +255,19 @@ bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref
 /// place in its chain.
 ///
 /// So after a fold, a statement that had a place and lost it gets one back: the statement written
-/// Replaces `id` by `replacement` (see replaceNode) and makes the replacement the graph's exit,
-/// output and returned value wherever `id` was one of them. `replaceNode` re-points the value
-/// anchors it knows (output, return), but erasing the node clears the exit anchor, so all three
-/// are set again on the replacement.
+/// Replaces `id` by `replacement` (see replaceNode) and leaves the graph's exit, output and
+/// returned value naming the node that stands for the value wherever `id` was one of them.
+///
+/// Which node that is, is `replaceNode`'s answer, not this wrapper's: it hands each anchor this
+/// node held to the node the readers see, and that node is not always `replacement`. A fold that
+/// takes the last read of the `GATE` at the end of a `sync` block's chain takes the write behind
+/// that gate out of the graph's reach, so `replaceNode` hangs the value on a `GATE` that waits on
+/// it (`keepThroughValue`) and names that gate. Writing `replacement` over the anchor here undid
+/// that: the exit read the constant directly and the `println` the gate carried stopped running.
+/// The shape is a call whose result the fold computes away after inlining the callee:
+/// `func q(a:int):int sync { println('L1'); return a+1 }` with `main` written
+/// `let x = q(41); return x - 42` prints `L1` with no pass and with `std::opt::inline`, and printed
+/// nothing at all under `std::opt` until this anchor was left to `replaceNode`.
 void replaceFoldResult(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
     auto &draft          = transaction.edit();
@@ -274,13 +283,15 @@ void replaceFoldResult(
     if (replacement == kInvalidNodeRef) {
         return;
     }
-    if (wasExit) {
+    // Only an anchor the splice left naming nothing gets one here; one it has already moved names
+    // the node that stands for the value, and that is the answer.
+    if (wasExit && draft.exitNode() == kInvalidNodeRef) {
         draft.setExitNode(replacement);
     }
-    if (wasOutput) {
+    if (wasOutput && draft.outputNode() == kInvalidNodeRef) {
         draft.setOutputNode(replacement);
     }
-    if (wasReturn) {
+    if (wasReturn && draft.returnNode() == kInvalidNodeRef) {
         draft.setReturnNode(replacement, kind);
     }
 }
