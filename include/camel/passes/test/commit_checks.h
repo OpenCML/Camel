@@ -163,6 +163,31 @@ class CommitSiblingArmTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * Reads the read across regions that a graph with *no branch* is never asked about. The rule
+ * (`validateRuntimeBranchArms`, src/runtime/branch_arms.cpp) is "a node reads only nodes that run
+ * whenever it runs", and it is written over the region tree -- so the body of a loop is a region of
+ * the graph exactly as the arm of a branch is, and a read of a value the loop's body computes is the
+ * same question as a read across two arms. What differed was only whether it was asked: the check
+ * returned as soon as a graph had no BRCH, so the whole of a branch-less graph's cross-region reads
+ * went unjudged.
+ *
+ * `test/cases/opt/commit_checks/loop_body_read.cml` is the fixture: a loop whose body computes a
+ * value, and no branch anywhere. The first draft is the read that must be refused -- a COPY in the
+ * function body (region 0) reading a value of the loop's body, waited on by the write that runs
+ * after the loop so that nothing about it is dead. The pass then makes the two reads that must not
+ * be refused, because a refusal on either of them would be the check judging the region pair by the
+ * wrong end: the same COPY reading a value of its own region, and a COPY inside the loop's body
+ * reading a value the function body computed (the direction every loop body in the language writes).
+ */
+inline constexpr const char *kCommitLoopBodyReadTestPass = "test::commit_loop_body_read";
+class CommitLoopBodyReadTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the same defect through the exemption every pass written in Camel has, in one run:
  * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
  * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was

@@ -1070,6 +1070,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kCommitAncestorTestPass, CommitAncestorTestPass),
         TEST_PASS(kCommitTierTestPass, CommitTierTestPass),
         TEST_PASS(kCommitSiblingArmTestPass, CommitSiblingArmTestPass),
+        TEST_PASS(kCommitLoopBodyReadTestPass, CommitLoopBodyReadTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
