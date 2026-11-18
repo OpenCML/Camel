@@ -293,8 +293,11 @@ export func show(n: Node): string spelling
 /// structure decides (design principles 9.5). Two programs that differ only in what the source
 /// spelled -- the order two statements were written in, the names a variable was given -- number
 /// their nodes the same, so a pass may key a map by this number and compare two of them to ask which
-/// node comes first in the canonical order. A node of a draft has no canonical number yet; it
-/// answers the position of the draft it is in.
+/// node comes first in the canonical order. A node of a draft has no canonical number at all, and
+/// reading one is refused with the fault `InvalidArgument` of `graph.id`: the position a node holds
+/// while the draft is open is the order the nodes were made in, and the commit replaces it, so an
+/// answer there would be a number that changes. Read `id` after the commit publishes the program, or
+/// read `creation_id` (which declares `spelling`) for the draft's own order.
 /// @example-fragment n is a node of the surrounding pass
 /// @example id(n)
 #op('graph:id')

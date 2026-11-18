@@ -1900,39 +1900,38 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         }
     }
 
-    // The two commit checks of the effect analysis (docs/design/effects/analysis.cn.md 4.1), asked
-    // of every graph this commit changed, through the one function every commit path uses
-    // (`camel::runtime::commitViolation`): a pass written in Camel reaches a rewrite only through
+    // The commit checks of the effect analysis and of the calculus (docs/design/effects/analysis.cn.md
+    // 4.1), asked of every graph this commit changed, through the one function every commit path
+    // uses (`camel::runtime::commitViolation`): a pass written in Camel reaches a rewrite only through
     // the graph module, and the graph module's `commit` is this commit, so this is the single place
     // both paths answer the same question. A rewrite through the draft API that splices nodes in
     // reaches it here too.
     //
-    // Asked as the build says (`commitChecksEnabled`, one cell with the pass layer's switch): a
-    // shipped build reads the theorem of 2026-11-15 and does not ask, a debug build asks, and a
-    // test asks. What is judged is what the commit made: a node whose reference the graph the draft
-    // was decoded from does not have. An access or an ordering the program already had is not this
-    // commit's to answer for, and a pair is judged when either of its nodes is one this commit made.
-    if (commitChecksEnabled()) {
-        for (const auto &[graph, copy] : fresh) {
-            if (!edited_.contains(graph)) {
-                continue;
+    // Asked by what the draft added, not by what the build is (the ruling of 2026-11-18, which
+    // replaces the one of 2026-11-16): a draft that added an access is asked the effect and order
+    // checks in every build, and a draft that added none owes no answer about them in any build --
+    // the public edits of the graph module (`replace`, `erase`, `add_constant`, `eval`) make no node
+    // that carries an access, and `replace` promises that what the node it removed ordered stays
+    // ordered (stdlib/graph.cml). The exit check and the seal's acyclicity check are asked of every
+    // commit, from the seal this commit runs just below (`validateRuntimeGraphPayload`): they are
+    // properties of the graph published, not of what the commit added.
+    //
+    // What is judged is what the commit made: a node whose reference the graph the draft was decoded
+    // from does not have. The regions it answers for are those nodes' regions and every region
+    // around them (`commitViolation`), because an owner node stands for what is under it and a
+    // splice deep inside a branch changes what the branch carries outside.
+    for (const auto &[graph, copy] : fresh) {
+        if (!edited_.contains(graph)) {
+            continue;
+        }
+        std::vector<gc_node_ref_t> made;
+        for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
+            if (graph == nullptr || ref >= graph->nodeCount() || graph->node(ref) == nullptr) {
+                made.push_back(ref);
             }
-            std::vector<gc_node_ref_t> made;
-            for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
-                if (graph == nullptr || ref >= graph->nodeCount() || graph->node(ref) == nullptr) {
-                    made.push_back(ref);
-                }
-            }
-            // A commit that made no node added no access: the graph module's public edits
-            // (`replace`, `erase`, `add_constant`, `eval`) make no node that carries one, and
-            // `replace` promises that what the node it removed ordered stays ordered
-            // (stdlib/graph.cml) -- which is the theorem of 2026-11-15 read per commit instead of
-            // per pass. So it owes no answer about ordering. Containment it does owe: the graph
-            // publishes a type whether or not this commit made a node, and a body that reaches past
-            // that type is the commit's to answer for either way.
-            if (const auto violation = commitViolation(*committed, *copy, made, !made.empty())) {
-                throw GraphCommitRefused(*violation);
-            }
+        }
+        if (const auto violation = commitViolation(*committed, *copy, made)) {
+            throw GraphCommitRefused(*violation);
         }
     }
 

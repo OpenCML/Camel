@@ -1453,14 +1453,6 @@ std::string nodeAccessText(const NodeAccess &access) {
     return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
 }
 
-/// Whether a commit answers for `ref`: every node when the caller named none, otherwise the ones it
-/// named. An access or an ordering the program already had before the commit is not this commit's to
-/// answer for; containment is a property of the graph as a whole and is asked of every node
-/// (`effectBeyondDeclaration`), so this scopes the order question only.
-bool judgedBy(const std::span<const gc_node_ref_t> &named, gc_node_ref_t ref) {
-    return named.empty() || std::find(named.begin(), named.end(), ref) != named.end();
-}
-
 /// The accesses of every node of one graph, resolved at most once each. The commit checks ask for a
 /// node's accesses once per pair it takes part in and once per access those contain; resolving them
 /// again per question would put the resolver's work inside a loop over pairs, where nothing it reads
@@ -1595,6 +1587,56 @@ uint32_t judgedRegionOf(const GCGraph &graph, uint32_t region) {
     return 0;
 }
 
+/// The tier of the ruling of 2026-11-18, read from the access table the checks already build: did
+/// the draft add an access? A node the draft made that carries none (a constant, a copy of a value)
+/// adds none, and a commit that added none owes no answer about the effect or the ordering, in any
+/// build. This is the whole of the tier -- it takes no build, and a caller cannot hand it one.
+bool addsAnAccess(const NodeAccessTable &table, std::span<const gc_node_ref_t> made) {
+    for (gc_node_ref_t ref : made) {
+        if (!table.of(ref).none()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The regions a commit answers for: the region each node it made is in, and every region around
+/// that one up to the body (the author's ruling of 2026-11-18, "recheck the touched regions with
+/// all their ancestors"). A region is touched by what was written in it and by what was written
+/// anywhere under it: an owner node stands in the region it sits in for every region under it (the
+/// `RegionEntrant` below), so a write spliced into an arm changes the footprint the branch node
+/// carries outside, and the pair out there can be new while neither of its nodes is one this commit
+/// made. The regions the commit did not touch are left alone: the program's own accesses there are
+/// already ordered, and asking again would decide a question whose answer cannot have changed.
+std::vector<uint8_t> touchedRegions(const GCGraph &graph, std::span<const gc_node_ref_t> made) {
+    std::vector<uint8_t> touched(static_cast<size_t>(graph.regionCount()), 0);
+    if (touched.empty()) {
+        return touched;
+    }
+    for (gc_node_ref_t ref : made) {
+        if (!graph.containsNodeRef(ref)) {
+            continue;
+        }
+        uint32_t region = judgedRegionOf(graph, graph.nodeRegion(ref));
+        for (uint32_t steps = 0; region != 0 && steps <= graph.regionCount(); ++steps) {
+            touched[region] = 1;
+            const GCRegion *one = graph.region(region);
+            if (one == nullptr) {
+                break;
+            }
+            const uint32_t parent = judgedRegionOf(graph, one->parent);
+            if (parent == region) {
+                break;
+            }
+            region = parent;
+        }
+        // The body is every region's ancestor, and the region a commit that made a node answers in
+        // whatever else it touched.
+        touched[0] = 1;
+    }
+    return touched;
+}
+
 /// One thing that touches a resource in one region: a node of that region, or -- when a node has
 /// accesses in a region under this one -- the owner node that stands here for everything under it.
 struct RegionEntrant {
@@ -1607,9 +1649,28 @@ struct RegionEntrant {
 /// which at least one writes must have a path between them in the region they both stand in --
 /// a data, sync or order edge, or a region's `GATE` input. A resource its declaration names
 /// `unordered` carries no promise and is passed over (principle 3.3).
+///
+/// Which regions are read is `touchedRegions`' answer, and which pairs are: those of which one side
+/// answers for a node this commit made, at the depth the made node sits -- an owner node answers for
+/// what is under it, and it is the owner that stands in the region around it.
 std::optional<CommitViolation> orderIncomplete(
     const Program &program, const GCGraph &graph, const NodeAccessTable &table,
-    std::span<const gc_node_ref_t> changed) {
+    std::span<const gc_node_ref_t> made) {
+    const std::vector<uint8_t> touched = touchedRegions(graph, made);
+    std::vector<uint8_t> madeNode(static_cast<size_t>(graph.nodeCount()), 0);
+    for (gc_node_ref_t ref : made) {
+        if (ref < graph.nodeCount()) {
+            madeNode[ref] = 1;
+        }
+    }
+    const auto answersFor = [&madeNode](const RegionEntrant &one) {
+        for (gc_node_ref_t member : one.members) {
+            if (member < madeNode.size() && madeNode[member] != 0) {
+                return true;
+            }
+        }
+        return false;
+    };
     std::vector<std::vector<RegionEntrant>> regions(
         static_cast<size_t>(graph.regionCount() > 0 ? graph.regionCount() : 1));
     const auto entrantAt = [&](uint32_t region, gc_node_ref_t stands) -> RegionEntrant & {
@@ -1647,7 +1708,11 @@ std::optional<CommitViolation> orderIncomplete(
             region = parent;
         }
     }
-    for (const std::vector<RegionEntrant> &here : regions) {
+    for (size_t at = 0; at < regions.size(); ++at) {
+        if (at >= touched.size() || !touched[at]) {
+            continue; // a region this commit did not touch, where nothing can have changed
+        }
+        const std::vector<RegionEntrant> &here = regions[at];
         for (size_t i = 0; i < here.size(); ++i) {
             for (size_t j = i + 1; j < here.size(); ++j) {
                 const RegionEntrant &x = here[i];
@@ -1656,14 +1721,26 @@ std::optional<CommitViolation> orderIncomplete(
                     y.stands == kInvalidNodeRef) {
                     continue;
                 }
-                if (!changed.empty() &&
-                    std::none_of(x.members.begin(), x.members.end(), [&](gc_node_ref_t ref) {
-                        return judgedBy(changed, ref);
-                    }) &&
-                    std::none_of(y.members.begin(), y.members.end(), [&](gc_node_ref_t ref) {
-                        return judgedBy(changed, ref);
-                    })) {
-                    continue; // both sides of this pair are what the program already had
+                // A pair is judged when either side answers for a node this commit made -- and the
+                // side that answers for it need not be the node itself: an owner node stands in its
+                // region for everything under it, so a write spliced into an arm turns the branch
+                // node into a writer the body did not have while the branch node is not a node this
+                // commit made. Two nodes the commit neither made nor now carries are two the program
+                // already had in the relation it already had them in.
+                if (!answersFor(x) && !answersFor(y)) {
+                    continue;
+                }
+                // An owner node and a node it stands for here are one effect seen at two depths, not
+                // two effects: the owner's access in this region *is* the access of what is under it.
+                // A pair of them would ask whether an effect is ordered against itself, which is not
+                // a question -- and the two sides are then the same access, or one side's own node is
+                // a member of the other.
+                const auto covers = [](const RegionEntrant &side, gc_node_ref_t node) {
+                    return std::find(side.members.begin(), side.members.end(), node) !=
+                           side.members.end();
+                };
+                if (covers(x, y.stands) || covers(y, x.stands) || x.members == y.members) {
+                    continue;
                 }
                 for (gc_node_ref_t first : x.members) {
                     for (gc_node_ref_t second : y.members) {
@@ -1715,19 +1792,36 @@ std::optional<CommitViolation> orderIncomplete(
 } // namespace
 
 std::optional<CommitViolation> commitViolation(
-    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
-    bool askOrder) {
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made) {
+    // The tier first, and before any resolver runs: a commit that made no node adds no access, so it
+    // owes no answer about the effect or the ordering, and a rewrite whose only interface is the
+    // graph module pays one size check per graph and nothing else -- the saving the ruling of
+    // 2026-11-16 bought with a build's answer, bought here with a fact about the draft.
+    if (made.empty()) {
+        return std::nullopt;
+    }
     // One walk for the whole question: each callee's footprint is a finished fixpoint.
     FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
     Resolver resolver(program, [&walk](const GCGraph *callee) { return walk.run(callee); });
     const NodeAccessTable table(graph, resolver);
+    if (!addsAnAccess(table, made)) {
+        return std::nullopt;
+    }
     if (auto effect = effectBeyondDeclaration(program, graph, walk, table)) {
         return effect;
     }
-    if (!askOrder) {
-        return std::nullopt;
-    }
     return orderIncomplete(program, graph, table, made);
+}
+
+bool commitAddsAccess(
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made) {
+    if (made.empty()) {
+        return false;
+    }
+    FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
+    Resolver resolver(program, [&walk](const GCGraph *callee) { return walk.run(callee); });
+    const NodeAccessTable table(graph, resolver);
+    return addsAnAccess(table, made);
 }
 
 /// Records the refusal as the diagnostic both commit paths carry. It is here, next to the reading,
@@ -1740,9 +1834,15 @@ void reportCommitViolation(
     if (ctx == nullptr) {
         return;
     }
-    const core::error::RuntimeDiag which = violation.check == CommitCheck::Effect
-                                               ? core::error::RuntimeDiag::PassEffectBeyondType
-                                               : core::error::RuntimeDiag::PassEffectOrder;
+    const core::error::RuntimeDiag which = [&] {
+        switch (violation.check) {
+        case CommitCheck::Effect:
+            return core::error::RuntimeDiag::PassEffectBeyondType;
+        case CommitCheck::Order:
+            return core::error::RuntimeDiag::PassEffectOrder;
+        }
+        return core::error::RuntimeDiag::PassEffectBeyondType;
+    }();
     auto diag = ctx->rtmDiags()->of(which);
     if (violation.origin != 0) {
         diag.atOrigin(violation.origin);
@@ -1752,9 +1852,11 @@ void reportCommitViolation(
 
 namespace {
 
-/// The one cell both commit paths read (`commitChecksEnabled` below). It is not in the header: the
+/// The one cell the pass boundary reads (`commitChecksEnabled` below). It is not in the header: the
 /// question is a build's answer, and a header that held it would offer a second copy of it to every
-/// translation unit, which is exactly what the two paths must not have.
+/// translation unit, which is exactly what the two paths must not have. The commit checks no longer
+/// read it: their tier is what the draft added (`commitAddsAccess`), which is a fact about the
+/// draft, and a build that decided it would be a second answer to that fact.
 std::atomic<bool> commitChecksCell =
 #ifndef NDEBUG
     true;

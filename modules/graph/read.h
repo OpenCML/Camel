@@ -24,8 +24,10 @@ bool constantType(const camel::core::type::Type *type);
 /// which the graph's structure decides (design principles 9.5). The walk is the one
 /// `src/runtime/canonical.cpp` already has -- the block naming and `same_graph` use it -- solved
 /// once per Program from the Program's root, so every graph of one program is numbered by one
-/// answer. A node of a draft has no canonical number yet and answers the place it holds in the
-/// draft.
+/// answer. A node of a draft has no canonical number: the reading is refused with a runtime fault
+/// (`RuntimeDiag::InvalidArgument`, site `graph.id`), because the place the node holds in the draft
+/// is the order the nodes were made in and the commit replaces it -- a number that changes is an
+/// answer of the right shape and the wrong value (design principles 9.5).
 uint32_t nodeCanonicalNumber(const Handle *handle);
 
 /// The nodes of one graph in canonical order, as `nodes` gives them: the same walk, same numbering.

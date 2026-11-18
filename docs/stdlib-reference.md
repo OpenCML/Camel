@@ -1614,6 +1614,26 @@ The whole reading in one line: the function is written where the call is, so the
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.
 
+**Where the cut happens** (author, 2026-11-18: "`grad` hands back the differentiated graph, not a
+graph that transforms itself when it runs"). `split(jvp(f))` is written *here*, in the body of
+`vjp`, and not inside the lambda it answers: the cut is made once, when `vjp(f)` is evaluated,
+and every call of the reading calls the graph that cut handed back instead of cutting the lifted
+function again. Before this the body of the lambda opened with `split(jvp(f))<...ws>(...xs)`, so a
+training loop redid the whole lift and the whole cut on every step -- the cost the author named
+on 11-17, and the reason an outer transform met a derivative that was not a graph yet.
+
+What is **not** done here, and why: the residuals the linear half reads still travel in `lin`'s
+closure, so `transpose(lin)` is still a per-call step, and `grad(grad(f))` is still refused. The
+design's next step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
+(`fwd: x => (y, residuals)`, `lin: (residuals, tangents) => tangent`), which needs the residual
+*list* in a type: it is a property of the body (`residualsOf`), not of the signature, and no
+declaration can write it -- the `ResidualsOf<F>` / `_`-position hole that used to try was removed
+for that reason. Measured 2026-11-18 on this tree: the operator resolver sees types only, so it
+gives `lin` an empty residual list while the graph has as many as the body reads, and a call site
+typed by the resolver hands the callee the wrong number of values. That ordering is a question
+for the author (a typed hole, or the `std::macro` stage evaluating the cut where the graph *is* in
+hand), and `docs/handover/reports/2026-11-18-nested-transforms.cn.md` states it with the readings.
+
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
 
@@ -1644,6 +1664,13 @@ its function takes. So the lambda this call answers writes the same pack and han
 without the pack
 (`reading(...xs)`) the call was refused at this very line with `ArgumentsMismatch`
 (measured 2026-11-15): the reading takes `<...ws>` and was given `<>`.
+
+**The cut is made here, once** (author, 2026-11-18), for the reason `vjp` above states and with
+the same limit: `split(jvp(first_with_as_param(f)))` is written in `grad`'s own body, so a call of
+the gradient calls the graph the cut built instead of lifting and cutting the function again. The
+body is the composition written out (`split`, then `transpose` per call) rather than `vjp` read at
+the seed 1, because a `vjp` read would put the cut back inside the lambda it answers: the whole
+point is that the derivative is a graph by the time `grad(f)` answers.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`
@@ -6100,8 +6127,11 @@ The canonical number of the node: its position in the order `nodes` gives, which
 structure decides (design principles 9.5). Two programs that differ only in what the source
 spelled -- the order two statements were written in, the names a variable was given -- number
 their nodes the same, so a pass may key a map by this number and compare two of them to ask which
-node comes first in the canonical order. A node of a draft has no canonical number yet; it
-answers the position of the draft it is in.
+node comes first in the canonical order. A node of a draft has no canonical number at all, and
+reading one is refused with the fault `InvalidArgument` of `graph.id`: the position a node holds
+while the draft is open is the order the nodes were made in, and the commit replaces it, so an
+answer there would be a number that changes. Read `id` after the commit publishes the program, or
+read `creation_id` (which declares `spelling`) for the draft's own order.
 
 - Example (a fragment, not compiled): `id(n)`
 - Why it is not compiled: n is a node of the surrounding pass

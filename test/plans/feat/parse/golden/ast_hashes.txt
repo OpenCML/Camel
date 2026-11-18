@@ -520,7 +520,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-d003df4bdb94f537 ok stdlib/graph.cml
+45e14e46b35110d4 ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -2141,6 +2141,7 @@ c1863f4b68b6f37e ok test/cases/compile/var/loop_branch_write.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml
 28d98696ca2a4873 ok test/cases/compile/var/loop_nested.cml
 430e0b6cb8318fd3 ok test/cases/compile/var/loop_phi_two_sources.cml
+0a50e3dd423f509b ok test/cases/compile/var/loop_state_starts_from_the_last_write.cml
 7d1be5d3a30727cc ok test/cases/compile/var/loop_two_states.cml
 36c00bf6af90970d ok test/cases/compile/var/loop_var.cml
 9a65db17c8e1acb7 ok test/cases/compile/var/loop_write_outside_read.cml
@@ -3918,8 +3919,10 @@ d48530c14f968f08 ok test/cases/opt/algebra_rules/library_only.cml
 51d83bb71bf41e41 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 69fb474c5a932ac1 ok test/cases/opt/camel_passes/fold_subject.cml
+645e58a68f6f609e ok test/cases/opt/commit_checks/branch_and_print.cml
 4458f4f7e6cb467b ok test/cases/opt/commit_checks/fold_function_type.cml
 5ea4b89de03c989f ok test/cases/opt/commit_checks/generic_call.cml
+4b03f511a3efb360 ok test/cases/opt/commit_checks/identity_at_exit.cml
 0e0caabcbb90b4eb ok test/cases/opt/defun/captured.cml
 48e74295fd29a520 ok test/cases/opt/defun/closure_dispatch.cml
 67b9fbb450feedf7 ok test/cases/opt/defun/effects.cml
