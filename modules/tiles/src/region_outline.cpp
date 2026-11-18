@@ -62,9 +62,133 @@ std::string sourceLocationOf(core::context::Context &context, camel::source::ori
 
 // Transfers are leaf operations. Preserve the source aggregate's structure in
 // graph values instead of inventing a Device<tuple> or flattening field order.
+//
+// What this pass writes into a block is an effect: a transfer reads and writes the ambient
+// `tiles:driver`, and so does the exec call that stands for a segment (`module.cpp`,
+// `declareResources`). Two accesses to one resource in one region must have a path between them
+// (Analysis 4.1), and the statements a program writes get theirs from the chain the front end
+// wrote. A node this pass inserts has no such place unless the pass gives it one, and the resource
+// it writes is what orders it (`docs/design/gpu/plan.cn.md`: a transfer is an ordinary node and
+// the order comes from the resource edge). So the effects of one control region are chained here,
+// in the order this rewrite writes them: the uploads of a segment, the segment's exec call, and
+// the downloads of its outputs. Nothing else orders them -- they are siblings of one rewrite and
+// neither reads what the other writes -- which is why a rewrite that wrote two of them and no edge
+// left a pair the commit must refuse (`RuntimeDiag::PassEffectOrder`).
+//
+// The edges are written once the graph is finished (`finish`), not as each node is made: whether
+// two effects are already ordered is a question about the graph the commit judges, and a node
+// still in the making answers it wrongly. An upload whose value is the result of an earlier
+// segment reads that segment's exec call and the download of its result, but the download does not
+// exist yet when the upload is written: an edge written then goes between two nodes that the
+// download will later join into one path, and closes a cycle. An edge is written only where no
+// path leads either way round in the finished graph.
+class EffectOrder {
+  public:
+    /// Records that `effect` was written into the control region `region`, beside `place` -- the
+    /// node of that region whose value it moves, when there is one, so that what the block wrote
+    /// before and after that place keeps its order against the effect too.
+    void wrote(uint32_t region, runtime::gc_node_ref_t place, runtime::gc_node_ref_t effect) {
+        written_[region].push_back({place, effect});
+    }
+    /// Records that `before` runs before `after` because of what they read, whichever order they
+    /// were written in.
+    void readsBefore(runtime::gc_node_ref_t before, runtime::gc_node_ref_t after) {
+        reads_.emplace_back(before, after);
+    }
+    /// Writes the edges: what an effect reads runs before it, and of two effects written into one
+    /// region that nothing else orders, the one written first runs first -- the place each was
+    /// written beside keeping its say, because the statement before an effect and the statement
+    /// after it are what the effect was written between.
+    void finish(runtime::GraphDraft &draft) {
+        for (const auto &[before, after] : reads_)
+            order(draft, before, after);
+        for (const auto &[region, written] : written_) {
+            std::vector<runtime::gc_node_ref_t> chain;
+            for (const auto &one : written) {
+                if (one.first != runtime::kInvalidNodeRef)
+                    chain.push_back(one.first);
+                chain.push_back(one.second);
+            }
+            for (size_t i = 0; i + 1 < chain.size(); ++i)
+                order(draft, chain[i], chain[i + 1]);
+            for (size_t i = 0; i < written.size(); ++i)
+                for (size_t j = i + 1; j < written.size(); ++j)
+                    order(draft, written[i].second, written[j].second);
+        }
+    }
+
+  private:
+    /// Whether the encoder keeps an order edge that orders `id` after something: a node that may be
+    /// arranged anywhere drops it (`graph.cpp`, the payload plan: `nodeIsFreelySchedulable`), so an
+    /// ordering through such a node is not one the commit reads.
+    static bool keepsOrder(const runtime::GraphDraft &draft, runtime::gc_node_ref_t id) {
+        const auto *header = draft.header(id);
+        if (header == nullptr)
+            return false;
+        if (header->kind == runtime::GCNodeKind::Dead || header->kind == runtime::GCNodeKind::Cast)
+            return true;
+        if (!runtime::nodeIsFreelySchedulable(draft, id))
+            return true;
+        // A branch or a loop that owns a region stands for what runs inside it, so its order is
+        // the region's order and the encoder keeps it.
+        if (header->kind == runtime::GCNodeKind::Brch || header->kind == runtime::GCNodeKind::Loop)
+            for (uint32_t region = 1; region < draft.regionCount(); ++region)
+                if (draft.region(region).owner == id)
+                    return true;
+        return false;
+    }
+
+    /// Whether some edge of the draft leads from `from` to `to` -- data, context, control, order or
+    /// sync, the same walk the commit's check makes.
+    static bool leads(
+        const runtime::GraphDraft &draft, runtime::gc_node_ref_t from, runtime::gc_node_ref_t to) {
+        namespace rt = runtime;
+        std::vector<rt::gc_node_ref_t> work{to};
+        std::unordered_set<rt::gc_node_ref_t> seen{to};
+        while (!work.empty()) {
+            const auto here = work.back();
+            work.pop_back();
+            if (here == from)
+                return true;
+            const auto visit = [&](std::span<const rt::gc_node_ref_t> inputs) {
+                for (auto input : inputs)
+                    if (input < draft.nodeSlotCount() && draft.alive(input) &&
+                        seen.insert(input).second)
+                        work.push_back(input);
+            };
+            visit(draft.normInputsOf(here));
+            visit(draft.withInputsOf(here));
+            visit(draft.ctrlInputsOf(here));
+            if (keepsOrder(draft, here))
+                visit(draft.orderInputsOf(here));
+            visit(draft.syncInputsOf(here));
+        }
+        return false;
+    }
+
+    /// Orders `after` after `before` unless the graph already leads one way round. An ordering is
+    /// a path, so an edge is written only where the graph does not answer it already: a second
+    /// one says nothing, and the other way round makes a cycle. An effect a later step erased has
+    /// no place left to order.
+    static void
+    order(runtime::GraphDraft &draft, runtime::gc_node_ref_t before, runtime::gc_node_ref_t after) {
+        if (before == after || !draft.alive(before) || !draft.alive(after) ||
+            !keepsOrder(draft, after))
+            return;
+        if (leads(draft, before, after) || leads(draft, after, before))
+            return;
+        (void)draft.appendOrderDependency(after, before);
+    }
+
+    std::unordered_map<
+        uint32_t, std::vector<std::pair<runtime::gc_node_ref_t, runtime::gc_node_ref_t>>>
+        written_;
+    std::vector<std::pair<runtime::gc_node_ref_t, runtime::gc_node_ref_t>> reads_;
+};
+
 runtime::gc_node_ref_t transferAggregate(
     runtime::GraphDraft &draft, runtime::gc_node_ref_t input, core::type::Type *host, bool upload,
-    operator_t operation, const std::string &uri) {
+    operator_t operation, const std::string &uri, EffectOrder &effects, uint32_t region) {
     namespace rt   = runtime;
     namespace ty   = core::type;
     auto *resident = residentType(host);
@@ -90,14 +214,49 @@ runtime::gc_node_ref_t transferAggregate(
                                            static_cast<ty::StructType *>(host)->fieldName(i),
                                            draft.allocateRuntimeSlot(fieldType));
             draft.setNormInputs(field, std::span(&input, 1));
-            fields.push_back(transferAggregate(draft, field, hostField, upload, operation, uri));
+            fields.push_back(transferAggregate(
+                draft,
+                field,
+                hostField,
+                upload,
+                operation,
+                uri,
+                effects,
+                region));
         }
         return packGraphAggregate(draft, upload ? resident : host, fields);
     }
     auto *type        = upload ? resident : host;
     const auto result = draft.addOperNode(type, operation, uri, draft.allocateRuntimeSlot(type));
     draft.setNormInputs(result, std::span(&input, 1));
+    effects.wrote(region, input, result);
     return result;
+}
+
+/// The node a block holds for a read of a value that happens under it: the reader itself when it is
+/// written in `where`, otherwise the owner (a BRCH or a LOOP) of the innermost region under `where`
+/// that holds it -- that owner is the statement written in `where`. A transfer is written in
+/// `where`, and an ordering never leaves the region that holds it, so this is the node it can be
+/// ordered against for the read to wait for it.
+runtime::gc_node_ref_t standingIn(
+    const runtime::GCGraph &graph, const runtime::ControlRegions &control, uint32_t where,
+    runtime::gc_node_ref_t reader) {
+    namespace rt    = runtime;
+    uint32_t region = control.controlOf(reader);
+    if (region == where)
+        return reader;
+    rt::gc_node_ref_t standing = rt::kInvalidNodeRef;
+    for (uint32_t steps = 0; region != where && steps <= graph.regionCount(); ++steps) {
+        const rt::GCRegion *one = region < graph.regionCount() ? graph.region(region) : nullptr;
+        if (one == nullptr)
+            return rt::kInvalidNodeRef;
+        standing             = one->owner;
+        const uint32_t outer = control.parentControl(region);
+        if (outer == region)
+            return rt::kInvalidNodeRef;
+        region = outer;
+    }
+    return standing;
 }
 } // namespace
 
@@ -476,6 +635,8 @@ const runtime::Program *outlineRegions(
             continue;
         auto &draft = session.edit(graph).edit();
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
+        /// The effects this rewrite has written, by the control region they were written in.
+        EffectOrder effects;
         const rt::ControlRegions control(*graph);
         // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
         // written in an arm runs only when that arm is taken, so its call, its uploads and its
@@ -512,15 +673,26 @@ const runtime::Program *outlineRegions(
             for (auto value : analysis.residency.uploads) {
                 const auto input  = static_cast<rt::gc_node_ref_t>(value);
                 const auto found  = uploadControl.find(value);
-                draft.setInsertRegion(found == uploadControl.end() ? 0 : found->second);
+                const uint32_t where = found == uploadControl.end() ? 0 : found->second;
+                draft.setInsertRegion(where);
                 const auto upload = transferAggregate(
                     draft,
                     input,
                     graph->node(input)->dataType(),
                     true,
                     device->upload,
-                    device->uploadUri);
+                    device->uploadUri,
+                    effects,
+                    where);
                 draft.setNodeOrigin(upload, graph->nodeOrigin(input));
+                // The value is read where this upload is written, or under it: the upload has to
+                // run before what reads it, so the reader -- or the branch or loop that owns the
+                // read, when it is written deeper -- is ordered after the upload.
+                for (auto reader : graph->uses().norm(input)) {
+                    const auto standing = standingIn(*graph, control, where, reader);
+                    if (standing != rt::kInvalidNodeRef && standing != upload)
+                        effects.readsBefore(upload, standing);
+                }
                 draft.setInsertRegion(0);
                 resident.emplace(value, upload);
             }
@@ -619,6 +791,10 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
+            // The exec call is the second effect of this region: it reads what the uploads wrote and
+            // writes the driver the downloads read, so it takes its place in the chain here and
+            // reads no value of the block beside it.
+            effects.wrote(whereOf(region), rt::kInvalidNodeRef, call);
             // That context argument is the segment's own function constant, so this call is the
             // segment's exec node and the template published above is its plan: a segment is an
             // exec call carrying its graph, and the report operators read the graph, not the
@@ -704,7 +880,9 @@ const runtime::Program *outlineRegions(
                             hostType,
                             false,
                             device->download,
-                            device->downloadUri);
+                            device->downloadUri,
+                            effects,
+                            whereOf(region));
                         draft.setNodeOrigin(download, graph->nodeOrigin(old));
                         replacement = download;
                     }
@@ -733,6 +911,9 @@ const runtime::Program *outlineRegions(
         for (const auto &region : analysis.regions)
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)
                 draft.eraseNode(static_cast<rt::gc_node_ref_t>(*it));
+        // The graph is finished: what the effects this rewrite wrote are already ordered by is now
+        // the graph the commit reads, so this is where the rest of their order is written.
+        effects.finish(draft);
     }
     if (regionRefused)
         return program;
