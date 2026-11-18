@@ -3196,23 +3196,12 @@ node_handle_t Builder::visitLinkNode(
                         })));
             throw BuildAbortException();
         }
-        // The call's value is what the callee's graph hands on: its result, and -- for a callee
-        // that hands its `var` parameters back -- those values beside it (`graphExitTypeOf`).
-        // The statement's value is the result, the tuple's first part: the tuple itself is the
-        // call's own value and what the `var` arguments' new versions are read from.
-        const node_handle_t callNode = currGraph_->addCallNode(graphExitTypeOf(factoryType));
-        linkNodes(LinkType::With, decoratorInvoke, callNode);
+        targetNode = currGraph_->addCallNode(factoryType->exitType());
+        linkNodes(LinkType::With, decoratorInvoke, targetNode);
         // The call is written in the program: it is located where it is written, not where
         // the function's decorators left it.
-        registerCallExpressionOrigin(context_, callNode, gct, "gir.link.call");
+        registerCallExpressionOrigin(context_, targetNode, gct, "gir.link.call");
         targetFuncType = factoryType;
-        targetNode     = callNode;
-        if (packsVariableParameters(factoryType) && factoryType->hasExitType() &&
-            !isVoidGraphExitType(factoryType->exitType())) {
-            // This path holds the signature and no graph: the signature says whether it packs,
-            // and a signature written with a tuple result is never packed (`graphExitTypeOf`).
-            targetNode = callValuePartOf(callNode, 0);
-        }
     };
 
     // Design principles 5.7: an instance also uses the operators of the module that declares
@@ -4480,7 +4469,7 @@ node_handle_t Builder::visitLinkNode(
                 .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
-        node_handle_t invokeNode = currGraph_->addCallNode(graphExitTypeOf(funcType));
+        node_handle_t invokeNode = currGraph_->addCallNode(funcType->exitType());
         linkNodes(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
@@ -5028,39 +5017,16 @@ node_handle_t Builder::visitLinkNode(
         writeNodes_[targetNode] = *store;
     }
 
-    // A callee that hands its `var` parameters' final values back ("a `var` parameter is one value
-    // in and one value out", author 2026-11-19) hands a tuple: its result first, then those values.
-    // What the expression is worth is the result, the first part; the call itself stays the node
-    // that runs, and the tuple it holds is where its `var` arguments' new versions are read from
-    // (Builder::valueVersionOf, once the caller rebinds them).
-    const node_handle_t callNode = targetNode;
-    // The callee graph answers this one question itself (`callHandsBackResult`): its body recorded
-    // whether it packs `var` parameters into the exit type, and the signature cannot be asked
-    // instead -- a user-written tuple result looks exactly like a packed one.
-    const bool handsBackParams = callHandsBackResult(targetGraph);
-    // Recorded for a reader that asks what the expression is *worth*, which is the result and not
-    // the tuple -- including a call inside its own body: that call's callee is this graph, whose
-    // exit is packed when the body ends, so the graph answers "not yet" and the declared signature
-    // answers for it. Recording changes nothing about the value or the nodes.
-    if (handsBackParams ||
-        (targetGraph != nullptr && targetGraph.get() == currGraph_.get() &&
-         packsVariableParameters(targetGraph->funcType()))) {
-        handsBackParameterCalls_.insert(callNode);
-    }
-    if (handsBackParams) {
-        targetNode = callValuePartOf(callNode, 0);
-    }
-
     // Outside a `sync` block there is no chain to be a statement of. Inside one, a call is a
     // statement by what its callee turns out to be (design principles 3.4): a call of a body that
     // reaches no resource, holds nothing that may fault and is not recursive is one of the
     // computations the compiler arranges freely, so the chain passes it by and the statement before
     // this one keeps its place.
-    const bool chainStatement = synced_ && callIsChainStatement(callNode);
+    const bool chainStatement = synced_ && callIsChainStatement(targetNode);
     if (synced_ && chainStatement) {
-        linkSyncStatement(lastSyncedNode_, callNode);
+        linkSyncStatement(lastSyncedNode_, targetNode);
         lastSyncedNode_ = targetNode;
-        chainedNodes_.insert(callNode);
+        chainedNodes_.insert(targetNode);
     }
     if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
         targetFuncType != nullptr && targetFuncType->hasExitType()) {

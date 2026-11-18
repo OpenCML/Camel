@@ -757,10 +757,7 @@ uint32_t Builder::captureWriteMaskOf(const compile_graph_ptr_t &callee) const {
 }
 
 Type *Builder::callValueTypeOf(const compile_graph_ptr_t &callee, uint32_t written) const {
-    // A callee that hands its `var` parameters' final values back (`graphExitTypeOf`) hands a
-    // tuple, and this is where every reader of the call's value learns its type -- including a
-    // call the callee's own body makes before that body's exit has set the type.
-    Type *exit = graphExitTypeOf(callee->funcType());
+    Type *exit = callee->funcType()->exitType();
     if (written == 0) {
         return exit;
     }
