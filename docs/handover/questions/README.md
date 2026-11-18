@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：42 页
+## 现在在等作者：43 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -41,6 +41,7 @@
 | [`2026-11-18-typeof-of-machine-made-types`](2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ |
 | [`2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value`](2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value.cn.md) | `sync` 体里一个调用把元组当成了语句的值 |
+| [`2026-11-19-a-tuple-flows-into-an-operator-s-arguments`](2026-11-19-a-tuple-flows-into-an-operator-s-arguments.cn.md) | 元组当值流进了算子实参 |
 | [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
 | [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
 | [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 |
