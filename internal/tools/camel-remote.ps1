@@ -981,6 +981,9 @@ $checkResults = @()
 # with the recorded red set. Null means the observation did not run (a -NoGpuWatch run, a build-only
 # run) or never printed a reading.
 $gpuReading = $null
+# Why each red is red, by case name: the `-evidence` line that follows the reading. Empty when the
+# host printed none (an older host script), which reads as "no reason recorded for any case".
+$gpuEvidence = @{}
 # The AST snapshot's own exit (`-UpdateAstHashes`) and the file it sent back. The record is written to
 # this tree only after the host says it made one, so a failed stage leaves the tree as it was.
 $astExit = $null
@@ -1472,13 +1475,36 @@ else
         gpu_skip=`${gpu_skip:-0}
         gpu_reds=`$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^\[FAIL\] ([^ ]+).*/\1/p')
         gpu_nfail=`$(printf '%s\n' "`$gpu_reds" | grep -c . || true)
-        # Twenty names is what a line can still be scanned at; the count is in `fail=` and the
-        # remainder is named as a number rather than dropped silently. `printf "%s", $0`, not
+        # EVERY name, not the first twenty. A truncated list was read as the whole list by the
+        # ratchet below, and that made `no longer red ... can be trimmed` print for recorded names
+        # that were red in the very same run (2026-11-18: seven of fifteen). The count is in `fail=`;
+        # `red_more` now says how many names the line withheld, and it is 0. `printf "%s", $0`, not
         # `printf "%s"`: a missing argument prints nothing, which read as "no red names" while
         # `fail=` said sixteen. The `$0` is escaped because this text is a PowerShell here-string and
         # an unescaped `$0` arrives at the host as nothing at all.
-        gpu_red=`$(printf '%s\n' "`$gpu_reds" | head -n 20 | awk 'NR>1{printf ","} {printf "%s", `$0}')
-        gpu_more=`$(( (`${gpu_nfail:-0}`) > 20 ? (`${gpu_nfail:-0}`) - 20 : 0 ))
+        gpu_red=`$(printf '%s\n' "`$gpu_reds" | awk 'NR>1{printf ","} {printf "%s", `$0}')
+        gpu_more=0
+        # WHY each red is red, one `<name>|<reason>` per fail, so a recorded entry can be checked
+        # against the reason it was recorded for and not only against its name. The reason is the
+        # diagnostic's own code (`code=0x040001B0`) when the failure printed one -- that is the
+        # language's own name for the diagnostic and it does not drift with the wording -- and the
+        # assertion's own words otherwise. `-` says the reading carried neither.
+        gpu_evidence=''
+        for gpu_dir in `$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^[[:space:]]*\[INFO\] full output: (\S+).*/\1/p'); do
+            gpu_case=`$(basename "`$gpu_dir")
+            # The three files are all written for a failing case and a diagnostic may land in any of
+            # them: a refusal written to stdout, a Python assertion to stderr. `resident_graph_transfers`
+            # asserts `p.stderr` on a program whose refusal went to stdout, so its output.txt carries
+            # the assertion and not the code -- reading only output.txt made it look like a red for a
+            # different reason than the one recorded, which was this reading's own error.
+            gpu_why=`$(grep -ohE 'code=0x[0-9A-Fa-f]{8}' "`$gpu_dir/output.txt" "`$gpu_dir/stdout.txt" "`$gpu_dir/stderr.txt" 2>/dev/null | head -n 1 | sed 's/^code=//')
+            if [ -z "`$gpu_why" ]; then
+                gpu_why=`$(grep -ohE 'AssertionError: .*' "`$gpu_dir/output.txt" "`$gpu_dir/stdout.txt" "`$gpu_dir/stderr.txt" 2>/dev/null | head -n 1 |
+                    sed -e 's/^AssertionError: *//' -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-40)
+            fi
+            [ -z "`$gpu_why" ] && gpu_why=-
+            gpu_evidence="`$gpu_evidence`$gpu_case|`$gpu_why;"
+        done
         gpu_state=read
         if [ "`${gpu_nfail:-0}" -gt 0 ]; then
             printf '%s\n' "`$gpu_clean" | awk '/^\[FAIL\]/ {p=1} p && /^\[/ && !/^\[FAIL\]/ {p=0} p'
@@ -1495,6 +1521,12 @@ else
     # `state` is what the local side ratchets on: `read` is a reading, the other two are "the layer
     # was not read" (a busy host, a runner that said nothing), which is never turned into a red.
     echo "check=$($gpuObservationName) total=`${gpu_total:-unknown} pass=`${gpu_pass:-unknown} fail=`${gpu_fail:-unknown} skip=`${gpu_skip:-unknown} red=[`${gpu_red}] red_more=`${gpu_more:-0} seconds=`${gpu_seconds:-0} state=`${gpu_state:-read} mode=report"
+    # The reading says which cases are red; this line says why each one is. It is a second line on
+    # purpose: the shape of the `check=` line above is what every lane and the tools' own tests read,
+    # and a recorded entry can be checked against its reason without changing that shape.
+    if [ -n "`$gpu_evidence" ]; then
+        echo "check=$($gpuObservationName)-evidence [`${gpu_evidence%;}]"
+    fi
     echo "[camel-remote] --- $($gpuObservationName): exit `$gpu_code ---"
 fi
 exec 5>&-
@@ -1976,6 +2008,19 @@ exit `$code
                     }
                 }
             }
+            # The reason line that follows the reading: `<name>|<reason>` per red, `;` between them.
+            # A name is checked against the reason it was recorded for, so a case that is red for a
+            # different reason than the one written down is news rather than a known red.
+            if ($cleanLine -match '^check=([A-Za-z0-9._-]+)-evidence \[(.*)\]$') {
+                if ($Matches[1] -eq $gpuObservationName) {
+                    foreach ($entry in @($Matches[2] -split ';' | Where-Object { $_.Trim() })) {
+                        $parts = $entry.Split('|', 2)
+                        if ($parts.Count -eq 2) {
+                            $gpuEvidence[$parts[0].Trim()] = $parts[1].Trim()
+                        }
+                    }
+                }
+            }
             # The per-checker footer: the name and the exit code of one checker, kept for the run's
             # own summary. The line itself is printed, because that is what a lane reads.
             if ($cleanLine -match '^\[camel-remote\] --- ([A-Za-z0-9._-]+): exit (\d+) ---$') {
@@ -2243,11 +2288,21 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     #     compared and nothing is invented, and the reason is printed when there is one.
     if ($null -ne $gpuReading) {
         $gpuBaselineFound = Test-Path -LiteralPath $gpuBaselinePath
+        # An entry is `name` or `name :: reason`. The reason is compared, not printed and forgotten:
+        # a name recorded for one failure and red for another is news (see the comparison below).
         $gpuBaseline = @()
+        $gpuReason   = @{}
         if ($gpuBaselineFound) {
-            $gpuBaseline = @(Get-Content -LiteralPath $gpuBaselinePath |
-                ForEach-Object { "$_".Trim() } |
-                Where-Object { $_ -and -not $_.StartsWith('#') })
+            foreach ($entry in @(Get-Content -LiteralPath $gpuBaselinePath |
+                    ForEach-Object { "$_".Trim() } |
+                    Where-Object { $_ -and -not $_.StartsWith('#') })) {
+                if ($entry -match '^(\S+)(?:\s*::\s*(.*?))?\s*$') {
+                    $entryName   = $Matches[1]
+                    $entryReason = if ($Matches.ContainsKey(2)) { "$($Matches[2])".Trim() } else { '' }
+                    $gpuBaseline += $entryName
+                    $gpuReason[$entryName] = $entryReason
+                }
+            }
         }
         if ($gpuReading.state -ne 'read') {
             $why = if ($gpuReading.state -eq 'noslot') {
@@ -2265,16 +2320,53 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
             }
         } else {
             $gpuReds = @($gpuReading.red)
-            $gpuNew = @($gpuReds | Where-Object { $gpuBaseline -notcontains $_ })
-            $gpuGone = @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ })
-            $gpuKnown = $gpuReds.Count - $gpuNew.Count
             # A reading that named only part of its reds cannot be compared by name, and the names it
-            # did not print are exactly the ones nobody would look at, so it counts as news.
+            # did not print are exactly the ones nobody would look at: they count as news, and -- this
+            # is what was wrong before -- a recorded name it did not print is NOT evidence that the
+            # name stopped being red. `red_more` is 0 when the reading named every red.
             $gpuIncomplete = $gpuReading.redMore -gt 0
-            Write-Host ("[camel-remote] gpu-plans: {0} red, {1} recorded, {2} new, {3} recorded name(s) no longer red" -f `
-                $gpuReds.Count, $gpuKnown, $gpuNew.Count, $gpuGone.Count)
+            $gpuNew     = @($gpuReds | Where-Object { $gpuBaseline -notcontains $_ })
+            $gpuStill   = @($gpuBaseline | Where-Object { $gpuReds -contains $_ })
+            # Recorded for one reason, red for another: the entry says what the gate should accept,
+            # and the gate now measures that claim instead of trusting the name. An entry with no
+            # reason recorded cannot be checked, and says so rather than pretending.
+            $gpuChanged = @($gpuStill | Where-Object {
+                    $gpuReason[$_] -and $gpuEvidence.ContainsKey($_) -and
+                    $gpuEvidence[$_] -ne '-' -and $gpuEvidence[$_] -ne $gpuReason[$_] })
+            # A case whose failure printed no code and no assertion says nothing about why it is
+            # red. That is not the same as "red for another reason": it is a reading that does not
+            # reach the reason, and it is said to be that rather than turned into a verdict.
+            $gpuUnchecked = @($gpuStill | Where-Object {
+                    $gpuReason[$_] -and (-not $gpuEvidence.ContainsKey($_) -or $gpuEvidence[$_] -eq '-') })
+            # Only a reading that named every red may say a recorded name is gone.
+            $gpuGone = if ($gpuIncomplete) {
+                @()
+            } else {
+                @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ })
+            }
+            $gpuKnown = $gpuReds.Count - $gpuNew.Count
+            Write-Host ("[camel-remote] gpu-plans: {0} red, {1} recorded, {2} new, {3} recorded for another reason, {4} recorded name(s) no longer red" -f `
+                $gpuReds.Count, $gpuKnown, $gpuNew.Count, $gpuChanged.Count, $gpuGone.Count)
             if (-not $gpuBaselineFound) {
                 Write-Host "[camel-remote] gpu-plans: there is no $gpuBaselineRel in this worktree, so every red above reads as new"
+            }
+            if ($gpuIncomplete) {
+                Write-Host "[camel-remote] gpu-plans: the reading named only part of its reds ($($gpuReading.redMore) not named), so a recorded name it did not print is not shown to have stopped: nothing was called no longer red"
+            }
+            if ($gpuChanged.Count -gt 0) {
+                foreach ($name in $gpuChanged) {
+                    Write-Host "[camel-remote] gpu-plans: RED FOR ANOTHER REASON: $name was recorded for '$($gpuReason[$name])', red now for '$($gpuEvidence[$name])' -- the entry no longer says what is wrong, so this is news and not a known red"
+                }
+                if ($code -eq 0) { $code = 5 }
+            }
+            # An entry with no reason cannot be checked against anything, and says so rather than
+            # passing for a verified one.
+            $gpuNoReason = @($gpuStill | Where-Object { -not $gpuReason[$_] })
+            if ($gpuNoReason.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: recorded with no reason, so nothing checks what they are red for: $($gpuNoReason -join ', ') -- write 'name :: reason' in $gpuBaselineRel"
+            }
+            if ($gpuUnchecked.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: the failure printed neither a diagnostic code nor an assertion, so the recorded reason could not be checked: $($gpuUnchecked -join ', ')"
             }
             if ($gpuNew.Count -gt 0 -or $gpuIncomplete) {
                 $listing = if ($gpuNew.Count -gt 0) { $gpuNew -join ', ' } else { 'none named' }
