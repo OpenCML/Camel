@@ -20,3 +20,30 @@ expect_exit = 0
 expect_stdout_contains = ["two writings through one greedy fusion are one canonical form: PASS", "the same pairing read against the spelling is two: PASS", "reading the spelling without the capability is refused: PASS"]
 expect_output_not_contains = ["FAIL"]
 timeout_ms = 120000
+
+# The refusal, as a case of its own rather than a string the acceptance script compiles: a code
+# counts in `catalog.pinned_coverage` only when a case asserts *it*, and this is the case that
+# asserts `SpellingNotDeclared` (design principles 9.5). The message is read verbatim, and the
+# note names the first reading inside the body -- the place the writer has to fix.
+[[tests]]
+name = "spelling_not_declared"
+desc = "A body that reads `name` and writes no clause is refused at its declaration, with `SpellingNotDeclared` and a note naming the first reading of the spelling in that body; the same program with `spelling` on both clauses compiles."
+kind = "negative"
+case = "../../../cases/trans/spelling/undeclared.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SpellingNotDeclared"
+expect_diagnostic_code = "0x030001D5"
+expect_output_contains = [
+    "This body reads the spelling of the program, and its type does not declare it.",
+    "[the first reading of the spelling in this body: it is what the type would have to declare at",
+]
+
+[[tests]]
+name = "spelling_declared_compiles"
+desc = "The same program with the capability written in both clauses -- the one that reads and the one that calls it -- compiles and runs."
+kind = "behavior"
+case = "../../../cases/trans/spelling/declared.cml"
+args = ["${case}"]
+expect_exit = 0
+timeout_ms = 30000

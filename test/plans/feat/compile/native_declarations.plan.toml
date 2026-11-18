@@ -1297,7 +1297,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.graph_constant_import"
-desc = "`graph:constant` is declared per sample type: an importer reads the first node of its root graph with an `i32`, an `int`, an `f32`, a `float`, a `bool` and a `string` sample, and every call is the C++ operator of that URI."
+desc = "`graph:constant` is declared per sample type: an importer reads a port of its root graph -- a node of no constant type -- with an `i32`, an `int`, an `f32`, a `float`, a `bool` and a `string` sample, and every call is the C++ operator of that URI. The node is a port rather than the node that stands first in `nodes`, because the default order is the canonical one and which node stands first is not what this case is about (design principles 9.5)."
 kind = "behavior"
 case = "../../../cases/compile/native/graph_constant_import.cml"
 args = ["${case}"]

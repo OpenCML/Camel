@@ -84,11 +84,26 @@ func main(): int sync {
 }
 
 const PRINT = `
-import { graphs_of, name, nodes, type_of } from graph
-import { Graph, Node, TypeRef } from graph
+import { graphs_of, kind, name, nodes, type_of } from graph
+import { Graph, Node, NodeKind, TypeRef } from graph
 
+// The type a graph was written with, read off a parameter port.
+//
+// This read \`type_of(nodes(g)[0])\` until 2026-11-18: the first node \`nodes\` gave, which was the
+// node created first -- the graph's own parameter port. \`nodes\` answers the *canonical* order now
+// (design principles 9.5), and the first node of the canonical walk is the same node in two graphs
+// written alike, whatever the parameter types are, so the probe compared one type with itself and
+// every negative pair was reported as one type.
+//
+// A port is what the corpus means: \`first(x: a, y: a)\` and \`second(x: b, y: b)\` write the type
+// under test as both of their parameters, so any port answers \`a\` (or \`b\`), and which port stands
+// first does not matter.
 func firstType(g: Graph): TypeRef? {
-    return type_of(nodes(g)[0])
+    let ports = nodes(g)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    return match len(ports) {
+        case 0 => null
+        case _ => type_of(ports[0])
+    }
 }
 
 func graphNamed(label: string): Graph {
