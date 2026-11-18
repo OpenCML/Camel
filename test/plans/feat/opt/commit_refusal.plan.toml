@@ -199,3 +199,26 @@ case = "../../../cases/opt/commit_checks/sibling_arm.cml"
 args = ["${case}", "test::commit_sibling_arm", "std::nvm"]
 expect_exit = 50
 expect_stdout_contains = ["commit_sibling_arm: the seal asks whether a node reads only what runs when it runs", "which reads node", "of arm", "refused at the commit: Runtime graph 'pick' breaks the branch-arm invariant", "belongs to two arms", "it would run only when arm", "reads it", "of the same arm", "the copy that reads a value of its own arm was published"]
+
+# The same read where there is no branch to hang it on. The arm of a branch and the body of a loop
+# are both regions of the graph, so "a node reads only nodes that run whenever it runs" is one rule
+# over the region tree -- but the check returned as soon as a graph had no BRCH, so the cross-region
+# reads of a branch-less graph were never asked. A loop is what such a graph has instead: its body is
+# a region the function body does not contain, and it runs only while the loop does.
+#
+# `loop_body_read.cml` is a loop whose body computes a value and no branch anywhere. The first draft
+# puts a COPY in the function body reading a value of that body, standing where the body's own read of
+# a function-body value stood, so nothing about the read is dead; the refusal must name the reader,
+# the region it runs in, the node it reads and the region *that* is in -- a refusal that says only
+# "breaks the invariant" is not one anybody can act on, so the whole sentence is asked for here,
+# node numbers included. The other two drafts are what says the refusal is about the pair and not
+# about the copy: the same COPY reading a value of its own region, and a COPY inside the loop's body
+# reading a value the function body computed (the direction every loop body in the language writes).
+[[tests]]
+name = "commit_refusal.loop_body_read"
+desc = "A copy in the function body reads a value the loop's body computes, in a graph with no branch at all: the commit refuses it, naming the reader, its region, the value and the region that value is in, while a read of the reader's own region and a read from the loop's body outwards are both published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/loop_body_read.cml"
+args = ["${case}", "test::commit_loop_body_read", "std::nvm"]
+expect_exit = 60
+expect_stdout_contains = ["commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph", "and no BRCH anywhere", "in the body (region 0) reading node", "of the body of LOOP", "refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (:op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).", "the copy that reads a value of its own region was published", "in the body of LOOP", "reading node", "of the function body was published"]

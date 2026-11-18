@@ -21,6 +21,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/pass/base.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -360,7 +361,202 @@ gc_node_ref_t spliceCopyBetweenArms(
     return copy;
 }
 
+/// A loop whose body computes a value, and the three nodes a read of that value can be written
+/// against: the value itself, a value the function body computed before the loop, and the node of
+/// the body that reads that value. The third is what makes the read live: the splice puts the copy
+/// where the read stood, so the same node reads the copy instead -- a read nothing executes is a
+/// question nobody asks (`validateRuntimeBranchArms` walks only what the exit depends on).
+struct LoopBodyRead {
+    const GCGraph *graph     = nullptr;
+    gc_node_ref_t loop       = kInvalidNodeRef;
+    uint32_t bodyRegion      = 0;
+    gc_node_ref_t bodyValue  = kInvalidNodeRef; // a value the loop's body computes
+    gc_node_ref_t outerValue = kInvalidNodeRef; // a value the function body computed, before the loop
+    gc_node_ref_t place      = kInvalidNodeRef; // a node of the body that reads outerValue
+};
+
+LoopBodyRead findLoopBodyRead(const Program &program) {
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph == nullptr || !graph->hasNodePayload()) {
+            continue;
+        }
+        const ControlRegions regions(*graph);
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (!*it || (*it)->kind != GCNodeKind::Loop) {
+                continue;
+            }
+            const auto parts = regions.loopPartsOf(it.ref());
+            if (parts[1] == 0) {
+                continue;
+            }
+            LoopBodyRead found;
+            found.graph      = graph;
+            found.loop       = it.ref();
+            found.bodyRegion = parts[1];
+            // The value the body computes: an operator's result inside the body. A port is what a
+            // region is handed or hands on, not a value a node of the body computes, so ports are
+            // skipped throughout.
+            for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+                const GCNode *node = graph->node(ref);
+                if (node == nullptr || node->kind != GCNodeKind::Oper ||
+                    node->dataType() == nullptr || graph->nodeRegion(ref) != parts[1]) {
+                    continue;
+                }
+                found.bodyValue = ref; // the last one: the body's own computation
+            }
+            // A value the function body computed, and a node of the loop's body that reads it: the
+            // direction every loop in the language writes, and where the splice stands. The value is
+            // an operator's result (`:op/...`) or a copy of one -- not the cell a `var` lives in and
+            // not a write, because a cell is not a value a copy can stand for.
+            for (gc_node_ref_t ref = 0; ref < graph->nodeCount() && found.place == kInvalidNodeRef;
+                 ++ref) {
+                if (graph->node(ref) == nullptr || graph->nodeRegion(ref) != parts[1]) {
+                    continue;
+                }
+                for (gc_node_ref_t input : graph->normInputsOf(ref)) {
+                    const GCNode *read = graph->node(input);
+                    if (read == nullptr || graph->nodeRegion(input) != 0 ||
+                        read->dataType() == nullptr) {
+                        continue;
+                    }
+                    if (read->kind == GCNodeKind::Copy) {
+                        found.place      = ref;
+                        found.outerValue = input;
+                        break;
+                    }
+                    if (read->kind != GCNodeKind::Oper) {
+                        continue;
+                    }
+                    const auto *oper = graph->nodeBodyAs<GCOperBody>(input);
+                    if (oper != nullptr && std::string_view(oper->uri()).rfind(":op/", 0) == 0) {
+                        found.place      = ref;
+                        found.outerValue = input;
+                        break;
+                    }
+                }
+            }
+            if (found.bodyValue == kInvalidNodeRef || found.place == kInvalidNodeRef ||
+                found.outerValue == kInvalidNodeRef) {
+                continue;
+            }
+            return found;
+        }
+    }
+    return {};
+}
+
+/// A COPY that reads `from`, put in `region`, standing where `replaced` stood in `place`'s inputs.
+/// The region is written *after* the input: a value edge pulls the reader into the region the value
+/// is in (`GraphDraft::inheritRegion`), which is exactly the move this fixture must not let happen,
+/// so the region the read is written in is the last word.
+gc_node_ref_t spliceRead(
+    GraphTransaction &transaction, const LoopBodyRead &found, gc_node_ref_t from, uint32_t region) {
+    auto &draft = transaction.edit();
+    const GCNode *read = found.graph->node(from);
+    if (read == nullptr || read->dataType() == nullptr) {
+        return kInvalidNodeRef;
+    }
+    const gc_node_ref_t copy = draft.addCopyNode(read->dataType(), 0);
+    draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&from, 1));
+    draft.setNodeRegion(copy, region);
+    std::vector<gc_node_ref_t> inputs(
+        found.graph->normInputsOf(found.place).begin(),
+        found.graph->normInputsOf(found.place).end());
+    for (gc_node_ref_t &slot : inputs) {
+        if (slot == found.outerValue) {
+            slot = copy;
+        }
+    }
+    draft.setNormInputs(found.place, std::span<const gc_node_ref_t>(inputs.data(), inputs.size()));
+    return copy;
+}
+
 } // namespace
+
+const camel::runtime::Program *
+CommitLoopBodyReadTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    out << "commit_loop_body_read: the arm of a branch and the body of a loop are both regions of "
+           "the graph, so a read across either is the same question -- a node reads only what runs "
+           "whenever it runs\n"
+        << std::flush;
+    const LoopBodyRead found = findLoopBodyRead(*program);
+    if (found.graph == nullptr) {
+        out << "commit_loop_body_read: no loop whose body computes a value with no branch around it, "
+               "so there is no read to write\n"
+            << std::flush;
+        return program;
+    }
+    out << "commit_loop_body_read: graph '" << found.graph->name() << "' has LOOP " << found.loop
+        << " with its body at region " << found.bodyRegion
+        << " and no BRCH anywhere; the body computes node " << found.bodyValue
+        << ", the function body computed node " << found.outerValue << ", and node " << found.place
+        << " of the body reads it\n"
+        << std::flush;
+    // The read that must be refused: a COPY in the function body reading a value of the loop's body,
+    // standing where the body's own read of the function body's value stood. The value the copy
+    // reads exists only while a round runs, and the copy does not run in the loop.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &transaction = session.edit(const_cast<GCGraph *>(found.graph));
+        const gc_node_ref_t copy = spliceRead(transaction, found, found.bodyValue, 0);
+        out << "commit_loop_body_read: graph '" << found.graph->name() << "' now has COPY " << copy
+            << " in the body (region 0) reading node " << found.bodyValue << " of the body of LOOP "
+            << found.loop << " (region " << found.bodyRegion << ")\n"
+            << std::flush;
+        try {
+            (void)session.commit();
+            out << "commit_loop_body_read: the commit published it, which is the defect\n"
+                << std::flush;
+        } catch (const GraphCommitRefused &refused) {
+            out << "commit_loop_body_read: refused by the commit checks, check="
+                << commitCheckName(refused.violation().check) << '\n'
+                << std::flush;
+        } catch (const std::runtime_error &refused) {
+            out << "commit_loop_body_read: refused at the commit: " << refused.what() << '\n'
+                << std::flush;
+        }
+    }
+    // The two reads that must not be refused. Without them, "it was refused" would mean only "a
+    // read across regions is always refused", which is a reading of neither rule.
+    //
+    // (a) the same COPY, in the function body, reading a value of the region it runs in.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &transaction = session.edit(const_cast<GCGraph *>(found.graph));
+        const gc_node_ref_t copy = spliceRead(transaction, found, found.outerValue, 0);
+        out << "commit_loop_body_read: graph '" << found.graph->name() << "' now has COPY " << copy
+            << " in the body (region 0) reading node " << found.outerValue
+            << " of the same region\n"
+            << std::flush;
+        const Program *committed = session.commit();
+        out << "commit_loop_body_read: the copy that reads a value of its own region was published\n"
+            << std::flush;
+        program = committed;
+    }
+    // (b) a COPY inside the loop's body reading a value the function body computed -- the direction
+    // of every loop body in the language, and the one a check that judged the region pair by the
+    // wrong end would refuse.
+    {
+        const LoopBodyRead again = findLoopBodyRead(*program);
+        RuntimeGraphDraftSession session(context_, program);
+        auto &transaction = session.edit(const_cast<GCGraph *>(again.graph));
+        const gc_node_ref_t copy =
+            spliceRead(transaction, again, again.outerValue, again.bodyRegion);
+        out << "commit_loop_body_read: graph '" << again.graph->name() << "' now has COPY " << copy
+            << " in the body of LOOP " << again.loop << " (region " << again.bodyRegion
+            << ") reading node " << again.outerValue << " of the function body\n"
+            << std::flush;
+        const Program *committed = session.commit();
+        out << "commit_loop_body_read: the copy in the loop's body that reads a value of the "
+               "function body was published\n"
+            << std::flush;
+        program = committed;
+    }
+    return program;
+}
 
 const camel::runtime::Program *
 CommitSiblingArmTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
