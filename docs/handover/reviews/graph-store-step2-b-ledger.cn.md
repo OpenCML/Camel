@@ -1425,3 +1425,81 @@ git show c6bbd67f5^:modules/transforms/rule_expand.cpp | grep -n 'transaction.ed
 `runtime.graph_draft_ledger.plan.toml` 一个字没动，判据仍是"逐个成员比对"，没有容差。
 **这笔上涨记在 `rule_expand.cpp` 头上**：它是草稿的又一个住户，`b6` 那天它和名单上另外 38 个
 一起消失，不是又一个必须留下的边界。
+
+## 63. `files` 涨 3（40 → 43）：**四处红里有一处不是住户，是头文件里一条没人能调的声明**（本笔）
+
+**读数**（`node test/cases/runtime/graph_draft_ledger/check.mjs`，基线 `1885b7ed0`）：
+
+```
+[LEDGER] files 44 member(s), constructions 1 member(s), decode 3 member(s), compared with the list member by member
+[LEDGER] RED entered files: include/camel/runtime/draft_outline.h  (first at include/camel/runtime/draft_outline.h:47: const GraphDraft &draft, std::span<const gc_node_ref_t> group);)
+[LEDGER] RED entered files: modules/graph/txn.cpp  (first at modules/graph/txn.cpp:242: const camel::runtime::GraphDraft::NamedEdit named(draft);)
+[LEDGER] RED entered files: src/passes/opt/inline/engine.cpp  (first at src/passes/opt/inline/engine.cpp:782: bool inSplicedRegion(const camel::runtime::GraphDraft &draft, gc_node_ref_t id) {)
+[LEDGER] RED entered files: src/runtime/draft_outline.cpp  (first at src/runtime/draft_outline.cpp:52: const GCOperBody &operBodyOf(const GraphDraft &draft, gc_node_ref_t id) {)
+[LEDGER] RED the list is test\cases\runtime\graph_draft_ledger\baseline.json: 4 entered, 0 left
+```
+
+**四处不是同一笔带进来的**（三个提交）：
+
+| 处 | 谁 | 是什么 |
+|---|---|---|
+| `modules/graph/txn.cpp` | `eccc6824a`（11-18，"the commit tier is the edit"） | `replace`／`erase` 的 `GraphDraft::NamedEdit` 护栏（`:242`、`:266`）。`3d9cbbc08` 给这个文件 **+77 行**，只把这一行从 `:237` 推到 `:242` |
+| `src/passes/opt/inline/engine.cpp` | `a6b9ec5d14`（11-18，"name the callee of the calls a splice and a gate were hiding"） | 新增 `inSplicedRegion`，读 `nodeRegion`／`regionCount`／`region(i)` 的 `kind` 与 `parent`，判断一个节点是否落在这趟 inline 自己铺下的 `Inline` region 里 |
+| `include/camel/runtime/draft_outline.h` | `3d9cbbc08`（`lane-outln`） | **只有一处代码点名**：边界读取函数的**声明**（`:46`–`:47`） |
+| `src/runtime/draft_outline.cpp` | 同上 | 边界读取与 `outlineDraftNodes` 的整个实现 |
+
+### 判"真的必须吗"：一处不必，三处必须
+
+**① `src/runtime/draft_outline.cpp` —— 必须，记账。** 它不只读，还**写**：`transaction.edit()` 取草稿
+（`:216`），`addFuncNode`／`setNormInputs`／`replaceAllValueUses`／`takeStatementPlace`／
+`eraseUnreadNodes`／`setNodeRegion`；再用 `GraphTransaction::open()` 造第二张草稿 `made`（`:238`）并
+`encode` 成新图。读的也是草稿独有的东西：`payloadOf`（OPER 的 `GCOperBody`）、`alive`／`header`、
+`namesNode`、`ctrlInputsOf`／`orderInputsOf`／`syncInputsOf`／`withInputsOf`／`normInputsOf`、
+`normUsersOf`／`withUsersOf`、`regionCount`／`region(i)` 的 `result`／`regionPortsOf`、`nodeRegion`／
+`nodeOrigin`。**用例里的节点 id 是草稿 id，那张图还没提交**；冻结的 `GCGraph` 是一次 `encode`／提交的
+产物，读它答的是另一张图（id 还要经 `translateNodeRef` 映射），而写（`eraseUnreadNodes`、
+`takeStatementPlace`）在冻结图上根本不存在。同族文件 `src/runtime/draft_inline.cpp`、
+`draft_regions.cpp`、`draft_writes.cpp` 都在名单上：**这是草稿层的又一个住户**，不是又一条边界。
+
+**② `include/camel/runtime/draft_outline.h` —— 不必，改实现、不记账。** 全文件唯一的代码点名是
+`draftOutlineBoundary(const GraphDraft &, std::span<...>)` 的声明；这个函数**唯一的调用者**是同一个
+`.cpp` 的 `:217`（`outlineDraftNodes` 体内），`git grep` 全树只有这两处，没有别的 TU、没有测试、没有
+设计页引用它。按 §51 已判过的同一条——**"唯一的调用者就在自己那个 `.cpp` 里，它根本不是 API 面"**
+（那笔把 `isWrittenArgument` 从 `draft_writes.h` 收进 `draft_writes.cpp` 的匿名命名空间）——这里照办：
+`DraftOutlineBoundary` 与 `draftOutlineBoundary` 一起收进 `draft_outline.cpp` 的匿名命名空间，头文件只剩
+`outlineDraftNodes(session, transaction, group, name)`，收的是**事务**，一个草稿类型名都不点（`#include
+"camel/runtime/draft.h"` 也换成它真正收的 `graph_txn.h`）。**头文件 10 增 14 删，公开声明 −1。**
+
+* 为什么不是"改收事务、仍留在头文件里"：那会把一条**只读**查询写成"我要一个事务来编辑"，而它并不编辑；
+  而且声明照样只有一个内部调用者。删声明是接口往下走，符合"只能降"。
+* 为什么不是"用 `auto` 把名字藏掉"：`auto` 会让**住户**离开名单而东西没动（§62 判过的正是这个）；这里
+  收回去的是一条**没有外部调用者的公开声明**，接线一根没动、`src/runtime/draft_outline.cpp` 照样记账。
+
+**③ `modules/graph/txn.cpp` —— 必须，记账。** `GraphDraft::NamedEdit named(draft)`（`:242`）把随后的
+`replaceNode` 标成 8.1 表里的**具名编辑**：那些 raw setter 因此不落进 `lowLevelEdits()`（`noteLowLevelEdit`
+读的就是草稿上的 `namedEdits_`，`draft.cpp:2162`），提交不必为一次"定理就是 `replace` 本身"的编辑欠六项
+检查。计数器在草稿对象上、且是私有的，`NamedEdit` 是它唯一的门；冻结图上没有"正在编辑"这个状态可读。
+要躲只能写 `auto` 或给要退休的类型加一个工厂——那是在涨接口，且数掉下去东西没动。
+
+**④ `src/passes/opt/inline/engine.cpp` —— 必须，记账。** `inSplicedRegion` 读的 region 表是**草稿态**：
+`Inline` region 是这一趟 `addInlineRegion` 写进草稿的，冻结图上是提交后的编码，答不了"这一趟铺下的
+region"；节点 id 也是草稿的。这个文件本来就用 `auto &draft = transaction.edit()`（`:924`、`:1221`）持有
+草稿，`a6b9ec5d14` 只是把这段读抽成自由函数、形参必须写出类型——与 §62 的 `rule_expand.cpp` 同型：
+**新增的是写出来的名字，住户本来就在。**
+
+### 记录
+
+`--record` 拒绝写涨了的成员，`--force` 才写：
+
+```
+node test/cases/runtime/graph_draft_ledger/check.mjs --record --force
+[LEDGER] --force: recording members that entered; the diff of baseline.json says so
+[LEDGER] recorded files 43 member(s), constructions 1 member(s), decode 3 member(s)
+```
+
+`baseline.json` 的 `files` **40 → 43**，diff 恰好三行（`modules/graph/txn.cpp`、
+`src/passes/opt/inline/engine.cpp`、`src/runtime/draft_outline.cpp`），别人的条目一条没动；
+`check.mjs` 与 `runtime.graph_draft_ledger.plan.toml` 一个字没动，判据仍是"逐个成员比对"，没有容差。
+**阴性对照**：把一处临时文件 `src/runtime/tmp_ledger_probe.cpp`（`ledgerProbe(const GraphDraft &, id)`）
+`git add` 后重跑，读数 `files 44 member(s)` / `RED entered files: src/runtime/tmp_ledger_probe.cpp` /
+`1 entered, 0 left`，退出码 1——账本在看；该文件未提交、已删。
