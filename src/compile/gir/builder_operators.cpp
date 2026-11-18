@@ -3948,6 +3948,16 @@ node_handle_t Builder::visitLinkNode(
                             continue;
                         }
                         const auto *func   = tt::as_ptr<FunctionType>(type);
+                        // Ask what the *declaration* says, when the graph that declares it is still
+                        // reachable: an operator's rule about a `var` parameter is a rule about the
+                        // function the program declared, not about the exit type its body ended up
+                        // stating (author, 2026-11-19). The fallback is the node's own type, for a
+                        // value whose graph is not known here.
+                        if (const auto callee = functionValueGraphOf(input.node); callee != nullptr) {
+                            if (auto *declared = callee->declaredFuncType(); declared != nullptr) {
+                                func = tt::as_ptr<FunctionType>(declared);
+                            }
+                        }
                         bool takesVariable = false;
                         for (size_t i = 0; i < func->normTypesCount(); ++i) {
                             takesVariable = takesVariable || func->normIsVarAt(i);
