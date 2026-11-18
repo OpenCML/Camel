@@ -95,6 +95,9 @@ class EffectOrder {
     void readsBefore(runtime::gc_node_ref_t before, runtime::gc_node_ref_t after) {
         reads_.emplace_back(before, after);
     }
+    /// Whether this rewrite wrote an effect into any block: a graph it rewrote but wrote no effect
+    /// into owes no order.
+    bool hasEffects() const { return !written_.empty(); }
     /// Writes the edges: what an effect reads runs before it, and of two effects written into one
     /// region that nothing else orders, the one written first runs first -- the place each was
     /// written beside keeping its say, because the statement before an effect and the statement
@@ -114,6 +117,31 @@ class EffectOrder {
             for (size_t i = 0; i < written.size(); ++i)
                 for (size_t j = i + 1; j < written.size(); ++j)
                     order(draft, written[i].second, written[j].second);
+            // And the block keeps its order across the insert: a statement the program wrote before
+            // an effect this rewrite wrote runs before it, and one written after it runs after it.
+            // The commit asks for a path between any two accesses to one resource in one region, and
+            // a statement of the block is the other side of such a pair whenever one of these effects
+            // is one side of it -- an effect it inserted is a write of the driver, and a `println`
+            // written beside it is a write of `stdout` the block never had to order before. Neither
+            // reads the other, so nothing but this edge relates them.
+            for (const auto &one : written) {
+                const auto effect = one.second;
+                if (!draft.alive(effect))
+                    continue; // a later step erased it, and an effect that is gone keeps no place
+                const uint32_t block = draft.nodeRegion(effect);
+                for (runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                    if (id == effect || !draft.alive(id) || draft.nodeRegion(id) != block ||
+                        !runtime::isChainStatement(draft, id))
+                        continue;
+                    // The statement the block wrote first runs first: the ids of a block's own
+                    // statements follow the order they were written in, and an effect this rewrite
+                    // wrote is appended to the block it was written into.
+                    if (id < effect)
+                        order(draft, id, effect);
+                    else
+                        order(draft, effect, id);
+                }
+            }
         }
     }
 
@@ -633,14 +661,20 @@ const runtime::Program *outlineRegions(
             return program;
     }
     bool regionRefused = false;
+    // What each rewritten graph's effects are, kept until the rewrite of every graph is over: the
+    // order is written once, and after the declarations stop growing (see the end of this function).
+    std::vector<std::pair<rt::GCGraph *, EffectOrder>> orders;
+    orders.reserve(graphs.size());
     for (auto *graph : graphs) {
         const auto &analysis = analyses.at(graph);
         if (analysis.regions.empty())
             continue;
         auto &draft = session.edit(graph).edit();
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
-        /// The effects this rewrite has written, by the control region they were written in.
-        EffectOrder effects;
+        // The effects this rewrite writes, by the control region they were written in. The record
+        // outlives this graph's rewrite: the edges are written once every graph is rewritten and
+        // the declarations over those bodies have stopped growing.
+        EffectOrder &effects = orders.emplace_back(graph, EffectOrder{}).second;
         const rt::ControlRegions control(*graph);
         // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
         // written in an arm runs only when that arm is taken, so its call, its uploads and its
@@ -915,9 +949,11 @@ const runtime::Program *outlineRegions(
         for (const auto &region : analysis.regions)
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)
                 draft.eraseNode(static_cast<rt::gc_node_ref_t>(*it));
-        // The graph is finished: what the effects this rewrite wrote are already ordered by is now
-        // the graph the commit reads, so this is where the rest of their order is written.
-        effects.finish(draft);
+        // The graph is finished: every effect this rewrite writes exists and every statement it
+        // replaced is erased, so the question the order answers -- is there already a path between
+        // these two? -- is now a question about the graph the commit judges. The answer is not
+        // written here, though: a declaration can still grow over these bodies, and the check reads
+        // the declarations the program ends with.
     }
     if (regionRefused)
         return program;
@@ -928,6 +964,19 @@ const runtime::Program *outlineRegions(
     // bodies it made hold a device submission, which reaches the ambient `tiles:driver`, and the
     // clause they inherited speaks of the host body they replaced.
     declareBodiesOverDrafts(session);
+    // The order of the effects this rewrite wrote, written once and after the declarations have
+    // stopped growing -- the author's ruling of 2026-11-19 (`e2524717e`): widen the whole program's
+    // declarations to a fixpoint first, then order the effects, once. A graph's clause can still
+    // grow here (a caller of a grown callee grows too, `__root__` included, and this pass rewrites
+    // no node of it), and the check that judges the order reads the declarations the program ends
+    // with, so an edge written before the last widening would be written against a program that no
+    // longer exists. Ordering after the last draft this pass opens also answers the other half:
+    // nothing erases or inserts a node after this, so the graph the edges are written on is the
+    // graph the commit publishes.
+    for (auto &[graph, effects] : orders) {
+        if (effects.hasEffects())
+            effects.finish(session.edit(graph).edit());
+    }
     return session.commit();
 }
 
