@@ -3985,6 +3985,7 @@ eb2ff0f38f12c634 ok test/cases/opt/effects/inline_keeps_stdout.cml
 bc0ba2e6a871d36c ok test/cases/opt/effects/inline_keeps_stdout_twice.cml
 48b4e2dd86b40e0f ok test/cases/opt/effects/inline_reduce_in_folded_arm.cml
 81b22132ae1a04a1 ok test/cases/opt/effects/keep_node_shape.cml
+da3a671c2223d761 ok test/cases/opt/effects/statement_before_branch_is_ordered.cml
 5595e6d08713d742 ok test/cases/opt/fault_preservation/chained_cast.cml
 bcfe751c0febf6ad ok test/cases/opt/fault_preservation/dce_chained_division.cml
 18025c1ffd60894c ok test/cases/opt/fault_preservation/inline_faulting_callee_order.cml

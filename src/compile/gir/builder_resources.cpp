@@ -1092,6 +1092,106 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
     // part of a loop separate blocks, and the regions that only annotate where a node came from
     // are looked through (the notion the seal check and the layout use).
     std::map<uint32_t, BlockEffectOrder> blocks;
+    // An effect is written in one block, and it also stands in every block further out, on the node
+    // that owns the region between them: an owner runs as a whole with what is under it
+    // (docs/design/effects/edges.cn.md 4.6, `nodeStandsForItsRegion`), and the owner is the node
+    // the commit's order check pairs a neighbour with (`runtime::orderIncomplete`: "an owner node
+    // answers for what is under it, and it is the owner that stands in the region around it").
+    // Recording an arm's effect in the arm's block alone therefore left a statement written before
+    // (or after) the branch and an effect inside it reaching one resource with no edge between
+    // them -- the shape the front end published, and the shape an inline splice copies verbatim
+    // (edges.cn.md 4.2, 5.7), so the first commit that saw the copy refused it (design principles
+    // 3.3: effects on one resource run in the order they are written).
+    // `orderedAlready` is asked only where the node standing for a region meets its own block: the
+    // block may already order the two -- a statement of a `sync` block is chained, and the chain
+    // says every statement runs after the one before it -- and a second edge beside that path would
+    // say the same thing twice. The effect's own level keeps the edges it always wrote.
+    //
+    // The walk follows every kind of edge the check itself follows (`runtime::orderIncomplete`:
+    // data, sync and order); a data path is the same question the caller asked above, and asking it
+    // here as well is what keeps an effect inside a loop body from hanging an edge on the `LOOP`
+    // when the loop's carried state already ties it to what was written before.
+    const auto orderedAlready = [&](draft_node_ref_t from, draft_node_ref_t to) {
+        std::vector<draft_node_ref_t> pending{to};
+        std::unordered_set<draft_node_ref_t> seen{to};
+        const auto push = [&](std::span<const runtime::gc_node_ref_t> inputs) {
+            for (const runtime::gc_node_ref_t input : inputs) {
+                if (seen.insert(input).second) {
+                    pending.push_back(input);
+                }
+            }
+        };
+        while (!pending.empty()) {
+            const draft_node_ref_t here = pending.back();
+            pending.pop_back();
+            if (here == from) {
+                return true;
+            }
+            push(draft.normInputsOf(here));
+            push(draft.withInputsOf(here));
+            push(draft.ctrlInputsOf(here));
+            push(draft.syncInputsOf(here));
+            push(draft.orderInputsOf(here));
+        }
+        return false;
+    };
+    const auto record = [&](uint32_t blockRegion,
+                            draft_node_ref_t stands,
+                            const ResourceKeys &named,
+                            bool orderedAtItsRegion) {
+        BlockEffectOrder &block = blocks[blockRegion];
+        std::vector<draft_node_ref_t> before;
+        const auto addBefore = [&](draft_node_ref_t from) {
+            if (from != 0 && from != stands && std::ranges::find(before, from) == before.end()) {
+                before.push_back(from);
+            }
+        };
+        if (named.unnamed) {
+            // Everything written before it in the block is before it, whatever it touched.
+            for (const auto &entry : block.lastOn) {
+                addBefore(entry.second);
+            }
+            addBefore(block.lastUnnamed);
+        } else {
+            for (const std::string &key : named.keys) {
+                const auto found = block.lastOn.find(key);
+                if (found != block.lastOn.end()) {
+                    addBefore(found->second);
+                }
+            }
+            addBefore(block.lastUnnamed);
+        }
+        const node_handle_t target = draft.ref(stands);
+        for (draft_node_ref_t from : before) {
+            const node_handle_t source = draft.ref(from);
+            if (!nodeTakesAnOrder(source) || !linkCheek(source, target)) {
+                continue;
+            }
+            // An edge the data path already carries says nothing, and one against it would be
+            // a cycle (design principles 2.1: the read and the write of `x = x + 1` are
+            // ordered by the value, not by a second edge).
+            if (hasDirectDataDependency(source, target) || dataPathReaches(source, target) ||
+                dataPathReaches(target, source)) {
+                continue;
+            }
+            // A path from that node to this one already exists: the graph says the order
+            // twice over, and the commit's check asks for a path, not for an edge.
+            if (orderedAtItsRegion && orderedAlready(from, stands)) {
+                continue;
+            }
+            linkNodes(LinkType::Order, source, target);
+        }
+        if (named.unnamed) {
+            // What it was ordered after is ordered after this one now: keeping both would say
+            // the same thing twice, and this node stands for every resource.
+            block.lastOn.clear();
+            block.lastUnnamed = stands;
+        } else {
+            for (const std::string &key : named.keys) {
+                block.lastOn[key] = stands;
+            }
+        }
+    };
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id)) {
             continue;
@@ -1129,51 +1229,22 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
             // two of them at the same time and `std::nvm` runs them one after the other.
             continue;
         }
-        BlockEffectOrder &block = blocks[runtime::controlRegionOf(draft, id)];
-        std::vector<draft_node_ref_t> before;
-        const auto addBefore = [&](draft_node_ref_t from) {
-            if (from != 0 && from != id && std::ranges::find(before, from) == before.end()) {
-                before.push_back(from);
+        // The effect is written in one block, and it stands in every block around that one too:
+        // here, and then on the node owning each region it lies in, in the block that region sits
+        // in (the same two depths `runtime::orderIncomplete` pairs).
+        uint32_t block = runtime::controlRegionOf(draft, id);
+        record(block, id, named, false);
+        for (size_t steps = 0; block != 0 && steps <= draft.regionCount(); ++steps) {
+            const auto &region = draft.region(block);
+            if (region.owner == 0) {
+                break; // a region that only annotates: `controlRegionOf` already looked through it
             }
-        };
-        if (named.unnamed) {
-            // Everything written before it in the block is before it, whatever it touched.
-            for (const auto &[key, from] : block.lastOn) {
-                addBefore(from);
+            const uint32_t outer = runtime::controlRegionOf(draft, region.owner);
+            if (outer == block) {
+                break;
             }
-            addBefore(block.lastUnnamed);
-        } else {
-            for (const std::string &key : named.keys) {
-                const auto found = block.lastOn.find(key);
-                if (found != block.lastOn.end()) {
-                    addBefore(found->second);
-                }
-            }
-            addBefore(block.lastUnnamed);
-        }
-        for (draft_node_ref_t from : before) {
-            const node_handle_t source = draft.ref(from);
-            if (!nodeTakesAnOrder(source) || !linkCheek(source, node)) {
-                continue;
-            }
-            // An edge the data path already carries says nothing, and one against it would be a
-            // cycle (design principles 2.1: the read and the write of `x = x + 1` are ordered by
-            // the value, not by a second edge).
-            if (hasDirectDataDependency(source, node) || dataPathReaches(source, node) ||
-                dataPathReaches(node, source)) {
-                continue;
-            }
-            linkNodes(LinkType::Order, source, node);
-        }
-        if (named.unnamed) {
-            // What it was ordered after is ordered after this one now: keeping both would say the
-            // same thing twice, and this node stands for every resource.
-            block.lastOn.clear();
-            block.lastUnnamed = id;
-        } else {
-            for (const std::string &key : named.keys) {
-                block.lastOn[key] = id;
-            }
+            record(outer, region.owner, named, true);
+            block = outer;
         }
     }
 }

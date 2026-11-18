@@ -318,6 +318,27 @@ gc_node_ref_t chainAnchorNode(camel::runtime::GraphTransaction &transaction) {
     const camel::runtime::gc_node_ref_t node =
         draft.addOperNode(camel::core::type::Type::Float32(), nullptr, ":io/println");
     draft.setNormInputs(node, std::span<const camel::runtime::gc_node_ref_t>(&value, 1));
+    // The anchor is a statement of the block it lands in, and it is written after what that block
+    // already holds: it runs after them. A statement a draft appends without giving it that place
+    // leaves two writes to one resource with no path between them, which the commit's order check
+    // refuses (design principles 3.3) -- and the graph the front end builds has the same shape, so
+    // an anchor that skipped this read like a program rather than like a test.
+    const uint32_t block        = camel::runtime::controlRegionOf(draft, node);
+    gc_node_ref_t previousBlock = kInvalidNodeRef;
+    for (gc_node_ref_t id = 0; id < node; ++id) {
+        if (!draft.alive(id) || camel::runtime::controlRegionOf(draft, id) != block) {
+            continue;
+        }
+        // The block's last statement, not a value it computes: an order edge's two ends are
+        // effects or nodes that may fault (edges.cn.md 4.6), which is the same question the
+        // front end's walk asks of the nodes it orders.
+        if (!camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+            previousBlock = id;
+        }
+    }
+    if (previousBlock != kInvalidNodeRef) {
+        (void)draft.appendOrderDependency(node, previousBlock);
+    }
     return node;
 }
 
