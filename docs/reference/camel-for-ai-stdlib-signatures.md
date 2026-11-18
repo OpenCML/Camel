@@ -632,13 +632,14 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 47 name(s)
+**`graph`** — import { ... } from graph — 51 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
 graphs_of: (f: F) => Graph[] when is_function::<F>()
-name: (g: Graph) => string
+name: (g: Graph) => string spelling
 nodes: (g: Graph) => Node[]
+exit_of: (g: Graph) => Node?
 inputs: (n: Node) => Node[]
 with_inputs: (n: Node) => Node[]
 sync_inputs: (n: Node) => Node[]
@@ -664,15 +665,16 @@ declaration_tags: (g: Graph) => Tag[]
 tag_name: (t: Tag) => string
 tag_graphs: (t: Tag) => Graph[]
 rule_of: (g: Graph, name: string) => Graph?
-origin: (n: Node) => int
+origin: (n: Node) => int spelling
 constant: (n: Node) => T? when is_ordered::<T>()
 region_of: (n: Node) => Region
 region_kind: (r: Region) => RegionKind
 region_parent: (r: Region) => Region?
-show: (n: Node) => string
-id: (h: Graph) => int
+show: (n: Node) => string spelling
 id: (h: Node) => int
-id: (h: Op) => int
+creation_id: (h: Graph) => int spelling
+creation_id: (h: Node) => int spelling
+creation_id: (h: Op) => int spelling
 effects: (g: Graph) => Effects
 shape_text: (n: Node) => string?
 permissions: (n: Node) => int
@@ -680,6 +682,8 @@ open: (f: F) => Txn<F> when is_function::<F>()
 replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
 erase: (t: Txn<F>, n: Node) => void uses var t
 eval: (t: Txn<F>, n: Node) => Node? uses var t
+order: (t: Txn<F>, before: Node, after: Node) => void uses var t
+inline: (t: Txn<F>, at: Node, fn: G) => Node uses var t when is_function::<G>()
 add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
 commit: (t: Txn<F>) => F! uses var t
 abort: (t: Txn<F>) => void uses var t

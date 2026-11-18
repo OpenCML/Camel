@@ -265,8 +265,6 @@ reported for it. A *write* to a resource outside the program is not like
 that: it is used by the region it is written in, so it runs although nothing reads what it returns.
 **Wrong** -- claiming that a bare `println` in a body that is not `sync` is dropped:
 
-<!-- camel-snippet: counter-example: a write is not dropped for lack of a reader, its region runs it -->
-
 ```camel
 import { get_env } from env
 
