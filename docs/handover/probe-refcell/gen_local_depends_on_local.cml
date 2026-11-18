@@ -1,0 +1,23 @@
+// Temporary instrument of the lane `mmtypeof`: a generator local whose declared value reads the
+// local before it. The state slot's payload is the `typeof` of that value, and inferring it needs
+// the earlier local's type -- which is itself a slot type. This case exists to read whether the
+// resolution happens in an order that has it, and it is deleted before the commit.
+//
+// It sits under docs/handover/, which the AST corpus walks past, so it moves no recorded reading.
+
+func gen(): int.. sync {
+    let a = 1
+    let b = a + 1
+    yield b
+}
+
+func drain(): int sync {
+    loop acc = 0 for v in gen() do sync { acc + v }
+}
+
+func main(): int sync {
+    // The value is printed, and the exit code stays zero: a program's exit code here is what it
+    // returns, which the first reading of these probes mistook for a failure (3 and 2).
+    println(drain())
+    return 0
+}

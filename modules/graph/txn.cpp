@@ -370,7 +370,7 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 /// was opened on (design principles 9.1: a transform gives a new value and changes nothing
 /// another holder sees). Only the pass driver installs a program, the one a pass hands on
 /// (src/execute/camel_pass.cpp).
-slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
+slot_t commitKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     auto *wrapper = norm.get<ForeignResourceObject *>(0);
     if (wrapper->disposed()) {
         return makeError(
@@ -387,6 +387,14 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
         result                   = functionOf(*state, committed, resultType);
     } catch (const mm::MemoryExhausted &) {
         throw;
+    } catch (const camel::runtime::GraphCommitRefused &refused) {
+        // The two commit checks of analysis 4.1 refused the graphs this commit changed: one line,
+        // the same one the reading made, recorded where a diagnostic is read and handed back as the
+        // error value this `commit` answers, because a commit that cannot keep its promises is a
+        // refused commit and not a broken invariant of the graph's edges.
+        camel::runtime::reportCommitViolation(
+            ctx.shared_from_this(), "graph::commit", refused.violation());
+        result = makeError("GraphInvalid", refused.what(), "<graph::commit>");
     } catch (const std::exception &failure) {
         result = makeError("GraphInvalid", failure.what(), "<graph::commit>");
     }

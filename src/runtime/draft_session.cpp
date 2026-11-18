@@ -1900,6 +1900,42 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         }
     }
 
+    // The two commit checks of the effect analysis (docs/design/effects/analysis.cn.md 4.1), asked
+    // of every graph this commit changed, through the one function every commit path uses
+    // (`camel::runtime::commitViolation`): a pass written in Camel reaches a rewrite only through
+    // the graph module, and the graph module's `commit` is this commit, so this is the single place
+    // both paths answer the same question. A rewrite through the draft API that splices nodes in
+    // reaches it here too.
+    //
+    // Asked as the build says (`commitChecksEnabled`, one cell with the pass layer's switch): a
+    // shipped build reads the theorem of 2026-11-15 and does not ask, a debug build asks, and a
+    // test asks. What is judged is what the commit made: a node whose reference the graph the draft
+    // was decoded from does not have. An access or an ordering the program already had is not this
+    // commit's to answer for, and a pair is judged when either of its nodes is one this commit made.
+    if (commitChecksEnabled()) {
+        for (const auto &[graph, copy] : fresh) {
+            if (!edited_.contains(graph)) {
+                continue;
+            }
+            std::vector<gc_node_ref_t> made;
+            for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
+                if (graph == nullptr || ref >= graph->nodeCount() || graph->node(ref) == nullptr) {
+                    made.push_back(ref);
+                }
+            }
+            // A commit that made no node added no access: the graph module's public edits
+            // (`replace`, `erase`, `add_constant`, `eval`) make no node that carries one, and
+            // `replace` promises that what the node it removed ordered stays ordered
+            // (stdlib/graph.cml) -- which is the theorem of 2026-11-15 read per commit instead of
+            // per pass. So it owes no answer about ordering. Containment it does owe: the graph
+            // publishes a type whether or not this commit made a node, and a body that reaches past
+            // that type is the commit's to answer for either way.
+            if (const auto violation = commitViolation(*committed, *copy, made, !made.empty())) {
+                throw GraphCommitRefused(*violation);
+            }
+        }
+    }
+
     // The table is a cache, not an owner (specializations.h): an entry whose specialization the
     // program does not hold names a graph the snapshot collected, and an entry whose callee got a
     // new version names one this program no longer has. Neither resolves in a later session, so

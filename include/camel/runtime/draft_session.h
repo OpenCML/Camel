@@ -21,6 +21,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/resources.h"
 
 #include <cstdint>
 #include <memory>

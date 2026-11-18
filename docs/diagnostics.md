@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-322 diagnostics: 300 errors, 22 warnings. 15 carry a machine-applicable edit, 307 say why they carry none.
+325 diagnostics: 303 errors, 22 warnings. 15 carry a machine-applicable edit, 310 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -335,6 +335,9 @@ prints one entry.
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
 | `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
 | `0x040001AF` | [RuntimeDiag::PassEffectContainment](#passeffectcontainment) | Error | no |
+| `0x040001B0` | [RuntimeDiag::PassEffectBeyondType](#passeffectbeyondtype) | Error | no |
+| `0x040001B1` | [RuntimeDiag::PassEffectOrder](#passeffectorder) | Error | no |
+| `0x040001B2` | [RuntimeDiag::NullSlotUnwrapped](#nullslotunwrapped) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -11391,6 +11394,123 @@ func main(): int {
     let quiet = doubled(21)
     let noisy = announced(3)
     return quiet + noisy
+}
+```
+
+### PassEffectBeyondType
+
+`0x040001B0` · Error · `RuntimeDiag::PassEffectBeyondType`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+'{0}' committed a graph that reaches past the effect its own type declares: {1}
+```
+
+**Help**
+
+```text
+A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::commit_effect std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
+}
+```
+
+### PassEffectOrder
+
+`0x040001B1` · Error · `RuntimeDiag::PassEffectOrder`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+'{0}' committed a graph whose conflicting effects are not ordered: {1}
+```
+
+**Help**
+
+```text
+Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::commit_order std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
+}
+```
+
+### NullSlotUnwrapped
+
+`0x040001B2` · Error · `RuntimeDiag::NullSlotUnwrapped`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and no change to the program's logic repairs a defect of the lowering
+
+**Message**
+
+```text
+The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.
+```
+
+**Help**
+
+```text
+The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.
+```
+
+**Example** (`test/cases/compile/tagged/unwrap_null.cml`, run as `camel test/cases/compile/tagged/unwrap_null.cml`)
+
+```camel
+func main(): int {
+    let slot: int? = null
+    return __unwrap__(slot)
 }
 ```
 
