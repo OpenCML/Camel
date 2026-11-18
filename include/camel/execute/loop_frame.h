@@ -221,6 +221,31 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
     return false;
 }
 
+/// A run that is unwinding abandons every loop it was still inside of. Each frame the pool holds
+/// gives back what its open loops held -- the values those slots name and the references they own
+/// -- because the run will not reach the loops' leaving branch, where `loopEnd` returns the same
+/// things on the normal path (camel/runtime/exec_plan.h, `applyRefEntriesOfOpenLoops`).
+///
+/// This lives here, beside `loopEnd`, because the ordering "give back before the frame goes back to
+/// the pool" is the loop's own knowledge and not a backend's: the twelve fault paths in nodevm,
+/// fastvm, gotovm, the JIT trampoline and taskflow each carried a copy of that two-line sentence
+/// (daily review 2026-11-18, item 6; the review counted 16 lines, of which 12 were call sites).
+inline void giveBackOpenLoopsOfEveryFrame(camel::core::context::FramePool &pool) {
+    pool.foreach([](camel::core::context::Frame *frame) {
+        camel::runtime::applyRefEntriesOfOpenLoops(frame);
+    });
+}
+
+/// The frame a fault abandons: give back what it held, then hand it back to the pool. One call,
+/// because the two cannot come apart -- after the release the slots the give-back reads are gone.
+inline void releaseWithOpenLoops(
+    camel::core::context::FramePool &pool, camel::core::context::Frame *frame) {
+    camel::runtime::applyRefEntriesOfOpenLoops(frame);
+    if (pool.isActive(frame)) {
+        pool.release(frame);
+    }
+}
+
 /// The body has run: true when another round starts (`roundDone(loop, rounds)` is called first,
 /// the interpreter's safepoint and limits), false when the test had stopped the loop; its state
 /// is its value.
