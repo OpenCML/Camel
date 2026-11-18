@@ -1,0 +1,42 @@
+id = "effects.commit_tier_inplace"
+order = 976
+tier = "fast"
+tags = ["feat", "effects", "commit-checks"]
+
+# The half of the commit-checks tier that "did the draft make a node" cannot see: an edit that makes
+# **no** node and changes the graph all the same.
+#
+# `docs/design/graph-editing/README.cn.md` 8.1 makes the tier a fact about *which edit the draft
+# used*, and its last row is the low-level interface -- "add an edge, change an operator" -- which
+# owes all six checks whatever it made. The code read the tier off the nodes a draft made
+# The code read the tier off the nodes a draft made
+# (`commitAddsAccess`, src/runtime/resources.cpp), so a draft that took one statement out of its
+# block's chain -- no node made, no node erased, no operator swapped -- was asked nothing and
+# published two writes to one resource that the program leaves free to happen in either order.
+#
+# The fixture and the pass live with the other commit-check readings
+# (`test/cases/opt/commit_checks/`, `src/passes/test/commit_checks.cpp`). The plan sits here rather
+# than in `feat/opt` because what it reads is the tier of the effect analysis's own commit checks,
+# and because the `opt` layer's count is a reading other lanes quote.
+#
+# `test/cases/opt/commit_checks/inplace_edit.cml` is the fixture, and `test::commit_inplace` makes
+# one edit twice: the second console write of one `sync` block is taken out of the chain. In `twice`
+# the chain was the only thing ordering the two writes, so the commit must be asked the order check
+# and that check must refuse it; in `carries` the second write reads the first one's value, so a data
+# edge orders them and the same edit, asked the same question, publishes. The last line is the
+# reading: `unordered-published=0` is "asked, and refused", `ordered-published=1` is "asked, and the
+# graph did not break it" -- which is what keeps the refusal from meaning "an in-place edit is always
+# refused".
+
+[defaults]
+kind = "behavior"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "commit_tier_inplace.inplace"
+desc = "An edit that makes no node takes a console write out of its block's chain: the commit is asked the order check and refuses the pair that is left unordered, and the same edit publishes where a data edge orders the two."
+case = "../../../cases/opt/commit_checks/inplace_edit.cml"
+args = ["${case}", "test::commit_inplace", "std::nvm"]
+expect_exit = 7
+expect_stdout_contains = ["commit_inplace: the tier is which edit the draft used, not whether it made a node", "waited for node", "and now waits for nothing; the draft makes no node", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and refused, check=order", "commit_inplace: two writes to stdout with no edge ordering either before the other -- refused", "asked the effect and the order checks (the table's last row: an edge taken away owes all six), and published", "published, which is the answer: the question was asked and the graph did not break it", "commit_inplace: unordered-published=0 ordered-published=1"]

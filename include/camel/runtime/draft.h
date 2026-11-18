@@ -470,6 +470,35 @@ class GraphDraft {
     /// Counts the calls that may have changed the draft since it was decoded (every call of a
     /// member that is not const): a draft of none is the graph it was decoded from.
     uint64_t mutations() const { return mutations_; }
+    /// The existing nodes whose operands or operator this draft changed through the low-level
+    /// interface -- the last row of the table in `docs/design/graph-editing/README.cn.md` 8.1,
+    /// "add an edge, change an operator", which owes **all six** commit checks whatever the draft
+    /// made. The other half of the tier is `made` (the nodes the commit made, read off the graph in
+    /// `src/runtime/draft_session.cpp`); this list is what the commit changed in place, and it is
+    /// here because the table makes the tier a fact about *which edit was used* and not about
+    /// whether a node was made: a draft that made nothing and re-pointed one operand of one node
+    /// can still have dropped an ordering, and a commit that read only `made` would not ask.
+    ///
+    /// Only the edits of the table's last row land here. The named edits above it -- `replace`,
+    /// `erase`, `eval`, `order` -- promise in their own right that the effect and the ordering they
+    /// leave are the ones they left, so a draft that used one opens a `NamedEdit` around it and what
+    /// it changes is that edit's rather than this list's. A change that writes down the list a node
+    /// already has is no change and is not recorded.
+    std::span<const gc_node_ref_t> lowLevelEdits() const { return lowLevelEdits_; }
+    /// Says that what it covers is one named edit of that table, whose answer to the effect and the
+    /// order checks is a theorem about the edit: the raw setters it is written with do not make the
+    /// draft a low-level one. Nesting is counted, so a named edit that itself uses another is one
+    /// named edit.
+    class NamedEdit {
+      public:
+        explicit NamedEdit(GraphDraft &draft) : draft_(draft) { ++draft_.namedEdits_; }
+        ~NamedEdit() { --draft_.namedEdits_; }
+        NamedEdit(const NamedEdit &)            = delete;
+        NamedEdit &operator=(const NamedEdit &) = delete;
+
+      private:
+        GraphDraft &draft_;
+    };
     /// A counter the draft also advances whenever its revision() does: a session keeps one
     /// for all its drafts, to know whether any of them changed what it refers to.
     void setRefsEpoch(uint64_t *epoch) { refsEpoch_ = epoch; }
@@ -1120,6 +1149,16 @@ class GraphDraft {
     std::vector<gc_node_ref_t> gateIds_;
     std::vector<gc_node_ref_t> brchIds_;
     std::vector<gc_node_ref_t> joinIds_;
+
+    /// What the commit checks read as the second half of their tier (see `lowLevelEdits`): the
+    /// existing nodes this draft changed in place, in the order the changes were first made, and a
+    /// bitmap so that a node changed twice is named once.
+    void noteLowLevelEdit(gc_node_ref_t id);
+    std::vector<gc_node_ref_t> lowLevelEdits_;
+    std::vector<uint8_t> lowLevelSeen_;
+    /// The named edits open right now (NamedEdit); the raw setters record nothing into
+    /// `lowLevelEdits_` while one is.
+    unsigned namedEdits_ = 0;
 
     gc_node_ref_t entry_      = kInvalidNodeRef;
     gc_node_ref_t exit_       = kInvalidNodeRef;

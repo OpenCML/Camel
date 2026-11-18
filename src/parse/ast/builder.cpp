@@ -2543,7 +2543,7 @@ typeDecl
     ;
 */
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 */
 Value Builder::visitResourceDecl(cst::ResourceDecl context) {
     ENTER("ResourceDecl");
@@ -2563,9 +2563,23 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
                 decl->addMember(Reference(member->text()));
             }
         }
-    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
-        // `resource net unordered`: the word after the name is the contextual `unordered`.
-        decl->setUnordered(true);
+    } else {
+        // The word after the name is the modifier, a contextual word kept as a token of this
+        // declaration (so the tree stays lossless) rather than a child node: `unordered`
+        // (`resource net unordered`) or `readonly` (`resource graph readonly`, design principles
+        // 9.12). Unknown words are not read from here: the parser accepts only these two.
+        for (size_t i = 0; i < context->childCount(); ++i) {
+            const auto child = context->child(i);
+            if (!child.isToken()) {
+                continue;
+            }
+            const std::string word = child.text();
+            if (word == "unordered") {
+                decl->setUnordered(true);
+            } else if (word == "readonly") {
+                decl->setReadonly(true);
+            }
+        }
     }
     if (context->tok(TK::KwExport)) {
         // `export resource` is this declaration, not an `ExportDecl` around it (the word

@@ -230,6 +230,11 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
             "graph.replace",
             "the replacement is the node itself or is computed from it");
     }
+    // A named edit of the table (docs/design/graph-editing/README.cn.md 8.1), whose answer to the
+    // effect and the order checks is a theorem about `replace` itself: the nodes this touches are
+    // therefore not the low-level changes that would make the commit answer for them
+    // (`GraphDraft::NamedEdit`).
+    const camel::runtime::GraphDraft::NamedEdit named(draft);
     camel::passes::generic::replaceNode(transaction, fromRef, toRef);
     return NullSlot;
 }
@@ -251,6 +256,9 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
             "graph.erase",
             "the value of the node is still read");
     }
+    // A named edit: what `erase` re-sequences is the erase's, not a low-level change of the graph
+    // (see replaceKernel above).
+    const camel::runtime::GraphDraft::NamedEdit named(draft);
     camel::passes::generic::replaceNode(transaction, ref, kInvalidNodeRef);
     return NullSlot;
 }
@@ -439,7 +447,12 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
             site,
             "the graph computes 'before' from 'after' already: the edge would form a cycle");
     }
-    draft.appendOrderDependency(afterRef, beforeRef);
+    // A named edit: an order edge adds an ordering and never makes a node run, so the table asks
+    // this edit no question about the effect or the ordering (`GraphDraft::NamedEdit`).
+    {
+        const camel::runtime::GraphDraft::NamedEdit named(draft);
+        draft.appendOrderDependency(afterRef, beforeRef);
+    }
     return NullSlot;
 }
 

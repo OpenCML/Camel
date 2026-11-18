@@ -134,7 +134,7 @@ carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('<' identDef (',' identDef)* ','? ('>' | '>='))?
                      ('=' typeExpr)?
-resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
