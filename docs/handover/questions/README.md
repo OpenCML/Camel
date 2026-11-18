@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：33 页
+## 现在在等作者：34 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -40,6 +40,7 @@
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ |
 | [`2026-11-18-typeof-of-machine-made-types`](2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ |
+| [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
 | [`questions-2026-11-17-two-rulings`](questions-2026-11-17-two-rulings.cn.md) | 两个必须由作者裁定的口子（2026-11-17 23:40） |
 | [`questions-2026-11-18-rc23-two-orders`](questions-2026-11-18-rc23-two-orders.cn.md) | rc23：两条指令互相冲突，而它现在是合入的唯一闸门 |
 
