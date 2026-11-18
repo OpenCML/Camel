@@ -554,7 +554,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
-383eb3177311c4eb ok stdlib/vjp.cml
+328db940e2249591 ok stdlib/vjp.cml
 f70d4e57b1f9b14e ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
