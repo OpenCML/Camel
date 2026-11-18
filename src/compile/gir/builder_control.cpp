@@ -2496,15 +2496,27 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             if (stored == nullptr || stored->code() == TypeCode::Void) {
                 continue;
             }
-            // Where the loop starts: the version the `var` has where the loop stands -- the value
-            // the cell was made with when nothing wrote it yet. That value is the one under the
-            // copy the cell was made over (`:var/new` reads a copy of the literal), which is what
-            // the `let` writing puts in the same place.
-            node_handle_t start = nullptr;
-            if (const auto version = carriedVersions_.find(cell);
-                version != carriedVersions_.end()) {
-                start = version->second;
-            } else {
+            // Where the loop starts: the value the `var` has where the loop stands, which is the
+            // version its last write made (Builder::valueVersionOf -- the JOIN a branch carried, the
+            // value an assignment stored, or the call that wrote it), and, when nothing has written
+            // it, the value the cell was made with: the one under the copy the cell was made over
+            // (`:var/new` reads a copy of the literal), which is what the `let` writing puts in the
+            // same place. Reading the version here and only here is what makes `var v = false;
+            // v = true;` entered with `true`: the state is the `var` as it stands, not the value its
+            // declaration gave it (test/cases/compile/var/loop_state_starts_from_the_last_write.cml).
+            node_handle_t start = valueVersionOf(cell);
+            if (start != nullptr) {
+                // A version that is the cell -- the write handed the cell back, or the cell as a
+                // call left it -- is not the state's value: the state is what a read of the `var`
+                // takes, which is the `:var/get` a use site builds (`readVariableThrough` makes
+                // the same node). A version that carries the value itself (the JOIN a branch's arms
+                // wrote) is the state as it stands and is used as it is.
+                Type *versionType = nodeTypeOf(start);
+                if (versionType != nullptr && valueTypeOf(versionType) != versionType) {
+                    start = variableOperator(camel::core::oper::VarGet, start);
+                }
+            }
+            if (start == nullptr) {
                 const auto ins = normInputsOf(cell);
                 if (ins.size() != 1) {
                     continue;
