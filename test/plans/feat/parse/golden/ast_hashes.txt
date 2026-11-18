@@ -520,7 +520,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-95f605ba85e0778d ok stdlib/graph.cml
+d18c0005cc2591d8 ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -1299,7 +1299,7 @@ e963ba5c5d5d5e1a ok test/cases/compile/native/fs_type.cml
 201a096f431b222d ok test/cases/compile/native/generic_qualified.cml
 646e0a10d230a91d ok test/cases/compile/native/graph_arity.cml
 c78b1046cfd06a83 ok test/cases/compile/native/graph_constant_arity.cml
-17721f3ac9f7c54f ok test/cases/compile/native/graph_constant_import.cml
+c47c50d8a9bf0096 ok test/cases/compile/native/graph_constant_import.cml
 21c559b0be019c30 ok test/cases/compile/native/graph_constant_type.cml
 8a40fd3cfe844b23 ok test/cases/compile/native/graph_declaration_import.cml
 0e3f4f3ecb332218 ok test/cases/compile/native/graph_type.cml
@@ -4346,7 +4346,7 @@ fb629dc0a74ec99e ok test/cases/trans/macro/tag_positions.cml
 92ec509afd9782a1 ok test/cases/trans/macro/tag_with_argument.cml
 a1a07acf0dca261a ok test/cases/trans/profile/alloc_count.cml
 fb8b57048d01e09e ok test/cases/trans/profile/alloc_step.cml
-005d7d96f661a8a5 ok test/cases/trans/spelling/declared.cml
+a53f27d79738a367 ok test/cases/trans/spelling/declared.cml
 66da1ebb33af63fc ok test/cases/trans/spelling/greedy.cml
 f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 216257761cb074d5 ok test/cases/transforms/compositions/grad_vjp_g_zero.cml
