@@ -1691,8 +1691,9 @@ constexpr std::string_view kCompParameter = "$comp_arg";
 constexpr std::string_view kCompLhs       = "$comp_f";
 constexpr std::string_view kCompRhs       = "$comp_g";
 // The built-in `range(start, end)`, which is what the interval reading of `..` is: referred to
-// by the name the compiler writes for a built-in operator (design principles 4.2).
-constexpr std::string_view kRangeCall = "$builtin::range";
+// by the name the compiler writes for a built-in operator (design principles 4.2). The name is
+// made by `core::compilerNamedOperator`, the one place such a name is built.
+const std::string kRangeCall = camel::core::compilerNamedOperator("range");
 } // namespace
 
 node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected) {
@@ -2241,8 +2242,11 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
     //  - `=`, and the whole variable's rebuild of a path: the group of one overload per type,
     //    chosen by the arguments' types. It has no single id (an assignment the program may also
     //    write as `=`), so it stays by name -- the one place a name is the reference, and here it
-    //    is the store's own name, not the write's. The rebuild says so with the prefix that marks
-    //    a name the compiler made.
+    //    is the store's own name, not the write's. The name itself is `core::kAssignmentGroup`:
+    //    the table in `operator_names.cpp` states it once, and this switch asks for it (daily
+    //    review 2026-11-18, item 4). The rebuild writes through that same name, without the
+    //    `$builtin::` prefix it carried until 2026-11-19 -- the prefix only marked a name the
+    //    compiler made, and that marking cost three readers a prefix judgement of their own.
     //  - `op=`: the compound group, whose overload set is what says whether the write is defined
     //    for these types (the node carries it, see AssignmentForm::Compound).
     //  - the rebinding to an in-place operator's result: that operator, by id.
@@ -2252,13 +2256,16 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
         dref = tree_->makeDRef(gct->assignmentOperator());
         break;
     case GCT::AssignmentForm::Rebuilt:
-        dref = tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__");
+    case GCT::AssignmentForm::Plain:
+        // One group for both: the whole variable's rebuild writes through the same assignment
+        // group `=` names, and `core::kAssignmentGroup` is where the name is stated. Until
+        // 2026-11-19 the rebuild prefixed it with `$builtin::` to mark a name the compiler made,
+        // which cost three readers a prefix judgement (daily review 2026-11-18, item 4); the
+        // bare name resolves to that same group, which is the only thing the prefix ever meant.
+        dref = tree_->makeDRef(std::string(camel::core::kAssignmentGroup));
         break;
     case GCT::AssignmentForm::Owned:
         dref = internalOperatorDref(camel::core::oper::AssnOwned);
-        break;
-    case GCT::AssignmentForm::Plain:
-        dref = tree_->makeDRef("__assn__");
         break;
     }
     dref->setOrigin(storeOperatorOrigin(gct));
@@ -4652,9 +4659,11 @@ node_handle_t Builder::visitLinkNode(
             // itself: it does not exist after the call, so it cannot carry the cell away. It is
             // remembered apart from the real escapes (a closure capturing the variable, a user
             // function's `var` parameter) so that the SSA fold can tell "kept a resource because it
-            // is written" from "kept a resource because it leaves the body".
+            // is written" from "kept a resource because it leaves the body". Which operators are
+            // writes is `core::isAssignmentUri`, the answer the table's family bit is set from
+            // (daily review 2026-11-18, item 4).
             const bool writeOperator =
-                targetOperator != nullptr && targetOperator->uri().rfind(":op/assn", 0) == 0;
+                targetOperator != nullptr && camel::core::isAssignmentUri(targetOperator->uri());
             if (writeOperator) {
                 if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
                     if (const std::string name = moduleLevelName(arg.expr->name());

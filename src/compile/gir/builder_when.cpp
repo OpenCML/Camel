@@ -24,6 +24,7 @@
  */
 
 #include "builder.h"
+#include "builder_helpers.h"
 #include "builder_support.h"
 #include "camel/core/type/typecall.h"
 
@@ -59,11 +60,11 @@ using camel::core::module::ImportLayer;
 namespace {
 
 /// `$builtin::not` and `not` name the same operator; a name a module qualified is that
-/// module's own.
+/// module's own. The prefix is `kBuiltinPrefix`, stated once in `builder_helpers.h`: this used to
+/// spell it again, which is the second copy daily review 2026-11-18 (item 4) counts.
 std::string plainName(const std::string &written) {
-    constexpr std::string_view builtin = "$builtin::";
-    if (written.rfind(builtin, 0) == 0) {
-        return written.substr(builtin.size());
+    if (written.starts_with(kBuiltinPrefix)) {
+        return written.substr(kBuiltinPrefix.size());
     }
     return written;
 }

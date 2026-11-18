@@ -2908,10 +2908,13 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         // `a = b` and `a op= b` write the left side; they are not calls (design principles 3.5).
         // One node of kind ASSIGN carries the two sides, and a compound assignment carries the
         // group of the operator it follows: that operator's set of operand types is what decides
-        // whether the write is defined, so it is the operator the graph builder asks.
+        // whether the write is defined, so it is the operator the graph builder asks. Which group
+        // is the plain assignment, and which are the compound ones, is the table in
+        // `operator_names.cpp` (daily review 2026-11-18, item 4): this line asks it instead of
+        // spelling the name.
         const bool compound =
             camel::core::plainGroupOfCompoundAssignment(groupName).has_value();
-        if (groupName == "__assn__" || compound) {
+        if (groupName == camel::core::kAssignmentGroup || compound) {
             const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
             node_ptr_t target      = visitData(lhsASTNode);
             node_ptr_t value       = visitData(rhsASTNode);
@@ -4512,7 +4515,7 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
         return funcNode;
     };
     // `value->op<function>`.
-    const auto apply = [&](const char *op, const node_ptr_t &function, const node_ptr_t &value) {
+    const auto apply = [&](const std::string &op, const node_ptr_t &function, const node_ptr_t &value) {
         node_ptr_t withNode = place(tree_->makeWith(1), ast, "gct.with");
         *withNode << place(tree_->makeDRef(op), ast, "gct.dref") << function;
         node_ptr_t linkNode = place(tree_->makeLink(1), ast, "gct.link");
@@ -4521,13 +4524,15 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
     };
     node_ptr_t result = visitData(sourceAst);
     if (conditionAst) {
-        result = apply("$builtin::filter", elementFunction(conditionAst), result);
+        result = apply(
+            camel::core::compilerNamedOperator("filter"), elementFunction(conditionAst), result);
     }
     // The two operators themselves, not what the names `filter` and `map` stand for where
     // the comprehension is written: a function of the program with one of those names must
     // not change what a comprehension means (the GIR builder resolves the reserved prefix
-    // in the built-in module, visitDRefNode).
-    return apply("$builtin::map", elementFunction(elementAst), result);
+    // in the built-in module, visitDRefNode). Both names are made by
+    // `core::compilerNamedOperator`, the one place a compiler-made operator name is built.
+    return apply(camel::core::compilerNamedOperator("map"), elementFunction(elementAst), result);
 }
 
 namespace {

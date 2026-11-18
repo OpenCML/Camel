@@ -1396,3 +1396,129 @@ CommitMadeGraphPortsTestPass::apply(const camel::runtime::Program *program, std:
         << std::flush;
     return current;
 }
+
+// Retyping one call site twice: the reading that says whether the second `materializeStaticValue`
+// is the type the encoded program carries. A pass that widens a callee's clause widens what its
+// callers declare, round after round, and a value that keeps the type of the round before it is a
+// call site that says something its callee no longer does -- which is what the pass boundary of
+// `feat/modules/tiles` refuses a published program for.
+const camel::runtime::Program *
+ValueRetypeTwiceTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    // The call site: a data node holding a function value whose graph this program holds.
+    const GCGraph *caller = nullptr;
+    gc_node_ref_t site    = kInvalidNodeRef;
+    size_t slot           = 0;
+    GraphId calleeId{};
+    for (const GCGraph *graph : program->graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_cnt_t i = 0; i < graph->nodeCount(); ++i) {
+            const GCNode *node = graph->node(static_cast<gc_node_ref_t>(i));
+            if (node == nullptr || node->kind != GCNodeKind::Data || node->dataIndex >= 0) {
+                continue;
+            }
+            const auto *type = node->dataType();
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Function) {
+                continue;
+            }
+            const size_t index = static_cast<size_t>(-node->dataIndex);
+            if (index >= graph->staticSlots().size()) {
+                continue;
+            }
+            const auto *function = camel::core::rtdata::fromSlot<Function *>(graph->staticSlots()[index]);
+            if (function == nullptr || program->graph(function->graphId()) == nullptr) {
+                continue;
+            }
+            caller   = graph;
+            site     = static_cast<gc_node_ref_t>(i);
+            slot     = index;
+            calleeId = function->graphId();
+            break;
+        }
+        if (caller != nullptr) {
+            break;
+        }
+    }
+    if (caller == nullptr) {
+        out << "value_retype_twice: no data node of this program holds a function whose graph it "
+               "also holds, so there is no call site to retype\n"
+            << std::flush;
+        return program;
+    }
+    const GCGraph *callee = program->graph(calleeId);
+    const auto *base      = callee->funcType();
+    if (base == nullptr) {
+        out << "value_retype_twice: graph '" << callee->name() << "' carries no type, so there is "
+               "nothing to retype it to\n"
+            << std::flush;
+        return program;
+    }
+    // Two clauses the callee's type can carry: the body's own, and that plus a write of the console.
+    // Neither is the reading under test; the reading is which one the value names after the second
+    // materialization and an encode.
+    sem::ResourceSignature first = bodySignature(*program, *callee);
+    if (first.mode != sem::ResourceSignature::Mode::Concrete) {
+        out << "value_retype_twice: graph '" << callee->name()
+            << "' has no concrete body signature, so there is no clause to widen\n"
+            << std::flush;
+        return program;
+    }
+    sem::ResourceSignature second = first;
+    second.ambient.push_back(sem::ResourceSignature::AmbientUse{
+        .name = "retype_twice", .mode = sem::AccessMode::Write, .unordered = false});
+    const bool differs = !(first == second);
+
+    RuntimeGraphDraftSession session(context_, program);
+    auto &draft = session.edit(const_cast<GCGraph *>(caller)).edit();
+    camel::core::type::FunctionType *firstType  = base->withResources(first);
+    camel::core::type::FunctionType *secondType = base->withResources(second);
+
+    const gc_node_ref_t once = draft.materializeStaticValue(draft.staticSlots()[slot], firstType);
+    draft.setNodeOrigin(once, draft.nodeOrigin(site));
+    draft.replaceAllValueUses(site, once);
+    draft.eraseNode(site);
+    const size_t onceSlot = static_cast<size_t>(-draft.header(once)->dataIndex);
+    const gc_node_ref_t twice =
+        draft.materializeStaticValue(draft.staticSlots()[onceSlot], secondType);
+    draft.setNodeOrigin(twice, draft.nodeOrigin(once));
+    draft.replaceAllValueUses(once, twice);
+    draft.eraseNode(once);
+
+    out << "value_retype_twice: graph '" << caller->name() << "' names '" << callee->name()
+        << "'; the two clauses differ: " << (differs ? "yes" : "no") << ", first "
+        << sem::toString(first) << ", second " << sem::toString(second) << '\n'
+        << std::flush;
+
+    // Read back from the encode and, when the commit publishes it, from the program it published.
+    // `prepared()` is the encode with nothing judged and nothing delivered.
+    const Program *staged = session.prepared();
+    const auto readBack    = [](const Program &held, const GCGraph *graph, GraphId wanted) {
+        std::string said = "<no value>";
+        const GCGraph *copy = held.graph(graph->id());
+        if (copy == nullptr) {
+            return std::string("<no copy>");
+        }
+        for (gc_cnt_t i = 0; i < copy->nodeCount(); ++i) {
+            const GCNode *node = copy->node(static_cast<gc_node_ref_t>(i));
+            if (node == nullptr || node->kind != GCNodeKind::Data || node->dataIndex >= 0) {
+                continue;
+            }
+            const auto *type = node->dataType();
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Function) {
+                continue;
+            }
+            const auto *function = static_cast<const camel::core::type::FunctionType *>(type);
+            said = sem::toString(function->resources());
+            break;
+        }
+        (void)wanted;
+        return said;
+    };
+    out << "value_retype_twice: the encode says " << readBack(*staged, caller, calleeId) << '\n'
+        << std::flush;
+    return program;
+}

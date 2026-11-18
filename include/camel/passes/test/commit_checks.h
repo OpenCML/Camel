@@ -77,6 +77,17 @@ class FoldFunctionTypeTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
+/// Retypes one call site twice, through `materializeStaticValue`, and reports the type the encoded
+/// program carries: the second materialization is what a pass does in a round after the first, and a
+/// value that keeps the type of the round before it is a call site that lags its callee.
+inline constexpr const char *kValueRetypeTwiceTestPass = "test::value_retype_twice";
+class ValueRetypeTwiceTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
 /**
  * The four readings the author's rework of 2026-11-18 asks for beyond the two of analysis 4.1. Each
  * one writes the one thing that check is about, commits it, and prints what the commit answered; the

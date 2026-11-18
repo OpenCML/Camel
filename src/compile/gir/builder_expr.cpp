@@ -3215,9 +3215,10 @@ Builder::CalleeValue Builder::calleeValueOf(const GCT::Node *callee) {
         return value;
     }
     const std::string &written = callee->name();
-    // `$builtin::__assn__`: the group the compiler names when it rewrites an assignment it handles
-    // itself. The built-in module is where the build resolves it (visitDRefNode), and it is a
-    // group, so the answer is the same as for any other operator.
+    // A name the compiler wrote for a built-in operator it means itself (`core::compilerNamedOperator`:
+    // the `filter` and `map` of a comprehension, the `range` an interval is). The built-in module is
+    // where the build resolves it (visitDRefNode), and what it names is a group, so the answer is the
+    // same as for any other operator.
     if (written.starts_with(kBuiltinPrefix)) {
         if (context_ != nullptr) {
             const auto entity =
