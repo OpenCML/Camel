@@ -520,7 +520,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-d18c0005cc2591d8 ok stdlib/graph.cml
+3314284e5333a70d ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml

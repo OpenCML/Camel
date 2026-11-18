@@ -50,10 +50,28 @@
  *    the nodes that read it), and a part that is still equal at that point is reported by
  *    CanonicalProgram::ties() (`camel inspect --ties`) as a known limitation, with its width.
  *
- *  - A node the walk does not reach (a dead write, a computation whose value nothing uses) is
- *    placed after everything the walk does reach, one region at a time, by the same tie rule. It
- *    is not part of the default query of a program; a document that prints the graph still prints
- *    it, and this is where.
+ *  - A node the walk does not reach is a *section* of the order, and the section is the whole of
+ *    what this answer says about one. What it says is: after everything the walk reaches, one
+ *    region at a time (the body first, then the regions in id order, then whatever is left that no
+ *    region of the walk holds), and inside itself ordered by the same tie rule as everything else
+ *    -- the node key, the equal-key part's smallest table, and the fragment cut beyond the
+ *    enumeration limit. So the tail is a total order the graph decides and never the order the
+ *    nodes were created in: two writings of one graph give one tail, which is what makes
+ *    `same_graph` mean something about a graph that has an unreachable node.
+ *
+ *    What the position is *not* is where the node would stand if something reached it. There is
+ *    no such place -- the walk starts from roots -- and inventing one would mean walking from a
+ *    root the graph does not have. The three readings this paragraph replaces are recorded in
+ *    `docs/handover/reports/2026-11-18-canonical-unreachable-and-a-draft-s-id.cn.md`: ordering the
+ *    tail by kind and parameters alone (a preorder, so two different graphs read as one), leaving
+ *    the tail out of `nodes` and giving it a view of its own (`nodes` stops being every node of
+ *    the graph, and a document that prints the graph needs the second view anyway, so the
+ *    question moves rather than closes), and this one. What the order does not carry is *which*
+ *    nodes are unreachable: the section is last, so a reader who wants to know asks the walk.
+ *
+ *    In a program this repository can build, an unreachable node is a region port nothing in its
+ *    region reads (`loop a = 0, b = 0 while b < n do (a + 1, b + 1)` leaves `a`'s condition port
+ *    with no reader): 207 of the 4037 `.cml` files here have one.
  *
  * The version ports the design principles name as a further tie source do not exist as nodes in
  * this graph model, so nothing here arranges them; the bindings whose key has no number yet are
