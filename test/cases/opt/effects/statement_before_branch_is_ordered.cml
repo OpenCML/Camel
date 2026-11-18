@@ -1,0 +1,23 @@
+/**
+ * The positive control for the pair the commit's order check asks: an effect written before a
+ * branch and an effect inside one of its arms reach one resource, so the compiler writes an order
+ * edge between the statement and the node that owns the arm. The owner stands in the block for
+ * what runs under it (docs/design/effects/edges.cn.md 4.6), and `runtime::orderIncomplete` pairs
+ * a neighbour with that owner, so the two must have a path between them (design principles 3.3).
+ *
+ * Read with no pass at all: the edge is the front end's. A graph in which an arm's effect is
+ * recorded in the arm's block alone answers no -- and that graph is what an inline splice copies
+ * verbatim into its caller (edges.cn.md 4.2, 5.7), where the first commit that sees the copy
+ * refuses it. `pick` is the body `fold_keeps_arm_effect` inlines; this case reads the graph before
+ * any pass runs.
+ */
+
+func pick(c: bool): int {
+    let a = println(1)
+    return if c then a else (println(2) - 1)
+}
+
+func main(): int sync {
+    println(pick(false))
+    return 0
+}
