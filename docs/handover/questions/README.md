@@ -33,9 +33,9 @@
 | [`2026-11-18-specialization-carries-its-ports-one-place-over`](2026-11-18-specialization-carries-its-ports-one-place-over.cn.md) | Specialization publishes its ports one place over from its own signature |
 | [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at`：语句上「占据位置」，纯节点上「只选区域」——答复已给（`e55cd6157`） |
 | [`2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch`](2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md) | The citation check demands a design page that by design lives only on the author's branch |
-| [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | The exemption list accepts a reason that is no longer why, and hides the names it says are clean |
+| [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | 一条豁免该不该连「它记的那条原因」一起校验——原因不再成立时，它还是豁免吗？ |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 |
-| [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | The tiles pass publishes a body before the type that describes it |
+| [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ |
 | [`2026-11-18-the-witness-a-transpose-needs-has-no-channel`](2026-11-18-the-witness-a-transpose-needs-has-no-channel.cn.md) | 转置要一条残差当「零的见证」：那条通道 11-04 被删了，而它今天必须回来 —— 但回哪一半？ |
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ |
 | [`2026-11-18-typeof-of-machine-made-types`](2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ |
