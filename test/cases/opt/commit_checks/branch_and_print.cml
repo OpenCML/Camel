@@ -1,0 +1,25 @@
+// A function that branches over a value of its own and then writes to the console, and a pure
+// function beside it. The branch is what the region reading needs: each arm is a region of its own,
+// and the blank node that owns them stands in the function body for everything under it, so a write
+// written inside one arm is a write the body's owner carries without being written there.
+//
+// The two statements are one chain -- the write waits for the branch that came before it -- and that
+// wait is the only thing ordering the two, which is what `test::commit_ancestor` takes away: the edit
+// re-sequences the body's write (out of the chain) and splices a write into one arm, so the write
+// left in the body is ordered against neither the branch nor what the branch now carries.
+
+func announced(b: bool): int sync {
+    let y = if b then 2 else 3
+    println(7)
+    return y
+}
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(true)
+    return quiet + noisy
+}
