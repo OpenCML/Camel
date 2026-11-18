@@ -1675,17 +1675,22 @@ bool buildTransposeMember(
                 return rt::kInvalidNodeRef;
             }
             const std::span<const camel::core::type::ExtentForm> stated = arrayType->extents();
-            std::vector<int64_t> extents;
-            bool exact = !stated.empty();
-            for (size_t i = 0; exact && i < stated.size(); ++i) {
-                if (const std::optional<int64_t> size = stated[i].evaluate({})) {
-                    extents.push_back(*size);
-                } else {
-                    exact = false;
-                }
+            if (stated.empty()) {
+                return rt::kInvalidNodeRef;
             }
-            if (!exact) {
-                extents.assign(stated.empty() ? 1 : stated.size(), int64_t{0});
+            std::vector<int64_t> extents;
+            extents.reserve(stated.size());
+            for (const camel::core::type::ExtentForm &form : stated) {
+                const std::optional<int64_t> size = form.evaluate({});
+                if (!size.has_value()) {
+                    // An extent the type does not state: the zero is the forward argument's, and
+                    // the witness arrives as one of the cut's residuals. This must not answer an
+                    // empty array instead -- an unwitnessed zero is wrong at every length but 0
+                    // (author, 2026-11-18: the empty array is withdrawn) -- so a missing witness is
+                    // a loud refusal, never a quiet wrong width.
+                    return rt::kInvalidNodeRef;
+                }
+                extents.push_back(*size);
             }
             ::Array *const zeros = ::Array::create(
                 mm::autoSpace(),
@@ -5482,6 +5487,32 @@ bool buildTransposeMember(
                     draft,
                     space.space,
                     ports[port] < forwardOf.size() ? forwardOf[ports[port]] : rt::kInvalidNodeRef);
+                if (zero == rt::kInvalidNodeRef) {
+                    // The witness this parameter's zero needs: the parameter's **forward value**,
+                    // which the cut appended to its residuals in parameter order (split.cpp, the
+                    // last block of residualsOf). The tail is the only channel, and it is read here
+                    // and nowhere else: this channel carries one fact -- the forward value of
+                    // parameter `at`, as the shape witness of a zero -- and it is not a law's read
+                    // of a value (the use that made the old channel a defect in 2026-11-04).
+                    //
+                    // The count is derived, not carried: a linear half's parameters are the
+                    // tangents of the graph it was cut from, so the appended tail has exactly one
+                    // entry per parameter of this graph, in this graph's parameter order. The type
+                    // is checked before the witness is used, so a graph whose tail is not that
+                    // shape refuses by name instead of taking a neighbour's length.
+                    if (paramCount > 0 && closureOf.size() >= paramCount && at < paramCount) {
+                        const gc_node_ref_t witness = closureOf[closureOf.size() - paramCount + at];
+                        const auto witnessPort = closurePortOf.find(witness);
+                        const camel::runtime::GCNode *witnessNode =
+                            witness != rt::kInvalidNodeRef ? function->node(witness) : nullptr;
+                        const Type *witnessType =
+                            witnessNode != nullptr ? witnessNode->dataType() : nullptr;
+                        if (witnessPort != closurePortOf.end() && witnessType != nullptr &&
+                            portType != nullptr && witnessType->toString() == portType->toString()) {
+                            zero = zeroOfSpaceOf(draft, space.space, witnessPort->second);
+                        }
+                    }
+                }
                 if (zero == rt::kInvalidNodeRef) {
                     // A space whose zero is built from a shape, and a type that states none: the
                     // walk has no value for this parameter and the type writes no extents, so there

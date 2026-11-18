@@ -531,12 +531,12 @@ timeout_ms = 20000
 # Both array halves were exit 1 before the fix; the scalar half was already `(0.0)`.
 [[tests]]
 name = "vjp_const_function_answers_zero.nvm"
-desc = "The derivative of a constant function of an array: `vjp(const_fixed)([2.0, 3.0, 4.0])`'s pullback answers `([0.0, 0.0, 0.0])` at a cotangent of 1 and of 2, and the open-rank parameter, whose type states no extent, answers `([])` -- the zero the type states. A constant function of a number is the control and answers `(0.0)`. On paper `f(x) = 1.0` for every x, so f' = 0. Before the fix the two array halves threw `autodiff: a zero tangent array needs an array with a tangent` (exit 1)."
+desc = "The derivative of a constant function of an array: `vjp(const_fixed)([2.0, 3.0, 4.0])`'s pullback answers `([0.0, 0.0, 0.0])` at a cotangent of 1 and of 2, and the open-rank parameter, whose type states no extent, answers `([0.0, 0.0, 0.0])` -- the zero of the forward argument's shape, which the cut carries as a residual. A constant function of a number is the control and answers `(0.0)`. On paper `f(x) = 1.0` for every x, so f' = 0. Before the fix the two array halves threw `autodiff: a zero tangent array needs an array with a tangent` (exit 1)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_output_contains = ["fixed value= 1.0", "fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open value= 1.0", "open pullback(1.0)= ([])", "scalar value= 1.0", "scalar pullback(1.0)= (0.0)", "scalar pullback(2.0)= (0.0)"]
+expect_output_contains = ["fixed value= 1.0", "fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open value= 1.0", "open pullback(1.0)= ([0.0, 0.0, 0.0])", "scalar value= 1.0", "scalar pullback(1.0)= (0.0)", "scalar pullback(2.0)= (0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -547,7 +547,7 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
-expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([0.0, 0.0, 0.0])", "scalar pullback(1.0)= (0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -558,7 +558,7 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
 args = ["${case}", "std::jit"]
 expect_exit = 0
-expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([0.0, 0.0, 0.0])", "scalar pullback(1.0)= (0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -569,7 +569,7 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
 args = ["${case}", "std::prl"]
 expect_exit = 0
-expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([0.0, 0.0, 0.0])", "scalar pullback(1.0)= (0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -586,32 +586,6 @@ timeout_ms = 20000
 # residual -- `docs/handover/reviews/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
 # road 丙) this entry is red on `dx= []` and says so, and the control next door
 # (`vjp_const_function_answers_zero`, `float[3]`) is what the new reading has to match.
-[[tests]]
-name = "vjp_const_function_open_rank_zero_is_refused_by_a_real_array.nvm"
-desc = "The zero of a `float[...]` parameter is an array of no elements: `shape(dx)= [0]`, `sum(dx)= 0.0` (the sum of zero elements), and `sum(dx * x)` -- the same zero meeting `[1.0, 2.0, 3.0]` -- is refused with `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` at the line that asked. So an answer whose width the type did not state makes the consumer say so; it does not quietly become 0 or broadcast."
-kind = "negative"
-case = "../../../cases/compile/transforms/vjp_const_function_open_rank_zero_is_refused_by_a_real_array.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 1
-expect_stdout_contains = ["dx= []", "shape(dx)= [0]", "sum(dx)= 0.0", "Array shape mismatch in 'multiply': cannot broadcast [0] with [3]."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
-
-# A refusal is one cause, and the cause is a value: the header declares it
-# (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
-# `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
-# (`refuse(TransposeRefusalCause::X)`). The four can drift apart and no program can see it: most of the
-# causes are not reachable from anything this tree can run, so a case that runs `camel` cannot pin
-# them -- the ones it can reach say nothing about the rest. So the check reads the four sources and
-# holds the sets together, and it holds them as relations, never as counts: a count is a number a
-# reader has to edit for a reason no reader can see (2026-11-03: splitting one word into two made `17`
-# red before `18`, on two trees that satisfied every relation).
-#
-# The reds it can be are the four directions, and each is one of the four places: a cause with no word
-# cannot be spelled into the log; a cause with no sentence is answered with nothing; a cause that names
-# the shape without being written out as one is an authored decision made quietly; a cause with a word
-# and a sentence and no site is a promise nothing keeps. The check also refuses a sentence file that
-# spells any of the words itself, which is the second spelling of the fact this change removed.
 [[tests]]
 name = "transpose_refusal_is_one_cause_in_four_places"
 desc = "One refusal is one cause, and the cause is read in four places that have to agree: the header declares it, the word table spells it into the log, `refusalSentence` renders the sentence a reader is handed from it, and a site decides it -- the walk's one `refuse` lambda, which also renders the log's line, or, for a cause that no step of the walk can see, the record written after the walk (the promise guard compares the member's ports with the operator's type, a fact about the whole member). Held as relations, not counts: every cause has one word, one sentence and a site -- the list of causes that wait for a site is empty since `NeedsAValueOutsideTheClosure` got one -- a cause with no sentence of its own lands on the one that names the shape and that list is written out in the check, and the word a cause is spelled as appears in one file only, the table, so the caller renders the sentence from the cause and never from the log. That last relation is the point of the entry: the caller used to recover the cause by searching the log text for the word's prefix, so the spelling itself was the fact, and a word renamed on one side of the pair was a sentence about a cause nothing named. The four ways it can be red are the four places -- a cause with no word, a cause with no sentence, a cause that names the shape without being written out as one, and a cause with a word and a sentence that no site records."
@@ -1953,32 +1927,17 @@ expect_output_contains = ["(2.0, 0.0)"]
 # reading, and a tree that starts answering a number here has to say so by turning this entry red
 # instead of leaving a stale green behind.
 [[tests]]
-name = "transpose_unread_array_parameter_stops_earlier"
-desc = "`g(x: float[], n: float) = n * 2.0` never reads `x`, and the transpose of it does not reach `skip=unread-parameter` at all: the walk answers from the type, one gate earlier. This entry pinned the refusal that stood there (`autodiff: a zero tangent array needs an array with a tangent`, exit 1) and now pins the reading that replaced it -- `([], 2.0)`, exit 0 -- because `transpose` asks the parameter's tangent space for the zero and, when the member holds no value for that parameter, writes the zero the type states: the same rule, in the same words, as `jvp`'s `zeroConstantFor`. A type that leaves a dimension open states no size for it, and a zero of it has 0 elements there, so an unread `float[]` answers `[]` where an unread `float` answers `0.0`; the difference between the two entries is the type, not the reading. The refusal it used to pin was a different defect (`:tangent/zeros_arr` named in the walk's own source, handed a node of the source graph). Whether an empty array is the right zero for a length nobody stated is the open question this entry leaves to `docs/handover/reviews/2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`."
-kind = "behavior"
-case = "../../../cases/compile/transforms/transpose_unread_array_parameter_stops_earlier.cml"
+name = "transpose_unread_open_array_needs_a_witness"
+desc = "A value-level `transpose(g)` for `g(x: float[], n: float) = n * 2.0` is refused, because the only argument the transposed function is handed is the cotangent (`(float) => (float[], float)`) and the width of an open-length array is nowhere in its type. Three readings this entry has had: until 2026-11-04 it pinned a crash (`:tangent/zeros_arr` handed a node of the source graph); then `([], 2.0)`, the zero the *type* states, which the author withdrew on 2026-11-18 (an unwitnessed zero is wrong at every length but 0); now the refusal, which is the honest answer where no witness exists. `vjp_const_function_answers_zero` pins the other side: the same parameter answered `([0.0, 0.0, 0.0])` through `vjp`, because the cut carries the forward argument as a residual and the transposed half builds `zeros_like` of it."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_unread_open_array_needs_a_witness.cml"
 args = ["--trace", "transforms", "${case}", "std::nvm"]
 backends = ["nvm"]
-expect_exit = 0
-expect_output_contains = ["([], 2.0)", "TRANSPOSE function=g graph=", "type=(float) => (float[], float)"]
-expect_output_not_contains = ["skip=unread-parameter"]
+expect_exit = 1
+expect_output_contains = ["transpose has no transpose for", "unread-parameter", "no-cotangent-zero"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# The same wall from the other side, and the one the zero carrier answers. `transpose` answers one
-# cotangent per parameter and passes nothing else (design principles 9.9: every parameter is a linear
-# input), while this body reads its array parameter to build a zero array of that array's shape. What
-# the law needs from that read is the parameter's **shape**, and since `lane-trefuse` the shape a
-# parameter's type states is enough to carry it: the zero carrier answers `pick(x: float[3]) = x[1]`
-# as `([0.0, 1.0, 0.0])` -- slot 1 filled, every other slot zero -- without being handed the value.
-# So the entry asserts that array and exit 0, on both back ends, and pins that the crash this program
-# used to be (`Runtime indirect call norm-arity mismatch ... has 1 args, target graph
-# 'transpose_of_pick' has 2 norm ports` on nvm, `FastVM indirect call norm-arity mismatch ...
-# expected 2, got 1` and exit 134 on fvm) does not come back.
-#
-# This is the zero carrier answering by type, not a widened criterion: the refusal is still raised
-# for the positions whose law reads *elements* rather than shapes (`#mul_tensor_t`'s `ct * w`,
-# `#relu_t`'s `where(x > 0.0, ct, 0.0)`), which no shape can stand in for.
 [[tests]]
 name = "transpose_refuses_a_parameter_value_it_cannot_be_handed"
 desc = "`transpose(pick)` where `pick(x: float[3]) = x[1]`: the cotangent of `x` is a zero array of its shape with slot 1 filled, and the shape is written in the parameter's type, so the zero carrier answers it without being handed the value -- `back(1.0)` prints `([0.0, 1.0, 0.0])` and exits 0 on both back ends. The entry used to pin a refusal here. Before the zero carrier landed this program was a crash on both back ends -- a norm-arity count on nvm whose help asked for the program to be reported, an abort with exit 134 on fvm -- so the entry still asserts that neither of those sentences appears."

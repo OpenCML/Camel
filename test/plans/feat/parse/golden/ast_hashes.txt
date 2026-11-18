@@ -2056,7 +2056,7 @@ ea90d120b3904b9c ok test/cases/compile/transforms/transpose_takes_a_function_par
 9da461821122abb6 ok test/cases/compile/transforms/transpose_tuple_component_first.cml
 55e63a516f5902e0 ok test/cases/compile/transforms/transpose_tuple_component_second.cml
 2766cf6f07e8cb2b ok test/cases/compile/transforms/transpose_tuple_nested.cml
-8c3698240f3b566b ok test/cases/compile/transforms/transpose_unread_array_parameter_stops_earlier.cml
+b979498945a50b67 ok test/cases/compile/transforms/transpose_unread_open_array_needs_a_witness.cml
 79b8329f005ddf96 ok test/cases/compile/transforms/transpose_unread_parameter_answers_zero.cml
 cf64ad60dada4fca ok test/cases/compile/transforms/transpose_unread_parameters.cml
 b7a53acec352ba52 ok test/cases/compile/transforms/transpose_unread_state_answers_zero.cml
@@ -2065,8 +2065,7 @@ eb22cf4fd83fba8a ok test/cases/compile/transforms/vjp_analytic_gradient.cml
 5e44a5ef5b3631d6 ok test/cases/compile/transforms/vjp_answers_abs_log_maximum_and_minimum.cml
 4b8ac60dcc91181c ok test/cases/compile/transforms/vjp_arities.cml
 efeb26c2194c13a7 ok test/cases/compile/transforms/vjp_carries_its_ruleset.cml
-04435f50f6e566b4 ok test/cases/compile/transforms/vjp_const_function_answers_zero.cml
-7dbc9999a7de596e ok test/cases/compile/transforms/vjp_const_function_open_rank_zero_is_refused_by_a_real_array.cml
+f558e6bf58d83b88 ok test/cases/compile/transforms/vjp_const_function_answers_zero.cml
 393bcaec7203612c ok test/cases/compile/transforms/vjp_gradient.cml
 1b293ef5d17a6e76 ok test/cases/compile/transforms/vjp_loop_gradient.cml
 6c3ca89659c74a24 ok test/cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml

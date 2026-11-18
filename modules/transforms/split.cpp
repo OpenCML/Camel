@@ -1572,6 +1572,62 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     // after everything that appears once: the copies are kept (the count is the graph's answer, and
     // the reading below prints it), and the slots of the parameters stay their own.
     {
+    // The value of **every** parameter crosses the cut, not only the ones the tangent half reads
+    // (author, 2026-11-18 17:50: "转置需要某个输入形状的零、而它的余切没人读时，前向就把这个输入的
+    // 形状（或它本身）作为残差捕获进 pb"). The transposed half builds that zero with the space's
+    // `zeros_like`, which reads its operand's shape, and an open length is nowhere in the type --
+    // the value is the only witness there is. Until this, `transpose` stood in for the missing
+    // witness with the zero the *type* states, an empty array for an open extent, and an
+    // unwitnessed zero is wrong at every length but 0.
+    //
+    // **Added to the parameters' own prefix**, in port order: the ordering block below is what writes that invariant
+    // down (a parameter's value stands in the prefix, a computed value after it), so a parameter the
+    // tangent half did not read belongs there too -- appending it at the end put a parameter after a
+    // computed value and `stop_gradient`'s library path read the wrong slot and answered
+    // `dL/dx=0.0` (measured 2026-11-18). The ordering below puts a parameter's value in the prefix,
+    // so the values added here are in the prefix in port order and nothing the walk numbered is
+    // displaced by more than the count of parameters it did not reach. The transposed half reads
+    // them by counting its own parameters (`transpose.cpp`, the zero of an unread parameter -- one
+    // reader, and it checks the type before it uses one).
+    {
+        const size_t half =
+            lifted.funcType() != nullptr ? lifted.funcType()->normTypesCount() / 2 : 0;
+        // Only a parameter whose **type cannot state its own shape** needs the witness: an array
+        // with an extent the declaration does not evaluate (or with none at all). A scalar's zero,
+        // and an array whose extents are all written down, are the type's to answer, so the cut
+        // carries nothing extra for them -- the reading `residuals=0` still means what it meant for
+        // a body whose tangent depends on no input
+        // (`stop_gradient_gradient_through_the_library`).
+        const auto wantsAWitness = [&](size_t parameter) -> bool {
+            Type *const type = lifted.funcType()->normTypeAt(parameter);
+            if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
+                return false;
+            }
+            const auto *const arrayType = tt::as_ptr<ArrayType>(const_cast<Type *>(type));
+            const std::span<const camel::core::type::ExtentForm> stated =
+                arrayType != nullptr ? arrayType->extents()
+                                     : std::span<const camel::core::type::ExtentForm>();
+            if (stated.empty()) {
+                return true;
+            }
+            for (const camel::core::type::ExtentForm &form : stated) {
+                if (!form.evaluate({}).has_value()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        for (size_t k = 0; k < half && k < ports.size(); ++k) {
+            if (!wantsAWitness(k)) {
+                continue;
+            }
+            const gc_node_ref_t valuePort = ports[k];
+            if (valuePort < nodeCount &&
+                std::find(found.begin(), found.end(), valuePort) == found.end()) {
+                found.push_back(valuePort);
+            }
+        }
+    }
         std::vector<gc_node_ref_t> once;
         std::vector<gc_node_ref_t> again;
         for (const gc_node_ref_t ref : found) {
