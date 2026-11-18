@@ -2830,6 +2830,10 @@ const EXAMPLE_STOPS = {
             'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
         'stdlib/graph.cml#origin#1':
             'the example reads the origin of `n`, which is a node of the surrounding pass, and the reading needs the `spelling` capability no example program can declare (design principles 9.5)',
+        'stdlib/graph.cml#show#1':
+            'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
+        'stdlib/graph.cml#creation_id#1':
+            'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
         'stdlib/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
         'stdlib/prelude.cml#len#3':
