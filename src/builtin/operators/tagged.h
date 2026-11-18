@@ -21,6 +21,10 @@
 // Lowering targets.
 slot_t __is_null__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __null_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+// The same value, taken out of a `T?` the compiler knows is not null: the one of the two that
+// faults. It is what a machine the compiler builds unwraps its own state slot with, and the fault
+// says the compiler, not the program, is wrong (RuntimeDiag::NullSlotUnwrapped).
+slot_t __unwrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __is_error__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __error_value__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __error_info__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
