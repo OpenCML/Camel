@@ -948,10 +948,15 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
     // printed by the loop below like any other.
     const auto entries = context->all<cst::UsesEntry>();
     const bool leading = context->firstToken() && context->firstToken()->text() == "spelling";
-    const bool pure =
-        context->firstToken() && (leading && context->firstToken()->next() != nullptr
-                                      ? context->firstToken()->next()->text() == "pure"
-                                      : context->firstToken()->text() == "pure");
+    // `pure` is a token of the clause and no entry: an entry is a `cst::UsesEntry`, so a child
+    // that reads `pure` is the word itself and not a resource named that way.
+    bool pure = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        if (context->child(i)->text() == "pure") {
+            pure = true;
+            break;
+        }
+    }
     string result = leading ? "spelling" : "";
     if (pure) {
         result += (result.empty() ? "" : " ") + string("pure");
