@@ -62,7 +62,7 @@ constexpr std::array<CompoundForm, 9> kCompound = {{
 
 std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol) {
     if (symbol == "=") {
-        return "__assn__";
+        return kAssignmentGroup;
     }
     if (symbol.size() >= 2 && symbol.back() == '=' && symbol != "==" && symbol != "!=" &&
         symbol != "<=" && symbol != ">=") {
@@ -178,7 +178,7 @@ const char *operatorSymbolOf(std::string_view group) {
     // symbol and `=`), and the few names that are not overloadable forms.
     static const std::unordered_map<std::string_view, std::string> symbols = [] {
         std::unordered_map<std::string_view, std::string> map = {
-            {"__assn__", "="},
+            {kAssignmentGroup, "="},
             {"__strict_eq__", "==="},
             {"__strict_neq__", "!=="},
         };
