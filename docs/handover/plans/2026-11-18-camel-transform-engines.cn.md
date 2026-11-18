@@ -4,7 +4,7 @@
 
 ## 第一步：图编辑接口补齐已定的算子
 
-编辑块的语法（`edit`/`view`）还有待负责人定的项（`docs/design/graph-editing/README.cn.md` 第 13 节），但算子已定：`inline`（调用并当场展开）、`outline`（把一段收回成函数）、`order`、`replace`、`erase`、`eval`，以及读出顺序边、同步边、区域归属的查询。先在今天的接口（`stdlib/graph.cml` 的草稿与提交）上把这些算子补齐，提交走同一个检查入口（六项检查）。编辑块语法定下后，算子不变，只换外壳。
+编辑块的语法已定（`docs/design/graph-editing/README.cn.md` 第 15 节，负责人 2026-11-18），算子也已定：`inline`（调用并当场展开）、`outline`（把一段收回成函数）、`order`、`replace`、`erase`、`eval`，以及读出顺序边、同步边、区域归属的查询。先在今天的接口（`stdlib/graph.cml` 的草稿与提交）上把这些算子补齐，提交走同一个检查入口（六项检查）。编辑块语法定下后，算子不变，只换外壳。
 
 ## 第二步：用 Camel 写 `reinterp`（前向求导）
 

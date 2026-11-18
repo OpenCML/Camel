@@ -54,7 +54,7 @@
 - `match type` 已能拆数组维度，`ShapeOf<T>`、`ElementOf`、`WithElement`、`RowsOf` 已在库层表达；不要重新加入同类 C++ 原语。
 - 继续删除 `sumToInfer`、`shapeListType`、`shapeInfer` 中重复描述形状的代码，让声明和通用类型函数成为唯一来源。
 - 让动态 batch 导出用例转绿。秩未知且需要前导轴归约时明确拒绝，不能猜 `Reshape` 后静默算错。
-- `match type` 分支守卫仍是独立待裁问题，不把 `ShapeOf<string>` 的当前结果写成已批准语义。
+- `match type` 分支守卫已定（负责人 2026-11-14：加守卫，`case _ when <pred>`）：`ShapeOf` 等按守卫改写，`ShapeOf<string>` 不再落进数值的默认臂。
 
 ### 5. 工程与性能欠账
 
