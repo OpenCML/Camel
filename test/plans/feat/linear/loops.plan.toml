@@ -863,9 +863,10 @@ timeout_ms = 20000
 
 # The scalar twin of the entry above: a state the loop head carries as a plain value (`var n: int`)
 # has no storage a write could reach, so the name is the value and the keeper gives it a place of
-# its own to be read from (`Builder::secondNameOf`: a GATE of one data port, operator_table.h:127-131
-# and docs/design/effects/edges.cn.md 5.3). Before that the name was the carried port itself and
-# `kept` printed the value the round wrote after it (1, 2, 3) where the round started at 0, 1, 2.
+# its own to be read from (`Builder::secondNameOf`: a GATE of one data port,
+# operator_table.h#kWellKnownCount and docs/design/effects/edges.cn.md 5.3). Before that the name was
+# the carried port itself and `kept` printed the value the round wrote after it (1, 2, 3) where the
+# round started at 0, 1, 2.
 [[tests]]
 name = "loops.second_name_in_round_scalar"
 desc = "A name bound to a scalar state the loop head carries reads the value the round started with: `let kept = n` followed by `n = i + 1` prints 0, 1, 2, not the write (1, 2, 3), and `n` after the loop is 3. The value has no storage to copy, so the name is the keeper of the value itself -- a GATE of one data port reading it (the scalar twin of loops.second_name_in_round, where the array leaves with its own storage)."

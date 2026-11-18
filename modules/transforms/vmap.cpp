@@ -771,7 +771,7 @@ VmapGraph buildVmapGraph(
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
         // that only forward it.
-        // The walk is xit_gate.h#exitValueOf: a gate's first input is the value and the rest are
+        // The walk is exit_gate.h#exitValueOf: a gate's first input is the value and the rest are
         // the statements it waits on (author,  780a83bd), so taking the last input read a write
         // as the value in a body that printed.
         gc_node_ref_t out = exitValueOf(*function, function->exitNodeRef());

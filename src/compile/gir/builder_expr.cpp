@@ -1728,9 +1728,9 @@ node_handle_t Builder::secondNameOf(node_handle_t value) {
     }
     // Every other value has no storage a write could reach, so the value itself is what the name
     // holds, and the keeper gives the value a place of its own to be read from: the GATE of
-    // docs/design/effects/edges.cn.md 5.3 and operator_table.h:127-131, a region of one data port
-    // reading the value, passed through. No sync predecessor: what the name needs is a place for
-    // the value, not an order for it. It carries no count, as a value with no storage needs none.
+    // docs/design/effects/edges.cn.md 5.3 and operator_table.h#kWellKnownCount, a region of one data
+    // port reading the value, passed through. No sync predecessor: what the name needs is a place
+    // for the value, not an order for it. It carries no count, as a value with no storage needs none.
     node_handle_t keeper = currGraph_->addGateNode(nodeTypeOf(value));
     linkNodes(LinkType::Norm, value, keeper);
     return keeper;

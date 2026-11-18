@@ -60,14 +60,14 @@
  *   * the state parameter is named `__gen_state__` **and that is why the port has a name at all**:
  *     `createCompileGraph` takes a port's name from the signature, and an unnamed parameter is port
  *     `__w0` with no name in scope (the same sentence the construction tree's machine keeps at
- *     `gct/builder.cpp:7063-7066`). The name is not decoration: it enters the scope, which is what
- *     makes the two machines give one observable shape;
+ *     `src/compile/gct/builder.cpp#Builder::visitGeneratorBody`). The name is not decoration: it
+ *     enters the scope, which is what makes the two machines give one observable shape;
  *   * the round state is `(answer, int)`, i.e. `((string, string..)?, int)` -- the `?` is on the
  *     **first** component and the pc is a bare `int`. A `?` on the pc, or its absence on the answer,
  *     would be a difference of structure and not of ids.
  *
  * Two readings taken from the construction tree's own machine today. They are the *transition* and
- * not the destination (`gct/builder.cpp:6277-6285`, `6315`, `7017-7030`):
+ * not the destination (`src/compile/gct/builder.cpp#Builder::visitGeneratorBody`):
  *
  *   * the loop's first round state is `(Data::null(), 0)` declared as `roundStateType`: an **untyped
  *     null data node cast to the answer's type**, and the pc's zero as an ordinary `int` literal --
@@ -77,8 +77,9 @@
  *     machine aims at**: it is the shape that can be built while the slots are still cells, and it
  *     is written down here so that the next reader knows which of the two they are looking at.
  *   * the loop's condition tests the round state's second part with a **call to `__eq__`**
- *     (`__eq__(state.1, 0)`), and so does an arm's dispatch (`equalTo` at `gct/builder.cpp:6072`
- *     is `makeLink(2) << makeDRef("__eq__") << readCell(name) << intLiteral(value)`). **Both are the
+ *     (`__eq__(state.1, 0)`), and so does an arm's dispatch (`equalTo`, at
+ *     `src/compile/gct/builder.cpp#equalTo`, is
+ *     `makeLink(2) << makeDRef("__eq__") << readCell(name) << intLiteral(value)`). **Both are the
  *     same operator, seen at two layers**, and this was read off the published graph and not off the
  *     construction tree: `std::jgir` of the generator case holds **four** `:op/eq_l` nodes, three in
  *     the arm regions and one in the *loop condition's* region (`g4r1`), each fed by a `DATA` int
@@ -89,13 +90,15 @@
  *     resolution decide. (An earlier draft of this comment called them two operators; the target
  *     said otherwise, and the target is the one that is read.)
  *
- * Three conventions of a region, which the loop below is built by (`builder_control.cpp:2643-2690`,
- * `:3568-3599`, `:3730-3735`). Two of them look like details and one of them is a trap:
+ * Three conventions of a region, which the loop below is built by
+ * (`builder_control.cpp#Builder::visitLoopNode`, `builder_control.cpp#Builder::buildStreamLoop`).
+ * Two of them look like details and one of them is a trap:
  *
  *   * a loop's regions are made **before** the loop node exists, so the owner is written after it:
  *     `draft.addRegion(kind, outerRegion)` then `setRegionOwner(region, nodeIdOf(loopNode), index)`,
- *     where **`index` is `0` for the condition and `1` for the body** (`graph.h:601` names the kinds,
- *     `Arm`, `LoopCond`, `LoopBody`). That `0`/`1` is **not** an order of construction and must not be
+ *     where **`index` is `0` for the condition and `1` for the body**
+ *     (`include/camel/runtime/graph.h#GCRegionKind` names the kinds, `Arm`, `LoopCond`, `LoopBody`).
+ *     That `0`/`1` is **not** an order of construction and must not be
  *     read as one -- it is which of the loop's two parts the region is. **And the order of
  *     construction is visible in the graph anyway**: the published `std::jgir` numbers the regions in
  *     the order they were made. In the generator case, measured on the published `std::jgir` of
@@ -114,7 +117,8 @@
  *   * a region port node is **explicitly put in its region** (`setNodeRegion(nodeIdOf(port),
  *     region)`), or it lands in the body region (0) and reads as a parameter of the graph.
  *
- * Where a `var` written inside an arm goes -- asked, read, answered (`builder_control.cpp:2134`):
+ * Where a `var` written inside an arm goes -- asked, read, answered
+ * (`builder_control.cpp#Builder::mergeArmVariables`):
  * `mergeArmVariables` is not a mechanism of regions. It walks the `ArmBuild` bookkeeping a *visitor*
  * keeps (`arm->touched`, `touchedOrder`, `recordWrite`, `pendingUsesOf`) and does two things: it
  * writes a control link from the arm's last writer to the join, and it records that a reader after
