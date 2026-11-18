@@ -41,11 +41,19 @@
 #include "camel/core/resource_semantics.h"
 #include "camel/runtime/graph.h"
 
+#include <cstdint>
 #include <iosfwd>
+#include <memory>
 #include <optional>
+#include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace camel::core::context {
+class Context;
+} // namespace camel::core::context
 
 namespace camel::runtime {
 
@@ -63,6 +71,11 @@ struct NodeAccess {
     /// undeclared operator's operand of unknown origin, an element of a loop's array, a call
     /// through a value).
     bool anyValue = false;
+    /// The declaration of the operator names this resource `unordered` (design principles 3.3), so
+    /// how two accesses to it are written keeps no order and the declaring library promises the
+    /// order does not matter. Carried here because the order check reads a node's accesses and not
+    /// the operator's spec, and the promise is the operator's.
+    bool unordered = false;
 
     bool operator==(const NodeAccess &) const = default;
 };
@@ -317,5 +330,97 @@ widened(const sem::ResourceSignature &declared, const sem::ResourceSignature &bo
 std::string toString(const NodeAccess &access);
 std::string toString(const NodeResources &resources);
 std::string toString(const GraphFootprint &footprint);
+
+// ---- The commit checks of the effect analysis, asked of one graph as one question ----------------
+//
+// docs/design/effects/analysis.cn.md 4.1 names the two things a commit owes the program it
+// publishes. They are one question here because both commit paths (a pass, and the graph module's
+// `commit`) have to ask both, and a second copy of either reading would be a second answer:
+//
+//   Effect  the footprint the graph's body reaches (resolved bottom-up from the nodes' operator
+//           declarations, principle 3.3) must stay inside the clause the graph's own type
+//           declares. What the type cannot spell -- a cell of a variable, a class the analysis
+//           cannot name -- is not judged: a possibility is not an access (the same line the
+//           call-site check draws).
+//   Order   within one region, any two accesses to one resource of which at least one writes must
+//           have a path between them in the graph (a data, sync or order edge, or a region's
+//           `GATE` input). A region is the body, an arm, a loop's condition or a loop's body; an
+//           owner node (the BRCH or LOOP) stands in the region it sits in for every region under
+//           it, so two accesses in different arms of one branch are never asked to be ordered --
+//           they never both run -- while an access inside a loop and one outside are ordered
+//           through the loop node. A resource a declaration names `unordered` carries no promise
+//           and is passed over (principle 3.3).
+//
+// The reading is per graph because a commit edits graphs; which of them it must answer for, and for
+// which nodes, is the caller's question (`commitViolation`'s `made` and `askOrder`).
+
+enum class CommitCheck : uint8_t {
+    Effect = 0, // the body reaches past the type
+    Order  = 1, // two conflicting accesses of one region no path orders
+};
+
+std::string_view commitCheckName(CommitCheck check);
+
+/// A commit that must be refused: which of the two checks, the graph, the nodes the reading names,
+/// and the one line the diagnostic carries. `origin` is the source position to report against (0
+/// when the program does not name one), so that a caller with a diagnostic can attach it.
+struct CommitViolation {
+    CommitCheck check     = CommitCheck::Effect;
+    const GCGraph *graph  = nullptr;
+    gc_node_ref_t first   = kInvalidNodeRef;
+    gc_node_ref_t second  = kInvalidNodeRef;
+    uint64_t origin       = 0;
+    std::string text;
+};
+
+/// The pair of questions analysis 4.1 asks of a commit, answered for one graph: does its body stay
+/// inside the effect its own type declares, and do two conflicting accesses in one region have a
+/// path that orders them. Both read the accesses their nodes' operator declarations give them
+/// (principle 3.3), bottom-up, and neither reads an operator's name.
+///
+/// `made` is what the commit made here, and it scopes the order question only: a pair is judged when
+/// at least one of its two nodes is one this commit made, because an ordering the program already
+/// lacked before the commit is not this commit's to answer for. `askOrder` says whether the question
+/// is asked at all -- a commit that made no node cannot have added a write and cannot have dropped an
+/// order edge (the public edits of the graph module keep both promises), so it has nothing to answer
+/// for in ordering. Containment is a property of the graph as a whole -- the body either fits the
+/// type it publishes or it does not -- so it is asked whatever `made` is.
+std::optional<CommitViolation> commitViolation(
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
+    bool askOrder = true);
+
+/// A commit that would publish a graph breaking one of the two promises above: the body stays
+/// inside the effect its own type declares, and two conflicting accesses in one region have a path
+/// ordering them. The refusal is carried whole so that a caller which catches it reports the same
+/// diagnostic the reading named, with the same graph, nodes and source position; `what()` is that
+/// line. It is thrown where the graphs of a commit are read (draft_session.cpp), which is the one
+/// place a graph becomes a graph either commit path can publish.
+class GraphCommitRefused : public std::runtime_error {
+  public:
+    explicit GraphCommitRefused(CommitViolation violation)
+        : std::runtime_error(violation.text), violation_(std::move(violation)) {}
+
+    const CommitViolation &violation() const { return violation_; }
+
+  private:
+    CommitViolation violation_;
+};
+
+/// Records a refusal as the diagnostic both commit paths carry, and says who asked: `site` is the
+/// pass's name, or `graph::commit` for the graph module. The diagnostic is the report; the caller
+/// still has to stop, which is why this answers nothing.
+void reportCommitViolation(
+    const std::shared_ptr<camel::core::context::Context> &ctx, const std::string &site,
+    const CommitViolation &violation);
+
+/// Whether a commit asks the two checks above. The ruling of 2026-11-15 stopped asking them of a
+/// rewrite whose only interface is the graph module, because such a rewrite cannot make a node that
+/// carries an access and cannot drop an edge that orders one; the ruling of 2026-11-16 keeps that
+/// saving only where it is paid for -- a shipped build (`NDEBUG`) does not ask, a debug build asks,
+/// and a test asks through `setCommitChecksEnabled`. Asking is a build's answer, so it is one cell
+/// and not a setting of each call site: `camel::execute::camelPassCommitChecksEnabled` reads this
+/// same cell (src/execute/pass.cpp), and the two paths cannot drift into two answers.
+bool commitChecksEnabled();
+void setCommitChecksEnabled(bool enabled);
 
 } // namespace camel::runtime

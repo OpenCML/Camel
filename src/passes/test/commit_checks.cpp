@@ -19,12 +19,14 @@
 #include "../opt/generic/rewrite.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/execute/pass/base.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/resources.h"
 
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -127,6 +129,22 @@ SameShapePair findSameShapePair(const Program &program) {
     return {};
 }
 
+/// Holds the commit checks off for as long as it lives and puts the build's answer back after. The
+/// fixture below makes a program the checks refuse; a fixture that could not hand that program on
+/// would leave the boundary check nothing to read, and the boundary check is what its plan reads.
+class CommitChecksOff {
+  public:
+    CommitChecksOff() : was_(camel::runtime::commitChecksEnabled()) {
+        camel::runtime::setCommitChecksEnabled(false);
+    }
+    ~CommitChecksOff() { camel::runtime::setCommitChecksEnabled(was_); }
+    CommitChecksOff(const CommitChecksOff &)            = delete;
+    CommitChecksOff &operator=(const CommitChecksOff &) = delete;
+
+  private:
+    bool was_;
+};
+
 /// The fold, in one commit: the noisy graph publishes the type of the quiet one and keeps its body,
 /// which is the program the containment check is about. Returns the program the commit made.
 ///
@@ -136,6 +154,10 @@ SameShapePair findSameShapePair(const Program &program) {
 const Program *foldTypeOf(
     const camel::core::context::context_ptr_t &context, const Program *program,
     const SameShapePair &pair, std::ostream &out) {
+    // The fixture's own commit is not what is under test: the boundary check is, and a program the
+    // commit refused to hand back is one the boundary never reads. The commit checks are asked by
+    // the passes below, on a case that is about them.
+    const CommitChecksOff off;
     RuntimeGraphDraftSession session(context, program);
     auto &transaction = session.edit(const_cast<GCGraph *>(pair.noisy));
     transaction.edit().setFuncType(pair.quiet->funcType());
@@ -143,6 +165,86 @@ const Program *foldTypeOf(
         << pair.quiet->funcType()->toString() << "', the type of graph '" << pair.quiet->name()
         << "'; its body is unchanged\n";
     return session.commit();
+}
+
+/// The console a case prints to. `println` in the prelude is `#op(':io/println')`
+/// (stdlib/prelude.cml), so a node with this uri is the program's own write of `stdout` and a node
+/// this file adds with the same uri writes it too: one resource, two writers, which is what the
+/// order check is about.
+constexpr const char *kPrintUri = ":io/println";
+
+/// Where the program prints, and the graph the question belongs in: the check is per graph, so the
+/// splice goes where the write it conflicts with is. The search is the program's and not the root's
+/// -- the case prints in a function it is entered through, and that function is not necessarily the
+/// root -- and it reads the frozen graph, because a draft is only what a graph is about to become.
+struct ConsoleWrite {
+    const GCGraph *graph = nullptr;
+    gc_node_ref_t node   = kInvalidNodeRef;
+};
+
+ConsoleWrite findPrint(const Program &program) {
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            const GCNode *node = graph->node(ref);
+            if (node == nullptr || node->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
+            if (body != nullptr && std::string_view(body->uri()) == kPrintUri) {
+                return ConsoleWrite{graph, ref};
+            }
+        }
+    }
+    return {};
+}
+
+/// Splices one print into the graph, standing on the effect it is placed after. A sync edge is what
+/// orders two effects and what the credential check reads (`effectStandsOnSomething`,
+/// src/execute/pass.cpp): an order edge orders two nodes and makes neither of them run, so an effect
+/// whose only company is an order edge stands on nothing and the boundary refuses it -- which is a
+/// different question from the one this file is about. `predecessor` is the write it waits for;
+/// `kInvalidNodeRef` leaves it waiting for nothing, which is the shape the order check refuses.
+gc_node_ref_t splicePrint(GraphTransaction &transaction, gc_node_ref_t predecessor) {
+    auto &draft               = transaction.edit();
+    const gc_node_ref_t value = draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<float>(7.0f), camel::core::type::Type::Float32());
+    const gc_node_ref_t node =
+        draft.addOperNode(camel::core::type::Type::Float32(), nullptr, kPrintUri);
+    draft.setNormInputs(node, std::span<const gc_node_ref_t>(&value, 1));
+    if (predecessor != kInvalidNodeRef) {
+        const gc_node_ref_t waits = predecessor;
+        draft.setSyncInputs(node, std::span<const gc_node_ref_t>(&waits, 1));
+    }
+    return node;
+}
+
+/// The two prints `spliceUnorderedPrintPair` wrote, in chain order.
+struct SplicedPair {
+    gc_node_ref_t first  = kInvalidNodeRef;
+    gc_node_ref_t second = kInvalidNodeRef;
+};
+
+/// Splices two prints, the second after the first, and answers both. The pair stands on its own sync
+/// edge, so the credential check is satisfied and the boundary has nothing to say; and it stands on
+/// nothing the program already had, so the order check has a pair with no path between them. Two and
+/// not one because a single print waiting for nothing would stand on nothing at all.
+SplicedPair spliceUnorderedPrintPair(GraphTransaction &transaction) {
+    SplicedPair pair;
+    pair.first  = splicePrint(transaction, kInvalidNodeRef);
+    pair.second = splicePrint(transaction, pair.first);
+    return pair;
+}
+
+/// Answers the checks whatever the build answers, and puts the build's own answer on the record
+/// first. What a plan reads must not depend on the tier the plans run in, and a run that quietly
+/// asked nothing would be the one answer that must not be able to look like a pass.
+void askTheCommitChecks(std::ostream &out, const char *who) {
+    const bool buildAsks = camel::runtime::commitChecksEnabled();
+    camel::runtime::setCommitChecksEnabled(true);
+    out << who << ": build asks=" << (buildAsks ? 1 : 0) << ", asked\n" << std::flush;
 }
 
 } // namespace
@@ -206,4 +308,92 @@ CamelCommitChecksTestPass::apply(const camel::runtime::Program *program, std::os
         out << "CAMEL_CHECKS asked=1 -> accepted\n";
     }
     return program;
+}
+
+const camel::runtime::Program *
+CommitOrderTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    askTheCommitChecks(out, "commit_order");
+    const ConsoleWrite print = findPrint(*program);
+    if (print.graph == nullptr) {
+        out << "commit_order: nothing in the program prints, so nothing to conflict with\n";
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    auto &transaction = session.edit(const_cast<GCGraph *>(print.graph));
+    const SplicedPair spliced = spliceUnorderedPrintPair(transaction);
+    out << "commit_order: graph '" << print.graph->name() << "' already writes stdout at node "
+        << print.node << " and now writes it again at " << spliced.first << " and "
+        << spliced.second << ", with no edge ordering either before the other\n"
+        << std::flush;
+    try {
+        const Program *committed = session.commit();
+        out << "commit_order: the commit published it, which is the defect\n";
+        return committed;
+    } catch (const GraphCommitRefused &refused) {
+        out << "commit_order: refused, check=" << commitCheckName(refused.violation().check)
+            << '\n'
+            << std::flush;
+        throw;
+    }
+}
+
+const camel::runtime::Program *
+CommitEffectTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    askTheCommitChecks(out, "commit_effect");
+    // The defect is the one `test::fold_function_type` makes, made again where the commit reads it:
+    // the printing graph publishes the type of a function that does not print, and keeps its body.
+    // No node is made, so the order check has nothing to answer for here and the reading is the
+    // containment one alone.
+    const SameShapePair pair = findSameShapePair(*program);
+    if (pair.noisy == nullptr) {
+        out << "commit_effect: no two functions of one shape to fold\n";
+        return program;
+    }
+    out << "commit_effect: graph '" << pair.noisy->name() << "' will publish '"
+        << pair.quiet->funcType()->toString() << "', the type of graph '" << pair.quiet->name()
+        << "', while its body goes on writing stdout\n"
+        << std::flush;
+    RuntimeGraphDraftSession session(context_, program);
+    session.edit(const_cast<GCGraph *>(pair.noisy)).edit().setFuncType(pair.quiet->funcType());
+    try {
+        const Program *committed = session.commit();
+        out << "commit_effect: the commit published it, which is the defect\n";
+        return committed;
+    } catch (const GraphCommitRefused &refused) {
+        out << "commit_effect: refused, check=" << commitCheckName(refused.violation().check) << '\n'
+            << std::flush;
+        throw;
+    }
+}
+
+const camel::runtime::Program *
+CommitLegalSpliceTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    askTheCommitChecks(out, "commit_legal_splice");
+    const ConsoleWrite print = findPrint(*program);
+    if (print.graph == nullptr) {
+        out << "commit_legal_splice: nothing in the program prints, so there is nothing to order "
+               "after\n";
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    auto &transaction = session.edit(const_cast<GCGraph *>(print.graph));
+    // The same splice as `test::commit_order`, ordered after the write that was already there: the
+    // graph publishes a type that declares the write, and the two writes are ordered, so there is
+    // nothing for either check to refuse. This is the half that makes the refusals readings.
+    const gc_node_ref_t spliced = splicePrint(transaction, print.node);
+    out << "commit_legal_splice: graph '" << print.graph->name() << "' writes stdout at node "
+        << print.node << " and again at " << spliced << ", ordered after it\n"
+        << std::flush;
+    const Program *committed = session.commit();
+    out << "commit_legal_splice: the commit published it, and nothing was refused\n" << std::flush;
+    return committed;
 }
