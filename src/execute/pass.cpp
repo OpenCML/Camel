@@ -629,6 +629,13 @@ void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false
 /// The core's kernels, one per declaration in stdlib/std.cml. A declaration with no kernel is a
 /// pass the language declares and the core does not implement; the pipeline refuses it, and the
 /// guard that resolves every declaration catches it.
+///
+/// The optimization passes are registered under `std::cxx::`, because they are the C++
+/// implementations and the Camel ones are the module `opt`: the two sets are separated by their
+/// names so that a comparison can name both (docs/roadmap.cn.md section 0, P, 2026-11-18). The
+/// names they answered to before the separation, `std::opt` and `std::opt::fold` and the rest, stay
+/// in the alias table below, so the default pipeline's own name and every page that writes one of
+/// them resolve to the same kernel.
 void registerCoreKernels() {
     registerCoreKernel("nop", makePass<NullGraphIRPass>());
     registerCoreKernel("macro", macroPass());
@@ -685,27 +692,30 @@ void registerCoreKernels() {
     registerCoreKernel("fastvm::jit_rmir", makePass<JitRmirDumpPass>());
     registerCoreKernel("fastvm::jit_mir", makePass<JitMirDumpPass>());
     registerCoreKernel("taskflow", taskflowPass());
-    registerCoreKernel("opt", optimizePass());
-    registerCoreKernel("opt::inline", inlinePass(std::nullopt, "std::opt::inline"));
+    registerCoreKernel("cxx::opt", optimizePass());
+    registerCoreKernel("cxx::inline", inlinePass(std::nullopt, "std::opt::inline"));
     registerCoreKernel(
-        "opt::small",
+        "cxx::small",
         inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small"));
-    registerCoreKernel("opt::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm"));
+    registerCoreKernel("cxx::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm"));
     registerCoreKernel(
-        "opt::hybrid",
+        "cxx::hybrid",
         inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid"));
-    registerCoreKernel("opt::devirtualize", devirtualizePass());
-    registerCoreKernel("opt::specialize", specializePass());
-    registerCoreKernel("opt::fold", foldPass());
-    registerCoreKernel("opt::algebra", algebraPass());
-    registerCoreKernel("opt::saturate", saturatePass());
-    registerCoreKernel("opt::extract", extractPass());
-    registerCoreKernel("opt::cse", makePass<CommonSubexpressionPass>());
-    registerCoreKernel("opt::dce", dcePass());
-    registerCoreKernel("opt::order", makePass<OrderReductionPass>());
+    registerCoreKernel("cxx::devirtualize", devirtualizePass());
+    registerCoreKernel("cxx::specialize", specializePass());
+    registerCoreKernel("cxx::fold", foldPass());
+    registerCoreKernel("cxx::algebra", algebraPass());
+    registerCoreKernel("cxx::saturate", saturatePass());
+    registerCoreKernel("cxx::extract", extractPass());
+    registerCoreKernel("cxx::cse", makePass<CommonSubexpressionPass>());
+    registerCoreKernel("cxx::dce", dcePass());
+    registerCoreKernel("cxx::order", makePass<OrderReductionPass>());
     // The core passes that read tag facts: the dumps show a node's attributes and numeric
-    // permissions, and std::opt keeps them across rewrites (CSE combines by their merge rules).
-    // A tag's `read_by` names one of these (or a module's pass that registers itself).
+    // permissions, and the optimizing pipeline keeps them across rewrites (CSE combines by their
+    // merge rules). A tag's `read_by` names one of these (or a module's pass that registers
+    // itself). Both names of the pipeline are readers: a tag written before the separation names
+    // `std::opt`, and one written as `std::cxx::opt` (or `std::cxx::fold`) is read too, by the
+    // prefix rule that makes a name cover the passes under it.
     for (const char *reader :
          {"std::gir",
           "std::rgir",
@@ -714,24 +724,44 @@ void registerCoreKernels() {
           "std::jgir",
           "std::agir",
           "std::argir",
-          "std::opt"}) {
+          "std::opt",
+          "std::cxx"}) {
         camel::core::tag::declareReader(reader);
     }
 }
 
 const std::map<std::string, std::string> passAliases = {
+    // The optimization passes are registered under `std::cxx::` -- the C++ implementations, kept
+    // apart from the Camel ones in the module `opt` -- and the names they answered to before that
+    // separation resolve to them here. `std::opt` is the default pipeline's name and keeps it: a
+    // program that names no pass, and the pass the fixed lowering steps insert, go through this
+    // entry.
+    {"std::opt", "std::cxx::opt"},
+    {"std::opt::inline", "std::cxx::inline"},
+    {"std::opt::small", "std::cxx::small"},
+    {"std::opt::arm", "std::cxx::arm"},
+    {"std::opt::hybrid", "std::cxx::hybrid"},
+    {"std::opt::devirtualize", "std::cxx::devirtualize"},
+    {"std::opt::specialize", "std::cxx::specialize"},
+    {"std::opt::fold", "std::cxx::fold"},
+    {"std::opt::algebra", "std::cxx::algebra"},
+    {"std::opt::saturate", "std::cxx::saturate"},
+    {"std::opt::extract", "std::cxx::extract"},
+    {"std::opt::cse", "std::cxx::cse"},
+    {"std::opt::dce", "std::cxx::dce"},
+    {"std::opt::order", "std::cxx::order"},
     // Frequently used spelling of the standalone inline stage and its strategies.
-    {"std::inline", "std::opt::inline"},
-    {"std::inline::small", "std::opt::small"},
-    {"std::opt::inline::small", "std::opt::small"},
-    {"std::opt::inline::arm", "std::opt::arm"},
-    {"std::opt::inline::hybrid", "std::opt::hybrid"},
+    {"std::inline", "std::cxx::inline"},
+    {"std::inline::small", "std::cxx::small"},
+    {"std::opt::inline::small", "std::cxx::small"},
+    {"std::opt::inline::arm", "std::cxx::arm"},
+    {"std::opt::inline::hybrid", "std::cxx::hybrid"},
     {"std::fastvm::jit::dump::asm", "std::fastvm::jit_asm"},
     {"std::fastvm::jit::dump::bin", "std::fastvm::jit_bin"},
     {"std::fastvm::jit::dump::rmir", "std::fastvm::jit_rmir"},
     {"std::fastvm::jit::dump::mir", "std::fastvm::jit_mir"},
-    {"std::inline::arm", "std::opt::arm"},
-    {"std::inline::hybrid", "std::opt::hybrid"},
+    {"std::inline::arm", "std::cxx::arm"},
+    {"std::inline::hybrid", "std::cxx::hybrid"},
     // Standard scheduler aliases
     {"std::default", "std::nvm"},
     {"std::linear", "std::nvm"},
@@ -750,7 +780,11 @@ const std::map<std::string, std::string> passAliases = {
     {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
     {"std::type::identity", "std::identitytype"},
-    {"std::cxx", "std::cpp"},
+    // `std::cxx` used to be a shorthand of the C++ exporter, `std::cpp`. It is not one any more:
+    // `cxx` is the namespace the C++ optimization passes are named under (`std::cxx::opt`,
+    // `std::cxx::fold`), and leaving the shorthand in place would answer `std::cxx` with a
+    // translation pass while a reader who learned the namespace from docs/cli.md means the
+    // optimizer. The exporter keeps its own name, `std::cpp`, and its two others below.
     {"std::cppmod", "std::cpp::module_file"},
     {"std::cppinspect", "std::cpp::inspect"},
     {"std::tns", "std::topo_node_seq"},
@@ -1460,8 +1494,11 @@ valueProblem(const std::string &name, const PassArgs &args) {
     using camel::execute::detail::ParamProblem;
     using camel::execute::detail::ParamProblemKind;
     // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
-    // (see settleRunsOf), and 0 is refused rather than read as "never report".
-    if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
+    // (see settleRunsOf), and 0 is refused rather than read as "never report". The pipeline is
+    // registered as `std::cxx::opt` and `std::opt` is an alias of it, so the check is made on the
+    // name the specification resolves to: a program that writes either spelling gets the refusal.
+    if (resolveAlias(name) == "std::cxx::opt" && args.given("settle_runs") &&
+        args.getInt("settle_runs") < 1) {
         ParamProblem problem;
         problem.kind     = ParamProblemKind::OutOfRange;
         problem.name     = "settle_runs";
@@ -3057,14 +3094,19 @@ constexpr FixedLoweringStep fixedLoweringSteps[] = {
 std::vector<std::string> expandFixedLoweringSteps(const std::vector<std::string> &passes) {
     std::vector<std::string> plan = passes;
     for (const FixedLoweringStep &step : fixedLoweringSteps) {
+        // The comparison is made on the names the specifications resolve to, not on the words the
+        // writer used: the optimizing pipeline answers to two names (`std::cxx::opt`, and the
+        // default `std::opt` it is an alias of), and a step that the optimizer is written against
+        // belongs before either of them. Comparing the written word would insert the step for one
+        // spelling and silently skip it for the other.
         const auto target = std::find_if(plan.begin(), plan.end(), [&](const std::string &spec) {
-            return specName(spec) == step.before;
+            return resolveAlias(specName(spec)) == resolveAlias(step.before);
         });
         if (target == plan.end()) {
             continue;
         }
         const bool named = std::any_of(plan.begin(), plan.end(), [&](const std::string &spec) {
-            return specName(spec) == step.pass;
+            return resolveAlias(specName(spec)) == resolveAlias(step.pass);
         });
         if (named) {
             continue;

@@ -1,0 +1,52 @@
+// The corpus of the comparison between the two implementations of one optimization pass
+// (docs/roadmap.cn.md, P: the C++ passes stay, isolated under `cxx::`, and are compared with the
+// Camel ones before anything is deleted). One program makes one graph set; the C++ pass and the
+// Camel pass are each put to it, and `std::jgir canonical=true` reads what came out. The two
+// readings are one document, character for character, or the comparison in
+// test/plans/feat/opt/cxx_isolation.plan.toml fails.
+//
+// The corpus holds what the two passes are about, and what they must leave alone:
+//
+//   chain   `2 * 3 + 4` as a chain of lets. The front end folds the two literals of one
+//           expression, so `a + 4` reaches the pass as an operation over constants and `b * 2` as
+//           an operation over that one -- a folding needs two rounds to reach `c`, and a version
+//           that folded one round and stopped leaves it there.
+//   shared  `x * 7` written twice over the same value: one expression with two writings, which is
+//           what the common-subexpression sweep is about. The product is read, so neither writing
+//           is dead.
+//   work    `n * 3` written twice in a `sync` block: the same text twice, through the gates of the
+//           statement chain. The sweep looks through a gate (`ungated`) or it does not, and either
+//           answer is a graph the two implementations have to give alike.
+//   main    calls all three; the pass must leave it as the front end built it.
+//
+// Every value is printed, so a folded operation feeds an effect rather than anchoring its graph:
+// a graph's returned value is its exit, and a node that anchors the graph cannot be replaced
+// (docs/technical/45_graph_module.md).
+
+func chain(): int sync {
+    let a = 2 * 3
+    let b = a + 4
+    let c = b * 2
+    println(c)
+    return 0
+}
+
+func shared(x: int): int {
+    let a = x * 7
+    let b = x * 7
+    return a + b
+}
+
+func work(n: int): int sync {
+    let twice = n * 3
+    let same = n * 3
+    println(twice + same)
+    return 0
+}
+
+func main(): int sync {
+    println(chain())
+    println(shared(3))
+    println(work(5))
+    return 0
+}
