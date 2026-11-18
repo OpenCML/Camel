@@ -520,7 +520,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-3314284e5333a70d ok stdlib/graph.cml
+45e14e46b35110d4 ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -2141,6 +2141,7 @@ c1863f4b68b6f37e ok test/cases/compile/var/loop_branch_write.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml
 28d98696ca2a4873 ok test/cases/compile/var/loop_nested.cml
 430e0b6cb8318fd3 ok test/cases/compile/var/loop_phi_two_sources.cml
+0a50e3dd423f509b ok test/cases/compile/var/loop_state_starts_from_the_last_write.cml
 7d1be5d3a30727cc ok test/cases/compile/var/loop_two_states.cml
 36c00bf6af90970d ok test/cases/compile/var/loop_var.cml
 9a65db17c8e1acb7 ok test/cases/compile/var/loop_write_outside_read.cml
@@ -3077,6 +3078,8 @@ ae72c3f152f64055 ok test/cases/modules/graph_pass/camel_import_values.cml
 9e76d36fd0b1a2e8 ok test/cases/modules/graph_pass/chainlib.cml
 b7923a281c80d3b2 ok test/cases/modules/graph_pass/cross_arm.cml
 b552f7c949a34d32 ok test/cases/modules/graph_pass/edits.cml
+cd29d29dcb72b0ed ok test/cases/modules/graph_pass/edits_exit.cml
+cb48852bde1b514c ok test/cases/modules/graph_pass/edits_order.cml
 a430ad3f5ee80b36 ok test/cases/modules/graph_pass/entry_body.cml
 fb750683e92efc64 ok test/cases/modules/graph_pass/entry_target.cml
 38195707d426d540 ok test/cases/modules/graph_pass/firstuser.cml
@@ -3095,6 +3098,7 @@ a6397fcb59f71518 ok test/cases/modules/graph_pass/monomorphic.cml
 c8999c489aa7730a ok test/cases/modules/graph_pass/neutral_kept.cml
 a192e6315d915edf ok test/cases/modules/graph_pass/neutral_target.cml
 04d78f0e3d3d8c66 ok test/cases/modules/graph_pass/neutral_var_target.cml
+052ae7e70b4f06e4 ok test/cases/modules/graph_pass/orderprobe.cml
 12ac649c0962b334 ok test/cases/modules/graph_pass/over_function.cml
 9d8f61a3c9088d11 ok test/cases/modules/graph_pass/params.cml
 aab4aaa568b160c3 ok test/cases/modules/graph_pass/probes.cml
