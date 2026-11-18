@@ -45,20 +45,27 @@ class Program;
  *
  *   COPIES <file>:<line>:<column> <update> <verdict>
  *
- * `<update>` is the name the program writes: the plain form of the operator the node is the
- * in-place form of (`append` for `:struct/append_arr`, `set_index` for `:op/set_index`, `sort_i`
- * for `array:sort_i`), the same name for the copying form of that operator, or the loop-state
- * append's own name (`append` for `:struct/append_arr_owned`). The three shapes are the three ways
- * `v = v->append(x)` reaches the graph, and all three are reported: a call that copies is an update
- * too, and the reading that says it allocates is the one it exists for. A fourth shape is an
- * operator that declares it reuses an operand (`OperatorTable::declareReusesOperand`): `nn:sgd`'s
- * `sgd(params, g, lr)` answers a parameter tree whose storage is the one it was handed, and no
- * in-place form can say that, because the value is a tree the operator walks leaf by leaf rather
- * than one array. It is reported the same way, by the name the program writes (`sgd`), and its
- * answer is `declared`, a fourth word: the plan decided nothing (there is no cell holding one
- * value it could prove something about), so what the row states is the operator's claim that it
- * reuses, and not a count anyone took. Which is why a program whose only update is a training
- * step's `sgd` reads one row and not `updates 0`. `<verdict>` is the answer:
+ * `<update>` is the name the program writes, read off the operator table and not derived from the
+ * URI's spelling (author review 2026-11-17, item 11): the call shape the operator's declaration
+ * states (`OperatorTable::callFormOf` -- `append` for `:struct/append_arr` from
+ * `stdlib/prelude.cml`'s `#op`, `sort_i` for `array:sort_i`), so the copying form of an operator
+ * and the plain operator print the same name, and a form a program cannot write prints the name of
+ * the operator it stands for (`OperatorTable::plainForm`: the in-place form `:op/set_index_in_place`
+ * prints `set_index`). The loop-state append states its own shape for the same reason: a program
+ * wrote `xs->append<v>`, so the table answers `append` for `:struct/append_arr_owned` itself
+ * (`declareCallForm` beside the other two forms) and this reading derives nothing. The three forms
+ * are
+ * the three ways `v = v->append(x)` reaches the graph, and all three are reported: a call that
+ * copies is an update too, and the reading that says it allocates is the one it exists for. A
+ * fourth shape is an operator that declares it reuses an operand
+ * (`OperatorTable::declareReusesOperand`): `nn:sgd`'s `sgd(params, g, lr)` answers a parameter
+ * tree whose storage is the one it was handed, and no in-place form can say that, because the value
+ * is a tree the operator walks leaf by leaf rather than one array. It is reported the same way, by
+ * the name the program writes (`sgd`), and its answer is `declared`, a fourth word: the plan
+ * decided nothing (there is no cell holding one value it could prove something about), so what the
+ * row states is the operator's claim that it reuses, and not a count anyone took. Which is why a
+ * program whose only update is a training step's `sgd` reads one row and not `updates 0`.
+ * `<verdict>` is the answer:
  *
  *   in-place  the plan proved the old value has no other holder and hands its storage to the
  *             update (StorageReuse::Input);
@@ -75,7 +82,11 @@ class Program;
  *             walked leaf by leaf). Nothing here proves the write is in place: the row records the
  *             claim, and whether the run really allocated is not answered by this tool. Kept apart
  *             from `by-count` on purpose -- one word for both would make a claim and a measurement
- *             indistinguishable in the column the S3b criterion is read with (StorageReuse::Declared);
+ *             indistinguishable in the column the S3b criterion is read with. This is the one word
+ *             of the four that no decision of the plan can be: `storageReuseAt` never holds it, so
+ *             it is this tool's word and is written here (src/runtime/storage_reuse.cpp,
+ *             `CopyVerdict`), not a member of `StorageReuse` (camel/runtime/exec_plan.h; author
+ *             review 2026-11-17, item 11);
  *   copied    the plan proved the old value has a holder the update must leave alone
  *             (StorageReuse::Copy), or the node is the copying form of an operator that has an
  *             in-place form -- `v = v->append(x)` on an array the compiler did not hand over, where

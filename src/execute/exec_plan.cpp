@@ -1226,6 +1226,28 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 /// item 6, the give-back at the loop's exit). This function names that loop -- the outermost one
 /// whose round runs the use and does not make the value, because that is the last round the value
 /// must live through -- and `nullopt` when the use is not inside such a loop.
+///
+/// What the note left in `ad44fca33` said would still leak, measured on this tree: nothing. That
+/// note said "a value a CALL or a FILL makes whose hold would have to be taken inside a loop's
+/// round is still kept: there is no position before the loop that writes a row of it". The position
+/// is the loop's own now (the paragraph above), so the shape it named is closed:
+/// `test/probe/refleak/call_box_loop_outer.cml` makes a box by a call *before* a loop, reads it on
+/// every round and by nothing after, and reads `created=1 released=1 live=0` on nvm, fvm, jit and
+/// prl (author review 2026-11-17, item 10; `call_box.cml` covers the call *inside* a round,
+/// `released=10 live=0`).
+///
+/// What this function cannot answer, and what it leaves to the representation: a value a *round*
+/// makes and the graph keeps -- `last = escaped_box(i)` inside the round, read after the loop. That
+/// is one node for every round, so the plan has one hold for it and the two uses it can see (the
+/// LOOP's own read of the state, whose row runs when the loop leaves, and the read after), each of
+/// which runs once, while the run makes a box per round: `test/probe/refleak/box_of_a_round.cml`
+/// reads `created=4 released=2 live=2` on all four back ends, and the read after the loop is
+/// `state::get` on a box the count had already released. Keeping the value is not the fix either: it
+/// trades the double release for a leak of every round's box. Both are the same missing fact -- a
+/// row naming "the value this node made last round" -- and a row is a node reference, so answering
+/// it is a per-round version of the value in the representation, not a change to this function.
+/// Measured and recorded here so the next lane measures nothing twice; the probe asserts the right
+/// numbers and stays red until it is answered there.
 std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced, size_t at) {
     std::optional<uint32_t> exit;
     for (const ExecLoop &loop : plan.loops) {

@@ -748,6 +748,16 @@ void registerBuiltinOperatorTraits() {
     registry.set(":struct/append_arr_in_place", {.stateOnly = true});
     registry.setInPlaceForm(":struct/append_arr", ":struct/append_arr_in_place");
     registry.declareReusesOperand(":struct/append_arr_in_place");
+    // What a program writes for the loop-state append (Builder::markLoopStateInPlace):
+    // `xs->append<v>`, the same name the plain and in-place forms answer, because that is the call
+    // the program wrote and the form is what the compiler made of it. This one had neither a call
+    // shape nor an in-place form of its own, so a reader asking "what does a program write here"
+    // had nothing to read and spelled the name out of the URI's tail instead -- which is the second
+    // spelling this declaration retires (author review 2026-11-17, item 11). Written here, beside
+    // the other two forms, because a declaration belongs where the operator is registered and not
+    // in its reader.
+    registry.declareCallForm(
+        ":struct/append_arr_owned", {.name = "append", .minArgs = 1, .declaredByModule = true});
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});
