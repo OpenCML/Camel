@@ -72,13 +72,14 @@ exit 1        (code=0x030001D5 SpellingNotDeclared)
 
 ## 5. 读数
 
-### 六个计划（树 = `73b692621`，提交干净）
+### 六个计划（树 = `73b692621`，提交干净，`BUILD_EXIT=0`）
 
 ```
-[SUMMARY] total: 5393, pass: 5371, fail: 2, skip: 20, known failures: 20
+[SUMMARY] total: 5393, pass: 5371, fail: 0, skip: 2, known failures: 20
+[TREE] clean: the run left nothing under the checkout (git status --porcelain -u normal: 0 before, 0 after, 824 directories watched)
 ```
 
-（本节数字在跑完后回填，见文末「这一版的读数」。）
+六个计划（`compile`、`linear`、`opt`、`parse`、`para`、`tools`）一起跑，**fail 0**：作者给的新基线目标是 `5393 / 5371`，逐字对上。`skip: 2` 与 `known failures: 20` 和基线同一批（e9 的 268/268 在 `opt` 里照旧）。上一轮在这条车道上还是 `5385 / 5356 / 7`，那 7 条逐条归属见 §6 与 §7。
 
 ### feat/modules 整目录（树 = `b82b3b5ee`）
 
