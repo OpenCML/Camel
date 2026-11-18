@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: MIT
 
 # The edit operators that were missing from the graph module's transaction: `order` (add an order
-# edge) and the exit anchor query `exit_of`. The plan the transform engines are written against is
-# `docs/handover/plans/2026-11-18-camel-transform-engines.cn.md`, first step: the operators the
+# edge) and the exit anchor query `exit_of`. They are the first step of the transform-engine plan
+# the language author holds on `fsh-dev` (`5c1f0f0c8`, "Camel 实现变换引擎"): the operators the
 # `edit` block will carry are written against today's interface (`open` / `commit`) first, so that
-# the day the block syntax is decided the operators do not move.
+# the day the block syntax is decided the operators do not move. The two operators that step cannot
+# write -- `inline`, whose `at` names a region and not a place, and `outline`, which would need a
+# graph that was not there -- are the questions of 2026-11-18 under docs/handover/questions/.
 #
 # Each case asserts the shape of the graph, not that the pass did not crash: the order edge is read
 # back off the committed program (`order_inputs` of the node it reaches), and the exit is compared
