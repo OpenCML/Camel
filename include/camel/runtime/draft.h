@@ -446,8 +446,8 @@ class GraphDraft {
     /// itself (`Builder::handBackVariableParameters`). The exit type cannot say which: a packed tuple
     /// and a user's tuple result have the same shape, which is what the module cases returning tuples
     /// met. Written where the packing happens, read where a caller asks what a call hands on.
-    bool exitTypeIsPacked() const { return exitTypeIsPacked_; }
-    void setExitTypeIsPacked(bool packed) { exitTypeIsPacked_ = packed; }
+    bool packsVarParameters() const { return packsVarParameters_; }
+    void setPacksVarParameters(bool packed) { packsVarParameters_ = packed; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
     /// The frame layout: the type of each frame slot, slot 0 (reserved) included. Empty when the
@@ -1152,8 +1152,13 @@ class GraphDraft {
     // The function type the signature declared: the source the packed exit is derived from
     // (declaredFuncType). Kept beside `funcType_` rather than instead of it, and read by nobody yet.
     camel::core::type::FunctionType *declaredFuncType_ = nullptr;
-    // Whether that exit type was packed rather than written (exitTypeIsPacked).
-    bool exitTypeIsPacked_ = false;
+    // Whether **this graph packed** its `var` parameters into the exit type -- not what its exit type
+    // is. What a signature *would* pack to is `Builder::graphExitTypeOf`; this answers whether the
+    // packing happened here. Different questions: an entry graph packs nothing, and so does a body
+    // that never ran the packing, while the derivation would still name the tuple such a signature
+    // would pack to (docs/handover/questions/
+    // 2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md).
+    bool packsVarParameters_ = false;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
     // the graph's own block (TupleType::constructFrameLayout).

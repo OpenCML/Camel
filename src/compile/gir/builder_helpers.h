@@ -138,7 +138,7 @@ inline Type *graphExitTypeOf(const FunctionType *funcType) {
 /// packs nothing a packing one, which is what the module cases returning tuples met. The graph is
 /// the only place that knows, so this asks it and nothing re-derives the answer.
 inline bool callHandsBackResult(const compile_graph_ptr_t &callee) {
-    return callee != nullptr && callee->exitTypeIsPacked();
+    return callee != nullptr && callee->packsVarParameters();
 }
 
 inline runtime::GCFillKind fillKindForType(Type *type) {

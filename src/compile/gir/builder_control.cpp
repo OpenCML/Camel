@@ -4627,10 +4627,10 @@ node_handle_t Builder::handBackVariableParameters(
     // `inspect` and the diagnostics go on showing it -- so the graph takes a copy of the signature
     // with the exit replaced rather than changing the declaration's own type.
     graph->setFuncType(funcType->withExitType(exitType));
-    // The bit that says the exit type was packed, not written (`GraphDraft::exitTypeIsPacked`):
+    // The bit that says the exit type was packed, not written (`GraphDraft::packsVarParameters`):
     // a caller asks the graph whether a call hands `var` parameters back, and the shape of the exit
     // type cannot answer it -- a signature written with a tuple result has the same shape.
-    graph->setExitTypeIsPacked(true);
+    graph->setPacksVarParameters(true);
     // The value and its type are two statements of one shape: a tuple whose size is not the number
     // of parts this body hands out would be a graph that does not say what it returns, so it is
     // refused here rather than at the encode.
