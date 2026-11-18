@@ -436,7 +436,7 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t run, const std::string &uri, size_t &count, const SegmentDeviceOps *device,
-    bool refuseGpuScopes, slot_t *error) {
+    bool refuseGpuScopes, slot_t *error, bool outlinesForDevice) {
     namespace rt = runtime;
     if (device &&
         (!device->upload || !device->execute || !device->download || run != device->execute))
@@ -457,9 +457,15 @@ const runtime::Program *outlineRegions(
     // covered graph is that region's segment, not a reason to fall back to the host (2.5), so the
     // scope map is built before the analysis and answers it.
     const GpuScopes scopes(*program);
+    // What the analysis is told about the device is the target of the pass, not the statement of a
+    // scope: a pass that outlines for the device (`device` set) means what it cuts, so under it
+    // every node the program did not place on the host by a fact of its own answers to the device.
+    // A pass that outlines for the host keeps the scopes the program writes, and a program that
+    // writes none leaves it with nothing to place, as it should.
+    const GpuScopes analysisScopes(*program, outlinesForDevice);
     std::unordered_map<rt::GCGraph *, SegmentAnalysis> analyses;
     for (auto *graph : graphs) {
-        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &scopes));
+        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &analysisScopes));
     }
     // Whether `id` is inside a `#gpu` scope: a device answer places it there directly, and a graph
     // the scope reaches places every node it did not explicitly tag for the host. A `#cpu` fact
