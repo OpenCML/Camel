@@ -29,3 +29,33 @@
 ## ④ 给 order 族车道的一个问题（只看一眼，不必改）
 
 补完 `transferAggregate` 的 `draft.appendOrderDependency` 之后，**这段刷新循环需要跟着动吗**？我预期不需要（它只读 clause 与调用点，不读边），但补边会改变 `bodySignature` 的足迹，请确认。
+## ⑤ 补记：实测答案（原先 ③ 只写了「在哪打点」）
+
+**探针位置**：`src/runtime/draft.cpp` 的 `GraphDraft::materializeStaticValue`（`[PROBE-M]`，只对
+`TypeCode::Function` 打印）与 `GraphDraft::eraseNode`（`[PROBE-E]`）。探针已删。
+
+**① 实测读数**（失败的用例 `gpu_scope.report_reads_the_segments_a_pass_cut`，按草稿指针分组）：
+
+```
+[PROBE-M] draft=A3f9c0 slot=2  type=...370 says=uses var stdout, tiles::driver, any unknown
+[PROBE-E] draft=A3f9c0 node=0
+        （此后整份日志没有第二条 draft=A3f9c0 的 [PROBE-M]）
+[PROBE-M] draft=A1640 slot=10 type=...480 says=uses var tiles::driver, any unknown, any foreign
+[PROBE-E] draft=A1640 node=3 / node=8 / node=11
+```
+
+调用方那张草稿（`A3f9c0`）**只被 materialize 过一次，且用的是第 0 轮的类型**
+（`tiles::driver` 仍是 read）；第 1 轮**没有第二次调用**。段图那张（`A1640`）三次都对。
+⇒ **排除「编码/发布丢掉新类型」这一整侧**：若丢在编码里，就该看到第二次调用而发布里是旧的，
+而现在根本没有这次调用；草稿里该节点的类型也仍是第 0 轮那个，所以「草稿已是新类型」也不成立。
+
+**② 两个附带事实**：
+
+- `materializeStaticValue` 也收**非函数类型**（`boundsType`、`visibleStateType` 等调用点）。第一版探针
+  无条件 `static_cast<FunctionType *>(type)->resources()` 直接把用例打成 **SIGSEGV**。⇒ 下一手在
+  `region_outline.cpp` 里**不要假设「静态值就是函数值」**，扫到静态值节点要先看 `code()`。
+- 这与 ③ 的「第 0 轮落得下去、第 1 轮落不下去」完全一致：第 1 轮确实进了刷新段，但没走到接口。
+
+**③ 下一手的唯一位置**：`region_outline.cpp` 的 `holdsWidened` 或内层扫描
+（`dataIndex < 0` + `found->second == nodeType`）。order 族车道的读数是：**第 1 轮外层
+`holdsWidened` 命中了、也进了刷新段，卡在「内层」** —— 与上面的实测互相印证，内层是唯一剩下的地方。
