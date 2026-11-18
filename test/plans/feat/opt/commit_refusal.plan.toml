@@ -1,0 +1,81 @@
+id = "opt.commit_refusal"
+order = 483
+tier = "fast"
+tags = ["feat", "opt", "effects", "commit-checks"]
+
+# The two checks the effect analysis asks when a program is committed
+# (docs/design/effects/analysis.cn.md 4.1, as the author's plan of 2026-11-18 has them):
+#
+#   甲 containment -- for every graph the draft changed, the footprint its nodes add up to (from what
+#   the operators declare, bottom-up, principle 3.3) must stay inside the effect its own type
+#   declares; a footprint that reaches past it is refused, and the diagnostic names the resource,
+#   the node and the source position.
+#
+#   乙 order completeness -- for every graph the draft changed and every resource, take the nodes that
+#   touch it; for each pair of which at least one writes, and which can both run in one execution,
+#   there must be a path on the graph that puts one before the other (a data edge, a sync edge, an
+#   order edge, or a region's `GATE` input). No path is refused, and the diagnostic names the pair,
+#   the resource and the source position. Two nodes in different arms of one branch cannot both run
+#   and are not a pair; a resource the declaration itself calls `unordered` promises no order.
+#
+# Both are asked by the one function every commit path reaches
+# (`camel::runtime::commitViolation`, src/runtime/resources.cpp, called from the commit in
+# src/runtime/draft_session.cpp): a pass written in Camel can only rewrite through the graph module,
+# and the graph module's `commit` is that same commit, so the two named paths are one reading and not
+# two copies of it.
+#
+# The three cases below are the acceptance reading: a new write that conflicts with an existing write
+# and is ordered against nothing must be refused; a write the type does not declare must be refused;
+# and a splice that is declared and ordered must pass. The third is what makes the first two
+# readings: without it, "it was refused" would mean only "it is always refused".
+#
+# All three run on `console_write`'s neighbour `fold_function_type.cml`, the program E9's defect was
+# found in: its `announced` graph prints once and declares the write (`int sync`), and its `doubled`
+# graph has the same shape and does not print. One program, three transformations, two answers --
+# which is what makes the answers about the property rather than about the fixture.
+
+[defaults]
+kind = "negative"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+# 乙, refused. `announced` already writes stdout and its type declares the write, so containment has
+# nothing to say here: the only broken promise is the order one. `test::commit_order` splices a second
+# print into that graph, ordered against nothing.
+#
+# Every line quoted below is part of the refusal: the pass says which node the program already wrote
+# at and which one it added, the diagnostic says which check refused, and the reading names both
+# nodes and the resource -- a refusal nobody can act on is not a refusal.
+[[tests]]
+name = "commit_refusal.order"
+desc = "A splice writes the console a second time with nothing ordering the two writes: the commit is refused, and the diagnostic names both nodes, the resource and the graph."
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_order", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectOrder"
+expect_output_contains = ["commit_order: build asks=", "already writes stdout at node", "and now writes it again at", "with no edge ordering either before the other", "commit_order: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write stdout"]
+
+# 甲, refused. The defect is the one E9 found and `test::fold_function_type` writes on purpose: a graph
+# whose body prints is given the type of a graph of the same shape whose body does not, and keeps its
+# body. The commit is where that is published, and the containment check refuses it there -- before
+# the pass boundary would have, which is why the diagnostic is the commit's own.
+[[tests]]
+name = "commit_refusal.effect"
+desc = "A commit publishes a graph that writes the console under a type that declares no write: it is refused, and the diagnostic names the node, the resource and the type."
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_effect", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
+expect_output_contains = ["commit_effect: build asks=", "while its body goes on writing stdout", "commit_effect: refused, check=effect", "committed a graph that reaches past the effect its own type declares", "makes an access the type does not cover", "write stdout"]
+
+# The same splice as the first case, ordered after the write that was already there, in the same graph
+# whose type declares the write: both checks are asked, both pass, and the commit publishes. This is
+# the reading that says the two refusals above are about the defect.
+[[tests]]
+name = "commit_refusal.legal_splice"
+desc = "A splice of the same write, ordered after the write the program already had and declared by the graph's type, is committed and the program runs."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_legal_splice", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["commit_legal_splice: build asks=", "writes stdout at node", ", ordered after it", "commit_legal_splice: the commit published it, and nothing was refused"]

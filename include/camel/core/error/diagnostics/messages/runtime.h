@@ -34,6 +34,8 @@ enum class RuntimeDiag : uint32_t {
     ExitTypeMismatch          = 0x0001AE,
     PassBoundaryPorts         = 0x000013,
     PassEffectContainment     = 0x0001AF,
+    PassEffectBeyondType      = 0x0001B0,
+    PassEffectOrder           = 0x0001B1,
     MacroEvaluationFailed     = 0x00000E,
     EntryArgumentMissing      = 0x000010,
     EntryArgumentInvalid      = 0x000011,
