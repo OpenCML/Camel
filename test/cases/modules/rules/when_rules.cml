@@ -62,19 +62,19 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] {
+func nodesOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int spelling {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// Prints the add and product counts of the functions of the target, so the tests can see what a
 /// condition let through and what it refused. The int rules use the 64-bit operators, the float
 /// ones the double operators.
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('byConst', countOf(p, 'byConst', ':op/add_l'))
     println('notConst', countOf(p, 'notConst', ':op/add_l'))
     println('mulSum', countOf(p, 'mulSum', ':op/mul_l'), countOf(p, 'mulSum', ':op/add_l'))

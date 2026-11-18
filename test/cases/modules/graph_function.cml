@@ -18,7 +18,7 @@ func isZero(n: Node): bool {
     }
 }
 
-func isAddZero(n: Node): bool {
+func isAddZero(n: Node): bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isZero(ins[1])
 }
@@ -27,7 +27,7 @@ func adds(f: (x: int) => int): int {
     return len(nodes(graph_of(f))->filter<isAddZero>)
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     println(name(graph_of(target)))
     println(adds(target))
     let t = open(target)

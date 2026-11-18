@@ -18,16 +18,16 @@ func grid(): f32[...] {
     return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
 }
 
-func describe(g: Graph): string {
+func describe(g: Graph): string spelling {
     return name(g)
 }
 
-func withName(text: string): Graph[] {
+func withName(text: string): Graph[] spelling {
     let all = concat(concat(graphs_of(quiet), graphs_of(loud)), concat(graphs_of(fragile), graphs_of(grid)))
     return all->filter<(g: Graph): bool => name(g) == text>
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     let q = effects(withName('quiet')[0])
     let l = effects(withName('loud')[0])
     let f = effects(withName('fragile')[0])

@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：11 页
+## 现在在等作者：23 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -20,6 +20,18 @@
 | [`2026-11-16-which-channel-takes-the-walkthrough-records`](2026-11-16-which-channel-takes-the-walkthrough-records.cn.md) | 走查记录该进哪条通道：作者说「诊断通道」，而诊断通道按设计装不下它 |
 | [`2026-11-17-does-an-effect-inside-a-binding-nobody-reads-still-happen`](2026-11-17-does-an-effect-inside-a-binding-nobody-reads-still-happen.cn.md) | 写在一个没人读的绑定里的效应，还发生吗？ |
 | [`2026-11-17-is-a-fixed-compile-error-one-defect-or-two`](2026-11-17-is-a-fixed-compile-error-one-defect-or-two.cn.md) | 四个格从「编译错」变成「算错」之后，E9 该把它算一个缺陷还是两个 |
+| [`2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked`](2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md) | 一个装着 Ref 的格子，计划期算持有者、运行期不算句柄 |
+| [`2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot`](2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot.cn.md) | 生成器状态槽要存一个 `Ref`，而 `Ref` 没有「未写」的形态 |
+| [`2026-11-18-a-value-made-per-round-needs-a-version-per-round`](2026-11-18-a-value-made-per-round-needs-a-version-per-round.cn.md) | 一轮造一个值、循环之后还要读它，计划该怎么数它？ |
+| [`2026-11-18-commit-checks-which-pairs-a-commit-owns`](2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md) | 一张被改过的图，提交该为哪些「访问对」负责？ |
+| [`2026-11-18-generator-halt-has-no-reader`](2026-11-18-generator-halt-has-no-reader.cn.md) | 生成器的 `halt` 位已经没有读者了：状态元组要不要从 2 元组收成 1 元组 |
+| [`2026-11-18-lowering-generator-state-to-gir`](2026-11-18-lowering-generator-state-to-gir.cn.md) | 生成器状态下移到 GIR：几百行、18 个文件的快照会动 |
+| [`2026-11-18-retract-rc23-two-orders`](2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） |
+| [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 |
+| [`2026-11-18-typeof-of-machine-made-types`](2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ |
+| [`2026-11-18-unwrapping-a-nullable-state-slot`](2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ |
+| [`questions-2026-11-17-two-rulings`](questions-2026-11-17-two-rulings.cn.md) | 两个必须由作者裁定的口子（2026-11-17 23:40） |
+| [`questions-2026-11-18-rc23-two-orders`](questions-2026-11-18-rc23-two-orders.cn.md) | rc23：两条指令互相冲突，而它现在是合入的唯一闸门 |
 
 ## 生成器不会删的行：121 行（页已不在 `questions/` 里）
 

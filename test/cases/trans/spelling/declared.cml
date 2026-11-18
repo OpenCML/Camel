@@ -1,0 +1,16 @@
+/**
+ * The same program as `undeclared.cml` with the capability written where it is read: `entry_name`
+ * declares it because it reads `name`, and `main` declares it because it calls `entry_name`
+ * (design principles 9.5). This one compiles, and it prints the name it read.
+ */
+
+import { Graph, graph_of, name } from graph
+
+func entry_name(g: Graph): string spelling {
+    return name(g)
+}
+
+func main(): int spelling {
+    println(entry_name(graph_of(main)))
+    return 0
+}

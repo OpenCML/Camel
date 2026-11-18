@@ -28,12 +28,12 @@ func opText(n: Node): string {
     }
 }
 
-func addsOf::<F>(p: F, function: string): Node[] {
+func addsOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     let adds = addsOf(p, 'target')
     let written = loop t = 0 for n in adds do t + depthOfWritten(n)
     let bare = loop t = 0 for n in adds do t + depthOfBare(n)
