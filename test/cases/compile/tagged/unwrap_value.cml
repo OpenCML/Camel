@@ -1,0 +1,10 @@
+/**
+ * The checked unwrap of a `T?` (`__unwrap__`, `:op/tag_unwrap`): a value goes through unchanged,
+ * so the operator is silent on the case every caller is supposed to be in.
+ */
+
+func main(): int sync {
+    let slot: int? = 41
+    println(__unwrap__(slot))
+    return 0
+}

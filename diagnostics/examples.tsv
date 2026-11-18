@@ -30,6 +30,7 @@ RuntimeDiag::JitWithoutCodeGenerator	test/cases/linear/jit/native_registers.cml
 RuntimeDiag::MacroEvaluationFailed	test/cases/compile/collections/refuse_grad.cml
 RuntimeDiag::MaxRecursionDepthExceeded	test/cases/consistency/limits/depth_direct.cml
 RuntimeDiag::MemoryExhausted	test/cases/compile/stream/interval_loop_not_materialised.cml
+RuntimeDiag::NullSlotUnwrapped	test/cases/compile/tagged/unwrap_null.cml
 RuntimeDiag::OperandTypeUnsupported	test/cases/modules/tensor/dtype/f32_only.cml
 RuntimeDiag::OptimizationStoppedShort	test/cases/opt/generic/rounds_exhausted.cml
 RuntimeDiag::PassBoundaryNodes	test/cases/effects/declared.cml

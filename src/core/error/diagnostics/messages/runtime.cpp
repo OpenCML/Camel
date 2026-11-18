@@ -357,6 +357,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::NullSlotUnwrapped,
+            {
+                "NullSlotUnwrapped",
+                "The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.",
+                "The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",
