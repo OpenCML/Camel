@@ -65,7 +65,7 @@ OperId OperatorTable::internLocked(std::string_view uri) {
     if (uri.starts_with(':')) {
         family |= kFamilyBuiltin;
     }
-    if (uri.starts_with(":op/assn")) {
+    if (isAssignmentUri(uri)) {
         family |= kFamilyAssignment;
     }
     const OperId id = entries_.append([&](Entry &entry) {
