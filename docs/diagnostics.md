@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-324 diagnostics: 302 errors, 22 warnings. 15 carry a machine-applicable edit, 309 say why they carry none.
+325 diagnostics: 303 errors, 22 warnings. 15 carry a machine-applicable edit, 310 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -218,6 +218,7 @@ prints one entry.
 | `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error | no |
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error | no |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error | no |
+| `0x030001D5` | [SemanticDiag::SpellingNotDeclared](#spellingnotdeclared) | Error | no |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error | no |
 | `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error | no |
 | `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error | no |
@@ -6994,6 +6995,41 @@ func f(a: int = 1, b: int): int {
 
 func main(): int sync {
     return f(2, 3)
+}
+```
+
+### SpellingNotDeclared
+
+`0x030001D5` · Error · `SemanticDiag::SpellingNotDeclared`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+This body reads the spelling of the program, and its type does not declare it.
+```
+
+**Help**
+
+```text
+Reading the spelling is a capability a signature writes in the same clause as 'pure' and 'uses': the name of a graph or of a function, the source position of a node, its creation number and the order it was created in, and the text it shows. A body whose type does not write 'spelling' is one the compiler guarantees reads none of them, so a rule, a 'when' condition and a pass built without it cannot depend on how the program was written (design principles 9.5). Write 'spelling' in the declaration's clause to say the body may read them, or stop reading them -- to pick one of two functions, hand the function value to the transform instead of finding it by name, and to order two nodes, use the canonical order 'nodes' gives.
+```
+
+**Example** (`test/cases/trans/spelling/undeclared.cml`, run as `camel test/cases/trans/spelling/undeclared.cml`)
+
+```camel
+import { Graph, graph_of, name } from graph
+
+func entry_name(g: Graph): string {
+    return name(g)
+}
+
+func main(): int {
+    let text = entry_name(graph_of(main))
+    return len(text)
 }
 ```
 

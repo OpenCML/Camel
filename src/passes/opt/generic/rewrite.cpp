@@ -249,6 +249,50 @@ bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_
 
 namespace {
 
+/// Whether the last read of `id` going out takes away a running the program observes: its own
+/// (`isObservedRun`), or -- for a `GATE` that waits -- the running of the statements written before
+/// it in the chain.
+///
+/// A chain is reached from its end, so the last read of the gate that ends it is the last read of
+/// every write the chain carries: nothing else names those statements. `orderedSources` stops at
+/// the gate (it is the first node that carries ordering) and `isObservedRun` says a gate's own
+/// running is nothing, which is true of the gate and false of the chain behind it. Without this
+/// walk a fold that replaces such a gate's only reader leaves the gate standing and unread: the
+/// write it waited for leaves the graph's reach and stops running. The shape is a call whose result
+/// the fold computes away after the callee is inlined -- the `println` in the callee then stands in
+/// a `sync` chain nothing reads, and the graph's exit reads the folded constant instead.
+bool carriesObservedRunning(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t maxWork = 8192) {
+    if (isObservedRun(transaction, id)) {
+        return true;
+    }
+    const auto &draft  = transaction.graph();
+    const auto *header = draft.header(id);
+    if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Gate) {
+        return false;
+    }
+    // Only the wait is followed: a value edge orders nothing, which is why the chain of a `sync`
+    // block is written through the sync edge (`docs/design/effects/edges.cn.md` 4.6).
+    std::vector<gc_node_ref_t> work(draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    while (!work.empty() && maxWork > 0) {
+        const gc_node_ref_t n = work.back();
+        work.pop_back();
+        if (n >= seen.size() || seen[n] || draft.header(n) == nullptr) {
+            continue;
+        }
+        seen[n] = true;
+        --maxWork;
+        if (isObservedRun(transaction, n)) {
+            return true;
+        }
+        for (gc_node_ref_t pred : draft.syncInputsOf(n)) {
+            work.push_back(pred);
+        }
+    }
+    return false;
+}
+
 /// The nodes `removed` reads whose last read removing it takes: the nodes that carry ordering
 /// (an effect, a call, a computation that may fault) that its value is computed from, that nothing
 /// else reads. Reads by a node `alsoGoing` names do not count: they are about to go away as well
@@ -260,7 +304,7 @@ std::vector<gc_node_ref_t> lastReadsGoingOut(
     std::vector<gc_node_ref_t> lastRead;
     for (gc_node_ref_t source : orderedSources(transaction, removed)) {
         if (!draft.alive(source) || (alsoGoing && alsoGoing(source)) ||
-            !isObservedRun(transaction, source)) {
+            !carriesObservedRunning(transaction, source)) {
             continue;
         }
         bool readElsewhere = false;

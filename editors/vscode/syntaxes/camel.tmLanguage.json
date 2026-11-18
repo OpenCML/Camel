@@ -238,6 +238,11 @@
           "match": "\\b(pure)\\b(?!\\s*[=,)\\]};:.])"
         },
         {
+          "comment": "contextual keywords: 'spelling' — the leading word of a resource clause, declaring that the body reads the spelling of the program (design principles 9.5). It stands before `pure`/`uses` in that clause and before the `when`/`sync` that may follow it, and nowhere else, so `let spelling = 4` stays a name.",
+          "name": "keyword.other.contextual-clause.camel",
+          "match": "\\b(spelling)\\b(?=\\s+(?:pure|uses)\\b|\\s*(?:\\{|when\\b|sync\\b)\\b)"
+        },
+        {
           "comment": "contextual keywords: 'join', 'meet', 'widen', 'narrow' — the trailing clauses of a fact declaration: on the line that closes its body, or on a line of their own, as the formatter writes them. Each names the function that follows it.",
           "match": "(?<=\\})\\s+(join|meet|widen|narrow)\\b(?=\\s+[A-Za-z_])",
           "captures": { "1": { "name": "keyword.other.contextual-clause.camel" } }

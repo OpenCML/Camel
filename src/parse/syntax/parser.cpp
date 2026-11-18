@@ -1000,7 +1000,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::Colon)) {
         parseType();
     }
-    if (atWord(0, "uses") || atWord(0, "pure")) {
+    if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {
         parseResourceClause();
     }
     if (atWord(0, "when")) {

@@ -448,6 +448,8 @@ enum class SemanticDiag : uint32_t {
     // semantic space instead of being placed next to a group that has no room left.
     /// The resources a body uses are not within what its `pure`/`uses` signature promises.
     UsesPromiseViolated = 0x0001F1,
+    /// The other half of the same check: a body reads the spelling of the program and its type does not write the capability.
+    SpellingNotDeclared = 0x0001D5,
     // Where the rule itself can be said: 0x1F2 and up. Constructs that left the grammar are
     // ordinary syntax errors instead; these four are language rules, so each one names the rule
     // rather than saying "not supported".

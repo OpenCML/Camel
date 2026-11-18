@@ -11,6 +11,11 @@ This repository uses `main` for releases, `develop` for integration and feature 
 - End integration work on a feature branch, not on `main` or `develop`.
 - A merge commit describes the integrated content, not merely the act of merging. Do not use subjects such as `merge branch` or `update`.
 
+## A Lane's Checkout Belongs To The Lane
+- **Merging a lane's branch does not end the lane.** A lane that has been merged keeps reading, re-recording and writing back, and a checkout removed while it works produces a failed write and no other signal. On 2026-11-18 a checkout was removed after its branch merged; the lane's next AST re-record answered `Could not find a part of the path ...ast_hashes.txt`, and only that message said anything was wrong. Nothing was lost, but nothing would have said so either.
+- **Remove a checkout only when the lane has reported and stopped**, or when its tree is clean and no process holds it. `worktree remove` refusing a directory with `Permission denied` is a file still open, not a dirty tree: the tree was clean. Treat the refusal as "someone is working" and leave it.
+- **A lane does not amend a commit it did not write.** An `--amend` aimed at a lane's own last commit landed on the integration merge that had just been made into its branch, rewriting the coordinator's sha. It was restored with `reset --soft` and the intended change committed separately, so nothing was lost -- but the window existed because `--amend` takes whatever is at the tip. Amend only a commit you made, and check the tip's subject before you do.
+
 ## Before integrating a lane
 
 1. Check `git status --short --branch` and confirm the intended base and clean worktree.

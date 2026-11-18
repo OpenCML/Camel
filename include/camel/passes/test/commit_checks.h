@@ -38,11 +38,11 @@
 ///   program runs. Without it, "it was refused" would mean only "it is always refused", which is a
 ///   reading of neither check.
 ///
-/// All three ask the checks whatever the build asks (`camel::runtime::setCommitChecksEnabled`,
-/// camel/runtime/resources.h): a shipped build does not ask them of a rewrite that has only the graph
-/// module's interface, and what a plan reads has to be the same in every build the plans run in. Each
-/// one prints the build's own answer first, so the asked run is on the record beside the answer it
-/// overrides.
+/// All three print what the draft added before they commit it. The tier of the checks is what the
+/// draft added, not what the build is (the ruling of 2026-11-18, `commitAddsAccess` in
+/// camel/runtime/resources.h), and each of these drafts adds an access, so each one is asked in every
+/// build the plans run in -- the line is on the record so that a run which was not asked cannot look
+/// like one that was.
 inline constexpr const char *kCommitOrderTestPass = "test::commit_order";
 class CommitOrderTestPass : public RuntimeGraphRewritePass {
   public:
@@ -71,6 +71,67 @@ class CommitLegalSpliceTestPass : public RuntimeGraphRewritePass {
 /// is: what a fold that treats two functions as one leaves behind.
 inline constexpr const char *kFoldFunctionTypeTestPass = "test::fold_function_type";
 class FoldFunctionTypeTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
+ * The four readings the author's rework of 2026-11-18 asks for beyond the two of analysis 4.1. Each
+ * one writes the one thing that check is about, commits it, and prints what the commit answered; the
+ * plan compares the answer.
+ *
+ *   `test::commit_exit_region` moves the graph's exit into one of a branch's arms, which is the edit
+ *   an inliner makes when it puts an identity's body where the exit read it (the calculus's
+ *   counter-example, `test/cases/opt/commit_checks/identity_at_exit.cml`). Nothing needs an arm that
+ *   the graph does not enter, so a value read out of one is a read that never happens: the commit
+ *   must refuse it. The check lives in the seal (`validateRuntimeGraphPayloadImpl`,
+ *   src/runtime/graph.cpp) and not in the two checks below, because it is a property of the graph
+ *   published and not of what the commit added -- so the refusal here is the seal's own, and it is
+ *   asked in every build and of every commit.
+ *
+ *   `test::commit_cycle` makes one node read itself. The draft's input setters do not look for a
+ *   cycle -- they cannot, a cycle is composed out of several rewrites -- so the commit is where the
+ *   seal's own acyclicity judgement reads the graph, and it must refuse it there.
+ *
+ *   `test::commit_ancestor` splices a write into one arm of a branch whose outer region already
+ *   writes the same resource, and orders it against nothing. Neither node of the pair out there is
+ *   one this commit made -- the branch node and the outer write were the program's -- so a commit
+ *   that judged a pair only when one of its nodes was made would publish it. It must be refused, and
+ *   the diagnostic must name the branch node and the outer write.
+ *
+ *   `test::commit_tier` reads the tier itself: the same two drafts, one that adds an access and one
+ *   that does not, under both answers the one build cell can hold. The two drafts answer different
+ *   things and the cell changes neither -- which is the ruling, read as a number rather than
+ *   asserted: the tier is what the draft added, and no build can move it.
+ */
+inline constexpr const char *kCommitExitRegionTestPass = "test::commit_exit_region";
+class CommitExitRegionTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+inline constexpr const char *kCommitCycleTestPass = "test::commit_cycle";
+class CommitCycleTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+inline constexpr const char *kCommitAncestorTestPass = "test::commit_ancestor";
+class CommitAncestorTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+inline constexpr const char *kCommitTierTestPass = "test::commit_tier";
+class CommitTierTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
