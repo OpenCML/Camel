@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-323 diagnostics: 301 errors, 22 warnings. 15 carry a machine-applicable edit, 308 say why they carry none.
+324 diagnostics: 302 errors, 22 warnings. 15 carry a machine-applicable edit, 309 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -336,6 +336,7 @@ prints one entry.
 | `0x040001AF` | [RuntimeDiag::PassEffectContainment](#passeffectcontainment) | Error | no |
 | `0x040001B0` | [RuntimeDiag::PassEffectBeyondType](#passeffectbeyondtype) | Error | no |
 | `0x040001B1` | [RuntimeDiag::PassEffectOrder](#passeffectorder) | Error | no |
+| `0x040001B2` | [RuntimeDiag::NullSlotUnwrapped](#nullslotunwrapped) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -11458,6 +11459,35 @@ func main(): int {
     let quiet = doubled(21)
     let noisy = announced(3)
     return quiet + noisy
+}
+```
+
+### NullSlotUnwrapped
+
+`0x040001B2` · Error · `RuntimeDiag::NullSlotUnwrapped`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and no change to the program's logic repairs a defect of the lowering
+
+**Message**
+
+```text
+The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.
+```
+
+**Help**
+
+```text
+The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.
+```
+
+**Example** (`test/cases/compile/tagged/unwrap_null.cml`, run as `camel test/cases/compile/tagged/unwrap_null.cml`)
+
+```camel
+func main(): int {
+    let slot: int? = null
+    return __unwrap__(slot)
 }
 ```
 

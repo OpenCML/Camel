@@ -343,6 +343,10 @@ void declareBuiltinOperatorFaults() {
     for (const std::string_view name : kNoFaultPath) {
         table.declareFaults(std::string(":") + std::string(name), {});
     }
+    // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag has
+    // already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's value --
+    // it is the absence of one -- and it is the compiler's own error, so it names no arithmetic kind.
+    table.declareFaults(":op/tag_unwrap", {{FaultKind::Other, 0}});
 }
 
 } // namespace
