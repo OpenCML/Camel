@@ -101,6 +101,115 @@ runtime::gc_node_ref_t transferAggregate(
 }
 } // namespace
 
+namespace {
+/// The declarations over the bodies this pass rewrote, stated on the drafts before the commit that
+/// judges them (the ruling of 2026-11-18, `f61196246`: the pass declares the widened type at the
+/// commit, and a commit that widened it itself could not tell an edit that needs a wider promise
+/// from a hand-written clause the author narrowed -- the two are the same three facts, a draft, the
+/// graph it was decoded from, and a body).
+///
+/// `session.prepared()` encodes the drafts without judging or delivering them, which is the same
+/// graph the commit's check reads, so `bodySignature` answers over this pass's body and not over
+/// the one the program had. Every graph whose body reaches past the clause its draft carries gets
+/// the clause the body needs (`runtime::widened`: a body no clause can be written for is left as it
+/// is, and the commit's check refuses it, as it should). Every function value that names such a
+/// graph is given the new type too, because a call site declares the type of the value it calls and
+/// not the type of the graph behind it. Rounds, because widening a callee widens what its callers
+/// have to declare.
+void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
+    namespace rt = runtime;
+    for (int round = 0; round < 4; ++round) {
+        const rt::Program *staged = session.prepared();
+        if (staged == nullptr) {
+            return;
+        }
+        // The graphs the program holds and the graphs this pass made: a segment is a graph the
+        // program did not have, and its clause is read by its callers exactly like any other's, so
+        // it is declared here too. Left out, it would be widened only after the commit
+        // (`settleDeclarations`), and its callers would go on declaring the clause it no longer
+        // carries -- one round behind, at a boundary that judges the program the commit published.
+        std::vector<rt::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
+        for (rt::GCGraph *made : session.madeGraphs()) {
+            if (std::find(graphs.begin(), graphs.end(), made) == graphs.end()) {
+                graphs.push_back(made);
+            }
+        }
+        std::vector<std::pair<rt::GCGraph *, core::type::FunctionType *>> wider;
+        for (rt::GCGraph *graph : graphs) {
+            rt::GraphTransaction *transaction = session.tryDraft(graph);
+            if (transaction == nullptr) {
+                continue;
+            }
+            auto &draft = transaction->edit();
+            auto *type  = draft.funcType();
+            if (type == nullptr) {
+                continue;
+            }
+            const auto declared = type->resources();
+            if (declared.mode == core::sem::ResourceSignature::Mode::Generic) {
+                continue; // a type that promises nothing covers whatever the body does
+            }
+            const rt::GCGraph *copy = staged->graph(graph->id());
+            if (copy == nullptr) {
+                continue;
+            }
+            const auto body = rt::bodySignature(*staged, *copy);
+            if (core::sem::covers(declared, body)) {
+                continue;
+            }
+            const auto clause = rt::widened(declared, body);
+            if (!core::sem::covers(clause, body)) {
+                continue; // not a clause the language can write: the commit says so instead
+            }
+            draft.setFuncType(type->withResources(clause));
+            wider.emplace_back(graph, draft.funcType());
+        }
+        if (wider.empty()) {
+            return;
+        }
+        // A value that names a graph whose clause grew carries the clause it names.
+        for (rt::GCGraph *graph : graphs) {
+            rt::GraphTransaction *transaction = session.tryDraft(graph);
+            if (transaction == nullptr) {
+                continue;
+            }
+            auto &draft = transaction->edit();
+            for (rt::gc_node_ref_t id = 0; id < draft.nodeCount(); ++id) {
+                const auto *header = draft.header(id);
+                if (header == nullptr || header->kind != rt::GCNodeKind::Data ||
+                    header->dataIndex >= 0) {
+                    continue;
+                }
+                auto *nodeType = header->dataType;
+                if (nodeType == nullptr || nodeType->code() != core::type::TypeCode::Function) {
+                    continue;
+                }
+                const size_t slot = static_cast<size_t>(-header->dataIndex);
+                if (slot >= draft.staticSlots().size()) {
+                    continue;
+                }
+                const auto *function =
+                    core::rtdata::fromSlot<::Function *>(draft.staticSlots()[slot]);
+                if (function == nullptr || function->graph() == nullptr) {
+                    continue;
+                }
+                const auto found = std::find_if(wider.begin(), wider.end(), [&](const auto &entry) {
+                    return entry.first->id() == function->graphId();
+                });
+                if (found == wider.end() || found->second == nodeType) {
+                    continue; // names a graph that did not grow, or already says what it does
+                }
+                const auto replacement =
+                    draft.materializeStaticValue(draft.staticSlots()[slot], found->second);
+                draft.setNodeOrigin(replacement, draft.nodeOrigin(id));
+                draft.replaceAllValueUses(id, replacement);
+                draft.eraseNode(id); // its type is the one that no longer says what the body does
+            }
+        }
+    }
+}
+} // namespace
+
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t run, const std::string &uri, size_t &count, const SegmentDeviceOps *device,
@@ -595,7 +704,14 @@ const runtime::Program *outlineRegions(
     }
     if (regionRefused)
         return program;
-    return count ? session.commit() : program;
+    if (count == 0) {
+        return program;
+    }
+    // The type over each body this pass rewrote, declared by this pass and not by the commit: the
+    // bodies it made hold a device submission, which reaches the ambient `tiles:driver`, and the
+    // clause they inherited speaks of the host body they replaced.
+    declareBodiesOverDrafts(session);
+    return session.commit();
 }
 
 const runtime::Program *settleDeclarations(

@@ -242,6 +242,15 @@ class RuntimeGraphDraftSession {
     /// rewrite, such as the working copy of autodiff) the program is left as it is and
     /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
     const Program *commit(bool detached = false);
+    /// The program the drafts of this session would publish as they stand, encoded but not judged
+    /// and not delivered: the graphs `commit` judges, before any of its checks. A pass whose edit
+    /// gives a body an access its type does not name (`tiles`: a device submission writes the
+    /// ambient `tiles:driver`) reads the body here -- through the same `bodySignature` the commit's
+    /// check reads -- and states the widened type on the draft (`GraphDraft::setFuncType`) before
+    /// the commit that judges it, which is how a pass declares the type its own edit needs (the
+    /// ruling of 2026-11-18, `f61196246`). The commit widens nothing itself: a body whose type no
+    /// caller declared is refused exactly as it was before this method existed.
+    const Program *prepared();
     /// The graphs the session read or wrote (decoded or edited) whose version in the context's
     /// program is not the one it started from; empty while the context's program is still the
     /// session's. A commit of a stale session with no conflict does not fail: it merges its
@@ -282,6 +291,9 @@ class RuntimeGraphDraftSession {
     };
 
     GraphTransaction &ensureDraft(GCGraph *graph);
+    /// `commit` and `prepared` are the same run of the encoder, and `staged` is the one thing that
+    /// tells them apart: true stops it after the encode, before the checks and the delivery.
+    const Program *runCommit(bool staged, bool detached);
     /// Refuses a draft whose operator port names a node the draft does not have: a graph version
     /// cannot be written around a reference to nothing, and the guard that judges a pass's program
     /// promises to refuse exactly this shape. Throws, so the pipeline names the pass that made it.
@@ -313,6 +325,10 @@ class RuntimeGraphDraftSession {
     /// through ProgramHold, because a commit encodes into it while the drafts' conditions may run
     /// Camel code -- a safepoint.
     mutable ProgramHold work_;
+    /// The program the last `prepared` encoded, held so that a pass can read the bodies of the
+    /// graphs the commit is about to judge: released by the next `commit` (or `prepared`), which
+    /// makes a program of its own.
+    ProgramHold staged_;
     GCGraph *runtimeRoot_ = nullptr;
     GraphState graphState_ = GraphState::Executable;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
