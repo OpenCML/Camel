@@ -5661,7 +5661,8 @@ The name of the graph. This is *spelling*: it is the identifier the source wrote
 needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
 that would pick a function by its name takes the function value instead.
 
-- Example: `name(graph_of((x: int): int => x + 1))`
+- Example (a fragment, not compiled): `name(graph_of((x: int): int => x + 1))`
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `nodes`
 
@@ -6009,6 +6010,7 @@ principles 9.5). Diagnostics and the debugger declare it; a transform does not r
 
 - Example (a fragment, not compiled): `origin(n)`
 - Why it is not compiled: n is a node of the surrounding pass
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `constant`
 
@@ -6071,6 +6073,7 @@ its clause (design principles 9.5). Diagnostics and the debugger declare it.
 
 - Example (a fragment, not compiled): `show(n)` gives `'%2 Oper :op/mul_l : int'`
 - Why it is not compiled: n is a node of the surrounding pass
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `id`
 

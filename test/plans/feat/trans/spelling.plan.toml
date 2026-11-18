@@ -43,4 +43,5 @@ kind = "behavior"
 case = "../../../cases/trans/spelling/declared.cml"
 args = ["${case}"]
 expect_exit = 0
+expect_stdout_exact = "main\n"
 timeout_ms = 30000

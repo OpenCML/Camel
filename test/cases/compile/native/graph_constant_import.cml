@@ -4,21 +4,20 @@
  * C++ operator of the same URI (bucket 1). The sample's value is not read, so a node of no
  * constant type answers null to every one of them.
  *
- * The node is a *port* -- `main`'s own parameter port -- and that is deliberate. This case used to
- * read `ns[0]`, the first node `nodes` gave, which was the node created first and happened to be
- * that port. `nodes` answers the canonical order now (design principles 9.5), and the node that
- * stands first in it is the literal `0` `main` returns, which *is* an `int` constant: the reading
- * `true, false, true, ...` measured which node the walk happened to start at, not the fact this
- * case is about. Naming the port keeps the fact ("a node that is no constant of any type answers
- * null to every sample") and no longer depends on a position.
+ * The node is an *operation* node, and that is deliberate. This case used to read `ns[0]`, the
+ * first node `nodes` gave, which was the node created first and happened to be a port. `nodes`
+ * answers the canonical order now (design principles 9.5), and the node that stands first in it is
+ * the literal `0` `main` returns, which *is* an `int` constant: the reading `true, false, true,
+ * ...` measured which node the walk happened to start at, not the fact this case is about. Naming
+ * the kind keeps the fact ("a node that is no constant of any type answers null to every sample")
+ * and no longer depends on a position.
  */
 
 import { kind, nodes, constant, graph_of } from graph
 import { Node, NodeKind } from graph
 
 func main(): int sync {
-    let ports = nodes(graph_of(main))->filter<(n: Node): bool => kind(n) == NodeKind::Port>
-    let ns = if len(ports) > 0 then { ports } else { nodes(graph_of(main)) }
+    let ns = nodes(graph_of(main))->filter<(n: Node): bool => kind(n) == NodeKind::Oper>
     println(constant::<i32>(ns[0]) == null)
     println(constant::<int>(ns[0]) == null)
     println(constant::<f32>(ns[0]) == null)

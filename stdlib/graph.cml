@@ -59,6 +59,7 @@ export func graphs_of::<F>(f: F): Graph[] when is_function::<F>()
 /// The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
 /// needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
 /// that would pick a function by its name takes the function value instead.
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example name(graph_of((x: int): int => x + 1))
 export func name(g: Graph): string spelling
 
@@ -242,6 +243,7 @@ export func rule_of(g: Graph, name: string): Graph?
 /// written, so reading it needs a declaration that writes `spelling` in its clause (design
 /// principles 9.5). Diagnostics and the debugger declare it; a transform does not read it.
 /// @example-fragment n is a node of the surrounding pass
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example origin(n)
 export func origin(n: Node): int spelling
 
@@ -274,6 +276,7 @@ export func region_parent(r: Region): Region?
 /// number the node was created with, so reading it needs a declaration that writes `spelling` in
 /// its clause (design principles 9.5). Diagnostics and the debugger declare it.
 /// @example-fragment n is a node of the surrounding pass
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example show(n)    // '%2 Oper :op/mul_l : int'
 export func show(n: Node): string spelling
 
