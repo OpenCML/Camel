@@ -25,19 +25,26 @@
 `stream` 计划 147/147、六计划 `[SUMMARY] total: 5385, pass: 5363, fail: 0, skip: 2, known failures: 20`，
 与基线逐字相同。
 
-## 3. 墙：`yield` 的剩余流是一个**调回自己所在图的嵌套图**
+## 3. 那堵「墙」**量了，不是墙**：答案是 (a)，互递归在 GIR 层可行
 
 ```
-靶子 g4（`__gen_step__`）n20 = DATA callee g5；g5 的 n4 = FUNC callee g4   ← 互递归
-⇒ 每个 `yield` 的 answer 里那个 `T..` 是 `gct/builder.cpp` `streamValue()` 造的
-   `makeFunc("")` + `return __gen_step__(state)`，由 `visitFunc` 建成一张**新图**
-⇒ GIR 层建图只有一个入口 `enterScope()`（换 `currGraph_`），而它建的是**子图**；
-   子图要引用**外层正在建的那张图**（g4），GIR 层没有写下来的机制 ——
-   GCT 树能行，是因为 `makeDRef(stepName)` 在**整棵树建完之后**才解析。
-```
+问题：一张 `makeFunc("")` 合成的 FUNC，在 `currGraph_` 是 step 图时被 `visit()`，
+      它对 `__gen_step__` 的 DRef 解析成什么？
+⇒ 探针（临时，已复原）：在 `buildGeneratorBody` 里、step 图仍是 `currGraph_` 时，
+   ① 读 `graphsAt("__gen_step__")`，与 `stepGraph.get()` 比指针；
+   ② 造 `makeFunc("")` + `makeType(stepType)` + `return __gen_step__(__gen_state__)`，`visit()` 它。
 
-**⇒ 这不是「还没写」，是「按 GCT 树的形状照抄会退回『状态型在 arms 之前定死』」，而手建图要先回答「子图何时能引用父图」。**
-**⇒ 动笔前该先量这一处**：一张 `makeFunc("")` 合成的 FUNC 在 `currGraph_` 是 step 图时被 `visit()`，DRef 到 step 的名字解析成什么。**这是下一段的第一个读数，不是第 800 行。**
+实测（`generators.cml` 每个生成器函数同一读数）：
+  ① **(a) the graph being built** —— `graphsAt` 回来的就是 `stepGraph`，指针相同
+     判据：`enterScope(name=…)` 在建图时立刻 `insertGraph(name, found)`（`builder.cpp#Builder::enterScope`），
+     所以「名字」在**建完之前**就指向这张图。
+  ② **`visit()` 成功**，返回的节点类型是 `(__gen_state__: (int,)) => (int, int..)?` —— 正是 step 的签名
+⇒ **⇒ 嵌套图可以调回外层正在建的图，⑥ 不必手建：照 GCT 树的形状（`streamValue()`）写即可。**
+
+一处更正要记住：探针**第一版报了 (c) `visit threw BuildAbortException`**，
+原因是我给 `__gen_step__` 传了零个实参（它要一个）。**那是 arity 拒绝，不是解析失败。**
+⇒ **「探针自己写错了」和「机制不存在」在读数上长得一样，区别只在有没有补上那个实参。**
+   不含这一步，这一页会把「可行」写成「有墙」。
 
 ## 4. 三处靶子读数（比规格更细，或与规格不同）
 
@@ -49,7 +56,8 @@
    ⇒ 「两处同一个算子、都写 group 调用」这条实测成立。
 ③ 边数：g4 按 jgir 的 `inputs` 数组数是 **78 节点 / 115 边**（规格写 116）；
    `std::stats` 报整个程序 `edges: 163`（7 张图），**不能用它拆出 g4 的 116**
-   ⇒ 「116」这个数**不是用 jgir 能量出来的**，谁写它都要说是哪把尺子。
+   ⇒ 「116」这个数**不是用 jgir 能量出来的**，谁写它都要说是哪把尺子。std::stats 报全程序 163，
+     也拆不出它 ⇒ **「116 从哪来」没有被查到；查清之前任何规格不许再用它当判据**，否则它会在下一份规格里复活。
 ```
 
 ## 5. 一处与规格形状不同、但不是缺陷

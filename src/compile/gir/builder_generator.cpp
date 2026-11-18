@@ -98,8 +98,12 @@
  *     `Arm`, `LoopCond`, `LoopBody`). That `0`/`1` is **not** an order of construction and must not be
  *     read as one -- it is which of the loop's two parts the region is. **And the order of
  *     construction is visible in the graph anyway**: the published `std::jgir` numbers the regions in
- *     the order they were made, and in the generator case the condition's region is `g4r1`, ahead of
- *     the arm regions `g4r2`, `g4r4`, `g4r6` -- so the condition's region is made **first**. The two
+ *     the order they were made. In the generator case, measured on the published `std::jgir` of
+ *     `test/cases/compile/stream/generators_cell_type.cml`: the condition's region is `1`, the
+ *     body's is `2`, and the **six** arm regions are `3` to `8` -- so the condition's region is
+ *     made **first**, and this sentence's earlier draft named `g4r2`, `g4r4`, `g4r6` as the arm
+ *     regions, which was a transcription and not a reading: the arms are six, and two of the
+ *     three names were the body's region. The two
  *     sentences belong together: the index says *which part*, the numbering says *which was made
  *     first*, and a machine that read the first as the second would number the regions the other way
  *     round and change the graph.
