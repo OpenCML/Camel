@@ -91,8 +91,10 @@ std::string placementReport(const runtime::Program &program);
 /// region rather than a reason to fall back.
 class GpuScopes {
   public:
-    /// The scopes of the graphs of `program`.
-    explicit GpuScopes(const runtime::Program &program);
+    /// The scopes of the graphs of `program`. `everyNodeOnDevice` answers `covers` for every node
+    /// the program did not place on the host by a fact of its own: the reading a pass that outlines
+    /// for the device asks for, because the regions it cuts are regions it means to execute.
+    explicit GpuScopes(const runtime::Program &program, bool everyNodeOnDevice = false);
 
     /// Whether `node` of `graph` is in a scope. A node with a placement fact of its own is not
     /// in one when that fact is `cpu`: `#cpu` inside a scope is the written way out.
@@ -103,6 +105,7 @@ class GpuScopes {
 
   private:
     std::unordered_map<const runtime::GCGraph *, const runtime::GCGraph *> scopeOf_;
+    bool everyNode_ = false;
 };
 
 } // namespace camel::tiles

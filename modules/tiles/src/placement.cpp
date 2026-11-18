@@ -312,7 +312,7 @@ std::string placementReport(const runtime::Program &program) {
     return out.str();
 }
 
-GpuScopes::GpuScopes(const runtime::Program &program) {
+GpuScopes::GpuScopes(const runtime::Program &program, bool everyNodeOnDevice) : everyNode_(everyNodeOnDevice) {
     // A body tag makes the whole graph a device unit.
     std::vector<const runtime::GCGraph *> scopes;
     for (const runtime::GCGraph *graph : program.graphs()) {
@@ -350,6 +350,8 @@ bool GpuScopes::covers(const runtime::GCGraph &graph, runtime::gc_node_ref_t nod
     // A fact of the node's own wins, in both directions: `#cpu` is the written way out of a
     // scope, and a nested `#gpu` block is on the device.
     if (decision.onDevice())
+        return true;
+    if (everyNode_ && decision.fact != "cpu")
         return true;
     return decision.scope == PlacementScope::Default && scopeOf_.contains(&graph);
 }
