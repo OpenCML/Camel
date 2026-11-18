@@ -239,7 +239,7 @@ void Builder::buildGeneratorBody(
         // ---- the round state, and the two regions that carry it ----------------
         //
         // Three conventions of a region decide the shape below, and one of them is a trap
-        // (`builder_control.cpp:2643-2690`, `:3568-3599`, `:3730-3735`):
+        // (`builder_control.cpp#Builder::visitLoopNode`, `#Builder::buildStreamLoop`):
         //
         //   * a loop's regions are made **before** the loop node exists, so the owner is written
         //     after it, and `setRegionOwner(region, loop, 0|1)` says *which part* the region is --
