@@ -2268,20 +2268,19 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
 
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
-    if (astExit == AST::ExitType::Yield) {
-        // A `yield` the generator machine did not claim reached the statement builder: the machine
-        // missed a shape it builds. Nothing in the program is wrong, and the report says so without
-        // asking for the program (author's ruling of 2026-11-02: a refusal is not a defect of the
-        // program, and the text never asks the reader to send it).
-        diags_->of(InternalDiag::UnknownInternalError)
-            .at(ast->load()->tokenRange())
-            .commit(
-                "a `yield` reached the statement builder, so the generator machine did not claim "
-                "it. Nothing in the program is wrong: the machine missed a shape it builds");
-        throw BuildAbortException();
+    // A `yield` is a node of this tree from 2026-11-18 (author's ruling: the generator body is
+    // built in GIR, and the GIR splits the body into arms at the `yield` it finds there, so the
+    // node is the only thing it can find). The machine in this file still claims every `yield`
+    // before the statement builder is reached, so nothing builds one today: what this line changes
+    // is the seam the GIR machine lands on, not what a generator is. What stood here was a refusal
+    // -- "a `yield` reached the statement builder, so the generator machine did not claim it" --
+    // and it said exactly that this machine does not claim this shape yet; the same reading is kept
+    // one layer down, where an unclaimed `yield` now arrives (`gir::Builder::visitExitNode`).
+    node_ptr_t exitNode = tree_->makeExit(
+        astExit == AST::ExitType::Yield ? ExitType::Yield : ExitType::Return);
+    if (astExit == AST::ExitType::Return) {
+        reportExitInUnusedArm(ast);
     }
-    node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
-    reportExitInUnusedArm(ast);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
