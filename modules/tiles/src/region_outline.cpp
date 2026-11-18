@@ -365,7 +365,11 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
                 continue; // the value already names what its graph says
             }
             auto &draft = session.edit(graph).edit();
-            for (rt::gc_node_ref_t id = 0; id < draft.nodeCount(); ++id) {
+            // The ids to read are the ones the encode wrote, not the draft's live-node count: the
+            // first round of this loop erases the node it replaces, so the id it wrote outlives
+            // `nodeCount()` -- and a scan bounded by the count stops one short of the value this
+            // round has to retype, which is the value the round before it wrote.
+            for (rt::gc_node_ref_t id = 0; id < copy->nodeCount(); ++id) {
                 const auto *header = draft.header(id);
                 if (header == nullptr || header->kind != rt::GCNodeKind::Data ||
                     header->dataIndex >= 0) {
