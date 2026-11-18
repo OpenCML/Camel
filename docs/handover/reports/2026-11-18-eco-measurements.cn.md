@@ -128,36 +128,49 @@ Release 构建默认不问这两条检查，是测试自己 `asked` 的。
 
 ---
 
-## 3 (c) 无关效应并行：数，以及为什么是这个数
+## 3 (c) 两个资源能不能并行：能
 
-**做了。** 程序（生成在临时目录）：`write_late(path, text, ms)` = `sleep(ms)` 然后 `'text'->write_text<path>`；
-`main` 依次调两次，两个**不同**文件，每次 200 ms。串行 `std::nvm` 与并行 `-t 4 std::prl` **交替**各 9 次：
+第一个读数（本报告初版）把两个**文件**当成两个资源，作者的裁定否掉了它（`1b7905cd4` 的合并说明：
+「rerun the parallel measurement on two distinct resources」）：两个文件是**一个**资源 `fs`，所以那次测的
+不是并行。重做如下，结论反过来了：**两个不同的资源确实并行，快一倍**。
 
-```
-  serial    n=9 min=   430.0 ms  median=   434.8 ms  max=   439.5 ms   runs=430, 440, 438, 435, 436, 433, 434, 431, 437
-  parallel  n=9 min=   435.3 ms  median=   443.1 ms  max=   447.0 ms   runs=443, 444, 443, 444, 446, 447, 435, 442, 440
-median serial / median parallel = 0.98
-reading: the two effects TOOK TURNS on both back ends
-```
+**两个资源，两处声明。**
 
-两个效应**没有重叠**：中位数 434.8 对 443.1 ms，都是一个 200 ms 加另一个 200 ms。原因不是并行后端没干活，
-而是**这两次写按设计就是一个资源**、不构成"两个不同资源的效应"：`stdlib/fs.cml` 开头原话——
+| 资源 | 声明 |
+|---|---|
+| `clock` | `stdlib/process.cml:15`：`export func sleep(seconds: float): void`，`@effect waits`（"The wait is on the clock"）。标准资源名在 `src/core/resource_semantics.cpp:504`：`stdout stderr stdin clock env fs` |
+| `rendezvous_point` | `stdlib/test_support.cml:17`：`export resource rendezvous_point unordered` —— "two calls on it keep no written order and may run at the same time (design principles 3.3)" |
 
-> Every function here uses the resource `fs`: a call runs only when its result is needed or it is
-> written in a `sync` block, and **calls on the file system keep their written order**.
+**程序**：`wait_clock(200)` = `sleep` + `return 1`（void 效应必须在 `sync` 体里，否则被丢），
+`wait_meet(200)` = `rendezvous(2, 0.2)`（等待点，只有一个调用者时等满超时并报告 1）；`main` **不是** `sync` 体。
 
-并行后端自己的判断同向（`std::prl diag=true`，原话）：
+**读数**（`std::nvm` 与 `-t 4 std::prl` 交替各 9 次）：
 
 ```
-[taskflow] graph 'main': 1 scope(s), 0 run as task graphs (0 tasks)
-[taskflow] graph 'main' is serial: runs as bytecode
-[taskflow] graph 'write_late' is serial: runs as bytecode
+  serial    n=9 min=   430.1 ms  median=   433.6 ms  max=   438.5 ms   runs=432, 436, 430, 436, 438, 434, 434, 432, 431
+  parallel  n=9 min=   230.8 ms  median=   235.2 ms  max=   245.7 ms   runs=231, 235, 240, 246, 235, 241, 234, 234, 233
+median serial / median parallel = 1.84
+reading: the two effects OVERLAPPED: one wait on the parallel back end, two in series on the serial one
+reading: `clock` and `rendezvous_point` are two resources the scheduler keeps apart
 ```
 
-所以 (c) 按"写两个不同文件"这个提法**测不出差别**，差别的来源（按资源粒度而不是按路径区分访问）在
-`fs` 的资源声明里，不在调度器里。要看到重叠，得两个效应落在**不同资源**上（如 `fs` 与 `stdout`），或者
-`fs` 的资源改成按路径区分——那是语义改动，本线不做，也不该由测量线顺手改。9 次、区间见上，脚本
-`test/cases/opt/writings/effect_parallel_clock.py` 可复跑（`--runs N`）。
+**④ 调度器自己的话**（`std::prl diag=true`）：`graph 'main': 1 scope(s), **1 run as task graphs (3 tasks)**`
+—— 之前那次是 `0`。
+
+**把 `sync` 拎出来做对照**（同一个 `unordered` 资源，两次同样的调用，只差 `sync`）；这里的数是**值**不是秒数：
+`rendezvous` 报告"多少调用者在同一时刻到达"，两个并行的都报 2，依次的各报 1：
+
+```
+  sync  serial 1001   parallel 1001
+  free  serial 1001   parallel 2002
+```
+
+`free` 那一行在 `std::prl` 下 20 次全 `2002`、`sync` 那行 10 次全 `1001`。所以第一次读数的两个原因各归各位：
+`fs` 是一个资源（`stdlib/fs.cml:12`：'calls on the file system keep their written order'）**并且** 那次程序把两次
+调用写在了 `sync` 体里（`sync` 是前端给冲突效应加控制边的办法）。**不同资源 + 主体不是 `sync` ⇒ 并行。**
+
+脚本 `test/cases/opt/writings/effect_parallel_clock.py` 可复跑（`--runs N`），计划
+`test/plans/feat/opt/writings.plan.toml` 的第二条跑它（`--runs 3`），断的是上面那两行**值**，不断秒数。
 
 ---
 
@@ -229,6 +242,9 @@ d47c7cfce test(opt): item (c) runs in the gate, and the torch.fx control is name
 ```
 
 零删除行；未改任何实现文件，未碰 `stdlib/graph.cml`，未动 `baseline.json`、未打 `known_fail`、未 push。
+
+§3 的重做（两个资源）改的是 `test/cases/opt/writings/effect_parallel_clock.py` 与`n`test/plans/feat/opt/writings.plan.toml` 的第二条，提交在 `lane-pclock` 分支上（父 `2e1e77324`，即本报告
+落进 `develop` 的那根）。用例条数没变：`opt` 仍是 1599。
 
 ---
 

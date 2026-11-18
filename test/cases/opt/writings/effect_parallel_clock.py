@@ -1,34 +1,45 @@
-"""Item (c) of the ECOOP measurement plan (2026-11-18): do two unrelated effects run at once?
+"""Item (c) of the ECOOP measurement plan (2026-11-18): do two effects on two resources run at once?
 
-The question as the plan puts it: "two effects that touch different resources (say two different
-files), on the parallel back end against the serial one, wall clock, several runs each, median and
-range". This script is that measurement, and the numbers it prints are the reading whether or not the
-answer is the one the question expected.
+The author's ruling after the first reading of this item (`1b7905cd4`): the measurement was on two
+*writings* of one resource, not two resources, so it could not answer the question. This is the
+measurement on **two resources the language declares apart**, and on what parts them.
 
-The program is generated here (a `.cml` file in the tree would move the front-end AST golden for a
-reason that has nothing to do with the front end -- `test/cases/trans/same_graph_writings.py` states
-the same reason). It is one function that writes one file, delayed by a sleep so that the wall clock
-shows whether two of them took turns:
+The resources, as `stdlib` declares them:
 
-    func write_late(path: string, text: string, ms: int): int sync {
-        sleep(float(ms) / 1000.0)
-        let _ = text->write_text<path>
-        return 0
+  clock              `sleep` waits on it (`stdlib/process.cml:15`, `@effect waits`); the six standard
+                     resources are named in `src/core/resource_semantics.cpp:504`:
+                     `stdout stderr stdin clock env fs`
+  rendezvous_point   `stdlib/test_support.cml:17`, `export resource rendezvous_point unordered`, the
+                     one meeting point of the process: "two calls on it keep no written order and may
+                     run at the same time (design principles 3.3)"
+
+The program puts one 200 ms effect on each, in a `main` that is **not** a `sync` body:
+
+    func wait_clock(ms: int): int sync {      // void effect, so in a `sync` body or it is dropped
+        sleep(float(ms) / 1000.0)             // -- `fs.cml`: "a call runs only when its result is
+        return 1                              //    needed or it is written in a `sync` block"
     }
+    func wait_meet(ms: int): int {            // `unordered`, so no `sync` and no written order
+        return rendezvous(2, float(ms) / 1000.0)
+    }
+    func main(): int {                        // not `sync`: the two calls are free to be unordered
+        let a = wait_clock(ms)
+        let b = wait_meet(ms)
+        ...
 
-and an entry that calls it twice, once per file. One sleep is 200 ms, so the two readings are far
-apart and neither can be confused with the other by timing noise:
+A `sync` body is how the front end orders conflicting effects in the graph, so `sync` in `main` would
+be the thing that parts them; that is why `main` here is not one, and why the script also runs the
+control below.
 
-    took turns        about 400 ms on both back ends
-    overlapped        about 200 ms on the parallel one, 400 ms on the serial one
+**The control is the same two calls with `sync` on and off, and it is a reading of values, not of
+seconds.** `rendezvous(2, t)` gives how many calls met at the meeting point: two calls that run at the
+same time both report 2, two that took turns report 1 and 1. So `sync` on against `sync` off on one
+unordered resource says whether the wall clock above is about resources at all.
 
-**A wall-clock measurement is not a verdict, so this script has none.** It prints the median and the
-range of N runs per back end, alternating the two so that a machine that slows down halfway through
-slows both readings alike, and states which of the two shapes the numbers have. No plan entry runs it:
-a bound on wall clock in the fast gate is a flake, and what the plan of 2026-11-18 asks for here is a
-reading, not a red.
+**No verdict, no bound.** It prints medians, ranges, ratios and the scheduler's own decision, and
+names which shape the numbers have. Run:
 
-Run: python test/cases/opt/writings/effect_parallel_clock.py --camel out/latest/bin/camel [--runs 9]
+    python test/cases/opt/writings/effect_parallel_clock.py --camel out/latest/bin/camel [--runs 9]
 """
 
 import os
@@ -63,21 +74,54 @@ for index, word in enumerate(ARGV):
 DELAY_MS = 200
 THREADS = "4"
 
-PROGRAM = """import {{ now }} from time
-import {{ sleep }} from process
-import {{ write_text }} from fs
+# One effect on the clock, one on the meeting point. `main` is not `sync`.
+TWO_RESOURCES = """import {{ sleep }} from process
+import {{ rendezvous }} from test_support
 
-// One effect on one file, after a delay long enough to see whether two of these took turns.
-func write_late(path: string, text: string, ms: int): int sync {{
+func wait_clock(ms: int): int sync {{
     sleep(float(ms) / 1000.0)
-    let _ = text->write_text<path>
+    return 1
+}}
+
+func wait_meet(ms: int): int {{
+    return rendezvous(2, float(ms) / 1000.0)
+}}
+
+func main(): int {{
+    let a = wait_clock({delay})
+    let b = wait_meet({delay})
+    print(a * 1000 + b)
     return 0
+}}
+""".format(delay=DELAY_MS)
+
+# The control: one unordered resource, the same two calls, `sync` on (the two callees and the caller)
+# against `sync` off. Nothing about seconds here -- the values say how many calls met.
+SYNC_PAIR = """import {{ rendezvous }} from test_support
+
+func meet(ms: int): int sync {{
+    return rendezvous(2, float(ms) / 1000.0)
 }}
 
 func main(): int sync {{
-    let first = write_late('effect_a.txt', 'a', {delay})
-    let second = write_late('effect_b.txt', 'b', {delay})
-    return first + second
+    let a = meet({delay})
+    let b = meet({delay})
+    print(a * 1000 + b)
+    return 0
+}}
+""".format(delay=DELAY_MS)
+
+FREE_PAIR = """import {{ rendezvous }} from test_support
+
+func meet(ms: int): int {{
+    return rendezvous(2, float(ms) / 1000.0)
+}}
+
+func main(): int {{
+    let a = meet({delay})
+    let b = meet({delay})
+    print(a * 1000 + b)
+    return 0
 }}
 """.format(delay=DELAY_MS)
 
@@ -93,10 +137,10 @@ def say(text=""):
     sys.stdout.flush()
 
 
-def run_once(scratch, program, flags, passes):
-    """One run of the program under one back end: its wall clock in milliseconds, and its exit."""
+def run(scratch, program, flags, passes):
+    """One run: its wall clock in milliseconds, and what the program printed."""
     started = time.monotonic()
-    run = subprocess.run(
+    done = subprocess.run(
         [EXE, *flags, str(program), *passes],
         cwd=str(scratch),
         capture_output=True,
@@ -104,12 +148,13 @@ def run_once(scratch, program, flags, passes):
         env=CHILD_ENV,
     )
     elapsed = (time.monotonic() - started) * 1000.0
-    if run.returncode != 0:
+    if done.returncode != 0:
         raise SystemExit(
-            f"camel {' '.join([*flags, 'prog.cml', *passes])} = exit {run.returncode}: "
-            f"{((run.stderr or run.stdout or '').strip().splitlines() or [''])[0]}"
+            f"camel {' '.join([*flags, program.name, *passes])} = exit {done.returncode}: "
+            f"{((done.stderr or done.stdout or '').strip().splitlines() or [''])[0]}"
         )
-    return elapsed
+    printed = (done.stdout or "").strip().splitlines()
+    return elapsed, (printed[-1].strip() if printed else "")
 
 
 def describe(name, samples):
@@ -128,50 +173,69 @@ def main():
     scratch.mkdir(parents=True, exist_ok=True)
     CHILD_ENV = dict(os.environ)
     CHILD_ENV.setdefault("CAMEL_HOME", str(Path(EXE).resolve().parent.parent))
-    program = scratch / "two_effects.cml"
-    program.write_text(PROGRAM, encoding="utf-8", newline="\n")
 
-    say(f"program: {program}")
-    say(f"two effects, two different files, each after a {DELAY_MS} ms sleep; "
+    pair = scratch / "two_resources.cml"
+    pair.write_text(TWO_RESOURCES, encoding="utf-8", newline="\n")
+
+    say(f"program: {pair}")
+    say("two resources: `clock` (sleep, stdlib/process.cml:15) and `rendezvous_point` "
+        "(stdlib/test_support.cml:17, unordered)")
+    say(f"one effect on each, {DELAY_MS} ms each, in a `main` that is not a `sync` body; "
         f"{RUNS} runs per back end, alternating serial and parallel")
     say()
 
     samples = {name: [] for name, _, _ in BACKENDS}
+    printed = {}
     for _ in range(RUNS):
         for name, flags, passes in BACKENDS:
-            samples[name].append(run_once(scratch, program, flags, passes))
+            elapsed, out = run(scratch, pair, flags, passes)
+            samples[name].append(elapsed)
+            printed[name] = out
 
     say("wall clock")
     medians = {name: describe(name, samples[name]) for name, _, _ in BACKENDS}
     serial, parallel = medians["serial"], medians["parallel"]
     say()
     say(f"median serial / median parallel = {serial / parallel:.2f}")
+    say(f"the program printed: serial {printed['serial']}, parallel {printed['parallel']} "
+        f"(a*1000+b: one call at the meeting point, so 1 either way)")
 
-    # What shape the numbers have. The two answers are 200 ms apart, which is fifty times the
-    # spread this machine shows between runs, so the comparison is read off the middle of each set
-    # and not off a bound.
+    # The shape of the numbers. The two answers are 200 ms apart, which is far more than this
+    # machine's spread between runs, so the comparison is read off the middle of each set.
     if parallel < serial * 0.75:
-        say("reading: the two effects OVERLAPPED under the parallel back end: the wall clock is one "
-            "sleep there and two in series here")
-        say("reading: two writes to two different files are two resources the scheduler may keep "
-            "apart")
+        say("reading: the two effects OVERLAPPED: one wait on the parallel back end, two in series "
+            "on the serial one")
+        say("reading: `clock` and `rendezvous_point` are two resources the scheduler keeps apart")
     else:
         say("reading: the two effects TOOK TURNS on both back ends")
-        say("reading: the wall clock is the sum of the two sleeps on either, so two writes to two "
-            "different files are one resource to the scheduler, ordered one against the other")
+        say("reading: a wall clock of the sum of the two waits means the two effects were ordered "
+            "one against the other")
+
+    # The control: the same two calls on one unordered resource, `sync` on against `sync` off.
+    say()
+    say("control: two calls on `rendezvous_point` (unordered), `sync` on against `sync` off --")
+    say("the number is a*1000+b, where each call reports how many calls met (2 = both at once):")
+    for label, text in (("sync", SYNC_PAIR), ("free", FREE_PAIR)):
+        path = scratch / f"pair_{label}.cml"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        cells = []
+        for name, flags, passes in BACKENDS:
+            _, out = run(scratch, path, flags, passes)
+            cells.append(f"{name} {out}")
+        say(f"  {label:<6}{'   '.join(cells)}")
 
     # The scheduler's own word, once: which graphs it kept serial and what it cut into tasks. It is
     # the reason behind the numbers above, and it is read here instead of inferred from them.
     say()
     say("the parallel back end's decision for the program (std::prl diag=true):")
-    run = subprocess.run(
-        [EXE, "-t", THREADS, str(program), "std::prl", "diag=true"],
+    done = subprocess.run(
+        [EXE, "-t", THREADS, str(pair), "std::prl", "diag=true"],
         cwd=str(scratch),
         capture_output=True,
         text=True,
         env=CHILD_ENV,
     )
-    text = ((run.stdout or "") + (run.stderr or "")).strip().splitlines()
+    text = (done.stderr or "").strip().splitlines()
     for line in text[:40]:
         say(f"  {line}")
     return 0

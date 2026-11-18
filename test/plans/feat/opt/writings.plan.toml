@@ -38,12 +38,21 @@
 # strict line, which the merge of 丙.1 turns this plan into, is the same command with
 # `--require-one-form` added to `args`: it fails until the two writings fuse to one canonical form.
 #
-# Item (c), wall clock of two unrelated effects: `effect_parallel_clock.py` runs one program that
-# writes two different files, each after a sleep, on the serial and the parallel back end, alternating
-# them, and prints the median and the range of its runs plus the parallel back end's own decision for
-# the program. **Nothing here is a bound on wall clock** -- the entry exists so that the measurement is
-# a thing the tree runs and not a script nobody runs, and what it asserts is that the harness ran and
-# stated a reading. The reading itself (whether the two effects overlap) is on
+# Item (c), wall clock of two effects on two resources: the author's ruling on `1b7905cd4` rejected the
+# first reading of this item as one resource written twice (two files are one resource, `fs`: "calls on
+# the file system keep their written order", `stdlib/fs.cml:12`), so `effect_parallel_clock.py` now runs
+# one 200 ms effect on `clock` (`stdlib/process.cml:15`) and one on `rendezvous_point`
+# (`stdlib/test_support.cml:17`, declared `unordered`) in a `main` that is not a `sync` body, alternating
+# the serial and the parallel back end, and prints the median and the range of its runs, the control
+# (`sync` on against `sync` off on the one unordered resource, whose values say how many calls met), and
+# the parallel back end's own decision (`1 run as task graphs`).
+#
+# **Nothing here is a bound on wall clock** -- the entry exists so that the measurement is a thing the
+# tree runs and not a script nobody runs. What it asserts is that the harness ran, stated a reading, and
+# that the value reading of the control held: two calls on the unordered resource that are free of
+# `sync` both report 2 (`free  serial 1001   parallel 2002`), and two that a `sync` body orders report 1
+# and 1 (`sync  serial 1001   parallel 1001`). Those are values that follow from the scheduler's
+# decision, not durations; the medians and the ratio are on
 # `docs/handover/reports/2026-11-18-eco-measurements.cn.md`, where a number belongs.
 #
 # The torch.fx control of the same item is `test/cases/opt/writings/fx_greedy_fusion.py`. It is not a
@@ -72,12 +81,12 @@ timeout_ms = 120000
 
 [[tests]]
 name = "opt.writings.two_effects_wall_clock"
-desc = "Item (c): one program writes two different files, each after a 200 ms sleep, on `std::nvm` and on `std::prl` with four workers, alternating the two back ends, and the median and the range of three runs each are printed with the parallel back end's own decision for the program (`0 run as task graphs` when it kept the graph serial). The entry asserts that the measurement ran and stated a reading, not that a wall clock fell on either side of a bound: a bound in the fast gate is a flake, and the plan asks this item for a number."
+desc = "Item (c): one 200 ms effect on `clock` (`sleep`) and one on `rendezvous_point` (`rendezvous(2, t)`, declared `unordered`), in a `main` that is not a `sync` body, on `std::nvm` and on `std::prl` with four workers, alternating the two back ends: the median and the range of three runs each are printed, with the control (`sync` on against `sync` off on the one unordered resource) and the parallel back end's own decision for the program (`1 run as task graphs`). The entry asserts that the measurement ran, stated a reading, and that the control's values held -- two calls free of `sync` both report 2, two a `sync` body orders report 1 and 1 -- not that a wall clock fell on either side of a bound: a bound in the fast gate is a flake, and the plan asks this item for a number."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/opt/writings/effect_parallel_clock.py"
 args = ["${case}", "--camel", "${camel}", "--runs", "3"]
 expect_exit = 0
-expect_stdout_contains = ["two effects, two different files", "wall clock", "serial    n=3", "parallel  n=3", "median serial / median parallel =", "reading: the two effects", "the parallel back end's decision for the program (std::prl diag=true):", "is serial: runs as bytecode"]
+expect_stdout_contains = ["two resources: `clock` (sleep, stdlib/process.cml:15) and `rendezvous_point` (stdlib/test_support.cml:17, unordered)", "wall clock", "serial    n=3", "parallel  n=3", "median serial / median parallel =", "reading: the two effects", "sync  serial 1001   parallel 1001", "free  serial 1001   parallel 2002", "the parallel back end's decision for the program (std::prl diag=true):", "graph 'main': 1 scope(s), 1 run as task graphs"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
