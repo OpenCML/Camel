@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：148 行（页已不在 `questions/` 里）
+## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -148,6 +148,7 @@
 | [`2026-11-18-retract-rc23-two-orders`](../reviews/2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） | 在 `reviews/` |
 | [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](../reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at` 只说「哪块区域」，没说「多早」——默认「该区域出口 `GATE` 之前」 | 在 `reviews/` |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](../reviews/2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 | 在 `reviews/` |
+| [`2026-11-18-the-witness-a-transpose-needs-has-no-channel`](../reviews/2026-11-18-the-witness-a-transpose-needs-has-no-channel.cn.md) | 转置要一条残差当「零的见证」：那条通道 11-04 被删了，而它今天必须回来 —— 但回哪一半？ | 在 `reviews/` |
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](../reviews/2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ | 在 `reviews/` |
 | [`2026-11-18-typeof-of-machine-made-types`](../reviews/2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ | 在 `reviews/` |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](../reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ | 在 `reviews/` |
