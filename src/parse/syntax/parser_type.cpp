@@ -411,21 +411,30 @@ void ParserImpl::parseFuncType() {
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }
-    if (atWord(0, "uses") || atWord(0, "pure")) {
+    if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {
         parseResourceClause();
     }
     close(m, NK::FuncType);
 }
 
-/// resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
+/// resourceClause : 'spelling'? ('uses' usesEntry (',' usesEntry)* | 'pure')*
 ///
 /// What a function type says about the resources a call touches (design effects plan 3.1):
 /// `pure` says none; `uses` names parameters (the values a call touches) and resources
-/// (ambient state, a module's resource, or a group of them). `uses` and `pure` are contextual.
-/// A `pure` followed by a `uses` is read here and refused when the clause is compiled
-/// (PureAndUses), so the error names the two words rather than the token after them.
+/// (ambient state, a module's resource, or a group of them). `spelling` is the clause's leading
+/// word and says something of the same kind (design principles 9.5): the body may read the
+/// spelling of the program -- a name, a source position, creation order and creation numbers, the
+/// text a node shows -- which is a capability rather than an effect, so it is written in this
+/// clause and carried by the same type. It is leading for the same reason `pure` is: the AST
+/// reads both as the clause's own text, and a resource may legitimately be named `spelling`
+/// (`uses spelling` names one). `uses`, `pure` and `spelling` are contextual. A `pure` followed by
+/// a `uses` is read here and refused when the clause is compiled (PureAndUses), so the error names
+/// the two words rather than the token after them.
 void ParserImpl::parseResourceClause() {
     const size_t m = mark();
+    if (atWord(0, "spelling")) {
+        bump();
+    }
     while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {
         if (atWord(0, "pure")) {
             bump();

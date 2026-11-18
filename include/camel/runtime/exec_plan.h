@@ -122,6 +122,13 @@ struct ExecLoop {
 /// is given or copies, and the decision is made once, here, from the graph
 /// (docs/design/arrays-memory/README.cn.md 4.3.1). Every back end runs the node the plan names for
 /// it (ExecPlan::operatorUriFor) instead of deciding for itself.
+///
+/// These are the plan's own answers and only these: every member is a value `storageReuseAt` really
+/// holds. A word a *reading* prints that no decision here could give -- `declared`, the answer an
+/// operator's own claim about reusing an operand makes (camel/runtime/storage_reuse.h) -- is the
+/// tool's vocabulary and is written where the tool is: a member nobody can write into the column is
+/// a fourth answer the plan does not have, and a reader of this enum would have to be told so every
+/// time it is used (author review 2026-11-17, item 11).
 enum class StorageReuse : uint8_t {
     /// Not an update node: the plan decided nothing about it.
     None = 0,
@@ -136,14 +143,6 @@ enum class StorageReuse : uint8_t {
     /// The old value has an observer the plan can see (a read of the cell that keeps the value),
     /// or its origin is unknown: the update copies.
     Copy = 3,
-    /// Not a decision of the plan and never written into `storageReuseAt`: the reading's word for
-    /// an operator that declares it reuses an operand (`OperatorTable::declareReusesOperand`) and
-    /// has no in-place form to say it -- `nn:sgd`, `nn:adam`, whose value is a *tree* walked leaf
-    /// by leaf. The plan decides nothing about such a node (there is no cell holding one value it
-    /// could prove something about), so what is written down is the operator's claim and not a
-    /// count anyone took: whether this run allocated is not answered here, which is why the
-    /// reading prints `declared` and `by-count` as two different columns.
-    Declared = 4,
 };
 
 /// What a back end does at a position of the plan for a loop that starts or goes on there.

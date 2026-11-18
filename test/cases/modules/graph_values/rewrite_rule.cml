@@ -26,7 +26,7 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of `target`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool {
+func isAddOne(n: Node): bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
@@ -43,7 +43,7 @@ func size(g: Graph): int {
 
 rule drop_one(x: int) { x + 1 => x }
 
-func isTarget(g: Graph): bool {
+func isTarget(g: Graph): bool spelling {
     return name(g)->ends_with<'target'>
 }
 
@@ -53,11 +53,11 @@ func targetIn::<F>(p: F): Graph {
 }
 
 /// The function the rule is applied to: it reaches `target`, so the rewrite reaches it too.
-func user(): int {
+func user(): int spelling {
     return target(5)
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     let p = user
     let rules: Rule[] = [drop_one]
     let q = p->rewrite<rules> !! p

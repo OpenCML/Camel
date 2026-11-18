@@ -26,12 +26,12 @@ func scaled(x: int): int {
 }
 
 with <w: int>
-func weighted(y: int): int {
+func weighted(y: int): int spelling {
     return scaled(y) * w
 }
 
 /// The body of `weighted` at `w = 2` in the program the rewrite was taken from.
-func plain(y: int): int {
+func plain(y: int): int spelling {
     return scaled(y) * 2
 }
 
@@ -52,7 +52,7 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of a `scaled`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool {
+func isAddOne(n: Node): bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
@@ -62,7 +62,7 @@ func addOnes(g: Graph): int {
     return len(nodes(g)->filter<isAddOne>)
 }
 
-func isScaled(g: Graph): bool {
+func isScaled(g: Graph): bool spelling {
     return name(g)->ends_with<'scaled'>
 }
 
@@ -72,7 +72,7 @@ func scaledIn::<F>(p: F): Graph {
     return found[0]
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     let rules: Rule[] = [drop_one]
     let q = weighted->rewrite<rules> !! weighted
     let moved = first_with_as_param(q)

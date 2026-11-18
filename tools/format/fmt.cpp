@@ -931,7 +931,7 @@ any Formatter::visitResourceDecl(cst::ResourceDecl context) {
 }
 
 /*
-resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
+resourceClause : 'spelling'? ('uses' usesEntry (',' usesEntry)* | 'pure')+
 usesEntry : 'var'? identRef
 */
 any Formatter::visitResourceClause(cst::ResourceClause context) {
@@ -940,9 +940,27 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
     // the call writes it (design principles 3.3) -- so it is written back, not dropped. A clause
     // that says both is refused by the semantic check (PureAndUses), and formatting keeps what was
     // written.
+    //
+    // `spelling` is the clause's leading word (design principles 9.5) and stands where it was
+    // written: a format that dropped it would print a body that no longer declares the capability
+    // it reads, which is a different program. Only the word before `pure`/`uses` is the clause's
+    // own -- a resource may be named `spelling` too (`uses spelling` names one), and that entry is
+    // printed by the loop below like any other.
     const auto entries = context->all<cst::UsesEntry>();
-    const bool pure    = context->firstToken() && context->firstToken()->text() == "pure";
-    string result      = pure ? "pure" : "";
+    const bool leading = context->firstToken() && context->firstToken()->text() == "spelling";
+    // `pure` is a token of the clause and no entry: an entry is a `cst::UsesEntry`, so a child
+    // that reads `pure` is the word itself and not a resource named that way.
+    bool pure = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        if (context->child(i)->text() == "pure") {
+            pure = true;
+            break;
+        }
+    }
+    string result = leading ? "spelling" : "";
+    if (pure) {
+        result += (result.empty() ? "" : " ") + string("pure");
+    }
     if (!entries.empty()) {
         if (!result.empty()) {
             result += " ";

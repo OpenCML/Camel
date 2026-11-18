@@ -58,12 +58,12 @@ export func apply::<F>(p: F): F! {
     return p->rewrite<[drop_positive, drop_int_coefficient]>
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('positive', countOf(p, 'positive_coefficient', ':op/mul_d'))
     println('int', countOf(p, 'int_coefficient', ':op/mul_l'))
     println('negative', countOf(p, 'negative_coefficient', ':op/mul_d'))
@@ -76,7 +76,7 @@ func int_coefficient(x: int): int { return x * 2 }
 
 func negative_coefficient(x: float): float { return x * -2.0 }
 
-func main(): int sync {
+func main(): int spelling sync {
     println(positive_coefficient(5.0), int_coefficient(5), negative_coefficient(5.0))
     return 0
 }

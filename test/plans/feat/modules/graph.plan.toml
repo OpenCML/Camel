@@ -16,12 +16,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "node_kinds_match_the_graph"
-desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph."
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in the order `nodes` answers; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph. The first list read `Port, Port, Oper, Join, Brch, Oper, Oper` until 2026-11-18: that was the creation order, which put the `join` the branch ends at before the two operations that follow it. `nodes` answers the canonical order now (design principles 9.5), and the walk numbers a graph from what it returns. Three of the eight lists moved, each with the same kinds in a different order: `pick` is `Port, Port, Oper, Oper, Oper, Brch, Join` (the two operands of the join before it), `kinds` is `Port, Oper, Data, Oper` (the operator before the data it takes), and `main` is `Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate` (the three data nodes `main` builds first). The old values would ask for the creation order back."
 kind = "behavior"
 case = "../../../cases/modules/graph_kinds.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "10\n[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+expect_stdout_exact = "10\n[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Brch, NodeKind::Join], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper, NodeKind::Data, NodeKind::Oper], [NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -507,12 +507,12 @@ timeout_ms = 20000
 # permissions a node was granted, read without a pass computing them again.
 [[tests]]
 name = "facts_of_graphs_and_nodes"
-desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted."
+desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted. The shape list read `[int [?], f32 [?], f32 [2, 3]]` until 2026-11-18: the order the nodes were created in. It now reads `[f32 [?], int [?], f32 [2, 3]]` because `nodes` answers the canonical order (design principles 9.5), which numbers the graph from what it returns -- the `f32` value first -- and the two facts are the same facts in the walk's own order."
 kind = "behavior"
 case = "../../../cases/modules/graph_facts.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "false\nfalse\ntrue\ntrue\n[int [?], f32 [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
+expect_stdout_exact = "false\nfalse\ntrue\ntrue\n[f32 [?], int [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
 timeout_ms = 10000
 
 # Written (`var`) slots: both passes leave the nodes whose value may be written in place alone.

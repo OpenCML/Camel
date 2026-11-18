@@ -324,6 +324,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     sig.result    = spec.result;
     sig.allocates = spec.allocates;
     sig.external  = spec.externalEffect;
+    sig.spelling  = spec.spelling;
     for (const ResourceAccess &access : spec.accesses) {
         switch (access.binding.kind) {
         case ResourceBinding::Kind::Norm:
@@ -446,6 +447,10 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     if (source.external && !target.external) {
         return false;
     }
+    // Reading the spelling is not read here: it is a capability the check of a body's declaration
+    // owns (Builder::checkInferredResources), where the clause the writer made is in hand. Comparing
+    // it here would refuse every body written in place against a position whose type promises
+    // `pure`, and a lambda has no clause to write the capability in (design principles 5.9, 9.5).
     return true;
 }
 
