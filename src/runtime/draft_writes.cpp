@@ -470,11 +470,15 @@ struct DraftGraphView {
 };
 
 /// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
-/// its value input, read here exactly as `isWrittenInPlace` reads a slot
-/// (`normInputsOf(id).back()`). So the cell a `var` parameter writes is the caller's cell, not the
-/// gate that carries it across the call: asking the gate alone answers "no root holds it" for every
-/// write made through a parameter, which is a write the caller can still read (design
-/// principles 3.5, 9.7).
+/// its value input, which is its first normal input, the same node `isWrittenInPlace` above follows
+/// (design principles 3.1, the author's ruling of 2026-11-17). So the cell a `var` parameter writes
+/// is the caller's cell, not the gate that carries it across the call: asking the gate alone answers
+/// "no root holds it" for every write made through a parameter, which is a write the caller can
+/// still read (design principles 3.5, 9.7).
+///
+/// Until 2026-11-19 this followed `inputs.back()` while the comment above claimed it read the slot
+/// as `isWrittenInPlace` does -- `isWrittenInPlace` has always taken `front()`. So the two walks
+/// disagreed on which input a gate forwards, and this one answered about a wait's cell.
 template <typename View> bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
     std::unordered_set<gc_node_ref_t> seen;
     gc_node_ref_t place = ref;
@@ -489,7 +493,7 @@ template <typename View> bool placeIsRootedWith(const View &view, gc_node_ref_t 
         if (inputs.empty()) {
             return false;
         }
-        place = inputs.back();
+        place = inputs.front();
     }
     // A cycle of GATEs: nothing behind it, so no root holds it.
     return false;
