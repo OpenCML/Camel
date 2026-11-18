@@ -40,12 +40,12 @@
 #
 # Item (c), wall clock of two effects on two resources: the author's ruling on `1b7905cd4` rejected the
 # first reading of this item as one resource written twice (two files are one resource, `fs`: "calls on
-# the file system keep their written order", `stdlib/fs.cml:12`), so `effect_parallel_clock.py` now runs
-# one 200 ms effect on `clock` (`stdlib/process.cml:15`) and one on `rendezvous_point`
-# (`stdlib/test_support.cml:17`, declared `unordered`) in a `main` that is not a `sync` body, alternating
-# the serial and the parallel back end, and prints the median and the range of its runs, the control
-# (`sync` on against `sync` off on the one unordered resource, whose values say how many calls met), and
-# the parallel back end's own decision (`1 run as task graphs`).
+# the file system keep their written order", `stdlib/fs.cml#fs`), so `effect_parallel_clock.py` now
+# runs one 200 ms effect on `clock` (`stdlib/process.cml#sleep`) and one on `rendezvous_point`
+# (`stdlib/test_support.cml#rendezvous_point`, declared `unordered`) in a `main` that is not a
+# `sync` body, alternating the serial and the parallel back end, and prints the median and the
+# range of its runs, the control (`sync` on against `sync` off on the one unordered resource, whose
+# values say how many calls met), and the parallel back end's own decision (`1 run as task graphs`).
 #
 # **Nothing here is a bound on wall clock** -- the entry exists so that the measurement is a thing the
 # tree runs and not a script nobody runs. What it asserts is that the harness ran, stated a reading, and
