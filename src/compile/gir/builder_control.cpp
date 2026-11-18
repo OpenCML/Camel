@@ -3810,6 +3810,23 @@ node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
+    // A `yield` is a node of the construction tree from 2026-11-18 (author's ruling: the generator
+    // body is built here, and the machine splits the body into arms at the `yield` it finds -- and
+    // it can only find what the tree holds). Exactly one machine claims such a node
+    // (`buildGeneratorBody`, `builder_generator.cpp`); one that arrives here is a `yield` nobody
+    // claimed, and the reading is the one the GCT statement builder kept until this seam opened:
+    // "a `yield` reached the statement builder, so the generator machine did not claim it. Nothing
+    // in the program is wrong: the machine missed a shape it builds". It was an internal error
+    // there and it is one here: a refusal is not a defect of the program (author's ruling of
+    // 2026-11-02), so the text never asks the reader to send it.
+    if (gct->exitType() != ExitType::Return) {
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(gct->origin())
+            .commit(
+                "a `yield` reached the translation, so no generator machine claimed it. Nothing in "
+                "the program is wrong: the machine missed a shape it builds");
+        throw BuildAbortException();
+    }
     ExpectedValueScope expectedScope(expectedValueType_, expectedExitTypeHere());
     // `return f`: the function value of a function named here. The name itself is not a
     // value, and left in place it reached the end of compilation as a DREF node.

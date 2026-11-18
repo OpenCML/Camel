@@ -1977,6 +1977,17 @@ class Builder {
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
         const std::string &name, const TagFacts &bodyTags, const FunctionType *written = nullptr);
 
+    /// The body of a function whose `yield` this translation builds: the machine a generator is
+    /// (the state one pull hands to the next, the arms, the stream value), written in
+    /// `builder_generator.cpp`. `ownYieldBodyOf` answers with the body when the body writes a
+    /// `yield` of its own -- not one of a function or a lambda written inside it, whose body is a
+    /// graph of its own -- and with null when it writes none, which is every body today: the
+    /// construction tree's own machine (`gct::Builder::visitGeneratorBody`) claims every `yield`
+    /// before a body reaches this file.
+    GCT::node_ptr_t ownYieldBodyOf(const GCT::node_ptr_t &funcGct) const;
+    void buildGeneratorBody(
+        const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType);
+
     /// Evaluates a declaration's `when` condition at one instantiation. `signature` is the
     /// declaration's signature with the instance's types bound, so the `with` parameter names
     /// are known; `bindings` substitutes the declaration's type variables in the condition's
