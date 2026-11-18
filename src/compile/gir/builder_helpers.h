@@ -450,10 +450,10 @@ inline compile_graph_ptr_t createCompileGraph(
 using camel::core::displayNameOf;
 using camel::core::operatorSymbolOf;
 
-/// The prefix of a name the compiler writes for a built-in operator it means itself (the
-/// `filter` and `map` of a list comprehension). No program can write it, and no declaration
-/// of the program is looked at when it is resolved.
-constexpr std::string_view kBuiltinPrefix = "$builtin::";
+/// The prefix of a name the compiler writes for a built-in operator it means itself. Stated once,
+/// in `core/operator_names.h`: the GCT layer writes such names too (the `filter` and `map` of a
+/// list comprehension) and cannot include this header.
+using camel::core::kBuiltinPrefix;
 
 /// Whether a value of this type can hold a function value: a function itself, or a composite that
 /// can carry one (a tuple or struct field, an array element). A body whose result is of such a type
