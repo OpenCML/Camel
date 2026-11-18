@@ -61,12 +61,12 @@ func opText(n: Node): string {
     }
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('swapped', countOf(p, 'swapped', ':op/mul_l'))
     println('kept', countOf(p, 'kept', ':op/mul_l'))
     println('plain', countOf(p, 'plain', ':op/mul_d'))
@@ -79,7 +79,7 @@ func kept(a: int): int { return a * 2 }
 
 func plain(a: float): float { return a * 5.0 }
 
-func main(): int sync {
+func main(): int spelling sync {
     println(swapped(7), kept(7), plain(3.0))
     return 0
 }

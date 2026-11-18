@@ -31,12 +31,12 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] {
+func nodesOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func mulsOf::<F>(p: F, function: string): int {
+func mulsOf::<F>(p: F, function: string): int spelling {
     let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
     return loop total = 0 for n in muls do total + 1
 }
@@ -49,7 +49,7 @@ export func apply_three::<F>(p: F): F! {
     return p->rewrite<[mul_by_three]>
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('one', mulsOf(p, 'one'), 'two', mulsOf(p, 'two'))
     return p
 }
@@ -64,7 +64,7 @@ func two(x: int): int {
     return x * 2
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     println(one(7), two(7))
     return 0
 }

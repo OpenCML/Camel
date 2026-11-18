@@ -1,0 +1,22 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The spelling lane's acceptance: a transform can only depend on how the program was *written* if
+# its type declares the capability to read it (design principles 9.5, "the graph interface does not
+# see the spelling").
+id = "trans.spelling"
+order = 971
+tier = "fast"
+tags = ["feat", "trans", "graph", "canonical", "effects"]
+
+[[tests]]
+name = "canonical_pairing"
+desc = "`greedy::fuse`, a greedy fusion written in Camel, pairs the multiplications of a graph two at a time in the order `nodes` gives and fuses a pair into one node when the two compute the same product. The same program in two writings -- two statements swapped, every local renamed -- goes through it once each, and the two results are one canonical form (`std::jgir canonical=true`, compared byte for byte, both hashes printed). The counterfactual kept beside it, `greedy::fuse_by_creation`, is the same pairing read against `creation_id`; it declares `spelling` because it reads the number a node was created with, and the two writings then part as two graphs. A body that reads `name` and declares nothing is refused with `SpellingNotDeclared`."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/spelling/canonical_pairing.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["two writings through one greedy fusion are one canonical form: PASS", "the same pairing read against the spelling is two: PASS", "reading the spelling without the capability is refused: PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 120000

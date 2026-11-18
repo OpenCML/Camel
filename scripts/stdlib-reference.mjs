@@ -837,7 +837,13 @@ function readDeclarations(file, module, options = {}) {
                 pendingUri = null
                 continue
             }
-            const result = readResultType(after, lines, i)
+            // A declaration may write the capability clauses it takes after its result type
+            // (`export func name(g: Graph): string spelling`, design principles 9.5). The clause is
+            // not part of the type, so the result every comparison reads is the type alone and the
+            // clause is printed back where the declaration wrote it (signatureText).
+            const stated = readResultType(after, lines, i)
+            const spelling = /\bspelling\s*$/.test(stated)
+            const result = spelling ? stated.replace(/\s+spelling\s*$/, '').trim() : stated
             const entry = {
                 module: module.name,
                 name,
@@ -847,6 +853,7 @@ function readDeclarations(file, module, options = {}) {
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
+                spelling,
                 inferred: result === '' && module.kind === 'camel',
                 // A body-less `export func` in a library module written in Camel declares one of
                 // the module's native operators (`array`'s sorts and primitives): there is no
@@ -962,9 +969,13 @@ function parseHeader(module) {
 // ---- the document -------------------------------------------------------------------------
 
 function signatureText(entry) {
-    if (entry.value) return `${entry.name}: ${entry.result}`
+    // The clause a declaration writes after its result type (`... => string spelling`) states the
+    // capability the body takes, not part of the type: the page prints it where the declaration
+    // writes it, after the result, and every comparison reads `entry.result` without it.
+    const clause = entry.spelling ? ' spelling' : ''
+    if (entry.value) return `${entry.name}: ${entry.result}${clause}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
-    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}`
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}${clause}`
 }
 
 function renderDoc() {
@@ -2815,6 +2826,10 @@ const EXAMPLE_STOPS = {
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
         'stdlib/graph.cml#replace#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
+        'stdlib/graph.cml#name#1':
+            'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
+        'stdlib/graph.cml#origin#1':
+            'the example reads the origin of `n`, which is a node of the surrounding pass, and the reading needs the `spelling` capability no example program can declare (design principles 9.5)',
         'stdlib/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
         'stdlib/prelude.cml#len#3':

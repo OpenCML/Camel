@@ -299,12 +299,22 @@ std::string resourceClause(const FunctionType *fn, bool mangle) {
                                    std::to_string(sig.allocates->name.size()) + sig.allocates->name
                              : "o-";
         out += sig.external ? "e" : "-";
+        out += sig.spelling ? "s" : "-";
         return out;
     }
-    if (sig.pure()) {
+    // `spelling` is a word of the clause like `pure`, and it prints before the list of resources so
+    // that two signatures that differ only in it print differently (design principles 9.5).
+    if (sig.spelling) {
+        out = "spelling";
+        if (sig.pure()) {
+            return out;
+        }
+    } else if (sig.pure()) {
         return "pure";
+    } else {
+        out = std::string();
     }
-    out        = "uses ";
+    out += (out.empty() ? "uses " : " uses ");
     bool first = true;
     // An entry prints the way it is written (design principles 3.3): a resource the call writes
     // carries `var`, and one it only reads does not. Without the word a reader of the type could

@@ -5654,10 +5654,12 @@ their ids; each graph once.
 #### `name`
 
 ```camel
-name: (g: Graph) => string
+name: (g: Graph) => string spelling
 ```
 
-The name of the graph.
+The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
+needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
+that would pick a function by its name takes the function value instead.
 
 - Example: `name(graph_of((x: int): int => x + 1))`
 
@@ -5667,7 +5669,13 @@ The name of the graph.
 nodes: (g: Graph) => Node[]
 ```
 
-The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+The nodes of the graph in canonical order: the order the graph's own structure decides, from the
+exit and the regions' outer accesses along the data and sync edges in port order, with what the
+ports leave open arranged for the smallest numbering table (design principles 9.5, the same walk
+`same_graph` and the block naming use). Two programs that differ only in what the source spelled
+-- two statements swapped, a variable renamed -- give one order, so a pass may pair neighbours in
+it and get one answer for both. The places of removed nodes are skipped; a node nothing reaches
+from the exit (a pure computation nobody uses) comes after the ones that are reached.
 
 - Example: `nodes(graph_of((x: int): int => x + 1))`
 
@@ -5992,10 +6000,12 @@ names is not a function. The name is the one the program writes, or its qualifie
 #### `origin`
 
 ```camel
-origin: (n: Node) => int
+origin: (n: Node) => int spelling
 ```
 
-The source origin id of the node, 0 when unknown.
+The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
+written, so reading it needs a declaration that writes `spelling` in its clause (design
+principles 9.5). Diagnostics and the debugger declare it; a transform does not read it.
 
 - Example (a fragment, not compiled): `origin(n)`
 - Why it is not compiled: n is a node of the surrounding pass
@@ -6052,10 +6062,12 @@ The region the region is in; null for the body (region 0).
 #### `show`
 
 ```camel
-show: (n: Node) => string
+show: (n: Node) => string spelling
 ```
 
-The node on one line: its id, kind, operator and type.
+The node on one line: its id, kind, operator and type. The text is *spelling*: it shows the
+number the node was created with, so reading it needs a declaration that writes `spelling` in
+its clause (design principles 9.5). Diagnostics and the debugger declare it.
 
 - Example (a fragment, not compiled): `show(n)` gives `'%2 Oper :op/mul_l : int'`
 - Why it is not compiled: n is a node of the surrounding pass
@@ -6063,16 +6075,34 @@ The node on one line: its id, kind, operator and type.
 #### `id`
 
 ```camel
-id: (h: Graph) => int
 id: (h: Node) => int
-id: (h: Op) => int
 ```
 
-The number a graph, a node or an operator is known by inside its function: the GraphId, the
-NodeId or the OperId. Stable for the function, so a pass can key a map by it.
+The canonical number of the node: its position in the order `nodes` gives, which the graph's own
+structure decides (design principles 9.5). Two programs that differ only in what the source
+spelled -- the order two statements were written in, the names a variable was given -- number
+their nodes the same, so a pass may key a map by this number and compare two of them to ask which
+node comes first in the canonical order. A node of a draft has no canonical number yet; it
+answers the position of the draft it is in.
 
 - Example (a fragment, not compiled): `id(n)`
-- Why it is not compiled: `n` is the graph the pass runs on
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `creation_id`
+
+```camel
+creation_id: (h: Graph) => int spelling
+creation_id: (h: Node) => int spelling
+creation_id: (h: Op) => int spelling
+```
+
+The number a graph, a node or an operator was created with inside its program: the GraphId, the
+NodeId or the OperId. It is stable for the program, and it is *spelling*: it says the order the
+program was written in, which a transform may not depend on. Reading it needs a declaration that
+writes `spelling` in its clause (design principles 9.5); to order two nodes, use `id`.
+
+- Example (a fragment, not compiled): `creation_id(n)`
+- Why it is not compiled: `n` is a graph, a node or an operator of the surrounding pass
 
 ### Facts
 

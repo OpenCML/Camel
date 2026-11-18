@@ -38,18 +38,18 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] {
+func nodesOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int spelling {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// Prints the addition and product count of every function of the target, so the tests can see
 /// which rule the binding let through and which one the condition of the rule refused.
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('left', countOf(p, 'left', ':op/add_l'), countOf(p, 'left', ':op/mul_l'))
     println('right', countOf(p, 'right', ':op/add_l'), countOf(p, 'right', ':op/mul_l'))
     println('folded', countOf(p, 'folded', ':op/add_l'), countOf(p, 'folded', ':op/mul_l'))

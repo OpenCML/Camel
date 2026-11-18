@@ -255,6 +255,13 @@ class ResourceClauseLoad : public Load {
     bool pure() const { return pure_; }
     void setPure(bool pure) { pure_ = pure; }
 
+    /// Whether the clause writes `spelling`: the body may read the spelling of the program -- a
+    /// name, a source position, creation order and creation numbers, the text a node shows
+    /// (design principles 9.5). It is written in the same clause as `pure`/`uses` and carried by
+    /// the same type, so a declaration that does not write it promises its body reads none.
+    bool spelling() const { return spelling_; }
+    void setSpelling(bool spelling) { spelling_ = spelling; }
+
     void addUse(Reference use, bool write, camel::core::error::TokenRange range) {
         uses_.push_back(Uses{std::move(use), write, range});
     }
@@ -265,6 +272,7 @@ class ResourceClauseLoad : public Load {
 
   private:
     bool pure_ = false;
+    bool spelling_ = false;
     std::vector<Uses> uses_;
 };
 

@@ -2588,8 +2588,15 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
     // The clause's tokens run together without white space or comments: a leading `pure` is the
     // word, while `uses pure` (a parameter of that name) starts with `uses`. The parser reads
     // both words so that `pure uses fs` is reported where it is written (PureAndUses) rather
-    // than as a syntax error.
-    if (context->text().starts_with("pure")) {
+    // than as a syntax error. `spelling` is read the same way and is written before the rest
+    // (design principles 9.5), so the prefix is read here too -- and `uses spelling` names a
+    // resource of that name, which starts with `uses`.
+    std::string clauseText = context->text();
+    if (clauseText.starts_with("spelling")) {
+        clause->setSpelling(true);
+        clauseText = clauseText.substr(std::string_view("spelling").size());
+    }
+    if (clauseText.starts_with("pure")) {
         clause->setPure(true);
     }
     for (const auto entry : context->all<cst::UsesEntry>()) {

@@ -56,11 +56,19 @@ export func graph_of::<F>(f: F): Graph when is_function::<F>()
 /// @example len(graphs_of((x: int): int => x + 1))
 export func graphs_of::<F>(f: F): Graph[] when is_function::<F>()
 
-/// The name of the graph.
+/// The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
+/// needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
+/// that would pick a function by its name takes the function value instead.
 /// @example name(graph_of((x: int): int => x + 1))
-export func name(g: Graph): string
+export func name(g: Graph): string spelling
 
-/// The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+/// The nodes of the graph in canonical order: the order the graph's own structure decides, from the
+/// exit and the regions' outer accesses along the data and sync edges in port order, with what the
+/// ports leave open arranged for the smallest numbering table (design principles 9.5, the same walk
+/// `same_graph` and the block naming use). Two programs that differ only in what the source spelled
+/// -- two statements swapped, a variable renamed -- give one order, so a pass may pair neighbours in
+/// it and get one answer for both. The places of removed nodes are skipped; a node nothing reaches
+/// from the exit (a pure computation nobody uses) comes after the ones that are reached.
 /// @example nodes(graph_of((x: int): int => x + 1))
 export func nodes(g: Graph): Node[]
 
@@ -230,10 +238,12 @@ export func tag_graphs(t: Tag): Graph[]
 /// @example rule_of(graph_of((x: int): int => x + 1), 'vjp')
 export func rule_of(g: Graph, name: string): Graph?
 
-/// The source origin id of the node, 0 when unknown.
+/// The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
+/// written, so reading it needs a declaration that writes `spelling` in its clause (design
+/// principles 9.5). Diagnostics and the debugger declare it; a transform does not read it.
 /// @example-fragment n is a node of the surrounding pass
 /// @example origin(n)
-export func origin(n: Node): int
+export func origin(n: Node): int spelling
 
 /// The value of a constant node as the type T (a number, a bool or a string), null for a node
 /// that is no constant of that type. T is written (`constant::<int>(n)`).
@@ -260,21 +270,36 @@ export func region_kind(r: Region): RegionKind
 /// @example region_parent(r)
 export func region_parent(r: Region): Region?
 
-/// The node on one line: its id, kind, operator and type.
+/// The node on one line: its id, kind, operator and type. The text is *spelling*: it shows the
+/// number the node was created with, so reading it needs a declaration that writes `spelling` in
+/// its clause (design principles 9.5). Diagnostics and the debugger declare it.
 /// @example-fragment n is a node of the surrounding pass
 /// @example show(n)    // '%2 Oper :op/mul_l : int'
-export func show(n: Node): string
+export func show(n: Node): string spelling
 
-/// The number a graph, a node or an operator is known by inside its function: the GraphId, the
-/// NodeId or the OperId. Stable for the function, so a pass can key a map by it.
-/// @example-fragment `n` is the graph the pass runs on
+/// The canonical number of the node: its position in the order `nodes` gives, which the graph's own
+/// structure decides (design principles 9.5). Two programs that differ only in what the source
+/// spelled -- the order two statements were written in, the names a variable was given -- number
+/// their nodes the same, so a pass may key a map by this number and compare two of them to ask which
+/// node comes first in the canonical order. A node of a draft has no canonical number yet; it
+/// answers the position of the draft it is in.
+/// @example-fragment n is a node of the surrounding pass
 /// @example id(n)
 #op('graph:id')
-export func id(h: Graph): int
-#op('graph:id')
 export func id(h: Node): int
-#op('graph:id')
-export func id(h: Op): int
+
+/// The number a graph, a node or an operator was created with inside its program: the GraphId, the
+/// NodeId or the OperId. It is stable for the program, and it is *spelling*: it says the order the
+/// program was written in, which a transform may not depend on. Reading it needs a declaration that
+/// writes `spelling` in its clause (design principles 9.5); to order two nodes, use `id`.
+/// @example-fragment `n` is a graph, a node or an operator of the surrounding pass
+/// @example creation_id(n)
+#op('graph:creation_id')
+export func creation_id(h: Graph): int spelling
+#op('graph:creation_id')
+export func creation_id(h: Node): int spelling
+#op('graph:creation_id')
+export func creation_id(h: Op): int spelling
 
 // ---- facts ----
 

@@ -1039,6 +1039,43 @@ void Builder::reportResourceViolation(
             : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
 }
 
+void Builder::reportSpellingNotDeclared(const compile_graph_ptr_t &graph) {
+    // The capability half of the same promise the resource check makes (design principles 9.5).
+    // Anchored at the declaration, like the resource report, and with a note at the first node
+    // whose own reach reads the spelling: that is the place the writer has to look at.
+    camel::source::origin_id_t firstRead = 0;
+    for (draft_node_ref_t id = 0; id < graph->view().nodeSlotCount(); ++id) {
+        if (!graph->view().alive(id)) {
+            continue;
+        }
+        const node_handle_t node = graph->view().ref(id);
+        const auto reach         = footprintOf(graph.get(), id);
+        if (!reach.has_value() || !reach->spelling) {
+            continue;
+        }
+        firstRead = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+        break;
+    }
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::SpellingNotDeclared);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    if (sourceContext != nullptr) {
+        const auto origin = sourceContext->debugMap().graphOrigin(graph->graphId());
+        if (origin != camel::source::kInvalidOriginId) {
+            builder.atOrigin(origin);
+        }
+    }
+    if (firstRead != 0) {
+        builder.relatedOrigin(
+            firstRead,
+            "the first reading of the spelling in this body: it is what the type would have to "
+            "declare");
+    }
+    // No type text: by the time this runs, a body that wrote no clause has its settled set written
+    // to its type, so quoting the type here would show the very `spelling` the message says is
+    // missing. The position is the declaration and the note is the read.
+    builder.commit();
+}
+
 void Builder::reportResourceConflict(
     const ResourceConflict &conflict, DraftGraphBuilder *leftOwner, DraftGraphBuilder *rightOwner) {
     // Anchored at the declaration that wrote no clause when the two met: the position cannot repair

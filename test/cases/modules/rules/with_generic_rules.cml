@@ -27,19 +27,19 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] {
+func nodesOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int spelling {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// One line per function: how many additions and how many products it holds. The pattern of the
 /// rule bound to 2 matches the products of `wide` and `again` and not the one of `thrice`, and the
 /// replacement it builds from the value adds an addition -- what the value was read for.
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('wide', countOf(p, 'wide', ':op/add_l'), countOf(p, 'wide', ':op/mul_l'))
     println('again', countOf(p, 'again', ':op/add_l'), countOf(p, 'again', ':op/mul_l'))
     println('thrice', countOf(p, 'thrice', ':op/add_l'), countOf(p, 'thrice', ':op/mul_l'))
