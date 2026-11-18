@@ -260,15 +260,16 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     std::optional<SegmentDeviceOps> device_;
     bool reasons_;
     bool declarations_;
+    bool outlinesForDevice_;
     static inline bool i64Reported = false;
 
   public:
     RegionOutlineTestPass(
         const core::context::context_ptr_t &context, operator_t run = nullptr,
         std::optional<SegmentDeviceOps> device = {}, bool reasons = false,
-        bool declarations = false)
+        bool declarations = false, bool outlinesForDevice = false)
         : RuntimeGraphRewritePass(context), run_(run), device_(device), reasons_(reasons),
-          declarations_(declarations) {}
+          declarations_(declarations), outlinesForDevice_(outlinesForDevice) {}
     const runtime::Program *apply(const runtime::Program *program, std::ostream &os) override {
         size_t count = 0;
         auto *result = outlineRegions(
@@ -280,7 +281,10 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
             : run_ == &testCompiledCall ? "tiles:test_compiled_call"
                                         : "tiles:run_compiled",
             count,
-            device_ ? &*device_ : nullptr);
+            device_ ? &*device_ : nullptr,
+            /*refuseGpuScopes=*/false,
+            /*error=*/nullptr,
+            outlinesForDevice_);
         // Global declaration replacement and detached graph publication happen
         // before scheduler execution, never in a PRL worker or concurrent call.
         if (run_ == &testCompiledCall && std::getenv("CAMEL_TILES_TEST_INVALIDATION")) {
@@ -450,7 +454,9 @@ void registerRegionTestPasses(
     registerModulePass(
         "tiles::test_outline_gpu",
         [run](const core::context::context_ptr_t &ctx) {
-            return std::make_unique<RegionOutlineTestPass>(ctx, run);
+            return std::make_unique<RegionOutlineTestPass>(
+                ctx, run, std::optional<SegmentDeviceOps>{}, /*reasons=*/false,
+                /*declarations=*/false, /*outlinesForDevice=*/true);
         });
 }
 } // namespace camel::tiles
