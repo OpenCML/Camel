@@ -56,6 +56,20 @@ inline constexpr std::string_view kAssignmentGroup = "__assn__";
 /// layer asks it by calling this rather than comparing the prefix itself.
 inline bool isAssignmentUri(std::string_view uri) { return uri.starts_with(":op/assn"); }
 
+/// The prefix of a name the compiler writes for a built-in operator it means itself, when the name
+/// is not the program's: `$builtin::filter`, `$builtin::map`, `$builtin::range`. No program can
+/// write it, and no declaration of the program is looked at when it is resolved (the GIR builder
+/// resolves it in the built-in module).
+inline constexpr std::string_view kBuiltinPrefix = "$builtin::";
+
+/// The name the compiler writes for the built-in operator `plain`: the one place a compiler-made
+/// operator name is built, so the three builders that need one -- a list comprehension's `filter`
+/// and `map`, and the `range` an interval `a..b` is -- do not each paste the prefix in front of a
+/// word (daily review 2026-11-18, item 4; the author made this follow-up O's on 2026-11-19).
+inline std::string compilerNamedOperator(std::string_view plain) {
+    return std::string(kBuiltinPrefix) + std::string(plain);
+}
+
 /// The name the compiler writes for `a..b` before the two readings of the construct are told
 /// apart (design principles 4.2; the rule on
 /// the rule): between two functions it is the composition `f..g`, the

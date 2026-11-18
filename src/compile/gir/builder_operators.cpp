@@ -1691,8 +1691,9 @@ constexpr std::string_view kCompParameter = "$comp_arg";
 constexpr std::string_view kCompLhs       = "$comp_f";
 constexpr std::string_view kCompRhs       = "$comp_g";
 // The built-in `range(start, end)`, which is what the interval reading of `..` is: referred to
-// by the name the compiler writes for a built-in operator (design principles 4.2).
-constexpr std::string_view kRangeCall = "$builtin::range";
+// by the name the compiler writes for a built-in operator (design principles 4.2). The name is
+// made by `core::compilerNamedOperator`, the one place such a name is built.
+const std::string kRangeCall = camel::core::compilerNamedOperator("range");
 } // namespace
 
 node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expected) {
