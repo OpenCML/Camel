@@ -253,6 +253,42 @@ class CommitPortTypeTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * Reads the same promise on the graph no narrower placement could reach: one **this transaction
+ * made**.
+ *
+ * `validateRuntimeGraphPortTypes` is asked of every graph a commit encodes, so this graph owes the
+ * answer for the same reason every other one does. Two narrower placements missed it, and neither
+ * was the case either was written for -- that case was the compiler's own outputs (`*$spec*`,
+ * `main$lift0`, `split_of_jvp_of_*_backward`) whose norm-port lists sat one place over from their
+ * signatures, a defect since fixed at its source. Measured 2026-11-18: the commit's closing loop
+ * decodes a made graph, finds no write recorded, drops it from `edited_`, so a commit that asked
+ * only the graphs it edited never asked it (`graph 'made$mismatch' not asked the port question
+ * (edited=0, made=1)`); and the signature tier `sameSignature(before, after)` would have waived it
+ * too, a made graph having a `before` that is itself, both its nodes and its signature written by
+ * the draft, so the comparison can only answer "unchanged".
+ *
+ * Two drafts, one question, and the two answers are the reading:
+ *   * the made graph declares parameter 0 as `i32` and its port node carries an `i32` -- the commit
+ *     must publish it, which is what says a made graph is not simply refused for being made;
+ *   * the same graph declares parameter 0 as `i32` while its port node carries an `f32` -- the
+ *     commit must refuse it, naming the parameter, the declared type and the type the port node
+ *     carries. A made graph is wrong from the moment it is made, and this is the moment.
+ *
+ * The two graphs are encoded by the transaction that makes them and handed to the session through
+ * `noteMadeGraph`, the seat `RuntimeGraphDraftSession` gives a graph the edit made (design
+ * graph-editing 2.5: the draft of `edit d = f` is `f`, the graphs `f` reaches **and the graphs this
+ * edit makes**). The fixture is `test/cases/opt/commit_checks/port_type.cml`, and neither draft
+ * touches it: what the program is, is only what `std::nvm` runs after the commits.
+ */
+inline constexpr const char *kCommitMadeGraphPortsTestPass = "test::commit_made_graph_ports";
+class CommitMadeGraphPortsTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the same defect through the exemption every pass written in Camel has, in one run:
  * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
  * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was
