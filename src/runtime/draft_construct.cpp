@@ -109,6 +109,10 @@ std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
 void GraphDraft::retargetOperNode(gc_node_ref_t id, std::string_view uri) {
     requireOneWriting("retargetOperNode");
     ++mutations_;
+    // Changing which operator a node runs is the table's second low-level edit ("change an
+    // operator", docs/design/graph-editing/README.cn.md 8.1): the node is the same node, so nothing
+    // is made, and what the graph reaches past its own type can have changed all the same.
+    noteLowLevelEdit(id);
     DraftNode *draftNode = node(id);
     ASSERT(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Oper,

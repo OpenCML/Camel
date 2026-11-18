@@ -1,0 +1,36 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# `inline` as an operator of a transaction: the two semantics the ruling of 2026-11-18 gave
+# (`e55cd6157`; docs/handover/questions/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
+# section 5, docs/design/graph-editing/README.cn.md 7 and 15.3).
+#
+# The readings are printed by the program itself, because the two branches are not told apart by
+# counting nodes: both add the body's code. What differs is where it lands and what the block's
+# chain does.
+#
+#   `at` a statement of the chain (here the block's second print, which holds a place because it
+#   writes): the print is gone, the body's gate stands where the print stood -- written after the
+#   node the print was written after --, and the edited function prints `first` and no `5`.
+#
+#   `at` a pure node (here the addition `c = a + b`): the chain is unchanged, the addition still
+#   reads its two calls and the print still reads it, the body's node is in an Inline region whose
+#   parent is the addition's own region, and the edited function prints what it printed.
+#
+#   `at` the call of a function that writes nothing (here `inc(2)`): by the ruling's words a call is
+#   a statement, and by the graph's structure it holds no place to take over. The reading says which
+#   one the operator followed: the call is still there, still reads `2`, the chain did not move.
+id = "modules.graph_inline"
+order = 378
+tier = "fast"
+tags = ["feat", "modules", "graph", "edit", "inline"]
+
+[[tests]]
+name = "inline_at_a_statement_takes_over_its_place"
+desc = "at a statement: the node is gone and the body stands in its place; at a pure node: the chain is unchanged and the body lands in an Inline region of that node's region"
+kind = "behavior"
+case = "../../../cases/modules/graph_function/inline.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n5\n[pure] prints=2->2 body=0->1 sum_kept=1 sum_reads=call(inc),call(inc) sum_readers=1 value=const(42)\n[pure] body=1 node(s), region=RegionKind::Inline parent_is_sum_region=true\n[pure] chain=:io/println<-:io/println gate<-:io/println -> :io/println<-:io/println gate<-:io/println\n[pure] the edited function runs:\nfirst\n5\n[call] inc_calls=2->2 body=0->1 target_sync_in=(none) call_reads=const(2) call_feeds=1 chain_same=true value=const(42)\n[stmt] prints=2->1 body=0->1 value=gate\n[stmt] last=gate (written after :io/println) anchor=gate reading const(42)\n[stmt] chain=:io/println<-:io/println gate<-:io/println -> gate<-:io/println gate<-gate\n[stmt] the edited function runs:\nfirst\n"
+timeout_ms = 20000

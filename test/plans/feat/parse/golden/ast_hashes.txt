@@ -522,7 +522,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-45e14e46b35110d4 ok stdlib/graph.cml
+45ea8b257cc22d5a ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -3071,6 +3071,7 @@ a4d54a5a8ece49dc ok test/cases/modules/autodiff/jax_names/jvp.cml
 49c3d8258c5de697 ok test/cases/modules/autodiff/jax_names/vmap_in_axes.cml
 0a20005a7e7a5b51 ok test/cases/modules/autodiff/jax_names/vmap_two_parameters.cml
 719b646e1f2f387c ok test/cases/modules/graph_function/edit.cml
+47acaa202ed7226e ok test/cases/modules/graph_function/inline.cml
 6ca0c5a532e79bfa ok test/cases/modules/graph_function/open_not_function.cml
 a2d8495ed82bf6c1 ok test/cases/modules/graph_function/reads.cml
 74a7356101d6c70e ok test/cases/modules/graph_pass/arm_join_target.cml
@@ -3924,6 +3925,7 @@ e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 4458f4f7e6cb467b ok test/cases/opt/commit_checks/fold_function_type.cml
 5ea4b89de03c989f ok test/cases/opt/commit_checks/generic_call.cml
 4b03f511a3efb360 ok test/cases/opt/commit_checks/identity_at_exit.cml
+1a71a9d22c46c7e8 ok test/cases/opt/commit_checks/inplace_edit.cml
 3bb03717c029f772 ok test/cases/opt/commit_checks/loop_body_read.cml
 21270de361be5622 ok test/cases/opt/commit_checks/port_type.cml
 deda32f3f56dabf6 ok test/cases/opt/commit_checks/sibling_arm.cml

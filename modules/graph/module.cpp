@@ -234,6 +234,7 @@ class GraphModule final : public BuiltinModule {
                 {"abort", false},
                 {"eval", false},
                 {"order", false},
+                {"inline", false},
                 {"graph_of", true},
                 {"add_constant", false},
             });
@@ -253,6 +254,7 @@ class GraphModule final : public BuiltinModule {
                     {"erase", onTxn},
                     {"eval", onTxn},
                     {"order", onTxn},
+                    {"inline", onTxn},
                     {"add_constant", onTxn},
                     {"commit", onTxn},
                     {"abort", onTxn},
