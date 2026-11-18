@@ -76,10 +76,18 @@
  *     `T?` itself and no null-and-cast pair stands there. **Do not read the pair as the shape this
  *     machine aims at**: it is the shape that can be built while the slots are still cells, and it
  *     is written down here so that the next reader knows which of the two they are looking at.
- *   * the loop's condition tests the round state's second part with **`__eq__`** --
- *     `__eq__(state.1, 0)`, a call -- while an arm's dispatch tests the pc with **`eq_l`**
- *     (`equalTo(pcCell, pc)`, a literal comparison). They are different operators, and a machine
- *     that used either for both would read the same on a small case and differ in the graph.
+ *   * the loop's condition tests the round state's second part with a **call to `__eq__`**
+ *     (`__eq__(state.1, 0)`), and so does an arm's dispatch (`equalTo` at `gct/builder.cpp:6072`
+ *     is `makeLink(2) << makeDRef("__eq__") << readCell(name) << intLiteral(value)`). **Both are the
+ *     same operator, seen at two layers**, and this was read off the published graph and not off the
+ *     construction tree: `std::jgir` of the generator case holds **four** `:op/eq_l` nodes, three in
+ *     the arm regions and one in the *loop condition's* region (`g4r1`), each fed by a `DATA` int
+ *     literal. So `__eq__` on two `int`s **is** `:op/eq_l` once the group is resolved, and a machine
+ *     that built one place as a group call and the other as a direct operator would publish the same
+ *     graph while differing from itself at the construction layer -- which is a difference nobody can
+ *     see and everybody would have to keep in step. Build both as the group call and let the
+ *     resolution decide. (An earlier draft of this comment called them two operators; the target
+ *     said otherwise, and the target is the one that is read.)
  *
  * Where a `var` written inside an arm goes -- asked, read, answered (`builder_control.cpp:2134`):
  * `mergeArmVariables` is not a mechanism of regions. It walks the `ArmBuild` bookkeeping a *visitor*
