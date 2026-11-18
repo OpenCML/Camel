@@ -2834,6 +2834,8 @@ const EXAMPLE_STOPS = {
             'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
         'stdlib/graph.cml#creation_id#1':
             'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
+        'stdlib/graph.cml#outline#1':
+            '`t` is an open transaction and `ns` a group of its graph\'s nodes: a doc example has neither',
         'stdlib/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
         'stdlib/prelude.cml#len#3':

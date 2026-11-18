@@ -12,8 +12,8 @@
 | [`2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain`](2026-11-18-a-call-to-a-pure-function-has-no-place-on-the-chain.cn.md) | A call to a pure function has no place on the chain, so two of the three rows read the same |
 | [`2026-11-18-specialization-carries-its-ports-one-place-over`](2026-11-18-specialization-carries-its-ports-one-place-over.cn.md) | Specialization publishes its ports one place over from its own signature |
 | [`2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch`](2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md) | The citation check demands a design page that by design lives only on the author's branch |
-| [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | The exemption list accepts a reason that is no longer why, and hides the names it says are clean |
-| [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | The tiles pass publishes a body before the type that describes it |
+| [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | 一条豁免该不该连「它记的那条原因」一起校验——原因不再成立时，它还是豁免吗？ |
+| [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 

@@ -522,14 +522,14 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-45ea8b257cc22d5a ok stdlib/graph.cml
+0a1ec7e25ad529de ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
 0ae128e62d27c378 ok stdlib/math.cml
 35b10ccc6987db19 ok stdlib/nn.cml
 86e965365e6a3de8 ok stdlib/onnx.cml
-fcd99c5b56838b14 ok stdlib/opt.cml
+52c6d5265b1040e0 ok stdlib/opt.cml
 2a0283eedb1877a0 ok stdlib/optim.cml
 9b35942b550de4e6 ok stdlib/para.cml
 8ab5db69d015f0f8 ok stdlib/perf.cml
@@ -544,7 +544,7 @@ bb4f371c5fc7c439 ok stdlib/random.cml
 e5785f40146107c0 ok stdlib/sim.cml
 5bf0e17861c0ec55 ok stdlib/state.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
-9f90e55ee60e5feb ok stdlib/std.cml
+475a70bc776cb129 ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
 1df6aaef0265dfcb ok stdlib/stream.cml
 95098d3e31cd398d ok stdlib/tensor.cml
@@ -3075,6 +3075,7 @@ a4d54a5a8ece49dc ok test/cases/modules/autodiff/jax_names/jvp.cml
 719b646e1f2f387c ok test/cases/modules/graph_function/edit.cml
 47acaa202ed7226e ok test/cases/modules/graph_function/inline.cml
 6ca0c5a532e79bfa ok test/cases/modules/graph_function/open_not_function.cml
+3022bbe3b441096d ok test/cases/modules/graph_function/outline.cml
 a2d8495ed82bf6c1 ok test/cases/modules/graph_function/reads.cml
 74a7356101d6c70e ok test/cases/modules/graph_pass/arm_join_target.cml
 ae72c3f152f64055 ok test/cases/modules/graph_pass/camel_import_values.cml
@@ -3931,6 +3932,7 @@ e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 3bb03717c029f772 ok test/cases/opt/commit_checks/loop_body_read.cml
 21270de361be5622 ok test/cases/opt/commit_checks/port_type.cml
 deda32f3f56dabf6 ok test/cases/opt/commit_checks/sibling_arm.cml
+8122dcd542bc3e1a ok test/cases/opt/cxx_isolation/subject.cml
 0e0caabcbb90b4eb ok test/cases/opt/defun/captured.cml
 48e74295fd29a520 ok test/cases/opt/defun/closure_dispatch.cml
 67b9fbb450feedf7 ok test/cases/opt/defun/effects.cml

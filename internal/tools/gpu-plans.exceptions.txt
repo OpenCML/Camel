@@ -47,22 +47,47 @@
 #     case that is red because Camel is wrong belongs in a fix, not in this file;
 #   * delete a name as soon as the case is fixed. A stale entry is accepted as it is and the run says
 #     the file can be trimmed, so deleting one can never be what turns the gate red.
+#
+# AN ENTRY NOW CARRIES THE REASON IT IS RED, and the gate checks it (2026-11-18):
+#
+#   outlined_execution.nvm :: 0x040001B0
+#
+# The reason is the diagnostic's own code as the failure printed it (`code=0x040001B0`), which is the
+# language's name for the diagnostic and does not drift with its wording; a failure that prints no
+# code is recorded by its own assertion's first words. A case that is red for a reason other than the
+# one written here is NEWS, not a known red, and makes the run exit 5 -- because a name recorded for
+# failure A, red for failure B, is not a red anybody has decided anything about.
+#
+# WHY THIS COLUMN EXISTS. On 2026-11-18 the thirteen below were recorded for one defect (the outlined
+# count, `TILES_OUTLINED 5` where the recorded output says 10) and were all red for a different one:
+# `tiles::compile` publishing a body before the type that covers it, refused by the commit checks
+# (`PassEffectBeyondType 0x040001B0`, see
+# `docs/handover/questions/2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md`). For
+# weeks the file said "known red" about a failure that had gone away and been replaced, and nothing
+# in the gate could notice. The reasons below were re-read on 2026-11-18 and every one of them is the
+# failure that is actually there today.
+#
+# THESE REASONS ARE NOT APPROVALS. Thirteen of them are recorded against a defect that is still open
+# and is still owed a fix; writing the real reason down does not turn any of them into "solved", and
+# none of these names may be deleted until the case is green for the reason named here.
 
-# One defect: the outlined-region count, wrong on all four back ends. Not exempt, owed.
-outlined_execution.fvm
-outlined_execution.jit
-outlined_execution.nvm
-outlined_execution.prl
-outlined_resident_execution.fvm
-outlined_resident_execution.jit
-outlined_resident_execution.nvm
-outlined_resident_execution.prl
-preferred_resident_execution.fvm
-preferred_resident_execution.jit
-preferred_resident_execution.nvm
-preferred_resident_execution.prl
-resident_graph_transfers
+# One defect: `tiles::compile` publishes the body it rewrote before the type that covers it, so the
+# commit that splices the transfer nodes refuses the graph it just built. Still owed a fix (the
+# outlined count these were originally recorded for is no longer what fails).
+outlined_execution.fvm :: 0x040001B0
+outlined_execution.jit :: 0x040001B0
+outlined_execution.nvm :: 0x040001B0
+outlined_execution.prl :: 0x040001B0
+outlined_resident_execution.fvm :: 0x040001B0
+outlined_resident_execution.jit :: 0x040001B0
+outlined_resident_execution.nvm :: 0x040001B0
+outlined_resident_execution.prl :: 0x040001B0
+preferred_resident_execution.fvm :: 0x040001B0
+preferred_resident_execution.jit :: 0x040001B0
+preferred_resident_execution.nvm :: 0x040001B0
+preferred_resident_execution.prl :: 0x040001B0
+resident_graph_transfers :: 0x040001B0
 
 # Not yet classified: bit-preservation assertions, to be split into "the device" and "the code".
-multi_state_loop_device
-static_loop_device
+multi_state_loop_device :: swap1-must-preserve-exact-initial-bits
+static_loop_device :: empty-loop-changes-initial-bits
