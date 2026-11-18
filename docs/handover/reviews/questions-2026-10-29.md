@@ -4241,3 +4241,41 @@ ECOOP 演算证明提交需要且只需要六项：出口在顶层区域、无�
 随之的口径：`std::opt` 等阶段里的规则若丢掉一个会出故障或不终止的计算，结果"更有定义"是允许的精化；E9 比对不同流水线时，"优化后故障消失"单列为允许的差异，不算错值，并在报告里计数。
 
 **批复（2026-11-18 21:20）**：`0c72ff230` 的归纳对："一个遍能撞上的拒绝，是它收到的那张图的证据"。三处都是前端造的图本身违反了自己的判据：没写资源集的"非纯"被读成访问一切、开放长度的零答成空数组、体里的效应没连到代表其区域的所属节点。按第 8 条规矩在前端（造图处）修，不在报出拒绝的遍里补；并把"在任何遍之前先对前端交出的图跑一遍同样的检查"做成调试构建里的常设断言。另：`inline` 两支的判据请用"可自由安排"那一个谓词（原则 3.4），不要另用 `may_be_recomputed` 拼出一个近似。
+
+## 每日审查（2026-11-18）
+
+范围：develop 过去 24 小时非合并提交 171 笔，动代码 80 笔（47%，昨天 22%），代码 +9965/−4546。三个只读子代理按领域读 diff，下面每条决策者读代码核实过；没核实或核实后不成立的不列（例：草稿节点的默认编号在 `modules/graph/read.cpp` 约 1091 行对草稿是拒绝而非给创建编号，不算泄漏）。方向对的不少：出口 `GATE` 收写、`SsaEnv` 成为唯一归宿、`split` 只做一次、提交检查按"碰过的区域及祖先"增量、规则与图模块的新算子都过同一个提交入口。问题按设计缺口排：
+
+**一、提交检查（车道 A/K，最先）**
+1. **六项缺两项**：出口在顶层区域、无环、效应、冲突都在；**作用域**（输入在节点所在区域看得见）与**端口与声明的类型一致**没有加（`edit` 改签名靠的正是后者）。补上，各收用例。
+2. **分档按"新建了节点"，漏掉"改了已有节点"**：`src/runtime/resources.cpp:1800` `if (made.empty()) return std::nullopt;`——一次只给已有节点加同步输入、改它的算子使之成为写的编辑，`made` 为空，效应与冲突整个跳过。分档要按"这次编辑会破坏哪些项"（ECOOP 证明的那张表：`replace` 破坏无环、作用域、端口；带访问的 `inline` 破坏后五项……），不按"有没有新节点"。
+
+**二、"是不是一个写"有三份**
+3. `src/core/resource_semantics.cpp:457` 新增的 `writesForTheRegion(const ResourceSignature&)` 自称"与 `OperatorSemantics::writesForTheRegion` 同样的两个问题、同样的写法"（`operator_semantics.cpp:254`），加上 `builder_diagnostics.cpp` 的 `writesForRegionOf`，同一个谓词三份。收成一个：算子语义调用签名那一份，前端只调用它。
+
+**三、赋值节点又被降回按名字的调用**
+4. `31b14394b` 加了 `NodeKind::ASSIGN`，但 `builder_operators.cpp:2255/2261` 仍 `makeDRef("__assn__")`、`gct/builder.cpp:2899` 仍比 `"__assn__"`；`builder_expr.cpp:971/1370/3221` 三处 `starts_with(kBuiltinPrefix)` 还在（`395c5f882` 说明写着"前缀判断已删"）。建图直接按 `ASSIGN` 的种类与形式处理写，不经名字解析出的 `__assn__` 调用；前缀判断删除。
+
+**四、`GATE` 的布局知识散在各处**
+5. "值是第一个输入、其余是等待"现在在运行时 9 个文件里各写一次 `.front()`，执行计划（`dataPredecessorsReadAsValues`）、规范形式（并列组）、改写引擎（`carriesObservedRunning`）又各自推一遍；变换侧有 `modules/transforms/exit_gate.h`。收成图内核里一个访问函数（取值、取等待），`exit_gate.h` 并进去，所有读者调用它。
+
+**五、计数在运行时补**
+6. `applyRefEntriesOfOpenLoops` 在故障处理里被各后端调用 16 处（nodevm 4、fastvm 6、gotovm 2、jit 1、taskflow 3），是计划之外、单一算子钩子之外的又一条执行路径。故障展开时的归还应当是执行层循环帧展开的一处逻辑（与 `loopEnd` 同一处），后端不各自接。
+7. `6eb5e2c15` 的 `takesTheReferenceForItsValue` 按"结果与实参同类型码"猜"可能交回实参本身"，`3c460b37a` 按 `TypeCode::Stream || Function` 判"被调者还没结束"：两处都改为读声明（算子声明交回实参、闭包捕获了什么），不按类型码猜。
+
+**六、前端在用的地方补**
+8. `563a8df31` 的 `writesTheExit`（"r6 形状"）、`f08d1ffe0` 对"前端没登记的被调者"一律 `answer(true)`、`c901d3746` 的 `orderedAlready`（自写一遍 `runtime::orderIncomplete` 的可达性）：都改为调用同一个谓词，没登记的被调者是前端缺陷，修登记，不保守兜底。
+
+**七、生成器**
+9. GIR 路径开了头（`48473af98`、`b62b76de5`），但 pc 仍用 `:var/new` 单元、只认 `yield 字面量`；GCT 的单元形式还在被继续细化（`775fbc925`、`694ad95e5`、`8f52c7336`）。停止细化 GCT 路径，GIR 路径照 11-18 的计划：先建好再改写的接缝，全部槽 `T?`、带检查的拆开算子；完成后删除 GCT 的生成器单元路径。
+
+**八、变换**
+10. `split` 对出口 `GATE` 有等待的函数一律拒绝（`modules/transforms/split.cpp:859` "a gate that waits on a statement"）——即带打印的函数今天走不通 `split`。这与 `7dcf8bc9f` 合并说明"带打印的函数 `grad` 得 6、打印一次"对不上：说明那条走的是哪条路（原生 `grad`、`jvp`，还是库的 `vjp`）。效应骨架带进前向一半按计划做，不是拒绝。
+11. 零的形状见证按类型的字符串比对（`491946619`：`witnessType->toString() == portType->toString()`）：改为类型相等。
+
+**九、流程**
+12. `e81642ed8` 把一段"WIP 关掉"的代码合进了 develop，`b8336dbd1` 合入时 `feat/compile` 有 39 条非已知的红、下一笔才修。develop 上不合入关掉的半成品；每次合并六计划非已知红为 0。
+13. 说明与改动不符：`46a6522ef`（"图层面不再有区域与写的规则"，同日三笔又在前端加了区域相关的写规则）、`395c5f882`（前缀判断"已删"）。
+14. 中心文件：`gct/builder.cpp` 8.8k 行仍在涨，`builder_diagnostics.cpp` 2987、`runtime/graph.cpp` 3755、`transpose.cpp` 5803、`split.cpp` 4070 都还在涨；`b97686319`、`ab0549bd9` 的拆分是挪而非减。车道图里"中心文件压回 2500 行"在 E 合入后做，每笔报拆前拆后，要求净减。
+
+无需负责人裁定的语义或原则改动。
