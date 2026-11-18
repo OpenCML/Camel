@@ -36,6 +36,7 @@
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
 #include "src/passes/opt/generic/rewrite.h"
@@ -455,6 +456,125 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     return NullSlot;
 }
 
+/// `inline(t, at, fn)`: the body of the function value `fn` spliced into the region `at` is in,
+/// answering the node that holds the body's value. `at` decides the place as well -- the ruling of
+/// 2026-11-18 (`e55cd6157`) on docs/handover/questions/2026-11-18-the-at-of-inline-says-a-region-
+/// not-a-place.cn.md, and docs/design/graph-editing/README.cn.md 7 and 15.3:
+///
+/// * `at` is the call `fn` is made at -- the shape `replace(call, inline(call, ...))` expands in
+///   place: the body is spliced where the call stood, takes over its place in the block's chain
+///   and its order edges, and the call is gone. The call's own arguments are the actuals.
+/// * `at` is another statement of its block's chain -- an effect or a node that may fault -- it
+///   hands that place over to the code the body becomes and is gone afterwards. `fn` takes no
+///   arguments: there is no call site whose arguments could be bound.
+/// * `at` stands in no chain -- a pure node -- it only selects the region: the body lands in an
+///   Inline region inside `at`'s, and `at` itself and its readers are left as they are. Where the
+///   body's writes run among the accesses already there is `order`'s to say, which is the caller's
+///   (the operator writes no order edge into that region).
+///
+/// Only a function value that captures nothing is expanded: the captures of a callee are values of
+/// the frame the value was made in, and a splice into another graph cannot name them.
+slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.inline";
+    TxnState &state         = openState(norm, 0, site);
+    const auto *at          = norm.get<Handle *>(1);
+    auto *function          = norm.get<::Function *>(2);
+    GCGraph *calleeGraph    = function != nullptr ? function->graph() : nullptr;
+    if (calleeGraph == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument, site, "the function value has no graph to expand");
+    }
+    if (!calleeGraph->closureNodes().empty()) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the function value captures variables: run `std::defunctionalize` on it and expand "
+            "the call it leaves");
+    }
+    // The graph may come from another program than the transaction's (a pass holds the program it
+    // was handed and the library it was written in): the draft has to see it to name it.
+    if (function->program() != nullptr && function->program() != state.base) {
+        state.session.adoptProgram(*function->program());
+    }
+    auto [transaction, atRef] = draftOf(state, at, site);
+    auto &draft               = transaction.edit();
+    const camel::runtime::DraftNodeHeader *const atHeader = draft.header(atRef);
+    const bool atIsCall = atHeader != nullptr && (atHeader->kind == GCNodeKind::Func ||
+                                                  atHeader->kind == GCNodeKind::Call);
+    if (atIsCall) {
+        if (atHeader->kind == GCNodeKind::Call &&
+            !camel::runtime::devirtualizeStaticCallInDraft(state.session, transaction, atRef, true)) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the callee of the call is not known in this graph: run `std::defunctionalize` on "
+                "it first");
+        }
+    }
+    // `at` is the call this very function is made at: its arguments are the actuals, and the splice
+    // does the whole of the expansion -- the body takes the call's place in the chain and the order
+    // edges, and the call is erased (draft_inline.h, inlineCallableInDraft). A call of *another*
+    // function is a statement like any other and takes the branch below: what is expanded there is
+    // the function value the operator was given.
+    if (atIsCall && draft.calleeGraphOf(atRef) == calleeGraph) {
+        const camel::runtime::DraftInlineResult inlined =
+            camel::runtime::inlineCallableInDraft(state.session, transaction, atRef);
+        if (!inlined) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the call cannot be expanded here (a callee that writes a captured variable keeps "
+                "the value it hands on, and is left as it is)");
+        }
+        return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
+    }
+    // Every other `at`: the body is made as a call of its own. `fn` takes no argument, because the
+    // operator carries no argument list yet: the declaration would need one.
+    if (!calleeGraph->normPorts().empty() || !calleeGraph->withPorts().empty()) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the function value takes arguments: expand it at a call of it, which has them");
+    }
+    camel::core::type::Type *const valueType = camel::runtime::callValueTypeOf(*calleeGraph, 0);
+    if (valueType == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument, site, "the function value has no result type");
+    }
+    const bool takesPlace = camel::runtime::occupiesChainPlace(draft, atRef);
+    if (takesPlace && !camel::passes::generic::isReplaceable(transaction, atRef)) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node anchors its graph (an exit, an output, a return or the end of a branch arm)");
+    }
+    // The call the body is spliced out of: the splice replaces a call node by the body it names, so
+    // the place is written on this call and the splice hands it on to the body's own code. The
+    // region is `at`'s either way -- that is the one thing `at` always says.
+    const gc_node_ref_t call = draft.addFuncNode(calleeGraph->id(), valueType);
+    draft.setNodeRegion(call, draft.nodeRegion(atRef));
+    draft.setNodeOrigin(call, draft.nodeOrigin(atRef));
+    if (takesPlace) {
+        draft.takeStatementPlace(atRef, call);
+    }
+    const camel::runtime::DraftInlineResult inlined =
+        camel::runtime::inlineCallableInDraft(state.session, transaction, call);
+    if (!inlined) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the function's body cannot be spliced into this graph");
+    }
+    if (takesPlace) {
+        // The statement is gone and the body's value is what it held: the node `at` named is
+        // replaced by the code the body became.
+        draft.replaceAllValueUses(atRef, inlined.valueExit);
+        draft.replaceAllCtrlUses(atRef, inlined.valueExit);
+        draft.eraseNode(atRef);
+    }
+    return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
+}
+
 /// The changed function (of the type that was opened, `F`), or the error value `GraphInvalid` when a
 /// graph it edited breaks an invariant (the message names it). The transaction is over either
 /// way. The commit is a value: it never installs the context's program, whoever the transaction
@@ -565,6 +685,7 @@ const std::vector<TxnOp> &txnOps() {
         {"abort", abortKernel},
         {"eval", evalKernel},
         {"order", orderKernel},
+        {"inline", inlineKernel},
     };
     return ops;
 }
