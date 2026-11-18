@@ -245,3 +245,80 @@ replace(a, b)
   3. `split` 支持效应（骨架整个进前向一半）与两套求导收成一套的排期。
   4. 规则引擎文档与代码统一（倾向按代码的"转挂"改文档），定义处补上两侧的检查。
   5. 规则删除保护：删 `protect_order`、留 `protect_faults`（第 13 节第 7 条）；以后可用插 `GATE` 代替拒绝。
+
+## 15. 语法（草案，2026-11-18，待负责人定）
+
+原则：只用语言里已有的形状——关键字引导的块（`for x in xs { }`、`match v { }`、`sync { }`）、`::<T>` 写类型实参（`range::<int>(n)`）、`uses` 写资源（`uses var console`）、`rule`/`fact` 的现有声明形式；不引入新的符号，不复用已有含义的词。
+
+### 15.1 两种块
+
+```camel
+view d = f { 表达式 }                 // 读：值是体的值
+edit d = f { 语句 }                   // 改：值的类型是 F!，F 是 f 的类型
+edit::<G> d = f { 语句 }              // 改了签名或加了效应：G 是结果的函数类型，值的类型是 G!
+```
+
+- **头部写成 `d = f`，不写 `f as d`**：`as` 在 Camel 里是类型转换（`m as Seconds`），`edit x as Seconds { … }` 无法区分"转换后编辑"还是"把草稿叫 Seconds"。`d = f` 与 `for x in xs` 同类：关键字后面先写引入的名字，再写它来自哪里。`d` 只在块里可见。
+- **结果类型用类型实参 `edit::<G>`**，与语言里显式给类型实参的写法一致；不写 `edit d = f: G`，因为 `f: G` 读起来像是给 `f` 标类型。省略时 `G` 就是 `f` 的类型。
+- 两种块都是表达式；块里最后一个表达式是块的值，`return` 结束的是块本身（与同步块当值同一规则）。
+- 遍照常是函数：`export func fold::<F>(f: F): F! when is_function::<F>() { return edit d = f { … } }`。
+
+### 15.2 句柄与查询
+
+- 句柄类型：`Graph`、`Node<T>`、`Region`、`Op`、`TypeRef`、`Tag`（作用域标签由编译器补，不写）。不带实参的 `Node` 是值类型未知的节点。
+- 根查询都以 `d` 为第一个实参：`nodes(d)`、`graphs(d)`、`params(d)`（形参端口，按位置）、`exit(d)`（出口节点）。节点上的查询以节点为实参：`inputs(n)`、`users(n)`、`op(n)`、`type_of(n)`、`region_of(n)`，以及事实（`sign(n)`、`range::<int>(n)`）。
+- 读写法的查询（`name`、`origin`、创建编号）要求所在函数 `uses spelling`（15.5）。
+
+### 15.3 编辑操作
+
+| 写法 | 作用 | 类型 |
+|---|---|---|
+| `replace(old, new)` | 把读 `old` 的地方改读 `new`（`new` 自己上游对 `old` 的读不改接） | `old`、`new` 同类型，或 `old` 是出口时为声明的结果类型 |
+| `replace(exit(d), v)` | 换出口的值：函数的结果也是 `exit(d)` 的一个读者，所以换出口不需要另一个操作 | `v` 是块头声明的结果类型 |
+| `erase(n)` | 删一个节点（含形参端口、效应节点）；值还有人读就先 `replace` | — |
+| `inline(at, g, args…)` | 把函数值 `g` 以 `args` 为实参展开进 `at` 的区域；`at` 是链上的语句时接过它的位置，是纯节点时只选区域 | 交出 `Node<R>`，`R` 是 `g` 的结果类型 |
+| `outline::<F>(ns)` | 把节点组 `ns` 收成一个函数值 | 结果类型在编辑前无法静态推出，所以用类型实参写明 `F`，当场对照，不符则这一步失败 |
+| `order(a, b)` | 两端都执行时 `a` 在 `b` 之前 | — |
+| `eval(n)` | 把 `n` 就地算成常量，交出常量节点 | `Node<T>` |
+| `add_param::<T>(d)` / `add_param::<T>(d, at: k)` | 加一个类型为 `T` 的形参（默认追加到末尾，`at` 给位置），交出它的端口 | `Node<T>`；形参不带名字（名字是写法，9.5），外面按位置传参 |
+
+所有操作都只能在 `edit` 块里调用（签名里有句柄类型），`view` 块里调用是类型错误。
+
+### 15.4 规则
+
+```camel
+rule add_zero::<T>(x: T) when is_float::<T>() { x + 0 => x }            // 现有写法，不变
+
+rule forward(r: Ref<int>, v: int) {                                      // 两侧可写语句块（9.11）
+    { set(r, v); get(r) } => { set(r, v); v }
+}
+rule reread(r: Ref<int>) {
+    { let a = get(r); let b = get(r); (a, b) } => { let a = get(r); (a, a) }
+}
+```
+
+- 两侧的块与普通块同一文法：语句以换行或 `;` 分开，`let` 给中间值起名，最后一个表达式是块的值；左侧 `let` 起的名字在右侧可用。
+- 锚点：两侧写出的同一条语句（同一算子、同一组实参的写法，按 `let` 名对应）就是同一个节点，原样保留。
+- `when` 条件照旧写在形参之后；条件里可用事实。
+- 规则的类型实参、`with` 实参照旧。
+- **保留未定**（设计稿第 14.1 节）：右侧写 `edit { … }` 的动作规则、临时构造的规则与事实表达式（`rule (x: int) { x * 1 => x }`、`fact (v: int): int match v { … } join max`）。形状已与 `func`/lambda 对称地留出，定之前不实现。
+
+### 15.5 效应里的两个只读资源
+
+```camel
+export resource graph readonly       // 读函数的图
+export resource spelling readonly    // 读写法：名字、源码位置、创建编号
+```
+
+- 用法与其他资源相同：`uses graph`、`uses spelling`，由推断得出，一般不写。
+- 新增资源修饰 `readonly`（与已有的 `unordered` 并列）：这种资源只有读，`uses var graph` 是类型错误；只读资源之间、与任何访问之间都不冲突，不产生顺序。
+- 带 `uses graph` 的：`view`、`edit` 块，`grad`、`vjp` 等结果可能取决于写法的变换；带 `uses spelling` 的：调用了读写法查询的代码。
+
+### 15.6 要负责人定的
+
+1. 块头写成 `edit d = f { … }` / `view d = f { … }`，不用 `as`（理由见 15.1）。备选：不给草稿起名，块里用隐含的草稿（根查询写成 `nodes()`、`exit()`）——更短，但帮助函数要拿根就得另想办法，且与 Camel 里 `with` 实参显式传递的做法不一致，所以不推荐。
+2. 结果类型写成 `edit::<G> d = f { … }`。
+3. 换出口用 `replace(exit(d), v)`，不另设操作。
+4. `outline::<F>(ns)` 写明结果类型。
+5. 资源修饰 `readonly`，两个只读资源名 `graph`、`spelling`。
+6. 规则两侧语句块的文法与锚点对应方式（15.4）。
