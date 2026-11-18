@@ -18,6 +18,7 @@
 #include "camel/runtime/control.h"
 
 #include "../generic/rewrite.h"
+#include "camel/execute/pass/base.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/source/manager.h"
@@ -1344,6 +1345,10 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     // inlining (nested helpers, devirtualized pullbacks) wait for the next session. Repeat until
     // nothing changes; the bound only guards against a rewrite that never settles.
     constexpr size_t kMaxSessions = 32;
+    // The name a refusal names: the pass that owns this run, as its budget does.
+    const std::string stepName = config.growthBudget.passName.empty()
+                                     ? std::string("std::opt")
+                                     : config.growthBudget.passName;
     bool changed                  = false;
     std::vector<InlineDeclined> declined;
     const GCGraph *lastChangedGraph = nullptr;
@@ -1359,6 +1364,22 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         if (!rewritten) {
             break;
         }
+        // The boundary check every optimization step ends with, asked here as the other steps ask
+        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp, since 2026-11-02): the
+        // engine's own steps -- devirtualize, specialize, inline -- went unchecked, so a splice
+        // that dropped an effect or moved one past another on the same resource was found only by
+        // comparing the output of the whole pipeline, one step after the one that broke it. Asked
+        // per session and on the whole program the session returned, for the reason the sibling
+        // site gives: a rewrite's edges are not the only ones it moves, so the graph is judged once
+        // it is written, not predicted from the node pair the rewrite named. A refusal records the
+        // diagnostic naming this pass and stops the chain (execute/pass.cpp reads the diagnostics
+        // after the pass). The line below the check is the other half of the reading: a run that
+        // went on says so, so "the check was asked and did not refuse" stays distinguishable from
+        // "the check was never asked" in the log rather than in a count.
+        if (context != nullptr && checkPassBoundary(context, stepName, *program, *rewritten)) {
+            return nullptr;
+        }
+        CAMEL_LOG_INFO_S("Opt", "boundary asked after session {} of '{}'", i, stepName);
         changed = true;
         program = rewritten;
     }
