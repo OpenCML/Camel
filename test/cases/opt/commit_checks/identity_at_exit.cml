@@ -1,0 +1,23 @@
+// The counter-example the calculus gives for "the exit must be in the top region" (the rework of
+// 2026-11-18, item 1):
+//
+//   f(b) = let y = if b then {not(b)} else {false}; not(y)
+//
+// The identity is applied at the exit. An inliner that puts the identity's body where the call was
+// leaves the exit on the node that computed the true arm's value -- inside a region that only runs
+// when the branch says so -- and nothing else needs that arm, so the read the exit stands for never
+// happens. `test::commit_exit_region` makes the same edit with the draft API, moving the exit onto a
+// node of the true arm, and the commit refuses it.
+
+func not(b: bool): bool {
+    return !b
+}
+
+func f(b: bool): bool {
+    let y = if b then not(b) else false
+    return not(y)
+}
+
+func main(): int {
+    return 48
+}

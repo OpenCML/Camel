@@ -3915,8 +3915,10 @@ d52d50350b44b1cb ok test/cases/opt/algebra_rules/measure.cml
 51d83bb71bf41e41 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 69fb474c5a932ac1 ok test/cases/opt/camel_passes/fold_subject.cml
+645e58a68f6f609e ok test/cases/opt/commit_checks/branch_and_print.cml
 4458f4f7e6cb467b ok test/cases/opt/commit_checks/fold_function_type.cml
 5ea4b89de03c989f ok test/cases/opt/commit_checks/generic_call.cml
+4b03f511a3efb360 ok test/cases/opt/commit_checks/identity_at_exit.cml
 0e0caabcbb90b4eb ok test/cases/opt/defun/captured.cml
 48e74295fd29a520 ok test/cases/opt/defun/closure_dispatch.cml
 67b9fbb450feedf7 ok test/cases/opt/defun/effects.cml

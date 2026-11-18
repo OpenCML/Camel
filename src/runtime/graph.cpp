@@ -631,6 +631,40 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     validateRef(graph->exitNodeRef(), "exit");
     validateRef(graph->outputNodeRef(), "output");
     validateRef(graph->returnNodeRef(), "return");
+
+    // The exit check (the author's rework of 2026-11-18, item 1, from the calculus's list of what a
+    // commit owes): the value a graph hands on is read at its exit, and the nodes a graph names as
+    // what it hands on -- the exit, the output, the returned value -- must be nodes of the function
+    // body, region 0. A rewrite that leaves one of them inside an arm or a loop publishes a graph
+    // whose value is read out of a region that only runs when its owner says so: nothing needs that
+    // region, so the read never happens and the run stops there. The counter-example the calculus
+    // gives inlines an identity function into the exit of one whose true arm computes the value,
+    // which lands the exit on the arm's value.
+    //
+    // Here, beside the cross-reference check and not in the commit's own checks, because it is a
+    // property of the graph published and not of what a commit added: every commit runs this seal in
+    // every build, whether or not it added an access, and no draft is exempt from it.
+    const auto validateInTopRegion = [&](gc_node_ref_t ref, std::string_view what) {
+        if (ref == kInvalidNodeRef || !graph->containsNodeRef(ref)) {
+            return; // no such node, or a number `validateRef` above has already thrown about
+        }
+        const uint32_t region = graph->nodeRegion(ref);
+        if (region == 0) {
+            return;
+        }
+        throw std::runtime_error(
+            std::format(
+                "Runtime graph '{}' has its {} at node {}, which is in region {} instead of the "
+                "function body (region 0): a region that only runs when its owner says so never runs "
+                "for a value nothing asks for, so the read never happens.",
+                graph->name(),
+                what,
+                ref,
+                region));
+    };
+    validateInTopRegion(graph->exitNodeRef(), "exit");
+    validateInTopRegion(graph->outputNodeRef(), "output");
+    validateInTopRegion(graph->returnNodeRef(), "returned value");
     for (gc_node_ref_t ref : graph->normPorts()) {
         validateRef(ref, "norm-port");
     }
