@@ -139,6 +139,30 @@ class CommitTierTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * Reads the one question about a read across regions that the *port* rule of the seal
+ * (`checkGraphCrossReferences`, src/runtime/graph_edges.cpp) does not ask, against the rule that
+ * does ask it: `validateRuntimeBranchArms` ("a node reads only nodes that run whenever it runs").
+ *
+ * The shape is one a rewrite can make and a hand-written graph will not: a COPY in one arm of a
+ * branch whose value is the *other* arm's, and the branch's JOIN reading the copy where the first
+ * arm's own value stood, so the read is on the edge the arm ends at and nothing can be dead about
+ * it. `test/cases/opt/commit_checks/sibling_arm.cml` is the fixture, and its two arms compute a
+ * value each, because a constant written in an arm is hoisted to the body and has no region to be
+ * read out of.
+ *
+ * The pass makes that read and commits it, then makes the same copy read a value of the arm it sits
+ * in and commits that. The two answers are the reading: a refusal that names the node and the two
+ * arms, and a publication, which is what says the refusal is about the arm and not about the copy.
+ */
+inline constexpr const char *kCommitSiblingArmTestPass = "test::commit_sibling_arm";
+class CommitSiblingArmTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the same defect through the exemption every pass written in Camel has, in one run:
  * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
  * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was
