@@ -89,21 +89,30 @@ graph.
 
 Three things happen to a value of these forms, and each is an existing node kind.
 
-**Reading the tag and the parts: `OPER`.** Five built-in operators
+**Reading the tag and the parts: `OPER`.** Six built-in operators
 (`src/builtin/operators/tagged.cpp`, group names are reserved identifiers):
 
 | Operator | Type | Meaning |
 |---|---|---|
 | `__is_null__` | `(T?) => bool` | the tag of a `T?` |
 | `__null_value__` | `(T?) => T` | the value of a `T?` that is not null |
+| `__unwrap__` | `(T?) => T` | the same value, from a `T?` the compiler has already checked: a null is an internal error |
 | `__is_error__` | `(T!) => bool` | the tag of a `T!` |
 | `__error_value__` | `(T!) => T` | the value of a `T!` that has not failed |
 | `__error_info__` | `(T!) => Error` | the error of a `T!` that has failed |
 
-All five are declared pure. `__null_value__`, `__error_value__` and `__error_info__` are only
+All six are declared pure. `__null_value__`, `__error_value__` and `__error_info__` are only
 ever placed inside the arm their tag selects. Applied to the other case they do not fault:
 they return the zero slot of their type, so a pass that moves one out of its arm (hoisting)
 does not change behaviour as long as the result is used only inside the arm.
+
+`__unwrap__` is the one that checks, and no pass places it: it is what a machine the compiler
+builds unwraps its own state slot with, where the compiler has already read the tag. A null there
+is `RuntimeDiag::NullSlotUnwrapped` — an internal error of the compiler, which is never isolated
+by `attempt` — rather than the zero slot, because a zero slot is a value of the right shape and
+the reader could not tell a slot that was never written from one that holds zero (the ruling of
+2026-11-18, `96714f465`; the reasoning is
+`docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
 
 **Putting a value into the form: `CAST`.** `TupleType::castSlotFrom` allocates the box.
 Allowed conversions (`castSafetyFrom`): `T -> T?`, `T -> T!`, `U! -> T!` for the failed case (compiler-made only, the error arm
@@ -248,7 +257,7 @@ destructuring of a tagged value are errors (`TaggedValueNotOpened`, 0x63), and n
 overload accepts one where it expects a `T`. A tagged value may be stored, passed, returned,
 captured and printed (`println` prints `null`, the value, or `error <kind>: <message>`) (Q5).
 
-Not closed: the five operators of section 3 are ordinary global names (reserved identifiers:
+Not closed: the operators of section 3 are ordinary global names (reserved identifiers:
 a program cannot *declare* such a name, but it can call `__null_value__(x)`). Nothing in the
 language needs that, and it should be refused where the name is resolved.
 
