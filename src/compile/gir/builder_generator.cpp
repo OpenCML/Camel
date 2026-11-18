@@ -89,6 +89,27 @@
  *     resolution decide. (An earlier draft of this comment called them two operators; the target
  *     said otherwise, and the target is the one that is read.)
  *
+ * Three conventions of a region, which the loop below is built by (`builder_control.cpp:2643-2690`,
+ * `:3568-3599`, `:3730-3735`). Two of them look like details and one of them is a trap:
+ *
+ *   * a loop's regions are made **before** the loop node exists, so the owner is written after it:
+ *     `draft.addRegion(kind, outerRegion)` then `setRegionOwner(region, nodeIdOf(loopNode), index)`,
+ *     where **`index` is `0` for the condition and `1` for the body** (`graph.h:601` names the kinds,
+ *     `Arm`, `LoopCond`, `LoopBody`). That `0`/`1` is **not** an order of construction and must not be
+ *     read as one -- it is which of the loop's two parts the region is. **And the order of
+ *     construction is visible in the graph anyway**: the published `std::jgir` numbers the regions in
+ *     the order they were made, and in the generator case the condition's region is `g4r1`, ahead of
+ *     the arm regions `g4r2`, `g4r4`, `g4r6` -- so the condition's region is made **first**. The two
+ *     sentences belong together: the index says *which part*, the numbering says *which was made
+ *     first*, and a machine that read the first as the second would number the regions the other way
+ *     round and change the graph.
+ *   * a region's ports are set **twice**, and both are needed: `setRegionPorts(region, ids)` (the
+ *     Port nodes, which must already have been put in that region with `setNodeRegion`) and
+ *     `setRegionParams(region, params)` -- a `FunctionTypeFactory` of the same names and types with
+ *     `setExitType(Type::Void())`. With only the first, the region's signature is empty.
+ *   * a region port node is **explicitly put in its region** (`setNodeRegion(nodeIdOf(port),
+ *     region)`), or it lands in the body region (0) and reads as a parameter of the graph.
+ *
  * Where a `var` written inside an arm goes -- asked, read, answered (`builder_control.cpp:2134`):
  * `mergeArmVariables` is not a mechanism of regions. It walks the `ArmBuild` bookkeeping a *visitor*
  * keeps (`arm->touched`, `touchedOrder`, `recordWrite`, `pendingUsesOf`) and does two things: it
