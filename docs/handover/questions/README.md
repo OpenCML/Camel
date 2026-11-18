@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：23 页
+## 现在在等作者：28 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -23,11 +23,16 @@
 | [`2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked`](2026-11-18-a-cell-holding-a-ref-is-neither-counted-nor-checked.cn.md) | 一个装着 Ref 的格子，计划期算持有者、运行期不算句柄 |
 | [`2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot`](2026-11-18-a-ref-has-no-unwritten-form-for-the-state-slot.cn.md) | 生成器状态槽要存一个 `Ref`，而 `Ref` 没有「未写」的形态 |
 | [`2026-11-18-a-value-made-per-round-needs-a-version-per-round`](2026-11-18-a-value-made-per-round-needs-a-version-per-round.cn.md) | 一轮造一个值、循环之后还要读它，计划该怎么数它？ |
+| [`2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding`](2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md) | 一问：`v = v->sort` 现在被构造成 SSA 重新绑定，in-place 改写不再触发 |
 | [`2026-11-18-commit-checks-which-pairs-a-commit-owns`](2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md) | 一张被改过的图，提交该为哪些「访问对」负责？ |
 | [`2026-11-18-generator-halt-has-no-reader`](2026-11-18-generator-halt-has-no-reader.cn.md) | 生成器的 `halt` 位已经没有读者了：状态元组要不要从 2 元组收成 1 元组 |
 | [`2026-11-18-lowering-generator-state-to-gir`](2026-11-18-lowering-generator-state-to-gir.cn.md) | 生成器状态下移到 GIR：几百行、18 个文件的快照会动 |
+| [`2026-11-18-outline-needs-a-graph-that-was-not-there`](2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md) | `outline`：草案已允许草稿新造图，差在「交付」这一条——答复已给（`e55cd6157`） |
 | [`2026-11-18-retract-rc23-two-orders`](2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） |
+| [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at`：语句上「占据位置」，纯节点上「只选区域」——答复已给（`e55cd6157`） |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 |
+| [`2026-11-18-the-witness-a-transpose-needs-has-no-channel`](2026-11-18-the-witness-a-transpose-needs-has-no-channel.cn.md) | 转置要一条残差当「零的见证」：那条通道 11-04 被删了，而它今天必须回来 —— 但回哪一半？ |
+| [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ |
 | [`2026-11-18-typeof-of-machine-made-types`](2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ |
 | [`questions-2026-11-17-two-rulings`](questions-2026-11-17-two-rulings.cn.md) | 两个必须由作者裁定的口子（2026-11-17 23:40） |
