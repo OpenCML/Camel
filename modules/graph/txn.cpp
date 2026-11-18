@@ -29,6 +29,7 @@
 #include "camel/core/mm/gen.h"
 #include "camel/core/operator.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tagged.h"
@@ -37,11 +38,15 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_outline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
 #include "src/passes/opt/generic/rewrite.h"
 
+#include <algorithm>
 #include <format>
+#include <string>
+#include <vector>
 
 using namespace camel::core::context;
 using namespace camel::core::type;
@@ -575,6 +580,77 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
 }
 
+/// `outline(t, ns)`: the group `ns` of one graph becomes a graph of its own and a call of it takes
+/// the place of the value the group handed on; that call is what the operator answers. It is
+/// `inline`'s reverse (docs/design/graph-editing/README.cn.md 7, 15.3), and the graph it makes is a
+/// graph this transaction *made* -- in no program before the edit -- so the commit delivers it
+/// through `noteMadeGraph` and not through what the drafts reach (2.5, 8.1).
+///
+/// What the group's boundary has to be, and how the graph is built from it, is
+/// `camel::runtime::outlineDraftNodes` (draft_outline.h): a group of operations whose values come
+/// from outside it and go out through one node, no anchor, no access, no ordering or chain place.
+/// The boundary is read before anything is made, so a group that is not that is refused with the rule
+/// it broke and the draft is as the operator found it.
+slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.outline";
+    TxnState &state         = openState(norm, 0, site);
+    auto *array             = norm.get<Array *>(1);
+    const size_t count      = array->size();
+    if (count == 0) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the group is empty");
+    }
+    std::vector<gc_node_ref_t> group;
+    group.reserve(count);
+    camel::runtime::GraphId graphId = camel::runtime::GraphId::Invalid;
+    for (size_t i = 0; i < count; ++i) {
+        auto *handle = array->get<Handle *>(i);
+        if (handle == nullptr || handle->kind() != HandleKind::Node) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument, site, "the group holds a node that is no node");
+        }
+        // A node read from a draft names the transaction and no program; one read from a program
+        // must be this transaction's program.
+        if (handle->program() != nullptr && handle->program() != state.base) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "a node of the group belongs to another program than the transaction");
+        }
+        if (graphId == camel::runtime::GraphId::Invalid) {
+            graphId = handle->graph();
+        } else if (graphId != handle->graph()) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the group names nodes of two graphs: a group is outlined out of one graph");
+        }
+        group.push_back(handle->index());
+    }
+    GCGraph *graph = state.base->graph(graphId);
+    if (graph == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
+    }
+    auto &transaction = state.session.edit(graph);
+    for (const gc_node_ref_t ref : group) {
+        if (!transaction.edit().alive(ref)) {
+            err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "a node was removed");
+        }
+    }
+    const std::string name = std::format(
+        "{}$outline{}", graph->name(), static_cast<unsigned>(std::ranges::min(group)));
+    try {
+        const camel::runtime::DraftOutlineResult outlined =
+            camel::runtime::outlineDraftNodes(state.session, transaction, group, name);
+        // A node the graph did not have: the call the group's value is now read from, whose callee
+        // is the graph this edit made (read back with `callee`).
+        return toSlot(Handle::createInTransaction(transaction, outlined.call, mm::autoSpace()));
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &failure) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, failure.what());
+    }
+}
+
 /// The changed function (of the type that was opened, `F`), or the error value `GraphInvalid` when a
 /// graph it edited breaks an invariant (the message names it). The transaction is over either
 /// way. The commit is a value: it never installs the context's program, whoever the transaction
@@ -686,6 +762,7 @@ const std::vector<TxnOp> &txnOps() {
         {"eval", evalKernel},
         {"order", orderKernel},
         {"inline", inlineKernel},
+        {"outline", outlineKernel},
     };
     return ops;
 }

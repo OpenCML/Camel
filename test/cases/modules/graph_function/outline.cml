@@ -1,0 +1,140 @@
+// The reverse of `inline` at the level a pass sees: `outline` collects a group of a graph's nodes
+// into a function of its own and puts a call of it where the group's value stood (docs/design/
+// graph-editing/README.cn.md 7 and 15.3).
+//
+// What is measured is the delivery, and the delivery is not "the commit did not refuse": a graph the
+// edit *made* was in no program before it, so a commit that only walked what the drafts reach left it
+// out in silence (`2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md` section 5, and the
+// reading of `7b0f407eb`: `only_adopted_delivered=0 noted_delivered=1`). So the reading names the
+// graphs the committed function reaches before and after the edit, and the id that is in the second
+// list and not in the first: `new_id` is a graph the committed program holds because this edit made
+// it. The control is the same commit with no `outline`: same edit, same function, no new id.
+//
+// `subject` computes `((n * 2) + 3) * 5` and prints it. The group is the addition: its two values come
+// from outside it (the doubling and the constant) and one value leaves it (the multiplication), so the
+// graph it becomes is `(int, int) => int` with the addition as its body, and the call that stands in
+// its place reads those same two values.
+
+import { Graph, Node, NodeKind, graph_of, graphs_of, name, nodes, inputs, kind, op, op_name, creation_id, callee, exit_of, id, is_anchor, open, outline, commit } from graph
+
+func subject(n: int): int sync {
+    println('first')
+    let a = n * 2
+    let b = a + 3
+    let c = b * 5
+    println(c)
+    return 0
+}
+
+func opText(n: Node): string spelling {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func isAdd(n: Node): bool spelling {
+    return opText(n) == ':op/add_i' || opText(n) == ':op/add_l'
+}
+
+func isCall(n: Node): bool {
+    return kind(n) == NodeKind::Func
+}
+
+func onlyAdd(g: Graph): Node {
+    let found = nodes(g)->filter<isAdd>
+    return found[0]
+}
+
+/// The one call the committed body has: the call `outline` put where the group was.
+func theCall(g: Graph): Node {
+    let found = nodes(g)->filter<isCall>
+    return found[0]
+}
+
+// ---- what the graph is, node by node ----
+
+/// Whether the graph names the node by something other than a read: its exit, its output, its return,
+/// its entry, one of its ports, a region's result or a control region's port. A group is outlined out
+/// of what the graph does not name (design 8.1, "不含锚点").
+func mark(n: Node): string spelling { return if is_anchor(n) then '!' else '' }
+
+/// The canonical position, the ref the operator layer speaks in (the number the node was created
+/// with), its operator, and whether the graph names it.
+func shape(g: Graph, i: int, acc: string): string spelling {
+    return if i >= len(nodes(g)) then acc
+        else shape(g, i + 1, `${acc} ${id(nodes(g)[i])}/${creation_id(nodes(g)[i])}:${opText(nodes(g)[i])}${mark(nodes(g)[i])}`)
+}
+
+/// The same, for a graph the edit made, with each node's kind: a body of ports and operations has
+/// nothing to say about its operators' names.
+func kinds(g: Graph, i: int, acc: string): string spelling {
+    return if i >= len(nodes(g)) then acc
+        else kinds(g, i + 1, `${acc} ${id(nodes(g)[i])}/${creation_id(nodes(g)[i])}:${kind(nodes(g)[i])}:${opText(nodes(g)[i])}${mark(nodes(g)[i])}`)
+}
+
+/// The number an id names is *spelling* (design 9.5): reading it needs a declaration that writes
+/// `spelling`, which is why the readings below carry that clause.
+func holdsId(xs: Graph[], want: int, i: int): bool spelling {
+    return if i >= len(xs) then false
+        else if creation_id(xs[i]) == want then true
+        else holdsId(xs, want, i + 1)
+}
+
+/// The first id in `after` that is in no graph of `before`, -1 when the two name the same graphs.
+func idNotIn(after: Graph[], before: Graph[], i: int): int spelling {
+    return if i >= len(after) then -1
+        else if !holdsId(before, creation_id(after[i]), 0) then creation_id(after[i])
+        else idNotIn(after, before, i + 1)
+}
+
+/// `outline` the addition of `subject`, commit that, and read what the committed function reaches.
+func outlined(): int spelling sync {
+    let g = graph_of(subject)
+    let before = graphs_of(subject)
+    println(`[shape] ${shape(g, 0, '')}`)
+    let group = onlyAdd(g)
+    let groupText = `${id(group)}:${opText(group)}`
+    let t = open(subject)
+    let made = outline(t, [group])
+    // What the operator answered belongs to the transaction: read it before the commit. It is the
+    // call the group's value is read from now (`callee` is null on a node of a draft: the graph it
+    // names is in this transaction's program, which the handle does not name).
+    let callReads = len(inputs(made))
+    let callIsCall = isCall(made)
+    let edited = commit(t) !! subject
+    let after = graphs_of(edited)
+    let newId = idNotIn(after, before, 0)
+    println(`[outline] graphs=${len(before)}->${len(after)} new_id=${newId} in_committed=${holdsId(after, newId, 0)} group=${groupText}`)
+    println(`[outline] call is_call=${callIsCall} call_reads=${callReads}`)
+    // The call's callee, read in the committed graph: the graph the group became, and what it holds.
+    let h = graph_of(edited)
+    let call = theCall(h)
+    let madeGraph = callee(call) ?? h
+    let madeExit = exit_of(madeGraph) ?? call
+    println(`[outline] made_graph=${name(madeGraph)} nodes=${len(nodes(madeGraph))} exit_reads=${len(inputs(madeExit))}`)
+    println(`[outline] made kinds:${kinds(madeGraph, 0, '')}`)
+    println(`[outline] subject after:${shape(h, 0, '')}`)
+    println('[outline] the edited function runs:')
+    edited(4)
+    return 0
+}
+
+/// The same commit, no `outline`: the delivery set is empty and the program holds no new graph.
+func control(): int spelling sync {
+    let before = graphs_of(subject)
+    let t = open(subject)
+    let edited = commit(t) !! subject
+    let after = graphs_of(edited)
+    let newId = idNotIn(after, before, 0)
+    println(`[control] graphs=${len(before)}->${len(after)} new_id=${newId}`)
+    return 0
+}
+
+func main(): int spelling sync {
+    println('[run] subject, before any edit')
+    subject(4)
+    outlined()
+    control()
+    return 0
+}
