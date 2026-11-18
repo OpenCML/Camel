@@ -232,13 +232,19 @@ void validateRuntimeGraphEdges(
 /// (`GraphDraft::setFuncType`) published a graph that says one type to its callers and another to
 /// its own body.
 ///
-/// Asked of a graph this commit gave *another signature* than the one it had: `before` is the graph
-/// the program held for it, `after` the one the commit encoded. A graph that had no `before` was
-/// built by the compiler and not republished by a rewrite, and is not asked (see the comment at the
-/// definition for the reading that put that boundary there). Throws std::runtime_error naming the
-/// parameter, the declared type and the type the port node carries.
+/// Asked of two graphs: one this commit gave *another signature* than the one the program held for it
+/// (`before` is the graph the program held for it, `after` the one the commit encoded), and one the
+/// commit *made* (`made`: `RuntimeGraphDraftSession::noteMadeGraph`), which stood in no program and
+/// whose signature this commit therefore wrote for the first time -- `before` is then the graph the
+/// transaction made, and the signature tier says nothing about it. A graph the commit neither made nor
+/// edited is not asked: it was asked when it was published. A graph the compiler's *builder* makes
+/// for itself is not asked either, until the shifted-ports defect of specialization is fixed at its
+/// source (see the comment at the definition, and
+/// `docs/handover/questions/2026-11-18-specialization-carries-its-ports-one-place-over.cn.md`).
+/// Throws std::runtime_error naming the parameter, the declared type and the type the port node
+/// carries.
 void validateRuntimeGraphPortTypes(
-    const Program &program, const GCGraph *before, const GCGraph *after,
+    const Program &program, const GCGraph *before, const GCGraph *after, bool made,
     GraphState state = GraphState::Executable);
 
 /// What the commit delivered, read back against the draft it encoded: `graph`, the graph the

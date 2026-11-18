@@ -989,24 +989,50 @@ bool sameSignature(
     return true;
 }
 
+/**
+ * The promise a graph makes twice -- its ports are the parameters its own signature declares -- and
+ * the two boundaries the commit asks it inside of.
+ *
+ * The promise: a port node is what a call site is checked against (`EdgeChecker::checkCall`) and
+ * `funcType()` is what the caller is told, so a graph that publishes both publishes two statements
+ * about one parameter, and the two must be one. It is not one of the seal's checks (`run()`) because
+ * asking it of every graph a commit publishes refused the compiler's own outputs.
+ *
+ * `made` is the first boundary: the graph is one this transaction made
+ * (`RuntimeGraphDraftSession::noteMadeGraph` -- `outline`'s function value, and anything that builds
+ * a graph through the draft instead of editing one). It stood in no program, the commit wrote the
+ * only signature it ever had, and design graph-editing 8.1 asks item ④ of it on `outline`'s row and
+ * of every graph on the low-level interface's row. A graph wrong from the moment it is made is what
+ * the question is for, so nothing about the tier may waive it.
+ *
+ * The signature tier is the second boundary, and it is a fact about a graph that *did* stand
+ * somewhere: `sameSignature(before, after)` answers "this commit wrote no new signature over it, so
+ * it owes no answer". It is the case `GraphDraft::setFuncType` writes -- a fold, a retype, a graph
+ * given another function's type while its port nodes stay where they are -- and it makes no node at
+ * all, which is why it cannot be asked from `commitViolation` (whose checks are asked by what the
+ * draft made) and is asked here, beside the seal.
+ *
+ * What the tier is **not** is "a graph the compiler built for this commit is the builder's reading
+ * and has no signature to be wrong about". That reading came from a measurement (2026-11-18): asking
+ * the check of every graph at the seal turned 67 cases across two families red in 137 places, every
+ * one of them a graph the compiler built for itself -- `*$spec*`, `main$lift0`,
+ * `split_of_jvp_of_*_backward` -- whose norm-port list is shifted one entry against the signature it
+ * declares. That is a defect of the builder, and the page
+ * `docs/handover/questions/2026-11-18-specialization-carries-its-ports-one-place-over.cn.md` records
+ * both it and the answer to it: the shift is a defect to be fixed at its source, after which the
+ * check is asked of every graph and the narrowing goes. Until that fix lands, the builder's graphs
+ * are the ones this function must not be handed, and that is the caller's business (which graph a
+ * commit publishes, and whether the program held it); it is not `sameSignature`'s, whose two sides
+ * are trivially one for a graph a single transaction wrote.
+ *
+ * A graph with no nodes has no port to compare: `!after->hasNodePayload()`.
+ */
 void validateRuntimeGraphPortTypes(
-    const Program &program, const GCGraph *before, const GCGraph *after, GraphState state) {
-    // A graph this commit made out of nothing is the builder's reading, not a rewrite's: its ports
-    // and its signature were written together, and the graphs the compiler builds from scratch do
-    // publish lists this check would refuse (measured 2026-11-18: a specialization's norm-port list
-    // is shifted by one entry against its own signature -- `f1$spec0` declares `bool` for parameter 0
-    // and its port node 1 carries parameter 1's type -- which is a defect of the specialization, in
-    // the builder, and not the question here). Nothing asks about a graph that had no signature
-    // before this commit.
-    if (before == nullptr || after == nullptr || !after->hasNodePayload()) {
+    const Program &program, const GCGraph *before, const GCGraph *after, bool made, GraphState state) {
+    if (after == nullptr || !after->hasNodePayload()) {
         return;
     }
-    // The tier is the signature and not the build: a commit that wrote no new signature over the
-    // graph it published owes no answer, and one that did owes it in every build. A rewrite that
-    // gives a graph another function's type is the whole of this case, and it makes no node at all,
-    // which is why this cannot be asked from `commitViolation` (whose checks are asked by what the
-    // draft added) and is asked here instead, beside the seal.
-    if (sameSignature(before->funcType(), after->funcType())) {
+    if (!made && (before == nullptr || sameSignature(before->funcType(), after->funcType()))) {
         return;
     }
     EdgeChecker checker(program, *after, state);

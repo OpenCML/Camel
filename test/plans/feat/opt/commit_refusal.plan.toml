@@ -252,3 +252,37 @@ case = "../../../cases/opt/commit_checks/port_type.cml"
 args = ["${case}", "test::commit_port_type", "std::nvm"]
 expect_exit = 42
 expect_stdout_contains = ["commit_port_type: a graph publishes one statement about one parameter twice", "and nothing asks whether the two agree", "takes the signature of graph 'takes_float' and keeps its port nodes", "refused at the commit: Runtime graph 'takes_int' publishes a signature of another type than the ports it holds", "declares parameter 0 as 'float', and its port node", "carries a 'int'", "takes the signature of graph 'mirror_int', whose parameter types are the same", "the commit published it, and nothing was refused -- a signature replacement is not what the check refuses", "signature of other parameter types -> refused=1, signature of the same parameter types -> published=1"]
+
+# The same promise, on the graph no signature comparison can reach: one the *transaction made*.
+#
+# The tier of `validateRuntimeGraphPortTypes` is `sameSignature(before, after)`, where `before` is the
+# graph the session's draft was decoded from -- so a graph that never stood in the program has a
+# `before` that is itself, the draft having written both its nodes and its signature, and the commit's
+# copy carrying the same signature. Measured 2026-11-18, that is not even the first thing that happens
+# to a made graph: the commit's closing loop decodes it, finds no write recorded, drops it from
+# `edited_`, and a commit that asked only the graphs it edited never reached the tier at all (probe:
+# `graph 'made$mismatch' not asked the port question (edited=0, made=1)`). Both are accidents of the
+# graph having no `before`; neither is the case the narrow tier was written for, which is the
+# compiler's own outputs (`*$spec*`, `main$lift0`) whose ports sit one place over from the signature.
+#
+# `test::commit_made_graph_ports` makes two graphs from nothing and hands each to the session through
+# `noteMadeGraph` (design graph-editing 2.5: the draft is `f`, the graphs `f` reaches, and the graphs
+# this edit makes; 8.1 asks the port-and-exit item of the made graph on `outline`'s row and of every
+# graph on the low-level interface's row).
+#
+# The negative half is the made graph whose port node carries an `f32` while its own signature
+# declares parameter 0 as an `i32`: the commit must refuse it and name the parameter -- the graph is
+# wrong from the moment it is made, and that moment is the commit. The positive half is the same
+# graph made the same way with an `i32` port for an `i32` parameter, published: without it, "it was
+# refused" would only mean "a made graph is always refused".
+#
+# Neither draft touches the fixture: what `std::nvm` runs afterwards is `port_type.cml`, so the two
+# graphs never execute and their being well-formed elsewhere is not this reading's question.
+[[tests]]
+name = "commit_refusal.made_graph_port_type"
+desc = "Two graphs a transaction makes out of nothing, handed to the session as made: the one whose port node carries another type than its own signature declares is refused, naming the parameter, and the one whose port agrees is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/port_type.cml"
+args = ["${case}", "test::commit_made_graph_ports", "std::nvm"]
+expect_exit = 42
+expect_stdout_contains = ["commit_made_graph_ports: a made graph has no signature the program held, so the port question is owed to it because it was made", "made graph 'made$mismatch' declares parameter 0 as 'i32' and its port node carries an 'f32'", "refused at the commit: Runtime graph 'made$mismatch' publishes a signature of another type than the ports it holds", "declares parameter 0 as 'i32', and its port node 0 carries a 'f32'", "made graph 'made$match' declares parameter 0 as 'i32' and its port node carries an 'i32'", "the commit published it, and nothing was refused", "made graph, port of another type -> refused=1, port of the declared type -> published=1"]

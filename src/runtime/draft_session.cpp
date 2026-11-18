@@ -1886,16 +1886,36 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
     }
-    // The promise a graph makes twice: its ports are the parameters its own signature declares. It
-    // is asked of a graph the draft gave *another signature* than the one the program held for it
-    // and not of every graph (`validateRuntimeGraphPortTypes`, src/runtime/graph_edges.cpp), which
-    // is the one thing a commit knows and the seal does not: a graph the compiler built for this
-    // commit has no earlier signature to have been rewritten from.
+    // The promise a graph makes twice: its ports are the parameters its own signature declares. Two
+    // kinds of graph owe the answer, and one function asks both (`validateRuntimeGraphPortTypes`,
+    // src/runtime/graph_edges.cpp):
+    //
+    //  · a graph the draft gave *another signature* than the one the program held for it -- the case
+    //    `GraphDraft::setFuncType` writes, which makes no node at all and so cannot be asked from
+    //    `commitViolation` (whose checks are asked by what the draft made);
+    //  · a graph this transaction *made* (`noteMadeGraph`): it stood in no program, so this commit
+    //    wrote the only signature it ever had, and "did this commit write a new signature" answers
+    //    nothing about a graph whose ports and signature are both this transaction's writing. Design
+    //    graph-editing 8.1 asks the port-and-exit item of the made graph on `outline`'s row, and of
+    //    every graph on the low-level interface's row.
+    //
+    // The second is why the graph is not asked *by what `edited_` holds*: a made graph arrives
+    // decoded (its draft records no write of its own), the closing loop above drops it from
+    // `edited_`, and a commit that asked only the graphs it edited published it without asking --
+    // measured 2026-11-18 on a made graph whose port node carried a `float` against a signature
+    // declaring an `int`: `refused=0` before this, and the question below is what refuses it.
     for (const auto &[graph, copy] : fresh) {
-        if (graph == nullptr || !edited_.contains(graph)) {
+        if (graph == nullptr) {
             continue;
         }
-        validateRuntimeGraphPortTypes(*committed, graph, copy, graphState_);
+        const bool made = std::ranges::any_of(
+            madeGraphs_, [&](const GCGraph *madeGraph) { return madeGraph == graph; });
+        // A graph the commit neither made nor edited is the graph it was: it was asked when it was
+        // published and nothing here makes the answer new.
+        if (!made && !edited_.contains(graph)) {
+            continue;
+        }
+        validateRuntimeGraphPortTypes(*committed, graph, copy, made, graphState_);
     }
     // The copy is the same graph to the fact store; a new revision only for a graph that was
     // edited and not encoded back to the same content (what a graph refers to is the fact
