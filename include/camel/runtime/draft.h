@@ -1300,41 +1300,36 @@ gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
 uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
 
 AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref);
-/// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
-/// inlined call gates its arguments after what the call waited for -- and changes nothing else
-/// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
-/// what it forwards, which is what a comparison of two computations asks; the gate keeps its place
-/// and its wait either way, so the answer is about the value alone.
-///
-/// What it forwards is its **first ordinary input**; the trailing ones are waits (author ruling
-/// 0780a83bd). Until 2026-11-19 this read `back()`, the last of them, which is a wait's value and
-/// not the gate's -- a defect under design principles 3.1, measured over the corpus: of 264,580
-/// calls in 1,444 cases, four walks reached a gate carrying more than one ordinary input, all four
-/// in test/cases/compile/ref/refwrite_shapes.cml, where the key they build is the one the rewrite
-/// pass of src/passes/opt/generic compares.
-///
-/// A gate with no ordinary input forwards its first `with` input, and one with neither forwards
-/// nothing: then the answer is "no value" rather than the gate itself, because the gate is not the
-/// value it was asked about. The graph is acyclic, so the walk ends without a bound; a debug build
-/// asserts the step it took, which is where a 64-step guard used to stand.
-inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
-    for (;;) {
-        if (draft.header(node) == nullptr || draft.header(node)->kind != GCNodeKind::Gate) {
-            return node;
-        }
-        if (const std::span<const gc_node_ref_t> norm = draft.normInputsOf(node); !norm.empty()) {
-            ASSERT(
-                norm.front() != kInvalidNodeRef,
-                "The ordinary input a gate forwards is a node.");
-            node = norm.front();
-            continue;
-        }
-        if (const std::span<const gc_node_ref_t> waits = draft.withInputsOf(node); !waits.empty()) {
-            node = waits.front();
-            continue;
-        }
-        return kInvalidNodeRef;
+
+/// A draft read as a graph reader, so that `camel/runtime/graph.h`'s gate walk answers for a draft
+/// too: the four methods `forwardedInputOf` and `valueBehindGates` ask for are `nodeCount`, `node`,
+/// `normInputsOf` and `withInputsOf`, and a draft has them under the names `nodeSlotCount` and
+/// `header`. One reading of a gate, one walk, two readers.
+struct DraftGateReader {
+    const GraphDraft *draft;
+
+    size_t nodeCount() const { return draft->nodeSlotCount(); }
+    const DraftNodeHeader *node(gc_node_ref_t ref) const { return draft->header(ref); }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return draft->normInputsOf(ref);
     }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return draft->withInputsOf(ref);
+    }
+};
+
+/// The value a chain of gates passes on, over a draft: the walk is `valueBehindGates`'s
+/// (camel/runtime/graph.h), and this is that walk with a draft as its reader. A gate orders the
+/// value it reads after other nodes and changes nothing else (docs/design/effects/edges.cn.md 4.6
+/// and 5.3), so a question about that value is a question about what the first ordinary input
+/// carries; the gate keeps its place and its wait either way.
+inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
+    return valueBehindGates(DraftGateReader{&draft}, node);
+}
+
+/// The one input a gate of a draft forwards (camel/runtime/graph.h, `forwardedInputOf`).
+inline gc_node_ref_t forwardedInputOf(const GraphDraft &draft, gc_node_ref_t ref) {
+    return forwardedInputOf(DraftGateReader{&draft}, ref);
 }
 
 } // namespace camel::runtime

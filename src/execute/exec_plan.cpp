@@ -109,17 +109,11 @@ const std::vector<ExecNode> &ExecPlan::buildNodes() const {
 
 namespace {
 
-/// The value behind the GATEs that order it after statements.
-gc_node_ref_t valueBehindGates(const GCGraph &graph, gc_node_ref_t at) {
-    for (int guard = 0; guard < 64; ++guard) {
-        const GCNode *node = graph.node(at);
-        if (node == nullptr || node->kind != GCNodeKind::Gate || graph.normInputsOf(at).empty()) {
-            break;
-        }
-        at = graph.normInputsOf(at).front();
-    }
-    return at;
-}
+/// The value behind the GATEs that order it after statements is `camel::runtime::valueBehindGates`:
+/// the first ordinary input, then the first context input, then nothing (camel/runtime/graph.h).
+/// This file used to carry its own copy of that walk with a 64-step guard; the guard is gone with
+/// it, because a graph is acyclic (daily review 2026-11-18, item 5).
+using camel::runtime::valueBehindGates;
 
 /// Whether the value of `node` is read only by the node at `reader` (one reference, the reader's):
 /// a value nothing else reads can be left unmade.

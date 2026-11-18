@@ -25,6 +25,9 @@
 
 namespace camel::transforms {
 
+using camel::runtime::gateWaitsOf;
+using camel::runtime::valueBehindGates;
+
 namespace rt = camel::runtime;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
@@ -315,15 +318,9 @@ bool findRuleRightSide(
     const rt::GCGraph *rhs = instance.rhs;
     // The exit node is the graph's value-producing node; a gate may stand in front of it when the
     // value is carried out of a block.
-    gc_node_ref_t exitRef = rhs->exitNodeRef();
-    for (size_t guard = 0; guard < 8 && exitRef != rt::kInvalidNodeRef; ++guard) {
-        const rt::GCNode *node = rhs->node(exitRef);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-            break;
-        }
-        const auto carried = rhs->normInputsOf(exitRef);
-        exitRef            = carried.empty() ? rt::kInvalidNodeRef : carried.front();
-    }
+    // The walk is camel::runtime::valueBehindGates (camel/runtime/graph.h): a gate's first input
+    // is the value it carries, then its first context input, then nothing.
+    const gc_node_ref_t exitRef = valueBehindGates(*rhs, rhs->exitNodeRef());
     const rt::GCNode *exit = exitRef == rt::kInvalidNodeRef ? nullptr : rhs->node(exitRef);
     if (exit == nullptr) {
         why = "the rule's right side has no value to answer with";
@@ -573,15 +570,7 @@ gc_node_ref_t expandRuleRightSide(
     std::vector<bool> keep;
     gc_node_ref_t answerRef = body->exitNodeRef();
     if (position != kWholeAnswer) {
-        for (size_t guard = 0; guard < 8; ++guard) {
-            const rt::GCNode *node =
-                answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-                break;
-            }
-            const auto carried = body->normInputsOf(answerRef);
-            answerRef          = carried.empty() ? rt::kInvalidNodeRef : carried.front();
-        }
+        answerRef = valueBehindGates(*body, answerRef);
         const rt::GCNode *exit = answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
         if (exit == nullptr) {
             why = "the rule's right side has no value to answer with";
@@ -1126,17 +1115,7 @@ gc_node_ref_t expandRuleRightSide(
     // carries the same value. A position asks for one component of that value, which the gate walk
     // above has already found.
     gc_node_ref_t out = position == kWholeAnswer ? body->exitNodeRef() : answerRef;
-    for (size_t guard = 0; guard < 8; ++guard) {
-        const rt::GCNode *node = body->node(out);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-            break;
-        }
-        const auto carried = body->normInputsOf(out);
-        if (carried.empty()) {
-            break;
-        }
-        out = carried.front();
-    }
+    out = valueBehindGates(*body, out);
     const auto at = copied.find(out);
     if (at == copied.end()) {
         why = "the rule's right side has no exit the transform can read";

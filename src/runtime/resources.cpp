@@ -88,18 +88,11 @@ namespace {
 
 // ---- Small helpers ----------------------------------------------------------------------------
 
-/// The value a GATE forwards, followed to the first node that is not a GATE. The value is the GATE's
-/// first normal input (design principles 3.1, the author's ruling of 2026-11-17); what follows it in
-/// the input list is the reads a region's writes are held by.
-gc_node_ref_t throughGates(const GCGraph &graph, gc_node_ref_t ref) {
-    for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(ref); ++hops) {
-        if (graph.node(ref)->kind != GCNodeKind::Gate || graph.normInputsOf(ref).empty()) {
-            break;
-        }
-        ref = graph.normInputsOf(ref).front();
-    }
-    return ref;
-}
+/// The value a GATE forwards is camel::runtime::valueBehindGates: its first normal input, then its
+/// first context input, then nothing (design principles 3.1, the author's ruling of 2026-11-17;
+/// camel/runtime/graph.h). What follows the value in the input list is the reads a region's writes
+/// are held by, which gateWaitsOf answers. This file used to walk the chain itself.
+using camel::runtime::valueBehindGates;
 
 /// The union of two modes of access to one resource.
 AccessMode unite(AccessMode a, AccessMode b) { return a == b ? a : AccessMode::ReadModifyWrite; }
@@ -115,7 +108,7 @@ bool compatible(const sem::Resource &a, const sem::Resource &b) {
 
 /// The Function constant `ref` holds, seen through GATEs: a static DATA node.
 const ::Function *staticFunctionOf(const GCGraph &graph, gc_node_ref_t ref) {
-    ref                = throughGates(graph, ref);
+    ref                = valueBehindGates(graph, ref);
     const GCNode *node = graph.node(ref);
     if (node->kind != GCNodeKind::Data || node->dataIndex >= 0 || graph.staticArea() == nullptr ||
         node->dataType() == nullptr ||
@@ -522,7 +515,7 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     const GCGraph *callee = nullptr;
     std::vector<gc_node_ref_t> captures; // by capture position, kInvalidNodeRef when unknown
     if (!with.empty()) {
-        const gc_node_ref_t value = throughGates(graph, with[0]);
+        const gc_node_ref_t value = valueBehindGates(graph, with[0]);
         if (const ::Function *fn = staticFunctionOf(graph, value)) {
             callee = fn->graph();
         } else if (graph.node(value)->kind == GCNodeKind::Fill && !graph.normInputsOf(value).empty()) {
@@ -645,7 +638,7 @@ NodeResources Resolver::loop(const GCGraph &, gc_node_ref_t) const {
 
 ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(ref); ++hops) {
-        ref                = throughGates(graph, ref);
+        ref                = valueBehindGates(graph, ref);
         const GCNode *node = graph.node(ref);
         switch (node->kind) {
         case GCNodeKind::Port:
@@ -689,7 +682,7 @@ bool Resolver::mayAlias(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) 
 
 sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) const {
     for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(value); ++hops) {
-        value              = throughGates(graph, value);
+        value              = valueBehindGates(graph, value);
         const GCNode *node = graph.node(value);
         switch (node->kind) {
         case GCNodeKind::Port: {
@@ -1273,7 +1266,7 @@ CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_
     if (with.empty()) {
         return {};
     }
-    const gc_node_ref_t value = throughGates(graph, with[0]);
+    const gc_node_ref_t value = valueBehindGates(graph, with[0]);
     const GCNode *node        = graph.node(value);
     if (node == nullptr || node->dataType() == nullptr ||
         node->dataType()->code() != core::type::TypeCode::Function) {
