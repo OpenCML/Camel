@@ -1,0 +1,190 @@
+id = "opt.cxx_isolation"
+order = 485
+tier = "fast"
+tags = ["feat", "opt", "cxx", "differential", "fold", "cse"]
+
+# The C++ optimization passes and the Camel ones are two implementations of one optimization.
+# Neither is deleted yet (docs/roadmap.cn.md, P, written by the author on 2026-11-18): the C++
+# ones stay, isolated under `cxx::`, and are compared against the Camel ones -- "输出图是否规范相等
+# （不等处逐例归因）" -- before anything decides which one runs by default. The report of the
+# experiment is docs/handover/reports/2026-11-18-two-implementations-of-one-pass.md.
+#
+# The comparison is a run, not a reading. `std::jgir canonical=true` writes the document the
+# equivalence checker reads (src/passes/trans/json/gir_canonical.cpp): the graph and node names,
+# the node ids and the source origins are dropped, the ordering edges are reduced to the part no
+# other path implies, the keys are in a canonical order and the node order comes from the graph's
+# own structure. Two runs that produced the same graph therefore print the same bytes. No entry
+# names a normalizer and this file has no `[defaults]`, so the runner normalizes nothing and the
+# compared field `stdout_normalized` IS what the run printed: a difference is a difference in the
+# graph, and a reviewer reads the disagreement rather than a count of it. Writing
+# `normalizers = []` would say the same and is itself a finding -- `test/tools/
+# plan-fields-baseline.json` counts an empty list as a field that checks nothing -- so the property
+# is kept by leaving the field out, and each entry that compares says so in its own words.
+#
+#   by_cpp       the C++ pass under the name the isolation gives it: `std::cxx::fold`, `std::cxx::cse`
+#   by_camel     the Camel pass of the module `opt` (stdlib/opt.cml): `opt::fold`, `opt::cse`
+#   by_old_name  the same C++ pass under the name the isolation kept as its alias, `std::opt::fold`:
+#                the reading has to be the one `by_cpp` printed, or the move changed something a
+#                reader of the old name would notice. This is the control of the isolation itself.
+#
+# FOLD: the two readings are one document, byte for byte. The C++ fold and the Camel fold agree on
+# every node, every constant and every edge of the corpus, and the name the passes were separated
+# from prints the same document as the name they were given.
+#
+# CSE: the two readings are one document except for one field -- the `flags` word of the one graph
+# neither implementation rewrites (`chain`, the folding corpus, which has no expression written
+# twice). The C++ sweep writes the graphs its screen selects, so nobody ever commits `chain` and its
+# `flags` stay 0; the Camel sweep opens one transaction over the program and commits once, and a
+# commit looks at the gates of every graph it opened, so `chain` carries `kGraphFlagGatesDissolved`
+# (2, include/camel/runtime/graph.h). That is a memo -- "a graph without it is looked at by the
+# first commit that reaches it" -- not a difference in the graph: the two readings have the same
+# graphs, the same nodes in the same order, the same operators, the same operands and the same
+# entry. So the CSE entries cannot be a text comparison today; they are the two readings themselves,
+# each asserted (a canonical document, the program's own graph set, the sweep reached its fixpoint,
+# and the `flags` word the run prints), which is the difference written down where a change to
+# either side turns it red.
+
+[[tests]]
+name = "cxx_isolation.fold.by_cpp"
+desc = "The C++ constant folding (`std::cxx::fold`) on the corpus whose literals form a chain: the canonical document of the graph it leaves, with no operation over two constants remaining, and the reading the Camel pass is put to."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::cxx::fold", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    throw new Error("std::cxx::fold: the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const graphs = doc.graphs || []
+if (graphs.length < 5) {
+    throw new Error("std::cxx::fold: the document holds " + graphs.length + " graph(s), not the five the program has")
+}
+const operands = (n) => (n.inputs || []).filter((i) => i.kind === "norm").map((i) => i.source)
+for (const g of graphs) {
+    const constants = new Set((g.nodes || []).filter((n) => n.kind === "DATA").map((n) => n.id))
+    for (const n of g.nodes || []) {
+        if (n.kind !== "OPER") continue
+        const ins = operands(n)
+        if (ins.length >= 2 && ins.every((s) => constants.has(s))) {
+            throw new Error("std::cxx::fold: an operation over constants is left in the graph, so the fold did not reach its fixpoint: " + n.id)
+        }
+    }
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.fold.by_camel"
+desc = "The Camel constant folding (`opt::fold`, stdlib/opt.cml) on the same graph: its canonical document is the one the C++ pass printed, byte for byte and with no normalizer between them."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "opt::fold", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.fold.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    throw new Error("opt::fold: the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const graphs = doc.graphs || []
+if (graphs.length < 5) {
+    throw new Error("opt::fold: the document holds " + graphs.length + " graph(s), not the five the program has")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.fold.by_old_name"
+desc = "The same C++ pass under the name it had before the isolation, `std::opt::fold`: the alias resolves to the kernel `std::cxx::fold` names, so this reading is the one `by_cpp` printed. A rename that changed the graph shows here."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::opt::fold", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.fold.by_cpp"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "cxx_isolation.cse.by_cpp"
+desc = "The C++ common-subexpression elimination (`std::cxx::cse`) on the corpus whose expression is written twice over one value: the canonical document of the graph it leaves, the sweep reached its fixpoint, and the `flags` word it prints -- the one field that tells it from the Camel reading."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::cxx::cse", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("std::cxx::cse: " + why)
+}
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    fail("the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const graphs = doc.graphs || []
+if (graphs.length < 5) {
+    fail("the document holds " + graphs.length + " graph(s), not the five the program has")
+}
+const operands = (n) => (n.inputs || []).filter((i) => i.kind === "norm").map((i) => i.source).join(",")
+for (const g of graphs) {
+    const seen = new Set()
+    for (const n of g.nodes || []) {
+        const op = n.payload && n.payload.op ? n.payload.op : ""
+        if (n.kind !== "OPER" || !op.startsWith(":op/")) continue
+        const key = op + "(" + operands(n) + ")"
+        if (seen.has(key)) {
+            fail("two nodes of one graph compute " + key + ", so the sweep did not reach its fixpoint")
+        }
+        seen.add(key)
+    }
+}
+const flags = graphs.map((g) => g.flags).sort().join(",")
+if (flags !== "0,2,2,2,2") {
+    fail("the graph set prints flags [" + flags + "], not [0,2,2,2,2]: exactly one graph is left "
+        + "with no commit having looked at its gates, because this sweep writes only the graphs it "
+        + "rewrites (docs/handover/reports/2026-11-18-two-implementations-of-one-pass.md)")
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.cse.by_camel"
+desc = "The Camel common-subexpression elimination (`opt::cse`, stdlib/opt.cml) on the same graph, read the same way: the same graphs, nodes, operators and operands, the sweep reached its fixpoint, and every graph prints the gates-dissolved bit because a program-wide commit looked at all of them."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "opt::cse", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("opt::cse: " + why)
+}
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    fail("the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const graphs = doc.graphs || []
+if (graphs.length < 5) {
+    fail("the document holds " + graphs.length + " graph(s), not the five the program has")
+}
+const operands = (n) => (n.inputs || []).filter((i) => i.kind === "norm").map((i) => i.source).join(",")
+for (const g of graphs) {
+    const seen = new Set()
+    for (const n of g.nodes || []) {
+        const op = n.payload && n.payload.op ? n.payload.op : ""
+        if (n.kind !== "OPER" || !op.startsWith(":op/")) continue
+        const key = op + "(" + operands(n) + ")"
+        if (seen.has(key)) {
+            fail("two nodes of one graph compute " + key + ", so the sweep did not reach its fixpoint")
+        }
+        seen.add(key)
+    }
+}
+const flags = graphs.map((g) => g.flags).sort().join(",")
+if (flags !== "2,2,2,2,2") {
+    fail("the graph set prints flags [" + flags + "], not [2,2,2,2,2]: this sweep opens one "
+        + "transaction over the program and commits it once, so a commit has looked at the gates of "
+        + "every graph, including the one it merged nothing in (docs/handover/reports/"
+        + "2026-11-18-two-implementations-of-one-pass.md)")
+}
+"""

@@ -5,9 +5,14 @@
  * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse`,
  * `opt::dce` and `opt::saturate`. A pass is a function from a function to a function of the same type,
  * `(f: F) => F!`, so it applies to one function, `loss->opt::fold->opt::cse`, and the pipeline
- * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the
- * native passes of the same names, `std::opt::fold`, `std::opt::cse` and `std::opt::dce`, which
- * run by default; a differential test keeps the two together (design principles 10.4).
+ * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the C++
+ * passes of the same names, `std::cxx::fold`, `std::cxx::cse` and `std::cxx::dce` (the names those
+ * passes had before they were separated from this module, `std::opt::fold` and the rest, are aliases
+ * of them), which run by default; neither set is deleted before the two have been compared
+ * (docs/roadmap.cn.md section 0, P; design principles 10.4). That comparison is a run, not a
+ * reading: the same program is folded, or swept for repeated expressions, by each implementation,
+ * `std::jgir canonical=true` reads both graphs, and the two documents have to be equal byte for
+ * byte (test/plans/feat/opt/cxx_isolation.plan.toml).
  *
  * A pass is a transaction over the function the `graph` module hands out: read a node, `replace`
  * it by another, `erase` one nobody reads, evaluate an operator over constants with `eval`,
