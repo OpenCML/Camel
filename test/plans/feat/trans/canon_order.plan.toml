@@ -16,6 +16,18 @@ expect_stdout_contains = ["canonical order: PASS"]
 timeout_ms = 180000
 
 [[tests]]
+name = "unreachable_nodes_have_a_place"
+desc = "A node no root reaches is a *section* of the canonical order and not a hole in it: it goes after everything the walk reaches, and inside itself it is ordered by the same tie rule, so the tail is a total order the graph decides rather than the order the nodes were created in. The program is `loop total = 0, step = 0 while step < scale do (total + twice, step + 1)`, whose condition reads `step` and never `total`, so `total`'s condition port is a node nothing in the region reads -- 207 of the 4037 `.cml` files in this repository have one, and every one of them is a region port of that shape. Two writings of it (two statements swapped, every local renamed) write one canonical document: both sha256 are printed and they are `004eefb6603d668a2c375775eb51540450a416ec00b6e72a7cbe9c8bafcebc68`. The unreachable node is read off the document itself -- a port a region names that no node lists as an input -- so the reading is about the graph the dump was made from; a dump of one file twice is the same bytes; and the counterfactual, one constant changed, must read two, with the nodes and the edges that differ printed, so that the `true` cannot come from a comparison that answers `true` to everything."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/canon_unreachable.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["unreachable nodes in writing a: 1", "canonical by nodes", "same_graph=True", "counterfactual", "same_graph=False", "two writings of a graph with an unreachable node are one canonical form: PASS", "the comparison says false when the graph differs: PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
+
+[[tests]]
 name = "execution_is_unchanged"
 desc = "Two writes into one sync block print what they printed before the rule changed: the canonical numbering is a query over the graph, and a tie may change what a document says and never what the program does."
 kind = "behavior"

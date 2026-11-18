@@ -1,0 +1,35 @@
+/**
+ * The state a `loop` starts a `var` from is the `var` as it stands where the loop is written, not the
+ * value its declaration gave it: a write written before the loop is the version the loop is entered
+ * with (design principles 3.5, "a write to an outer `var` in a loop body becomes the loop's carried
+ * state"; the state's first value is that variable, Builder::valueVersionOf).
+ *
+ * Both halves are here, because either one alone can be passed by taking the declaration's value:
+ *   `on`  is declared `false` and written `true` before the loop, so the loop runs, twice, and prints
+ *         `on 0` and `on 1`;
+ *   `off` is declared `true` and written `false` before the loop, so the loop does not run and prints
+ *         nothing.
+ * A build that starts the loop from the declaration prints `off 0` / `off 1` and no `on` line at all,
+ * so the two halves cannot both pass unless the version is read.
+ *
+ * Found by the E9 differential campaign, seed 361 (2026-11-18): the generator writes a `var false`
+ * before a loop whose condition reads it, then writes `true`, and all 99 cells of the matrix lost the
+ * ten lines the loop prints.
+ */
+func main(): int sync {
+    var on = false;
+    on = true;
+    let first = loop s = 0, c = 0 while ((c < 2) && on) do sync {
+        on = (if on then true else false);
+        println('on {}'->format<c>);
+        return (s, c + 1);
+    };
+    var off = true;
+    off = false;
+    let second = loop s = 0, c = 0 while ((c < 2) && off) do sync {
+        off = (if off then true else false);
+        println('off {}'->format<c>);
+        return (s, c + 1);
+    };
+    return 0;
+}

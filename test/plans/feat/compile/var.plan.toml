@@ -768,3 +768,24 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 expect_stdout_matches = ["^COPIES .* updates [0-9]+ in-place [0-9]+ by-count [0-9]+ declared [0-9]+ copied 0$"]
 timeout_ms = 30000
+# The state a `loop` starts a `var` from is the `var` as it stands where the loop is written, not the
+# value its declaration gave it: the last write before the loop is the version the head is entered
+# with (design principles 3.5; Builder::visitLoopNode, the cell branch, asks Builder::valueVersionOf).
+#
+# Both halves of the case are read here, and both are needed: `on` is declared `false` and written
+# `true` before its loop, and `off` is declared `true` and written `false` before its own. A build
+# that starts from the declaration prints `off 0`/`off 1` and no `on` line at all, so neither half
+# can be passed by guessing. The exact stdout is the whole reading, on every back end: the defect
+# this pins was in the GIR the front end built, so all four produced the same wrong five lines and
+# comparing them to each other would have agreed.
+[[tests]]
+name = "var.loop_state_starts_from_the_last_write"
+desc = "`var on = false; on = true;` before a `while` loop whose condition reads `on` is entered with `true` and runs twice, and `var off = true; off = false;` is entered with `false` and does not run: exact stdout on all four back ends. Found by E9 seed 361, where all 99 cells lost the ten lines."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_state_starts_from_the_last_write.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "on 0\non 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

@@ -302,6 +302,30 @@ slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
     return handleArray(HandleKind::Node, items);
 }
 
+/// The node the graph hands its value out of: the node a graph returns, a port for a function that
+/// returns a parameter, the `JOIN` a body's branches end at. Null for a graph that hands no value
+/// out, which is the one case with no node to put anything in the place of.
+slot_t exitOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    // A draft has no `Graph` handle of its own (a transaction names its draft), so this reads a
+    // published graph and nothing else; the exit of a draft is the same node, alive until the graph
+    // is committed.
+    if (handle->transaction() != nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.exit_of",
+            "the graph belongs to a transaction");
+    }
+    const GCGraph &graph    = graphOf(handle, "graph.exit_of");
+    const gc_node_ref_t out = graph.exitNodeRef();
+    if (out == kInvalidNodeRef || graph.node(out) == nullptr) {
+        return NullSlot;
+    }
+    return makeSome(
+        toSlot(nodeHandle(handle->program(), handle->graph(), out)),
+        nullableOf(HandleType::get(HandleKind::Node)));
+}
+
 // ---- a node ----
 
 slot_t inputsOf(ArgsView &norm, const char *site, int group) {
@@ -1026,6 +1050,7 @@ const std::vector<ReadOp> &readOps() {
         {"graphs_of", graphsOfKernel},
         {"name", nameKernel},
         {"nodes", nodesKernel},
+        {"exit_of", exitOfKernel},
         {"inputs", inputsKernel},
         {"with_inputs", withInputsKernel},
         {"sync_inputs", syncInputsKernel},
@@ -1064,9 +1089,19 @@ const std::vector<ReadOp> &readOps() {
 
 uint32_t nodeCanonicalNumber(const Handle *handle) {
     if (handle->transaction() != nullptr) {
-        // A draft has no canonical order yet: it is being edited, and a rule condition reads it
-        // while it is. The place the node holds in the draft is the only number it has.
-        return handle->index();
+        // A node of a draft has no canonical number, and this reading refuses rather than answer
+        // the place the node holds in the draft (design principles 9.5). The draft is being
+        // edited: that place is the order the nodes were made in while the draft is open, and the
+        // commit is what turns it into a graph -- so an answer here would be a number of the right
+        // shape that is wrong, which is the one thing a reading of the canonical order exists to
+        // replace. A rule condition that wants the draft's own order reads `creation_id` and
+        // declares the `spelling` capability, which is what it is doing.
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.id",
+            "the node belongs to a draft, and a draft has no canonical number: its nodes' places "
+            "are the order they were made in, which the commit replaces. Read `id` after the "
+            "commit publishes the program, or read `creation_id` for the draft's own order");
     }
     const std::vector<uint32_t> numbers = canonicalNumbersOf(handle);
     const uint32_t ref                  = handle->index();

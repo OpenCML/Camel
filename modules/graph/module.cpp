@@ -76,8 +76,9 @@ slot_t neKernel(ArgsView &, ArgsView &norm, Context &) {
 slot_t idKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<camel::graphmod::Handle *>(0);
     // A node's id is its *canonical* number (design principles 9.5): the position it has in the
-    // order `nodes` gives, which the graph's structure decides. A draft has no canonical order yet
-    // -- it is being edited -- so a node of one answers the place it holds in the draft.
+    // order `nodes` gives, which the graph's structure decides. A node of a draft has none, and
+    // `nodeCanonicalNumber` refuses the reading rather than answer the place the node holds in the
+    // draft -- that place is the order the nodes were made in and the commit replaces it.
     if (handle->kind() == HandleKind::Node) {
         return rtdata::toSlot<rtdata::Int64>(
             static_cast<int64_t>(camel::graphmod::nodeCanonicalNumber(handle)));
@@ -182,6 +183,7 @@ class GraphModule final : public BuiltinModule {
                 {"check_pass_boundary", true},
                 {"name", true},
                 {"nodes", true},
+                {"exit_of", true},
                 {"inputs", true},
                 {"with_inputs", true},
                 {"sync_inputs", true},
@@ -231,6 +233,7 @@ class GraphModule final : public BuiltinModule {
                 {"commit", false},
                 {"abort", false},
                 {"eval", false},
+                {"order", false},
                 {"graph_of", true},
                 {"add_constant", false},
             });
@@ -249,6 +252,7 @@ class GraphModule final : public BuiltinModule {
                     {"replace", onTxn},
                     {"erase", onTxn},
                     {"eval", onTxn},
+                    {"order", onTxn},
                     {"add_constant", onTxn},
                     {"commit", onTxn},
                     {"abort", onTxn},
