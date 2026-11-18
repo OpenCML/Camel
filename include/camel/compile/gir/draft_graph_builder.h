@@ -77,6 +77,11 @@ class DraftGraphBuilder {
     /// The graph's identity (camel/runtime/graph_id.h), the id of the runtime graph it encodes to.
     runtime::GraphId graphId() const { return draft().id(); }
     camel::core::type::FunctionType *funcType() const { return draft().funcType(); }
+    /// Whether the exit type the graph states was packed from its `var` parameters rather than
+    /// written (`GraphDraft::exitTypeIsPacked`): what a caller reads to know that a call hands values
+    /// back beside the result.
+    bool exitTypeIsPacked() const { return draft().exitTypeIsPacked(); }
+    void setExitTypeIsPacked(bool packed) { draft().setExitTypeIsPacked(packed); }
     camel::core::type::TupleType *closureType() const { return draft().closureType(); }
     bool hasFrameLayout() const { return draft().hasFrameLayout(); }
     size_t frameSize() const { return draft().frameSize(); }
