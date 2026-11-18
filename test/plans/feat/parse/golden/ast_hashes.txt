@@ -1839,6 +1839,9 @@ f01c77c567688089 ok test/cases/compile/tagged/pass_nullable.cml
 ec082d301afdd2b9 ok test/cases/compile/tagged/pipelines.cml
 d2c108544556533a ok test/cases/compile/tagged/stdlib.cml
 99e3d7b194681fb1 ok test/cases/compile/tagged/two_layer.cml
+beaef4960e8f840d ok test/cases/compile/tagged/unwrap_null.cml
+c1a800a678e66c2d ok test/cases/compile/tagged/unwrap_null_attempt.cml
+c712daf3e8410589 ok test/cases/compile/tagged/unwrap_value.cml
 561ce101db48320a ok test/cases/compile/tags/decl.cml
 76ae80e3f0efa75c ok test/cases/compile/tags/err_arity.cml
 eada2f47c8221cf6 ok test/cases/compile/tags/err_const.cml
