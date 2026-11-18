@@ -602,20 +602,29 @@ void replaceNode(
         }
     }
     draft.eraseNode(id);
-    // Closing the chain over a node hands its successor the place that node stood in. A node the
-    // program did not write as a statement of the block stands in none -- a pure node the block's
-    // value reads -- and one whose place is in another block keeps none of it either (the chain of
-    // a block joins its own statements, docs/design/effects/edges.cn.md 4.6). The successor is then
-    // left waiting on nothing, and everything the removed node waited on stops being reached from
-    // the program's result, which is what ran those effects (section 2). It keeps that wait
-    // instead: it runs where the removed code did, which is where its own statement was written.
+    // Closing the chain over a node hands its successor the place that node stood in -- and that
+    // place is the removed node's chain predecessor alone. What the removed node waited on outside
+    // the chain is not in it: the effects it was written after, and the nodes its value was computed
+    // from. A successor of another block keeps none of the place either (the chain of a block joins
+    // its own statements, docs/design/effects/edges.cn.md 4.6), and one that already holds a wait of
+    // its own kept only that wait. Either way the successor is left with no edge to those nodes, and
+    // everything the removed node waited on stops being reached from the program's result, which is
+    // what ran those effects (section 2) -- or, when the two are accesses to one resource, the two
+    // are published unordered (`docs/design/graph-editing/README.cn.md` 8.1 item six, which is what
+    // `std::opt` over `bump(s)` inlined into a `sync` block tripped: the write of the cell and the
+    // branch that reads it were ordered through the GATE the inliner left standing for the call, and
+    // sweeping that GATE took the only edge between them). The successor keeps that wait instead: it
+    // runs where the removed code did, which is where its own statement was written. This is the
+    // control-edge half of what `eraseNode` does for order edges (`spliceOrderEdgesOver`, docs/
+    // design/effects/edges.cn.md 4: what a node waited on, what stands where it stood waits on).
     for (gc_node_ref_t user : syncUsers) {
-        if (user == id || !draft.alive(user) || !draft.syncInputsOf(user).empty() ||
-            !draft.ctrlInputsOf(user).empty()) {
+        if (user == id || !draft.alive(user)) {
             continue;
         }
         for (gc_node_ref_t pred : inheritedWait) {
-            if (pred == user || !draft.alive(pred)) {
+            // A predecessor the user already stands after cannot be written as one more input: the
+            // edge would close a cycle of inputs, which the seal check refuses.
+            if (pred == user || !draft.alive(pred) || reaches(transaction, user, pred)) {
                 continue;
             }
             // The chain takes the tail as a wait of its own kind when it can (`handOverSyncWait`),
