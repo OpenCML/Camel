@@ -986,7 +986,7 @@ GRAPH_STATS {"graphs":7,"nodes":70,"edges":85,"opers":18,"direct_calls":4,"indir
 两行数字不同：`std::opt` 改了图（直接调用少了，算子节点多了——函数被内联到了调用处），而程序的结果不变。要逐遍保存整张图，用 `--dump-after-each-pass`：
 
 ```bash
-camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::opt::inline std::opt::fold std::fvm
+camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::cxx::inline std::cxx::fold std::fvm
 ```
 
 目录 `snap` 里得到 `00_input.rgir.dot`、`01_std.opt.inline.rgir.dot`、`02_std.opt.fold.rgir.dot` 以及对应的 `.stats.json`：输入的图，和每一遍之后的图。

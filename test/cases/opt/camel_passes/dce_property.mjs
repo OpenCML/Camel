@@ -6,7 +6,7 @@
 //   1. No graph keeps a value nobody reads. A value is a constant, a conversion, a copy, an
 //      access, a fill, or an operation that reads and writes nothing outside the graph — the
 //      `isValueOnly` of the C++ pass, as far as a dump can tell. This is the sweep's fixpoint,
-//      and it is what the corpus needs two rounds for: `std::opt::inline` takes the only user of
+//      and it is what the corpus needs two rounds for: `std::cxx::inline` takes the only user of
 //      `chain`'s product away, so the product is dead, and the constant it reads becomes dead
 //      only after the product is gone.
 //   2. The value the program uses is still there, and still read: `kept`'s product is read by its

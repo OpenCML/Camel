@@ -1,8 +1,8 @@
 // The measurement's table, one entry per corpus. Two tables are compared, and neither is a
 // snapshot of a pass that no longer exists:
 //
-//   * the **reference** column, read from the plan's `by_cpp` golden: `std::opt::algebra
-//     neutral_only=true` followed by the same `std::opt::dce values_only=true` the library side
+//   * the **reference** column, read from the plan's `by_cpp` golden: `std::cxx::algebra
+//     neutral_only=true` followed by the same `std::cxx::dce values_only=true` the library side
 //     runs. The mode is in this tree (`src/passes/opt/generic/algebra.cpp`), so this column is
 //     re-recordable and the plan's `*.by_cpp` entries pin it for itself.
 //   * the **library** column, the run being verified: `rules::simplify` with the same pass list,

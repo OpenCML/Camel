@@ -38,7 +38,7 @@ FIXED: Dict[str, List[str]] = {
     "P6": ["std::macro", "std::opt", "std::nvm"],
     "P7": ["std::macro", "std::opt", "std::nvm"],
     "P8": ["std::macro", "std::opt", "std::fvm"],
-    "P9": ["std::macro", "std::opt::inline", "std::nvm"],
+    "P9": ["std::macro", "std::cxx::inline", "std::nvm"],
     "P10": ["std::macro", "tensor::fuse", "std::nvm"],
     "P11": ["std::opt", "std::nvm"],
     "P12": ["std::macro", "std::opt", "std::tf"],
@@ -50,12 +50,12 @@ MACRO_REFERENCE = "P4"
 
 REWRITE_PASSES: List[str] = [
     "std::macro",
-    "std::opt::devirtualize",
-    "std::opt::specialize",
-    "std::opt::inline",
-    "std::opt::fold",
-    "std::opt::cse",
-    "std::opt::dce",
+    "std::cxx::devirtualize",
+    "std::cxx::specialize",
+    "std::cxx::inline",
+    "std::cxx::fold",
+    "std::cxx::cse",
+    "std::cxx::dce",
     "tensor::fuse",
     "std::opt",
 ]

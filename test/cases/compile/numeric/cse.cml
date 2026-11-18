@@ -1,6 +1,6 @@
 /**
  * Two equal expressions are not merged when they were granted different numeric permissions
- * (std::opt::cse, docs/design/op-semantics 6.4); equal expressions with equal permissions are.
+ * (std::cxx::cse, docs/design/op-semantics 6.4); equal expressions with equal permissions are.
  */
 
 func twice(a: float, b: float): float {

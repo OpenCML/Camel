@@ -36,9 +36,9 @@ expect_stdout_exact = "5\n"
 
 [[tests]]
 name = "dce_effect_under_pure_arithmetic.dce"
-desc = "`std::opt::dce` drops the unread subtraction: the print it holds stays."
+desc = "`std::cxx::dce` drops the unread subtraction: the print it holds stays."
 case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 expect_exit = 7
 expect_stdout_exact = "5\n"
 
@@ -60,9 +60,9 @@ expect_stdout_exact = "9\n"
 
 [[tests]]
 name = "inline_argument_effect.inline"
-desc = "`std::opt::inline` binds no use to the parameter the callee never reads; the argument's effect stays."
+desc = "`std::cxx::inline` binds no use to the parameter the callee never reads; the argument's effect stays."
 case = "../../../cases/opt/effects/inline_argument_effect.cml"
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 expect_exit = 5
 expect_stdout_exact = "9\n"
 
@@ -86,7 +86,7 @@ expect_stdout_exact = "1\n2\n1\n"
 name = "fold_keeps_arm_effect.fold_after_inline"
 desc = "Inlining makes the condition constant and the fold takes the other arm; the print the dropped arm read stays."
 case = "../../../cases/opt/effects/fold_keeps_arm_effect.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "1\n2\n1\n"
 
@@ -110,7 +110,7 @@ expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
 name = "branch_keeps_outer_effect.fold_after_inline"
 desc = "The second call's condition is constant after inlining; the effect the dropped arm read still runs."
 case = "../../../cases/opt/effects/branch_keeps_outer_effect.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "1\n3\n4\n1\n3\n3\n"
 
@@ -173,9 +173,9 @@ expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 
 [[tests]]
 name = "fold_keeps_inner_fault.fold"
-desc = "`std::opt::fold`: the fault still happens after the branch above it is pruned."
+desc = "`std::cxx::fold`: the fault still happens after the branch above it is pruned."
 case = "../../../cases/opt/effects/fold_keeps_inner_fault.cml"
-args = ["${case}", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::fold", "${backend}"]
 kind = "negative"
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
@@ -207,9 +207,9 @@ expect_stdout_exact = "8\n8\n"
 
 [[tests]]
 name = "fold_leaves_no_control_edge.fold"
-desc = "`std::opt::fold` takes the same two prints on every back end."
+desc = "`std::cxx::fold` takes the same two prints on every back end."
 case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
-args = ["${case}", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::fold", "${backend}"]
 expect_exit = 8
 expect_stdout_exact = "8\n8\n"
 
@@ -272,7 +272,7 @@ expect_exit = 0
 expect_stdout_contains = ["\"exit\": null"]
 # An effect whose place in the chain was the GATE inlined in front of it (2026-11-01, lane-fold2).
 #
-# `std::opt::inline` splices an inlined body's tail as a GATE, and `std::opt::fold` prunes the branch
+# `std::cxx::inline` splices an inlined body's tail as a GATE, and `std::cxx::fold` prunes the branch
 # whose chain entered that arm. The gate was left with no wait, and the commit dissolved it as "plain
 # forwarding" -- but a gate with no data user forwards nothing: it was the last reader of the
 # `reduce`, and dissolving it took the effect's only place in the chain with it:
@@ -292,9 +292,9 @@ expect_stdout_exact = ""
 
 [[tests]]
 name = "inline_reduce_in_folded_arm.inline_fold"
-desc = "`std::opt::fold` prunes the branch the inlined body's chain was entered from; the `reduce` keeps the place the gate it read held."
+desc = "`std::cxx::fold` prunes the branch the inlined body's chain was entered from; the `reduce` keeps the place the gate it read held."
 case = "../../../cases/opt/effects/inline_reduce_in_folded_arm.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
 
@@ -427,7 +427,7 @@ expect_stdout_exact = "1\n2\n3\n"
 name = "fold_keeps_arm_effect_chain.inline_fold"
 desc = "Inlining makes the condition constant; both prints of the taken arm stay, in order."
 case = "../../../cases/opt/effects/fold_keeps_arm_effect_chain.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "1\n2\n3\n"
 
@@ -451,7 +451,7 @@ expect_stdout_exact = "11\n12\n13\n3\n11\n13\n0\n"
 name = "fold_keeps_nested_arm_effect.fold"
 desc = "Two constant branches dissolved around an effect: the inner arm's line stays between the outer arm's two."
 case = "../../../cases/opt/effects/fold_keeps_nested_arm_effect.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "11\n12\n13\n3\n11\n13\n0\n"
 
@@ -475,7 +475,7 @@ expect_stdout_exact = "21\n1\n22\n2\n"
 name = "fold_keeps_taken_arm_only.fold"
 desc = "Both branches dissolved, one to each arm: the arm that is dropped contributes no line, and the taken one still prints."
 case = "../../../cases/opt/effects/fold_keeps_taken_arm_only.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "21\n1\n22\n2\n"
 
@@ -579,7 +579,7 @@ expect_stdout_exact = "41\n41\n"
 # the node `runtime::orderIncomplete` pairs a neighbour with. Without that edge a body statement and
 # a branch's arm are two writes to `stdout` with no path between them: the graph is one a commit
 # refuses, and an inline splice copies it verbatim into the caller (edges.cn.md 4.2, 5.7), where
-# `std::opt::inline` / `std::opt` then refuse -- `fold_keeps_arm_effect` above is that refusal.
+# `std::cxx::inline` / `std::opt` then refuse -- `fold_keeps_arm_effect` above is that refusal.
 # This entry exists so a fix cannot pass by making the check blind to the pair: it reads the edge
 # itself, in the graph the front end built.
 [[tests]]

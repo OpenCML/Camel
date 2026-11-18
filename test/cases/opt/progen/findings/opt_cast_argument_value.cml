@@ -5,7 +5,7 @@
  *   The conversion was written `i as float` when the finding was made; `as` casts dynamically
  *   now and refuses `int` to `float`, so the program writes the conversion the way the language
  *   writes it today, `float(i)` -- the spelling SemanticDiag::DynamicCastForbidden names.
- * Pipeline: std::opt std::nvm (also std::opt and std::opt::specialize)
+ * Pipeline: std::opt std::nvm (also std::opt and std::cxx::specialize)
  * Expected output: 7.5, 17.25, 10.75 (three lines)
  * Actual: 0.5, -1.75, 7.75 (node VM; the second line differs between schedulers)
  */

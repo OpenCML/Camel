@@ -205,8 +205,8 @@ expect_output_not_contains = ["test_echo:"]
 
 [[tests]]
 name = "growth_budget.parameter"
-desc = "std::opt::inline declares growth_budget and takes it as a parameter, like every pass setting (it used to be CAMEL_OPT_GROWTH_BUDGET)."
-args = ["${case}", "std::opt::inline growth_budget=0", "std::fvm"]
+desc = "std::cxx::inline declares growth_budget and takes it as a parameter, like every pass setting (it used to be CAMEL_OPT_GROWTH_BUDGET)."
+args = ["${case}", "std::cxx::inline growth_budget=0", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 
@@ -404,8 +404,8 @@ timeout_ms = 120000
 
 [[tests]]
 name = "declaration.resolves_by_module_and_name"
-desc = "A pass is a declaration of stdlib/std.cml; the pipeline finds it by module and name and runs its kernel. `std::inline` is the short spelling of the same declaration, resolved as an alias."
-args = ["${case}", "std::inline", "std::fvm"]
+desc = "A pass is a declaration of stdlib/std.cml; the pipeline finds it by module and name and runs its kernel, and no alias is on that path: `std::cxx::inline` is the declaration's own name under the `cxx` namespace, and the short spelling the isolation retired (`std::inline`) is refused."
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_stdout_starts_with = "camel-ran-marker\n"
 
 [[tests]]

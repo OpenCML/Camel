@@ -91,7 +91,7 @@ Model exportFunction(
  * because it needs the examples: the parameters take the examples' exact types (dtype and
  * shape), node types are re-inferred, and what those types make constant (the shape of an
  * input and the arithmetic on it) is folded and the dead nodes are dropped, i.e. the
- * std::opt::fold / std::opt::dce fixpoint with every call-rewriting phase off.
+ * std::cxx::fold / std::cxx::dce fixpoint with every call-rewriting phase off.
  */
 Model translateFunction(
     core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,

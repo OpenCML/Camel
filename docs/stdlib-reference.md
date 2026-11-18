@@ -5928,7 +5928,7 @@ Whether the node is a constant of the graph.
 constant_bytes: (n: Node) => int
 ```
 
-The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+The bytes the node's constant value occupies: the measure `std::opt` and `std::cxx::fold` clamp with
 `constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
 cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
 node that is no constant costs 0.

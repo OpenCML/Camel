@@ -4,7 +4,7 @@
 /*
  * Runtime rewrite pass configuration.
  *
- * `std::opt::inline` is intentionally an inline-only surface. `std::opt` is the
+ * `std::cxx::inline` is intentionally an inline-only surface. `std::opt` is the
  * integrated optimization driver, which combines call rewriting with folding, CSE
  * and DCE. This configuration selects the call-rewrite stages and their budgets.
  * Keeping the two configuration types distinct
@@ -55,7 +55,7 @@ inline constexpr size_t kDefaultGrowthBudgetNodes = 4096;
 /// Bytes of constants folding may put into a graph. Folding replaces a computation by the value it
 /// produces, which is compile-time memory bought for run time; past this size the value is not
 /// worth holding and the computation stays (generic.cpp, constantBytesOf). It is the default of
-/// the `constant_budget` parameter of the passes that fold, `std::opt` and `std::opt::fold`.
+/// the `constant_budget` parameter of the passes that fold, `std::opt` and `std::cxx::fold`.
 inline constexpr size_t kDefaultConstantBudgetBytes = 8u * 1024u * 1024u;
 
 /// The growth budget of one pass built on the rewrite engine. `nodes` is what the pass may copy;
@@ -156,7 +156,7 @@ struct OptimizeRewriteConfig {
     /// The nodes already copied, for a driver that runs the engine several times against one
     /// budget (std::opt, whose rounds share one count). **Required** by
     /// `applyOptimizeRewritePass`: every pass that runs the rewrite keeps one — `std::opt` through
-    /// `simplifyGraph`, `std::opt::inline`, `::devirtualize` and `::specialize` on their own
+    /// `simplifyGraph`, `std::cxx::inline`, `::devirtualize` and `::specialize` on their own
     /// instances, cleared where their run starts — and a run given none is refused rather than
     /// counted in a local, which would spend the whole `growth_budget` again on the next run and
     /// say nothing about it (engine.cpp).
@@ -177,7 +177,7 @@ struct OptimizeRewriteConfig {
     /// count that outlived the program it was counting would report a run of one program against
     /// the next, and nothing in a count of runs belongs to the process rather than to a pass.
     /// **Required** by `applyOptimizeRewritePass`: every pass that runs the rewrite keeps one
-    /// (`std::opt`, `std::opt::inline`, `std::opt::devirtualize`, `std::opt::specialize`), and a
+    /// (`std::opt`, `std::cxx::inline`, `std::cxx::devirtualize`, `std::cxx::specialize`), and a
     /// run given none is refused rather than counted from zero in a local, which would hide the
     /// rewrite that never settles (engine.cpp).
     SettleStreak *settleStreak = nullptr;

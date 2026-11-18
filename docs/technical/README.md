@@ -18,7 +18,7 @@
 | [10_source_mapping_and_debug_locations.md](10_source_mapping_and_debug_locations.md) | 源码映射、Origin 派生链，以及 GCT/GIR/Runtime 如何回到源码区间 |
 | [11_semantic_models_and_reverse_mapping_foundation.md](11_semantic_models_and_reverse_mapping_foundation.md) | AST/GCT/GIR 节点语义、层间 lowering、基础缺口审计与相对精确逆映射底座 |
 | [12_namespace_convention.md](12_namespace_convention.md) | **命名空间规范**：路径与命名空间映射、别名约定、新代码规则及迁移状态 |
-| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::opt::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
+| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::cxx::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
 | [17_graph_rewrite_api_contracts.md](17_graph_rewrite_api_contracts.md) | Graph 重写 API 契约：事务边界、可写域、内联入口规则与验证器约束 |
 | [18_sync_control_semantics.md](18_sync_control_semantics.md) | 同步控制语义解读：`BRCH/JOIN/GATE` 分工、`EXIT` 锚点规则与后端契约 |
 | [19_tail_call_optimization.md](19_tail_call_optimization.md) | 尾调用优化（TCO）：以 NodeVM 为主的机制说明（拓扑、判据、帧与尾调路径）；附录含 FastVM 对照 |

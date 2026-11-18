@@ -208,7 +208,7 @@ await runTest(async (t) => {
     }
 
     // ---- back ends without hooks run on std::fvm, and say so ----------------------------------
-    for (const passes of [['std::jit'], ['std::opt::inline', 'std::prl']]) {
+    for (const passes of [['std::jit'], ['std::cxx::inline', 'std::prl']]) {
         const name = passes[passes.length - 1]
         const dap = await t.dap()
         const line = lineOf(CALLS, 'println(c)')

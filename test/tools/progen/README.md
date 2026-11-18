@@ -221,8 +221,8 @@ seed back; when the generator changes the programs of existing seeds, raise
 present.
 
 The same plan runs `progen.py fixed`: every finding with a `fixed` key in `findings.json`, under
-the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
-`std::opt::inline std::opt::dce`, `std::opt` and `std::opt::specialize`, on the four schedulers. When a finding is fixed, give it that key.
+the rewrite sequence it was found with and under `std::cxx::inline`, `std::opt`,
+`std::cxx::inline std::cxx::dce`, `std::opt` and `std::cxx::specialize`, on the four schedulers. When a finding is fixed, give it that key.
 
 ## What is not covered
 
@@ -288,7 +288,7 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   with what it shows, and left out is not absent: the test plan runs that seed on its own in a
   fast-layer entry (`progen_seed_4` today), so the reading appears on every merge instead of
   passing over it. `CHECK_EXCLUDED` is empty today. Its last entry was seed 4 of
-  `generate.VERSION` 8, which made all four cells of `std::opt::inline` end in SIGSEGV -- not
+  `generate.VERSION` 8, which made all four cells of `std::cxx::inline` end in SIGSEGV -- not
   something the front end says about the program and not something the generator can avoid
   without dropping a shape the language accepts -- until `edeaa9c41` laid a spliced body's wait
   before the loop's first round; `test/cases/opt/inline/loop_wait_after_inline.cml` is its

@@ -3,7 +3,7 @@
 // the nodes of the body that own a region -- a BRCH or a LOOP "takes the incoming wait itself" --
 // and that wait runs before the loop's first round.
 //
-// `w22` is recursive, so `std::opt::inline` leaves its call in `main` and splices `f8` in the
+// `w22` is recursive, so `std::cxx::inline` leaves its call in `main` and splices `f8` in the
 // statement before it. `f8` never reads `a10`, so the wait is the only reason the read of `v60`
 // that the argument makes is ordered at all, and the two loops are the two shapes the comparison
 // of `P` is made of: give the callee an argument of constants, or replace either loop by a

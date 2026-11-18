@@ -40,5 +40,5 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 
 [[tests]]
 name = "static_tuple_indices.opt_inline"
-desc = "`std::opt::inline` alone splices the same bodies and reaches the same refusal."
-args = ["${case}", "std::opt::inline", "${backend}"]
+desc = "`std::cxx::inline` alone splices the same bodies and reaches the same refusal."
+args = ["${case}", "std::cxx::inline", "${backend}"]

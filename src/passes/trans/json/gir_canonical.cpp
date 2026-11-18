@@ -285,7 +285,7 @@ class CanonicalDocument {
     /// graph's edges that order (data, sync, order and the control waits) already orders its two
     /// ends inside the region that holds it. Equivalence is defined on that order and not on the
     /// edges that spell it, which is why `x += 1` and its split form, whose graphs differ only in
-    /// an order edge a data path implies, write one document. The reduction is `std::opt::order`'s
+    /// an order edge a data path implies, write one document. The reduction is `std::cxx::order`'s
     /// own (camel::runtime::reduceDocumentOrdering): read on a decoded draft, so nothing here
     /// decides what "already ordered" means a second time.
     const Ordering &orderingOf(GCGraph *graph) {
@@ -679,7 +679,7 @@ class CanonicalDocument {
         // `TypeCode` is not written: an `Other` type is given one by the registry's counter in the
         // order the modules were first registered (core/type/other.h,
         // OtherTypeRegistry::registerType), so two spellings of one pipeline that load different
-        // modules -- `std::opt::saturate` and `opt::saturate` -- wrote documents differing only in
+        // modules -- `std::cxx::saturate` and `opt::saturate` -- wrote documents differing only in
         // those numbers (defect B2 of the 2026-11-01 eval report: `Node<int>` as 2684354570 in one
         // and 2684354568 in the other). The code is a hash of what the program shows, the spelling,
         // so the document says the same thing whichever modules the run happened to load.

@@ -10,7 +10,7 @@ For every program of the list below, on this machine and with the build in out/l
             discarding it (std::null consumes the program, so nothing runs). The wall time of the
             whole process, the nodes, edges and bytes std::stats reports, and the peak working
             set of the process.
-  opt       `std::opt::inline`: timed with `--timeit` (which compiles again for every iteration
+  opt       `std::cxx::inline`: timed with `--timeit` (which compiles again for every iteration
             and times only the pass), and the peak working set of one run of the pass.
   opt all   `std::opt` (inline, specialization and the generic rewrites, to a fixpoint), timed
             and measured the same way.
@@ -295,8 +295,8 @@ def main():
         sys.stderr.write(f"[baseline] {name}\n")
         stats = run(args + ["std::stats", "std::null"], env)
         graph = graph_stats(stats["stdout"])
-        opt_peak = run(args + ["std::opt::inline", "std::null"], env)
-        opt_time = run(["--timeit", f"std::opt::inline/{rounds}"] + args + ["--output-format", "json"], env)
+        opt_peak = run(args + ["std::cxx::inline", "std::null"], env)
+        opt_time = run(["--timeit", f"std::cxx::inline/{rounds}"] + args + ["--output-format", "json"], env)
         optall_peak = run(args + ["std::opt", "std::null"], env)
         optall_time = run(["--timeit", f"std::opt/{rounds}"] + args + ["--output-format", "json"], env)
         row = {
@@ -324,7 +324,7 @@ def main():
 
     info = machine_info()
     header = (
-        "| 程序 | 图 | 节点 | 边 | 图字节 | 字节/节点 | 编译 | std::opt::inline | std::opt | "
+        "| 程序 | 图 | 节点 | 边 | 图字节 | 字节/节点 | 编译 | std::cxx::inline | std::opt | "
         + " | ".join(f"执行 {backend}" for backend in BACKENDS)
         + " | 峰值（编译 / inline / opt / "
         + " / ".join(BACKENDS)

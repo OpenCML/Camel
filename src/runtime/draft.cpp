@@ -2660,7 +2660,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // nothing -- the value is read by this node alone -- so dissolving it takes the last
             // **read** of whatever computed that value, and an effect that stands on a read (a
             // call, an operator with effects, a computation that may fault, design principles 3.1)
-            // is then in the graph and in no chain. `std::opt::inline` splices an inlined body's
+            // is then in the graph and in no chain. `std::cxx::inline` splices an inlined body's
             // tail as a GATE and the fold prunes the branch whose chain entered it, which leaves
             // exactly this gate standing where the branch's arm stood.
             //
@@ -2683,7 +2683,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             //    second rule is exactly the shape of the defect this fixes -- two paths, only one
             //    of which keeps the observed run.
             // 3. The arm's tail cannot be the anchor here. When the tail is this gate -- the shape
-            //    `std::opt::inline` leaves, the arm's value being what the gate forwards --
+            //    `std::cxx::inline` leaves, the arm's value being what the gate forwards --
             //    ordering the effect after `armTail` is ordering it after the gate that reads it,
             //    which is a cycle of inputs. The place it stood in is therefore handed to the
             //    effect itself, and the successors wait on the effect: the equivalent form of "put

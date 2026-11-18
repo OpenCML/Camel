@@ -417,7 +417,7 @@ export func simplify::<F>(f: F): F! when is_function::<F>() {
 }
 
 /// Every rule of `algebra` and `distribution`, applied both ways to the writings of every value,
-/// for at most `rounds` rounds; then the smallest writing of each value. (`std::opt::saturate` is
+/// for at most `rounds` rounds; then the smallest writing of each value. (`std::cxx::saturate` is
 /// the saturation alone, which keeps every writing.)
 /// @fails error value `RuleInvalid` when a rule does not compile
 /// @example ((x: int): int => x * 3 + x * 4)->saturate_all

@@ -59,9 +59,10 @@ check(
 check(
     'the refusal names the declaration file it read',
     // The name the core looked for is the one the pipeline resolved `std::opt` to: the pass lives
-    // under `cxx` (`std::cxx::opt`) and `std::opt` is an alias of it, so a stdlib without that
-    // declaration is a stdlib without `cxx::opt` (docs/roadmap.cn.md, P, 2026-11-18). The message
-    // names the resolved name because that is the declaration it went looking for.
+    // under `cxx` (`std::cxx::opt`) and `std::opt` -- the default pipeline's name -- resolves to
+    // it, so a stdlib without that declaration is a stdlib without `cxx::opt`
+    // (docs/roadmap.cn.md, P, 2026-11-18). The message names the resolved name because that is the
+    // declaration it went looking for.
     output.includes(declaration) && output.includes("declares no pass 'cxx::opt'"),
     output,
 )

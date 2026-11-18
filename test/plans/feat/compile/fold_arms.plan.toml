@@ -10,8 +10,8 @@ and the arms of a branch written in it that is still there, are regions of their
 one of them runs when that region runs, not whenever the arm runs (docs/technical/
 17_graph_rewrite_api_contracts.md, 4.1). Handing the place to a node of a nested region made the
 statements written after the branch read a value only that region computes, and the commit refused
-the graph -- after `std::opt::inline`, whose copies gave the pruning that shape; `std::opt::fold`
-alone and `std::opt::inline` alone were both green. `pruneBranch` now takes the tail from the arm's
+the graph -- after `std::cxx::inline`, whose copies gave the pruning that shape; `std::cxx::fold`
+alone and `std::cxx::inline` alone were both green. `pruneBranch` now takes the tail from the arm's
 own region (`GraphDraft::armRegionOf`), so the place is handed to a node that runs with the arm.
 """
 # The case is the minimal program of a progen finding (seed 8, reduced 157 -> 30 -> 21 -> 16 lines),
@@ -21,10 +21,10 @@ own region (`GraphDraft::armRegionOf`), so the place is handed to a node that ru
 
 [[tests]]
 name = "fold_arms.after_inline_gate"
-desc = "The reported pipeline: `std::opt::inline` then `std::opt::fold` on the minimal program. Before, the fold's pruning handed the place of the outer branch to a GATE of the loop's condition region, which lies in the taken arm but is not of it, and the commit refused the graph: `Runtime graph 'main' breaks the branch-arm invariant: GATE 30 reads GATE 35 ... arm of BRCH 25 that may not be taken when GATE 30 runs`. The folded program is accepted here and prints the value it computed, so a graph that keeps the shape by not running the arm's code is red too."
+desc = "The reported pipeline: `std::cxx::inline` then `std::cxx::fold` on the minimal program. Before, the fold's pruning handed the place of the outer branch to a GATE of the loop's condition region, which lies in the taken arm but is not of it, and the commit refused the graph: `Runtime graph 'main' breaks the branch-arm invariant: GATE 30 reads GATE 35 ... arm of BRCH 25 that may not be taken when GATE 30 runs`. The folded program is accepted here and prints the value it computed, so a graph that keeps the shape by not running the arm's code is red too."
 kind = "behavior"
 case = "../../../cases/compile/fold_arms/after_inline_arm_gate.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${run_nvm}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${run_nvm}"]
 expect_exit = 0
 expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -38,7 +38,7 @@ timeout_ms = 20000
 
 # `rc05_seed104` of the reduced programs of result `adb67e081` (CC2027 eval, `test/cases/opt/
 # adb67e081/`): the same arm-tail choice, reached without `inline` -- the loop is written in the arm
-# and its body is a lambda call, so `std::opt::fold` alone refused the graph with `GATE 28 reads
+# and its body is a lambda call, so `std::cxx::fold` alone refused the graph with `GATE 28 reads
 # OPER 21 (:mark/filter_arr), which lies in an arm of BRCH 24`. The program prints nothing, so the
 # output of a run with the folding must be the output of a run without it: the three entries below
 # are that comparison, the first one being the reference the other two must equal.
@@ -63,10 +63,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "fold_arms.adb67e081_fold"
-desc = "`std::opt::fold`, the pipeline the defect was found with: the folding must not change what the program does. Before, the graph was refused (`GATE 28 reads OPER 21 ... arm of BRCH 24 that may not be taken when GATE 28 runs`)."
+desc = "`std::cxx::fold`, the pipeline the defect was found with: the folding must not change what the program does. Before, the graph was refused (`GATE 28 reads OPER 21 ... arm of BRCH 24 that may not be taken when GATE 28 runs`)."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc05_seed104.cml"
-args = ["${case}", "std::opt::fold", "${run_nvm}"]
+args = ["${case}", "std::cxx::fold", "${run_nvm}"]
 envs = ["PROGEN_I0=7"]
 expect_exit = 0
 expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]

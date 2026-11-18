@@ -10164,7 +10164,7 @@ Pass '{0}' changed the ambient resources the program touches: before {1}, after 
 This invocation selected a pass boundary check requiring equal standard ambient resource/access-mode support. The before and after programs differ under that check. Equal support does not establish equal event counts, payloads, or full observational behavior.
 ```
 
-**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::cxx::inline std::opt`)
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
@@ -10280,7 +10280,7 @@ Pass '{0}' returned a program whose {1} has no {2}.
 A graph runs from its entry node to its exit node. A rewrite may replace either one, but what it puts there must be a node of the graph that is alive: a graph whose entry or exit is gone is a graph nothing can run, and the pass that returned it lost the program's boundary.
 ```
 
-**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::cxx::inline std::opt`)
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
@@ -10433,7 +10433,7 @@ Pass '{0}' returned a program whose operator node {1} no longer matches its decl
 An operator node's ordinary ports are the arguments of the declaration it names, in order: a pass may rewrite the graph, but not write an operand the declaration does not have, point one at a node that is gone or dead, or leave one without a type. A node that no longer matches its declaration is a call nothing can run.
 ```
 
-**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::cxx::inline std::opt`)
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
@@ -10935,10 +10935,10 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 **Help**
 
 ```text
-An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
+An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::cxx::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
 ```
 
-**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::cxx::fold std::nvm`)
 
 ```camel
 func f(a: int, b: int): int {
@@ -11588,7 +11588,7 @@ Pass '{0}' consumes the graph, so {1} written after it will not run.
 A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
 ```
 
-**Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::opt::inline std::fvm`)
+**Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::cxx::inline std::fvm`)
 
 ```camel
 func before(x: int): int sync {
@@ -11635,7 +11635,7 @@ This constant expression faults whenever it is evaluated ({0}); it is not folded
 All its operands are known and computing it fails, so there is no value to put in its place. It is left as written: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. If it is never reached (an arm that is not taken), nothing happens.
 ```
 
-**Example** (`test/cases/opt/generic/fold_constant_fault.cml`, run as `camel -Werror test/cases/opt/generic/fold_constant_fault.cml std::opt::fold std::nvm`)
+**Example** (`test/cases/opt/generic/fold_constant_fault.cml`, run as `camel -Werror test/cases/opt/generic/fold_constant_fault.cml std::cxx::fold std::nvm`)
 
 ```camel
 import { now } from time

@@ -17,7 +17,7 @@
  * It returns the committed program.
  *
  * `test::facts_seed` and `test::facts_check` bracket other passes (rewrites interact with facts,
- * design 10.5): `camel p.cml test::facts_seed std::opt::inline test::facts_check`. The first
+ * design 10.5): `camel p.cml test::facts_seed std::cxx::inline test::facts_check`. The first
  * computes every core fact of the program and prints how many of each kind (`FACTS seeded <kind>
  * <n>`), the declaration epoch it stamped them with (`FACTS epoch seed=<n>`) and each graph's
  * revision (`FACTS seed revision <graph> <n>`). The second prints the epoch and revisions it finds

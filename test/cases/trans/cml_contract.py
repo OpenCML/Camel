@@ -326,7 +326,7 @@ def main():
     check_refusal(
         CML / "refuse/inline_region.cml",
         "CmlUnsupportedConstruct",
-        ("std::opt::inline", "std::cml"),
+        ("std::cxx::inline", "std::cml"),
     )
     # A named struct type whose declaration cannot be written is still a refusal, and the message
     # says which half is missing: this one is a `#resource` declaration, whose tag is not readable

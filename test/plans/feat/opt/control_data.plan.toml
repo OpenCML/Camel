@@ -25,7 +25,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.unused_argument.inline"
 case = "../../../cases/opt/generic/control_unused_argument.cml"
-args = ["${case}","std::inline","${backend}"]
+args = ["${case}","std::cxx::inline","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -37,7 +37,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.unused_argument.inline_fold"
 case = "../../../cases/opt/generic/control_unused_argument.cml"
-args = ["${case}","std::inline","std::opt::fold","${backend}"]
+args = ["${case}","std::cxx::inline","std::cxx::fold","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -49,7 +49,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.unused_argument.ctrl_inline"
 case = "../../../cases/opt/generic/control_unused_argument.cml"
-args = ["${case}","std::opt::order","std::inline","${backend}"]
+args = ["${case}","std::cxx::order","std::cxx::inline","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -144,7 +144,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.ctrl.left"
 case = "../../../cases/opt/generic/control_data_paths.cml"
-args = ["${case}","--arg","x=2","--arg","flag=true","std::macro","std::opt::devirtualize","std::inline","std::opt::order","${backend}"]
+args = ["${case}","--arg","x=2","--arg","flag=true","std::macro","std::cxx::devirtualize","std::cxx::inline","std::cxx::order","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -156,7 +156,7 @@ verify_script = '''
 [[tests]]
 name = "control_data.ctrl.right"
 case = "../../../cases/opt/generic/control_data_paths.cml"
-args = ["${case}","--arg","x=2","--arg","flag=false","std::macro","std::opt::devirtualize","std::inline","std::opt::order","${backend}"]
+args = ["${case}","--arg","x=2","--arg","flag=false","std::macro","std::cxx::devirtualize","std::cxx::inline","std::cxx::order","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''

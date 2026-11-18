@@ -63,11 +63,11 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_inline"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`std::opt::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
+desc = "`std::cxx::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 
 # The call that builds the `tee` is destructured by a `let`, so the statement the chain names after
 # it is the `accs` that takes the tuple apart, while the two `println`s after it waited on the call
@@ -103,11 +103,11 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 [[tests]]
 name = "tee_result_is_tuple.opt_inline"
 case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
-desc = "`std::opt::inline` alone splices the same bodies and writes the same chain."
+desc = "`std::cxx::inline` alone splices the same bodies and writes the same chain."
 expect_stdout_exact = "6\n6\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 
 # The timed loop sits in an arm of a branch, and the place the splice writes for the body's tail is
 # the one the branch's `brch` gave it. The program's own `println` is not in a sync block and nothing
@@ -203,8 +203,8 @@ verify_script = """
 [[tests]]
 name = "nn_grad_check.spliced_body_chain_is_one_chain"
 case = "../../../cases/modules/autodiff/nn_grad_check.cml"
-desc = "`std::opt::inline` splices `check` six times: each copy's `:io/println` has exactly one SYNC predecessor and one SYNC successor, and the same pairs carry the control edge beside them."
-args = ["${case}", "std::opt::inline", "std::gir"]
+desc = "`std::cxx::inline` splices `check` six times: each copy's `:io/println` has exactly one SYNC predecessor and one SYNC successor, and the same pairs carry the control edge beside them."
+args = ["${case}", "std::cxx::inline", "std::gir"]
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)

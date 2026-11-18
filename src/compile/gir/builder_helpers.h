@@ -512,7 +512,7 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 /// says nothing new. This is the transitive form of `hasDirectDataDependency`, and the question a
 /// read before a write asks: `x = x + 1` and `x += 1` both hand the read's value to the operator
 /// the write stores, so both are ordered already and neither is given a second edge (design
-/// principles 2.1). The transitive reduction over the edges that remain is `std::opt::order`'s.
+/// principles 2.1). The transitive reduction over the edges that remain is `std::cxx::order`'s.
 inline bool dataPathReaches(node_handle_t from, node_handle_t to) {
     if (!from || !to || from == to || nodeGraphOf(from) != nodeGraphOf(to)) {
         return false;
@@ -600,7 +600,7 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
 /// of the value a variable holds may be reused by an update -- is decided by the execution plan
 /// from the graph itself: a read that keeps the value ends the proof (`:var/get`), a read that
 /// cannot (`:var/peek`) leaves it standing, and an edge that only orders carries no use (design
-/// principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
+/// principles 3.3, 3.4). The transitive reduction over such edges lives in `std::cxx::order`;
 /// measured that adding or removing one changes no decision.
 inline bool chainEdgeSaysSomething(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);

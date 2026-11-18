@@ -116,19 +116,19 @@ name = "writings.driver_refuses_rewrite"
 desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with PassNeedsExtraction, naming the pass and the extraction to put before it."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
-args = ["${case}", "test::tabled", "std::opt::fold", "std::nvm"]
+args = ["${case}", "test::tabled", "std::cxx::fold", "std::nvm"]
 
 expect_exit = 1
-expect_output_contains = ["PassNeedsExtraction", "std::opt::fold", "std::opt::extract"]
+expect_output_contains = ["PassNeedsExtraction", "std::cxx::fold", "std::cxx::extract"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
 name = "writings.extract_pass"
-desc = "std::opt::extract chooses one writing for every value, so the rewrite pass after it gets a program it knows; its cost parameter names the model, and an unknown model is an error."
+desc = "std::cxx::extract chooses one writing for every value, so the rewrite pass after it gets a program it knows; its cost parameter names the model, and an unknown model is an error."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
-args = ["${case}", "test::tabled", "std::opt::extract cost=\"nodes\"", "std::opt::fold", "std::nvm"]
+args = ["${case}", "test::tabled", "std::cxx::extract cost=\"nodes\"", "std::cxx::fold", "std::nvm"]
 
 expect_exit = 0
 expect_stdout_contains = ["15"]
@@ -137,10 +137,10 @@ timeout_ms = 30000
 
 [[tests]]
 name = "saturate.default"
-desc = "The local algebra of std::opt::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::opt::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. `shared_product` is `sync`: its pure result is a block value whose completion GATE waits for the println, rather than a statement whose product needs a chain place (waits=0), so it folds as in std::opt::algebra. The program prints what it printed on every back end."
+desc = "The local algebra of std::cxx::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::cxx::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. `shared_product` is `sync`: its pure result is a block value whose completion GATE waits for the println, rather than a statement whose product needs a chain place (waits=0), so it folds as in std::cxx::algebra. The program prints what it printed on every back end."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "${backend}"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate", "${backend}"]
 backends = ["nvm", "fvm"]
 
 expect_exit = 0
@@ -153,7 +153,7 @@ name = "shared_product.completion_gate"
 desc = "The pure result of shared_product is a block value, not a statement in the middle of the chain. Its return GATE still waits for the preceding println after the product is rewritten."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "std::jgir"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate", "std::jgir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -171,10 +171,10 @@ timeout_ms = 30000
 
 [[tests]]
 name = "saturate.safe"
-desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::opt::algebra safe_fp=true: `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold; `shared_product` also folds (x*c + x*c with a whole c is exact; std::opt::algebra safe_fp=true leaves it because its product is shared)."
+desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::cxx::algebra safe_fp=true: `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold; `shared_product` also folds (x*c + x*c with a whole c is exact; std::cxx::algebra safe_fp=true leaves it because its product is shared)."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_safe", "${backend}"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate_safe", "${backend}"]
 backends = ["nvm", "fvm"]
 
 expect_exit = 0
@@ -187,7 +187,7 @@ name = "saturate.deterministic"
 desc = "Saturation is asserted as a property, not as a snapshot of its counters: on every function of the algebra corpus the run terminates at a fixed point within the budget (`saturated=1`), saturating the same writings again adds no writing and no union (`SATURATE-AGAIN ... writings=0 unions=0 saturated=1`), and a second run over the same program finds the same rounds, matches, writings and unions (`SATURATE-STABLE ... same=1`, the matches are found in node order and applied in the order found; no hash table is walked). The operators the rules leave are what the rules exist for, so they are asserted as well: a rule that stopped firing changes an operator count even though the counters would stay stable. All of it holds on every back end; the differential case below repeats the run in a second process."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_props", "${backend}"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate_props", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 
@@ -201,7 +201,7 @@ name = "saturate.deterministic.again"
 desc = "The same saturation in a second process: the counters, the fixed point and the operators left are identical, so nothing in the engine depends on an address or a hash order that only survives one run."
 kind = "differential"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_props", "std::nvm"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate_props", "std::nvm"]
 expect_exit = 0
 compare_to = "saturate.deterministic.nvm"
 compare_fields = ["exit_code", "stdout_normalized"]
@@ -213,7 +213,7 @@ name = "saturate.budget"
 desc = "A budget of one round stops the saturation where it is, without an error: `saturated=0`, and what is extracted from the writings found so far still runs and prints what it printed."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_one_round", "std::nvm"]
+args = ["${case}", "--arg", "x=2", "std::cxx::fold", "test::saturate_one_round", "std::nvm"]
 
 expect_exit = 0
 expect_stdout_contains = ["SATURATE-INFO strict rounds=1", "saturated=0", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
@@ -277,7 +277,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "draw_classes.gir"
-desc = "`std::opt::saturate` leaves the program in the state with several writings and `std::gir` draws it: every class is one dashed cluster with one class node and two or more writings inside, all of them naming that class and all of one type; exactly one writing of a class is marked `chosen=\"true\"`, and for the class that holds `x + x` and `x * 2` it is the add — the writing the cost model the pipeline itself extracts by likes (an add costs 1.0 and reads its value twice at 0.1, a product 3.0 and reads it once plus a constant, so 1.2 against 3.2), and the dump says which model chose (`writings_cost=\"weighted\"`); the value the graph returns is read from its class node and not from a writing."
+desc = "`std::cxx::saturate` leaves the program in the state with several writings and `std::gir` draws it: every class is one dashed cluster with one class node and two or more writings inside, all of them naming that class and all of one type; exactly one writing of a class is marked `chosen=\"true\"`, and for the class that holds `x + x` and `x * 2` it is the add — the writing the cost model the pipeline itself extracts by likes (an add costs 1.0 and reads its value twice at 0.1, a product 3.0 and reads it once plus a constant, so 1.2 against 3.2), and the dump says which model chose (`writings_cost=\"weighted\"`); the value the graph returns is read from its class node and not from a writing."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
@@ -325,7 +325,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.guard"
-desc = "The drawing check is not vacuous: run on a dump of the same program without `std::opt::saturate` — one writing per value, so no class can exist — it refuses, naming the case file and the dump line of the writing that stands alone (asserted to be the node line it read), and run on the dump the saturation produces it accepts. Examining zero classes is a failure in both directions, and the check is the same code in both."
+desc = "The drawing check is not vacuous: run on a dump of the same program without `std::cxx::saturate` — one writing per value, so no class can exist — it refuses, naming the case file and the dump line of the writing that stands alone (asserted to be the node line it read), and run on the dump the saturation produces it accepts. Examining zero classes is a failure in both directions, and the check is the same code in both."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
@@ -337,7 +337,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.params"
-desc = "The pass declares `rounds: int = 6` and `strict: bool = false` in stdlib/std.cml, and a parameter written after the pass name reaches it: `rounds=0` applies no rule, so the program keeps the writing it had and the check of `draw_classes.guard` refuses that dump; `rounds=1` already leaves `x + x` and `x * 2` in one class; `strict=true` keeps the pair, because the integer rules hold bit for bit; `rounds=1+1` is read as an int; and `rounds=true` is refused at the call, naming the declaration's type (`The argument 'rounds' of 'std::opt::saturate' has type 'bool', not 'int'`), before anything runs."
+desc = "The pass declares `rounds: int = 6` and `strict: bool = false` in stdlib/std.cml, and a parameter written after the pass name reaches it: `rounds=0` applies no rule, so the program keeps the writing it had and the check of `draw_classes.guard` refuses that dump; `rounds=1` already leaves `x + x` and `x * 2` in one class; `strict=true` keeps the pair, because the integer rules hold bit for bit; `rounds=1+1` is read as an int; and `rounds=true` is refused at the call, naming the declaration's type (`The argument 'rounds' of 'std::cxx::saturate' has type 'bool', not 'int'`), before anything runs."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"
@@ -349,7 +349,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "draw_classes.extract"
-desc = "The pass extracts nothing: the program it leaves is in the state with several writings, a pass that consumes it (`std::nvm`) is given one writing per value by the driver and prints 42, `std::opt::extract` before it does the same, and a rewrite pass that does not declare that it accepts the state (`std::opt::fold`) is still refused with `PassNeedsExtraction` — the new rule is about a pass that asked for the state, not about every pass."
+desc = "The pass extracts nothing: the program it leaves is in the state with several writings, a pass that consumes it (`std::nvm`) is given one writing per value by the driver and prints 42, `std::cxx::extract` before it does the same, and a rewrite pass that does not declare that it accepts the state (`std::cxx::fold`) is still refused with `PassNeedsExtraction` — the new rule is about a pass that asked for the state, not about every pass."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/feat/mm/writings/draw_classes.mjs"

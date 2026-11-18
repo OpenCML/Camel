@@ -312,7 +312,7 @@ namespace {
 /// away when a path of at least two edges that order already orders the two ends inside the region
 /// that holds the edge, which is what "when both run the predecessor runs first" makes redundant.
 enum class OrderingReading {
-    /// `std::opt::order` on a graph a pass still rewrites: order edges are the candidates, and the
+    /// `std::cxx::order` on a graph a pass still rewrites: order edges are the candidates, and the
     /// proof walks order edges and sync edges -- the two kinds that order without passing "used"
     /// (docs/design/effects/edges.cn.md 1). Data and control edges stay out of the proof: a pass may
     /// still rewrite them, so an order edge they would cover is the conservative answer while they

@@ -886,7 +886,7 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     // (push(), requireNestedCallRoom()) -- less the calls already open, whichever spelling put
     // them there: push() for a direct call, nestedCalls_ for a call through a function value.
     // Both are subtracted, because the count must not depend on the spelling
-    // (camel/execute/limits.h) after std::opt::devirtualize rewrites one into the other.
+    // (camel/execute/limits.h) after std::cxx::devirtualize rewrites one into the other.
     const size_t room = maxRecursionDepth_ + camel::execute::kEntryCalls;
     jc->depthBudget   = room - std::min(stackDepth_ + nestedCalls_, room);
     // The count does not bound the machine stack its native calls use: they also stop above

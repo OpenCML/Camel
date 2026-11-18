@@ -428,7 +428,7 @@ slot_t isConstantKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Bool>(node.kind() == GCNodeKind::Data && node.dataIndex() < 0);
 }
 
-/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::opt::fold` clamp with
+/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::cxx::fold` clamp with
 /// `constant_budget`, answered here so a Camel pass can ask the same question. A node that is no constant --
 /// or whose value is not in the graph's static values -- occupies nothing: 0.
 slot_t constantBytesKernel(ArgsView &, ArgsView &norm, Context &) {

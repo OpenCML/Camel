@@ -14,9 +14,9 @@
 
 | 注册点（`rules.cml`） | 条数 | 谁跑它 |
 |---|---|---|
-| `algebra` | 31 | `rules::simplify`（注册为 `std::opt::algebra`，`std::opt` 默认流水线的一步） |
+| `algebra` | 31 | `rules::simplify`（注册为 `std::cxx::algebra`，`std::opt` 默认流水线的一步） |
 | `accuracy_laws` | 3 | `rules::simplify` 同一次调用；也单独作为 `rules::accuracy` |
-| `distribution` | 2 | `rules::saturate_all`（`std::opt::saturate` 的含义） |
+| `distribution` | 2 | `rules::saturate_all`（`std::cxx::saturate` 的含义） |
 | `fusion_laws` | 1 | `rules::fusion`（选择加入） |
 
 于是：`std::opt` 默认一步跑 **34** 条（`algebra` + `accuracy_laws`，一个方向到不动点）；饱和那一步跑 **33** 条（`algebra` + `distribution`，两个方向，再取最省写法）；四个入口合起来覆盖全部 **37** 条。

@@ -492,7 +492,7 @@ PassMaker specializePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<SpecializeRewritePass>(
             ctx,
-            growthBudgetOf(args, "std::opt::specialize"));
+            growthBudgetOf(args, "std::cxx::specialize"));
     };
 }
 
@@ -500,7 +500,7 @@ PassMaker devirtualizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DevirtualizeRewritePass>(
             ctx,
-            growthBudgetOf(args, "std::opt::devirtualize"));
+            growthBudgetOf(args, "std::cxx::devirtualize"));
     };
 }
 
@@ -517,7 +517,7 @@ PassMaker foldPass() {
     };
 }
 
-/// The saturation of the rules library, under the core's name. Like `std::opt::algebra`,
+/// The saturation of the rules library, under the core's name. Like `std::cxx::algebra`,
 /// the laws are the library's (`opt::saturate`); unlike it, the extraction is not made, so
 /// the program stops in the state where a value has several writings.
 PassMaker saturatePass() {
@@ -633,9 +633,11 @@ void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false
 /// The optimization passes are registered under `std::cxx::`, because they are the C++
 /// implementations and the Camel ones are the module `opt`: the two sets are separated by their
 /// names so that a comparison can name both (docs/roadmap.cn.md section 0, P, 2026-11-18). The
-/// names they answered to before the separation, `std::opt` and `std::opt::fold` and the rest, stay
-/// in the alias table below, so the default pipeline's own name and every page that writes one of
-/// them resolve to the same kernel.
+/// names they answered to before the separation are gone with the separation: `std::opt::fold` and
+/// the rest resolve to nothing, and a pipeline that still writes one is refused as an unknown pass
+/// (the author's rework of 2026-11-18, docs/handover/reviews/questions-2026-10-29.md). The one
+/// name that stays is `std::opt` -- not an alias of a sub-pass but the default pipeline's own name,
+/// the choice "optimize by default", which today selects the C++ implementation.
 void registerCoreKernels() {
     registerCoreKernel("nop", makePass<NullGraphIRPass>());
     registerCoreKernel("macro", macroPass());
@@ -693,14 +695,10 @@ void registerCoreKernels() {
     registerCoreKernel("fastvm::jit_mir", makePass<JitMirDumpPass>());
     registerCoreKernel("taskflow", taskflowPass());
     registerCoreKernel("cxx::opt", optimizePass());
-    registerCoreKernel("cxx::inline", inlinePass(std::nullopt, "std::opt::inline"));
-    registerCoreKernel(
-        "cxx::small",
-        inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small"));
-    registerCoreKernel("cxx::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm"));
-    registerCoreKernel(
-        "cxx::hybrid",
-        inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid"));
+    registerCoreKernel("cxx::inline", inlinePass(std::nullopt, "std::cxx::inline"));
+    registerCoreKernel("cxx::small", inlinePass(InlineTargetStrategy::Small, "std::cxx::small"));
+    registerCoreKernel("cxx::arm", inlinePass(InlineTargetStrategy::Arm, "std::cxx::arm"));
+    registerCoreKernel("cxx::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::cxx::hybrid"));
     registerCoreKernel("cxx::devirtualize", devirtualizePass());
     registerCoreKernel("cxx::specialize", specializePass());
     registerCoreKernel("cxx::fold", foldPass());
@@ -713,9 +711,9 @@ void registerCoreKernels() {
     // The core passes that read tag facts: the dumps show a node's attributes and numeric
     // permissions, and the optimizing pipeline keeps them across rewrites (CSE combines by their
     // merge rules). A tag's `read_by` names one of these (or a module's pass that registers
-    // itself). Both names of the pipeline are readers: a tag written before the separation names
-    // `std::opt`, and one written as `std::cxx::opt` (or `std::cxx::fold`) is read too, by the
-    // prefix rule that makes a name cover the passes under it.
+    // itself). Both names of the pipeline are readers: `std::opt` is the default pipeline's name,
+    // and `std::cxx` covers the C++ passes named under the isolation (`std::cxx::opt`,
+    // `std::cxx::fold`) by the prefix rule that makes a name cover the passes under it.
     for (const char *reader :
          {"std::gir",
           "std::rgir",
@@ -732,36 +730,25 @@ void registerCoreKernels() {
 
 const std::map<std::string, std::string> passAliases = {
     // The optimization passes are registered under `std::cxx::` -- the C++ implementations, kept
-    // apart from the Camel ones in the module `opt` -- and the names they answered to before that
-    // separation resolve to them here. `std::opt` is the default pipeline's name and keeps it: a
-    // program that names no pass, and the pass the fixed lowering steps insert, go through this
-    // entry.
+    // apart from the Camel ones in the module `opt`. Their old spellings (`std::opt::fold`,
+    // `std::opt::inline`, the four inline strategies and the standalone `std::inline` and the rest)
+    // are **not**
+    // aliases: a pipeline that writes one is refused as an unknown pass, which is the isolation's
+    // own judgement rather than compatibility debt (author's rework, 2026-11-18,
+    // docs/handover/reviews/questions-2026-10-29.md; internal testing, so the old writings are
+    // deleted, not carried).
+    //
+    // `std::opt` stays, and it is the one entry here that is not a spelling of another pass: it is
+    // the name of the default pipeline -- the choice "optimize by default". A program that names
+    // no pass, and the pass the fixed lowering steps insert, go through this entry, and today it
+    // selects the C++ implementation. After the comparison experiment of docs/roadmap.cn.md
+    // section 0, P, the owner decides whether it selects the Camel one instead; nothing else in
+    // this table has to move for that.
     {"std::opt", "std::cxx::opt"},
-    {"std::opt::inline", "std::cxx::inline"},
-    {"std::opt::small", "std::cxx::small"},
-    {"std::opt::arm", "std::cxx::arm"},
-    {"std::opt::hybrid", "std::cxx::hybrid"},
-    {"std::opt::devirtualize", "std::cxx::devirtualize"},
-    {"std::opt::specialize", "std::cxx::specialize"},
-    {"std::opt::fold", "std::cxx::fold"},
-    {"std::opt::algebra", "std::cxx::algebra"},
-    {"std::opt::saturate", "std::cxx::saturate"},
-    {"std::opt::extract", "std::cxx::extract"},
-    {"std::opt::cse", "std::cxx::cse"},
-    {"std::opt::dce", "std::cxx::dce"},
-    {"std::opt::order", "std::cxx::order"},
-    // Frequently used spelling of the standalone inline stage and its strategies.
-    {"std::inline", "std::cxx::inline"},
-    {"std::inline::small", "std::cxx::small"},
-    {"std::opt::inline::small", "std::cxx::small"},
-    {"std::opt::inline::arm", "std::cxx::arm"},
-    {"std::opt::inline::hybrid", "std::cxx::hybrid"},
     {"std::fastvm::jit::dump::asm", "std::fastvm::jit_asm"},
     {"std::fastvm::jit::dump::bin", "std::fastvm::jit_bin"},
     {"std::fastvm::jit::dump::rmir", "std::fastvm::jit_rmir"},
     {"std::fastvm::jit::dump::mir", "std::fastvm::jit_mir"},
-    {"std::inline::arm", "std::cxx::arm"},
-    {"std::inline::hybrid", "std::cxx::hybrid"},
     // Standard scheduler aliases
     {"std::default", "std::nvm"},
     {"std::linear", "std::nvm"},
@@ -1039,6 +1026,11 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
 
 namespace {
 
+/// The pass a written name resolves to: the core's table first, then the aliases the loaded
+/// modules registered. The core's table has one entry, `std::opt` -- the default pipeline's name,
+/// which is a choice rather than a spelling of another pass -- so no sub-pass of the optimizer is
+/// reachable under an old name any more; a module's short aliases (`registerPassAlias`) are the
+/// rest of what this answers.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
         return it->second;
@@ -1496,8 +1488,9 @@ valueProblem(const std::string &name, const PassArgs &args) {
     using camel::execute::detail::ParamProblemKind;
     // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
     // (see settleRunsOf), and 0 is refused rather than read as "never report". The pipeline is
-    // registered as `std::cxx::opt` and `std::opt` is an alias of it, so the check is made on the
-    // name the specification resolves to: a program that writes either spelling gets the refusal.
+    // registered as `std::cxx::opt` and `std::opt` is the default pipeline's name for it, so the
+    // check is made on the name the specification resolves to: a program that writes either
+    // spelling gets the refusal.
     if (resolveAlias(name) == "std::cxx::opt" && args.given("settle_runs") &&
         args.getInt("settle_runs") < 1) {
         ParamProblem problem;
@@ -1818,8 +1811,8 @@ namespace {
 
 /// The graph id -> revision of every graph a program holds: what `programContentChanged`
 /// compares. Read out before a pass runs rather than looked at afterwards, because a pass of the
-/// core is another registered pass's caller (`std::opt::algebra` runs the rules library's
-/// `rules::simplify`, `std::opt::saturate` its `opt::saturate`), and that inner pass
+/// core is another registered pass's caller (`std::cxx::algebra` runs the rules library's
+/// `rules::simplify`, `std::cxx::saturate` its `opt::saturate`), and that inner pass
 /// commits its result and releases the program the outer one was given
 /// (`Context::settleRuntimeGraphs`). The old program is not read after `pass->apply` returns.
 std::unordered_map<uint32_t, uint64_t> graphRevisionsOf(const camel::runtime::Program *program) {
@@ -3021,7 +3014,7 @@ PassRunResult applyRegisteredPass(
         return {nullptr, true};
     }
     // The check every pass ends with, for a pass a pass runs by name. Before 2026-11-02 this
-    // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
+    // site had none: `std::cxx::saturate`, `rules::simplify` and the `std::opt` rounds came
     // through here, and a graph they broke reached the next pass unchecked.
     if (ctx != nullptr && passBoundaryViolation(
                               ctx,
@@ -3096,10 +3089,10 @@ std::vector<std::string> expandFixedLoweringSteps(const std::vector<std::string>
     std::vector<std::string> plan = passes;
     for (const FixedLoweringStep &step : fixedLoweringSteps) {
         // The comparison is made on the names the specifications resolve to, not on the words the
-        // writer used: the optimizing pipeline answers to two names (`std::cxx::opt`, and the
-        // default `std::opt` it is an alias of), and a step that the optimizer is written against
-        // belongs before either of them. Comparing the written word would insert the step for one
-        // spelling and silently skip it for the other.
+        // writer used: the optimizing pipeline answers to two names (`std::cxx::opt`, and
+        // `std::opt`, the default pipeline's name for it), and a step that the optimizer is
+        // written against belongs before either of them. Comparing the written word would insert
+        // the step for one spelling and silently skip it for the other.
         const auto target = std::find_if(plan.begin(), plan.end(), [&](const std::string &spec) {
             return resolveAlias(specName(spec)) == resolveAlias(step.before);
         });

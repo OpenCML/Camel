@@ -1,4 +1,4 @@
-# Recursive Fibonacci, timed with `--timeit` on each back end and after `std::opt::inline`.
+# Recursive Fibonacci, timed with `--timeit` on each back end and after `std::cxx::inline`.
 #
 # No `perf_budget_mean_ms` here: the means are recorded, not gated. The budgets this plan used to
 # carry (200/200/65/50/80/3 ms, 2026-05-04) were recorded on a developer machine and cannot be met

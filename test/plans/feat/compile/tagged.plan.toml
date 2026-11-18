@@ -252,10 +252,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "combined.inline_nvm"
-desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::opt::inline std::nvm`."
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/combined.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -728,10 +728,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::inline std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -755,10 +755,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.fallible.inline_nvm"
-desc = "The `T!` program gives the same result through `std::opt::inline std::nvm`."
+desc = "The `T!` program gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/fallible.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -785,10 +785,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.nullable.inline_nvm"
-desc = "The `T?` program gives the same result through `std::opt::inline std::nvm`."
+desc = "The `T?` program gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/nullable.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -819,10 +819,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_fvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::inline std::fvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -873,10 +873,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.fold_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::fold std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::fold std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::fold", "std::nvm"]
+args = ["${case}", "std::cxx::fold", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -900,10 +900,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.cse_dce_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::cse std::opt::dce std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::cse std::cxx::dce std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::cse", "std::opt::dce", "std::nvm"]
+args = ["${case}", "std::cxx::cse", "std::cxx::dce", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -954,10 +954,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_opt_jit"
-desc = "The program over both tagged forms gives the same result through `std::opt::inline std::opt std::jit`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::inline std::opt std::jit`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

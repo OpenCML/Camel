@@ -18,37 +18,37 @@ timeout_ms = 20000
 
 [[tests]]
 name = "exit_last.algebra"
-desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::algebra."
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::cxx::algebra."
 case = "../../../cases/opt/never_exit/exit_last.cml"
-args = ["${case}", "std::opt::algebra", "${backend}"]
+args = ["${case}", "std::cxx::algebra", "${backend}"]
 expect_exit = 3
 
 [[tests]]
 name = "exit_last.dce"
-desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::dce."
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::cxx::dce."
 case = "../../../cases/opt/never_exit/exit_last.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 expect_exit = 3
 
 [[tests]]
 name = "exit_last.inline"
-desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::inline."
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::cxx::inline."
 case = "../../../cases/opt/never_exit/exit_last.cml"
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 expect_exit = 3
 
 [[tests]]
 name = "exit_last.fold"
-desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::fold."
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::cxx::fold."
 case = "../../../cases/opt/never_exit/exit_last.cml"
-args = ["${case}", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::fold", "${backend}"]
 expect_exit = 3
 
 [[tests]]
 name = "exit_last.cse"
-desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::cse."
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::cxx::cse."
 case = "../../../cases/opt/never_exit/exit_last.cml"
-args = ["${case}", "std::opt::cse", "${backend}"]
+args = ["${case}", "std::cxx::cse", "${backend}"]
 expect_exit = 3
 
 [[tests]]
@@ -60,37 +60,37 @@ expect_exit = 3
 
 [[tests]]
 name = "fail_last.algebra"
-desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::algebra."
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::cxx::algebra."
 case = "../../../cases/opt/never_exit/fail_last.cml"
-args = ["${case}", "std::opt::algebra", "${backend}"]
+args = ["${case}", "std::cxx::algebra", "${backend}"]
 expect_exit = 1
 
 [[tests]]
 name = "fail_last.dce"
-desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::dce."
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::cxx::dce."
 case = "../../../cases/opt/never_exit/fail_last.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 expect_exit = 1
 
 [[tests]]
 name = "fail_last.inline"
-desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::inline."
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::cxx::inline."
 case = "../../../cases/opt/never_exit/fail_last.cml"
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 expect_exit = 1
 
 [[tests]]
 name = "fail_last.fold"
-desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::fold."
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::cxx::fold."
 case = "../../../cases/opt/never_exit/fail_last.cml"
-args = ["${case}", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::fold", "${backend}"]
 expect_exit = 1
 
 [[tests]]
 name = "fail_last.cse"
-desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::cse."
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::cxx::cse."
 case = "../../../cases/opt/never_exit/fail_last.cml"
-args = ["${case}", "std::opt::cse", "${backend}"]
+args = ["${case}", "std::cxx::cse", "${backend}"]
 expect_exit = 1
 
 [[tests]]

@@ -591,10 +591,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_nvm"
-desc = "The same generic program gives the same result through `std::opt::inline std::nvm`."
+desc = "The same generic program gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -622,10 +622,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_fvm"
-desc = "The same generic program gives the same result through `std::opt::inline std::fvm`."
+desc = "The same generic program gives the same result through `std::cxx::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -653,10 +653,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_jit"
-desc = "The same generic program gives the same result through `std::opt::inline std::jit`."
+desc = "The same generic program gives the same result through `std::cxx::inline std::jit`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -684,10 +684,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.opt_inline_fvm"
-desc = "The same generic program gives the same result through `std::opt std::opt::inline std::fvm`."
+desc = "The same generic program gives the same result through `std::opt std::cxx::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::opt", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::opt", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

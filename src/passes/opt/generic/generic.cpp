@@ -251,7 +251,7 @@ bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref
 /// `test/cases/opt/e9/rc00_seed30.cml` lost the place of its first `:io/println` while the fold
 /// that removed the block between the two prints was considered done: the successor was left with
 /// the source-order edge alone, which carries no place (`docs/design/effects/edges.cn.md` 1.5 and
-/// 5.3), and `std::opt::dce` then reported an effect node with neither a read of its value nor a
+/// 5.3), and `std::cxx::dce` then reported an effect node with neither a read of its value nor a
 /// place in its chain.
 ///
 /// So after a fold, a statement that had a place and lost it gets one back: the statement written
@@ -266,7 +266,7 @@ bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref
 /// that: the exit read the constant directly and the `println` the gate carried stopped running.
 /// The shape is a call whose result the fold computes away after inlining the callee:
 /// `func q(a:int):int sync { println('L1'); return a+1 }` with `main` written
-/// `let x = q(41); return x - 42` prints `L1` with no pass and with `std::opt::inline`, and printed
+/// `let x = q(41); return x - 42` prints `L1` with no pass and with `std::cxx::inline`, and printed
 /// nothing at all under `std::opt` until this anchor was left to `replaceNode`.
 void replaceFoldResult(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement) {
@@ -1271,7 +1271,7 @@ bool foldStaticFill(
     auto *object = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(source->first)
                        ->clone(camel::core::mm::autoSpace(), result, false);
     // Keep the object alive until commit moves it into the graph's static area.
-    roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
+    roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::cxx::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
     replaceFoldResult(
         transaction,
@@ -1346,7 +1346,7 @@ bool foldStaticCast(
             camel::core::mm::autoSpace(),
             camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(result),
             target,
-            "std::opt::fold");
+            "std::cxx::fold");
     }
     const gc_node_ref_t data = draft.materializeStaticValue(result, target);
     replaceFoldResult(transaction, id, data);
@@ -1364,7 +1364,7 @@ bool foldStaticCast(
 /// that it changed the graph, and the statement it took the place from is left with the
 /// source-order edge alone, which carries no place (docs/design/effects/edges.cn.md 1.5 and 5.3).
 /// That is how `test/cases/opt/e9/rc00_seed30.cml` ends with an `:io/println` that neither reads
-/// its value nor stands in a chain, which `std::opt::dce` reports as a defect of the compiler.
+/// its value nor stands in a chain, which `std::cxx::dce` reports as a defect of the compiler.
 ///
 /// So a statement that carries the program's order (`carriesOrdering`) and has no place gets one:
 /// the statement written after it -- the `ORDER` user, which is the source order the graph kept --
@@ -1561,7 +1561,7 @@ size_t foldDraft(
                     camel::core::mm::autoSpace(),
                     camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(result),
                     resultType,
-                    "std::opt::fold");
+                    "std::cxx::fold");
             }
             const gc_node_ref_t value = draft.materializeStaticValue(result, resultType);
             replaceFoldResult(transaction, id, value);
@@ -1812,7 +1812,7 @@ namespace camel::passes::generic {
 
 /// The type-folder fold (rewrite.h): a pure operator whose argument types fix its result is that
 /// constant. It lives here, outside the file's own namespace, because two drivers reach it -- the
-/// `std::opt::fold` stage below (`foldDraft`) and `foldTypedOperators` -- and a second copy of it
+/// `std::cxx::fold` stage below (`foldDraft`) and `foldTypedOperators` -- and a second copy of it
 /// would be a second answer to the same question.
 bool foldFromTypes(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
@@ -1851,7 +1851,7 @@ bool foldFromTypes(
             camel::core::mm::autoSpace(),
             camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*result),
             resultType,
-            "std::opt::fold");
+            "std::cxx::fold");
     }
     replaceFoldResult(transaction, id, draft.materializeStaticValue(*result, resultType));
     return true;
@@ -1865,7 +1865,7 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
     return rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::fold",
+        "std::cxx::fold",
         [&](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
             return foldDraft(transaction, *context_, roots, constantBudgetBytes_);
@@ -1884,7 +1884,7 @@ const camel::runtime::Program *foldTypedOperators(
     return rewriteReachableGraphs(
         context,
         program,
-        "std::opt::fold",
+        "std::cxx::fold",
         [&](camel::runtime::GraphTransaction &transaction) {
             auto &draft   = transaction.edit();
             size_t folded = 0;
@@ -1923,7 +1923,7 @@ CommonSubexpressionPass::apply(const camel::runtime::Program *program, std::ostr
     return rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::cse",
+        "std::cxx::cse",
         cseDraft,
         nullptr,
         nullptr,
@@ -1935,7 +1935,7 @@ DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
     return rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::dce",
+        "std::cxx::dce",
         [&](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
             return dceDraft(transaction, valuesOnly_);
@@ -1950,7 +1950,7 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
     return rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::order",
+        "std::cxx::order",
         [](camel::runtime::GraphTransaction &transaction) {
             auto &draft = transaction.edit();
             return camel::runtime::reduceOrderDependencies(transaction) +
@@ -2004,7 +2004,7 @@ const camel::runtime::Program *simplifyGraph(
         return rewriteReachableGraphs(
             context,
             result,
-            "std::opt::order",
+            "std::cxx::order",
             [](camel::runtime::GraphTransaction &transaction) {
                 auto &draft = transaction.edit();
                 return camel::runtime::reduceOrderDependencies(transaction) +
@@ -2031,7 +2031,7 @@ const camel::runtime::Program *simplifyGraph(
         program = rewriteReachableGraphs(
             context,
             program,
-            "std::opt::fold",
+            "std::cxx::fold",
             [&](camel::runtime::GraphTransaction &transaction) {
                 auto &draft = transaction.edit();
                 return foldDraft(transaction, *context, roots, config.constantBudgetBytes);
@@ -2043,18 +2043,18 @@ const camel::runtime::Program *simplifyGraph(
         program = rewriteReachableGraphs(
             context,
             program,
-            "std::opt::cse",
+            "std::cxx::cse",
             cseDraft,
             &merged,
             &memo,
             mayMerge,
             config.checkScreens);
-        // The algebraic stage is the pass itself: std::opt::algebra is the rules library's
+        // The algebraic stage is the pass itself: std::cxx::algebra is the rules library's
         // `rules::simplify` (`rules::simplify strict=true` for safe_fp), so the laws are written
         // once, in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
         // measurements assume.
         const std::string algebraPass =
-            config.safeFloatingPoint ? "std::opt::algebra safe_fp=true" : "std::opt::algebra";
+            config.safeFloatingPoint ? "std::cxx::algebra safe_fp=true" : "std::cxx::algebra";
         const PassRunResult algebra =
             applyRegisteredPass(program, algebraPass, context, os, caller);
         if (algebra.program == nullptr) {
@@ -2067,7 +2067,7 @@ const camel::runtime::Program *simplifyGraph(
         program = rewriteReachableGraphs(
             context,
             program,
-            "std::opt::dce",
+            "std::cxx::dce",
             [](camel::runtime::GraphTransaction &transaction) { return dceDraft(transaction); },
             &removed,
             &memo,

@@ -251,7 +251,7 @@ entry into compiled code.
 
 Verified with a callee that is compiled (`compiled.cml`): shape (a) with a division by zero
 in straight-line code under `std::jit`, and with a native self-recursion that exceeds the
-limit under `std::opt::inline std::jit`; the compiled code runs again afterwards.
+limit under `std::cxx::inline std::jit`; the compiled code runs again afterwards.
 
 The case "compiled `f` calls another graph through the interpreter" does not exist today: a
 graph that calls another graph is not compiled. If trampolines are added, `07` 16.5 applies

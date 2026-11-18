@@ -23,13 +23,15 @@ tags = ["feat", "opt", "cxx", "differential", "fold", "cse"]
 #
 #   by_cpp       the C++ pass under the name the isolation gives it: `std::cxx::fold`, `std::cxx::cse`
 #   by_camel     the Camel pass of the module `opt` (stdlib/opt.cml): `opt::fold`, `opt::cse`
-#   by_old_name  the same C++ pass under the name the isolation kept as its alias, `std::opt::fold`:
-#                the reading has to be the one `by_cpp` printed, or the move changed something a
-#                reader of the old name would notice. This is the control of the isolation itself.
+#   by_old_name  the name the pass had before the isolation, `std::opt::fold`: the isolation keeps
+#                **no** alias for it (the author's rework, 2026-11-18), so the run has to be
+#                refused as an unknown pass and the refusal has to name the name. This is the
+#                control of the isolation itself, read in the negative: a rename that left the old
+#                spelling resolving would turn this case red, which is what makes it a control.
 #
 # FOLD: the two readings are one document, byte for byte. The C++ fold and the Camel fold agree on
-# every node, every constant and every edge of the corpus, and the name the passes were separated
-# from prints the same document as the name they were given.
+# every node, every constant and every edge of the corpus. The name they were separated from is
+# not a third reading: it is refused, and the refusal is asserted here rather than assumed.
 #
 # CSE: the two readings are one document except for one field -- the `flags` word of the one graph
 # neither implementation rewrites (`chain`, the folding corpus, which has no expression written
@@ -97,14 +99,24 @@ if (graphs.length < 5) {
 
 [[tests]]
 name = "cxx_isolation.fold.by_old_name"
-desc = "The same C++ pass under the name it had before the isolation, `std::opt::fold`: the alias resolves to the kernel `std::cxx::fold` names, so this reading is the one `by_cpp` printed. A rename that changed the graph shows here."
-kind = "differential"
+desc = "The name the C++ fold had before the isolation, `std::opt::fold`, is not accepted: the isolation keeps no alias (author's rework, 2026-11-18), so the pipeline is refused as an unknown pass and the refusal names the name. The same program under the same dump pass, one word changed -- the reading differs from `by_cpp` in the only way a retired name can differ: it never runs."
+kind = "behavior"
 case = "../../../cases/opt/cxx_isolation/subject.cml"
 args = ["${case}", "std::opt::fold", "std::jgir canonical=true"]
-expect_exit = 0
+expect_exit = 1
 timeout_ms = 20000
-compare_to = "cxx_isolation.fold.by_cpp"
-compare_fields = ["exit_code", "stdout_normalized"]
+expect_output_contains = ["Pass <std::opt::fold> not found, available passes are:"]
+# The alias listing is what an old spelling would have resolved through; the entry that answered
+# `std::opt::fold` is gone, and what is left is `std::opt` -- the default pipeline's name.
+expect_output_not_contains = ["std::opt::fold ->"]
+verify_script = """
+// The refusal goes to stdout with the rest of the compiler's report, so the reading is not "stdout
+// is empty" -- it is that no graph document left the run: the pipeline was never entered, so
+// `std::jgir` printed nothing of the program.
+if (/camel\.gir|"graphs"\s*:/.test(input.normalized.stdout)) {
+    throw new Error("std::opt::fold: the run printed a graph document, so a pass ran under a name that is not a pass: " + input.normalized.stdout.slice(0, 200))
+}
+"""
 
 [[tests]]
 name = "cxx_isolation.cse.by_cpp"
@@ -188,3 +200,54 @@ if (flags !== "2,2,2,2,2") {
         + "2026-11-18-two-implementations-of-one-pass.md)")
 }
 """
+# The one name the rework kept. `std::opt` is not a spelling of a sub-pass: it is the name of the
+# default pipeline, the choice "optimize by default", and today it selects the C++ implementation.
+# The two entries below are its reading, and they are a relation rather than a stored document: the
+# canonical graph the default name prints has to be the one the registered name prints, byte for
+# byte, with no normalizer between them. A run of `std::opt` that stopped resolving to the kernel
+# would fail the reference entry; one that resolved to a *different* kernel would fail the
+# comparison.
+[[tests]]
+name = "cxx_isolation.default_pipeline.by_default_name"
+desc = "The default pipeline, run by the name a program writes -- `std::opt`, the word a program that asks for optimization by name uses -- prints a canonical document of the whole graph set in which no operation over constants is left. This is the reference `by_registered_name` is compared against; it asserts a canonical, non-empty document of five graphs because an empty run against an empty run compares equal, which is the trap the experiment's report names (docs/handover/reports/2026-11-18-two-implementations-of-one-pass.md, section 4)."
+kind = "behavior"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::opt", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+verify_script = """
+const doc = JSON.parse(input.normalized.stdout)
+const fail = (why) => {
+    throw new Error("std::opt: " + why)
+}
+if (doc.format !== "camel.gir" || doc.canonical !== true) {
+    fail("the run did not print the canonical document: " + input.normalized.stdout.slice(0, 200))
+}
+const graphs = doc.graphs || []
+if (graphs.length < 5) {
+    fail("the document holds " + graphs.length + " graph(s), not the five the program has")
+}
+const operands = (n) => (n.inputs || []).filter((i) => i.kind === "norm").map((i) => i.source)
+for (const g of graphs) {
+    const constants = new Set((g.nodes || []).filter((n) => n.kind === "DATA").map((n) => n.id))
+    for (const n of g.nodes || []) {
+        if (n.kind !== "OPER") continue
+        const ins = operands(n)
+        if (ins.length >= 2 && ins.every((s) => constants.has(s))) {
+            fail("an operation over constants is left in the graph, so the default pipeline did not "
+                + "fold it: " + n.id)
+        }
+    }
+}
+"""
+
+[[tests]]
+name = "cxx_isolation.default_pipeline.by_registered_name"
+desc = "The same pipeline under the name the isolation registered, `std::cxx::opt`: the canonical document is the one the default name printed, byte for byte -- same exit, same bytes, no normalizer. The rework deleted every old sub-pass name and kept `std::opt` alone, so this is the entry that says what it kept still runs the kernel rather than merely resolving to a name."
+kind = "differential"
+case = "../../../cases/opt/cxx_isolation/subject.cml"
+args = ["${case}", "std::cxx::opt", "std::jgir canonical=true"]
+expect_exit = 0
+timeout_ms = 20000
+compare_to = "cxx_isolation.default_pipeline.by_default_name"
+compare_fields = ["exit_code", "stdout_normalized"]

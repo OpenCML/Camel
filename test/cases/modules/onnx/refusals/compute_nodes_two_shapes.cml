@@ -1,6 +1,6 @@
 /**
  * The same function measured in two splice shapes. `main` calls `combine`, and one pipeline
- * (std::opt::fold then devirtualize then inline) has spliced `combine` into `main` before the
+ * (std::cxx::fold then devirtualize then inline) has spliced `combine` into `main` before the
  * inliner examines the call of `main`, while the other (std::opt, whose rewrite rounds run
  * between its folding stages) examines it first. The export refusal reports the size of `main`,
  * and the size is fixed to the compute nodes of the function being

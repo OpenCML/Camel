@@ -21,7 +21,7 @@ name = "pass_boundary.resources_kept"
 desc = "The optimizer explicitly checks resource support internally; this program passes its preserving transformations unchanged."
 kind = "behavior"
 case = "../../../cases/effects/declared.cml"
-args = ["${case}", "std::opt::inline", "std::opt"]
+args = ["${case}", "std::cxx::inline", "std::opt"]
 expect_exit = 0
 expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources", "failed with an internal error"]
 
@@ -51,7 +51,7 @@ name = "pass_boundary.entry_and_exit_kept"
 desc = "The other half of the pass boundary, and a diagnostic of its own (`RuntimeDiag::PassBoundaryNodes`, 0x0400000F): after every pass the program's root graph still has an entry node it can start at and an exit node whose value it returns, or the pass that returned it is named. Kept apart from `PassBoundaryResources` on purpose -- two invariants that can go red separately are two invariants, and one red then says which of them broke. No pass in the tree breaks this one today, which is what this pins: the check is silent on a program put through two rewriting passes."
 kind = "behavior"
 case = "../../../cases/effects/declared.cml"
-args = ["${case}", "std::opt::inline", "std::opt"]
+args = ["${case}", "std::cxx::inline", "std::opt"]
 expect_exit = 0
 expect_output_not_contains = ["RuntimeDiag::PassBoundaryNodes", "has no entry node", "has no exit node"]
 
@@ -60,7 +60,7 @@ name = "pass_boundary.ports_match_declaration"
 desc = "The third boundary, a diagnostic of its own (`RuntimeDiag::PassBoundaryPorts`, 0x04000013): after every pass, every operator node still names an operator the table knows and every ordinary port of it is a live node with a type. A pass may rewrite the graph, but it may not leave a call nothing can run. Measured on the whole tree when it was written: no pass breaks it, so what this pins is the silence."
 kind = "behavior"
 case = "../../../cases/effects/declared.cml"
-args = ["${case}", "std::opt::inline", "std::opt"]
+args = ["${case}", "std::cxx::inline", "std::opt"]
 expect_exit = 0
 expect_output_not_contains = ["RuntimeDiag::PassBoundaryPorts", "no longer matches its declaration"]
 

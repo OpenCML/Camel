@@ -201,7 +201,7 @@
   - 策略组合子；
   - 规则校验（`modules/verify`）；
   - 程序变换的三个算子。
-- **两套并存的**：`fold`、`cse`、`dce` 在 `stdlib/opt.cml` 里有 Camel 版本，`std::opt::fold`、`std::opt::cse`、`std::opt::dce` 又有 C++ 版本。按"不留两套"，迁移的第一步就是让 Camel 版本在全量用例上与 C++ 版本给出相同的图，然后删掉 C++ 版本。Camel 版的 `cse` 同时改成饱和的写法（第 2 节）。
+- **两套并存的**：`fold`、`cse`、`dce` 在 `stdlib/opt.cml` 里有 Camel 版本，`std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce` 又有 C++ 版本。按"不留两套"，迁移的第一步就是让 Camel 版本在全量用例上与 C++ 版本给出相同的图，然后删掉 C++ 版本。Camel 版的 `cse` 同时改成饱和的写法（第 2 节）。
 - **还是 C++ 的**：`opt::inline`（约 1500 行）、`defun`（约 1750 行）、`generic` 的其余部分（约 3400 行）、`specialize`、`devirtualize`、`tensor::fuse`、`std::macro`。
 
 ## 7. 迁移的规矩

@@ -10,7 +10,7 @@
  * respected, the arms of each branch laid out as contiguous ranges. A branch is an if /
  * else-if / else statement at the place of its BRCH, its arms the statements of their nodes:
  * in the form the front end gives (each arm a graph of its own, called by a FUNC node) the arm
- * graph is lowered into the function in place of the call; in the form std::opt::inline leaves (the
+ * graph is lowered into the function in place of the call; in the form std::cxx::inline leaves (the
  * arm's nodes between the BRCH and the JOIN) the range of the arm is.
  *
  * A call of the function itself whose value is the function's value, with nothing after it, is

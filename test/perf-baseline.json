@@ -159,7 +159,7 @@
     },
     "fib.inline_nvm_timeit": {
       "plan": "perf.fib",
-      "command": "out/latest/bin/camel --timeit std::nvm/10 --output-format json test/cases/perf/fib_recursive.cml std::opt::inline std::nvm",
+      "command": "out/latest/bin/camel --timeit std::nvm/10 --output-format json test/cases/perf/fib_recursive.cml std::cxx::inline std::nvm",
       "metric": "cpu",
       "wall": {
         "n": 5,
@@ -201,7 +201,7 @@
     },
     "fib.inline_fvm_timeit": {
       "plan": "perf.fib",
-      "command": "out/latest/bin/camel --timeit std::fvm/10 --output-format json test/cases/perf/fib_recursive.cml std::opt::inline std::fvm",
+      "command": "out/latest/bin/camel --timeit std::fvm/10 --output-format json test/cases/perf/fib_recursive.cml std::cxx::inline std::fvm",
       "metric": "cpu",
       "wall": {
         "n": 5,
@@ -243,7 +243,7 @@
     },
     "fib.inline_jit_timeit": {
       "plan": "perf.fib",
-      "command": "out/latest/bin/camel --timeit std::jit/10 --output-format json test/cases/perf/fib_recursive.cml std::opt::inline std::jit",
+      "command": "out/latest/bin/camel --timeit std::jit/10 --output-format json test/cases/perf/fib_recursive.cml std::cxx::inline std::jit",
       "metric": "wall",
       "wall": {
         "n": 5,

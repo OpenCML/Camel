@@ -91,7 +91,7 @@ The words after the file name are the passes to run, in order:
 camel fit.cml                        # run on the node VM
 camel fit.cml std::gir               # print the graph (Graphviz DOT) instead of running
 camel fit.cml std::macro std::opt std::jit   # expand grad, optimize, run with the JIT
-camel fit.cml std::opt::saturate std::gir    # keep every equivalent form and draw them side by side
+camel fit.cml std::cxx::saturate std::gir    # keep every equivalent form and draw them side by side
 ```
 
 Optimizations are written in Camel too. A law is stated once, for every type that satisfies its condition:

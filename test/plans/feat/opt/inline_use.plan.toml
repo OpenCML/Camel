@@ -10,7 +10,7 @@ desc = "Inlining retains stdout uses; a generic pass can intentionally erase the
 # to be the same afterwards.
 #
 #   inline_keeps_stdout.write    the program as written: two writes of `stdout`, one per graph
-#   inline_keeps_stdout.inline   `std::opt::inline` folds `noisy` into `main`: still two writes,
+#   inline_keeps_stdout.inline   `std::cxx::inline` folds `noisy` into `main`: still two writes,
 #                                and the program prints what it printed
 #   inline_keeps_stdout.drop     `test::inline_use_drop` erases both prints after the inline: the
 #                                generic boundary admits this intentional deletion without a selected check
@@ -45,9 +45,9 @@ expect_output_not_contains = ["PassBoundaryResources", "changed the ambient reso
 
 [[tests]]
 name = "inline_keeps_stdout.inline"
-desc = "`std::opt::inline` folds `noisy` into its caller: the print moved graphs, the program still writes `stdout` twice, and the output is unchanged."
+desc = "`std::cxx::inline` folds `noisy` into its caller: the print moved graphs, the program still writes `stdout` twice, and the output is unchanged."
 case = "../../../cases/opt/effects/inline_keeps_stdout.cml"
-args = ["${case}", "std::opt::inline", "test::inline_use", "${backend}"]
+args = ["${case}", "std::cxx::inline", "test::inline_use", "${backend}"]
 expect_exit = 0
 expect_stdout_contains = ["INLINE_USE kinds=1 stdout (write)=4", "noisy", "2"]
 expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources"]
@@ -56,7 +56,7 @@ expect_output_not_contains = ["PassBoundaryResources", "changed the ambient reso
 name = "inline_keeps_stdout.drop"
 desc = "The generic route permits an intentional deletion without an explicit support-preserving check."
 case = "../../../cases/opt/effects/inline_keeps_stdout.cml"
-args = ["${case}", "std::opt::inline", "test::inline_use_drop", "${backend}"]
+args = ["${case}", "std::cxx::inline", "test::inline_use_drop", "${backend}"]
 expect_exit = 0
 expect_stdout_contains = ["INLINE_USE_DROP erased=3"]
 expect_output_not_contains = ["PassBoundaryNodes", "PassBoundaryPorts"]
@@ -74,7 +74,7 @@ expect_output_not_contains = ["PassBoundaryResources"]
 name = "inline_keeps_stdout.twice_inline"
 desc = "Both calls inlined: the count stays six and so does the output, and the per-node lines show the copies replacing the nodes they came from (48:11, 48:15 for 48:0, 48:3) -- a copy is not a new resource, and it is not a new use either when the node it copies is gone."
 case = "../../../cases/opt/effects/inline_keeps_stdout_twice.cml"
-args = ["${case}", "std::opt::inline", "test::inline_use", "${backend}"]
+args = ["${case}", "std::cxx::inline", "test::inline_use", "${backend}"]
 expect_exit = 0
 expect_stdout_contains = ["INLINE_USE kinds=1 stdout (write)=6", "noisy", "3"]
 expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources"]

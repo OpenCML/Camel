@@ -5,19 +5,19 @@
  * Generic graph optimizations. Algebra recognizes core scalar arithmetic by OperId;
  * the other passes consult declared properties, never module-specific knowledge:
  *
- *   std::opt::fold  evaluates pure operators whose inputs are all static and
+ *   std::cxx::fold  evaluates pure operators whose inputs are all static and
  *                   replaces them by static values, and replaces an element
  *                   projected out of a tuple built in the same graph by the
  *                   value filled there;
- *   std::opt::cse   merges pure operator nodes with identical operator and
+ *   std::cxx::cse   merges pure operator nodes with identical operator and
  *                   inputs;
- *   std::opt::algebra combines local scalar arithmetic, with optional safe_fp mode;
- *   std::opt::dce   removes pure operator (and value-only) nodes whose results
+ *   std::cxx::algebra combines local scalar arithmetic, with optional safe_fp mode;
+ *   std::cxx::dce   removes pure operator (and value-only) nodes whose results
  *                   are unused, and GATEs used only for control;
  *                   also bypasses non-anchor GATEs by transferring waits to mandatory users,
  *                   within an edge-growth budget;
  *                   their ordering is transferred to their control users.
- *   std::opt::order removes ordering edges already implied by a path of ordering edges, within a
+ *   std::cxx::order removes ordering edges already implied by a path of ordering edges, within a
  *                   work budget (docs/design/effects/edges.cn.md 5.4). It still removes control
  *                   edges implied by mandatory data/control paths until the control-edge kind is
  *                   gone, without changing branch boundaries or arm anchors.
@@ -63,7 +63,7 @@ class CommonSubexpressionPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
-/// The integer neutral-element reference mode of `std::opt::algebra neutral_only=true`. The
+/// The integer neutral-element reference mode of `std::cxx::algebra neutral_only=true`. The
 /// algebraic simplification itself is the rules library's pass (`rules::simplify`, registered
 /// under the core name); this class keeps the documented reference the Camel-pass tests compare
 /// against, and has no algebraic laws beyond `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`.
@@ -79,7 +79,7 @@ class AlgebraPass : public RuntimeGraphRewritePass {
     bool neutralOnly_;
 };
 
-/// std::opt::extract: one writing for every value that has several (runtime/writings.h).
+/// std::cxx::extract: one writing for every value that has several (runtime/writings.h).
 class ExtractPass : public RuntimeGraphRewritePass {
   public:
     ExtractPass(const camel::core::context::context_ptr_t &ctx, std::string cost)
@@ -103,7 +103,7 @@ class DeadCodePass : public RuntimeGraphRewritePass {
     bool valuesOnly_;
 };
 
-/// std::opt::order: the transitive reduction over a graph's ordering edges (docs/design/effects/
+/// std::cxx::order: the transitive reduction over a graph's ordering edges (docs/design/effects/
 /// edges.cn.md 5.4). An order edge A -> C goes away when a path of order edges or of one `sync`
 /// block's chain already orders the two ends; sync edges themselves are never dropped. The
 /// control-edge kind is still in the graph, so until it is removed the pass also drops the CTRL
@@ -129,12 +129,12 @@ class OrderReductionPass : public RuntimeGraphRewritePass {
 struct OptimizeRewriteConfig;
 
 /**
- * The type-folder half of `std::opt::fold`, run once over `program` on its own: a pure operator
+ * The type-folder half of `std::cxx::fold`, run once over `program` on its own: a pure operator
  * whose argument types fix its result is replaced by that constant, through the folder the
  * operator registered (`OperatorTable::typeFolder`; `tensor:shape` is
  * `modules/tensor/ops/layout_ops.cpp#shapeFold`, and `tensor:numel` / `tensor:dim` sit beside it
  * in `gradient_ops.cpp`). The fold itself is one function
- * (`src/passes/opt/generic/generic.cpp#foldFromTypes`), the one `std::opt::fold` reaches for a
+ * (`src/passes/opt/generic/generic.cpp#foldFromTypes`), the one `std::cxx::fold` reaches for a
  * node its arguments do not all fix; this entry point runs it and nothing else, so a pass that
  * reads the shape of a graph before it rewrites it does not have to run the whole stage.
  *

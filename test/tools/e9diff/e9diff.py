@@ -39,7 +39,7 @@ that costs 25 minutes to produce costs a second to repeat. `analyze` groups the 
 campaign); `reduce` shrinks one representative of each group.
 
 The matrix: `p00` no pass; `p01` `std::macro`; `p02`..`p09` `std::macro` plus the first k of
-`devirtualize specialize inline fold cse algebra dce order`, each as its own `std::opt::<name>`
+`devirtualize specialize inline fold cse algebra dce order`, each as its own `std::cxx::<name>`
 pass (one round of `simplifyGraph`, `order` last); `p10` `std::macro std::opt`. Back ends
 `std::nvm`, `std::fvm`, `std::jit`, `std::prl` under both collectors in the full matrix, plus
 `std::cpp` translated, built and run with no collector. Every cell is compared with the output the
@@ -127,7 +127,7 @@ OPT_STAGES = ["devirtualize", "specialize", "inline", "fold", "cse", "algebra", 
 PIPES: list = [("p00_none", []), ("p01_macro", ["std::macro"])]
 for k in range(1, len(OPT_STAGES) + 1):
     PIPES.append((f"p{k + 1:02d}_+{OPT_STAGES[k - 1]}",
-                  ["std::macro"] + [f"std::opt::{s}" for s in OPT_STAGES[:k]]))
+                  ["std::macro"] + [f"std::cxx::{s}" for s in OPT_STAGES[:k]]))
 PIPES.append(("p10_opt", ["std::macro", "std::opt"]))
 PASSES = dict(PIPES)
 
@@ -851,7 +851,7 @@ def column(rec: dict, backend: str, collector: str) -> dict:
 def stage_of(pid: str) -> str:
     fixed = {"p00_none": "(no pass: front end or back end)", "p01_macro": "std::macro",
              "p10_opt": "std::opt (integrated fixpoint)"}
-    return fixed[pid] if pid in fixed else "std::opt::" + pid.split("+")[1]
+    return fixed[pid] if pid in fixed else "std::cxx::" + pid.split("+")[1]
 
 
 def localize(rec: dict):

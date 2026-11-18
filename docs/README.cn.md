@@ -91,7 +91,7 @@ func main(): int sync {
 camel fit.cml                        # 在节点虚拟机上运行
 camel fit.cml std::gir               # 不运行，打印图（Graphviz DOT）
 camel fit.cml std::macro std::opt std::jit   # 展开 grad、优化、用 JIT 运行
-camel fit.cml std::opt::saturate std::gir    # 保留所有等价写法，并排画出来
+camel fit.cml std::cxx::saturate std::gir    # 保留所有等价写法，并排画出来
 ```
 
 优化同样用 Camel 写。一条定律只写一次，对所有满足条件的类型成立：

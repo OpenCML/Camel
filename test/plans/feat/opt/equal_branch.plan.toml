@@ -17,9 +17,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "equal_branch.graph.inline"
-desc = "std::inline replaces the calls but keeps the source's arithmetic: the graph's branches are the source's three conditional expressions, each over the one runtime `env:get_env` comparison, the two arm effects are still controlled by their branch, and the equal-armed branch's value is its product with itself. The branch comparison is the assertion; no BRCH, JOIN or multiply total is pinned."
+desc = "std::cxx::inline replaces the calls but keeps the source's arithmetic: the graph's branches are the source's three conditional expressions, each over the one runtime `env:get_env` comparison, the two arm effects are still controlled by their branch, and the equal-armed branch's value is its product with itself. The branch comparison is the assertion; no BRCH, JOIN or multiply total is pinned."
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}","std::inline","std::jgir"]
+args = ["${case}","std::cxx::inline","std::jgir"]
 verify_script_path = "../../../cases/opt/generic/equal_branch_shape.mjs"
 
 [[tests]]
@@ -31,9 +31,9 @@ verify_script_path = "../../../cases/opt/generic/equal_branch_shape.mjs"
 
 [[tests]]
 name = "equal_branch.graph.cse"
-desc = "std::opt::cse after std::inline leaves the branch structure as std::inline does: common subexpression elimination may share the values a branch joins, but the branches stay the source's three conditional expressions over the one runtime `env:get_env` comparison and the equal-armed branch value stays the source's product."
+desc = "std::cxx::cse after std::cxx::inline leaves the branch structure as std::cxx::inline does: common subexpression elimination may share the values a branch joins, but the branches stay the source's three conditional expressions over the one runtime `env:get_env` comparison and the equal-armed branch value stays the source's product."
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}","std::inline","std::opt::cse","std::jgir"]
+args = ["${case}","std::cxx::inline","std::cxx::cse","std::jgir"]
 verify_script_path = "../../../cases/opt/generic/equal_branch_shape.mjs"
 
 [[tests]]
@@ -77,7 +77,7 @@ verify_script = '''
 [[tests]]
 name = "equal_branch.fold.left"
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}","std::inline","std::opt::fold","${backend}"]
+args = ["${case}","std::cxx::inline","std::cxx::fold","${backend}"]
 envs = ["CAMEL_EQUAL_BRANCH="]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
@@ -90,7 +90,7 @@ verify_script = '''
 [[tests]]
 name = "equal_branch.fold.right"
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}","std::inline","std::opt::fold","${backend}"]
+args = ["${case}","std::cxx::inline","std::cxx::fold","${backend}"]
 envs = ["CAMEL_EQUAL_BRANCH=right"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
@@ -103,7 +103,7 @@ verify_script = '''
 [[tests]]
 name = "equal_branch.cse.left"
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}","std::inline","std::opt::cse","${backend}"]
+args = ["${case}","std::cxx::inline","std::cxx::cse","${backend}"]
 envs = ["CAMEL_EQUAL_BRANCH="]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
@@ -116,7 +116,7 @@ verify_script = '''
 [[tests]]
 name = "equal_branch.cse.right"
 case = "../../../cases/opt/generic/equal_branch_values.cml"
-args = ["${case}","std::inline","std::opt::cse","${backend}"]
+args = ["${case}","std::cxx::inline","std::cxx::cse","${backend}"]
 envs = ["CAMEL_EQUAL_BRANCH=right"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]

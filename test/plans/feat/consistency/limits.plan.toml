@@ -69,7 +69,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 # --- the same boundary whatever pipeline produced the graph ---------------------------------
 #
 # The count is a property of the program, not of the graph a pass handed to the scheduler:
-# std::opt::devirtualize rewrites the entry's call of main from a call through a function value
+# std::cxx::devirtualize rewrites the entry's call of main from a call through a function value
 # (`CALL` of a closure) into a direct call (`FUNC main$lift0`), which is the same call. Measured
 # before the fix on both interpreters, that spelling was worth a frame: with the limit at 100,
 # depth(100) ran and depth(101) was the first to stop, so one pass changed which program fails
@@ -83,16 +83,16 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.direct.after_devirtualize.fits"
-desc = "Limit 100 after std::opt::devirtualize: depth(99) still runs, on all four back ends."
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::devirtualize", "${backend}"]
+desc = "Limit 100 after std::cxx::devirtualize: depth(99) still runs, on all four back ends."
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::devirtualize", "${backend}"]
 envs = ["N=99"]
 expect_exit = 0
 expect_stdout_starts_with = "start\n99\ndone\n"
 
 [[tests]]
 name = "limit.direct.after_devirtualize.exceeds"
-desc = "Limit 100 after std::opt::devirtualize: depth(100) still stops with MaxRecursionDepthExceeded at the recursive call -- the pass does not buy a frame. Red before the fix: exit 0 and `start\n100\ndone\n`."
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::devirtualize", "${backend}"]
+desc = "Limit 100 after std::cxx::devirtualize: depth(100) still stops with MaxRecursionDepthExceeded at the recursive call -- the pass does not buy a frame. Red before the fix: exit 0 and `start\n100\ndone\n`."
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::devirtualize", "${backend}"]
 envs = ["N=100"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
@@ -132,8 +132,8 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 #   depth_direct without passes N=10 -> 1; after std::opt N=10 -> 0 and N=11 -> 1 -- one level: the
 #     inline stage of std::opt puts main's body into the entry graph, so the activation the room
 #     check subtracts for the entry's call of main is not there to subtract.
-#   depth_value without passes N=50 -> 1; after std::opt::inline N=50 -> 0 and N=100 -> 0,
-#     N=101 -> 1; after std::opt::saturate N=50 -> 0, N=100 -> 1; after std::opt N=50 -> 0 and
+#   depth_value without passes N=50 -> 1; after std::cxx::inline N=50 -> 0 and N=100 -> 0,
+#     N=101 -> 1; after std::cxx::saturate N=50 -> 0, N=100 -> 1; after std::opt N=50 -> 0 and
 #     N=100 -> 0, N=101 -> 1 -- the mutual recursion of step and via is compacted to one call per
 #     level, so the boundary moves from 50 levels to 100.
 
@@ -188,9 +188,9 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.after_inline.runs"
-desc = "Limit 100 after std::opt::inline: step(50) runs -- the inliner compacts the mutual recursion to one call per level."
+desc = "Limit 100 after std::cxx::inline: step(50) runs -- the inliner compacts the mutual recursion to one call per level."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::inline", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
 expect_exit = 0
@@ -198,9 +198,9 @@ expect_stdout_starts_with = "start\n50\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_inline.at_the_doubled_boundary"
-desc = "Limit 100 after std::opt::inline: step(100) runs, the boundary having moved from 50 levels to 100."
+desc = "Limit 100 after std::cxx::inline: step(100) runs, the boundary having moved from 50 levels to 100."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::inline", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=100"]
 expect_exit = 0
@@ -208,9 +208,9 @@ expect_stdout_starts_with = "start\n100\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_inline.past_it.still_stops"
-desc = "Limit 100 after std::opt::inline, one level past the doubled boundary: step(101) stops."
+desc = "Limit 100 after std::cxx::inline, one level past the doubled boundary: step(101) stops."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::inline", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::inline", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=101"]
 expect_exit = 1
@@ -220,9 +220,9 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.moved.value.after_saturate.runs"
-desc = "Limit 100 after std::opt::saturate: step(50) runs; this pass moves the boundary too."
+desc = "Limit 100 after std::cxx::saturate: step(50) runs; this pass moves the boundary too."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::saturate", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=50"]
 expect_exit = 0
@@ -230,9 +230,9 @@ expect_stdout_starts_with = "start\n50\ndone\n"
 
 [[tests]]
 name = "limit.moved.value.after_saturate.still_stops"
-desc = "Limit 100 after std::opt::saturate: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
+desc = "Limit 100 after std::cxx::saturate: step(100) stops -- this pass moves the boundary to 99 levels, not past them."
 case = "../../../cases/consistency/limits/depth_value.cml"
-args = ["--max-recursion-depth", "100", "${case}", "std::opt::saturate", "${backend}"]
+args = ["--max-recursion-depth", "100", "${case}", "std::cxx::saturate", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 envs = ["N=100"]
 expect_exit = 1
@@ -468,7 +468,7 @@ expect_stderr_contains = ["Invalid --max-macro-depth value: 'many'."]
 
 [[tests]]
 name = "limit.direct.exceeds.native"
-desc = "The same limit under std::opt::inline std::jit, where depth is compiled to native code: the compiled recursion counts its depth and leaves through the fault exit with the interpreter's diagnostic."
+desc = "The same limit under std::cxx::inline std::jit, where depth is compiled to native code: the compiled recursion counts its depth and leaves through the fault exit with the interpreter's diagnostic."
 backends = ["inline_jit"]
 envs = ["N=100"]
 expect_exit = 1
@@ -487,7 +487,7 @@ expect_diagnostic_column = 38
 
 [[tests]]
 name = "limit.10000.fits"
-desc = "Limit 10000: depth(9999) is under the count on every back end and under std::opt::inline std::jit. It finishes wherever the native stack holds 9999 levels; where it does not (the back ends that nest on the native stack, on Windows, which keeps 15/16 of the stack as the reserve for SEH unwinding: stackReserve in src/execute/limits.cpp), it stops at the recursive call with the diagnostic of a full native stack, never with the count's."
+desc = "Limit 10000: depth(9999) is under the count on every back end and under std::cxx::inline std::jit. It finishes wherever the native stack holds 9999 levels; where it does not (the back ends that nest on the native stack, on Windows, which keeps 15/16 of the stack as the reserve for SEH unwinding: stackReserve in src/execute/limits.cpp), it stops at the recursive call with the diagnostic of a full native stack, never with the count's."
 args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
 backends_agree = []
@@ -520,7 +520,7 @@ assert(/Maximum recursion depth \(10000\) exceeded/.test(text) || /native stack 
 
 [[tests]]
 name = "limit.10000.exceeds.native"
-desc = "The same in native code (std::opt::inline std::jit), at the same call."
+desc = "The same in native code (std::cxx::inline std::jit), at the same call."
 args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
 backends = ["inline_jit"]
 envs = ["N=100000"]

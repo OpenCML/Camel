@@ -27,7 +27,7 @@ under the measured pass; ``bump`` lets ``std::opt`` load it; ``fold`` loads noth
     python3 test/tools/facts-cost.py --reps 21 \
       --case "bump=test/cases/facts/tensors_and_loops.cml test::facts_seed std::opt test::facts_check" \
       --case "control=test/cases/facts/tensors_and_loops.cml test::facts_load_rules test::facts_seed std::opt test::facts_check" \
-      --case "fold=test/cases/facts/tensors_and_loops.cml test::facts_seed std::opt::fold test::facts_check" \
+      --case "fold=test/cases/facts/tensors_and_loops.cml test::facts_seed std::cxx::fold test::facts_check" \
       --baseline control --outdir /tmp/facts-cost
 
 The camel binary is ``$CAMEL_HOME/bin/camel`` unless ``--camel`` says otherwise; the working

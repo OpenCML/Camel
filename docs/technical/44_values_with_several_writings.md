@@ -95,10 +95,10 @@ and integer tensor arithmetic) are never read the other way, because the exchang
 value. Mirrored rules in the library (`*_zero_add`, `*_one_mul`, ...) remain correct statements but
 are redundant for matching: the first-written law now covers both orders.
 
-The rules of `test/passes` (`test::saturate`) are the local algebra of `std::opt::algebra`: exact
+The rules of `test/passes` (`test::saturate`) are the local algebra of `std::cxx::algebra`: exact
 commutation, neutral elements of wrapping integers, `x*c + x*c`, `x*c1 + x*c2`, `(x*c1)*c2`
 (the last two need `reassociate`, the last also `no_infs`, for floats). Extracted by node count
-they leave the same operators as `std::opt::algebra` on the algebra corpus under the default and
+they leave the same operators as `std::cxx::algebra` on the algebra corpus under the default and
 the strict policy. `shared_product` (a `sync` function) keeps two products because `t` is also read
 by the `println`: the sum is rewritten to `x * 6` while `t` stays for the print, so both products
 remain. (The old path went through `float_add_self` to `t * 2`, which `float_fold` could not
@@ -132,12 +132,12 @@ control input. A pure writing that is a candidate of a class and read by nothing
 Back ends and exporters keep refusing a graph with writings (`GCGraph::execPlan`,
 `RunPrograms::begin`). The pass driver asks the pass before it extracts: a pass that declares
 `acceptsWritings()` is given the program as it is — the dumps read that state, and
-`std::opt::saturate` is the pass that produces it — and every other pass is given one writing per
+`std::cxx::saturate` is the pass that produces it — and every other pass is given one writing per
 value, extracted first with the `weighted` model (visible in the `Pass` info log). A pass that
 neither consumes the program nor declares that it accepts writings gets a diagnostic instead of
 the program.
 
-`std::opt::saturate` reaches that state from the command line: it runs the standard rules library
+`std::cxx::saturate` reaches that state from the command line: it runs the standard rules library
 (`stdlib/rules.cml`) for `rounds` rounds (6 by default; `strict` keeps the laws that hold bit for
 bit, as `safe_fp` does for `std::opt`) and extracts nothing. It is the same saturation
 `saturate_all` runs, and the rules are one list (`saturateList`), so the pass and the library
