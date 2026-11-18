@@ -1969,7 +1969,18 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
                 made.push_back(ref);
             }
         }
-        if (const auto violation = commitViolation(*committed, *copy, made)) {
+        // The other half of the tier (docs/design/graph-editing/README.cn.md 8.1): the existing
+        // nodes the draft changed in place through the low-level interface -- an operand added or
+        // taken away, an operator swapped -- which owes the effect and the order checks although it
+        // made no node at all. `made` alone cannot see it, and a commit that read only `made`
+        // published an edit that dropped an ordering without asking anything.
+        std::vector<gc_node_ref_t> changed;
+        if (const auto at = drafts_.find(graph); at != drafts_.end() && at->second->transaction) {
+            const std::span<const gc_node_ref_t> edits =
+                at->second->transaction->edit().lowLevelEdits();
+            changed.assign(edits.begin(), edits.end());
+        }
+        if (const auto violation = commitViolation(*committed, *copy, made, changed, graph)) {
             throw GraphCommitRefused(*violation);
         }
     }

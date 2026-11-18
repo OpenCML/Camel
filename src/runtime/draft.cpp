@@ -1378,6 +1378,7 @@ void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_n
     ++mutations_;
     DraftNode *draftNode = node(userId);
     DraftNodeHeader &h   = draftNode->header;
+    noteLowLevelEdit(userId);
     if (h.usedBytes() + sizeof(gc_node_ref_t) > h.capacityBytes) {
         // No room: lay the node out again with the new input (the block grows by doubling).
         DraftNodeInit init = makeInitFromNode(draftNode);
@@ -2088,6 +2089,33 @@ bool GraphDraft::eraseUnreadNodes(std::span<const gc_node_ref_t> nodes) {
     return true;
 }
 
+void GraphDraft::noteLowLevelEdit(gc_node_ref_t id) {
+    // A named edit is the edit: what it changes in place is that edit's, and the table of
+    // docs/design/graph-editing/README.cn.md 8.1 owes the effect and order checks nothing for it.
+    if (namedEdits_ != 0 || id == kInvalidNodeRef) {
+        return;
+    }
+    if (id >= lowLevelSeen_.size()) {
+        lowLevelSeen_.resize(static_cast<size_t>(id) + 1, 0);
+    }
+    if (lowLevelSeen_[id] != 0) {
+        return;
+    }
+    lowLevelSeen_[id] = 1;
+    lowLevelEdits_.push_back(id);
+}
+
+namespace {
+
+/// Whether a whole-list edge edit writes down the list the node already has: such a call is no
+/// change to the graph, so it is not one the commit checks have to answer for.
+bool edgesUnchanged(std::span<const gc_node_ref_t> current, std::span<const gc_node_ref_t> wanted) {
+    return current.size() == wanted.size() &&
+           std::equal(current.begin(), current.end(), wanted.begin());
+}
+
+} // namespace
+
 void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
     requireOneWriting("setNormInputs");
     ++mutations_;
@@ -2098,6 +2126,9 @@ void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
             "set norm inputs for draft node {}, which this graph does not have (it holds {} nodes)",
             id,
             nodesById_.size()));
+    if (!edgesUnchanged(DraftNodeView::normInputs(draftNode), inputs)) {
+        noteLowLevelEdit(id);
+    }
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
@@ -2121,6 +2152,9 @@ void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
             "set with inputs for draft node {}, which this graph does not have (it holds {} nodes)",
             id,
             nodesById_.size()));
+    if (!edgesUnchanged(DraftNodeView::withInputs(draftNode), inputs)) {
+        noteLowLevelEdit(id);
+    }
     for (gc_node_ref_t oldInput : DraftNodeView::withInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::ContextPorts);
     }
@@ -2144,6 +2178,9 @@ void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
             "set ctrl inputs for draft node {}, which this graph does not have (it holds {} nodes)",
             id,
             nodesById_.size()));
+    if (!edgesUnchanged(DraftNodeView::ctrlInputs(draftNode), inputs)) {
+        noteLowLevelEdit(id);
+    }
     for (gc_node_ref_t oldInput : DraftNodeView::ctrlInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::Ctrl);
     }
@@ -2172,6 +2209,9 @@ void GraphDraft::setOrderInputs(gc_node_ref_t id, std::span<const gc_node_ref_t>
         if (input == id) {
             throw std::logic_error("An order edge cannot order a node after itself.");
         }
+    }
+    if (!edgesUnchanged(DraftNodeView::orderInputs(draftNode), inputs)) {
+        noteLowLevelEdit(id);
     }
     for (gc_node_ref_t oldInput : DraftNodeView::orderInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::Order);
@@ -2206,6 +2246,9 @@ void GraphDraft::setSyncInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     // that leaves it, and it is the same shape seen from the other end).
     if (inputs.size() > 1) {
         throw std::logic_error("A sync edge joins one statement to the next one.");
+    }
+    if (!edgesUnchanged(DraftNodeView::syncInputs(draftNode), inputs)) {
+        noteLowLevelEdit(id);
     }
     for (gc_node_ref_t oldInput : DraftNodeView::syncInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::Sync);
@@ -2259,6 +2302,10 @@ void GraphDraft::setPorts(
             "set ports for draft node {}, which this graph does not have (it holds {} nodes)",
             id,
             nodesById_.size()));
+    if (!edgesUnchanged(DraftNodeView::normInputs(draftNode), ports) ||
+        !edgesUnchanged(DraftNodeView::withInputs(draftNode), withPorts)) {
+        noteLowLevelEdit(id);
+    }
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
