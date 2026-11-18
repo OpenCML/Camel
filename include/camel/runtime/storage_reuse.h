@@ -51,8 +51,10 @@ class Program;
  * `stdlib/prelude.cml`'s `#op`, `sort_i` for `array:sort_i`), so the copying form of an operator
  * and the plain operator print the same name, and a form a program cannot write prints the name of
  * the operator it stands for (`OperatorTable::plainForm`: the in-place form `:op/set_index_in_place`
- * prints `set_index`). The loop-state append prints the plain append's name for the same reason: a
- * program wrote `xs->append<v>`, and the form is what the compiler made of it. The three forms are
+ * prints `set_index`). The loop-state append states its own shape for the same reason: a program
+ * wrote `xs->append<v>`, so the table answers `append` for `:struct/append_arr_owned` itself
+ * (`declareCallForm` beside the other two forms) and this reading derives nothing. The three forms
+ * are
  * the three ways `v = v->append(x)` reaches the graph, and all three are reported: a call that
  * copies is an update too, and the reading that says it allocates is the one it exists for. A
  * fourth shape is an operator that declares it reuses an operand

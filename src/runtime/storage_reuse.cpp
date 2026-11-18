@@ -74,10 +74,12 @@ CopyVerdict verdictOfDecision(StorageReuse decision) {
 /// `_in_place`, `_owned` and `_arr`, which is a second spelling of the connection the table already
 /// declares). Two declarations answer it, both written where the operator is registered:
 ///
-///   * the call shape a module declared for the operator (`OperatorTable::callFormOf`):
+///   * the call shape declared for the operator (`OperatorTable::callFormOf`):
 ///     `stdlib/prelude.cml` declares `export func append::<T>(xs: T[])` with `#op(':struct/append_arr')`,
 ///     so `append` is a fact of that declaration and not of the URI's tail; `array:sort_i` answers
-///     `sort_i` the same way;
+///     `sort_i` the same way; and the loop-state append states its own shape
+///     (`declareCallForm(":struct/append_arr_owned", ...)`) because a program writes `xs->append<v>`
+///     for it -- which is why this reading no longer carries a URI constant for that form;
 ///   * for a form a program cannot write, the operator the form stands for (`plainForm`), whose own
 ///     call shape is then the name: the program wrote the plain call, and the verdict is the form's.
 std::string updateName(const camel::core::OperatorTable &table, std::string_view uri) {
@@ -101,16 +103,6 @@ std::string updateName(const camel::core::OperatorTable &table, std::string_view
     const size_t separator = uri.find_last_of("/:");
     return std::string(uri.substr(separator == std::string_view::npos ? 0 : separator + 1));
 }
-
-/// The operator the loop-state form is the form of: a program writes `xs->append<v>`, which is
-/// `:struct/append_arr`'s call, so that is the name the form prints. It is needed because the table
-/// declares no relation between the two: the loop-state form is registered as a private group of its
-/// own (src/builtin/modules/globals.cpp, `__append_owned__`) and no declaration states that it is the
-/// loop-state form of the plain append. The declaration that would retire this constant is a call
-/// shape on the form itself, beside `setInPlaceForm` and `declareReusesOperand`
-/// (src/builtin/executors/builtin.cpp: `declareCallForm(":struct/append_arr_owned", {.name =
-/// "append"})`), and it is written where the operator is registered -- not here.
-constexpr std::string_view kPlainAppend = ":struct/append_arr";
 
 /// Whether the node is the loop-state append: `xs->append<v>` on a loop state the compiler proved
 /// no one else can see (Builder::markLoopStateInPlace). Read by the id the operator table fixes for
@@ -252,11 +244,11 @@ void dumpStorageReuse(
                 ++copied;
                 break;
             }
-            // The loop-state append is the plain append's form, so it prints the plain append's
-            // name: a program wrote `xs->append<v>` and the form is what the compiler made of it.
-            const std::string name =
-                loopStateAppend ? updateName(table, kPlainAppend)
-                                : updateName(table, plain.has_value() ? *plain : uri);
+            // Every shape answers its own name from the table: the loop-state form has a call shape
+            // of its own now (`declareCallForm(":struct/append_arr_owned", ...)` beside the two
+            // forms in src/builtin/executors/builtin.cpp), so there is no shape left whose name has
+            // to be spelled out, and no URI constant in this reading.
+            const std::string name = updateName(table, uri);
             os << "COPIES " << placeOf(*graph, ref, sources) << " " << name << " "
                << verdictOf(read) << "\n";
         }
