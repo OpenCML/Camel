@@ -8,6 +8,8 @@ faecc6419e79ddb9 ok test/cases/parse/constructs/enum.cml
 96ef9e6311988e9b ok test/cases/parse/constructs/literals.cml
 dc8dc3be941ad0d4 ok test/cases/parse/constructs/match_guard.cml
 39e66e006a7d3402 ok test/cases/parse/constructs/operator_name.cml
+0b101123b1ebdb3a ok test/cases/parse/constructs/resource_modifier_absent.cml
+da96b771af99bbcb ok test/cases/parse/constructs/resource_modifiers.cml
 aee832334c9c5755 ok test/cases/parse/constructs/rest_signature.cml
 f324c27f73a41140 ok test/cases/parse/constructs/static_loop.cml
 96c648a7018c3a31 ok test/cases/parse/constructs/tags.cml

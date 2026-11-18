@@ -1,0 +1,25 @@
+/**
+ * The modifier a resource declaration may carry after its name (design effects plan 3.1, design
+ * principles 9.12 and 15.5): `unordered` says the effects on the resource keep no written order,
+ * `readonly` says nothing ever writes it, so it conflicts with no access and orders none.
+ *
+ * `graph` and `spelling` are the two read-only resources the graph-editing design names: reading a
+ * graph is an effect, and the representation it reads is a value nobody writes. This case pins the
+ * declaration alone -- that the word is written after the name and read into the declaration. What
+ * `uses var` on such a resource means is the semantic layer's business and is not read here.
+ *
+ * `resource_modifier_absent.cml` is the same program without the two words; the pair is what says
+ * a reading can tell a modifier from its absence.
+ */
+export resource graph readonly
+export resource spelling readonly
+resource log_sink unordered
+
+func twice(f: int): int uses graph {
+    return f * 2
+}
+
+func main(): int {
+    println(twice(21))
+    return 0
+}
