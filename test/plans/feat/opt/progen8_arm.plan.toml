@@ -13,7 +13,7 @@ tags = ["feat", "opt", "fold", "branches", "defects"]
 #   invariant: JOIN 30 reads GATE 41, which lies in an arm of BRCH 26 that may not be taken when
 #   JOIN 30 runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
 #
-# Which rewrite: `std::opt::fold`, in `pruneBranch` (src/passes/opt/generic/generic.cpp). A branch
+# Which rewrite: `std::cxx::fold`, in `pruneBranch` (src/passes/opt/generic/generic.cpp). A branch
 # whose condition the pass knows is replaced by the arm it takes, and the branch's place in the
 # block's chain is handed to the last statement of that arm -- chosen among the nodes the arm's
 # region *contains*, which includes the regions nested in it: the condition of a loop written in the
@@ -21,10 +21,10 @@ tags = ["feat", "opt", "fold", "branches", "defects"]
 # read a value only that nested region computes, which is 4.1 rule 3 ("a node reads only nodes of
 # its own control region or of the control regions around it").
 #
-# The matrix over the six rewrites says which two do it: each of `std::opt::fold`, `std::opt::inline`,
-# `std::opt::cse`, `std::opt::dce`, `std::opt::specialize` and `std::opt::devirtualize` alone is
-# accepted, and of the 30 ordered pairs exactly one is refused -- `std::opt::inline` then
-# `std::opt::fold` (`JOIN 29 reads GATE 42`). `inline` supplies the shape (the value of a `sync`
+# The matrix over the six rewrites says which two do it: each of `std::cxx::fold`, `std::cxx::inline`,
+# `std::cxx::cse`, `std::cxx::dce`, `std::cxx::specialize` and `std::cxx::devirtualize` alone is
+# accepted, and of the 30 ordered pairs exactly one is refused -- `std::cxx::inline` then
+# `std::cxx::fold` (`JOIN 29 reads GATE 42`). `inline` supplies the shape (the value of a `sync`
 # call forwarded by a `GATE`, a loop whose condition is written as a branch); the folding does the
 # damage.
 #
@@ -56,8 +56,8 @@ args = ["${case}", "${backend}"]
 
 [[tests]]
 name = "progen8_arm.inline_then_fold"
-desc = "The pair that writes the illegal relation: `std::opt::inline` then `std::opt::fold`. Green today, measured 2026-11-05: exit 0 and no output. It guards the relation the pair used to write -- `Runtime graph 'main' breaks the branch-arm invariant: JOIN 29 reads GATE 42, which lies in an arm of BRCH 25 that may not be taken when JOIN 29 runs` (17_graph_rewrite_api_contracts.md, 4.1 rule 3) -- and the run asserts an empty stdout, so that sentence printing again turns red here."
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+desc = "The pair that writes the illegal relation: `std::cxx::inline` then `std::cxx::fold`. Green today, measured 2026-11-05: exit 0 and no output. It guards the relation the pair used to write -- `Runtime graph 'main' breaks the branch-arm invariant: JOIN 29 reads GATE 42, which lies in an arm of BRCH 25 that may not be taken when JOIN 29 runs` (17_graph_rewrite_api_contracts.md, 4.1 rule 3) -- and the run asserts an empty stdout, so that sentence printing again turns red here."
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 
 [[tests]]
 name = "progen8_arm.std_opt"

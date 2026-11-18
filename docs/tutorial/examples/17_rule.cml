@@ -17,7 +17,7 @@ func combined(x: int): int {
     return x * 3 + x * 5
 }
 
-// The same value written twice: `std::opt::saturate` keeps both writings in one class.
+// The same value written twice: `std::cxx::saturate` keeps both writings in one class.
 func doubled(x: int): int {
     return x * 2 + x * 2
 }

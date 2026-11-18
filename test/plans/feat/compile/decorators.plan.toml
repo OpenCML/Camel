@@ -55,10 +55,10 @@ all(66, 'test.level=5')              // its block: the inner value
 
 [[tests]]
 name = "grants.inline"
-desc = "std::opt::inline keeps each node's own attributes: the inlined body of plain has none in its decorated caller, the inlined lambda keeps its flags."
+desc = "std::cxx::inline keeps each node's own attributes: the inlined body of plain has none in its decorated caller, the inlined lambda keeps its flags."
 kind = "behavior"
 case = "../../../cases/compile/decorators/grants.cml"
-args = ["${case}", "std::opt::inline", "std::gir"]
+args = ["${case}", "std::cxx::inline", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -81,10 +81,10 @@ expect_stdout_contains = ["\"attrs\": {", "\"test.mark\": true", "\"test.flags\"
 
 [[tests]]
 name = "cse"
-desc = "std::opt::cse asks each attribute's key: in `twice` a product with test.mark and one without stay two (a mark merges only with a mark); in `relaxed` the products with flags {1} and {1, 2} become one, with the intersection {1}."
+desc = "std::cxx::cse asks each attribute's key: in `twice` a product with test.mark and one without stay two (a mark merges only with a mark); in `relaxed` the products with flags {1} and {1, 2} become one, with the intersection {1}."
 kind = "behavior"
 case = "../../../cases/compile/decorators/cse.cml"
-args = ["${case}", "std::opt::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -98,10 +98,10 @@ assert(muls.filter((l) => l.includes('attrs="test.flags={1}"')).length === 1, 't
 
 [[tests]]
 name = "cse.result"
-desc = "The program after std::opt::cse prints the same result."
+desc = "The program after std::cxx::cse prints the same result."
 kind = "behavior"
 case = "../../../cases/compile/decorators/cse.cml"
-args = ["${case}", "std::opt::cse", "std::nvm"]
+args = ["${case}", "std::cxx::cse", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "18.0\n9.0\n"
 

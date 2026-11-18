@@ -2,10 +2,10 @@
  * The minimal program of a progen finding (seed 8; reduced 157 -> 30 -> 21 -> 16 lines), with the
  * value it computes printed so the answer is pinned beside the structure.
  *
- * `std::opt::fold` alone and `std::opt::inline` alone both leave a graph the commit accepts;
+ * `std::cxx::fold` alone and `std::cxx::inline` alone both leave a graph the commit accepts;
  * `inline` followed by `fold` produced one that broke the branch-arm invariant:
  *
- *   Pass 'std::opt::fold' failed with an internal error: Runtime graph 'main' breaks the
+ *   Pass 'std::cxx::fold' failed with an internal error: Runtime graph 'main' breaks the
  *   branch-arm invariant: GATE 30 reads GATE 35, which lies in an arm of BRCH 25 that may not be
  *   taken when GATE 30 runs (docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
  *

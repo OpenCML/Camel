@@ -308,7 +308,7 @@ not touch (`x * 1.0`, `x + -0.0`, `x - 0.0`, `x / 1.0`, double negation, commuta
 of each value). No rule enters the file before `check` passes it: `check_library.cml` runs the
 check over every rule of it (the plan `modules.rules`). The float laws that depend on a
 permission (`x*c1 + x*c2`, `(x*c1)*c2`) can now be written with `#requires`; the ones that need a
-condition (`x*c + x*c` for a whole `c`) still wait for `when`; `std::opt::algebra` keeps doing
+condition (`x*c + x*c` for a whole `c`) still wait for `when`; `std::cxx::algebra` keeps doing
 them.
 
 ## 6. The rest of the engine

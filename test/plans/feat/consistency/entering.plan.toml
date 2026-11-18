@@ -48,9 +48,9 @@ golden = "golden/entering_positions.txt"
 
 [[tests]]
 name = "entering.positions.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/positions.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
@@ -66,18 +66,18 @@ golden = "golden/entering_positions.txt"
 
 [[tests]]
 name = "entering.positions.fold"
-desc = "The same program through std::opt::fold, std::fvm."
+desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/positions.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
 name = "entering.positions.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/positions.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
@@ -134,9 +134,9 @@ golden = "golden/entering_empty_array.txt"
 
 [[tests]]
 name = "entering.empty_array.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_empty_array.txt"
@@ -152,18 +152,18 @@ golden = "golden/entering_empty_array.txt"
 
 [[tests]]
 name = "entering.empty_array.fold"
-desc = "The same program through std::opt::fold, std::fvm."
+desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
 name = "entering.empty_array.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/empty_array.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_empty_array.txt"
@@ -188,9 +188,9 @@ golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
 name = "entering.fallback_chain.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
@@ -206,18 +206,18 @@ golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
 name = "entering.fallback_chain.fold"
-desc = "The same program through std::opt::fold, std::fvm."
+desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
 name = "entering.fallback_chain.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
@@ -365,10 +365,10 @@ expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
 name = "entering.arms_folded.fold"
-desc = "Arms put into T? under a constant condition, std::opt::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+desc = "Arms put into T? under a constant condition, std::cxx::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
 kind = "behavior"
 case = "../../../cases/consistency/entering/arms_folded.cml"
-args = ["${case}", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::fold", "${backend}"]
 expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
@@ -381,10 +381,10 @@ expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
 name = "entering.arms_folded.inline_fold"
-desc = "Arms put into T? under a constant condition, std::opt::inline, std::opt::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+desc = "Arms put into T? under a constant condition, std::cxx::inline, std::cxx::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
 kind = "behavior"
 case = "../../../cases/consistency/entering/arms_folded.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]

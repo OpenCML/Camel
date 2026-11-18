@@ -1,6 +1,6 @@
 """Checks `camel --dump-after-each-pass <dir>` and tools/graph-diff on a macro program.
 
-Runs `basic.cml` (a macro call `add_one(41)`) through `std::macro std::opt::inline std::nvm` and
+Runs `basic.cml` (a macro call `add_one(41)`) through `std::macro std::cxx::inline std::nvm` and
 checks that:
   - snapshot 00 is the input graph and one snapshot follows per pass that returned a graph
     (the scheduling pass consumes the graph and leaves none);
@@ -53,7 +53,7 @@ def main() -> int:
         out = Path(t) / "snapshots"
         proc = subprocess.run(
             [camel_exe(), "--dump-after-each-pass", str(out), str(PROGRAM),
-             "std::macro", "std::opt::inline", "std::nvm"],
+             "std::macro", "std::cxx::inline", "std::nvm"],
             env=env, capture_output=True, text=True, cwd=REPO_ROOT)
         check(proc.returncode == 0, f"camel exit code 0 (got {proc.returncode})")
         check(proc.stdout.strip() == "42", "program output unchanged (42)")

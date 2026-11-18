@@ -68,10 +68,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "recursion_depth_limit.inline_nvm"
-desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::opt::inline); depth(200) printed before it, nothing after."
+desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::cxx::inline); depth(200) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"

@@ -202,7 +202,7 @@ namespace {
 /// `tryResolveStaticValue` makes for the same question (src/runtime/draft_inline.cpp): through the
 /// GATE a `let`'s value gets and the COPY/CAST a rewrite leaves between a value and its user, to
 /// the DATA node that stands for a constant of the static area. Only a callee this resolves is one
-/// `std::opt::devirtualize` can rewrite, which is what makes the retarget below a case about that
+/// `std::cxx::devirtualize` can rewrite, which is what makes the retarget below a case about that
 /// pass.
 ///
 /// The draft is a template parameter rather than a named type: a signature that names the type is a

@@ -250,13 +250,13 @@ treated as effectful.
 Generic passes (`src/passes/opt/generic/`) use only traits, never module
 knowledge:
 
-- `std::opt::fold` evaluates pure operators whose inputs are all static DATA
+- `std::cxx::fold` evaluates pure operators whose inputs are all static DATA
   nodes through the regular kernels and materializes the result as a static
   value. Kernel failures are left for runtime to report.
-- `std::opt::cse` merges pure operator nodes with the same URI, type, and inputs,
+- `std::cxx::cse` merges pure operator nodes with the same URI, type, and inputs,
   after merging equal scalar constants (value numbering), but only within the
   same branch-arm region and never onto a node downstream of the replaced one.
-- `std::opt::dce` removes value-only nodes (pure operators, static data,
+- `std::cxx::dce` removes value-only nodes (pure operators, static data,
   CAST/COPY/ACCS/FILL) that have no value users.
 
 Ordering rule shared by all three: in `sync` code every call sits on a control
@@ -565,7 +565,7 @@ rejection reason. That resolver extension is part of step 2.
 
 ### Step 3 landed: graph optimization and kernel quality
 
-- Traits registry, module pass registry, `std::opt::{fold,cse,dce}`, and
+- Traits registry, module pass registry, `std::cxx::{fold,cse,dce}`, and
   `tensor::fuse` as described in sections 3.4 and 3.5.
 - Per-operator profiling of the native Transformer showed that the dominant
   cost was not the VMs but the unary kernels: a per-element `switch` on the

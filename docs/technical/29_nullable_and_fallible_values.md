@@ -290,14 +290,14 @@ Nothing in a pass, a backend or an exporter mentions the two forms. What they me
 
 - `BRCH`/`JOIN` with two subgraph arms and a `bool` condition: an `if`;
 - `OPER` nodes of pure built-in operators;
-- `CAST` nodes whose target is a tuple type (`std::opt::fold` folds a `CAST` between
+- `CAST` nodes whose target is a tuple type (`std::cxx::fold` folds a `CAST` between
   primitive types only, so these stay in the graph);
 - values whose type is a tuple type.
 
 Verified (`test/plans/feat/compile/tagged.plan.toml`): one program over both forms gives the
 same output on `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and through `std::opt`,
-`std::opt::inline`, `std::opt`, `std::opt::fold`, `std::opt::cse std::opt::dce`,
-`std::macro std::opt` and `std::opt::inline std::opt`. No pass, backend or exporter was changed.
+`std::cxx::inline`, `std::opt`, `std::cxx::fold`, `std::cxx::cse std::cxx::dce`,
+`std::macro std::opt` and `std::cxx::inline std::opt`. No pass, backend or exporter was changed.
 
 Not verified: `std::cpp`, `onnx::export` and autodiff over a graph that holds these nodes
 (they are expected to refuse it the way they refuse tuples and unknown operators), and a
@@ -346,7 +346,7 @@ func main(): int sync {
 ```
 
 `nullable.cml` of the test plan contains this shape, so it is run on the four backends and
-through `std::opt::inline`, not through `std::opt`.
+through `std::cxx::inline`, not through `std::opt`.
 
 ## 10. Questions for the language author
 

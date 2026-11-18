@@ -21,7 +21,7 @@
  * have run. The one preparation it performs itself is the one that needs the
  * example inputs, which no earlier pass has: the parameters take the examples'
  * types (dtype and shape), and what those types make constant is folded
- * (std::opt::fold and std::opt::dce on the bound copy of the function; the
+ * (std::cxx::fold and std::cxx::dce on the bound copy of the function; the
  * program's own graphs are not modified).
  *
  * What it prints, it prints because a parameter asked for it: `trace=true` every

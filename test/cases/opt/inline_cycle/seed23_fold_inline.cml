@@ -3,16 +3,16 @@
  * (generator version 7, the default feature set, size 1) and copied unedited below this header.
  *
  * It is the second program `a1723fbb9` fixed, and the instance of that defect no plan guarded. Under
- * `std::opt::fold std::opt::inline` the splice wrote the body's head beside the argument the call
+ * `std::cxx::fold std::cxx::inline` the splice wrote the body's head beside the argument the call
  * reads instead of after it, `resolvePlaceForks` then moved the argument onto the body's tail, and the
  * pass refused the cycle (docs/technical/17_graph_rewrite_api_contracts.md, 4.2 rule 1):
  *
- *   error[RuntimeDiag::PassInternalError]: Pass 'std::opt::inline' failed with an internal error:
+ *   error[RuntimeDiag::PassInternalError]: Pass 'std::cxx::inline' failed with an internal error:
  *   Runtime graph 'main' breaks its edge invariants (1 violation(s)):
  *     graph 'main' node 16 (11): lies on a cycle of inputs:
  *     16(11) <- 39(11) <- 340(13) <- 334(13) <- 328(13) <- 16.
  *
- * Pipeline: std::opt::fold std::opt::inline -- the `fold+inline@nvm` cell of the 41-cell cross
+ * Pipeline: std::cxx::fold std::cxx::inline -- the `fold+inline@nvm` cell of the 41-cell cross
  * matrix, the one cell that was red before the fix.
  * Environment: PROGEN_I0=5, PROGEN_S1=x
  * Reference output: the sixteen lines the program prints with no pass at all.

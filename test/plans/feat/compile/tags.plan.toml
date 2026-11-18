@@ -86,7 +86,7 @@ assert(at(26).every((l) => !attrs(l).includes('graph::plain')), 'the inner block
 
 [[tests]]
 name = "graph.run"
-desc = "The tagged program runs to the same result through `std::nvm`, `std::fvm` and `std::opt::inline std::nvm`."
+desc = "The tagged program runs to the same result through `std::nvm`, `std::fvm` and `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tags/graph.cml"
 args = ["${case}", "${backend}"]

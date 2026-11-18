@@ -24,12 +24,12 @@ timeout_ms = 30000
 
 [[tests]]
 name = "json.accessor_error.opt"
-desc = "The same output through `std::opt::inline std::opt std::fvm`."
+desc = "The same output through `std::cxx::inline std::opt std::fvm`."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/modules/std/json/json_accessor_error.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::fvm"]
 golden = "golden/json_accessor_error.txt"
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

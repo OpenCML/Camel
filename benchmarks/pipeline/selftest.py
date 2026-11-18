@@ -354,8 +354,8 @@ obscure = outcome_under(NEW, rec([], output=""), failing("autodiff: needs std::m
 check("R1: the same without a location is obscure", obscure["library_precondition"], "late_or_obscure")
 check("R1: prefix must start the message", c.library_of("An error has occurred: x in autodiff: y"), None)
 check("R1: std::macro position", [c.macro_position(p) for p in (["std::nvm"], ["std::macro", "std::nvm"],
-                                                                 ["std::opt::inline", "std::macro", "std::nvm"])],
-      ["no std::macro in the pipeline", "std::macro first", "std::macro after std::opt::inline"])
+                                                                 ["std::cxx::inline", "std::macro", "std::nvm"])],
+      ["no std::macro in the pipeline", "std::macro first", "std::macro after std::cxx::inline"])
 check("R1: classes of the defect outcomes",
       [c.DEFECT_CLASS[o] for o in ("VALUE_MISMATCH", "EFFECT_MISMATCH", "CRASH", "HANG", "REFUSED_UNLOCATED", "CONSISTENT")],
       ["silent_result_change"] * 2 + ["crash_hang_or_error"] * 2 + ["diagnostic_unlocated_or_late", "agrees"])

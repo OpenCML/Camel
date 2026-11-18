@@ -1,5 +1,5 @@
 /**
- * Inputs for the generic optimization passes std::opt::{fold, cse, dce}.
+ * Inputs for the generic optimization passes std::cxx::{fold, cse, dce}.
  * Results and the order of the two prints must be identical with and without
  * the passes: `a` folds, `q` merges into `p`, `unused` is dead inside a sync
  * chain, and the identical `n * 7` in the two branch arms must not be merged

@@ -40,7 +40,7 @@ namespace {
 
 /// The Camel pass the exemption is read on: `opt::cse`, the library's common-subexpression sweep
 /// (`stdlib/opt.cml`), whose only rewriting interface is the graph module's. Its native twin is
-/// `std::opt::cse`, which is a C++ pass and is checked in every build.
+/// `std::cxx::cse`, which is a C++ pass and is checked in every build.
 constexpr const char *kCamelPassUnderTest = "opt::cse";
 
 /// Whether running `graph` writes a resource outside the program -- a print, a file, the clock. The

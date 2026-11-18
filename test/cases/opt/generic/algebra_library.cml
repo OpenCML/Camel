@@ -1,6 +1,6 @@
 /**
  * The laws the rules library has beyond the old C++ pass: x * 0, x - x, x / 1 and -(-x) for the
- * integer element types, and x / 1.0 and -(-x) for an element-wise tensor. `std::opt::algebra`
+ * integer element types, and x / 1.0 and -(-x) for an element-wise tensor. `std::cxx::algebra`
  * is the library's pass now, so these are the observables that say so: each function's graph
  * keeps no operator for the law that fired, while the printed values stay what the source says.
  */

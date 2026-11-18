@@ -23,7 +23,7 @@ expect_stdout_exact = "true\ntrue\n1 1 0 true\n100 7\n"
 [[tests]]
 name = "blocks.mem_blocks.optimized"
 desc = "The same reading after the optimizer, which must not fold, merge or drop a call whose value is the counters (it is declared to have effects)."
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_stdout_exact = "true\ntrue\n1 1 0 true\n100 7\n"
 [[tests]]
 name = "blocks.mem_blocks.not_available_in_cpp"

@@ -7,8 +7,9 @@
  * `(f: F) => F!`, so it applies to one function, `loss->opt::fold->opt::cse`, and the pipeline
  * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the C++
  * passes of the same names, `std::cxx::fold`, `std::cxx::cse` and `std::cxx::dce` (the names those
- * passes had before they were separated from this module, `std::opt::fold` and the rest, are aliases
- * of them), which run by default; neither set is deleted before the two have been compared
+ * passes had before they were separated from this module, `std::opt::fold` and the rest, are gone
+ * with the separation: they are not aliases, and a pipeline that writes one is refused), which run
+ * by default; neither set is deleted before the two have been compared
  * (docs/roadmap.cn.md section 0, P; design principles 10.4). That comparison is a run, not a
  * reading: the same program is folded, or swept for repeated expressions, by each implementation,
  * `std::jgir canonical=true` reads both graphs, and the two documents have to be equal byte for
@@ -203,7 +204,7 @@ func dead_values::<F>(f: F): F! when is_function::<F>() sync {
     return if len(hits) == 0 then f else erase_hits(f, hits) -> dead_values
 }
 
-/// Values nobody reads are erased, until none is left: the value half of `std::opt::dce`.
+/// Values nobody reads are erased, until none is left: the value half of `std::cxx::dce`.
 /// @example ((x: int): int => x + 1)->dce
 export func dce::<F>(f: F): F! when is_function::<F>() {
     return dead_values(f)
@@ -303,7 +304,7 @@ func fold_rounds::<F>(f: F, budget: int): F! when is_function::<F>() sync {
 /// @example ((x: int): int => 1 + 2 + x)->fold
 with <
     /// Bytes of constants this pass may materialize in a graph: the same measure and the same
-    /// default as `std::opt::fold` (`constantBytesOf`), read through `constant_bytes`; a value
+    /// default as `std::cxx::fold` (`constantBytesOf`), read through `constant_bytes`; a value
     /// above it is left as the computation that builds it, and 0 materializes none.
     constant_budget: int = 8388608
 >

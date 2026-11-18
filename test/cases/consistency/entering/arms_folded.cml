@@ -1,7 +1,7 @@
 /**
  * Arms that are put into `T?` at their exit, under a condition a pass can decide: once the
  * branch is pruned, what read the join reads the arm. (The arm's node kept the slot of the
- * plain value; std::opt::fold then printed a box as a float. progen finding F42.)
+ * plain value; std::cxx::fold then printed a box as a float. progen finding F42.)
  */
 
 func main(): int sync {

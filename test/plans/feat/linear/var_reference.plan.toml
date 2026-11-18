@@ -181,10 +181,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -197,10 +197,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.specialize"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::specialize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::specialize"]
+args = ["${case}", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -213,10 +213,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.devirtualize"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::devirtualize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::devirtualize"]
+args = ["${case}", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -229,10 +229,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.fold"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::fold."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -245,10 +245,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.cse"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::cse."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::cse"]
+args = ["${case}", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -261,10 +261,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.dce"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::dce"]
+args = ["${case}", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -325,10 +325,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_inline"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::inline."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
+args = ["${case}", "std::macro", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -341,10 +341,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_specialize"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::specialize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::specialize"]
+args = ["${case}", "std::macro", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -357,10 +357,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_devirtualize"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::devirtualize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::devirtualize"]
+args = ["${case}", "std::macro", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -373,10 +373,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_fold"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::fold."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::fold"]
+args = ["${case}", "std::macro", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -389,10 +389,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_cse"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::cse."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::cse"]
+args = ["${case}", "std::macro", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -405,10 +405,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_dce"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::dce"]
+args = ["${case}", "std::macro", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -453,10 +453,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.all_6"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+args = ["${case}", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -469,10 +469,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.all_macro_9"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
+args = ["${case}", "std::macro", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce", "std::opt", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -533,10 +533,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_fvm"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -549,10 +549,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_jit"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::inline std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::inline", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -565,10 +565,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_tf"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::inline std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::inline", "std::tf"]
+args = ["${case}", "std::cxx::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -581,10 +581,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.specialize_jit"
-desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::specialize std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::cxx::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
-args = ["${case}", "std::opt::specialize", "std::jit"]
+args = ["${case}", "std::cxx::specialize", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -709,10 +709,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.inline"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -725,10 +725,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.specialize"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::specialize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::specialize"]
+args = ["${case}", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -741,10 +741,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.devirtualize"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::devirtualize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::devirtualize"]
+args = ["${case}", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -757,10 +757,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.fold"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::fold."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -773,10 +773,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.cse"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::cse."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::cse"]
+args = ["${case}", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -789,10 +789,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.dce"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::dce."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::dce"]
+args = ["${case}", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -853,10 +853,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.macro_inline"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::inline."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
+args = ["${case}", "std::macro", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -869,10 +869,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.macro_specialize"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::specialize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::specialize"]
+args = ["${case}", "std::macro", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -885,10 +885,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.macro_devirtualize"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::devirtualize."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::devirtualize"]
+args = ["${case}", "std::macro", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -901,10 +901,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.macro_fold"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::fold."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::fold"]
+args = ["${case}", "std::macro", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -917,10 +917,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.macro_cse"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::cse."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::cse"]
+args = ["${case}", "std::macro", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -933,10 +933,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.macro_dce"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::dce."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::dce"]
+args = ["${case}", "std::macro", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -981,10 +981,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.all_6"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+args = ["${case}", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -997,10 +997,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.all_macro_9"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::macro std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
+args = ["${case}", "std::macro", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce", "std::opt", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1061,10 +1061,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.inline_fvm"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::fvm."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1077,10 +1077,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.inline_jit"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::inline", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1093,10 +1093,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.inline_tf"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::inline std::tf."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::inline", "std::tf"]
+args = ["${case}", "std::cxx::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1109,10 +1109,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_before_after.specialize_jit"
-desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::opt::specialize std::jit."
+desc = "A(i); modify(i); B(i) in a sync body: A observes the old value and completes first, B observes the new value. Pipeline: std::cxx::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_before_after.cml"
-args = ["${case}", "std::opt::specialize", "std::jit"]
+args = ["${case}", "std::cxx::specialize", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1557,10 +1557,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1573,10 +1573,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.specialize"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::specialize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::specialize"]
+args = ["${case}", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1589,10 +1589,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.devirtualize"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::devirtualize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::devirtualize"]
+args = ["${case}", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1605,10 +1605,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.fold"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::fold."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1621,10 +1621,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.cse"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::cse."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::cse"]
+args = ["${case}", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1637,10 +1637,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.dce"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::dce"]
+args = ["${case}", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1701,10 +1701,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_inline"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::inline."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
+args = ["${case}", "std::macro", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1717,10 +1717,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_specialize"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::specialize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::specialize"]
+args = ["${case}", "std::macro", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1733,10 +1733,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_devirtualize"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::devirtualize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::devirtualize"]
+args = ["${case}", "std::macro", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1749,10 +1749,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_fold"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::fold."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::fold"]
+args = ["${case}", "std::macro", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1765,10 +1765,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_cse"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::cse."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::cse"]
+args = ["${case}", "std::macro", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1781,10 +1781,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_dce"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::dce"]
+args = ["${case}", "std::macro", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1829,10 +1829,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.all_6"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+args = ["${case}", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1845,10 +1845,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.all_macro_9"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
+args = ["${case}", "std::macro", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce", "std::opt", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1909,10 +1909,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_fvm"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1925,10 +1925,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_jit"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::inline", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1941,10 +1941,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_tf"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::inline", "std::tf"]
+args = ["${case}", "std::cxx::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1957,10 +1957,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param.specialize_jit"
-desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::specialize std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::cxx::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
-args = ["${case}", "std::opt::specialize", "std::jit"]
+args = ["${case}", "std::cxx::specialize", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2085,10 +2085,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2101,10 +2101,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.specialize"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::specialize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::specialize"]
+args = ["${case}", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2117,10 +2117,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.devirtualize"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::devirtualize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::devirtualize"]
+args = ["${case}", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2133,10 +2133,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.fold"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::fold."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2149,10 +2149,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.cse"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::cse."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::cse"]
+args = ["${case}", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2165,10 +2165,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.dce"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::dce."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::dce"]
+args = ["${case}", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2229,10 +2229,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_inline"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::inline."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::inline."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
+args = ["${case}", "std::macro", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2245,10 +2245,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_specialize"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::specialize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::specialize."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::specialize"]
+args = ["${case}", "std::macro", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2261,10 +2261,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_devirtualize"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::devirtualize."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::devirtualize"]
+args = ["${case}", "std::macro", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2277,10 +2277,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_fold"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::fold."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::fold."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::fold"]
+args = ["${case}", "std::macro", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2293,10 +2293,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_cse"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::cse."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::cse."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::cse"]
+args = ["${case}", "std::macro", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2309,10 +2309,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.macro_dce"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::dce."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::dce"]
+args = ["${case}", "std::macro", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2357,10 +2357,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.all_6"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+args = ["${case}", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2373,10 +2373,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.all_macro_9"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::macro std::cxx::inline std::cxx::specialize std::cxx::devirtualize std::cxx::fold std::cxx::cse std::cxx::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
+args = ["${case}", "std::macro", "std::cxx::inline", "std::cxx::specialize", "std::cxx::devirtualize", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce", "std::opt", "std::opt"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2437,10 +2437,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline_fvm"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::fvm."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2453,10 +2453,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline_jit"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::inline std::jit."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::inline", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2469,10 +2469,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.inline_tf"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::inline std::tf."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::inline std::tf."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::inline", "std::tf"]
+args = ["${case}", "std::cxx::inline", "std::tf"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2485,10 +2485,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_grad.specialize_jit"
-desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::opt::specialize std::jit."
+desc = "A write to a var parameter of a function called through with_grad reaches the caller's variable. Pipeline: std::cxx::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_through_with_grad.cml"
-args = ["${case}", "std::opt::specialize", "std::jit"]
+args = ["${case}", "std::cxx::specialize", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2564,10 +2564,10 @@ timeout_ms = 20000
 [[tests]]
 name = "var_param_jit"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "std::opt::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion) as frameless code, and a function that reads the variable as framed code: :var/get is a generic operator, called through a helper."
+desc = "std::cxx::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion) as frameless code, and a function that reads the variable as framed code: :var/get is a generic operator, called through a helper."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_jit.cml"
-args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::opt::inline", "std::jit"]
+args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::cxx::inline", "std::jit"]
 # Which kind of code a graph becomes depends on the collector: the test names the default one.
 sweep = false
 expect_exit = 0
@@ -2927,7 +2927,7 @@ name = "var_writes_through_recursion.inline_x4"
 desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
-args = ["${case}", "std::opt::inline", "std::opt::inline", "std::opt::inline", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline", "std::cxx::inline", "std::cxx::inline", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -2991,7 +2991,7 @@ name = "var_read_before_callee_write.opt_fold"
 desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt (a snapshot came out as the variable's final value; silent)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
-args = ["${case}", "std::opt", "std::opt::fold"]
+args = ["${case}", "std::opt", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3135,7 +3135,7 @@ name = "var_rule_subpasses.fold"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt::fold"]
+args = ["${case}", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3151,7 +3151,7 @@ name = "var_rule_subpasses.cse"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt::cse"]
+args = ["${case}", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3167,7 +3167,7 @@ name = "var_rule_subpasses.dce"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt::dce"]
+args = ["${case}", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3183,7 +3183,7 @@ name = "var_rule_subpasses.inline"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt::inline"]
+args = ["${case}", "std::cxx::inline"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3199,7 +3199,7 @@ name = "var_rule_subpasses.specialize"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt::specialize"]
+args = ["${case}", "std::cxx::specialize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3215,7 +3215,7 @@ name = "var_rule_subpasses.devirtualize"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt::devirtualize"]
+args = ["${case}", "std::cxx::devirtualize"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3247,7 +3247,7 @@ name = "var_rule_subpasses.opt_fold"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt", "std::opt::fold"]
+args = ["${case}", "std::opt", "std::cxx::fold"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3263,7 +3263,7 @@ name = "var_rule_subpasses.opt_cse"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt", "std::opt::cse"]
+args = ["${case}", "std::opt", "std::cxx::cse"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3279,7 +3279,7 @@ name = "var_rule_subpasses.opt_dce"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt", "std::opt::dce"]
+args = ["${case}", "std::opt", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -3295,7 +3295,7 @@ name = "var_rule_subpasses.opt_fold_cse_dce"
 desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_rule_subpasses.cml"
-args = ["${case}", "std::opt", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+args = ["${case}", "std::opt", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

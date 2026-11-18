@@ -18,10 +18,10 @@ stays in the tree; the graph it builds cannot host the blocks the pass puts down
 
 [[tests]]
 name = "regions.inline_origin"
-desc = "std::opt::inline puts the body of each function it inlines in a region of kind inline, inside the region of the call, which names the function it came from (std::jgir shows them); the program still runs."
+desc = "std::cxx::inline puts the body of each function it inlines in a region of kind inline, inside the region of the call, which names the function it came from (std::jgir shows them); the program still runs."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "std::jgir"]
 expect_exit = 0
 expect_output_contains = ["\"regions\"", "\"kind\": \"inline\"", "\"inlined\": \"forward\"", "\"region\": \"g1r1\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -29,10 +29,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "regions.inline_runs"
-desc = "A program inlined by std::opt::inline, with its inline regions, runs on every back end as before."
+desc = "A program inlined by std::cxx::inline, with its inline regions, runs on every back end as before."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "${run_fvm}"]
+args = ["${case}", "std::cxx::inline", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["[8.0, 8.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -43,7 +43,7 @@ name = "regions.dot_clusters"
 desc = "std::gir_regions and std::rgir_regions draw the regions of a graph as clusters inside the cluster of its function; std::gir and std::rgir draw the same graph without them."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "std::gir_regions"]
+args = ["${case}", "std::cxx::inline", "std::gir_regions"]
 expect_exit = 0
 expect_output_contains = ["label=\"inlined forward\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -54,7 +54,7 @@ name = "regions.dot_default_unchanged"
 desc = "Without the regions option the dump has no region cluster."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "std::rgir"]
+args = ["${case}", "std::cxx::inline", "std::rgir"]
 expect_exit = 0
 expect_output_not_contains = ["inlined forward"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

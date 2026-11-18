@@ -145,7 +145,7 @@ const PLANS = [
         gateable: true,
         measures:
             'recursive Fibonacci timed with --timeit on nvm, fvm and jit, each also after ' +
-            'std::opt::inline (ten timed iterations per case)',
+            'std::cxx::inline (ten timed iterations per case)',
         cost: 'about 11 s per repetition for all six cases',
         own: 'no budget: the plan records the means and its header says why the old budgets were dropped',
         cases: [
@@ -336,11 +336,11 @@ const PLANS = [
 const GATEABLE = PLANS.filter((plan) => plan.gateable).map((plan) => plan.id)
 
 // The plan's own command for one Fibonacci case: `--timeit std::<backend>/10`, the program, then
-// the passes the plan names (std::opt::inline before the backend when the case inlines).
+// the passes the plan names (std::cxx::inline before the backend when the case inlines).
 function timeit(camel, backend, inline) {
     const argv = [camel, '--timeit', `${backend}/10`, '--output-format', 'json', FIB_RECURSIVE]
     if (inline) {
-        argv.push('std::opt::inline')
+        argv.push('std::cxx::inline')
     }
     argv.push(backend)
     return argv

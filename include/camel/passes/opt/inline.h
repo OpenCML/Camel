@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Inlining one call the way std::opt::inline does it.
+ * Inlining one call the way std::cxx::inline does it.
  *
  * The splice itself (camel/runtime/draft_inline.h) copies the callee's body in place of the
  * call. A call also ordered the code around it: it ran after everything its arguments were
  * computed from, and its users ran after it. A body that does not read every argument, or
  * that has effects of its own, loses that order unless it is made explicit around the splice.
- * This is the one place that does so; std::opt::inline, std::opt and any transformation that has
+ * This is the one place that does so; std::cxx::inline, std::opt and any transformation that has
  * to bring a callee's body into a graph (autodiff, to follow a function value) go through it.
  */
 

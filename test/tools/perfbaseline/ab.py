@@ -22,7 +22,7 @@ for `--what` modes that time a pass the pass's own time from `--timeit` (which c
 for every iteration and times only the pass):
 
   compile    camel PROGRAM std::stats std::null          (wall time)
-  optinline  --timeit std::opt::inline/1 PROGRAM         (the pass's time)
+  optinline  --timeit std::cxx::inline/1 PROGRAM         (the pass's time)
   opt        --timeit std::opt/1 PROGRAM                 (the pass's time)
   nvm, fvm, jit, prl    --timeit std::<back end>/N PROGRAM   (the run, without the compile)
 
@@ -49,7 +49,7 @@ def timed(pass_name, rounds):
 def mode_table(rounds):
     return {
         "compile": lambda args: (args + ["std::stats", "std::null"], False),
-        "optinline": timed("std::opt::inline", rounds),
+        "optinline": timed("std::cxx::inline", rounds),
         "opt": timed("std::opt", rounds),
         "nvm": timed("std::nvm", rounds),
         "fvm": timed("std::fvm", rounds),

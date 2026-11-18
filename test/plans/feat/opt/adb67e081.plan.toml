@@ -84,7 +84,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_inline"
-desc = "The same refusal as its twin, because `rc04_seed72` is refused before any pass runs and `std::opt::inline` never sees it. Kept rather than deleted: the pair is what says the seed is refused once, and the entry is where the pipeline it was found with has to come back from. When it was green it read as a behavior test under `std::opt::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: `a1723fbb9` writes the body after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included (`bf12366ba`), and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
+desc = "The same refusal as its twin, because `rc04_seed72` is refused before any pass runs and `std::cxx::inline` never sees it. Kept rather than deleted: the pair is what says the seed is refused once, and the entry is where the pipeline it was found with has to come back from. When it was green it read as a behavior test under `std::cxx::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: `a1723fbb9` writes the body after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included (`bf12366ba`), and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
 kind = "negative"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
 args = ["${case}"]
@@ -141,10 +141,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_within_call_inline"
-desc = "The same program under `std::opt::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red. Same carrier as the entry above: the closure reads `v16` and the write that used to be inside it is one line up."
+desc = "The same program under `std::cxx::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red. Same carrier as the entry above: the closure reads `v16` and the write that used to be inside it is one line up."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
-args = ["${case}", "std::opt::inline", "std::stats", "${run_nvm}"]
+args = ["${case}", "std::cxx::inline", "std::stats", "${run_nvm}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """

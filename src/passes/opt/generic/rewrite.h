@@ -108,8 +108,8 @@ inline bool handOverSyncWait(
 }
 
 /// The integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), the implementation of
-/// `std::opt::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
-/// (`rules::simplify`, registered as `std::opt::algebra`); this residual exists only because the
+/// `std::cxx::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
+/// (`rules::simplify`, registered as `std::cxx::algebra`); this residual exists only because the
 /// library has no neutral-only mode, and does nothing without `neutralOnly`.
 size_t algebraDraft(
     camel::runtime::GraphTransaction &transaction, bool safeFp = false, bool neutralOnly = false);
@@ -151,7 +151,7 @@ bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_
  * the argument's type, so no observation of a value decides it.
  *
  * The fold is the same one wherever it runs, and it runs in two places for two reasons:
- * `foldDraft` (the `std::opt::fold` stage) reaches it for a node whose arguments are not all
+ * `foldDraft` (the `std::cxx::fold` stage) reaches it for a node whose arguments are not all
  * constants, and `foldTypedOperators` (generic.h) offers every operator of a program to it on its
  * own, for a pass that reads a graph structurally before it rewrites it. The second caller exists
  * because what the fold decides can be the difference between a graph a consumer accepts and one

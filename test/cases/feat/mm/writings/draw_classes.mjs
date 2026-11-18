@@ -29,7 +29,7 @@
  *     expression, and a bool where the declaration says int is refused at the call.
  *
  * The guard is shown red on a dump that lacks the drawing: `guard` mode runs the pipeline without
- * `std::opt::saturate`, where the value has one writing and no cluster can exist, and requires
+ * `std::cxx::saturate`, where the value has one writing and no cluster can exist, and requires
  * the *same* check to refuse it, naming the case file and the dump line of the writing that
  * stands alone. A check that cannot refuse anything is not evidence, so the red half is part of
  * the case and not a note about it.
@@ -247,7 +247,7 @@ const verdicts = []
 
 if (MODE === 'gir' || MODE === 'rgir') {
     const rich = MODE === 'rgir'
-    const result = run(['std::opt::saturate', rich ? 'std::rgir' : 'std::gir'])
+    const result = run(['std::cxx::saturate', rich ? 'std::rgir' : 'std::gir'])
     check(`${MODE} exit`, result.status === 0, result.output)
     const problems = drawingProblems(result.stdout, rich)
     check(`${MODE} drawing`, problems.length === 0, problems.join(' | '))
@@ -266,7 +266,7 @@ if (MODE === 'gir' || MODE === 'rgir') {
     }
     verdicts.push(`DRAW-${MODE}`)
 } else if (MODE === 'jgir') {
-    const result = run(['std::opt::saturate', 'std::jgir'])
+    const result = run(['std::cxx::saturate', 'std::jgir'])
     check('jgir exit', result.status === 0, result.output)
     let document = null
     try {
@@ -315,7 +315,7 @@ if (MODE === 'gir' || MODE === 'rgir') {
     }
     verdicts.push('DRAW-jgir')
 } else if (MODE === 'egraph') {
-    const result = run(['std::opt::saturate', 'std::jgir', 'egraph=true'])
+    const result = run(['std::cxx::saturate', 'std::jgir', 'egraph=true'])
     check('egraph exit', result.status === 0, result.output)
     let document = null
     try {
@@ -391,7 +391,7 @@ if (MODE === 'gir' || MODE === 'rgir') {
         console.log(`DRAW guard red=${CASE}:${named[2]}`)
     }
     // The green half: the very same check accepts the dump the saturation produces.
-    const saturated = run(['std::opt::saturate', 'std::gir'])
+    const saturated = run(['std::cxx::saturate', 'std::gir'])
     check('guard saturated exit', saturated.status === 0, saturated.output)
     const problems = drawingProblems(saturated.stdout)
     check('guard accepts the drawing', problems.length === 0, problems.join(' | '))
@@ -403,9 +403,9 @@ if (MODE === 'gir' || MODE === 'rgir') {
 } else if (MODE === 'extract') {
     // Nothing is extracted by the pass, and the pipeline still works: the driver extracts before
     // the pass that consumes the program.
-    const run1 = run(['std::opt::saturate', 'std::nvm'])
+    const run1 = run(['std::cxx::saturate', 'std::nvm'])
     check('extract the program runs', run1.status === 0 && /(^|\n)42(\r?\n|$)/.test(run1.stdout), run1.output)
-    const extracted = run(['std::opt::saturate', 'std::opt::extract', 'std::nvm'])
+    const extracted = run(['std::cxx::saturate', 'std::cxx::extract', 'std::nvm'])
     check(
         'extract one writing per value still runs',
         extracted.status === 0 && /(^|\n)42(\r?\n|$)/.test(extracted.stdout),
@@ -413,10 +413,10 @@ if (MODE === 'gir' || MODE === 'rgir') {
     )
     // A rewrite pass that does not declare that it accepts the state is still refused: the new
     // rule is about a pass that asked for the state, not about every pass.
-    const refused = run(['std::opt::saturate', 'std::opt::fold', 'std::nvm'])
+    const refused = run(['std::cxx::saturate', 'std::cxx::fold', 'std::nvm'])
     check(
         'extract a rewrite pass is refused the state',
-        refused.status === 1 && /PassNeedsExtraction/.test(refused.output) && /std::opt::fold/.test(refused.output),
+        refused.status === 1 && /PassNeedsExtraction/.test(refused.output) && /std::cxx::fold/.test(refused.output),
         refused.output
     )
     if (!failed) {
@@ -426,36 +426,36 @@ if (MODE === 'gir' || MODE === 'rgir') {
 } else if (MODE === 'params') {
     // The pass declares `rounds: int = 6` and `strict: bool = false`; a parameter reaches the
     // pass, and the one that bounds the work is read as the declaration says.
-    const zero = run(['std::opt::saturate', 'rounds=0', 'std::gir'])
+    const zero = run(['std::cxx::saturate', 'rounds=0', 'std::gir'])
     check('params rounds=0 exit', zero.status === 0, zero.output)
     check(
         'params rounds=0 applies no rule: the program keeps its writings',
         drawingProblems(zero.stdout).length > 0,
         'rounds=0 left a class behind'
     )
-    const one = run(['std::opt::saturate', 'rounds=1', 'std::gir'])
+    const one = run(['std::cxx::saturate', 'rounds=1', 'std::gir'])
     check(
         'params rounds=1 reaches the state',
         one.status === 0 && drawingProblems(one.stdout).length === 0,
         one.output
     )
-    const strict = run(['std::opt::saturate', 'strict=true', 'std::gir'])
+    const strict = run(['std::cxx::saturate', 'strict=true', 'std::gir'])
     check(
         'params strict=true keeps the rules that hold bit for bit',
         strict.status === 0 && drawingProblems(strict.stdout).length === 0,
         strict.output
     )
-    const expression = run(['std::opt::saturate', 'rounds=1+1', 'std::gir'])
+    const expression = run(['std::cxx::saturate', 'rounds=1+1', 'std::gir'])
     check(
         'params an int parameter takes a constant expression',
         expression.status === 0 && drawingProblems(expression.stdout).length === 0,
         expression.output
     )
-    const wrong = run(['std::opt::saturate', 'rounds=true', 'std::gir'])
+    const wrong = run(['std::cxx::saturate', 'rounds=true', 'std::gir'])
     check(
         'params the declared type is read: a bool where an int is declared is refused at the call',
         wrong.status === 1 &&
-            /The argument 'rounds' of 'std::opt::saturate' has type 'bool', not 'int'/.test(
+            /The argument 'rounds' of 'std::cxx::saturate' has type 'bool', not 'int'/.test(
                 wrong.output
             ),
         wrong.output

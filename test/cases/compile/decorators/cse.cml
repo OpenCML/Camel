@@ -1,5 +1,5 @@
 /**
- * Whether std::opt::cse merges two equal expressions with different node attributes is the
+ * Whether std::cxx::cse merges two equal expressions with different node attributes is the
  * rule of each attribute's key (camel/core/node_attrs.h): a mark merges only with a mark, so
  * the products of `twice` stay two; flags merge to their intersection, so `relaxed` keeps one
  * product, with the flags both have.

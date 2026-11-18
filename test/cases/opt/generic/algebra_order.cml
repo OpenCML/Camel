@@ -14,7 +14,7 @@
  * no chain (3.1). The premise of this program is therefore that the prints are real, and they are
  * the `2` lines the run tests expect -- `scaled` is called twice, with `2.0`.
  *
- *   camel algebra_order.cml std::opt::inline std::opt::algebra std::jgir
+ *   camel algebra_order.cml std::cxx::inline std::cxx::algebra std::jgir
  */
 
 func scaled(x: float): float sync {

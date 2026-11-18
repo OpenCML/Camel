@@ -360,7 +360,7 @@ name = "warn.werror_pass_warning"
 desc = "A warning raised by a pass and made an error ends the pipeline after that pass: the program is not run."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["-Werror", "${case}", "std::opt::fold", "std::nvm"]
+args = ["-Werror", "${case}", "std::cxx::fold", "std::nvm"]
 expect_exit = 1
 verify_script = """
 assert(input.stdout.includes('[Error]: This constant expression faults whenever it is evaluated (DivisionByZero)'), input.stdout)
@@ -375,7 +375,7 @@ name = "warn.wno_pass_warning"
 desc = "A warning raised by a pass is switched off like any other."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_constant_fault.cml"
-args = ["-Wno-constant-expression-faults", "${case}", "std::opt::fold", "std::nvm"]
+args = ["-Wno-constant-expression-faults", "${case}", "std::cxx::fold", "std::nvm"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'no warning: ' + input.stderr)

@@ -820,7 +820,7 @@ expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# The transpose of a graph `std::opt::algebra` has rewritten, read against the same program with no
+# The transpose of a graph `std::cxx::algebra` has rewritten, read against the same program with no
 # optimization at all. This is a differential pair and not two entries with the same expected strings
 # for a reason: the assertion being made is *the two paths answer the same numbers*, and a shared
 # expectation would have to be edited twice the day the program changes -- while a pair can only go
@@ -850,10 +850,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_after_algebra.with_algebra"
-desc = "The same program with `std::opt::algebra` in front of it, and the same numbers: the pass folds `2*x + 3*x` to `x * 5` and `(x*2 + x*3) * 4` to `(x*5) * 4`, and the transpose of the rewritten graph has to answer what the transpose of the original did. It answered `0.0` for `chain` -- the cotangent the walk dropped when it visited the rule's new node before the node reading it -- so this entry is the defect: a wrong number printed as an ordinary result. The comparison is against `transpose_after_algebra.without_optimization`, field by field, so a future rewrite that changes one path and not the other fails here without either entry having to name the number that moved."
+desc = "The same program with `std::cxx::algebra` in front of it, and the same numbers: the pass folds `2*x + 3*x` to `x * 5` and `(x*2 + x*3) * 4` to `(x*5) * 4`, and the transpose of the rewritten graph has to answer what the transpose of the original did. It answered `0.0` for `chain` -- the cotangent the walk dropped when it visited the rule's new node before the node reading it -- so this entry is the defect: a wrong number printed as an ordinary result. The comparison is against `transpose_after_algebra.without_optimization`, field by field, so a future rewrite that changes one path and not the other fails here without either entry having to name the number that moved."
 kind = "differential"
 case = "../../../cases/compile/transforms/transpose_after_algebra.cml"
-args = ["${case}", "std::opt::algebra", "std::nvm"]
+args = ["${case}", "std::cxx::algebra", "std::nvm"]
 expect_exit = 0
 compare_to = "transpose_after_algebra.without_optimization"
 compare_fields = ["exit_code", "stdout_normalized"]

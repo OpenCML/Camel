@@ -29,9 +29,9 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules_drop_division.algebra"
-desc = "`std::opt::algebra` applies int_mul_zero to `(a / b) * 0`, which would drop the division."
+desc = "`std::cxx::algebra` applies int_mul_zero to `(a / b) * 0`, which would drop the division."
 case = "../../../cases/opt/fault_preservation/rules_drop_division.cml"
-args = ["${case}", "std::opt::algebra", "${backend}"]
+args = ["${case}", "std::cxx::algebra", "${backend}"]
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_stdout_starts_with = "before\n"
 
@@ -45,9 +45,9 @@ expect_stdout_starts_with = "before\n"
 
 [[tests]]
 name = "dce_chained_division.dce"
-desc = "`std::opt::dce` leaves `let r = 5 / z` in a sync block, so `after` is not printed."
+desc = "`std::cxx::dce` leaves `let r = 5 / z` in a sync block, so `after` is not printed."
 case = "../../../cases/opt/fault_preservation/dce_chained_division.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_stdout_starts_with = "before\n"
 
@@ -69,9 +69,9 @@ expect_output_contains = ["conversion to 'f32[2, 3]' failed"]
 
 [[tests]]
 name = "chained_cast.dce"
-desc = "`std::opt::dce` keeps the unread conversion."
+desc = "`std::cxx::dce` keeps the unread conversion."
 case = "../../../cases/opt/fault_preservation/chained_cast.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 expect_stdout_starts_with = "before\n"
 expect_output_contains = ["conversion to 'f32[2, 3]' failed"]
 
@@ -131,9 +131,9 @@ compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
 name = "one_hot_oob.dce"
-desc = "`std::opt::dce` keeps the unread `one_hot`: the call may fault, so the program reports the label outside [0, classes) and exits 1."
+desc = "`std::cxx::dce` keeps the unread `one_hot`: the call may fault, so the program reports the label outside [0, classes) and exits 1."
 case = "../../../cases/modules/tensor/one_hot_oob.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_output_contains = ["Index 3 is out of range for the class dimension of one_hot of length 3"]
 

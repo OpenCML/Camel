@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Call-rewrite engine shared by the standalone std::opt::{inline,devirtualize,specialize}
+ * Call-rewrite engine shared by the standalone std::cxx::{inline,devirtualize,specialize}
  * stages and the integrated std::opt driver. The driver adds fold, cse and dce rounds;
  * this engine only performs the call rewrites selected by its configuration.
  */

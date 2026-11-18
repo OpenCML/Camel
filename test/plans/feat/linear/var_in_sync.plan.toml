@@ -160,7 +160,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "partial_application_written_var.opt"
-desc = "The partial application of a sync function that writes a module-level var, after the optimizer: std::opt::specialize binds the with parameter and rewrites the call, and it used to leave the callee's type stating that parameter -- the call's value lost the version, and the four schedulers segfaulted after the body printed its line. Pipeline: opt."
+desc = "The partial application of a sync function that writes a module-level var, after the optimizer: std::cxx::specialize binds the with parameter and rewrites the call, and it used to leave the callee's type stating that parameter -- the call's value lost the version, and the four schedulers segfaulted after the body printed its line. Pipeline: opt."
 kind = "behavior"
 case = "../../../cases/linear/runtime/partial_application_written_var.cml"
 args = ["${case}", "std::opt"]
@@ -172,10 +172,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "partial_application_written_var.opt_specialize"
-desc = "The same call after the one pass that broke it, alone: std::opt::specialize binds the declared with parameter away, and the node VM then reads the version the call hands on -- the value, that version and the single run of the body. Pipeline: opt_specialize."
+desc = "The same call after the one pass that broke it, alone: std::cxx::specialize binds the declared with parameter away, and the node VM then reads the version the call hands on -- the value, that version and the single run of the body. Pipeline: opt_specialize."
 kind = "behavior"
 case = "../../../cases/linear/runtime/partial_application_written_var.cml"
-args = ["${case}", "std::opt::specialize", "std::nvm"]
+args = ["${case}", "std::cxx::specialize", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "f body runs\n9.0\n1\n"
 expect_output_not_contains = ["internal error", "Camel Debug Assertion"]

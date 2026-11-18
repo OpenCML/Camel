@@ -32,7 +32,7 @@ func combined(x: int): int {
     return x * 3 + x * 5
 }
 
-// The same value written twice: `std::opt::saturate` keeps both writings in one class.
+// The same value written twice: `std::cxx::saturate` keeps both writings in one class.
 func doubled(x: int): int {
     return x * 2 + x * 2
 }
@@ -111,9 +111,9 @@ because that library is what the pipeline holds.
 
 ## Equivalent graphs: several writings of one value
 
-Optimization does not always decide at once which writing to keep. `std::opt::saturate` applies the standard
+Optimization does not always decide at once which writing to keep. `std::cxx::saturate` applies the standard
 library's laws until nothing changes and **keeps every writing of a value**, leaving the choice to a later stage.
-The `doubled` half of `camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::rgir` reads:
+The `doubled` half of `camel docs/tutorial/examples/17_rule.cml std::cxx::saturate std::rgir` reads:
 
 ![doubled: the several writings of x * 2 + x * 2 stay in one equivalence class each](images/17_rule_saturate.svg)
 

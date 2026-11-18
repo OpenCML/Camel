@@ -63,7 +63,7 @@ compare" is a failure, not a pass** (`## The ratchet`).
 ## The matrix and the judgment
 
 Pipelines (`p00`..`p10`): no pass; `std::macro`; `std::macro` plus the first k of
-`devirtualize specialize inline fold cse algebra dce order`, each as its own `std::opt::<name>`
+`devirtualize specialize inline fold cse algebra dce order`, each as its own `std::cxx::<name>`
 pass (one round of `simplifyGraph`, `order` last); and `std::macro std::opt` (the integrated
 fixpoint). Back ends: `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, each under `--gc
 generational` and `--gc mark-sweep`, plus `std::cpp` (translated by `camel ... std::cpp`, built by
@@ -94,7 +94,7 @@ number of failing programs. Both are reported (programs and cells).
 ## Root cause
 
 `analyze` gives every failing program one key, the campaign's: the **first failing pipeline on the
-node VM** (`pipeline:std::opt::fold`), or, when the node VM is clean on every prefix,
+node VM** (`pipeline:std::cxx::fold`), or, when the node VM is clean on every prefix,
 `backend:<the back ends that fail> first bad at <stage>`. The outcome (and its diagnostic) is part
 of the key, and the summary lists each key with its program count and seeds, plus the counts per
 pipeline, per back end, per collector and per column. `reduce` then shrinks one representative per
@@ -174,7 +174,7 @@ does not shrink one: `reduce.py` runs the camel back ends only.
 
 Every number this tool prints is keyed by seed, and a seed is not a program: the generator's
 `generate.VERSION` decides which program a seed writes, and `0ddbb92af` took it from 7 to 8 with
-"existing seeds are other programs". A note like "seed 26 is a `std::opt::dce` MISMATCH" therefore
+"existing seeds are other programs". A note like "seed 26 is a `std::cxx::dce` MISMATCH" therefore
 outlives the program it was measured on; the next version writes another one, the note still reads
 the same, and the run that would have shown it is a run nobody kept. Quote the generator version
 with the seed, or the finding is unfalsifiable: `progen.py show --seed 26` draws the program and
@@ -183,17 +183,17 @@ carry.
 
 Measured on 2026-11-15, for the two departures such a note had recorded against the slow tier:
 
-- **seed 4, `std::opt::inline`, CRASH.** Gone. `edeaa9c41` fixed the shape (`progen_4` crash 1 ->
+- **seed 4, `std::cxx::inline`, CRASH.** Gone. `edeaa9c41` fixed the shape (`progen_4` crash 1 ->
   0; `test/cases/opt/inline/loop_wait_after_inline.cml` is its 25-line reduction), and the seed
   is back in the progen batch with the mark removed.
-- **seed 26, `std::opt::dce`, MISMATCH.** Not reproducible, and not a masked defect either. Under
+- **seed 26, `std::cxx::dce`, MISMATCH.** Not reproducible, and not a masked defect either. Under
   `generate.VERSION` 8 (the program the seed writes today) every cell of the slow matrix is `OK`.
   Under `generate.VERSION` 7 -- the program the seed wrote from 2026-11-02 until `0ddbb92af`, and
   byte-identical at `5ec45c70f` = `4fae172f2^`, the last compiler that accepts it -- all eleven
-  pipelines of the slow matrix, `std::opt::dce` alone and `std::opt` all equal the model's eight
+  pipelines of the slow matrix, `std::cxx::dce` alone and `std::opt` all equal the model's eight
   lines exactly, exit 0. Under `generate.VERSION` 6 the same holds. The front end of that tree refused that
   version-7 program with `SemanticDiag::ClosureCaptureEscapes` (rule of `4fae172f2`; the rule was
   withdrawn on 2026-11-16 and what refuses the write now is `ClosureAssignsCapturedName`), so the seed
   cannot reach a pass at all any more; "unreachable" would be the wrong thing to write down, but
   so would "fixed" -- what the readings support is that no program this seed can name ever
-  miscompiled under `std::opt::dce`, in any tree that still accepted it.
+  miscompiled under `std::cxx::dce`, in any tree that still accepted it.

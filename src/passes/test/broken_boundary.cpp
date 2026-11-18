@@ -173,7 +173,7 @@ BreakJoinTestPass::apply(const camel::runtime::Program *program, std::ostream &o
 
 const camel::runtime::Program *
 NestedBreakTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    // The nested pass is named the way `std::opt::saturate` names `opt::saturate` and the `std::opt`
+    // The nested pass is named the way `std::cxx::saturate` names `opt::saturate` and the `std::opt`
     // rounds name `rules::simplify`: through the registry, not through a hand-built object.
     const PassRunResult nested =
         applyRegisteredPass(program, kBreakExitTestPass, context_, os, this);

@@ -22,7 +22,7 @@ verify_script = '''
 [[tests]]
 name = "ordering.dce"
 case = "../../../cases/opt/generic/gate_value_dependency.cml"
-args = ["${case}","std::macro","std::opt::dce","${backend}"]
+args = ["${case}","std::macro","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -32,7 +32,7 @@ verify_script = '''
 [[tests]]
 name = "ordering.inline_dce"
 case = "../../../cases/opt/generic/gate_value_dependency.cml"
-args = ["${case}","std::macro","std::inline","std::opt::dce","${backend}"]
+args = ["${case}","std::macro","std::cxx::inline","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -161,7 +161,7 @@ verify_script = '''
 [[tests]]
 name = "branch.42.inline_dce"
 case = "../../../cases/opt/generic/gate_branch_wait.cml"
-args = ["${case}","--arg","k=42","std::inline","std::opt::dce","${backend}"]
+args = ["${case}","--arg","k=42","std::cxx::inline","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -171,7 +171,7 @@ verify_script = '''
 [[tests]]
 name = "branch.42.opt_dce"
 case = "../../../cases/opt/generic/gate_branch_wait.cml"
-args = ["${case}","--arg","k=42","std::opt","std::opt::dce","${backend}"]
+args = ["${case}","--arg","k=42","std::opt","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -201,7 +201,7 @@ verify_script = '''
 [[tests]]
 name = "branch.1.inline_dce"
 case = "../../../cases/opt/generic/gate_branch_wait.cml"
-args = ["${case}","--arg","k=1","std::inline","std::opt::dce","${backend}"]
+args = ["${case}","--arg","k=1","std::cxx::inline","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -211,7 +211,7 @@ verify_script = '''
 [[tests]]
 name = "branch.1.opt_dce"
 case = "../../../cases/opt/generic/gate_branch_wait.cml"
-args = ["${case}","--arg","k=1","std::opt","std::opt::dce","${backend}"]
+args = ["${case}","--arg","k=1","std::opt","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''

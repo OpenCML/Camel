@@ -17,7 +17,7 @@
 每个程序，八次独立的 `camel` 进程：
 
 - **编译**：`camel <程序> std::stats std::null`。`std::stats` 打印 `GRAPH_STATS`（图数、节点、边、图字节），`std::null` 消费掉程序所以不执行。记录整个进程的墙钟时间（含进程启动、模块加载、解析、建图）、峰值工作集，以及 `std::stats` 报的节点数与字节数。
-- **优化**：`camel <程序> std::opt::inline std::null` 的峰值工作集；时间取 `camel --timeit std::opt::inline/<轮数> <程序> --output-format json` 的 `mean_ms`。`--timeit` 每次迭代都重新编译，计时窗口只包住被计时的那个 pass。
+- **优化**：`camel <程序> std::cxx::inline std::null` 的峰值工作集；时间取 `camel --timeit std::cxx::inline/<轮数> <程序> --output-format json` 的 `mean_ms`。`--timeit` 每次迭代都重新编译，计时窗口只包住被计时的那个 pass。
 - **执行**：`std::nvm`、`std::fvm`、`std::jit` 各一次完整运行取峰值工作集；时间取 `--timeit std::<后端>/<轮数>` 的 `mean_ms`（同样只包住那个 pass，不含编译）。
 - **图字节**：`std::stats` 的 `bytes` 字段，按可达图累加：每个节点一条 `GCNode` 记录（16 字节）+ 每个输入引用（`gc_node_ref_t`）+ 节点载荷（`nodePayloadBytes`，按字对齐）。这是**图存储本身的账**，不是进程堆。字节/节点是它与节点数之商。
 - **峰值工作集**：进程结束后读 `GetProcessMemoryInfo` 的 `PeakWorkingSetSize`。句柄在进程启动时打开、结束后才关闭，Windows 因此仍保留进程对象，数字是精确峰值而不是采样。非 Windows 上这一列是 `n/a`。
@@ -143,7 +143,7 @@ python3 test/tools/perfbaseline/ab.py --a OUT_A --b OUT_B --pairs 5   # OUT 是 
 
 `baseline.py --home <fsh-dev 的 out/latest> --rounds 5`，机器负载较低的时段（没有保证）。`std::opt` 是整个优化器（内联、特化、折叠、公共子表达式、代数化简、死代码，迭代到不动点）。
 
-| 程序 | 图 | 节点 | 编译 | std::opt::inline | std::opt | 峰值：编译 / inline / opt |
+| 程序 | 图 | 节点 | 编译 | std::cxx::inline | std::opt | 峰值：编译 / inline / opt |
 |---|---|---|---|---|---|---|
 | fib.deep | 5 | 31 | 5.9 ms | 0.1 ms | 115.9 ms | 14.7 / 14.7 / 14.7 MB |
 | alloc_small | 7 | 69 | 5.2 ms | 0.2 ms | 20.6 ms | 14.7 / 14.7 / 14.7 MB |
@@ -160,7 +160,7 @@ python3 test/tools/perfbaseline/ab.py --a OUT_A --b OUT_B --pairs 5   # OUT 是 
 读法：
 
 - **编译**随节点数近似线性，约 12 µs/节点（572 ms / 48.8k）；这一列在删扫描前后相同，因为编译路径没有被改。
-- **`std::opt::inline` 在删扫描之前是超线性的**：每个节点 0.12 ms（1.1k）、0.18 ms（11k）、0.23 ms（49k）。每一次成功的内联都让引擎重新收集整个闭包，所以一次 pass 的代价是 内联数 × 程序大小。
+- **`std::cxx::inline` 在删扫描之前是超线性的**：每个节点 0.12 ms（1.1k）、0.18 ms（11k）、0.23 ms（49k）。每一次成功的内联都让引擎重新收集整个闭包，所以一次 pass 的代价是 内联数 × 程序大小。
 - **峰值内存**约 6.5 MB/千节点，加 14.7 MB 的运行时固定部分（与前面 Windows 的 11 MB 底噪同类）。`map_chain`（75 个节点）的 `std::opt` 峰值 61.4 MB 与程序大小无关。
 - `std::opt` 在很小的程序上也要几十到几百毫秒（`fib.deep`、`jit_const`）：它们是递归加常量参数，特化展开受增长预算限制才停下。
 
@@ -170,15 +170,15 @@ python3 test/tools/perfbaseline/ab.py --a OUT_A --b OUT_B --pairs 5   # OUT 是 
 
 | 程序 | 模式 | A (ms) | B (ms) | B/A | 噪声 |
 |---|---|---|---|---|---|
-| scale.1k | std::opt::inline | 140.5 | 34.9 | 0.25 | 1.9% |
+| scale.1k | std::cxx::inline | 140.5 | 34.9 | 0.25 | 1.9% |
 | scale.1k | std::opt | 226.3 | 100.4 | 0.44 | 1.0% |
-| scale.10k | std::opt::inline | 1982.4 | 202.1 | 0.10 | 1.4% |
+| scale.10k | std::cxx::inline | 1982.4 | 202.1 | 0.10 | 1.4% |
 | scale.10k | std::opt | 1809.1 | 305.7 | 0.17 | 4.0% |
-| scale.50k | std::opt::inline | 12311.4 | 1257.2 | 0.10 | 5.4% |
+| scale.50k | std::cxx::inline | 12311.4 | 1257.2 | 0.10 | 5.4% |
 | scale.50k | std::opt | 15450.9 | 1905.9 | 0.12 | 28.4% |
 
-小程序（`fib.deep` 到 `jit_const`，31 到 80 个节点）：编译（进程 CPU 时间）的 B/A 在 0.76 到 0.99 之间，噪声 11% 到 18%，没有变慢的迹象；`std::opt` 的 B/A 在 0.52 到 0.94 之间（不再为没有可做之事的图打开草稿）；`std::opt::inline` 在 0.2 到 0.8 ms，在噪声内持平。峰值内存各程序相差不超过 1.5%。
+小程序（`fib.deep` 到 `jit_const`，31 到 80 个节点）：编译（进程 CPU 时间）的 B/A 在 0.76 到 0.99 之间，噪声 11% 到 18%，没有变慢的迹象；`std::opt` 的 B/A 在 0.52 到 0.94 之间（不再为没有可做之事的图打开草稿）；`std::cxx::inline` 在 0.2 到 0.8 ms，在噪声内持平。峰值内存各程序相差不超过 1.5%。
 
-`std::opt::inline` 在 `scale.10k` 与 `scale.50k` 上都快了约 10 倍，之后每节点 0.018 到 0.031 ms，随大小**线性**：不再是 内联数 × 程序大小。`std::opt` 快 2 到 8 倍（越大越多）；它剩下的代价主要是每次提交重新编码整个闭包（一轮 `std::opt` 要提交数次）和引擎每次重启仍要遍历一次闭包，这两项要等 `GraphId` 与增量提交。
+`std::cxx::inline` 在 `scale.10k` 与 `scale.50k` 上都快了约 10 倍，之后每节点 0.018 到 0.031 ms，随大小**线性**：不再是 内联数 × 程序大小。`std::opt` 快 2 到 8 倍（越大越多）；它剩下的代价主要是每次提交重新编码整个闭包（一轮 `std::opt` 要提交数次）和引擎每次重启仍要遍历一次闭包，这两项要等 `GraphId` 与增量提交。
 
-输出不变的证据：1452 个测试程序和两个生成程序（`test/cases` 下 opt、linear、compile、consistency、loops、macro、modules、facts、trans、definitions、resources、para、perf，加上 `scale.1k`、`scale.10k`）在 `std::opt`、`std::opt::inline`、`std::opt::{fold,cse,algebra,dce,ctrl}`、`std::opt::{specialize,devirtualize,inline,fold}` 四组 pass 下，`std::gir` 的输出与 fsh-dev 逐字节相同。
+输出不变的证据：1452 个测试程序和两个生成程序（`test/cases` 下 opt、linear、compile、consistency、loops、macro、modules、facts、trans、definitions、resources、para、perf，加上 `scale.1k`、`scale.10k`）在 `std::opt`、`std::cxx::inline`、`std::cxx::{fold,cse,algebra,dce,ctrl}`、`std::cxx::{specialize,devirtualize,inline,fold}` 四组 pass 下，`std::gir` 的输出与 fsh-dev 逐字节相同。

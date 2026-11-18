@@ -1392,7 +1392,7 @@ class Engine {
 // Afterwards a call of such a value is a call of a closure built in this graph, which
 // rewriteIndirectCall differentiates; a value that is still not evident (it is chosen by a
 // branch, read from a container, a parameter of the differentiated function) is refused at
-// its call as before. Inlining is std::opt::inline's own (camel/passes/opt/inline.h), so the order
+// its call as before. Inlining is std::cxx::inline's own (camel/passes/opt/inline.h), so the order
 // and the effects of the inlined body are kept by the same code as everywhere else.
 //
 // Bounded: only calls that carry function values are inlined, and a branch arm is never

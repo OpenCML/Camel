@@ -682,7 +682,7 @@ python benchmarks\train.py --check-ksteps --models transformer --device cuda --c
 2. **首次调用的 NVRTC 编译时间**：Draft §4 已定"自适应池"；G3 的验收把 `deviceCompiles` 记录在 profile 里，首次与稳态分开报，不让冷启动混进每步时间。
 3. **磁盘缓存的错误命中**：指纹漏掉某个输入（新加的节点种类、新加的属性）就会命中旧产物。缓解：schema 号进指纹；加载时用记录的类型/形状重新校验；失效矩阵测试。
 4. **与上一版的冲突**：见第 7 节；顺序上先合它。
-5. **内联与 `#gpu`**：`std::opt::inline` 把 callee 的节点搬进调用者时，节点属性随节点走（文档不变式），所以放置不丢；但要有一个用例钉住（`placement_callee` 的 inline 变体）。
+5. **内联与 `#gpu`**：`std::cxx::inline` 把 callee 的节点搬进调用者时，节点属性随节点走（文档不变式），所以放置不丢；但要有一个用例钉住（`placement_callee` 的 inline 变体）。
 6. **异步的错误时机**：设备错误在 exec 节点报，而不是在真正出错的主机行；这是设计选择（tiles-route §3.6），测试钉住 origin。
 7. **展开遍的图引用**：`buildGradientGraph` 现在按 program 建图（`program` + `graph` 参数），在遍里要把它接到 draft 组（挂同一 session、必要时新建 program）；这是 S5b 里最需要先做原型的一处，失败的话退回"派生图在首次调用时编译"（同一套缓存键，但首步有编译延迟，验收的 `deviceCompiles` 会把首步与稳态分开）。
 8. **展开的代码体积**：每个调用点一份派生图（`grad(f)` 出现两次就有两份）。先按调用点展开，若体积成为问题再按图共享（同一图 + 同一放置只建一份）。
