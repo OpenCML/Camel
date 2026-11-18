@@ -1305,12 +1305,36 @@ AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t
 /// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
 /// what it forwards, which is what a comparison of two computations asks; the gate keeps its place
 /// and its wait either way, so the answer is about the value alone.
+///
+/// What it forwards is its **first ordinary input**; the trailing ones are waits (author ruling
+/// 0780a83bd). Until 2026-11-19 this read `back()`, the last of them, which is a wait's value and
+/// not the gate's -- a defect under design principles 3.1, measured over the corpus: of 264,580
+/// calls in 1,444 cases, four walks reached a gate carrying more than one ordinary input, all four
+/// in test/cases/compile/ref/refwrite_shapes.cml, where the key they build is the one the rewrite
+/// pass of src/passes/opt/generic compares.
+///
+/// A gate with no ordinary input forwards its first `with` input, and one with neither forwards
+/// nothing: then the answer is "no value" rather than the gate itself, because the gate is not the
+/// value it was asked about. The graph is acyclic, so the walk ends without a bound; a debug build
+/// asserts the step it took, which is where a 64-step guard used to stand.
 inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
-    while (draft.header(node) != nullptr && draft.header(node)->kind == GCNodeKind::Gate &&
-           !draft.normInputsOf(node).empty()) {
-        node = draft.normInputsOf(node).back();
+    for (;;) {
+        if (draft.header(node) == nullptr || draft.header(node)->kind != GCNodeKind::Gate) {
+            return node;
+        }
+        if (const std::span<const gc_node_ref_t> norm = draft.normInputsOf(node); !norm.empty()) {
+            ASSERT(
+                norm.front() != kInvalidNodeRef,
+                "The ordinary input a gate forwards is a node.");
+            node = norm.front();
+            continue;
+        }
+        if (const std::span<const gc_node_ref_t> waits = draft.withInputsOf(node); !waits.empty()) {
+            node = waits.front();
+            continue;
+        }
+        return kInvalidNodeRef;
     }
-    return node;
 }
 
 } // namespace camel::runtime
