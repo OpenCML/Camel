@@ -68,3 +68,19 @@
 GIR 机器按裁定应当是「局部就以值出生、类型是它第一个写入的类型」⇒ 那里**没有捕获端口**
 ⇒ ⇒ 这条差异是**目标**，不是偏差；但它会让 g4 的节点数与捕获边数与靶子不同，**④ 报差时要认它**。
 ```
+## 6. ⑥ 的第一个形状类不该是 `generators_cell_type.cml`
+
+```
+`generators_cell_type.cml` 的体：`var s = "one"; yield s; s = "two"; yield s`
+⇒ `s` **跨过了两个 `yield`** ⇒ 它是「格子在两段之间活着」这条，正落在本 segment **不许**碰的
+  `T?` 槽那一块（文件头写死「状态只载 `pc`」）。
+⇒ **而 `test/cases/compile/stream/generators.cml` 里 `quad()` 的体是两个纯 `yield`，没有局部：**
+     `func quad(): (int, int).. sync { yield (1, 2); yield (3, 4) }`
+⇒ **那才是「能出一张图的最小路径」**；⑥ 的第一个形状类应当按它划线，
+   再按 `count()`（局部跨 yield）→ `sign()`（臂里的 yield）→ `reading()`（闭包）逐类往上铺。
+   **先拿 `generators_cell_type.cml` 当第一类，会把「最难的形状」当「第一个读数」。**
+
+实测（`generators.cml`，`std::jgir canonical=true`，25 张图）：
+  g7 = 97 节点 / 148 边、g9 = 70/94、g11 = 113/212、g13 = 80/119 —— 四台生成器机器的读数，
+  与靶子同一形状的机器要拿这几行去比，**不是 `quad` 单独一张**（`quad` 是 g13 或 g9 之一，
+  下次开工第一件事是把它钉死，别猜）。
