@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "jvp.h"
-#include "exit_gate.h"
+#include "camel/runtime/graph.h"
 
 #include "refusal_readings.h"
 #include "rule_expand.h"
@@ -38,6 +38,9 @@
 #include <vector>
 
 namespace camel::transforms {
+
+using camel::runtime::gateWaitsOf;
+using camel::runtime::valueBehindGates;
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
@@ -2425,24 +2428,9 @@ bool liftGraph(
         // node *is* the value-producing node of a compiled graph (its inputs are that node's
         // operands), so the value is the copy of the exit itself -- and a Gate only forwards, so it
         // is followed to what it carries.
-        gc_node_ref_t oldValue = function.exitNodeRef();
-        while (oldValue != rt::kInvalidNodeRef) {
-            const NodeFace *node = function.node(oldValue);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-                break;
-            }
-            const auto norm = function.normInputsOf(oldValue);
-            if (!norm.empty()) {
-                oldValue = norm.back();
-                continue;
-            }
-            const auto with = function.withInputsOf(oldValue);
-            if (!with.empty()) {
-                oldValue = with.back();
-                continue;
-            }
-            oldValue = rt::kInvalidNodeRef;
-        }
+        // valueBehindGates is the walk (camel/runtime/graph.h): the value a gate carries is its
+        // first ordinary input, and this used to take back() -- the last wait -- for both kinds.
+        const gc_node_ref_t oldValue = valueBehindGates(function, function.exitNodeRef());
         if (oldValue >= function.nodeCount() || !copied[oldValue]) {
             os << "REINTERP jvp function=" << name
                << " skip=" << refusalCauseName(RefusalCause::Value) << '\n';
@@ -2524,7 +2512,7 @@ bool liftGraph(
             // statement from another graph.
             std::vector<gc_node_ref_t> gateInputs;
             gateInputs.push_back(out);
-            for (gc_node_ref_t wait : exitWaitsOf(function, originalExit)) {
+            for (gc_node_ref_t wait : gateWaitsOf(function, originalExit)) {
                 if (wait < function.nodeCount() && copied[wait]) {
                     gateInputs.push_back(copyOf[wait]);
                 }

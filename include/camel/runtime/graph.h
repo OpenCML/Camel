@@ -1532,4 +1532,81 @@ class ProgramHold {
     Program *program_                       = nullptr;
 };
 
+/// The value a gate forwards: its first ordinary input, or its first context input when it has no
+/// ordinary one. A ref that is not a gate forwards itself; a gate that forwards nothing answers
+/// `kInvalidNodeRef`.
+///
+/// This is **the** reading of a gate, stated once for every reader of a graph: a GATE orders the
+/// value it reads after other nodes -- an inlined call gates its arguments after what the call
+/// waited for -- and changes nothing else (design principles 3.1, author ruling 0780a83bd: a gate's
+/// trailing input is a wait rather than a use). The value is the **first** ordinary input, and
+/// everything after it in that list is a wait. Resolving a forwarded value reference, emitting the
+/// draft payload and asking a node for its result type all read `front()`; the walkers that ask
+/// "what does this gate pass on" used to answer with `back()` -- the last wait -- and each carried
+/// its own copy of the loop (daily review 2026-11-18, item 5).
+///
+/// It is a template over the reader rather than a function of `GCGraph` because a draft hands out
+/// its own reader while it is being written, and the compile front end reads a graph through
+/// `GraphRead`: the methods asked for here -- `node`, `nodeCount`, `normInputsOf`, `withInputsOf` --
+/// are the ones every reader of a graph has. Input lists are taken by `const auto`, because a
+/// reader may answer with a span over its own storage or with a vector it built.
+///
+/// The walk needs no step bound: a graph is acyclic, and a debug build asserts the step it took.
+template <class GraphReader>
+inline gc_node_ref_t forwardedInputOf(const GraphReader &graph, gc_node_ref_t ref) {
+    if (ref == kInvalidNodeRef || ref >= graph.nodeCount()) {
+        return kInvalidNodeRef;
+    }
+    const auto *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Gate) {
+        return kInvalidNodeRef;
+    }
+    const auto norm = graph.normInputsOf(ref);
+    if (!norm.empty()) {
+        ASSERT(norm.front() != kInvalidNodeRef, "The ordinary input a gate forwards is a node.");
+        return norm.front();
+    }
+    const auto with = graph.withInputsOf(ref);
+    return with.empty() ? kInvalidNodeRef : with.front();
+}
+
+/// The value behind a chain of gates: `forwardedInputOf` followed to the first node that is not a
+/// gate. A ref that is not a gate answers itself.
+template <class GraphReader>
+inline gc_node_ref_t valueBehindGates(const GraphReader &graph, gc_node_ref_t ref) {
+    while (ref != kInvalidNodeRef && ref < graph.nodeCount()) {
+        const auto *node = graph.node(ref);
+        if (node == nullptr || node->kind != GCNodeKind::Gate) {
+            return ref;
+        }
+        const gc_node_ref_t forwarded = forwardedInputOf(graph, ref);
+        if (forwarded == kInvalidNodeRef) {
+            return kInvalidNodeRef;
+        }
+        ref = forwarded;
+    }
+    return kInvalidNodeRef;
+}
+
+/// The statements a gate waits on: every ordinary input after the value it forwards. Empty when
+/// `ref` is not a gate, or a gate that waits on nothing (the same reading as `forwardedInputOf`).
+///
+/// It answers with a vector rather than a view: a reader may hand out a span over its own storage
+/// or a vector it built, and a view over the second would outlive nothing.
+template <class GraphReader>
+inline std::vector<gc_node_ref_t> gateWaitsOf(const GraphReader &graph, gc_node_ref_t ref) {
+    if (ref == kInvalidNodeRef || ref >= graph.nodeCount()) {
+        return {};
+    }
+    const auto *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Gate) {
+        return {};
+    }
+    const auto norm = graph.normInputsOf(ref);
+    if (norm.size() <= 1) {
+        return {};
+    }
+    return std::vector<gc_node_ref_t>(norm.begin() + 1, norm.end());
+}
+
 } // namespace camel::runtime
