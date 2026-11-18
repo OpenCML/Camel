@@ -895,6 +895,22 @@ class ForwardRewrite {
     /// included. A wait is read in either kind: a node of a `sync` block waits through the sync
     /// edge of the block's chain as well as through the control edge beside it
     /// (docs/design/effects/edges.cn.md 1, 4.6).
+    ///
+    /// The step below is a second copy of the walk `camel::runtime::ungated` makes, and it reads the
+    /// other end of the same list: `back()` is the *last* ordinary input, and a GATE forwards the
+    /// **first**, the rest being its waits (author ruling 0780a83bd; `ungated` in
+    /// include/camel/runtime/draft.h was fixed to `front()` on 2026-11-19). This copy therefore
+    /// resumes at a wait's node rather than at the value's, which is the same defect in another
+    /// place, not a second reading of it.
+    ///
+    /// It is not fixed here, and it is not fixed because it is not reached: a temporary probe on
+    /// this function, run over feat/compile (2,635 tests) and feat/opt (1,614), recorded sixteen
+    /// steps through a gate and **every one of them had a single ordinary input** (`inputs=1`, so
+    /// `front() == back()`), which is why the two readings cannot differ in any case either plan
+    /// runs today. The step count is small because this walk runs only when a closure call is
+    /// rewritten to a direct call of its graph. Collapsing this copy into `ungated`'s -- one step
+    /// function, two callers -- is the follow-up that owns the change; measured here, it moves
+    /// nothing.
     std::vector<gc_node_ref_t> orderingOf(gc_node_ref_t node) const {
         std::vector<gc_node_ref_t> ctrl;
         while (true) {
