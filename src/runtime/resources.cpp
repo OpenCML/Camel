@@ -1730,6 +1730,18 @@ std::optional<CommitViolation> orderIncomplete(
                 if (!answersFor(x) && !answersFor(y)) {
                     continue;
                 }
+                // An owner node and a node it stands for here are one effect seen at two depths, not
+                // two effects: the owner's access in this region *is* the access of what is under it.
+                // A pair of them would ask whether an effect is ordered against itself, which is not
+                // a question -- and the two sides are then the same access, or one side's own node is
+                // a member of the other.
+                const auto covers = [](const RegionEntrant &side, gc_node_ref_t node) {
+                    return std::find(side.members.begin(), side.members.end(), node) !=
+                           side.members.end();
+                };
+                if (covers(x, y.stands) || covers(y, x.stands) || x.members == y.members) {
+                    continue;
+                }
                 for (gc_node_ref_t first : x.members) {
                     for (gc_node_ref_t second : y.members) {
                         if (first == second) {
