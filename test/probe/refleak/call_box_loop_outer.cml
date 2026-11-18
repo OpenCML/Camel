@@ -1,0 +1,27 @@
+import state
+
+// The shape the note left in `ad44fca33` named as the one still leaking: a value a CALL makes
+// *before* a loop, read on every round of it, and read by nothing after it.
+//
+// In that commit a counted value's rows could only be written where a back end runs them -- the
+// site of an operator -- so a row due at the use inside the round either ran once per round (a
+// reference given back on the first round while the second still read the value) or, when that was
+// not allowed, could not be written at all: the value was then called `kept`. The plan read
+// balanced and the box stayed counted for the life of the program. The LEAVING of the loop is the
+// position that runs once at that moment, and the reference now comes back there.
+func escaped_box(i: int): state::Ref<int> {
+    return state::ref(i)
+}
+
+func read_from_a_call(): int sync {
+    let box = escaped_box(0)
+    loop i = 0 while i < 3 do sync {
+        println(`box ${state::get(box)}`)
+        i + 1
+    }
+    return 0
+}
+
+func main(): int sync {
+    return read_from_a_call()
+}

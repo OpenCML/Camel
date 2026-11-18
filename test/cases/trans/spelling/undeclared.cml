@@ -1,0 +1,16 @@
+/**
+ * Reads the spelling and declares nothing. `main` calls it so that the body is built, and the
+ * diagnostic names the declaration it is refused at and the first reading inside it (design
+ * principles 9.5). The same program with `spelling` on both clauses is `declared.cml` beside it.
+ */
+
+import { Graph, graph_of, name } from graph
+
+func entry_name(g: Graph): string {
+    return name(g)
+}
+
+func main(): int {
+    let text = entry_name(graph_of(main))
+    return len(text)
+}

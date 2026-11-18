@@ -6,7 +6,7 @@ func compute(x: int): int {
     return y + 1
 }
 
-func wrap(x: int): int {
+func wrap(x: int): int spelling {
     return compute(x)
 }
 
@@ -24,14 +24,14 @@ func typeText(n: Node): string {
     }
 }
 
-func calleeText(n: Node): string {
+func calleeText(n: Node): string spelling {
     return match callee(n) {
         case null => 'none'
         case c => name(c)
     }
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     let p = main
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'compute'>
     let g = found[0]

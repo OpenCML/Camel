@@ -1701,6 +1701,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::SpellingNotDeclared,
+            {
+                "SpellingNotDeclared",
+                "This body reads the spelling of the program, and its type does not declare it.",
+                "Reading the spelling is a capability a signature writes in the same clause as 'pure' and 'uses': the name of a graph or of a function, the source position of a node, its creation number and the order it was created in, and the text it shows. A body whose type does not write 'spelling' is one the compiler guarantees reads none of them, so a rule, a 'when' condition and a pass built without it cannot depend on how the program was written (design principles 9.5). Write 'spelling' in the declaration's clause to say the body may read them, or stop reading them -- to pick one of two functions, hand the function value to the transform instead of finding it by name, and to order two nodes, use the canonical order 'nodes' gives.",
+            },
+        },
+        {
             SemanticDiag::TypeAliasRecursionUnrepresented,
             {
                 "TypeAliasRecursionUnrepresented",

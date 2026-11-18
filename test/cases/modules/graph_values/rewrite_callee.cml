@@ -19,7 +19,7 @@ func target(x: int): int {
     return x + 1
 }
 
-func user(n: int): int {
+func user(n: int): int spelling {
     return target(n)
 }
 
@@ -27,11 +27,11 @@ func deep(x: int): int {
     return x + 1
 }
 
-func mid(n: int): int {
+func mid(n: int): int spelling {
     return deep(n)
 }
 
-func chain(n: int): int {
+func chain(n: int): int spelling {
     return mid(n)
 }
 
@@ -50,7 +50,7 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of a `target` or a `deep`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool {
+func isAddOne(n: Node): bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
@@ -60,17 +60,17 @@ func addOnes(g: Graph): int {
     return len(nodes(g)->filter<isAddOne>)
 }
 
-func named(label: string, g: Graph): bool {
+func named(label: string, g: Graph): bool spelling {
     return name(g)->ends_with<label>
 }
 
 /// The graph of the function `label` that `p` reaches.
-func graphNamed::<F>(p: F, label: string): Graph {
+func graphNamed::<F>(p: F, label: string): Graph spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => named(label, g)>
     return found[0]
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     let rules: Rule[] = [drop_one]
     let q = user->rewrite<rules> !! user
     println(`one: ${addOnes(graphNamed(q, 'target'))} ${q(5)}`)

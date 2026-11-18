@@ -111,6 +111,9 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
         united.allocates = b.allocates;
     }
     united.external = united.external || b.external;
+    // The capability is united the way `external` is: a reading of the body that reaches the
+    // spelling makes the whole body reach it, whichever round found it (design principles 9.5).
+    united.spelling = united.spelling || b.spelling;
     std::sort(united.params.begin(), united.params.end(), [](const auto &left, const auto &right) {
         return left.index < right.index;
     });
@@ -446,6 +449,9 @@ bool Builder::readCalleeSignature(
         walk.reach.allocates = sig.allocates;
     }
     walk.reach.external = walk.reach.external || sig.external;
+    // A call reads the spelling exactly when the callee may: the capability is the signature's, and
+    // a caller that does not write it is refused (design principles 9.5).
+    walk.reach.spelling = walk.reach.spelling || sig.spelling;
     return true;
 }
 
@@ -466,6 +472,12 @@ void Builder::readUnknownValue(BodyReach &walk) const {
         walk.reach.anyOf.push_back(cls);
     }
     walk.reach.external = true;
+    // The spelling is *not* read conservatively here, unlike the resources above. What a signature
+    // nobody wrote may reach is unbounded, so a body has to be measured as reaching everything;
+    // the spelling is not like that: the guarantee 9.5 makes is about the body's own text, and
+    // `covers` refuses a value that may read spelling where a signature does not promise it -- so a
+    // function handed in is caught where it is handed in, and not again here for every body that
+    // calls it through a parameter.
 }
 
 std::optional<sem::ResultAlias> Builder::resultAliasOf(
@@ -672,6 +684,9 @@ bool Builder::reachOfOper(
         addParamUse(walk, port->second, access.resource.cls, access.resource.name, access.mode);
     }
     walk.reach.external = walk.reach.external || spec.externalEffect;
+    // What the operator says about the spelling of the program is declared once, in its spec, the
+    // way its accesses are (design principles 9.5): a body that calls one of these reads it.
+    walk.reach.spelling = walk.reach.spelling || spec.spelling;
     return true;
 }
 
@@ -709,6 +724,10 @@ bool Builder::reachOfFunc(
             callee);
     }
     if (calleeType->resources().mode != ResourceSignature::Mode::Concrete) {
+        // A signature that promises nothing about its resources still says whether it reads the
+        // spelling: a declaration that writes the capability and nothing else (`f! spelling`) is
+        // Generic and carries it, and a caller has to know (design principles 9.5).
+        walk.reach.spelling = walk.reach.spelling || calleeType->resources().spelling;
         readUnknownValue(walk);
         return true;
     }
@@ -987,7 +1006,15 @@ void Builder::measureInferredResources() {
             continue;
         }
         if (settled.anyOf.empty()) {
-            graph->setResources(settled);
+            // The capability is not published: it is not one of the resources a caller has to be
+            // told about -- a caller reads it from this measurement (see `readCalleeSignature`)
+            // or from the clause the declaration wrote -- and a signature that showed `spelling`
+            // for a body that wrote no clause would be a type claiming a promise its source never
+            // made (design principles 9.5). It stays in `inferredResources_`, which is what a
+            // caller and the check read.
+            ResourceSignature published = settled;
+            published.spelling          = false;
+            graph->setResources(published);
         }
     }
 }
@@ -1175,6 +1202,19 @@ camel::source::origin_id_t Builder::firstUnpromisedEffectOrigin(
 
 void Builder::checkInferredResources() {
     using sem::ResourceSignature;
+    // A lambda written in place has no clause of its own to write: its signature is the one the
+    // position it stands in expects (design principles 5.9), so the capability it reads is the
+    // enclosing body's, and that body is the one this check asks -- a lambda's reach joins it
+    // through the argument it is handed as. The bodies written in place are the values
+    // `lambdaGraphs_` holds (they are the ones the program wrote `(x) => ...` for).
+    std::unordered_set<const DraftGraphBuilder *> writtenInPlace;
+    writtenInPlace.reserve(lambdaGraphs_.size());
+    for (const auto &[node, body] : lambdaGraphs_) {
+        (void)node;
+        if (body != nullptr) {
+            writtenInPlace.insert(body);
+        }
+    }
     for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
         const auto measured = inferredResources_.find(graph.get());
         if (measured == inferredResources_.end()) {
@@ -1185,6 +1225,20 @@ void Builder::checkInferredResources() {
             continue;
         }
         const ResourceSignature &promised = type->resources();
+        // The spelling is checked whatever the clause says, and before the clause's mode is read: a
+        // declaration that writes no clause promises nothing about resources, but it does promise
+        // its body reads no spelling -- that is the guarantee design principles 9.5 makes. A body
+        // that reaches the spelling is refused here whether or not it also overruns its resource
+        // promise.
+        //
+        // What is read is the clause, and only the clause: the published signature of a body that
+        // wrote none deliberately carries no `spelling` (see measureInferredResources), so this
+        // asks the declaration the writer made and not the body's own reach.
+        const bool writtenHere = writtenInPlace.contains(graph.get());
+        if (measured->second.spelling && !writtenHere && !promised.spelling) {
+            reportSpellingNotDeclared(graph);
+            continue;
+        }
         if (promised.mode != ResourceSignature::Mode::Concrete) {
             continue; // the declaration wrote no clause: it promised nothing to break
         }

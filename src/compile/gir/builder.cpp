@@ -1760,14 +1760,22 @@ void Builder::buildFuncBody(
         // writes no clause) leaves the signature as it is rather than promising too little.
         if (graph->funcType() != nullptr &&
             graph->funcType()->resources().mode ==
-                camel::core::sem::ResourceSignature::Mode::Generic) {
+                camel::core::sem::ResourceSignature::Mode::Generic &&
+            // A declaration that writes the capability and nothing else (`f! spelling`) is the
+            // one Generic signature that wrote a clause: it promises nothing about its resources,
+            // so nothing is measured onto it, and it is not one of the bodies whose set is
+            // inferred (design principles 9.5, and `checkInferredResources` reads exactly this).
+            !graph->funcType()->resources().spelling) {
             // Its signature carries an inferred set from here on: this is what the settled
             // measurement is written onto once every body has been measured. A measurement that
             // cannot be written as a clause is not written now, and is not written then either.
             inferredSignatures_.insert(graph.get());
             if (const auto measured = footprintOf(graph.get());
                 measured.has_value() && measured->anyOf.empty()) {
-                graph->setResources(*measured);
+                // As in measureInferredResources: the capability is not published on the type.
+                camel::core::sem::ResourceSignature published = *measured;
+                published.spelling                             = false;
+                graph->setResources(published);
             }
         }
         if (recorder_) {

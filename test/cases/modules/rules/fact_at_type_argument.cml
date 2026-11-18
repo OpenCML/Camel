@@ -32,7 +32,7 @@ func opText(n: Node): string {
     }
 }
 
-func addsOf::<F>(p: F, function: string): int {
+func addsOf::<F>(p: F, function: string): int spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     let adds = nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
     // A node read out of a graph states no value type, so the query writes the type argument.
@@ -43,7 +43,7 @@ export func apply::<F>(p: F): F! {
     return p->rewrite<[drop_deep]>
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('target', addsOf(p, 'target'), 'keep', addsOf(p, 'keep'))
     return p
 }

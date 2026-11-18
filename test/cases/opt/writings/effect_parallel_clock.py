@@ -1,0 +1,245 @@
+"""Item (c) of the ECOOP measurement plan (2026-11-18): do two effects on two resources run at once?
+
+The author's ruling after the first reading of this item (`1b7905cd4`): the measurement was on two
+*writings* of one resource, not two resources, so it could not answer the question. This is the
+measurement on **two resources the language declares apart**, and on what parts them.
+
+The resources, as `stdlib` declares them:
+
+  clock              `sleep` waits on it (`stdlib/process.cml:15`, `@effect waits`); the six standard
+                     resources are named in `src/core/resource_semantics.cpp:504`:
+                     `stdout stderr stdin clock env fs`
+  rendezvous_point   `stdlib/test_support.cml:17`, `export resource rendezvous_point unordered`, the
+                     one meeting point of the process: "two calls on it keep no written order and may
+                     run at the same time (design principles 3.3)"
+
+The program puts one 200 ms effect on each, in a `main` that is **not** a `sync` body:
+
+    func wait_clock(ms: int): int sync {      // void effect, so in a `sync` body or it is dropped
+        sleep(float(ms) / 1000.0)             // -- `fs.cml`: "a call runs only when its result is
+        return 1                              //    needed or it is written in a `sync` block"
+    }
+    func wait_meet(ms: int): int {            // `unordered`, so no `sync` and no written order
+        return rendezvous(2, float(ms) / 1000.0)
+    }
+    func main(): int {                        // not `sync`: the two calls are free to be unordered
+        let a = wait_clock(ms)
+        let b = wait_meet(ms)
+        ...
+
+A `sync` body is how the front end orders conflicting effects in the graph, so `sync` in `main` would
+be the thing that parts them; that is why `main` here is not one, and why the script also runs the
+control below.
+
+**The control is the same two calls with `sync` on and off, and it is a reading of values, not of
+seconds.** `rendezvous(2, t)` gives how many calls met at the meeting point: two calls that run at the
+same time both report 2, two that took turns report 1 and 1. So `sync` on against `sync` off on one
+unordered resource says whether the wall clock above is about resources at all.
+
+**No verdict, no bound.** It prints medians, ranges, ratios and the scheduler's own decision, and
+names which shape the numbers have. Run:
+
+    python test/cases/opt/writings/effect_parallel_clock.py --camel out/latest/bin/camel [--runs 9]
+"""
+
+import os
+import statistics
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def repository_root(start):
+    """The first ancestor holding `stdlib/std.cml`: neither cwd nor `HERE` is the root."""
+    for directory in [start, *start.parents]:
+        if (directory / "stdlib" / "std.cml").is_file():
+            return directory
+    raise SystemExit(f"no stdlib/std.cml above {start}")
+
+
+ROOT = repository_root(HERE)
+sys.path.insert(0, str(ROOT / "test" / "tools"))
+from camel_arg import camel_from_argv  # noqa: E402
+
+EXE, ARGV = camel_from_argv(ROOT)
+RUNS = 9
+for index, word in enumerate(ARGV):
+    if word == "--runs" and index + 1 < len(ARGV):
+        RUNS = int(ARGV[index + 1])
+
+DELAY_MS = 200
+THREADS = "4"
+
+# One effect on the clock, one on the meeting point. `main` is not `sync`.
+TWO_RESOURCES = """import {{ sleep }} from process
+import {{ rendezvous }} from test_support
+
+func wait_clock(ms: int): int sync {{
+    sleep(float(ms) / 1000.0)
+    return 1
+}}
+
+func wait_meet(ms: int): int {{
+    return rendezvous(2, float(ms) / 1000.0)
+}}
+
+func main(): int {{
+    let a = wait_clock({delay})
+    let b = wait_meet({delay})
+    print(a * 1000 + b)
+    return 0
+}}
+""".format(delay=DELAY_MS)
+
+# The control: one unordered resource, the same two calls, `sync` on (the two callees and the caller)
+# against `sync` off. Nothing about seconds here -- the values say how many calls met.
+SYNC_PAIR = """import {{ rendezvous }} from test_support
+
+func meet(ms: int): int sync {{
+    return rendezvous(2, float(ms) / 1000.0)
+}}
+
+func main(): int sync {{
+    let a = meet({delay})
+    let b = meet({delay})
+    print(a * 1000 + b)
+    return 0
+}}
+""".format(delay=DELAY_MS)
+
+FREE_PAIR = """import {{ rendezvous }} from test_support
+
+func meet(ms: int): int {{
+    return rendezvous(2, float(ms) / 1000.0)
+}}
+
+func main(): int {{
+    let a = meet({delay})
+    let b = meet({delay})
+    print(a * 1000 + b)
+    return 0
+}}
+""".format(delay=DELAY_MS)
+
+BACKENDS = (
+    # (name, the flags that come before the program, the pipeline that comes after it)
+    ("serial", [], ["std::nvm"]),
+    ("parallel", ["-t", THREADS], ["std::prl"]),
+)
+
+
+def say(text=""):
+    print(text)
+    sys.stdout.flush()
+
+
+def run(scratch, program, flags, passes):
+    """One run: its wall clock in milliseconds, and what the program printed."""
+    started = time.monotonic()
+    done = subprocess.run(
+        [EXE, *flags, str(program), *passes],
+        cwd=str(scratch),
+        capture_output=True,
+        text=True,
+        env=CHILD_ENV,
+    )
+    elapsed = (time.monotonic() - started) * 1000.0
+    if done.returncode != 0:
+        raise SystemExit(
+            f"camel {' '.join([*flags, program.name, *passes])} = exit {done.returncode}: "
+            f"{((done.stderr or done.stdout or '').strip().splitlines() or [''])[0]}"
+        )
+    printed = (done.stdout or "").strip().splitlines()
+    return elapsed, (printed[-1].strip() if printed else "")
+
+
+def describe(name, samples):
+    ordered = sorted(samples)
+    median = statistics.median(ordered)
+    say(
+        f"  {name:<9} n={len(ordered)} min={ordered[0]:8.1f} ms  median={median:8.1f} ms  "
+        f"max={ordered[-1]:8.1f} ms   runs={', '.join(f'{one:.0f}' for one in samples)}"
+    )
+    return median
+
+
+def main():
+    global CHILD_ENV
+    scratch = Path(os.environ.get("CAMEL_TEST_TMPDIR") or tempfile.mkdtemp(prefix="effect-clock-"))
+    scratch.mkdir(parents=True, exist_ok=True)
+    CHILD_ENV = dict(os.environ)
+    CHILD_ENV.setdefault("CAMEL_HOME", str(Path(EXE).resolve().parent.parent))
+
+    pair = scratch / "two_resources.cml"
+    pair.write_text(TWO_RESOURCES, encoding="utf-8", newline="\n")
+
+    say(f"program: {pair}")
+    say("two resources: `clock` (sleep, stdlib/process.cml:15) and `rendezvous_point` "
+        "(stdlib/test_support.cml:17, unordered)")
+    say(f"one effect on each, {DELAY_MS} ms each, in a `main` that is not a `sync` body; "
+        f"{RUNS} runs per back end, alternating serial and parallel")
+    say()
+
+    samples = {name: [] for name, _, _ in BACKENDS}
+    printed = {}
+    for _ in range(RUNS):
+        for name, flags, passes in BACKENDS:
+            elapsed, out = run(scratch, pair, flags, passes)
+            samples[name].append(elapsed)
+            printed[name] = out
+
+    say("wall clock")
+    medians = {name: describe(name, samples[name]) for name, _, _ in BACKENDS}
+    serial, parallel = medians["serial"], medians["parallel"]
+    say()
+    say(f"median serial / median parallel = {serial / parallel:.2f}")
+    say(f"the program printed: serial {printed['serial']}, parallel {printed['parallel']} "
+        f"(a*1000+b: one call at the meeting point, so 1 either way)")
+
+    # The shape of the numbers. The two answers are 200 ms apart, which is far more than this
+    # machine's spread between runs, so the comparison is read off the middle of each set.
+    if parallel < serial * 0.75:
+        say("reading: the two effects OVERLAPPED: one wait on the parallel back end, two in series "
+            "on the serial one")
+        say("reading: `clock` and `rendezvous_point` are two resources the scheduler keeps apart")
+    else:
+        say("reading: the two effects TOOK TURNS on both back ends")
+        say("reading: a wall clock of the sum of the two waits means the two effects were ordered "
+            "one against the other")
+
+    # The control: the same two calls on one unordered resource, `sync` on against `sync` off.
+    say()
+    say("control: two calls on `rendezvous_point` (unordered), `sync` on against `sync` off --")
+    say("the number is a*1000+b, where each call reports how many calls met (2 = both at once):")
+    for label, text in (("sync", SYNC_PAIR), ("free", FREE_PAIR)):
+        path = scratch / f"pair_{label}.cml"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        cells = []
+        for name, flags, passes in BACKENDS:
+            _, out = run(scratch, path, flags, passes)
+            cells.append(f"{name} {out}")
+        say(f"  {label:<6}{'   '.join(cells)}")
+
+    # The scheduler's own word, once: which graphs it kept serial and what it cut into tasks. It is
+    # the reason behind the numbers above, and it is read here instead of inferred from them.
+    say()
+    say("the parallel back end's decision for the program (std::prl diag=true):")
+    done = subprocess.run(
+        [EXE, "-t", THREADS, str(pair), "std::prl", "diag=true"],
+        cwd=str(scratch),
+        capture_output=True,
+        text=True,
+        env=CHILD_ENV,
+    )
+    text = (done.stderr or "").strip().splitlines()
+    for line in text[:40]:
+        say(f"  {line}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
