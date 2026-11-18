@@ -11,6 +11,7 @@
 #include "camel/execute/observer.h"
 #include "camel/execute/operator_call.h"
 #include "camel/profile/profile.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -899,12 +900,10 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
         result = fn(slots, jitCtx);
     } catch (...) {
         // A frame goes back with a loop still open only when the run is unwinding past that loop's
-        // exit; what the loop held comes home before the slots are reset (exec_plan.h,
-        // `applyRefEntriesOfOpenLoops`).
-        camel::runtime::applyRefEntriesOfOpenLoops(frame);
+        // exit; what the loop held comes home before the slots are reset (camel/execute/loop_frame.h,
+        // `releaseWithOpenLoops`).
         camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
-        if (framePool_.isActive(frame))
-            framePool_.release(frame);
+        camel::execute::releaseWithOpenLoops(framePool_, frame);
         throw;
     }
     camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
@@ -928,9 +927,7 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
         // What a helper of framed code caught: located already where it is a fault.
         std::exception_ptr pending = std::move(jc->pending);
         jc->pending                = nullptr;
-        camel::runtime::applyRefEntriesOfOpenLoops(frame);
-        if (framePool_.isActive(frame))
-            framePool_.release(frame);
+        camel::execute::releaseWithOpenLoops(framePool_, frame);
         std::rethrow_exception(pending);
     }
     // The fault is in the graph the frame belongs to (compiled code calls only itself), at the
@@ -938,11 +935,9 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     const ExecutionSite site =
         makePcExecutionSite(context_->sourceContext(), frame, pc, 0, "", ExecutionSiteKind::JitPc);
     const std::string graphName = frame->graphName();
-    // A loop this frame is still inside gives back what it held: the frame is released on the next
-    // line and the slots that name the value go with it (exec_plan.h, `applyRefEntriesOfOpenLoops`).
-    camel::runtime::applyRefEntriesOfOpenLoops(frame);
-    if (framePool_.isActive(frame))
-        framePool_.release(frame);
+    // A loop this frame is still inside gives back what it held: the frame is released at once and the
+    // slots that name the value go with it (camel/execute/loop_frame.h, `releaseWithOpenLoops`).
+    camel::execute::releaseWithOpenLoops(framePool_, frame);
     const RuntimeFault fault =
         kind == x64::JitFaultKind::DivisionByZero ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
         : kind == x64::JitFaultKind::MaxRecursionDepthExceeded
@@ -1181,9 +1176,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
             return reinterpret_cast<uintptr_t>(left) > reinterpret_cast<uintptr_t>(right);
         });
         for (Frame *held : mine)
-            camel::runtime::applyRefEntriesOfOpenLoops(held);
-        for (Frame *held : mine)
-            framePool_.release(held);
+            camel::execute::releaseWithOpenLoops(framePool_, held);
         stackDepth_  = depthBase;
         nestedCalls_ = nestedBase;
         try {
