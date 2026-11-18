@@ -136,22 +136,21 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
         }
         std::vector<std::pair<rt::GCGraph *, core::type::FunctionType *>> wider;
         for (rt::GCGraph *graph : graphs) {
-            rt::GraphTransaction *transaction = session.tryDraft(graph);
-            if (transaction == nullptr) {
+            // What the commit will carry, read from the copy: a graph this pass made has no draft
+            // of its own, and the copy is the one reading that exists for every graph of the
+            // closure. The draft is opened below, and only for a graph whose body is past its
+            // clause: opening one is part of declaring, not a condition of measuring it.
+            const rt::GCGraph *copy = staged->graph(graph->id());
+            if (copy == nullptr) {
                 continue;
             }
-            auto &draft = transaction->edit();
-            auto *type  = draft.funcType();
+            const auto *type = copy->funcType();
             if (type == nullptr) {
                 continue;
             }
             const auto declared = type->resources();
             if (declared.mode == core::sem::ResourceSignature::Mode::Generic) {
                 continue; // a type that promises nothing covers whatever the body does
-            }
-            const rt::GCGraph *copy = staged->graph(graph->id());
-            if (copy == nullptr) {
-                continue;
             }
             const auto body = rt::bodySignature(*staged, *copy);
             if (core::sem::covers(declared, body)) {
@@ -161,6 +160,7 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
             if (!core::sem::covers(clause, body)) {
                 continue; // not a clause the language can write: the commit says so instead
             }
+            auto &draft = session.edit(graph).edit();
             draft.setFuncType(type->withResources(clause));
             wider.emplace_back(graph, draft.funcType());
         }
@@ -168,12 +168,44 @@ void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
             return;
         }
         // A value that names a graph whose clause grew carries the clause it names.
+        //
+        // Which graphs hold such a value is read from the copy, because a caller is not always a
+        // graph this pass edited: `__root__` holds the value of the entry and nothing else, so it
+        // has no draft, and a loop that skipped the graphs without one would leave that call site
+        // declaring a clause its callee no longer carries -- the one thing the pass boundary
+        // refuses a published program for. The draft is opened as part of the rewrite.
         for (rt::GCGraph *graph : graphs) {
-            rt::GraphTransaction *transaction = session.tryDraft(graph);
-            if (transaction == nullptr) {
+            const rt::GCGraph *copy = staged->graph(graph->id());
+            if (copy == nullptr) {
                 continue;
             }
-            auto &draft = transaction->edit();
+            bool holdsWidened = false;
+            for (rt::gc_node_ref_t id = 0; id < copy->nodeCount() && !holdsWidened; ++id) {
+                const auto *node = copy->node(id);
+                if (node == nullptr || node->kind != rt::GCNodeKind::Data || node->dataIndex >= 0) {
+                    continue;
+                }
+                const auto *nodeType = node->dataType();
+                if (nodeType == nullptr || nodeType->code() != core::type::TypeCode::Function) {
+                    continue;
+                }
+                const size_t slot = static_cast<size_t>(-node->dataIndex);
+                if (slot >= copy->staticSlots().size()) {
+                    continue;
+                }
+                const auto *function =
+                    core::rtdata::fromSlot<::Function *>(copy->staticSlots()[slot]);
+                if (function == nullptr || function->graph() == nullptr) {
+                    continue;
+                }
+                holdsWidened = std::any_of(wider.begin(), wider.end(), [&](const auto &entry) {
+                    return entry.first->id() == function->graphId();
+                });
+            }
+            if (!holdsWidened) {
+                continue; // the value already names what its graph says
+            }
+            auto &draft = session.edit(graph).edit();
             for (rt::gc_node_ref_t id = 0; id < draft.nodeCount(); ++id) {
                 const auto *header = draft.header(id);
                 if (header == nullptr || header->kind != rt::GCNodeKind::Data ||
