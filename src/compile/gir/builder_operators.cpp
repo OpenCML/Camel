@@ -2241,10 +2241,11 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
     //  - `=`, and the whole variable's rebuild of a path: the group of one overload per type,
     //    chosen by the arguments' types. It has no single id (an assignment the program may also
     //    write as `=`), so it stays by name -- the one place a name is the reference, and here it
-    //    is the store's own name, not the write's. The rebuild says so with the prefix that marks
-    //    a name the compiler made. The name itself is `core::kAssignmentGroup`: the table in
-    //    `operator_names.cpp` states it once, and this switch asks for it (daily review
-    //    2026-11-18, item 4).
+    //    is the store's own name, not the write's. The name itself is `core::kAssignmentGroup`:
+    //    the table in `operator_names.cpp` states it once, and this switch asks for it (daily
+    //    review 2026-11-18, item 4). The rebuild writes through that same name, without the
+    //    `$builtin::` prefix it carried until 2026-11-19 -- the prefix only marked a name the
+    //    compiler made, and that marking cost three readers a prefix judgement of their own.
     //  - `op=`: the compound group, whose overload set is what says whether the write is defined
     //    for these types (the node carries it, see AssignmentForm::Compound).
     //  - the rebinding to an in-place operator's result: that operator, by id.
@@ -2254,13 +2255,16 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
         dref = tree_->makeDRef(gct->assignmentOperator());
         break;
     case GCT::AssignmentForm::Rebuilt:
-        dref = tree_->makeDRef(std::string(kBuiltinPrefix) + std::string(camel::core::kAssignmentGroup));
+    case GCT::AssignmentForm::Plain:
+        // One group for both: the whole variable's rebuild writes through the same assignment
+        // group `=` names, and `core::kAssignmentGroup` is where the name is stated. Until
+        // 2026-11-19 the rebuild prefixed it with `$builtin::` to mark a name the compiler made,
+        // which cost three readers a prefix judgement (daily review 2026-11-18, item 4); the
+        // bare name resolves to that same group, which is the only thing the prefix ever meant.
+        dref = tree_->makeDRef(std::string(camel::core::kAssignmentGroup));
         break;
     case GCT::AssignmentForm::Owned:
         dref = internalOperatorDref(camel::core::oper::AssnOwned);
-        break;
-    case GCT::AssignmentForm::Plain:
-        dref = tree_->makeDRef(std::string(camel::core::kAssignmentGroup));
         break;
     }
     dref->setOrigin(storeOperatorOrigin(gct));
