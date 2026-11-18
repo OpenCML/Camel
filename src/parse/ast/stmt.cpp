@@ -95,6 +95,8 @@ const std::string ResourceDeclLoad::toString() const {
         result += "]";
     } else if (unordered_) {
         result += " unordered";
+    } else if (readonly_) {
+        result += " readonly";
     }
     return result + docSuffix();
 }
@@ -110,6 +112,8 @@ const std::string ResourceDeclLoad::geneCode() const {
     }
     if (unordered_) {
         result += " unordered";
+    } else if (readonly_) {
+        result += " readonly";
     }
     return result;
 }

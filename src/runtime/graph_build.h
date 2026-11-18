@@ -225,6 +225,22 @@ void validateRuntimeGraphCalls(
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
+/// The promise a graph makes twice (graph_edges.cpp, `EdgeChecker::checkPortTypes`): its ports are
+/// the parameters its own signature declares. A call site is checked against the port node and the
+/// value a graph hands on against the signature, so a graph that publishes both must publish one
+/// answer -- and a draft that writes a new signature over port nodes it did not touch
+/// (`GraphDraft::setFuncType`) published a graph that says one type to its callers and another to
+/// its own body.
+///
+/// Asked of a graph this commit gave *another signature* than the one it had: `before` is the graph
+/// the program held for it, `after` the one the commit encoded. A graph that had no `before` was
+/// built by the compiler and not republished by a rewrite, and is not asked (see the comment at the
+/// definition for the reading that put that boundary there). Throws std::runtime_error naming the
+/// parameter, the declared type and the type the port node carries.
+void validateRuntimeGraphPortTypes(
+    const Program &program, const GCGraph *before, const GCGraph *after,
+    GraphState state = GraphState::Executable);
+
 /// What the commit delivered, read back against the draft it encoded: `graph`, the graph the
 /// program holds for `transaction`'s draft, must hold exactly the draft's edges -- the four kinds
 /// (a data port in its normal and its context run, a control input, an order edge, a sync edge),

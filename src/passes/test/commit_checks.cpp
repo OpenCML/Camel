@@ -27,6 +27,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/resources.h"
 
+#include <algorithm>
 #include <span>
 #include <utility>
 #include <vector>
@@ -471,7 +472,160 @@ gc_node_ref_t spliceRead(
     return copy;
 }
 
+/// The three functions `test::commit_port_type` reads: one whose signature a draft replaces, one
+/// whose signature *declares another parameter type* than that one's, and one whose parameter types
+/// are the same. Every one of them is called: a graph nobody calls is not in the program a pass is
+/// handed, and the reading has to be of graphs the fixture really has.
+struct SignatureTrio {
+    const GCGraph *taken     = nullptr; // the graph the two drafts republish
+    const GCGraph *different = nullptr; // same arity, other parameter types
+    const GCGraph *same      = nullptr; // same arity, the same parameter types
+};
+
+/// The parameter lists, and not the exit types: a draft that writes a new signature writes both
+/// halves at once, and the half this pass is about is the one a call site is checked against.
+bool sameParameterCount(const GCGraph &a, const GCGraph &b) {
+    const auto *left  = a.funcType();
+    const auto *right = b.funcType();
+    return left != nullptr && right != nullptr &&
+           left->normTypesCount() == right->normTypesCount() &&
+           left->withTypesCount() == right->withTypesCount();
+}
+
+bool sameParameterTypes(const GCGraph &a, const GCGraph &b) {
+    const auto *left  = a.funcType();
+    const auto *right = b.funcType();
+    if (!sameParameterCount(a, b)) {
+        return false;
+    }
+    for (size_t i = 0; i < left->normTypesCount(); ++i) {
+        if (!typesCompatible(left->normTypeAt(i), right->normTypeAt(i))) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < left->withTypesCount(); ++i) {
+        if (!typesCompatible(left->withTypeAt(i), right->withTypeAt(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+SignatureTrio findSignatureTrio(const Program &program) {
+    std::vector<const GCGraph *> called;
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            const GCNode *node = graph->node(ref);
+            if (node == nullptr || node->kind != GCNodeKind::Func) {
+                continue;
+            }
+            const GCGraph *callee = program.calleeOf(*graph, ref);
+            if (callee == nullptr || callee == graph) {
+                continue;
+            }
+            if (std::find(called.begin(), called.end(), callee) == called.end()) {
+                called.push_back(callee);
+            }
+        }
+    }
+    for (const GCGraph *taken : called) {
+        const GCGraph *different = nullptr;
+        const GCGraph *same      = nullptr;
+        for (const GCGraph *other : called) {
+            if (other == taken || !sameParameterCount(*taken, *other)) {
+                continue;
+            }
+            if (sameParameterTypes(*taken, *other)) {
+                if (same == nullptr) {
+                    same = other;
+                }
+            } else if (different == nullptr) {
+                different = other;
+            }
+        }
+        if (different != nullptr && same != nullptr) {
+            return SignatureTrio{taken, different, same};
+        }
+    }
+    return {};
+}
+
 } // namespace
+
+const camel::runtime::Program *
+CommitPortTypeTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    out << "commit_port_type: a graph publishes one statement about one parameter twice -- as a port "
+           "node a call site is checked against and as an entry of the signature the value and the "
+           "entry arguments are read through -- and nothing asks whether the two agree\n"
+        << std::flush;
+    const SignatureTrio trio = findSignatureTrio(*program);
+    if (trio.taken == nullptr) {
+        out << "commit_port_type: no three called functions whose parameter types tell the two "
+               "drafts apart\n"
+            << std::flush;
+        return program;
+    }
+    out << "commit_port_type: graph '" << trio.taken->name() << "' declares '"
+        << trio.taken->funcType()->toString() << "', graph '" << trio.different->name()
+        << "' declares '" << trio.different->funcType()->toString() << "' (other parameter types), "
+           "graph '"
+        << trio.same->name() << "' declares '" << trio.same->funcType()->toString()
+        << "' (the same parameter types)\n"
+        << std::flush;
+    int refused   = 0;
+    int published = 0;
+    // The draft that must be refused: another function's signature over this function's port nodes,
+    // which is what a fold that decides two bodies are one function writes.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(const_cast<GCGraph *>(trio.taken)).edit();
+        draft.setFuncType(trio.different->funcType());
+        out << "commit_port_type: graph '" << trio.taken->name() << "' takes the signature of graph '"
+            << trio.different->name() << "' and keeps its port nodes\n"
+            << std::flush;
+        try {
+            (void)session.commit();
+            out << "commit_port_type: the commit published it, which is the defect\n" << std::flush;
+        } catch (const std::runtime_error &refusedAtCommit) {
+            ++refused;
+            out << "commit_port_type: refused at the commit: " << refusedAtCommit.what() << '\n'
+                << std::flush;
+        }
+    }
+    // The draft that must not be refused: the same replacement with a signature whose parameter
+    // types are the same. Without it, "it was refused" would mean only "a signature was replaced",
+    // and every legitimately retyped graph would be unpublishable.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &draft = session.edit(const_cast<GCGraph *>(trio.taken)).edit();
+        draft.setFuncType(trio.same->funcType());
+        out << "commit_port_type: graph '" << trio.taken->name() << "' takes the signature of graph '"
+            << trio.same->name() << "', whose parameter types are the same\n"
+            << std::flush;
+        try {
+            (void)session.commit();
+            ++published;
+            out << "commit_port_type: the commit published it, and nothing was refused -- a "
+                   "signature replacement is not what the check refuses\n"
+                << std::flush;
+        } catch (const std::runtime_error &refusedAtCommit) {
+            out << "commit_port_type: refused at the commit: " << refusedAtCommit.what() << '\n'
+                << std::flush;
+        }
+    }
+    out << "commit_port_type: signature of other parameter types -> refused=" << refused
+        << ", signature of the same parameter types -> published=" << published << '\n'
+        << std::flush;
+    // The program is handed back unchanged: the two commits above are the reading, and what runs
+    // next must be the fixture and not either graph they would have published.
+    return program;
+}
 
 const camel::runtime::Program *
 CommitLoopBodyReadTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {

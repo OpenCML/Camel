@@ -1858,6 +1858,17 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
     }
+    // The promise a graph makes twice: its ports are the parameters its own signature declares. It
+    // is asked of a graph the draft gave *another signature* than the one the program held for it
+    // and not of every graph (`validateRuntimeGraphPortTypes`, src/runtime/graph_edges.cpp), which
+    // is the one thing a commit knows and the seal does not: a graph the compiler built for this
+    // commit has no earlier signature to have been rewritten from.
+    for (const auto &[graph, copy] : fresh) {
+        if (graph == nullptr || !edited_.contains(graph)) {
+            continue;
+        }
+        validateRuntimeGraphPortTypes(*committed, graph, copy, graphState_);
+    }
     // The copy is the same graph to the fact store; a new revision only for a graph that was
     // edited and not encoded back to the same content (what a graph refers to is the fact
     // engine's business: closureRevision). This is all `sameContent` decides now: a revision is a

@@ -1,0 +1,20 @@
+/**
+ * The control of `resource_modifiers.cml`: the same program with the modifier left off every
+ * declaration. `resource graph` and `resource spelling` parse and resolve exactly as before, and a
+ * reading of the declaration says nothing about `readonly`.
+ *
+ * The two files differ in those two words alone, so a reading that could not tell them apart would
+ * have added no syntax: the modifier's whole content is that it is written and seen.
+ */
+export resource graph
+export resource spelling
+resource log_sink unordered
+
+func twice(f: int): int uses graph {
+    return f * 2
+}
+
+func main(): int {
+    println(twice(21))
+    return 0
+}
