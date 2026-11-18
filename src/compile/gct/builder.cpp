@@ -2908,10 +2908,13 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         // `a = b` and `a op= b` write the left side; they are not calls (design principles 3.5).
         // One node of kind ASSIGN carries the two sides, and a compound assignment carries the
         // group of the operator it follows: that operator's set of operand types is what decides
-        // whether the write is defined, so it is the operator the graph builder asks.
+        // whether the write is defined, so it is the operator the graph builder asks. Which group
+        // is the plain assignment, and which are the compound ones, is the table in
+        // `operator_names.cpp` (daily review 2026-11-18, item 4): this line asks it instead of
+        // spelling the name.
         const bool compound =
             camel::core::plainGroupOfCompoundAssignment(groupName).has_value();
-        if (groupName == "__assn__" || compound) {
+        if (groupName == camel::core::kAssignmentGroup || compound) {
             const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
             node_ptr_t target      = visitData(lhsASTNode);
             node_ptr_t value       = visitData(rhsASTNode);

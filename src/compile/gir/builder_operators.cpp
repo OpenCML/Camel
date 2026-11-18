@@ -2242,7 +2242,9 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
     //    chosen by the arguments' types. It has no single id (an assignment the program may also
     //    write as `=`), so it stays by name -- the one place a name is the reference, and here it
     //    is the store's own name, not the write's. The rebuild says so with the prefix that marks
-    //    a name the compiler made.
+    //    a name the compiler made. The name itself is `core::kAssignmentGroup`: the table in
+    //    `operator_names.cpp` states it once, and this switch asks for it (daily review
+    //    2026-11-18, item 4).
     //  - `op=`: the compound group, whose overload set is what says whether the write is defined
     //    for these types (the node carries it, see AssignmentForm::Compound).
     //  - the rebinding to an in-place operator's result: that operator, by id.
@@ -2252,13 +2254,13 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
         dref = tree_->makeDRef(gct->assignmentOperator());
         break;
     case GCT::AssignmentForm::Rebuilt:
-        dref = tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__");
+        dref = tree_->makeDRef(std::string(kBuiltinPrefix) + std::string(camel::core::kAssignmentGroup));
         break;
     case GCT::AssignmentForm::Owned:
         dref = internalOperatorDref(camel::core::oper::AssnOwned);
         break;
     case GCT::AssignmentForm::Plain:
-        dref = tree_->makeDRef("__assn__");
+        dref = tree_->makeDRef(std::string(camel::core::kAssignmentGroup));
         break;
     }
     dref->setOrigin(storeOperatorOrigin(gct));
@@ -4652,9 +4654,11 @@ node_handle_t Builder::visitLinkNode(
             // itself: it does not exist after the call, so it cannot carry the cell away. It is
             // remembered apart from the real escapes (a closure capturing the variable, a user
             // function's `var` parameter) so that the SSA fold can tell "kept a resource because it
-            // is written" from "kept a resource because it leaves the body".
+            // is written" from "kept a resource because it leaves the body". Which operators are
+            // writes is `core::isAssignmentUri`, the answer the table's family bit is set from
+            // (daily review 2026-11-18, item 4).
             const bool writeOperator =
-                targetOperator != nullptr && targetOperator->uri().rfind(":op/assn", 0) == 0;
+                targetOperator != nullptr && camel::core::isAssignmentUri(targetOperator->uri());
             if (writeOperator) {
                 if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
                     if (const std::string name = moduleLevelName(arg.expr->name());

@@ -43,6 +43,19 @@ overloadableOperatorGroup(std::string_view symbol, size_t paramCount);
 /// a call of a function (`&&`, `||`, `===`, ...).
 std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol);
 
+/// The group `x = e` writes through: the group `=` maps to in `binaryOperatorGroup`, and the name a
+/// reference to it is built with. A write has no single operator id -- the group holds one overload
+/// per type (design principles 3.5) -- so the reference stays a name, and this constant is where
+/// that name is stated: code that spells `"__assn__"` itself is a second copy of this table (daily
+/// review 2026-11-18, item 4).
+inline constexpr std::string_view kAssignmentGroup = "__assn__";
+
+/// Whether `uri` names an assignment operator: `:op/assn`, `:op/assn_i`, `:op/assn_owned` and the
+/// compound families. The table's `kFamilyAssignment` bit is set from this one answer
+/// (`OperatorTable::internLocked`), so "is this operator a write" is asked one way, and the compiler
+/// layer asks it by calling this rather than comparing the prefix itself.
+inline bool isAssignmentUri(std::string_view uri) { return uri.starts_with(":op/assn"); }
+
 /// The name the compiler writes for `a..b` before the two readings of the construct are told
 /// apart (design principles 4.2; the rule on
 /// the rule): between two functions it is the composition `f..g`, the
