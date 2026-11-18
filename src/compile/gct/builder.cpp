@@ -1333,6 +1333,7 @@ node_ptr_t Builder::visitResourceDecl(const AST::node_ptr_t &ast) {
     const auto decl = ast->loadAs<AST::ResourceDeclLoad>();
     camel::core::module::Module::ResourceDecl resource;
     resource.unordered = decl->unordered();
+    resource.readonly  = decl->readonly();
     for (const Reference &member : decl->members()) {
         resource.members.push_back(member);
     }
@@ -1405,7 +1406,10 @@ bool Builder::resolveAmbientResource(
                             // `var` is a cell only the program observes (design principles 3.3).
                             .external = !decl->variable,
                             // `resource net unordered`: the effects on it keep no written order.
-                            .unordered = decl->unordered});
+                            .unordered = decl->unordered,
+                            // `resource graph readonly`: no clause may write it (design principles
+                            // 9.12, 15.5), which resourceSignatureOf refuses.
+                            .readonly = decl->readonly});
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1630,6 +1634,17 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
             // clause is for, and `var` says the call writes it rather than only reading it.
             if (!entry.external) {
                 diags_->of(SemanticDiag::VariableInUses)
+                    .at(use.range)
+                    .commit(sem::resourceDisplayName(entry.key), clause->geneCode());
+                throw BuildAbortException();
+            }
+            if (entry.readonly && use.write) {
+                // A read-only resource is only ever read (design principles 9.12, 15.5): the graph
+                // a function is and the spelling of a name are values nothing that runs writes, so
+                // no clause can declare a write of one. The refusal names the resource and the
+                // modifier that forbids it, so that it reads as the declaration's answer and not
+                // as the clause's.
+                diags_->of(SemanticDiag::ReadonlyResourceWritten)
                     .at(use.range)
                     .commit(sem::resourceDisplayName(entry.key), clause->geneCode());
                 throw BuildAbortException();

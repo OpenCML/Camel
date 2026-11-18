@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 232
+**Semantic — errors** (`SemanticDiag`) — 234
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -198,6 +198,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ResourceGroupCycle` | The resource group '{0}' contains itself: {1}. |
 | `HandleTypeNotNominal` | '{0}' is not a nominal type declaration, so '#resource' says nothing about it. |
 | `NativeResourceMismatch` | The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'. |
+| `ReadonlyResourceWritten` | The resource '{0}' is declared 'readonly', but the clause '{1}' writes it. |
 | `VariableInUses` | The variable '{0}' is named in the resource clause '{1}'. |
 | `CmlUnsupportedConstruct` | std::cml cannot print {0}: {1}. |
 | `CmlBigConstant` | std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}). |
@@ -271,6 +272,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RuleWithParameterUnbound` | '{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it. |
 | `RuleWithArgumentNotConstant` | The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'. |
 | `UsesPromiseViolated` | '{0}' does not keep its resource promise: {1}. |
+| `SpellingNotDeclared` | This body reads the spelling of the program, and its type does not declare it. |
 | `TypeAliasRecursionUnrepresented` | The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation. |
 | `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
 | `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
@@ -311,7 +313,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 | `UnusedAssignedValue` | The value this assignment stores is never read. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 41
+**Run time and passes — errors** (`RuntimeDiag`) — 44
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -327,6 +329,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ExitTypeMismatch` | The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}. |
 | `PassBoundaryPorts` | Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}. |
 | `PassEffectContainment` | Pass '{0}' returned a program whose call site reaches past the type it declares: {1} |
+| `PassEffectBeyondType` | '{0}' committed a graph that reaches past the effect its own type declares: {1} |
+| `PassEffectOrder` | '{0}' committed a graph whose conflicting effects are not ordered: {1} |
 | `MacroEvaluationFailed` | '{0}' could not be evaluated by std::macro: {1}. |
 | `EntryArgumentMissing` | No value was given for the {0} {1} of 'main'. |
 | `EntryArgumentInvalid` | Cannot bind the argument '{0}' of 'main': {1}. |
@@ -354,6 +358,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `GraphNoDeviceProgram` | '{0}' has no device program for '{1}': {2}. |
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |
 | `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
+| `NullSlotUnwrapped` | The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make. |
 
 **Run time and passes — warnings** (`RuntimeDiag`) — 6
 

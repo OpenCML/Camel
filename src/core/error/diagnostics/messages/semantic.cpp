@@ -1117,6 +1117,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ReadonlyResourceWritten,
+            {
+                "ReadonlyResourceWritten",
+                "The resource '{0}' is declared 'readonly', but the clause '{1}' writes it.",
+                "A `readonly` resource is only ever read (design principles 9.12, 15.5): the graph a function is, and the spelling of a name, are representations nothing that runs writes, so no call can declare a write of one and two accesses to it never conflict and need no order. Drop the `var` and write the entry as a read (`uses {0}`), or drop `readonly` from `resource {0}` if the program really writes it.",
+            },
+        },
+        {
             SemanticDiag::VariableInUses,
             {
                 "VariableInUses",

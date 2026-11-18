@@ -136,13 +136,20 @@ class Module : public std::enable_shared_from_this<Module> {
 
     /// A resource this module declares (design effects plan 3.2): `resource NAME` (an ambient
     /// resource of its own), `resource NAME unordered` (the accesses of a call may be
-    /// reordered) or `resource NAME = [a, b]` (a group naming resources and other groups). A
-    /// group's `members` are names as written; expand them once all modules are read (the GCT
-    /// builder's resourceSignatureOf). Design principles 3.3: a resource is state with an
-    /// identity, and a name no value carries (`fs`, `rng`) is an ambient resource of that name.
+    /// reordered), `resource NAME readonly` (nothing ever writes it, so it conflicts with no
+    /// access and orders none -- design principles 9.12, 15.5) or `resource NAME = [a, b]` (a
+    /// group naming resources and other groups). A group's `members` are names as written; expand
+    /// them once all modules are read (the GCT builder's resourceSignatureOf). Design principles
+    /// 3.3: a resource is state with an identity, and a name no value carries (`fs`, `rng`) is an
+    /// ambient resource of that name.
     struct ResourceDecl {
         bool unordered = false;
-        bool exported  = false;
+        /// The declaration wrote `readonly`: a clause may read this resource and no clause may
+        /// write it (the GCT builder refuses `uses var NAME` against it). It is kept on the
+        /// declaration rather than in the signature because the rule belongs to the name, not to
+        /// one clause that happens to mention it.
+        bool readonly = false;
+        bool exported = false;
         /// A `var` of the top level of the module is a resource of it, named by the variable
         /// (design principles 3.5): it is always shown with its module.
         bool variable = false;

@@ -2582,6 +2582,7 @@ a59c7f524645bc2b ok test/cases/effects/err_unknown_resource.cml
 ba37a1b646cfc919 ok test/cases/effects/err_variable_in_clause.cml
 424ff392df57c3ee ok test/cases/effects/err_wide_parameters.cml
 deb1a25e7a8832d5 ok test/cases/effects/err_write_entry_reaches.cml
+d6a7c15f0f666e5a ok test/cases/effects/err_write_readonly_resource.cml
 c90ca6b8bfe43728 ok test/cases/effects/exported_resource_imported.cml
 e4eadcfee18057e8 ok test/cases/effects/exported_resource_qualified.cml
 1d6435aed665a819 ok test/cases/effects/generic_parameter_takes_instantiation.cml
@@ -2596,6 +2597,7 @@ a2a3de299da8cd87 ok test/cases/effects/ok_capture_local_var_as_value.cml
 4e305b0e13dd0408 ok test/cases/effects/pure_parameter_takes_lambda.cml
 e3a0179e2e4653b5 ok test/cases/effects/pure_parameter_takes_pure.cml
 49f87c95ef2d988e ok test/cases/effects/read_write_entries.cml
+2e0d5267e3e56dbe ok test/cases/effects/readonly_resource_read.cml
 526b74e40bc2379e ok test/cases/effects/two_calls_through_values_keep_both_writes.cml
 4cb5b22d352490a8 ok test/cases/effects/two_references_write_one_object.cml
 fe1e03c7601a0566 ok test/cases/effects/two_references_write_one_object_unsynced.cml
