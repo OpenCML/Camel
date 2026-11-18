@@ -1,0 +1,22 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The graph `order` is read on. Two `println` statements of one `sync` block are the nodes an order
+// edge can land on: a node that writes to a resource arranges itself nowhere, so the edge it carries
+// is kept (a pure node that may be recomputed freely drops it -- the encoder says the edge says
+// nothing there, `src/runtime/graph.cpp`). `a = seed() + 20` and `c = a + 1` give the pair the cycle
+// case needs: `c` is an addition that reads an addition.
+//
+// The order edge is the whole of the edit, so the program prints the same two values before and
+// after it.
+func seed(): int {
+    return 7
+}
+
+func main(): int sync {
+    let a = seed() + 20
+    let c = a + 1
+    println(c)
+    println(a)
+    return 0
+}

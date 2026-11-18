@@ -1,0 +1,18 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The graph `exit_of` is read on: a pure body, so the node the function hands its value out of is
+// the computation itself and not the `GATE` a `sync` block ends at. The front end folds arithmetic
+// on literals, so the operands come from a call: `a` is an addition, `b` is a multiplication, and
+// `c` is the addition of the two, which is what `main` returns. The CLI prints that value, which is
+// how the plan reads that the graph it read is the program that ran.
+func seed(): int {
+    return 7
+}
+
+func main(): int {
+    let a = seed() + 20
+    let b = seed() * 4
+    let c = a + b
+    return c
+}

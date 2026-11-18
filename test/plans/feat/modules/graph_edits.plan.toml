@@ -1,0 +1,46 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# The edit operators that were missing from the graph module's transaction: `order` (add an order
+# edge) and the exit anchor query `exit_of`. The plan the transform engines are written against is
+# `docs/handover/plans/2026-11-18-camel-transform-engines.cn.md`, first step: the operators the
+# `edit` block will carry are written against today's interface (`open` / `commit`) first, so that
+# the day the block syntax is decided the operators do not move.
+#
+# Each case asserts the shape of the graph, not that the pass did not crash: the order edge is read
+# back off the committed program (`order_inputs` of the node it reaches), and the exit is compared
+# with the node an independent search for the shape finds.
+id = "modules.graph_edits"
+order = 377
+tier = "fast"
+tags = ["feat", "modules", "graph", "edit"]
+
+[[tests]]
+name = "exit_of_is_the_node_the_function_hands_out"
+desc = "`exit_of` of the graph of `main` answers the addition the function returns: an operator node, of type `int`, an anchor, read by nothing -- and the same node an independent search for 'the addition that reads an addition' finds, which is what the query claims to be. Before this query existed a pass had to scan `nodes` and test `is_anchor` to name the node an edit that changes what the function gives has to put a value in the place of. The program exits 55, so the graph the pass read is the program that ran."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits_exit.cml"
+args = ["${case}", "orderprobe::exit_shape", "std::nvm"]
+expect_exit = 55
+expect_stdout_exact = "NodeKind::Oper int true 0 2 1\ntrue\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "order_adds_an_edge_and_the_program_still_computes"
+desc = "Two `println` statements of `main` write to the console and neither is ordered by an order edge: `order_read` sees no order edge reaching the second, `order_add` writes one from the first, and the `order_read` after it sees one edge that reaches that `println`. The program prints the same two values, because an order edge only orders and never makes a node run (design principles 3.1). A pure node would drop the edge instead: the encoder keeps an ordering only where the node it reaches arranges itself nowhere (`src/runtime/graph.cpp`)."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits_order.cml"
+args = ["${case}", "orderprobe::order_read", "orderprobe::order_add", "orderprobe::order_read", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "0\nfalse\n1\ntrue\n28\n27\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "order_refuses_a_cycle"
+desc = "Ordering an addition that reads another addition before the one it reads would make the graph run `c` before `a` while `c` is computed from `a`. The operator refuses, naming itself and the cycle, and the pass stops before the commit has anything to say about the graph."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/edits_order.cml"
+args = ["${case}", "orderprobe::order_cycle", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["graph.order", "the edge would form a cycle"]
+timeout_ms = 20000

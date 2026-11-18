@@ -302,6 +302,30 @@ slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
     return handleArray(HandleKind::Node, items);
 }
 
+/// The node the graph hands its value out of: the node a graph returns, a port for a function that
+/// returns a parameter, the `JOIN` a body's branches end at. Null for a graph that hands no value
+/// out, which is the one case with no node to put anything in the place of.
+slot_t exitOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    // A draft has no `Graph` handle of its own (a transaction names its draft), so this reads a
+    // published graph and nothing else; the exit of a draft is the same node, alive until the graph
+    // is committed.
+    if (handle->transaction() != nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.exit_of",
+            "the graph belongs to a transaction");
+    }
+    const GCGraph &graph    = graphOf(handle, "graph.exit_of");
+    const gc_node_ref_t out = graph.exitNodeRef();
+    if (out == kInvalidNodeRef || graph.node(out) == nullptr) {
+        return NullSlot;
+    }
+    return makeSome(
+        toSlot(nodeHandle(handle->program(), handle->graph(), out)),
+        nullableOf(HandleType::get(HandleKind::Node)));
+}
+
 // ---- a node ----
 
 slot_t inputsOf(ArgsView &norm, const char *site, int group) {
@@ -1026,6 +1050,7 @@ const std::vector<ReadOp> &readOps() {
         {"graphs_of", graphsOfKernel},
         {"name", nameKernel},
         {"nodes", nodesKernel},
+        {"exit_of", exitOfKernel},
         {"inputs", inputsKernel},
         {"with_inputs", withInputsKernel},
         {"sync_inputs", syncInputsKernel},
