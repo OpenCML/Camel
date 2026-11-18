@@ -1650,12 +1650,27 @@ struct RegionEntrant {
 /// a data, sync or order edge, or a region's `GATE` input. A resource its declaration names
 /// `unordered` carries no promise and is passed over (principle 3.3).
 ///
-/// Which regions are read is `touchedRegions`' answer, and every pair in a region it names is
-/// judged -- not only the pairs that name a node this commit made.
+/// Which regions are read is `touchedRegions`' answer, and which pairs are: those of which one side
+/// answers for a node this commit made, at the depth the made node sits -- an owner node answers for
+/// what is under it, and it is the owner that stands in the region around it.
 std::optional<CommitViolation> orderIncomplete(
     const Program &program, const GCGraph &graph, const NodeAccessTable &table,
     std::span<const gc_node_ref_t> made) {
     const std::vector<uint8_t> touched = touchedRegions(graph, made);
+    std::vector<uint8_t> madeNode(static_cast<size_t>(graph.nodeCount()), 0);
+    for (gc_node_ref_t ref : made) {
+        if (ref < graph.nodeCount()) {
+            madeNode[ref] = 1;
+        }
+    }
+    const auto answersFor = [&madeNode](const RegionEntrant &one) {
+        for (gc_node_ref_t member : one.members) {
+            if (member < madeNode.size() && madeNode[member] != 0) {
+                return true;
+            }
+        }
+        return false;
+    };
     std::vector<std::vector<RegionEntrant>> regions(
         static_cast<size_t>(graph.regionCount() > 0 ? graph.regionCount() : 1));
     const auto entrantAt = [&](uint32_t region, gc_node_ref_t stands) -> RegionEntrant & {
@@ -1704,6 +1719,15 @@ std::optional<CommitViolation> orderIncomplete(
                 const RegionEntrant &y = here[j];
                 if (x.stands == y.stands || x.stands == kInvalidNodeRef ||
                     y.stands == kInvalidNodeRef) {
+                    continue;
+                }
+                // A pair is judged when either side answers for a node this commit made -- and the
+                // side that answers for it need not be the node itself: an owner node stands in its
+                // region for everything under it, so a write spliced into an arm turns the branch
+                // node into a writer the body did not have while the branch node is not a node this
+                // commit made. Two nodes the commit neither made nor now carries are two the program
+                // already had in the relation it already had them in.
+                if (!answersFor(x) && !answersFor(y)) {
                     continue;
                 }
                 for (gc_node_ref_t first : x.members) {
