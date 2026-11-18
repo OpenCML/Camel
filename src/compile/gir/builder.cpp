@@ -1541,6 +1541,17 @@ void Builder::buildFuncBody(
     staticValueScopes_.clear();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
+        // A body that writes a `yield` of its own is built by the generator machine and not by the
+        // statement visitor: that machine owns the graph's shape (the state one pull hands to the
+        // next, the arms, the stream value the body returns), and the arms are the only place the
+        // body's own statements are visited at all. Nothing answers this test today -- the
+        // construction tree's machine (`gct::Builder::visitGeneratorBody`) claims every `yield`
+        // before a body reaches this file, so no body here holds one -- which is what makes this a
+        // seam rather than a change of behaviour (see `builder_generator.cpp`).
+        if (ownYieldBodyOf(gct) != nullptr) {
+            buildGeneratorBody(gct, graph, funcType);
+            return;
+        }
         const auto withPorts = graph->view().withPorts();
         for (size_t i = 0; i < withPorts.size(); ++i) {
             node_handle_t port = graph->view().ref(withPorts[i]);
