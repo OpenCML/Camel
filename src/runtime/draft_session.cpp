@@ -1094,6 +1094,26 @@ void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
     }
 }
 
+void RuntimeGraphDraftSession::noteMadeGraph(GCGraph *graph) {
+    if (graph == nullptr || runtimeRoot_ == nullptr) {
+        return;
+    }
+    // The graph is the session's from here on: a draft must be able to read it (a draft that calls
+    // the function value `outline` made reads the made graph), and the collector must not free it
+    // while the session is open, which is what `adoptGraph` answers.
+    adoptGraph(graph);
+    const auto known = std::ranges::any_of(
+        madeGraphs_, [&](const GCGraph *made) { return made->id() == graph->id(); });
+    if (known) {
+        return;
+    }
+    madeGraphs_.push_back(graph);
+    // A closure collected before this graph was made is the closure of an earlier session; the
+    // count in the cache's key says that too, and this closes the window inside one commit, which
+    // is where a graph is made and the closure is asked for again.
+    closureCache_.valid = false;
+}
+
 bool RuntimeGraphDraftSession::hasDraft(const GCGraph *graph) const {
     return graph != nullptr && drafts_.contains(const_cast<GCGraph *>(graph));
 }
@@ -1343,11 +1363,11 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     if (!runtimeRoot_) {
         return closure;
     }
-    // The closure depends on what the drafts refer to and on the table the ids are read in:
-    // while neither changed it is the one collected last.
+    // The closure depends on what the drafts refer to and on the table the ids are read in, on the
+    // graphs the transaction made: while none of those changed it is the one collected last.
     if (closureCache_.valid && closureCache_.epoch == *refsEpoch_ &&
         closureCache_.table == work_->version() && closureCache_.drafts == drafts_.size() &&
-        closureCache_.root == runtimeRoot_) {
+        closureCache_.made == madeGraphs_.size() && closureCache_.root == runtimeRoot_) {
         return closureCache_.graphs;
     }
 
@@ -1376,6 +1396,13 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         return found;
     };
     reach(runtimeRoot_->id());
+    // What this transaction made is delivered too, and no draft has to name it (design 2.5: the
+    // draft is `f`, the graphs `f` reaches, and the graphs this edit made). They are seeded before
+    // the walk so that what they call is reached like anything else -- a made graph stands in the
+    // program it is delivered into, and its callees have to be there beside it.
+    for (const GCGraph *made : madeGraphs_) {
+        reach(made->id());
+    }
     for (size_t head = 0; head < queue.size(); ++head) {
         const GraphId id = queue[head];
         GCGraph *graph   = work_->graph(id);
@@ -1416,6 +1443,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         .epoch  = *refsEpoch_,
         .table  = work_->version(),
         .drafts = drafts_.size(),
+        .made   = madeGraphs_.size(),
         .root   = runtimeRoot_,
         .graphs = closure,
     };
