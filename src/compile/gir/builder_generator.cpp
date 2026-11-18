@@ -98,8 +98,12 @@
  *     `Arm`, `LoopCond`, `LoopBody`). That `0`/`1` is **not** an order of construction and must not be
  *     read as one -- it is which of the loop's two parts the region is. **And the order of
  *     construction is visible in the graph anyway**: the published `std::jgir` numbers the regions in
- *     the order they were made, and in the generator case the condition's region is `g4r1`, ahead of
- *     the arm regions `g4r2`, `g4r4`, `g4r6` -- so the condition's region is made **first**. The two
+ *     the order they were made. In the generator case, measured on the published `std::jgir` of
+ *     `test/cases/compile/stream/generators_cell_type.cml`: the condition's region is `1`, the
+ *     body's is `2`, and the **six** arm regions are `3` to `8` -- so the condition's region is
+ *     made **first**, and this sentence's earlier draft named `g4r2`, `g4r4`, `g4r6` as the arm
+ *     regions, which was a transcription and not a reading: the arms are six, and two of the
+ *     three names were the body's region. The two
  *     sentences belong together: the index says *which part*, the numbering says *which was made
  *     first*, and a machine that read the first as the second would number the regions the other way
  *     round and change the graph.
@@ -131,8 +135,12 @@
 #include "builder_helpers.h"
 #include "builder_support.h"
 
+#include "camel/core/data/composite/tuple.h"
+#include "camel/core/data/primary.h"
+#include "camel/core/rtdata/tuple.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/stream.h"
+#include "camel/runtime/graph.h"
 
 #include <string>
 
@@ -231,6 +239,101 @@ void Builder::buildGeneratorBody(
         linkNodes(LinkType::Norm, statePort, pcMember);
         const node_handle_t pcCell = newVariable(pcMember);
         insertNode("__gen_pc__", pcCell);
+
+        // ---- the round state, and the two regions that carry it ----------------
+        //
+        // Three conventions of a region decide the shape below, and one of them is a trap
+        // (`builder_control.cpp#Builder::visitLoopNode`, `#Builder::buildStreamLoop`):
+        //
+        //   * a loop's regions are made **before** the loop node exists, so the owner is written
+        //     after it, and `setRegionOwner(region, loop, 0|1)` says *which part* the region is --
+        //     `0` the condition, `1` the body -- and **not** the order of construction;
+        //   * the order of construction is visible in the published graph anyway, which numbers
+        //     the regions in the order they were made: in the target `g4r1` is the condition's
+        //     region and `g4r2` the body's, so **the condition is made first**. Reading the first
+        //     sentence as the second numbers the regions the other way round and is a different
+        //     graph;
+        //   * a region port is **explicitly put in its region** (`setNodeRegion`); without that
+        //     it lands in the graph's own region and reads as a parameter of the graph. And a
+        //     region's ports are set **twice** -- `setRegionPorts` (the Port nodes) and
+        //     `setRegionParams` (their names and types) -- because with only the first the
+        //     region's signature is empty.
+        //
+        // The first round state. `(Data::null() cast to the answer, 0)` is a **transition shape**:
+        // it is what can be built while a slot is still a cell, and it is written so that the next
+        // reader knows which of the two shapes they are looking at. It is **not** the shape this
+        // machine aims at -- the aim is a `T?` slot and no null-and-cast pair.
+        const std::vector<size_t> answerSlot{0};
+        node_handle_t initialAnswer =
+            castNodeTo(currGraph_->addStaticDataNode(Data::null()), answerType, gct);
+        node_handle_t initialRoundState = currGraph_->addFillNode(
+            roundStateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
+        const slot_t emptyRoundState =
+            camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
+        linkNodes(
+            LinkType::Norm,
+            currGraph_->view().ref(
+                currGraph_->edit().materializeStaticValue(emptyRoundState, roundStateType)),
+            initialRoundState);
+        linkNodes(LinkType::With, initialAnswer, initialRoundState);
+
+        const std::string answerPortName   = "__gen_answer__";
+        const std::string answeredPortName = "__gen_answered__";
+        std::vector<node_handle_t> condPorts;
+        std::vector<node_handle_t> bodyPorts;
+        // The names and types a region declares for its ports, from the ports themselves: one
+        // Port node per part of the round state, put in the region, and then the region's two
+        // records of them.
+        const auto declarePart = [&](ArmBuild &part, std::vector<node_handle_t> &ports) {
+            FunctionTypeFactory params;
+            std::vector<runtime::gc_node_ref_t> ids;
+            for (const auto &[name, type] :
+                 {std::pair{answerPortName, answerType}, std::pair{answeredPortName, pcType}}) {
+                node_handle_t port = currGraph_->addRegionPortNode(type, name);
+                part.graph->edit().setNodeRegion(nodeIdOf(port), part.region);
+                insertNode(name, port);
+                ports.push_back(port);
+                ids.push_back(nodeIdOf(port));
+                params.addNormArg(name, type, false);
+            }
+            params.setExitType(Type::Void());
+            part.graph->edit().setRegionPorts(part.region, ids);
+            part.graph->edit().setRegionParams(part.region, params.build());
+        };
+
+        // The condition: `__eq__(state.1, 0)` over the round state's second part, which says
+        // whether the pull in hand has answered. Written as the **group** call `__eq__` -- the
+        // same group an arm's `pc` dispatch writes -- and not as a direct operator, so that both
+        // places move together if the resolution ever does: the target holds four `:op/eq_l` (one
+        // here, three in the arm regions), and `__eq__` on two `int`s *is* `:op/eq_l` once the
+        // group is resolved. A machine that wrote one place as a group call and the other as a
+        // direct operator would publish the same graph while differing from itself at the
+        // construction layer -- a difference nobody can see and everybody has to keep in step.
+        const GCT::node_ptr_t bodyGct = gct->at(1);
+        arm_ptr_t condPart            = buildArm(
+            bodyGct,
+            [&]() -> node_handle_t {
+                GCT::node_ptr_t call = tree_->makeLink(2);
+                *call << tree_->makeDRef("__eq__") << tree_->makeDRef(answeredPortName)
+                      << tree_->makeData(tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(0)));
+                return visitLinkNode(call);
+            },
+            runtime::GCRegionKind::LoopCond,
+            [&](ArmBuild &part) { declarePart(part, condPorts); });
+        // The body's region and its ports. Its result is the round state the next round starts
+        // from, and it is the arms that build it: the ports are declared here, the rounds are not.
+        arm_ptr_t bodyPart = buildArm(
+            bodyGct,
+            [&]() -> node_handle_t { return nullptr; },
+            runtime::GCRegionKind::LoopBody,
+            [&](ArmBuild &part) { declarePart(part, bodyPorts); });
+        // The loop node names its regions, and each region names its result. Until the arms are
+        // written there is no result to name, so the node is not made: a loop laid on a region
+        // without a result is not a smaller loop, it is a draft that would be refused where a
+        // graph is published.
+        (void)condPart;
+        (void)bodyPart;
+        (void)initialRoundState;
     }
     leaveScope();
     // What is written is the seam: the pc dispatch, the arms, the pack and the return are the next
@@ -243,10 +346,11 @@ void Builder::buildGeneratorBody(
             "the generator body of `" +
             (element != nullptr ? element->toString() : std::string("?")) +
             "..` reached the translation, and the translation builds generator bodies in segments: "
-            "the state is there and its `pc` cell is made, while the round state `" +
+            "the state is there, its `pc` cell is made, and the round state `" +
             roundStateType->toString() +
-            "` and the pc dispatch, the arms and the pack are not written yet. Nothing in the "
-            "program is wrong: the machine missed a shape it builds");
+            "` has its first value, its two regions and their ports, and its condition; the arms "
+            "of the pc dispatch, the pack and the loop node that names them are not written yet. "
+            "Nothing in the program is wrong: the machine missed a shape it builds");
     throw BuildAbortException();
 }
 
