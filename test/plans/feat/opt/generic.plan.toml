@@ -955,7 +955,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_recursion.graph"
-desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[n]) => f32 pure` -- the declaration wrote no resource clause, so its type carries the set its body was measured to reach, which is the empty one -- the declaration itself with the name still unbound and never the eight the entry argument is long, and the call inside it is a call of the base `walk` that takes no further instance."
+desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(xs: f32[n]) => f32 pure` -- the level count the entry call fixes to a constant is bound out of the copy, so that parameter is gone from the signature exactly as its port is gone from the port list, and the extent the declaration leaves to the name is still unbound, never the eight the entry argument is long: the declaration wrote no resource clause, so its type carries the set its body was measured to reach, which is the empty one. The call inside it is a call of the base `walk` that takes no further instance."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
 args = ["${case}", "std::opt::specialize", "std::jgir"]
@@ -969,7 +969,7 @@ const byId = new Map(doc.graphs.map((g) => [g.id, g]))
 const base = doc.graphs.find((g) => g.name === 'walk')
 const instance = doc.graphs.find((g) => g.name === 'walk$spec0')
 assert(base && instance, `graphs: ${doc.graphs.map((g) => g.name).join(', ')}`)
-assert(instance.signature === '(n: int, xs: f32[n]) => f32 pure', `instance declared '${instance.signature}'`)
+assert(instance.signature === '(xs: f32[n]) => f32 pure', `instance declared '${instance.signature}'`)
 const call = instance.nodes.find((n) => n.callee !== undefined)
 assert(call && byId.get(call.callee) === base, `the recursive call is bound to '${call && byId.get(call.callee).name}'`)
 const instances = doc.graphs.filter((g) => g.name.startsWith('walk$'))
