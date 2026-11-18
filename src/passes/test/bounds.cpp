@@ -6,6 +6,12 @@
  * name the program had and changes only the way it is used -- `stdout` read where the program wrote
  * it. It stands where the print stood, so nothing else about the program moves: the name set is the
  * same before and after, which is what the check compared, and the access is not.
+ *
+ * The type moves with the body (the tier of 2026-11-18): a draft that adds an access is asked
+ * containment at the commit, so a read of `stdout` in a graph whose type declares the write would be
+ * refused there and the boundary's admission invariant -- an effect operator with neither a value
+ * reader nor a place in a chain -- would never be asked. The fixture declares the read it makes, so
+ * the invariant it exists to read stays reachable.
  */
 
 #include "camel/passes/test/bounds.h"
@@ -17,6 +23,7 @@
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft_session.h"
 
+#include <algorithm>
 #include <ostream>
 #include <span>
 #include <string_view>
@@ -80,6 +87,36 @@ BoundsFlipTestPass::apply(const camel::runtime::Program *program, std::ostream &
         for (gc_node_ref_t print : prints) {
             const std::vector<gc_node_ref_t> inputs(draft.normInputsOf(print).begin(),
                                                     draft.normInputsOf(print).end());
+            // The type this graph publishes has to cover what the draft is about to make. The commit
+            // asks containment of a draft that added an access (the tier of 2026-11-18), and a read
+            // of `stdout` where the program wrote it is an access the type has to declare -- so the
+            // type moves with the body here, and the question this pass exists to reach stays the
+            // boundary's admission invariant: an effect operator with neither a value reader nor a
+            // place in a chain. Asking the same graph once at the commit and once at the boundary
+            // would make the second question unanswerable, not answered.
+            if (camel::core::type::FunctionType *published = graph->funcType(); published != nullptr) {
+                using Signature             = camel::core::sem::ResourceSignature;
+                Signature declared          = published->resources();
+                declared.mode               = Signature::Mode::Concrete;
+                bool named                  = false;
+                for (Signature::AmbientUse &use : declared.ambient) {
+                    if (use.name != "stdout") {
+                        continue;
+                    }
+                    use.mode = AccessMode::Read;
+                    named    = true;
+                }
+                if (!named) {
+                    declared.ambient.push_back(
+                        Signature::AmbientUse{.name = "stdout", .mode = AccessMode::Read});
+                    std::sort(declared.ambient.begin(),
+                              declared.ambient.end(),
+                              [](const Signature::AmbientUse &one, const Signature::AmbientUse &two) {
+                                  return one.name < two.name;
+                              });
+                }
+                draft.setFuncType(published->withResources(declared));
+            }
             const gc_node_ref_t read = draft.addOperNode(Type::Void(), nullptr, kReadUri);
             draft.setNormInputs(read, std::span<const gc_node_ref_t>(inputs.begin(), inputs.size()));
             camel::passes::generic::replaceNode(transaction, print, read);

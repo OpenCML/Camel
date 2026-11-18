@@ -17,12 +17,11 @@ tags = ["feat", "opt", "effects", "commit-checks"]
 #   ③ the tier is what the draft added, not what the build is -- a draft that added an access is asked
 #   the effect and order checks in every build, and a draft that added none owes no answer about them
 #   in any build. This replaces the ruling of 2026-11-16, which read the tier as a build's answer.
-#   ④ the regions a commit answers for are the ones it touched and every region around them: an owner
-#   node stands in the region it sits in for everything under it, so a write spliced into an arm
-#   changes what the branch node carries outside while no node of a pair out there is one this commit
-#   made.
-#
-# 甲 containment -- for every graph the draft changed, the footprint its nodes add up to (from what
+#   ④ the regions a commit answers for are the ones it touched and every region around them, and a
+#   pair is judged when one of its two *sides* answers for a node this commit made -- a branch node
+#   standing for an arm that gained a write answers for it, although the branch node is not a node
+#   the commit made. The rule the rework replaced judged a pair when one of its two *named* nodes was
+#   made, which never sees the pair out in the body. 甲 containment -- for every graph the draft changed, the footprint its nodes add up to (from what
 # the operators declare, bottom-up, principle 3.3) must stay inside the effect its own type
 # declares; a footprint that reaches past it is refused, and the diagnostic names the resource, the
 # node and the source position.
@@ -142,12 +141,12 @@ expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_t
 # a `CommitViolation`.
 [[tests]]
 name = "commit_refusal.exit_region"
-desc = "A commit reads the graph's value at a node of one arm: the seal refuses it, naming the node, the region it landed in and the function body it should have been in, and the program it did not publish still runs."
+desc = "A commit reads the graph's value at a node of one arm: the seal refuses it, naming the node, the region that only runs when its owner says so and the read that then never happens, and the program it did not publish still runs."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/identity_at_exit.cml"
 args = ["${case}", "test::commit_exit_region", "std::nvm"]
 expect_exit = 48
-expect_stdout_contains = ["commit_exit_region: the seal asks it", "now reads its value at node", "and not in the function body", "commit_exit_region: refused at the commit:", "has its exit at node", "instead of the function body (region 0)", "so the read never happens"]
+expect_stdout_contains = ["commit_exit_region: the seal asks it", "now reads its value at node", "and not in the function body", "commit_exit_region: refused at the commit:", "has its exit at node", "instead of the function body", "runs only when its owner says so", "the read never happens"]
 
 # ②, refused. One node is made to read itself -- no input setter looks for a cycle, because one
 # rewrite cannot see a cycle another one closes -- and the commit refuses the graph at the seal it

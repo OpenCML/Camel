@@ -644,27 +644,37 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     // Here, beside the cross-reference check and not in the commit's own checks, because it is a
     // property of the graph published and not of what a commit added: every commit runs this seal in
     // every build, whether or not it added an access, and no draft is exempt from it.
-    const auto validateInTopRegion = [&](gc_node_ref_t ref, std::string_view what) {
+    // "In the function body" is "runs whenever the function runs", which is not the same as "region
+    // 0": a block and an inlined body are regions the function enters unconditionally, and the front
+    // end leaves the exit in one whenever the last thing a body says is inside one (an inlined call
+    // at the tail, a tagged block). What never runs for a value nothing asks for is an arm, a loop's
+    // condition and a loop's body -- those run only when their owner says so -- and that is what
+    // this refuses, at any depth.
+    const auto validateRunsWithTheBody = [&](gc_node_ref_t ref, std::string_view what) {
         if (ref == kInvalidNodeRef || !graph->containsNodeRef(ref)) {
             return; // no such node, or a number `validateRef` above has already thrown about
         }
-        const uint32_t region = graph->nodeRegion(ref);
-        if (region == 0) {
-            return;
+        for (uint32_t region = graph->nodeRegion(ref); region != 0;
+             region            = graph->region(region)->parent) {
+            const GCRegionKind kind = graph->region(region)->kind;
+            if (kind != GCRegionKind::Arm && kind != GCRegionKind::LoopCond &&
+                kind != GCRegionKind::LoopBody) {
+                continue;
+            }
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has its {} at node {}, which is in region {} instead of the "
+                    "function body: that region runs only when its owner says so, so a value nothing "
+                    "asks for never runs there, and the read never happens.",
+                    graph->name(),
+                    what,
+                    ref,
+                    region));
         }
-        throw std::runtime_error(
-            std::format(
-                "Runtime graph '{}' has its {} at node {}, which is in region {} instead of the "
-                "function body (region 0): a region that only runs when its owner says so never runs "
-                "for a value nothing asks for, so the read never happens.",
-                graph->name(),
-                what,
-                ref,
-                region));
     };
-    validateInTopRegion(graph->exitNodeRef(), "exit");
-    validateInTopRegion(graph->outputNodeRef(), "output");
-    validateInTopRegion(graph->returnNodeRef(), "returned value");
+    validateRunsWithTheBody(graph->exitNodeRef(), "exit");
+    validateRunsWithTheBody(graph->outputNodeRef(), "output");
+    validateRunsWithTheBody(graph->returnNodeRef(), "returned value");
     for (gc_node_ref_t ref : graph->normPorts()) {
         validateRef(ref, "norm-port");
     }
