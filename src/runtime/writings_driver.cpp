@@ -246,22 +246,28 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                 }
                 const auto *h = draft_.header(node);
                 DraftNodeInit base;
-                base.dataType       = h->dataType;
-                base.permissions    = h->permissions;
-                base.region         = draft_.nodeRegion(node);
-                base.origin         = draft_.nodeOrigin(node);
-                base.attrs          = draft_.nodeAttrs(node);
-                const size_t before = draft_.nodeSlotCount();
-                gc_node_ref_t made  = kInvalidNodeRef;
+                base.dataType              = h->dataType;
+                base.permissions           = h->permissions;
+                base.region                = draft_.nodeRegion(node);
+                base.origin                = draft_.nodeOrigin(node);
+                base.attrs                 = draft_.nodeAttrs(node);
+                const size_t before        = draft_.nodeSlotCount();
+                const ApplicationMark mark = markApplication();
+                gc_node_ref_t made         = kInvalidNodeRef;
                 try {
                     made = build(
                         rule.rhs,
                         Match{*this, node, *chosen, chosenRemainder.value_or(MatchRemainder{})},
                         base);
                 } catch (const RuleSkipped &) {
+                    // The right side was abandoned partway through building it (a constant of the
+                    // rule faults): one application is all or nothing, so what it had already made
+                    // goes back with it and the next rule sees the draft it started from.
+                    abandonApplication(mark);
                     continue;
                 }
                 if (made == node) {
+                    abandonApplication(mark);
                     continue;
                 }
                 // Everything the match read that ordered it: the root's own control inputs and
@@ -273,6 +279,7 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                     chosenWaits.value_or(std::vector<gc_node_ref_t>{});
                 // A node that already existed cannot be made to wait without risking a cycle.
                 if (!waits.empty() && made < before) {
+                    abandonApplication(mark);
                     continue;
                 }
                 // The attribution of this rewrite (rewrite design 8.7). The step is made only
@@ -431,16 +438,21 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             }
             const auto *h = draft_.header(match.root);
             DraftNodeInit base;
-            base.dataType       = h->dataType;
-            base.permissions    = h->permissions;
-            base.region         = draft_.nodeRegion(match.root);
-            base.origin         = draft_.nodeOrigin(match.root);
-            base.attrs          = draft_.nodeAttrs(match.root);
-            const size_t before = draft_.nodeSlotCount();
-            gc_node_ref_t made  = kInvalidNodeRef;
+            base.dataType              = h->dataType;
+            base.permissions           = h->permissions;
+            base.region                = draft_.nodeRegion(match.root);
+            base.origin                = draft_.nodeOrigin(match.root);
+            base.attrs                 = draft_.nodeAttrs(match.root);
+            const size_t before        = draft_.nodeSlotCount();
+            const ApplicationMark mark = markApplication();
+            gc_node_ref_t made         = kInvalidNodeRef;
             try {
                 made = build(rule.rhs, Match{*this, match.root, match.vars, match.remainder}, base);
             } catch (const RuleSkipped &) {
+                // One application is all or nothing: the writings it made before the fault go back,
+                // so the round counts what this saturation added and not what it started and
+                // abandoned (16.1, 16.4: `作废就把临时区的指针退回去`).
+                abandonApplication(mark);
                 continue;
             }
             // The writings of one value share a region: extraction may put any writing of a class
@@ -451,6 +463,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             // still makes the replacement: reading an enclosing value inside an arm is a plain
             // edge.
             if (made != match.root && draft_.nodeRegion(made) != draft_.nodeRegion(match.root)) {
+                abandonApplication(mark);
                 continue;
             }
             stats.newWritings += draft_.nodeSlotCount() - before;
