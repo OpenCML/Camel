@@ -14,14 +14,58 @@
  *   about the shape of a graph that exists and about the types on an edge, and neither asks what
  *   the body does under the type it publishes.
  *
- * The order-completeness half (analysis 4.1, second item) is not landed here; see the commit that
- * adds this pass for the readings of the existing passes it refuses.
+ * The order-completeness half (analysis 4.1, second item) is read by the three passes below.
  *
  * The pass is not in a default pipeline: naming it is the whole switch.
  */
 
 #pragma once
 #include "camel/execute/pass/opt.h"
+
+/// The three transformations the two commit checks are read on: one per check, and one that must
+/// pass.
+///
+/// The defect is not in the pass's own reading of a program but in what it leaves behind for the
+/// commit to publish, so each of these says which edit it made and then commits it, and says nothing
+/// more: the commit is the reader, and the diagnostic it refuses with is what a plan compares.
+///
+///   `test::commit_order` splices a fresh write to the resource the program already writes, and
+///   orders it against nothing, so the second check must refuse it and name the pair of nodes;
+///   `test::commit_effect` splices a write into a graph whose type declares none, so the first
+///   check must refuse it and name the node;
+///   `test::commit_legal_splice` makes the same splice as the first but ordered after the write that
+///   was already there, in a graph whose type declares the write, so nothing is refused and the
+///   program runs. Without it, "it was refused" would mean only "it is always refused", which is a
+///   reading of neither check.
+///
+/// All three ask the checks whatever the build asks (`camel::runtime::setCommitChecksEnabled`,
+/// camel/runtime/resources.h): a shipped build does not ask them of a rewrite that has only the graph
+/// module's interface, and what a plan reads has to be the same in every build the plans run in. Each
+/// one prints the build's own answer first, so the asked run is on the record beside the answer it
+/// overrides.
+inline constexpr const char *kCommitOrderTestPass = "test::commit_order";
+class CommitOrderTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+inline constexpr const char *kCommitEffectTestPass = "test::commit_effect";
+class CommitEffectTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+inline constexpr const char *kCommitLegalSpliceTestPass = "test::commit_legal_splice";
+class CommitLegalSpliceTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
 
 /// Gives a function graph that prints the type of one that does not, the same body staying where it
 /// is: what a fold that treats two functions as one leaves behind.

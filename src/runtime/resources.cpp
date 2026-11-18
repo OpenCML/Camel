@@ -16,6 +16,8 @@
 
 #include "camel/runtime/resources.h"
 
+#include "camel/core/context/context.h"
+#include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
@@ -26,6 +28,7 @@
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
+#include <atomic>
 #include <format>
 #include <functional>
 #include <map>
@@ -488,6 +491,7 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
     r.external  = spec.externalEffect;
     for (const sem::ResourceAccess &access : spec.accesses) {
         NodeAccess a{.resource = access.resource, .mode = access.mode, .region = access.region};
+        a.unordered = access.unordered;
         switch (access.binding.kind) {
         case sem::ResourceBinding::Kind::Norm:
             a.value = access.binding.index < norm.size() ? norm[access.binding.index] : kInvalidNodeRef;
@@ -610,8 +614,9 @@ NodeResources Resolver::fromSignature(
     for (const auto &use : signature.ambient) {
         r.accesses.push_back(
             NodeAccess{
-                .resource = {.cls = ResourceClass::Ambient, .name = use.name},
-                .mode     = use.mode,
+                .resource  = {.cls = ResourceClass::Ambient, .name = use.name},
+                .mode      = use.mode,
+                .unordered = use.unordered,
             });
     }
     for (ResourceClass cls : signature.anyOf) {
@@ -898,14 +903,13 @@ namespace {
 /// the program gives them. Two effects outside the program that name different resources are not a
 /// pair at all (design principles 3.3, F9); an effect that names none is the global resource and is
 /// an access of unknown class (Resolver::node), so it meets every effect through the same loop.
-ResourceConflict conflictWith(
-    const Resolver &resolver, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+ResourceConflict conflictOf(
+    const Resolver &resolver, const GCGraph &graph, gc_node_ref_t a, const NodeResources &ra,
+    gc_node_ref_t b, const NodeResources &rb) {
     ResourceConflict conflict;
     if (a == b) {
         return conflict;
     }
-    const NodeResources ra = resolver.node(graph, a);
-    const NodeResources rb = resolver.node(graph, b);
     for (size_t i = 0; i < ra.accesses.size(); ++i) {
         for (size_t j = 0; j < rb.accesses.size(); ++j) {
             const NodeAccess &x = ra.accesses[i];
@@ -935,6 +939,12 @@ ResourceConflict conflictWith(
         }
     }
     return conflict;
+}
+
+/// conflictOf resolved for the two nodes: the reading most callers want.
+ResourceConflict
+conflictWith(const Resolver &resolver, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+    return conflictOf(resolver, graph, a, resolver.node(graph, a), b, resolver.node(graph, b));
 }
 
 } // namespace
@@ -1395,6 +1405,369 @@ sem::ResourceSignature widened(
     // weaker than the body it was built from.
     sem::ambientCarriesExternal(wider);
     return wider;
+}
+
+// ---- The commit checks (analysis 4.1), one question for every commit path ------------------------
+
+std::string_view commitCheckName(CommitCheck check) {
+    switch (check) {
+    case CommitCheck::Effect:
+        return "effect";
+    case CommitCheck::Order:
+        return "order";
+    }
+    return "effect";
+}
+
+namespace {
+
+/// A node as a commit diagnostic names it: the graph, the node, and what the graph says it is. A
+/// reader is looking at a program, so a bare number would not be enough (`describeNodeOf` in
+/// execute/pass.cpp says the same thing for the pass-boundary diagnostics; the two texts are
+/// about different questions and neither is a copy of the other's code).
+std::string namedNode(const Program &program, const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    std::string what   = "a node";
+    if (node != nullptr) {
+        if (node->kind == GCNodeKind::Func || node->kind == GCNodeKind::Call) {
+            const GCGraph *callee = program.calleeOf(graph, ref);
+            what = callee == nullptr ? std::string("a call") : "a call of '" + callee->name() + "'";
+        } else if (node->kind == GCNodeKind::Oper) {
+            if (const auto *body = graph.nodeBodyAs<GCOperBody>(ref)) {
+                what = std::string(body->uri());
+            } else {
+                what = "an operator";
+            }
+        }
+    }
+    return std::format("node {} of graph '{}' ({})", ref, graph.name(), what);
+}
+
+/// One access of one node in the spelling `beyondCoverage` answers in, so that an access the
+/// declaration does not cover can be traced back to the node that makes it: a footprint is a sum
+/// over the whole body and a diagnostic has to name a node.
+std::string nodeAccessText(const NodeAccess &access) {
+    const std::string name = !access.resource.name.empty()
+                                 ? sem::resourceDisplayName(access.resource.name)
+                                 : std::string(sem::resourceClassName(access.resource.cls));
+    return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
+}
+
+/// Whether a commit answers for `ref`: every node when the caller named none, otherwise the ones it
+/// named. An access or an ordering the program already had before the commit is not this commit's to
+/// answer for; containment is a property of the graph as a whole and is asked of every node
+/// (`effectBeyondDeclaration`), so this scopes the order question only.
+bool judgedBy(const std::span<const gc_node_ref_t> &named, gc_node_ref_t ref) {
+    return named.empty() || std::find(named.begin(), named.end(), ref) != named.end();
+}
+
+/// The accesses of every node of one graph, resolved at most once each. The commit checks ask for a
+/// node's accesses once per pair it takes part in and once per access those contain; resolving them
+/// again per question would put the resolver's work inside a loop over pairs, where nothing it reads
+/// depends on the pair.
+class NodeAccessTable {
+  public:
+    NodeAccessTable(const GCGraph &graph, const Resolver &resolver)
+        : graph_(graph), resolver_(resolver), rows_(graph.nodeCount()) {}
+
+    const NodeResources &of(gc_node_ref_t ref) const {
+        static const NodeResources empty;
+        if (ref >= rows_.size()) {
+            return empty;
+        }
+        std::optional<NodeResources> &row = rows_[ref];
+        if (!row.has_value()) {
+            row = resolver_.node(graph_, ref);
+        }
+        return *row;
+    }
+
+    /// The conflict of two nodes, from the accesses already resolved.
+    ResourceConflict conflict(gc_node_ref_t a, gc_node_ref_t b) const {
+        return conflictOf(resolver_, graph_, a, of(a), b, of(b));
+    }
+
+  private:
+    const GCGraph &graph_;
+    const Resolver &resolver_;
+    mutable std::vector<std::optional<NodeResources>> rows_;
+};
+
+/// Analysis 4.1, effect containment, read over the whole body of `graph`: what the nodes' operator
+/// declarations make it reach (principle 3.3, resolved bottom-up) must stay inside the clause the
+/// graph's own type declares. What a type cannot spell -- a cell of a variable, a class the
+/// analysis cannot name -- is passed over, which is the line the call-site check draws too.
+std::optional<CommitViolation> effectBeyondDeclaration(
+    const Program &program, const GCGraph &graph, FootprintWalk &walk,
+    const NodeAccessTable &table) {
+    const auto *type = graph.funcType();
+    if (type == nullptr) {
+        return std::nullopt; // nothing declares anything here
+    }
+    const sem::ResourceSignature &declared = type->resources();
+    if (declared.mode != sem::ResourceSignature::Mode::Concrete) {
+        return std::nullopt; // a type that promises nothing covers everything
+    }
+    const GraphFootprint body = walk.run(&graph);
+    const std::vector<std::string> beyond =
+        beyondCoverage(declared, body, type->withTypesCount(), nullptr);
+    if (beyond.empty()) {
+        return std::nullopt;
+    }
+    const std::string declaredText =
+        declared.ambient.empty() && declared.params.empty() && declared.captures.empty() &&
+                declared.anyOf.empty() && !declared.external
+            ? std::string("nothing")
+            : sem::toString(declared);
+    for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        if (graph.node(ref) == nullptr) {
+            continue;
+        }
+        const NodeResources resources = table.of(ref);
+        for (const NodeAccess &access : resources.accesses) {
+            if (access.resource.cls == ResourceClass::Variable ||
+                access.resource.cls == ResourceClass::Unknown) {
+                continue; // a type cannot spell it, so it does not promise against it
+            }
+            if (std::find(beyond.begin(), beyond.end(), nodeAccessText(access)) == beyond.end()) {
+                continue;
+            }
+            return CommitViolation{
+                .check  = CommitCheck::Effect,
+                .graph  = &graph,
+                .first  = ref,
+                .origin = graph.nodeOrigin(ref),
+                .text   = std::format(
+                    "{}, in a graph whose type declares {}, makes an access the type does not "
+                    "cover ({}): the commit would publish a body that reaches past its own "
+                    "declared effect",
+                    namedNode(program, graph, ref),
+                    declaredText,
+                    nodeAccessText(access)),
+            };
+        }
+        if (resources.external &&
+            std::find(beyond.begin(), beyond.end(), std::string("an effect outside the program")) !=
+                beyond.end()) {
+            return CommitViolation{
+                .check  = CommitCheck::Effect,
+                .graph  = &graph,
+                .first  = ref,
+                .origin = graph.nodeOrigin(ref),
+                .text   = std::format(
+                    "{}, in a graph whose type declares {}, has an effect outside the program: the "
+                    "commit would publish a body that reaches past its own declared effect",
+                    namedNode(program, graph, ref),
+                    declaredText),
+            };
+        }
+    }
+    return std::nullopt;
+}
+
+/// The region a node's accesses are judged in: the innermost region that runs with its parent --
+/// the body, an arm, a loop's condition, a loop's body. A `Block` or an `Inline` region always runs
+/// when its parent does and a `Dead` one is a place a rewrite emptied, so neither is a region of
+/// its own for this question: their nodes count in the control region around them.
+uint32_t judgedRegionOf(const GCGraph &graph, uint32_t region) {
+    uint32_t at = region;
+    for (uint32_t steps = 0; steps <= graph.regionCount(); ++steps) {
+        if (at == 0) {
+            return 0;
+        }
+        const GCRegion *one = graph.region(at);
+        if (one == nullptr) {
+            return 0;
+        }
+        switch (one->kind) {
+        case GCRegionKind::Arm:
+        case GCRegionKind::LoopCond:
+        case GCRegionKind::LoopBody:
+            return at;
+        default:
+            break;
+        }
+        if (one->parent == at) {
+            return 0;
+        }
+        at = one->parent;
+    }
+    return 0;
+}
+
+/// One thing that touches a resource in one region: a node of that region, or -- when a node has
+/// accesses in a region under this one -- the owner node that stands here for everything under it.
+struct RegionEntrant {
+    gc_node_ref_t stands = kInvalidNodeRef;
+    /// The nodes whose accesses `stands` answers for here.
+    std::vector<gc_node_ref_t> members;
+};
+
+/// Analysis 4.1, order completeness, read region by region: any two accesses to one resource of
+/// which at least one writes must have a path between them in the region they both stand in --
+/// a data, sync or order edge, or a region's `GATE` input. A resource its declaration names
+/// `unordered` carries no promise and is passed over (principle 3.3).
+std::optional<CommitViolation> orderIncomplete(
+    const Program &program, const GCGraph &graph, const NodeAccessTable &table,
+    std::span<const gc_node_ref_t> changed) {
+    std::vector<std::vector<RegionEntrant>> regions(
+        static_cast<size_t>(graph.regionCount() > 0 ? graph.regionCount() : 1));
+    const auto entrantAt = [&](uint32_t region, gc_node_ref_t stands) -> RegionEntrant & {
+        std::vector<RegionEntrant> &here = regions[region < regions.size() ? region : 0];
+        for (RegionEntrant &one : here) {
+            if (one.stands == stands) {
+                return one;
+            }
+        }
+        here.push_back(RegionEntrant{.stands = stands});
+        return here.back();
+    };
+    for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        const GCNode *node = graph.node(ref);
+        if (node == nullptr || table.of(ref).none()) {
+            continue;
+        }
+        // The node itself, in the control region it sits in ...
+        uint32_t region = judgedRegionOf(graph, graph.nodeRegion(ref));
+        entrantAt(region, ref).members.push_back(ref);
+        // ... and the owner of each control region around it, standing for it in the region that
+        // region sits in (an arm, a loop's condition and a loop's body are what an owner has).
+        for (uint32_t steps = 0; region != 0 && steps <= graph.regionCount(); ++steps) {
+            const GCRegion *one = graph.region(region);
+            if (one == nullptr) {
+                break;
+            }
+            const uint32_t parent = judgedRegionOf(graph, one->parent);
+            if (one->owner != kInvalidNodeRef) {
+                entrantAt(parent, one->owner).members.push_back(ref);
+            }
+            if (parent == region) {
+                break;
+            }
+            region = parent;
+        }
+    }
+    for (const std::vector<RegionEntrant> &here : regions) {
+        for (size_t i = 0; i < here.size(); ++i) {
+            for (size_t j = i + 1; j < here.size(); ++j) {
+                const RegionEntrant &x = here[i];
+                const RegionEntrant &y = here[j];
+                if (x.stands == y.stands || x.stands == kInvalidNodeRef ||
+                    y.stands == kInvalidNodeRef) {
+                    continue;
+                }
+                if (!changed.empty() &&
+                    std::none_of(x.members.begin(), x.members.end(), [&](gc_node_ref_t ref) {
+                        return judgedBy(changed, ref);
+                    }) &&
+                    std::none_of(y.members.begin(), y.members.end(), [&](gc_node_ref_t ref) {
+                        return judgedBy(changed, ref);
+                    })) {
+                    continue; // both sides of this pair are what the program already had
+                }
+                for (gc_node_ref_t first : x.members) {
+                    for (gc_node_ref_t second : y.members) {
+                        if (first == second) {
+                            continue;
+                        }
+                        const ResourceConflict conflict = table.conflict(first, second);
+                        if (!conflict) {
+                            continue;
+                        }
+                        if (table.of(first).accesses[conflict.accessA].unordered ||
+                            table.of(second).accesses[conflict.accessB].unordered) {
+                            continue; // the declaration promises the order does not matter
+                        }
+                        if (orderedBefore(graph, x.stands, y.stands) ||
+                            orderedBefore(graph, y.stands, x.stands)) {
+                            continue;
+                        }
+                        const uint64_t origin = graph.nodeOrigin(y.stands) != 0
+                                                    ? graph.nodeOrigin(y.stands)
+                                                    : graph.nodeOrigin(x.stands);
+                        return CommitViolation{
+                            .check  = CommitCheck::Order,
+                            .graph  = &graph,
+                            .first  = x.stands,
+                            .second = y.stands,
+                            .origin = origin,
+                            .text   = std::format(
+                                "{}, in one region of graph '{}', has no order against {}, and at "
+                                "least one of the two writes ({}): no data edge, no sync edge, no "
+                                "order edge and no region's GATE input makes one wait for the "
+                                "other, so the commit would publish two effects on one resource "
+                                "that the program leaves free to happen in either order",
+                                namedNode(program, graph, x.stands),
+                                graph.name(),
+                                namedNode(program, graph, y.stands),
+                                nodeAccessText(table.of(first).accesses[conflict.accessA]) +
+                                    " / " +
+                                    nodeAccessText(table.of(second).accesses[conflict.accessB])),
+                        };
+                    }
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+std::optional<CommitViolation> commitViolation(
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
+    bool askOrder) {
+    // One walk for the whole question: each callee's footprint is a finished fixpoint.
+    FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
+    Resolver resolver(program, [&walk](const GCGraph *callee) { return walk.run(callee); });
+    const NodeAccessTable table(graph, resolver);
+    if (auto effect = effectBeyondDeclaration(program, graph, walk, table)) {
+        return effect;
+    }
+    if (!askOrder) {
+        return std::nullopt;
+    }
+    return orderIncomplete(program, graph, table, made);
+}
+
+/// Records the refusal as the diagnostic both commit paths carry. It is here, next to the reading,
+/// so that a pass and the graph module's `commit` cannot each answer "which diagnostic is a refused
+/// commit" differently. The caller still stops: a recorded diagnostic is a report, not a control
+/// flow.
+void reportCommitViolation(
+    const std::shared_ptr<camel::core::context::Context> &ctx, const std::string &site,
+    const CommitViolation &violation) {
+    if (ctx == nullptr) {
+        return;
+    }
+    const core::error::RuntimeDiag which = violation.check == CommitCheck::Effect
+                                               ? core::error::RuntimeDiag::PassEffectBeyondType
+                                               : core::error::RuntimeDiag::PassEffectOrder;
+    auto diag = ctx->rtmDiags()->of(which);
+    if (violation.origin != 0) {
+        diag.atOrigin(violation.origin);
+    }
+    diag.commit(site, violation.text);
+}
+
+namespace {
+
+/// The one cell both commit paths read (`commitChecksEnabled` below). It is not in the header: the
+/// question is a build's answer, and a header that held it would offer a second copy of it to every
+/// translation unit, which is exactly what the two paths must not have.
+std::atomic<bool> commitChecksCell =
+#ifndef NDEBUG
+    true;
+#else
+    false;
+#endif
+
+} // namespace
+
+bool commitChecksEnabled() { return commitChecksCell.load(std::memory_order_relaxed); }
+
+void setCommitChecksEnabled(bool enabled) {
+    commitChecksCell.store(enabled, std::memory_order_relaxed);
 }
 
 } // namespace camel::runtime

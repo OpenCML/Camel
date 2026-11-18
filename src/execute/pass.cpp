@@ -1062,6 +1062,9 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kFoldFunctionTypeTestPass, FoldFunctionTypeTestPass),
         TEST_PASS(kCamelCommitChecksTestPass, CamelCommitChecksTestPass),
+        TEST_PASS(kCommitOrderTestPass, CommitOrderTestPass),
+        TEST_PASS(kCommitEffectTestPass, CommitEffectTestPass),
+        TEST_PASS(kCommitLegalSpliceTestPass, CommitLegalSpliceTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
@@ -2906,26 +2909,25 @@ namespace {
 /// paid for -- a shipped build does not ask, a debug build asks, and a test asks
 /// (`setCamelPassCommitChecksEnabled`). The theorem is why the shipped build may skip; reading it
 /// in the builds that have the suite is how anyone knows the theorem is still true.
-std::atomic<bool> camelPassCommitChecks =
-#ifndef NDEBUG
-    true;
-#else
-    false;
-#endif
-
-/// Whether the two commit checks of analysis 4.1 are asked of `pass`: every pass answers yes, except
-/// one that rewrites through the graph module alone -- and it answers as the build does, because the
-/// reason not to ask is a theorem about that pass, not a measurement of it (see the switch above).
+///
+/// The answer itself is one cell for both commit paths, and it lives in the runtime beside the
+/// reading it asks for (camel/runtime/resources.h, `commitChecksEnabled`); this is the pass
+/// layer's name for it, and `camelPassCommitChecksEnabled` below is the same cell.
 bool commitChecksAskedOf(const GraphIRPass &pass) {
     return !pass.rewritesThroughTheGraphModuleOnly() || camelPassCommitChecksEnabled();
 }
 
 } // namespace
 
-bool camelPassCommitChecksEnabled() { return camelPassCommitChecks.load(std::memory_order_relaxed); }
+bool camelPassCommitChecksEnabled() {
+    // One cell with the runtime's, because it is one question: `std::nvm`-time commits ask it too
+    // (camel/runtime/resources.h, `commitChecksEnabled`), and a pass driver whose switch answered
+    // differently from the commit under it would make "asked" mean two things in one run.
+    return camel::runtime::commitChecksEnabled();
+}
 
 void setCamelPassCommitChecksEnabled(bool enabled) {
-    camelPassCommitChecks.store(enabled, std::memory_order_relaxed);
+    camel::runtime::setCommitChecksEnabled(enabled);
 }
 
 PassRunResult applyRegisteredPass(
@@ -3455,6 +3457,17 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
+                // A commit that refused one of the two promises of analysis 4.1 is not a defect of
+                // the compiler: it is the reading's own diagnostic, the same one either commit path
+                // asks (camel/runtime/resources.h, `commitViolation`), carrying the graph, the
+                // nodes and the source position it named.
+                if (const auto *refused =
+                        dynamic_cast<const camel::runtime::GraphCommitRefused *>(&e)) {
+                    setPipelineStage("pass:" + specName(p));
+                    camel::runtime::reportCommitViolation(ctx, p, refused->violation());
+                    CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (commit refused)", p);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
                 // The same receiver a construction site uses: one answer to "what is a pass's
                 // failure called", whether the pass broke while being built or while running.
                 reportPassFailure(ctx, p, e);
