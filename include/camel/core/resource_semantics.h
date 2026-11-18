@@ -172,9 +172,16 @@ struct ResourceSpec {
     /// Running the operator is visible outside the program (I/O, clocks, generators, the
     /// process): such operators keep the order the program gives them among themselves.
     bool externalEffect = false;
+    /// The operator reads the *spelling* of the program: a name, a source position, the order the
+    /// program was written in, the text a node shows (design principles 9.5). It is not a resource
+    /// -- nothing orders two of these and nothing outside the program is touched -- so it is a
+    /// separate component of the spec rather than an access, and it is declared the same way: by
+    /// the operator, once, here.
+    bool spelling = false;
 
     /// Touches no resource: no access, nothing allocated, no external effect (how the result
-    /// relates to the operands' resources is not a touch).
+    /// relates to the operands' resources is not a touch). Reading the spelling is not a touch of
+    /// a resource either: `none()` answers what the order edges ask.
     bool none() const { return accesses.empty() && !allocates && !externalEffect; }
     bool operator==(const ResourceSpec &) const = default;
 };
@@ -233,8 +240,19 @@ struct ResourceSignature {
     /// program does not own, so a signature that names one carries this too: writing `stdout` in a
     /// clause promises the effect that comes with it (design principles 3.3).
     bool external = false;
+    /// The body reads the spelling of the program (design principles 9.5): a name, a source
+    /// position, the creation order or the creation number of a node, the text a node shows. This
+    /// is the capability a declaration writes with the word `spelling` in its clause, the way it
+    /// writes `pure` or `uses`; a body whose signature does not carry it is proved by the compiler
+    /// never to read any of them. Unlike an access it orders nothing and reaches nothing outside
+    /// the program, so it takes no part in `pure()`, in the order edges or in the region roots --
+    /// only in `covers` (a body that may read spelling does not fit a signature that does not
+    /// promise it) and in the text a type prints.
+    bool spelling = false;
 
-    /// Concrete and touching nothing: `pure`.
+    /// Concrete and touching nothing: `pure`. Reading the spelling is not a touch, so a signature
+    /// that writes `spelling` with no resource is still pure: `effects` of a graph that names a
+    /// node is the empty summary.
     bool pure() const {
         return mode == Mode::Concrete && params.empty() && captures.empty() && ambient.empty() &&
                anyOf.empty() && !allocates && !external;

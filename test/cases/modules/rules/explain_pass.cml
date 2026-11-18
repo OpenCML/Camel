@@ -25,23 +25,23 @@ rule add_zero_when(x: int) when never(x) { x + 0 => x }
 /// A condition that is false at every match: the left side matches, the condition refuses.
 func never(n: Node): bool { return false }
 
-func nodesOf::<F>(p: F, function: string): Node[] {
+func nodesOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
 /// The operations of `f`: the values the cases chain.
-func addsOf::<F>(p: F): Node[] {
+func addsOf::<F>(p: F): Node[] spelling {
     return nodesOf(p, 'f')->filter<(n: Node): bool => kind(n) == NodeKind::Oper>
 }
 
 /// The one addition of `f` in the program a pass gets.
-func addOf::<F>(p: F): Node {
+func addOf::<F>(p: F): Node spelling {
     return addsOf(p)[0]
 }
 
 /// The parameter of `f`: a value no rewrite made, so no chain starts there.
-func portOf::<F>(p: F): Node {
+func portOf::<F>(p: F): Node spelling {
     let ports = nodesOf(p, 'f')->filter<(n: Node): bool => kind(n) == NodeKind::Port>
     return ports[0]
 }
@@ -58,7 +58,7 @@ func showAll::<F>(r: Run<F>): F! sync {
 }
 
 /// The first of two rules that match the same site: only `zero_to_one` may be named.
-export func two_rules::<F>(p: F): F! sync {
+export func two_rules::<F>(p: F): F! spelling sync {
     return match p->run<[zero_to_one, zero_to_two], explain: true> {
         case error e => { return e }
         case r => showAll(r)
@@ -67,7 +67,7 @@ export func two_rules::<F>(p: F): F! sync {
 
 /// `seq`: `zero_to_one`'s stage, then `bump_one`'s. The two proofs print in that order, and each
 /// stage runs to a fixpoint before the next one starts (rewrite design 8.5).
-export func seq_order::<F>(p: F): F! sync {
+export func seq_order::<F>(p: F): F! spelling sync {
     return match p->run<[zero_to_one], explain: true> {
         case error e => { return e }
         case first => sync {
@@ -85,7 +85,7 @@ export func seq_order::<F>(p: F): F! sync {
 }
 
 /// One rule, one round, two sites: the proof must carry two steps, both of round 1.
-export func twice_one_round::<F>(p: F): F! sync {
+export func twice_one_round::<F>(p: F): F! spelling sync {
     return match p->run<[add_zero], explain: true> {
         case error e => { return e }
         case r => showAll(r)
@@ -93,7 +93,7 @@ export func twice_one_round::<F>(p: F): F! sync {
 }
 
 /// A rule set that matches nothing: the proof says so instead of printing an empty table.
-export func nothing::<F>(p: F): F! sync {
+export func nothing::<F>(p: F): F! spelling sync {
     return match p->run<[mul_zero], explain: true> {
         case error e => { return e }
         case r => showAll(r)
@@ -102,7 +102,7 @@ export func nothing::<F>(p: F): F! sync {
 
 /// A run made without attribution has no proof to read, and saying so is the point of the
 /// optional record: the plain run paid nothing.
-export func without_attribution::<F>(p: F): F! sync {
+export func without_attribution::<F>(p: F): F! spelling sync {
     return match p->run<[add_zero]> {
         case error e => { return e }
         case r => showAll(r)
@@ -110,7 +110,7 @@ export func without_attribution::<F>(p: F): F! sync {
 }
 
 /// One rewrite, read forwards: the addition of the input and the one that replaced it.
-export func chain_forward::<F>(p: F): F! sync {
+export func chain_forward::<F>(p: F): F! spelling sync {
     let before = addOf(p)
     return match p->run<[zero_to_one], explain: true> {
         case error e => { return e }
@@ -129,7 +129,7 @@ export func chain_forward::<F>(p: F): F! sync {
 
 /// Two rewrites chained through a value that was rewritten away: `x + 0` became `x + 1` and then
 /// `x + 2`, so the chain names the intermediate even though the final program no longer has it.
-export func chain_through::<F>(p: F): F! sync {
+export func chain_through::<F>(p: F): F! spelling sync {
     let before = addOf(p)
     return match p->run<[zero_to_one, bump_one], explain: true> {
         case error e => { return e }
@@ -147,7 +147,7 @@ export func chain_through::<F>(p: F): F! sync {
 }
 
 /// The same chain from the other end: every step is read backwards, and the print says so.
-export func chain_backwards::<F>(p: F): F! sync {
+export func chain_backwards::<F>(p: F): F! spelling sync {
     let before = addOf(p)
     return match p->run<[zero_to_one, bump_one], explain: true> {
         case error e => { return e }
@@ -165,7 +165,7 @@ export func chain_backwards::<F>(p: F): F! sync {
 
 /// A value no rewrite made: the run cannot chain the parameter to the rewritten addition, and
 /// says why instead of printing an empty chain.
-export func chain_none::<F>(p: F): F! sync {
+export func chain_none::<F>(p: F): F! spelling sync {
     return match p->run<[zero_to_one], explain: true> {
         case error e => { return e }
         case r => sync {
@@ -185,7 +185,7 @@ export func chain_none::<F>(p: F): F! sync {
 
 /// The pattern's root is a product and the value is an addition: the answer names the operator
 /// the pattern writes and the node the program has.
-export func why_not_operator::<F>(p: F): F! sync {
+export func why_not_operator::<F>(p: F): F! spelling sync {
     return match p->run<[mul_zero], explain: true> {
         case error e => { return e }
         case r => sync {
@@ -198,7 +198,7 @@ export func why_not_operator::<F>(p: F): F! sync {
 }
 
 /// The left side matches and the condition is false: the answer names the values it read.
-export func why_not_condition::<F>(p: F): F! sync {
+export func why_not_condition::<F>(p: F): F! spelling sync {
     return match p->run<[add_zero_when], explain: true> {
         case error e => { return e }
         case r => sync {
@@ -211,7 +211,7 @@ export func why_not_condition::<F>(p: F): F! sync {
 }
 
 /// A rule that did fire: the answer says which rewrite it made, not "no chain".
-export func why_not_fired::<F>(p: F): F! sync {
+export func why_not_fired::<F>(p: F): F! spelling sync {
     return match p->run<[zero_to_one], explain: true> {
         case error e => { return e }
         case r => sync {

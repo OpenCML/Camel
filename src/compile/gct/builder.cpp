@@ -1466,6 +1466,15 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         // No clause: a type that promises nothing about resources (Generic).
         return signature;
     }
+    signature.spelling = clause->spelling();
+    // A clause that writes the capability and nothing else (`f! spelling`) declares the spelling
+    // without promising anything about the rest: the same reading as a declaration that writes no
+    // clause at all, which promises nothing (Generic), with the capability added. Otherwise the
+    // word could only be written beside a full account of the body's resources, and a pass that
+    // reads the spelling and does anything else could not declare it (design principles 9.5).
+    if (clause->spelling() && !clause->pure() && clause->uses().empty()) {
+        return signature;
+    }
     signature.mode = sem::ResourceSignature::Mode::Concrete;
     if (clause->pure() && !clause->uses().empty()) {
         diags_->of(SemanticDiag::PureAndUses).at(clause->tokenRange()).commit(built->toString());
@@ -7844,7 +7853,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     // type touches. A type without one stays Generic, which promises nothing, so nothing is set
     // and a call through it is read conservatively.
     const sem::ResourceSignature resources = resourceSignatureOf(ast, built);
-    if (resources.mode == sem::ResourceSignature::Mode::Concrete) {
+    // A clause that writes the capability and nothing else is Generic (`f! spelling`): it promises
+    // nothing about resources, but it is still a clause the type has to carry, or a caller and the
+    // check of the body would read a signature that says nothing at all (design principles 9.5).
+    if (resources.mode == sem::ResourceSignature::Mode::Concrete || resources.spelling) {
         if (built->asOpen() != nullptr) {
             // An open signature is not interned and is resolved by each call site; it is this
             // object the resolver copies from (step 2: instantiateFunctionType copies the
