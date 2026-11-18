@@ -6276,6 +6276,28 @@ function value that captures no variable can be expanded.
 - Example (a fragment, not compiled): `inline(t, n, () => 0)`
 - Why it is not compiled: t is an open transaction and n a node of its graph
 
+#### `outline`
+
+```camel
+outline: (t: Txn<F>, ns: Node[]) => Node uses var t
+```
+
+Collects a group of the graph's nodes into a function of its own and puts a call of it where the
+value the group handed on was read: `inline`'s reverse (design 7 and 15.3). The nodes the group
+reads from outside it become that function's parameters, in the order they are found, and the one
+value the group hands on becomes its result; the call the operator answers reads those same
+values, and its callee (`callee`) is the function the group became. The group's own nodes are
+gone from the graph afterwards, so the code stands there once.
+
+A group is a segment with a clear boundary: operations only, whose values come in from outside it
+and go out through one node, with no anchor of the graph in it, no access, no ordering and no
+place in a chain. A group that is not that is refused with the rule it broke, before anything of
+it is copied.
+
+- Failure: fault `InvalidArgument` when the group is empty, when its nodes are not all of one graph the transaction holds, when one of them anchors its graph, when one of them is no pure operation, when the group hands on no value or more than one, or when the transaction is over.
+- Example (a fragment, not compiled): `outline(t, ns)`
+- Why it is not compiled: t is an open transaction and ns is a group of its graph's nodes
+
 #### `add_constant`
 
 ```camel

@@ -1,0 +1,44 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
+# `outline` as an operator of a transaction: a group of a graph's nodes becomes a function of its own
+# and a call of it stands where the group's value stood (docs/design/graph-editing/README.cn.md 7,
+# 8.1 and 15.3; the reverse of `inline`).
+#
+# The reading that decides is not "the commit did not refuse": a graph the edit *made* was in no
+# program before it, so a commit that walked only what the drafts reach left it out in silence
+# (`2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md` 5, and the reading of `7b0f407eb`:
+# `only_adopted_delivered=0 noted_delivered=1`). So the program prints the ids the committed function
+# reaches before and after the edit and names the id that is in the second list and not the first --
+# a graph the committed program holds because this edit made it -- and then calls the edited function
+# and prints what it computes, which is the same number the unedited one computes.
+#
+# The control is the same commit with no `outline`: same function, same transaction, no new id.
+#
+# The second test runs the same case on the bytecode VM, which refuses to compile a graph that has no
+# value return node. It is the reading that keeps the made graph whole: an exit alone leaves a call
+# with nothing to take out of it, which the node VM answers with 0 rather than with a diagnostic.
+id = "modules.graph_outline"
+order = 379
+tier = "fast"
+tags = ["feat", "modules", "graph", "edit", "outline"]
+
+[[tests]]
+name = "outline_delivers_the_graph_it_makes"
+desc = "a group of the graph's nodes becomes a graph of its own; the committed function reaches an id it did not hold before, the call the edit left reads the group's entries, the group's code stands there once, the edited function prints what it printed, and the same commit without `outline` adds no id"
+kind = "behavior"
+case = "../../../cases/modules/graph_function/outline.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n55\n[shape]  0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/6::op/add_l 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::op/add_l\n[outline] call is_call=true call_reads=2\n[outline] made_graph=subject$outline6 nodes=3 exit_reads=2\n[outline] made kinds: 0/0:NodeKind::Port: 1/1:NodeKind::Port: 2/2:NodeKind::Oper::op/add_l!\n[outline] subject after: 0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/12: 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] the edited function runs:\nfirst\n55\n[control] graphs=1->1 new_id=-1\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "outline_delivers_a_graph_the_bytecode_vm_can_compile"
+desc = "the same case on std::fvm: the delivered graph is whole enough for the bytecode VM to compile it, so the call it stands under has a value to take out"
+kind = "behavior"
+case = "../../../cases/modules/graph_function/outline.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n55\n[shape]  0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/6::op/add_l 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] graphs=1->2 new_id=68 in_committed=true group=5::op/add_l\n[outline] call is_call=true call_reads=2\n[outline] made_graph=subject$outline6 nodes=3 exit_reads=2\n[outline] made kinds: 0/0:NodeKind::Port: 1/1:NodeKind::Port: 2/2:NodeKind::Oper::op/add_l!\n[outline] subject after: 0/10:! 1/0: 2/3: 3/4::op/mul_l 4/5: 5/12: 6/7: 7/8::op/mul_l 8/1: 9/2::io/println 10/9::io/println 11/11:!\n[outline] the edited function runs:\nfirst\n55\n[control] graphs=1->1 new_id=-1\n"
+timeout_ms = 20000
