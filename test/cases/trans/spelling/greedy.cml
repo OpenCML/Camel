@@ -1,0 +1,153 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * A greedy fusion of multiplications, written in Camel: it pairs the multiplications by the order
+ * `nodes` gives, which is the graph's own canonical order, and fuses a pair into one node when the
+ * two compute the same product.
+ *
+ * The point of the file is the *order*, not the arithmetic. A pass that reads the order the source
+ * was written in -- `nodes` in NodeId order, or `creation_id` sorted by it -- pairs different
+ * multiplications from two programs that differ only in what the source spelled, and gives two
+ * different graphs. `nodes` returns the canonical order (design principles 9.5), so the pairing is
+ * the same for both writings and the two graphs are one canonical form.
+ *
+ * `fuse_by_creation` is that counterfactual, kept here on purpose: it is the same pairing written
+ * against the spelling query, and it is what a pass must *not* do. Its declaration writes
+ * `spelling`, because it reads the number a node was created with -- and so must every function
+ * that calls it, which is the capability 9.5 asks for. `fuse` writes nothing of the kind and
+ * cannot read a spelling query at all: the compiler refuses it.
+ *
+ * The fusion itself is the only one this interface's edit vocabulary can express without inventing
+ * an operator: `replace` puts one node in the place of another, so the two nodes of a pair have to
+ * compute one value. Two multiplications that do not are left as they are, and the pair is skipped
+ * whole -- the greedy rule pairs two at a time from the first and never slides by one, so which
+ * pairs are offered is a fact about the order alone.
+ */
+
+import { Graph, Node, Txn, commit, constant, creation_id, graphs_of, inputs, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
+import { all, sort_by } from array
+import { is_function } from types
+
+// ---- reading a node as the key of a comparison ----
+
+func op_text(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func type_text_of(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+// ---- the pairs ----
+
+// Whether the node is a multiplication: the operator an `int` uses and the one a `float` uses.
+func is_multiplication(n: Node): bool {
+    let name = op_text(n)
+    return name == ':op/mul_l' || name == ':op/mul_f'
+}
+
+// Whether the two nodes hold the same value of the type T.
+func same_value::<T>(a: Node, b: Node): bool {
+    let x = constant::<T>(a)
+    let y = constant::<T>(b)
+    return if x != null && y != null then x == y else false
+}
+
+// Whether the two nodes are constants of one type and one value. Only the types whose `==` in
+// Camel is the equality of the graph's values are compared, for the reason `opt.cml` gives: a float
+// is left out, because `0.0 == -0.0` holds in Camel while the two constants are different values.
+func same_constant(a: Node, b: Node): bool {
+    return match type_text_of(a) {
+        case 'int' => same_value::<int>(a, b)
+        case 'i32' => same_value::<i32>(a, b)
+        case 'bool' => same_value::<bool>(a, b)
+        case _ => false
+    }
+}
+
+// Whether the two nodes are one operand: the same node, or two constants of one value. A literal
+// written twice is two nodes of the graph, so comparing the nodes alone would miss that a pair is
+// two writings of one product.
+func same_operand(a: Node, b: Node): bool {
+    return a == b || (is_constant(a) && is_constant(b) && same_constant(a, b))
+}
+
+func same_operands(xs: Node[], ys: Node[]): bool {
+    return len(xs) == len(ys)
+        && zip(xs, ys)->all<(p: (Node, Node)): bool => same_operand(p.0, p.1)>
+}
+
+// Whether the two nodes compute the same product: the same operator over operands that are one
+// value each, in the same order.
+func same_product(a: Node, b: Node): bool {
+    return op_text(a) == op_text(b) && same_operands(inputs(a), inputs(b))
+}
+
+// ---- the pass ----
+
+// Fuses the pairs it finds walking the list once, from the left: when two neighbours are the same
+// product it fuses them and goes on after them, otherwise it slides by one. The pairing is the
+// greedy one, and which pairs it is offered is a fact about the order alone.
+func fuse_pairs::<F>(t: Txn<F>, muls: Node[], at: int): void {
+    if at + 1 < len(muls) then {
+        if same_product(muls[at], muls[at + 1]) then {
+            replace(t, muls[at + 1], muls[at])
+            fuse_pairs::<F>(t, muls, at + 2)
+        } else {
+            fuse_pairs::<F>(t, muls, at + 1)
+        }
+    }
+}
+
+func fuse_of::<F>(t: Txn<F>, muls: Node[]): void {
+    fuse_pairs::<F>(t, muls, 0)
+}
+
+// The multiplications in the order the source created them, which is the spelling query.
+func by_creation(g: Graph): Node[] {
+    return nodes(g)->filter<is_multiplication>->sort_by<(n: Node): int => creation_id(n)>
+}
+
+func muls_in_nodes_order(g: Graph): Node[] {
+    return nodes(g)->filter<is_multiplication>
+}
+
+// One round of the greedy fusion over the canonical order: the transaction and the commit, and a
+// `sync` block because the closure that walks the graphs writes through the transaction.
+func fuse_round::<F>(f: F): F! sync {
+    let t = open(f)
+    graphs_of(f)->foreach<(g: Graph): void => fuse_of(t, muls_in_nodes_order(g))>
+    return commit(t)
+}
+
+// The same round read against the spelling. It calls the spelling query, so its own declaration
+// writes the capability -- and so does the pass below, and only that one: `fuse` writes nothing of
+// the kind and could not call this function.
+func fuse_round_by_creation::<F>(f: F): F! spelling sync {
+    let t = open(f)
+    graphs_of(f)->foreach<(g: Graph): void => fuse_of(t, by_creation(g))>
+    return commit(t)
+}
+
+/// The greedy fusion: pairs the multiplications two at a time in the canonical order `nodes` gives
+/// and fuses the pairs that compute one product.
+/// @example (x: int): int => x * 2 + x * 2 ->greedy::fuse
+export func fuse::<F>(f: F): F! when is_function::<F>() {
+    return fuse_round(f)
+}
+
+/// The same pairing, read against the spelling: the multiplications sorted by the number they were
+/// created with. This is the counterfactual the acceptance compares `fuse` with, and it is what a
+/// pass must not do -- two programs that differ only in the order their statements were written in
+/// pair differently here. Reading the spelling is a capability, so the declaration writes it.
+/// @example (x: int): int => x * 2 + x * 2 ->greedy::fuse_by_creation
+export func fuse_by_creation::<F>(f: F): F! spelling when is_function::<F>() {
+    return fuse_round_by_creation(f)
+}

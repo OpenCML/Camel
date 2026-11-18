@@ -12,16 +12,16 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf::<F>(p: F, function: string): Node[] {
+func nodesOf::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf::<F>(p: F, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int spelling {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     println('combine', countOf(p, 'combine', ':op/add_d'), countOf(p, 'combine', ':op/mul_d'))
     println('mixed', countOf(p, 'mixed', ':op/add_d'), countOf(p, 'mixed', ':op/mul_d'))
     println('chain', countOf(p, 'chain', ':op/add_d'), countOf(p, 'chain', ':op/mul_d'))

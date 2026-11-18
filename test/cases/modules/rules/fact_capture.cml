@@ -19,12 +19,12 @@ fact depth: int match v {
     case _            => base * 1000
 } join (a: int, b: int) => max(a, b)
 
-func nodes_of::<F>(p: F, function: string): Node[] {
+func nodes_of::<F>(p: F, function: string): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     let ns = nodes_of(p, 'sum')
     let total = loop running = 0 for n in ns do running + depth(n)
     println('depth ', total)

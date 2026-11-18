@@ -217,6 +217,7 @@ SemanticDiag::RuleWithParameterUnbound	test/cases/modules/rules/err_rule_with_un
 SemanticDiag::SameShapeComprehensionMismatch	test/cases/compile/static_expansion/shape_mismatch.cml
 SemanticDiag::SameShapeComprehensionNotComposite	test/cases/compile/static_expansion/shape_not_composite.cml
 SemanticDiag::SliceStepZero	test/cases/linear/faults/subscript_step_zero_const.cml
+SemanticDiag::SpellingNotDeclared	test/cases/trans/spelling/undeclared.cml
 SemanticDiag::StatementAfterFail	test/cases/consistency/fail_never/statement_after_fail.cml
 SemanticDiag::StatementAfterReturn	test/cases/compile/return_after/statement_after_return_sync.cml
 SemanticDiag::StaticAccessIndexOutOfRange	test/cases/compile/static_expansion/static_access_out_of_range.cml

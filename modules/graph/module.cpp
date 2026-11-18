@@ -75,6 +75,23 @@ slot_t neKernel(ArgsView &, ArgsView &norm, Context &) {
 
 slot_t idKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<camel::graphmod::Handle *>(0);
+    // A node's id is its *canonical* number (design principles 9.5): the position it has in the
+    // order `nodes` gives, which the graph's structure decides. A draft has no canonical order yet
+    // -- it is being edited -- so a node of one answers the place it holds in the draft.
+    if (handle->kind() == HandleKind::Node) {
+        return rtdata::toSlot<rtdata::Int64>(
+            static_cast<int64_t>(camel::graphmod::nodeCanonicalNumber(handle)));
+    }
+    return rtdata::toSlot<rtdata::Int64>(
+        handle->kind() == HandleKind::Graph ? static_cast<int64_t>(toValue(handle->graph()))
+                                            : static_cast<int64_t>(handle->index()));
+}
+
+/// The number a handle was *created* with: the GraphId, the NodeId or the OperId. That is spelling
+/// -- it says the order the program was written in -- so the operator's spec declares `spelling`
+/// and only a body whose type writes the capability reaches it (design principles 9.5).
+slot_t creationIdKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<camel::graphmod::Handle *>(0);
     return rtdata::toSlot<rtdata::Int64>(
         handle->kind() == HandleKind::Graph ? static_cast<int64_t>(toValue(handle->graph()))
                                             : static_cast<int64_t>(handle->index()));
@@ -112,6 +129,7 @@ class GraphExecutor final : public Executor {
         out.emplace("eq", eqKernel);
         out.emplace("ne", neKernel);
         out.emplace("id", idKernel);
+        out.emplace("creation_id", creationIdKernel);
         out.emplace("check_pass_boundary", checkPassBoundaryKernel);
         return out;
     }
@@ -197,6 +215,7 @@ class GraphModule final : public BuiltinModule {
                 // the value's type: the program itself, the number a handle is known by, the
                 // constant a node holds, and the three facts
                 {"id", true},
+                {"creation_id", true},
                 {"constant", true},
                 {"effects", true},
                 {"shape_text", true},
@@ -233,6 +252,25 @@ class GraphModule final : public BuiltinModule {
                     {"add_constant", onTxn},
                     {"commit", onTxn},
                     {"abort", onTxn},
+                });
+        }
+        // What the operators that read the *spelling* of the program say about themselves (design
+        // principles 9.5): a graph's or a function's name, a node's source position, the text it
+        // shows, and the number it was created with. Declared here, once, the way an operator's
+        // accesses are, so a body that calls one is measured as reading the spelling and a
+        // declaration that does not write `spelling` is refused. `nodes`, `id`, `op_name`,
+        // `type_name` and `tag_name` are not here: they answer the canonical order and the
+        // operator's or type's declared name, which the program does not spell.
+        {
+            camel::core::sem::ResourceSpec readsTheSpelling;
+            readsTheSpelling.spelling = true;
+            table.declareResources(
+                "graph",
+                {
+                    {"name", readsTheSpelling},
+                    {"origin", readsTheSpelling},
+                    {"show", readsTheSpelling},
+                    {"creation_id", readsTheSpelling},
                 });
         }
         camel::graphmod::registerHandleProbePass();

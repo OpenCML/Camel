@@ -2825,6 +2825,9 @@ class Builder {
     void reportResourceViolation(
         const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
         const camel::core::sem::ResourceSignature &measured, camel::source::origin_id_t noteOrigin);
+    // The report of one body that reads the spelling of the program while its type does not write
+    // `spelling` (design principles 9.5): anchored at the declaration, naming the type it wrote.
+    void reportSpellingNotDeclared(const compile_graph_ptr_t &graph);
     // The report of one place where one type variable was asked for two function types that write
     // different resources (recordResourceConflict): anchored at the declaration of the side the
     // position may repair, naming both signatures. Reported with the other per-module diagnostics.
