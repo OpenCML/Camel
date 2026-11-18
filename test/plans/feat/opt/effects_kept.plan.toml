@@ -571,3 +571,42 @@ case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n41\n"
+
+# The positive control for the ordering the commit's order check asks, read on the graph and with no
+# pass at all. An effect written before a branch and an effect inside one of its arms reach one
+# resource, so the front end writes an order edge between the statement and the node owning the arm
+# -- the branch, which stands in the block for what runs under it (edges.cn.md 4.6), and which is
+# the node `runtime::orderIncomplete` pairs a neighbour with. Without that edge a body statement and
+# a branch's arm are two writes to `stdout` with no path between them: the graph is one a commit
+# refuses, and an inline splice copies it verbatim into the caller (edges.cn.md 4.2, 5.7), where
+# `std::opt::inline` / `std::opt` then refuse -- `fold_keeps_arm_effect` above is that refusal.
+# This entry exists so a fix cannot pass by making the check blind to the pair: it reads the edge
+# itself, in the graph the front end built.
+[[tests]]
+name = "a_statement_before_a_branch_is_ordered_with_its_arm"
+desc = "No pass: the print written before `pick`'s branch and the branch that owns the arm's print are joined by an order edge -- the front end's own, which a splice copies and a commit asks about."
+kind = "behavior"
+case = "../../../cases/opt/effects/statement_before_branch_is_ordered.cml"
+args = ["${case}", "std::jgir"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["\"format\": \"camel.gir\""]
+verify_script = '''
+({ input, assert }) => {
+  const doc = JSON.parse(input.normalized.stdout)
+  const holders = doc.graphs.filter(g => (g.nodes || []).some(n => n.kind === 'BRCH'))
+  assert(holders.length === 1, 'expected one graph with a branch: ' + holders.map(g => g.name))
+  const graph = holders[0]
+  const branch = graph.nodes.find(n => n.kind === 'BRCH')
+  const prints = graph.nodes.filter(n => n.kind === 'OPER' && String(n.label).includes(':io/println'))
+  assert(prints.length === 2, 'expected the body print and the arm print: ' + JSON.stringify(prints.map(n => n.label)))
+  const statement = prints.find(n => n.region === undefined)
+  assert(statement !== undefined, 'no print stands in the body block: ' + JSON.stringify(prints.map(n => [n.id, n.region])))
+  const orders = (graph.edges || []).filter(e => e.kind === 'order')
+  const joined = orders.some(e =>
+    (e.source === statement.id && e.target === branch.id) ||
+    (e.source === branch.id && e.target === statement.id))
+  assert(joined, 'the statement written before the branch and the branch owning the arm effect are not ordered: ' +
+    JSON.stringify({ statement: statement.id, branch: branch.id, order: orders.map(e => [e.source, e.target]) }))
+}
+'''

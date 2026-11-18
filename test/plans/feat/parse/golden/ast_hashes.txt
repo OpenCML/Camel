@@ -554,7 +554,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
-328db940e2249591 ok stdlib/vjp.cml
+7535a5ecc1f47e2c ok stdlib/vjp.cml
 f70d4e57b1f9b14e ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
@@ -2822,7 +2822,7 @@ ed839a06bfe0e847 ok test/cases/linear/runtime/recursion_depth_limit.cml
 431b45ba8bfcf34c ok test/cases/linear/runtime/same_resource_order.cml
 b199f1e857512d01 ok test/cases/linear/runtime/same_resource_order_call.cml
 50482ac490770e33 ok test/cases/linear/runtime/second_name_in_round.cml
-b62ac03619715cd4 ok test/cases/linear/runtime/second_name_in_round_scalar.cml
+b2f088d874f3a602 ok test/cases/linear/runtime/second_name_in_round_scalar.cml
 f6283621ba8bf8a6 ok test/cases/linear/runtime/sync_block_order.cml
 5a3ccda81ed8cc21 ok test/cases/linear/runtime/sync_literal_operands.cml
 38a87f91ff7ddedf ok test/cases/linear/runtime/var_between_statements.cml
@@ -3987,6 +3987,7 @@ eb2ff0f38f12c634 ok test/cases/opt/effects/inline_keeps_stdout.cml
 bc0ba2e6a871d36c ok test/cases/opt/effects/inline_keeps_stdout_twice.cml
 48b4e2dd86b40e0f ok test/cases/opt/effects/inline_reduce_in_folded_arm.cml
 81b22132ae1a04a1 ok test/cases/opt/effects/keep_node_shape.cml
+da3a671c2223d761 ok test/cases/opt/effects/statement_before_branch_is_ordered.cml
 5595e6d08713d742 ok test/cases/opt/fault_preservation/chained_cast.cml
 bcfe751c0febf6ad ok test/cases/opt/fault_preservation/dce_chained_division.cml
 18025c1ffd60894c ok test/cases/opt/fault_preservation/inline_faulting_callee_order.cml

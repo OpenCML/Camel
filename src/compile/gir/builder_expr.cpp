@@ -1728,9 +1728,9 @@ node_handle_t Builder::secondNameOf(node_handle_t value) {
     }
     // Every other value has no storage a write could reach, so the value itself is what the name
     // holds, and the keeper gives the value a place of its own to be read from: the GATE of
-    // docs/design/effects/edges.cn.md 5.3 and operator_table.h:127-131, a region of one data port
-    // reading the value, passed through. No sync predecessor: what the name needs is a place for
-    // the value, not an order for it. It carries no count, as a value with no storage needs none.
+    // docs/design/effects/edges.cn.md 5.3 and operator_table.h#kWellKnownCount, a region of one data
+    // port reading the value, passed through. No sync predecessor: what the name needs is a place
+    // for the value, not an order for it. It carries no count, as a value with no storage needs none.
     node_handle_t keeper = currGraph_->addGateNode(nodeTypeOf(value));
     linkNodes(LinkType::Norm, value, keeper);
     return keeper;
@@ -1836,7 +1836,22 @@ node_handle_t Builder::readVariableThrough(node_handle_t variable, camel::core::
         // reads it.
         Type *versionType = nodeTypeOf(version);
         if (versionType != nullptr && valueTypeOf(versionType) == versionType) {
-            return version;
+            // The version is a node of the region it was built in, and a read stands in one:
+            // `recordWrite` keeps a read the write cannot be ordered against pending for the
+            // region (`readRegion != exitRegion`, builder_expr.cpp), and a read cannot take a
+            // value out of a region it is not in for the same reason, one side later. The JOIN of
+            // a statement branch written in a loop body is a node of that arm, and a read after the
+            // loop is not in it: an edge from there to here is the branch-arm invariant
+            // (src/runtime/branch_arms.cpp), which the graph is refused for at encode. The read
+            // takes the cell instead -- the shape a read after a loop of a `var` has when no
+            // branch carried it -- and the region it stands in orders it.
+            auto &readDraft              = currGraph_->transaction().edit();
+            const uint32_t versionRegion = readDraft.nodeRegion(nodeIdOf(version));
+            const uint32_t readRegion    = readDraft.insertRegion();
+            if (readDraft.regionWithin(readRegion, versionRegion)) {
+                return version;
+            }
+            version = nullptr;
         }
     }
     if (version == nullptr) {

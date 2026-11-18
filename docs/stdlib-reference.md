@@ -1632,7 +1632,7 @@ for that reason. Measured 2026-11-18 on this tree: the operator resolver sees ty
 gives `lin` an empty residual list while the graph has as many as the body reads, and a call site
 typed by the resolver hands the callee the wrong number of values. That ordering is a question
 for the author (a typed hole, or the `std::macro` stage evaluating the cut where the graph *is* in
-hand), and `docs/handover/reports/2026-11-18-nested-transforms.cn.md` states it with the readings.
+hand), and the handover report of 2026-11-18 on nested transforms states it with the readings.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
