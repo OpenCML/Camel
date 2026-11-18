@@ -494,6 +494,20 @@ class DraftWritings : private WritingObserver {
     /// Closes the classes over congruence: nodes whose inputs changed class are looked up again.
     void rebuild();
 
+    /// Where one rule application started (docs/design/graph-editing/README.cn.md 16.1, 16.4), as
+    /// the draft names it.
+    using ApplicationMark = GraphDraft::Savepoint;
+    ApplicationMark markApplication();
+    /// Takes an abandoned application back, index first: the rows of the congruence index are keyed
+    /// by node id (`keyOf`, `takes`, `written`, and the `byKey` map by what `keyOf` sweeps), and
+    /// the draft hands the same ids out to no second node, so a row the rollback did not clear
+    /// would be read as an answer about a node that is gone -- a constant node whose row still
+    /// names it is the shape where the next constant of that value is not made at all.
+    ///
+    /// What it takes back is what the application *appended*: `GraphDraft::Savepoint` says what
+    /// that is and why an edit made in place is not in it.
+    void abandonApplication(const ApplicationMark &mark);
+
     /// The smallest node of the value `node` is a writing of, in the context of its own
     /// permissions.
     gc_node_ref_t find(gc_node_ref_t node);

@@ -529,6 +529,40 @@ void DraftWritings::build() {
     rebuild();
 }
 
+DraftWritings::ApplicationMark DraftWritings::markApplication() { return draft_.savepoint(); }
+
+void DraftWritings::abandonApplication(const ApplicationMark &mark) {
+    auto &ix = *index_;
+    // The index rows of the nodes the application made, before the draft forgets them: `keyOf` is
+    // what names the key, and `byKey` maps that key to the node, so the map entry goes only when it
+    // is this node's -- two nodes of one key are one class, and a merge the application did not
+    // make is not the rollback's to erase.
+    for (size_t at = mark.nodes; at < draft_.nodeSlotCount() && at < ix.keyOf.size(); ++at) {
+        if (ix.keyOf[at].has_value()) {
+            const auto found = ix.byKey.find(*ix.keyOf[at]);
+            if (found != ix.byKey.end() && found->second == at) {
+                ix.byKey.erase(found);
+            }
+            ix.keyOf[at].reset();
+        }
+        // 0 is "unknown" for both, which is what a node id the draft has not indexed yet answers;
+        // the row a rolled-back node filled says nothing about the node that will not take the id.
+        if (at < ix.takes.size()) {
+            ix.takes[at] = 0;
+        }
+        if (at < ix.written.size()) {
+            ix.written[at] = 0;
+        }
+    }
+    // A node the application made may already be queued for congruence (a merge of an earlier
+    // application enqueues the users that read what moved); the queue takes the ids back with them.
+    std::erase_if(pending_, [&](gc_node_ref_t node) { return node >= mark.nodes; });
+    if (queued_.size() > mark.nodes) {
+        queued_.resize(mark.nodes);
+    }
+    draft_.rollbackTo(mark);
+}
+
 void DraftWritings::rebuild() {
     while (!pending_.empty()) {
         std::vector<gc_node_ref_t> batch;

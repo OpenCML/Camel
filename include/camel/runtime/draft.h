@@ -729,6 +729,39 @@ class GraphDraft {
     /// never goes while the node that reads it is still there; `true` says every node of the set is
     /// gone.
     bool eraseUnreadNodes(std::span<const gc_node_ref_t> nodes);
+
+    /// Where the draft stood: the counts its node table and its two slot tables had, the regions it
+    /// had, and how many writes it had seen (docs/design/graph-editing/README.cn.md 16.1, 16.4).
+    ///
+    /// A savepoint exists for one caller: a rule application, which appends nodes and the slots
+    /// they take and edits nothing it found. What it appends is what `rollbackTo` takes back, so an
+    /// application the engine abandons -- a right side whose constant faults, a writing that cannot
+    /// be given the waits the node it replaces had -- leaves the draft as it found it, which is the
+    /// "all or nothing" one application is ("一次应用就是一个小的 edit：全成或全不成").
+    ///
+    /// It is not the undo log of 16.4, and the difference is what it can be asked: a change made
+    /// *in place* on a node the draft already had (an operand taken away, an operator swapped) has
+    /// no record here to walk back, so a caller that made one must not ask for a rollback.
+    struct Savepoint {
+        size_t nodes        = 0;
+        size_t staticSlots  = 0;
+        size_t frameSlots   = 0;
+        size_t regions      = 0;
+        uint64_t mutations  = 0;
+        bool hasFrameLayout = false;
+    };
+    Savepoint savepoint() const;
+    /// Drops every node, static value and frame slot the draft appended after `mark`, and puts the
+    /// draft's own write count back, so that a commit after an abandoned application sees a draft
+    /// that was not written to.
+    ///
+    /// The **ids** are not given back: `addNode` never reuses one, and the lists that keep the ids
+    /// of erased nodes (`gateIds_` and its two siblings) count on that, so the nodes go and the id
+    /// space keeps them. What the application took out of the tables does come back -- a static
+    /// value and a frame slot exist for the node that made them, and a graph published with them
+    /// would carry a constant nothing reads and a frame larger than its body needs.
+    void rollbackTo(const Savepoint &mark);
+
     /// Whether the graph names `id` by something other than a read, so that a policy which erases a
     /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
     /// the entry, the exit, the node whose value it returns, its ports, its captures, the result of

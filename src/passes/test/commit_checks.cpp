@@ -22,9 +22,11 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/pass/base.h"
 #include "camel/runtime/control_regions.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_txn.h"
 #include "camel/runtime/resources.h"
 
 #include <algorithm>
@@ -1296,4 +1298,101 @@ CommitInPlaceTestPass::apply(const camel::runtime::Program *program, std::ostrea
         << std::flush;
     // The program is handed back unchanged: the two commits above are the reading.
     return program;
+}
+
+/// A graph the transaction **makes**, out of nothing: one ordinary parameter, whose port node carries
+/// `carried` while the signature declares it `declared`, and the graph hands that value on -- so the
+/// signature and the port node are the two statements about parameter 0 that a made graph writes.
+/// Nothing calls it and no program holds it; `encode` is the only way it becomes a graph at all, and
+/// the name is the one the diagnostic quotes.
+GCGraph *makeGraphWithOnePort(
+    const camel::core::context::context_ptr_t &context, camel::core::type::Type *declared,
+    camel::core::type::Type *carried, const char *mangledName, const char *name) {
+    using camel::core::type::FunctionType;
+    using camel::core::type::param_vec_t;
+    const param_vec_t withTypes;
+    param_vec_t normTypes;
+    normTypes.emplace_back(declared, false);
+    FunctionType *signature =
+        FunctionType::create(withTypes, normTypes, /*returnType*/ carried);
+    auto transaction         = GraphTransaction::open(context->graphIds().allocate(), signature);
+    auto &draft              = transaction->edit();
+    const gc_node_ref_t port = draft.addPortNode(carried, 0);
+    draft.appendNormPort(port);
+    // The value the graph hands on is the one its parameter carries: the exit is not the question
+    // here (`checkReturnValueType` reads the exit against the signature), so it is written to agree
+    // and only the port can disagree.
+    draft.setExitNode(port);
+    return draft.encode(mangledName, name);
+}
+
+const camel::runtime::Program *
+CommitMadeGraphPortsTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr || program->root() == nullptr) {
+        out << "commit_made_graph_ports: the program has no root, so there is no session to make a "
+               "graph in\n";
+        return program;
+    }
+    out << "commit_made_graph_ports: a made graph has no signature the program held, so the port "
+           "question is owed to it because it was made -- not because a signature it had was "
+           "replaced\n"
+        << std::flush;
+    int refused   = 0;
+    int published = 0;
+    const Program *current = program;
+    // The made graph whose port node carries another type than the signature declares it as: the
+    // commit must refuse it, and the diagnostic must name the parameter.
+    {
+        RuntimeGraphDraftSession session(context_, current);
+        GCGraph *made = makeGraphWithOnePort(
+            context_,
+            camel::core::type::Type::Int32(),
+            camel::core::type::Type::Float32(),
+            "test$made_port_mismatch",
+            "made$mismatch");
+        session.noteMadeGraph(made);
+        out << "commit_made_graph_ports: made graph '" << made->name()
+            << "' declares parameter 0 as 'i32' and its port node carries an 'f32'\n"
+            << std::flush;
+        try {
+            current = session.commit();
+            out << "commit_made_graph_ports: the commit published it, which is the defect\n"
+                << std::flush;
+        } catch (const std::runtime_error &refusedAtCommit) {
+            ++refused;
+            out << "commit_made_graph_ports: refused at the commit: " << refusedAtCommit.what()
+                << '\n'
+                << std::flush;
+        }
+    }
+    // The positive half: the same graph, made the same way, with the port node carrying the type the
+    // signature declares. Without it, "it was refused" would mean only "a made graph is always
+    // refused", which is a reading of neither rule.
+    {
+        RuntimeGraphDraftSession session(context_, current);
+        GCGraph *made = makeGraphWithOnePort(
+            context_,
+            camel::core::type::Type::Int32(),
+            camel::core::type::Type::Int32(),
+            "test$made_port_match",
+            "made$match");
+        session.noteMadeGraph(made);
+        out << "commit_made_graph_ports: made graph '" << made->name()
+            << "' declares parameter 0 as 'i32' and its port node carries an 'i32'\n"
+            << std::flush;
+        try {
+            current = session.commit();
+            ++published;
+            out << "commit_made_graph_ports: the commit published it, and nothing was refused\n"
+                << std::flush;
+        } catch (const std::runtime_error &refusedAtCommit) {
+            out << "commit_made_graph_ports: refused at the commit: " << refusedAtCommit.what()
+                << '\n'
+                << std::flush;
+        }
+    }
+    out << "commit_made_graph_ports: made graph, port of another type -> refused=" << refused
+        << ", port of the declared type -> published=" << published << '\n'
+        << std::flush;
+    return current;
 }
