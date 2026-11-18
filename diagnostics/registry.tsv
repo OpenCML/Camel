@@ -561,6 +561,16 @@ runtime	DeviceNotSelected	0x0001AB	error	No device to run '{0}' on: {1}.	Name a 
 # which the pipeline does not contain. The defect is the pipeline, not the program, so the message
 # names the pass to put before this one.
 runtime	GpuScopeMacroNotExpanded	0x0001A9	error	`#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one.	`grad` and `with_grad` build their derived graph ahead of time (`std::macro`), and only a graph that exists while the passes run is part of the scope's unit. Write the pass before `tiles::compile`, or move the call out of the `#gpu` scope.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+# The unwrap of a `T?` a program cannot write, in the one place it refuses: `:op/tag_unwrap`
+# (`src/builtin/operators/tagged.cpp`), which the compiler places where it has already read the
+# tag. A null there is a defect of what the compiler emitted and not a state the program made,
+# which is the ruling of 2026-11-18 (`96714f465`: "the slot unwrap checks and reports an internal
+# error"): it does not return the zero slot, because a zero slot is a value of the right shape and
+# the reader could not tell the two apart (the reasoning is the question page
+# `docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`). No other fault in
+# this table is of that kind, so the code says so in its own words and it is never isolated by
+# `attempt` (`isIsolatableFault`: a defect of the compiler is not a fault of the program).
+runtime	NullSlotUnwrapped	0x0001B0	error	The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.	The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.	none: runtime: the fault is raised while the program runs, and no change to the program's logic repairs a defect of the lowering
 # Warnings (severity bits = Warn).
 runtime	PassesNeverRun	0x10000F	warn	Pass '{0}' consumes the graph, so {1} written after it will not run.	A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	ConstantExpressionFaults	0x100015	warn	This constant expression faults whenever it is evaluated ({0}); it is not folded.	All its operands are known and computing it fails, so there is no value to put in its place. It is left as written: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. If it is never reached (an arm that is not taken), nothing happens.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
