@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：145 行（页已不在 `questions/` 里）
+## 生成器不会删的行：146 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -146,6 +146,7 @@
 | [`2026-11-18-lowering-generator-state-to-gir`](../reviews/2026-11-18-lowering-generator-state-to-gir.cn.md) | 生成器状态下移到 GIR：几百行、18 个文件的快照会动 | 在 `reviews/` |
 | [`2026-11-18-retract-rc23-two-orders`](../reviews/2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） | 在 `reviews/` |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](../reviews/2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 | 在 `reviews/` |
+| [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](../reviews/2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ | 在 `reviews/` |
 | [`2026-11-18-typeof-of-machine-made-types`](../reviews/2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ | 在 `reviews/` |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](../reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
