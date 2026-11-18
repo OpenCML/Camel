@@ -188,6 +188,35 @@ class CommitLoopBodyReadTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * Reads the promise a graph makes twice: its ports are the parameters its signature declares.
+ *
+ * A Port node is the argument a caller passes and `funcType()` is what the caller is told the
+ * parameter is, so a graph publishes one statement about one parameter in two places. Nothing read
+ * the two together: a call site is checked against the port node, the value the graph hands on is
+ * checked against the signature, and the entry arguments are read through the signature. A draft
+ * that republishes a graph under *another function's type* -- `GraphDraft::setFuncType`, which is
+ * what a fold does when it decides two bodies are one function, and what `test::commit_tier`
+ * already reads on two graphs that happen to have the same parameter types -- therefore publishes a
+ * graph that says one type to its callers and another to its own body, and every plan stayed green.
+ * `test/cases/opt/commit_checks/port_type.cml` is that program: three called functions, two of
+ * which take an `int` and one a `float`.
+ *
+ * The two drafts are one reading. The first republishes a graph under the signature of a graph whose
+ * parameter type differs, and the commit must refuse it, naming the parameter, the declared type and
+ * the type the port node carries. The second republishes the same graph under the signature of a
+ * graph whose parameter types are the same, and the commit must publish it -- without it, "it was
+ * refused" would mean only "a signature was replaced", which is a reading of neither rule and would
+ * make every legitimately retyped graph unpublishable.
+ */
+inline constexpr const char *kCommitPortTypeTestPass = "test::commit_port_type";
+class CommitPortTypeTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the same defect through the exemption every pass written in Camel has, in one run:
  * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
  * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was

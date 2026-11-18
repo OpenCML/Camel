@@ -120,6 +120,15 @@ class EdgeChecker {
         return std::move(exitTypeMismatch_);
     }
 
+    /// The violations of `checkPortTypes` alone: a graph's ports are the parameters its own
+    /// signature declares. Asked by the commit for a graph it gave another signature than the one
+    /// the graph had (`validateRuntimeGraphPortTypes`, below), which is why it is not one of the
+    /// checks `run()` makes on every graph.
+    std::vector<std::string> portTypeViolations() {
+        checkPortTypes();
+        return std::move(violations_);
+    }
+
   private:
     /**
      * The four references a graph's numbering can break -- see
@@ -158,6 +167,87 @@ class EdgeChecker {
             violations_.empty(),
             "A frozen graph names a type id that did not come from the type table's interning "
             "path (see typeIdOf in src/runtime/graph.cpp).");
+    }
+
+    /**
+     * A graph's ports are the parameters its own signature declares: a port node's value is what a
+     * caller passes, and `funcType()` is what the caller is told the parameter is. They are one
+     * statement about one parameter, written twice -- once as a node the graph computes with, once
+     * as an entry of the function type a call site, a translation and the entry-argument reader go
+     * by -- so a graph that publishes both is a graph that publishes two answers to one question.
+     *
+     * Which of the two a reader believes today is not one answer. A call site is checked against
+     * the port node (`EdgeChecker::checkCall`, which reads `callee->node(ports[i])->dataType()`),
+     * the value a graph hands on is checked against the signature (`checkReturnValueType` below,
+     * which reads `funcType()->exitType()`), the frame is laid out from the node types
+     * (`GCGraph::runtimeDataType`) and the entry arguments are read through the signature. A draft
+     * that republishes a graph under another signature -- `GraphDraft::setFuncType`, which is how a
+     * fold, a retype and `test::commit_tier` all write a new signature -- moves the second and
+     * leaves the first where it was, so the graph says `float` to its callers and `int` to its own
+     * body. Until this check, no path asked whether the two were the same promise: measured
+     * 2026-11-18, with `test/cases/opt/commit_checks/port_type.cml` and a draft that writes one
+     * graph's signature over another's port nodes, the commit published the graph and every plan
+     * stayed green.
+     *
+     * The relation is the seal's own one spelling of "the types agree" (`typesCompatible`,
+     * camel/runtime/graph.h), not a stricter one written here: two parameters that agree in either
+     * assignability direction, unify, or are `void` are the same promise, which is what keeps this
+     * check from refusing the graphs the call-edge and exit checks already accept.
+     *
+     * The two lists are walked together only as far as both of them reach, and their *lengths* are
+     * not judged: an instance of a generic function carries its type argument as a `with` port the
+     * signature of the instance does not declare (`math::is_inf<float>` publishes one `with` port
+     * and declares no capture, which is what a call to it passes and what the call edge counts), so
+     * the two counts are two questions and not one.
+     *
+     * This is asked of a graph a commit gave a new signature and not of every graph (see
+     * `validateRuntimeGraphPortTypes` below for who calls it and why the tier is the signature and
+     * not the build). The port of a `var` parameter holds the variable and the parameter is typed by
+     * its value -- the relation `reinferDraftTypes` holds the signature to when it re-infers one
+     * (src/runtime/draft_types.cpp) -- so both sides are read by value, and the declaration and the
+     * port node are judged the same way whichever of the two a rewrite moved.
+     */
+    void checkPortTypes() {
+        camel::core::type::FunctionType *funcType = graph_.funcType();
+        if (funcType == nullptr) {
+            return;
+        }
+        const std::span<const gc_node_ref_t> norm = graph_.normPorts();
+        const std::span<const gc_node_ref_t> with = graph_.withPorts();
+        for (size_t i = 0; i < norm.size() && i < funcType->normTypesCount(); ++i) {
+            judgePort(norm[i], funcType->normTypeAt(i), "parameter", i);
+        }
+        for (size_t i = 0; i < with.size() && i < funcType->withTypesCount(); ++i) {
+            judgePort(with[i], funcType->withTypeAt(i), "capture", i);
+        }
+    }
+
+    /// One parameter: the type the signature declares it as, and the type the port node a graph
+    /// publishes for it carries. See `checkPortTypes`.
+    void judgePort(gc_node_ref_t port, Type *declared, const char *what, size_t index) {
+        const GCNode *node = graph_.node(port);
+        if (node == nullptr) {
+            return; // no node answers that number: `validateRuntimeGraphPayloadImpl` owns it
+        }
+        // Both sides are read by value: the port of a `var` parameter holds the variable, and the
+        // parameter itself is typed by that variable's value (`var int` and `int` are one promise).
+        declared = camel::core::type::valueTypeOf(declared);
+        Type *actual = camel::core::type::valueTypeOf(node->dataType());
+        if (isUndecidedType(declared) || isUndecidedType(actual)) {
+            return; // a type the reading cannot fill in is not another type (as in checkReturnValueType)
+        }
+        if (compatible(declared, actual)) {
+            return;
+        }
+        violations_.push_back(
+            std::format(
+                "graph '{}' declares {} {} as '{}', and its port node {} carries a '{}'",
+                graph_.name(),
+                what,
+                index,
+                show(declared),
+                port,
+                show(actual)));
     }
 
     /// The value a graph hands on is a value of the type the graph declares: that is the promise a
@@ -860,6 +950,74 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     std::string text = std::format(
         "Runtime graph '{}' breaks its edge invariants ({} violation(s)):",
         graph->name(),
+        violations.size());
+    for (size_t i = 0; i < violations.size() && i < 8; ++i) {
+        text += "\n  " + violations[i];
+    }
+    throw std::runtime_error(text);
+}
+
+/**
+ * Whether two function types are one signature: the same parameter lists, the same exit type. What
+ * a commit asks before it judges a graph's ports -- see `validateRuntimeGraphPortTypes`.
+ */
+bool sameSignature(
+    const camel::core::type::FunctionType *left, const camel::core::type::FunctionType *right) {
+    if (left == right) {
+        return true;
+    }
+    if (left == nullptr || right == nullptr) {
+        return false;
+    }
+    if (left->normTypesCount() != right->normTypesCount() ||
+        left->withTypesCount() != right->withTypesCount()) {
+        return false;
+    }
+    if (!typesCompatible(left->exitType(), right->exitType())) {
+        return false;
+    }
+    for (size_t i = 0; i < left->normTypesCount(); ++i) {
+        if (!typesCompatible(left->normTypeAt(i), right->normTypeAt(i))) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < left->withTypesCount(); ++i) {
+        if (!typesCompatible(left->withTypeAt(i), right->withTypeAt(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void validateRuntimeGraphPortTypes(
+    const Program &program, const GCGraph *before, const GCGraph *after, GraphState state) {
+    // A graph this commit made out of nothing is the builder's reading, not a rewrite's: its ports
+    // and its signature were written together, and the graphs the compiler builds from scratch do
+    // publish lists this check would refuse (measured 2026-11-18: a specialization's norm-port list
+    // is shifted by one entry against its own signature -- `f1$spec0` declares `bool` for parameter 0
+    // and its port node 1 carries parameter 1's type -- which is a defect of the specialization, in
+    // the builder, and not the question here). Nothing asks about a graph that had no signature
+    // before this commit.
+    if (before == nullptr || after == nullptr || !after->hasNodePayload()) {
+        return;
+    }
+    // The tier is the signature and not the build: a commit that wrote no new signature over the
+    // graph it published owes no answer, and one that did owes it in every build. A rewrite that
+    // gives a graph another function's type is the whole of this case, and it makes no node at all,
+    // which is why this cannot be asked from `commitViolation` (whose checks are asked by what the
+    // draft added) and is asked here instead, beside the seal.
+    if (sameSignature(before->funcType(), after->funcType())) {
+        return;
+    }
+    EdgeChecker checker(program, *after, state);
+    const std::vector<std::string> violations = checker.portTypeViolations();
+    if (violations.empty()) {
+        return;
+    }
+    std::string text = std::format(
+        "Runtime graph '{}' publishes a signature of another type than the ports it holds ({} "
+        "violation(s)):",
+        after->name(),
         violations.size());
     for (size_t i = 0; i < violations.size() && i < 8; ++i) {
         text += "\n  " + violations[i];

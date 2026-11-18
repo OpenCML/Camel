@@ -227,6 +227,13 @@ export const CONTEXT_KEYWORDS = [
         evidence: ['} else if (atWord(0, "unordered")) {'],
     },
     {
+        word: 'readonly',
+        group: 'type',
+        zh: '资源声明里，名字之后的 `readonly`（`resource graph readonly`：它只被读，所以不与任何访问冲突、也不产生顺序；`uses var` 是类型错误）',
+        en: 'in a resource declaration, after the name: `readonly` (`resource graph readonly`: it is only ever read, so it conflicts with no access and orders none; `uses var` on it is a type error)',
+        evidence: ['} else if (atWord(0, "readonly")) {'],
+    },
+    {
         word: 'field',
         group: 'tag-position',
         zh: '标签声明的 `on` 之后：标签贴在结构体字段上',

@@ -915,17 +915,28 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
 }
 
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 */
 any Formatter::visitResourceDecl(cst::ResourceDecl context) {
     string result = context->tok(TK::KwExport) ? "export " : "";
-    result += "resource " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    const auto name = context->get<cst::IdentDef>();
+    result += "resource " + any_cast<string>(visitIdentDef(name));
     if (const auto members = context->get<cst::BracketIdents>()) {
         result += " = " + any_cast<string>(visitBracketIdents(members));
-    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
-        // The contextual `unordered` (design effects plan 3.1): any order of the accesses is
-        // allowed, so the resource has no order to keep.
-        result += " unordered";
+    } else if (name) {
+        // The modifier after the name is a contextual word kept as a token of this declaration:
+        // `unordered` (design effects plan 3.1: any order of the accesses is allowed, so the
+        // resource has no order to keep) or `readonly` (design principles 9.12: nothing writes it).
+        // Every token after the name is written back, so a format keeps the word the input had
+        // instead of dropping one it does not know.
+        const auto nameEnd = name->lastToken().index();
+        for (size_t i = 0; i < context->childCount(); ++i) {
+            const auto child = context->child(i);
+            if (!child.isToken() || child.token().index() <= nameEnd) {
+                continue;
+            }
+            result += " " + child.text();
+        }
     }
     return result;
 }

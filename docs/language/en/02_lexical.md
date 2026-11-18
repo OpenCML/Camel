@@ -92,6 +92,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |
 | Type and pattern positions | `indices` | in the same head: the `indices` after `in` (a value follows, and it walks the positions of its elements) |
 | Type and pattern positions | `unordered` | in a resource declaration, after the name: `unordered` (`resource net unordered`: the effects on it keep no written order) |
+| Type and pattern positions | `readonly` | in a resource declaration, after the name: `readonly` (`resource graph readonly`: it is only ever read, so it conflicts with no access and orders none; `uses var` on it is a type error) |
 | Tag position names | `field` | after the `on` of a tag declaration: the tag holds for a struct field |
 | Tag position names | `nodes` | after the `on` of a tag declaration: the tag holds for the nodes written lexically in a region |
 | Tag position names | `param` | after the `on` of a tag declaration: the tag holds for a function parameter |

@@ -62,6 +62,11 @@ tags = ["feat", "opt", "effects", "commit-checks"]
 # The four readings the rework adds are `commit_refusal.exit_region` (①), `commit_refusal.cycle` (②),
 # `commit_refusal.retier` (③) and `commit_refusal.ancestor_region` (④).
 #
+# The two readings of the six that the review of 2026-10-29 lists last are `commit_refusal.sibling_arm`
+# and `commit_refusal.loop_body_read` (a read across regions), the sixth is `commit_refusal.port_type`
+# (a graph's ports are the parameters its own signature declares), and the exit's own type is the
+# separate plan `feat/runtime/exit_type.plan.toml` -- the seal's exit check was already asked there,
+# which is why `port_type.cml` is built so that only the *parameter* can be the question.
 # All of them run on `fold_function_type.cml`, `branch_and_print.cml` and `identity_at_exit.cml`: one
 # prints and declares the write (`announced`), one has the same shape and does not (`doubled`), one
 # branches over a value of its own while printing a constant -- which is what a region under the body
@@ -222,3 +227,28 @@ case = "../../../cases/opt/commit_checks/loop_body_read.cml"
 args = ["${case}", "test::commit_loop_body_read", "std::nvm"]
 expect_exit = 60
 expect_stdout_contains = ["commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph", "and no BRCH anywhere", "in the body (region 0) reading node", "of the body of LOOP", "refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (:op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).", "the copy that reads a value of its own region was published", "in the body of LOOP", "reading node", "of the function body was published"]
+
+# The six the review of 2026-10-29 lists end with "端口与声明的类型一致", and it is the one of the six
+# that was read from outside the seal: a call site is checked against the callee's *port node*
+# (`EdgeChecker::checkCall`, `callee->node(ports[i])->dataType()`), while the value a graph hands on
+# is checked against the *signature* (`checkReturnValueType`) and the entry arguments are read
+# through the signature. Two readers, two places, no question asked about the two being one
+# statement. A draft that writes a new signature without touching the port nodes -- what a fold does
+# when it decides two bodies are one function, and what `test::commit_tier` already does on two
+# graphs that happen to have the same parameter types -- published a graph that says one type to its
+# callers and another to its own body, and every plan stayed green.
+#
+# `port_type.cml` is three called functions of one shape: two take an `int`, one takes a `float`.
+# `test::commit_port_type` republishes `takes_int` under `takes_float`'s signature -- another
+# parameter type, port nodes untouched -- and the commit must refuse it, naming the parameter, the
+# declared type and the type the port node carries. The same replacement under `mirror_int`'s
+# signature is the positive half: the parameter types are the same, so nothing is refused, and
+# without that line "it was refused" would mean only "a signature was replaced".
+[[tests]]
+name = "commit_refusal.port_type"
+desc = "A draft republishes a graph under another function's signature, whose parameter type differs from the one its port node carries: the commit refuses it, naming the parameter, the declared type and the port node's type, while the same replacement under a signature of the same parameter types is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/port_type.cml"
+args = ["${case}", "test::commit_port_type", "std::nvm"]
+expect_exit = 42
+expect_stdout_contains = ["commit_port_type: a graph publishes one statement about one parameter twice", "and nothing asks whether the two agree", "takes the signature of graph 'takes_float' and keeps its port nodes", "refused at the commit: Runtime graph 'takes_int' publishes a signature of another type than the ports it holds", "declares parameter 0 as 'float', and its port node", "carries a 'int'", "takes the signature of graph 'mirror_int', whose parameter types are the same", "the commit published it, and nothing was refused -- a signature replacement is not what the check refuses", "signature of other parameter types -> refused=1, signature of the same parameter types -> published=1"]

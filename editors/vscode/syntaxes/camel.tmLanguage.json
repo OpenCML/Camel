@@ -208,9 +208,9 @@
           "captures": { "1": { "name": "storage.type.contextual-declaration.camel" } }
         },
         {
-          "comment": "contextual keywords: 'unordered' — a resource declaration whose effects keep no written order: `resource net unordered` ends there.",
+          "comment": "contextual keywords: 'unordered', 'readonly' — the modifier that ends a resource declaration: `resource net unordered` says its effects keep no written order, `resource graph readonly` that nothing ever writes it.",
           "name": "storage.type.contextual-declaration.camel",
-          "match": "\\b(unordered)\\b(?=\\s*$)"
+          "match": "\\b(unordered|readonly)\\b(?=\\s*$)"
         },
         {
           "comment": "contextual keywords: 'on' — the tag declaration's list of positions, which starts at the position name after it.",
