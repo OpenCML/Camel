@@ -9,6 +9,7 @@
 #include "camel/runtime/storage_reuse.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -25,28 +26,103 @@ namespace camel::runtime {
 
 namespace {
 
-/// The name the program writes for an update, read off the operator's URI: the part after the
-/// module separator (`:struct/append_arr` -> `append_arr`, `array:sort_i` -> `sort_i`), with the
-/// spelling the built-in adds for a form dropped (`_arr` for an array operation, `_owned` for the
-/// loop-state form, `_in_place` for the in-place form): `append_arr_owned` -> `append`. The name is
-/// derived and never stored, so adding a form needs no entry here.
-std::string updateName(std::string_view uri) {
-    const size_t separator = uri.find_last_of("/:");
-    std::string name(uri.substr(separator == std::string_view::npos ? 0 : separator + 1));
-    for (const std::string_view suffix : {"_in_place", "_owned", "_arr"}) {
-        if (name.size() > suffix.size() && name.ends_with(suffix)) {
-            name.resize(name.size() - suffix.size());
-        }
+/// The four words the reading prints, and the one place they are written. Three of them are the
+/// plan's own answers (`StorageReuse`, camel/runtime/exec_plan.h), and the fourth -- `Declared` --
+/// is not: the plan never writes it into `storageReuseAt`, because a node whose only claim is its
+/// operator's declaration has no decision to record. So it is the tool's word and lives here, beside
+/// the two words that are not the plan's either (an in-place form the plan decided nothing about,
+/// and the copying form a plan decision cannot describe); keeping it in the core enum made a
+/// member nobody could write look like a fourth decision (author review 2026-11-17, item 11).
+enum class CopyVerdict : uint8_t {
+    InPlace,  // the plan proved it and hands the storage over (StorageReuse::Input)
+    ByCount,  // asks the array's own count at run time (StorageReuse::ByArrayCount, or no decision)
+    Declared, // the operator claims it reuses an operand; no count was taken and none is claimed
+    Copied,   // proven to copy, or the copying form of an operator that has an in-place one
+};
+
+/// The word the reading prints for a verdict.
+const char *verdictOf(CopyVerdict verdict) {
+    switch (verdict) {
+    case CopyVerdict::InPlace:
+        return "in-place";
+    case CopyVerdict::ByCount:
+        return "by-count";
+    case CopyVerdict::Declared:
+        return "declared";
+    case CopyVerdict::Copied:
+        return "copied";
     }
-    return name;
+    return "copied";
 }
 
-/// The loop-state append: `xs->append<v>` on a loop state the compiler proved no one else can see
-/// (Builder::markLoopStateInPlace). It is not an in-place form and the plan decided nothing about
-/// it, because there is no cell to take the array from: the operator asks the array itself whether
-/// its storage can be written (Array::writableInPlace) and copies when it cannot, which is the
-/// `by-count` reading.
-constexpr std::string_view kAppendOwned = ":struct/append_arr_owned";
+/// The plan's decision as the reading's word, for the decisions a plan can actually write.
+CopyVerdict verdictOfDecision(StorageReuse decision) {
+    switch (decision) {
+    case StorageReuse::Input:
+        return CopyVerdict::InPlace;
+    case StorageReuse::ByArrayCount:
+        return CopyVerdict::ByCount;
+    case StorageReuse::Copy:
+    case StorageReuse::None:
+        break;
+    }
+    return CopyVerdict::Copied;
+}
+
+/// The name the program writes for an update, read off the operator table and never derived from the
+/// URI's spelling (author review 2026-11-17, item 11: the reading used to strip the suffixes
+/// `_in_place`, `_owned` and `_arr`, which is a second spelling of the connection the table already
+/// declares). Two declarations answer it, both written where the operator is registered:
+///
+///   * the call shape a module declared for the operator (`OperatorTable::callFormOf`):
+///     `stdlib/prelude.cml` declares `export func append::<T>(xs: T[])` with `#op(':struct/append_arr')`,
+///     so `append` is a fact of that declaration and not of the URI's tail; `array:sort_i` answers
+///     `sort_i` the same way;
+///   * for a form a program cannot write, the operator the form stands for (`plainForm`), whose own
+///     call shape is then the name: the program wrote the plain call, and the verdict is the form's.
+std::string updateName(const camel::core::OperatorTable &table, std::string_view uri) {
+    const auto writtenName = [&](std::string_view at) -> std::optional<std::string> {
+        if (const std::optional<camel::core::OperatorTable::CallForm> form = table.callFormOf(at);
+            form.has_value() && !form->name.empty()) {
+            return form->name;
+        }
+        return std::nullopt;
+    };
+    if (std::optional<std::string> name = writtenName(uri); name.has_value()) {
+        return *name;
+    }
+    if (const std::optional<std::string_view> plain = table.plainForm(uri); plain.has_value()) {
+        if (std::optional<std::string> name = writtenName(*plain); name.has_value()) {
+            return *name;
+        }
+    }
+    // Nothing a program can write: the operator's own tail is all there is to name it by. That is a
+    // fallback for an operator no reading should reach, and not a rule about how names are made.
+    const size_t separator = uri.find_last_of("/:");
+    return std::string(uri.substr(separator == std::string_view::npos ? 0 : separator + 1));
+}
+
+/// The operator the loop-state form is the form of: a program writes `xs->append<v>`, which is
+/// `:struct/append_arr`'s call, so that is the name the form prints. It is needed because the table
+/// declares no relation between the two: the loop-state form is registered as a private group of its
+/// own (src/builtin/modules/globals.cpp, `__append_owned__`) and no declaration states that it is the
+/// loop-state form of the plain append. The declaration that would retire this constant is a call
+/// shape on the form itself, beside `setInPlaceForm` and `declareReusesOperand`
+/// (src/builtin/executors/builtin.cpp: `declareCallForm(":struct/append_arr_owned", {.name =
+/// "append"})`), and it is written where the operator is registered -- not here.
+constexpr std::string_view kPlainAppend = ":struct/append_arr";
+
+/// Whether the node is the loop-state append: `xs->append<v>` on a loop state the compiler proved
+/// no one else can see (Builder::markLoopStateInPlace). Read by the id the operator table fixes for
+/// it (`camel::core::oper::AppendOwned`, operator_table.h), not by its URI's spelling -- the same
+/// test the builder makes when it resolves the operator (builder_control.cpp).
+///
+/// It is not an in-place form and the plan decided nothing about it, because there is no cell to take
+/// the array from: the operator asks the array itself whether its storage can be written
+/// (Array::writableInPlace) and copies when it cannot, which is the `by-count` reading.
+bool isLoopStateAppend(camel::core::OperId oper) noexcept {
+    return oper == camel::core::oper::AppendOwned;
+}
 
 /// `file:line:column` of the node (1-based, the way a diagnostic writes a place), or
 /// `<graph>@<node>` when the node has no source position. The file is the last component of the
@@ -68,23 +144,6 @@ placeOf(const GCGraph &graph, gc_node_ref_t ref, const camel::source::SourceCont
         }
     }
     return graph.name() + "@" + std::to_string(ref);
-}
-
-/// The plan's decision as the one word the reading uses. `None` is not asked about here.
-const char *verdictOf(StorageReuse decision) {
-    switch (decision) {
-    case StorageReuse::Input:
-        return "in-place";
-    case StorageReuse::ByArrayCount:
-        return "by-count";
-    case StorageReuse::Declared:
-        return "declared";
-    case StorageReuse::Copy:
-        return "copied";
-    case StorageReuse::None:
-        break;
-    }
-    return "copied";
 }
 
 } // namespace
@@ -122,14 +181,15 @@ void dumpStorageReuse(
             const std::optional<std::string_view> plain = table.plainForm(uri);
             // The shapes an update node has. The in-place form of an operator: the plan
             // decided it, because its array comes from a cell's `:var/take`. The loop-state append:
-            // no cell and no decision. And the *copying* form of an operator that has an in-place
-            // form -- `v = v->append(x)` on an array the compiler did not hand over, or one it
-            // could not prove unshared -- which allocates the new storage and hands it back. All
-            // three are the update the program wrote; leaving the third one out would be the
-            // silence this command exists to remove, and `copied` is the answer it must be able to
-            // give. An operator that has neither form and declares nothing returns a new value and
-            // never had the option of reusing its input's storage; that is not an update.
-            const bool loopStateAppend = uri == kAppendOwned;
+            // no cell and no decision, recognized by the id the table fixes for it and not by its
+            // URI's spelling. And the *copying* form of an operator that has an in-place form --
+            // `v = v->append(x)` on an array the compiler did not hand over, or one it could not
+            // prove unshared -- which allocates the new storage and hands it back. All three are the
+            // update the program wrote; leaving the third one out would be the silence this command
+            // exists to remove, and `copied` is the answer it must be able to give. An operator that
+            // has neither form and declares nothing returns a new value and never had the option of
+            // reusing its input's storage; that is not an update.
+            const bool loopStateAppend = isLoopStateAppend(body->oper);
             const bool copyingForm =
                 !plain.has_value() && !loopStateAppend && table.inPlaceForm(uri).has_value();
             // The fourth shape: an operator that declares it reuses an operand
@@ -166,29 +226,39 @@ void dumpStorageReuse(
             // whether this run allocated cannot be told from here). Printing one word for both
             // would put a promise and a measurement in the same column, and the column is the one
             // the S3b criterion is read with.
-            const StorageReuse read = copyingForm
-                                          ? StorageReuse::Copy
-                                          : (declaredOnly ? StorageReuse::Declared
-                                                          : (!plain.has_value() ||
-                                                                     decided == StorageReuse::None
-                                                                 ? StorageReuse::ByArrayCount
-                                                                 : decided));
+            CopyVerdict read = verdictOfDecision(decided);
+            if (!plain.has_value() || decided == StorageReuse::None) {
+                // An in-place form the plan decided nothing about, the loop-state append, and an
+                // operator that only declared reuse: the form asks the array at run time.
+                read = CopyVerdict::ByCount;
+            }
+            if (declaredOnly) {
+                read = CopyVerdict::Declared;
+            }
+            if (copyingForm) {
+                read = CopyVerdict::Copied;
+            }
             switch (read) {
-            case StorageReuse::Input:
+            case CopyVerdict::InPlace:
                 ++inPlace;
                 break;
-            case StorageReuse::ByArrayCount:
+            case CopyVerdict::ByCount:
                 ++byCount;
                 break;
-            case StorageReuse::Declared:
+            case CopyVerdict::Declared:
                 ++declared;
                 break;
-            default:
+            case CopyVerdict::Copied:
                 ++copied;
                 break;
             }
-            os << "COPIES " << placeOf(*graph, ref, sources) << " "
-               << updateName(plain.has_value() ? *plain : uri) << " " << verdictOf(read) << "\n";
+            // The loop-state append is the plain append's form, so it prints the plain append's
+            // name: a program wrote `xs->append<v>` and the form is what the compiler made of it.
+            const std::string name =
+                loopStateAppend ? updateName(table, kPlainAppend)
+                                : updateName(table, plain.has_value() ? *plain : uri);
+            os << "COPIES " << placeOf(*graph, ref, sources) << " " << name << " "
+               << verdictOf(read) << "\n";
         }
         os << "COPIES " << graph->name() << " updates " << (inPlace + byCount + declared + copied)
            << " in-place " << inPlace << " by-count " << byCount << " declared " << declared
