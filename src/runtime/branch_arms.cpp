@@ -19,6 +19,11 @@
  * The same check keeps a loop's regions where the loop is: the condition and the body of a LOOP
  * inside an arm are regions of that arm (and of a loop nested in another loop's part, regions of
  * that part), so no part of a loop is laid out outside the arm that runs the loop.
+ *
+ * The read rule is a rule about a graph's *regions*, not about its branches: the body of a loop is a
+ * region of the graph exactly as an arm is, and it runs only while the loop does, so a graph with no
+ * BRCH at all has cross-region reads too and they are asked here as well. The walk below therefore
+ * does not stop at a graph that names no branch.
  */
 
 #include "runtime/graph_build.h"
@@ -133,9 +138,16 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         }
     }
 
-    if (branches.empty()) {
-        return;
-    }
+    // No early return when the graph names no BRCH. A graph's regions are not a branch's regions: the
+    // condition and the body of a LOOP are regions of the graph exactly as an arm is (design
+    // principles 3.10), and a part runs only while its loop does. So a node of the function body
+    // reading a value a loop's body computes is the same read as a node of one arm reading the other
+    // arm's, and it is asked by the same walk below. Returning here made every cross-region read of a
+    // branch-less graph -- which is every read of a loop's part values -- unasked: the commit
+    // published the graph, and the back ends ran it, reading a value that was never written.
+    //
+    // The questions that *are* about a branch are the loop over `branches` below, which is empty
+    // here; nothing else needed a branch to be asked.
 
     // Every edge a node is entered from: its data and context ports and the chain that orders it, in
     // either kind that chain is written in (docs/design/effects/edges.cn.md 1). A chain link waits
@@ -388,12 +400,12 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                 fail(
                     graph,
                     std::format(
-                        "{} reads {}, which lies in an arm of BRCH {} that may not be taken when "
-                        "{} runs",
+                        "{} runs in {} and reads {}, which lies in {}: a node reads only the values "
+                        "that run whenever it runs",
                         describe(program, graph, ref),
+                        describeControl(graph, here),
                         describe(program, graph, input),
-                        region.owner,
-                        describe(program, graph, ref)));
+                        describeControl(graph, there)));
         }
     }
 }

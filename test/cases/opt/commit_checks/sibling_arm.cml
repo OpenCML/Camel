@@ -1,0 +1,19 @@
+// A branch whose two arms each compute a value of their own. That is what a read across two arms
+// needs in order to be a read at all: a value written in an arm exists only while that arm runs, so
+// a node of the other arm reading it reads a value that was never written -- and the shape has to be
+// two *computed* arms, because a constant written in an arm is hoisted to the body and has no region
+// of its own to be read out of.
+//
+// `test::commit_sibling_arm` makes that read on this program (a copy in the true arm reading the
+// false arm's value, which is also the true arm's result, so the read is on the arm's own edge) and
+// commits it. The same pass then makes the same copy read a value of the arm it sits in, which is
+// the half that says a refusal is about the arm and not about the read.
+
+func pick(b: bool, x: int): int {
+    let y = if b then x + 1 else x + 2
+    return y
+}
+
+func main(): int {
+    return pick(true, 4) * 10
+}

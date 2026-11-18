@@ -139,6 +139,55 @@ class CommitTierTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
+ * Reads the one question about a read across regions that the *port* rule of the seal
+ * (`checkGraphCrossReferences`, src/runtime/graph_edges.cpp) does not ask, against the rule that
+ * does ask it: `validateRuntimeBranchArms` ("a node reads only nodes that run whenever it runs").
+ *
+ * The shape is one a rewrite can make and a hand-written graph will not: a COPY in one arm of a
+ * branch whose value is the *other* arm's, and the branch's JOIN reading the copy where the first
+ * arm's own value stood, so the read is on the edge the arm ends at and nothing can be dead about
+ * it. `test/cases/opt/commit_checks/sibling_arm.cml` is the fixture, and its two arms compute a
+ * value each, because a constant written in an arm is hoisted to the body and has no region to be
+ * read out of.
+ *
+ * The pass makes that read and commits it, then makes the same copy read a value of the arm it sits
+ * in and commits that. The two answers are the reading: a refusal that names the node and the two
+ * arms, and a publication, which is what says the refusal is about the arm and not about the copy.
+ */
+inline constexpr const char *kCommitSiblingArmTestPass = "test::commit_sibling_arm";
+class CommitSiblingArmTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
+ * Reads the read across regions that a graph with *no branch* is never asked about. The rule
+ * (`validateRuntimeBranchArms`, src/runtime/branch_arms.cpp) is "a node reads only nodes that run
+ * whenever it runs", and it is written over the region tree -- so the body of a loop is a region of
+ * the graph exactly as the arm of a branch is, and a read of a value the loop's body computes is the
+ * same question as a read across two arms. What differed was only whether it was asked: the check
+ * returned as soon as a graph had no BRCH, so the whole of a branch-less graph's cross-region reads
+ * went unjudged.
+ *
+ * `test/cases/opt/commit_checks/loop_body_read.cml` is the fixture: a loop whose body computes a
+ * value, and no branch anywhere. The first draft is the read that must be refused -- a COPY in the
+ * function body (region 0) reading a value of the loop's body, waited on by the write that runs
+ * after the loop so that nothing about it is dead. The pass then makes the two reads that must not
+ * be refused, because a refusal on either of them would be the check judging the region pair by the
+ * wrong end: the same COPY reading a value of its own region, and a COPY inside the loop's body
+ * reading a value the function body computed (the direction every loop body in the language writes).
+ */
+inline constexpr const char *kCommitLoopBodyReadTestPass = "test::commit_loop_body_read";
+class CommitLoopBodyReadTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/**
  * Reads the same defect through the exemption every pass written in Camel has, in one run:
  * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
  * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was

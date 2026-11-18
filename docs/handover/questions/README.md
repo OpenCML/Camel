@@ -144,9 +144,9 @@
 | [`2026-11-18-commit-checks-which-pairs-a-commit-owns`](../reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md) | 一张被改过的图，提交该为哪些「访问对」负责？ | 在 `reviews/` |
 | [`2026-11-18-generator-halt-has-no-reader`](../reviews/2026-11-18-generator-halt-has-no-reader.cn.md) | 生成器的 `halt` 位已经没有读者了：状态元组要不要从 2 元组收成 1 元组 | 在 `reviews/` |
 | [`2026-11-18-lowering-generator-state-to-gir`](../reviews/2026-11-18-lowering-generator-state-to-gir.cn.md) | 生成器状态下移到 GIR：几百行、18 个文件的快照会动 | 在 `reviews/` |
-| [`2026-11-18-outline-needs-a-graph-that-was-not-there`](../reviews/2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md) | `outline` 要造一个「`f` 够不到的图」——等「没有程序层」那层定了再看 | 在 `reviews/` |
+| [`2026-11-18-outline-needs-a-graph-that-was-not-there`](../reviews/2026-11-18-outline-needs-a-graph-that-was-not-there.cn.md) | `outline`：草案已允许草稿新造图，差在「交付」这一条——答复已给（`e55cd6157`） | 在 `reviews/` |
 | [`2026-11-18-retract-rc23-two-orders`](../reviews/2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） | 在 `reviews/` |
-| [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](../reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at` 只说「哪块区域」，没说「多早」——默认「该区域出口 `GATE` 之前」 | 在 `reviews/` |
+| [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](../reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at`：语句上「占据位置」，纯节点上「只选区域」——答复已给（`e55cd6157`） | 在 `reviews/` |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](../reviews/2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 | 在 `reviews/` |
 | [`2026-11-18-the-witness-a-transpose-needs-has-no-channel`](../reviews/2026-11-18-the-witness-a-transpose-needs-has-no-channel.cn.md) | 转置要一条残差当「零的见证」：那条通道 11-04 被删了，而它今天必须回来 —— 但回哪一半？ | 在 `reviews/` |
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](../reviews/2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ | 在 `reviews/` |
