@@ -658,6 +658,26 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
                 pending.push_back(use);
                 continue;
             }
+            // A read that stands in the region around this write -- the write in an arm or a
+            // loop body, the read in a region that encloses it -- is one this write cannot be
+            // ordered against: an order edge from it would enter the region (4.6). It stays
+            // pending for the write the region itself is, which takes it as a control input
+            // (`regionExit` above, `mergeArmVariables`). The target's generator machine holds
+            // exactly that shape: the dispatch's `:var/get` is a control input of the JOIN, and
+            // no order edge enters a region.
+            //
+            // A write that is a statement of a `sync` block is the exception the same rule gives
+            // another carrier: the branch is a statement of the chain, so the order the read has
+            // with it belongs on the node that owns the arm (`rehomeOrderEdges` moves the edge
+            // there), and the edge is written here as it was. Moving the read to the JOIN as well
+            // would take that edge away: `order_edges_regions` shape 2 loses the one order edge
+            // it pins on the `BRCH`.
+            const uint32_t readRegion = nodeDraftOf(use.node)->nodeRegion(nodeIdOf(use.node));
+            const uint32_t exitRegion = nodeDraftOf(exit)->nodeRegion(nodeIdOf(exit));
+            if (readRegion != exitRegion && !synced_) {
+                pending.push_back(use);
+                continue;
+            }
             if (nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
                 !hasDirectDataDependency(use.node, exit) && !dataPathReaches(use.node, exit)) {
                 linkNodes(LinkType::Order, use.node, exit);
