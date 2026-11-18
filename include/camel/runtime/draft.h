@@ -434,13 +434,6 @@ class GraphDraft {
     uint32_t declarationFacts() const { return declarationFacts_; }
     void setDeclarationFacts(uint32_t facts) { declarationFacts_ = facts; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
-    /// Whether `funcType` states the exit this body hands on **because the body packs its `var`
-    /// parameters into it** (`Builder::handBackVariableParameters`), rather than because the
-    /// signature was written with that type. The tuple a packing makes and a tuple a user wrote
-    /// have the same shape, so the shape cannot answer this; one bit recorded where the packing
-    /// happens can, and every reader of it asks the graph instead of counting parts.
-    bool exitTypeIsPacked() const { return exitTypeIsPacked_; }
-    void setExitTypeIsPacked(bool packed) { exitTypeIsPacked_ = packed; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
     /// The frame layout: the type of each frame slot, slot 0 (reserved) included. Empty when the
@@ -1142,9 +1135,6 @@ class GraphDraft {
     std::string implKernelUri_;
     uint32_t declarationFacts_                 = 0; // see declarationFacts()
     camel::core::type::FunctionType *funcType_ = nullptr;
-    // Set where the body packs its `var` parameters into the exit type, and nowhere else
-    // (exitTypeIsPacked): the exit type alone cannot say whether it was packed or written.
-    bool exitTypeIsPacked_ = false;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
     // the graph's own block (TupleType::constructFrameLayout).
