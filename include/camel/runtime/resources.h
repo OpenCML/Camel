@@ -352,8 +352,8 @@ std::string toString(const GraphFootprint &footprint);
 //           and is passed over (principle 3.3).
 //
 // The reading is per graph because a commit edits graphs; which of them it must answer for is the
-// caller's question (`commitViolation`'s `made`), and which regions inside one are the commit's is
-// `made`'s too (the regions those nodes are in, and every region around them).
+// caller's question (`commitViolation`'s `made` and `changed`), and which regions inside one are the
+// commit's is the same pair's (the regions those nodes are in, and every region around them).
 //
 // Three more things the author's rework of 2026-11-18 makes part of the same commitment (the
 // question page `docs/handover/questions/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`,
@@ -368,12 +368,14 @@ std::string toString(const GraphFootprint &footprint);
 //   Cycle   a graph that closes a cycle of inputs has no order any back end can run. Asked by the
 //           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build, before
 //           the two checks below -- one reading, not a second copy of it here.
-//   Tier    the two checks above (effect, order) are asked by what the draft added, not by what the
-//           build is (the ruling of 2026-11-18, which replaces the one of 2026-11-16): a draft that
-//           added no access owes no answer about them -- the public edits of the graph module keep
-//           both promises -- and a draft that spliced a node with an access in is asked in every
-//           build. `commitAddsAccess` is that question, and it is the whole of the tier: what a run
-//           asks is decided by what the run added.
+//   Tier    the two checks above (effect, order) are asked by the edit the draft used, not by what
+//           the build is (the ruling of 2026-11-18, which replaces the one of 2026-11-16). The table
+//           of `docs/design/graph-editing/README.cn.md` 8.1 is the rule, and it is why the tier has
+//           two halves: the nodes the draft made (`made`) and the nodes it changed in place through
+//           the low-level interface (`GraphDraft::lowLevelEdits`) -- that table's last row, "add an
+//           edge, change an operator", owes all six checks and makes no node. A draft that did
+//           neither owes no answer about either, in any build: the named edits keep both promises,
+//           and `commitAddsAccess` reads the first half alone.
 
 enum class CommitCheck : uint8_t {
     Effect = 0, // the body reaches past the type
@@ -395,27 +397,43 @@ struct CommitViolation {
 };
 
 /// The questions a commit answers, asked of one graph: does its body stay inside the effect its own
-/// type declares, and do two conflicting accesses in one region have a path that orders them? Both
-/// are asked when the draft added an access, in every build.
+/// type declares, and do two conflicting accesses in one region have a path that orders them? Asked
+/// when the draft's edit can break either -- see the tier below -- in every build.
 ///
-/// `made` is what the commit made here, and it scopes both questions twice over:
+/// `made` is what the commit made here, and `changed` the existing nodes the draft changed in place
+/// through the low-level interface (an operand or an operator; `GraphDraft::lowLevelEdits`). The two
+/// together are the tier, and they scope both questions twice over:
 ///
-///   * whether they are asked at all -- `commitAddsAccess` says it, and it is the whole tier (the
-///     ruling of 2026-11-18): a commit that made no node adding an access cannot have added one
-///     past the type and cannot have dropped an order edge (the public edits of the graph module
-///     keep both promises), so it owes no answer about either, in any build;
-///   * which regions of the graph it answers for -- the region each made node is in, and every
-///     region around it up to the body (the same ruling, second half). Judging only the pairs that
-///     name a made node is not enough: an owner node stands in the region it sits in for all the
-///     accesses under it, so a write spliced deep inside a branch changes what the branch node
-///     carries in the region outside while neither node of a pair there is one this commit made.
+///   * whether they are asked at all -- the table of `docs/design/graph-editing/README.cn.md` 8.1 is
+///     the rule, and its last row is why `made` cannot be the whole of it: "add an edge, change an
+///     operator" owes all six checks and makes no node. A commit whose draft made nothing and
+///     changed nothing owes no answer about either, in any build; one that made a node carrying an
+///     access, or that changed a node in place, is asked both. (The ruling of 2026-11-18 read the
+///     tier off what the draft *added*, which saw only the first half; a draft that emptied a
+///     statement's chain and spliced nothing was published without a question being asked.)
+///   * which regions of the graph it answers for -- the region each such node is in, and every
+///     region around it up to the body (`touchedRegions`). Judging only the pairs that name one of
+///     them is not enough: an owner node stands in the region it sits in for all the accesses under
+///     it, so a write spliced deep inside a branch changes what the branch node carries in the
+///     region outside while neither node of a pair there is one this commit touched.
+///
+/// What the two questions are asked *of* is the edit, and `before` is what says that: the graph as
+/// the commit started from, when the commit changed existing nodes in place (the caller that has it
+/// passes it; a commit that only made nodes passes nothing). A body that already reached past its
+/// declaration, and a pair the graph already left unordered, are what the program already was -- the
+/// pass boundary's question, not this commit's -- so an in-place edit answers for what it changed:
+/// the pairs that were ordered and are not any more, and the reach it added.
 std::optional<CommitViolation> commitViolation(
-    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {});
+    const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
+    std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
-/// effect outside the program). This is the tier of the ruling of 2026-11-18. It takes no build:
-/// what a run asks is decided by what the run added, and a build that answered differently would be
-/// a second answer to one question.
+/// effect outside the program). This is the first half of the tier of the ruling of 2026-11-18; the
+/// second half -- the nodes the commit changed in place -- is `GraphDraft::lowLevelEdits`, and
+/// `commitViolation` is where the two are read together (the table of
+/// `docs/design/graph-editing/README.cn.md` 8.1). It takes no build: what a run asks is decided by
+/// what the run did to the graph, and a build that answered differently would be a second answer to
+/// one question.
 bool commitAddsAccess(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made);
 

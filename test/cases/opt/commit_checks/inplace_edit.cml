@@ -1,0 +1,26 @@
+// Two functions that each write the console twice, in one `sync` block, and differ in one thing: in
+// `twice` neither write reads the other, so the only thing ordering them is the chain of the block;
+// in `carries` the second write reads the value the first one returned, so the two are ordered by a
+// data edge whatever the chain says.
+//
+// `test::commit_inplace` makes one edit and makes no node: it takes the second write out of its
+// block's chain (no control input, no sync input). In `twice` that leaves two writes to one resource
+// with nothing ordering them, which the order check must refuse; in `carries` the same edit leaves
+// them ordered, and the commit must publish. A commit whose tier was "did the draft make a node"
+// asked nothing in either half and published the first one.
+
+func twice(x: int): int sync {
+    println(x)
+    println(x)
+    return x
+}
+
+func carries(x: int): int sync {
+    let first = println(x)
+    println(first)
+    return first
+}
+
+func main(): int {
+    return twice(3) + carries(4)
+}
