@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "split.h"
+#include "exit_gate.h"
 
 #include "refusal_readings.h"
 
@@ -150,21 +151,14 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
 
 /// The node a value is read through with the gates that only forward it stripped (the same walk
 /// `buildVmapGraph` takes to the exit): a gate consumes what it carries and produces that value.
+///
+/// The walk itself is `exit_gate.h#exitValueOf`, and it reads the gate's **first** input: since
+/// `0780a83bd` a gate is `GATE(value, writes...)`, so the walk that took the last input read the
+/// last *write* as the value in any body that printed something (author, 2026-11-18: "`ungated` 剥
+/// `GATE` 时取的是 `norm.back()` -- 最后一个输入，在有写的函数里那就是最后那次写，不是值"). The
+/// reading is one function in one header so `split`, `transpose` and `vmap` cannot disagree.
 gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
-    while (ref < graph->nodeCount()) {
-        const rt::GCNode *node = graph->node(ref);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-            break;
-        }
-        const std::span<const gc_node_ref_t> norm = graph->normInputsOf(ref);
-        if (!norm.empty()) {
-            ref = norm.back();
-            continue;
-        }
-        const std::span<const gc_node_ref_t> with = graph->withInputsOf(ref);
-        ref = with.empty() ? rt::kInvalidNodeRef : with.back();
-    }
-    return ref;
+    return exitValueOf(*graph, ref);
 }
 
 /// The data ports of `ref`, in port order: the ordinary ones and then the context ones. The effect
@@ -845,15 +839,36 @@ struct Half {
             return true;
         }
         case rt::GCNodeKind::Gate: {
-            // A gate only forwards: what a reader of it reads is its input.
-            if (inputs.size() != 1) {
+            // A gate forwards its **first** input; every input after it is a statement the gate
+            // waits on (`exit_gate.h`, author `0780a83bd`). The value is what a reader of the gate
+            // reads, and it is what this half copies.
+            //
+            // The waits are refused here rather than dropped: a half that copied the value and left
+            // the waits behind would stop the body's prints from running at all, and one that
+            // copied the waits without their place on a chain would run them at a point nobody
+            // wrote. Carrying the effect skeleton across the cut is a tier of its own -- until it
+            // exists, this is a refusal and not a silent wrong answer (author, 2026-11-18: a cut
+            // placed a print where the result should be, because the gate's last input was read as
+            // the value).
+            const std::span<const gc_node_ref_t> waits = exitWaitsOf(*source, ref);
+            if (!waits.empty()) {
+                return refuseAt(
+                    refusal,
+                    source,
+                    ref,
+                    "a gate that waits on a statement",
+                    "the gate forwards its value and waits on the statements written beside it, and "
+                    "the cut does not carry a statement across yet: a half would either drop the "
+                    "print or run it where it was not written");
+            }
+            const gc_node_ref_t forwarded = exitValueOf(*source, ref);
+            if (forwarded == rt::kInvalidNodeRef) {
                 return refuseAt(
                     refusal,
                     source,
                     ref,
                     "a gate",
-                    "the gate forwards no value, or more than one, and the plumbing has no reading "
-                    "for either");
+                    "the gate forwards no value, so there is nothing for this half to read");
             }
             copyOf[ref] = inputs.front();
             return true;
