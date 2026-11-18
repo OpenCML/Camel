@@ -286,16 +286,26 @@ inline void ambientCarriesExternal(ResourceSignature &signature) {
 /// not cover it; a `pure` target covers only a source that touches nothing.
 bool covers(const ResourceSignature &target, const ResourceSignature &source);
 
+/// Whether a resource of this class is state outside the program (design principles 3.3, 10.5):
+/// the console, the file system, a module's own state, a resource nobody itemized. A variable or
+/// an object is the program's own; a handle is a value the program owns -- but its reader may
+/// stand in a graph this one cannot see, which is why a *write* of one is asked separately (see
+/// `writesForTheRegion`, and the ruling of 2026-11-16 quoted there).
+bool reachesOutside(ResourceClass cls);
+
 /// Whether what a signature describes writes a resource the region that runs it owes (design
 /// principles 3.1, "对外部资源与句柄的写由所在区域用到"): a write of state outside the program --
 /// the console, the file system, a module's own state, a resource nobody itemized -- or a write of
 /// a handle, whose reader may stand in a graph this one cannot see (3.3). A read is not one: a read
 /// is a dependency like a read of a variable and runs only when something needs its value.
 ///
-/// This is the resource half of "does this node write?", asked of the measurement
-/// (`Builder::footprintOf`) rather than of an operator's name, so a call, a branch and a loop are
-/// answered by what they reach exactly as an operator is; `OperatorSemantics::writesForTheRegion`
-/// asks the same two questions of a declaration, and it is where the classes below come from.
+/// **The one answer to "is this a write the region owes".** It is asked of the measurement
+/// (`Builder::footprintOf`) writing the classes it reached into a signature, rather than of an
+/// operator's name, so a call, a branch and a loop are answered by what they reach exactly as an
+/// operator is; `OperatorSemantics::writesForTheRegion` states a declared spec as the same
+/// signature (`signatureOf`) and calls this, so a declaration and a measured body cannot disagree
+/// about what a write is (the daily review of 2026-11-18, item 3: the predicate was written three
+/// times).
 bool writesForTheRegion(const ResourceSignature &signature);
 
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,

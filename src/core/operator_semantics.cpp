@@ -207,27 +207,6 @@ std::string_view numericClassName(NumericClass cls) {
 
 // ---- The effect, derived from the access list ----------------------------------------------
 
-namespace {
-
-/// Whether an access of this class reaches state outside the program (design principles 3.3,
-/// 10.5): the console, the file system, a module's own state, a resource nobody itemized. A
-/// variable or an object is the program's own; a handle is a value the program owns.
-bool reachesOutside(const ResourceClass cls) {
-    switch (cls) {
-    case ResourceClass::Variable:
-    case ResourceClass::Object:
-    case ResourceClass::Handle:
-        return false;
-    case ResourceClass::Ambient:
-    case ResourceClass::Foreign:
-    case ResourceClass::Unknown:
-        break;
-    }
-    return true;
-}
-
-} // namespace
-
 bool OperatorSemantics::external() const {
     // Nobody declared its effect: the conservative reading, which is an effect outside the
     // program (design principles 3.3).
@@ -276,21 +255,20 @@ bool OperatorSemantics::writesForTheRegion() const {
     // `var` is not an effect -- what it writes is a value passed in and handed back). The two
     // questions this file answers are asked by different readers and are deliberately not the same:
     // "does anything outside the program see it" (`external()`, the effect summary) and "does the
-    // region that runs it owe its running" (this one, the region's roots).
+    // region that runs it owe its running" (the predicate below).
+    //
+    // The answer itself is `sem::writesForTheRegion` (resource_semantics.cpp): a declaration states
+    // its accesses in the same signature a measured body does (`signatureOf`), so there is one
+    // test for "is this a write the region owes" and this method only states the spec as that
+    // signature. `withCount` is 0 because the test reads the class and the mode of a use and never
+    // its parameter index.
     if (declaredEffect == Effect::Undeclared) {
         return true;
     }
     if (!resources) {
         return declaredEffect == Effect::Effectful;
     }
-    for (const ResourceAccess &access : resources->accesses) {
-        if (writes(access.mode) &&
-            (reachesOutside(access.resource.cls) ||
-             access.resource.cls == ResourceClass::Handle)) {
-            return true;
-        }
-    }
-    return false;
+    return camel::core::sem::writesForTheRegion(signatureOf(*resources, 0));
 }
 
 Effect OperatorSemantics::effect() const {
