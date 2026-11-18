@@ -520,7 +520,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-d18c0005cc2591d8 ok stdlib/graph.cml
+3314284e5333a70d ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -2141,6 +2141,7 @@ c1863f4b68b6f37e ok test/cases/compile/var/loop_branch_write.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml
 28d98696ca2a4873 ok test/cases/compile/var/loop_nested.cml
 430e0b6cb8318fd3 ok test/cases/compile/var/loop_phi_two_sources.cml
+0a50e3dd423f509b ok test/cases/compile/var/loop_state_starts_from_the_last_write.cml
 7d1be5d3a30727cc ok test/cases/compile/var/loop_two_states.cml
 36c00bf6af90970d ok test/cases/compile/var/loop_var.cml
 9a65db17c8e1acb7 ok test/cases/compile/var/loop_write_outside_read.cml

@@ -1064,9 +1064,19 @@ const std::vector<ReadOp> &readOps() {
 
 uint32_t nodeCanonicalNumber(const Handle *handle) {
     if (handle->transaction() != nullptr) {
-        // A draft has no canonical order yet: it is being edited, and a rule condition reads it
-        // while it is. The place the node holds in the draft is the only number it has.
-        return handle->index();
+        // A node of a draft has no canonical number, and this reading refuses rather than answer
+        // the place the node holds in the draft (design principles 9.5). The draft is being
+        // edited: that place is the order the nodes were made in while the draft is open, and the
+        // commit is what turns it into a graph -- so an answer here would be a number of the right
+        // shape that is wrong, which is the one thing a reading of the canonical order exists to
+        // replace. A rule condition that wants the draft's own order reads `creation_id` and
+        // declares the `spelling` capability, which is what it is doing.
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.id",
+            "the node belongs to a draft, and a draft has no canonical number: its nodes' places "
+            "are the order they were made in, which the commit replaces. Read `id` after the "
+            "commit publishes the program, or read `creation_id` for the draft's own order");
     }
     const std::vector<uint32_t> numbers = canonicalNumbersOf(handle);
     const uint32_t ref                  = handle->index();
