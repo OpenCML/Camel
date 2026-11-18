@@ -7,6 +7,7 @@
 #include "node_order.h"
 #include "rule_expand.h"
 #include "split.h"
+#include "exit_gate.h"
 
 #include "camel/core/derivative.h"
 #include "camel/core/forward.h"
@@ -3681,9 +3682,11 @@ bool buildTransposeMember(
                 break;
             }
             case rt::GCNodeKind::Gate: {
-                const auto norm = function->normInputsOf(ref);
-                if (!norm.empty()) {
-                    addCotangent(norm.back(), cotangent[ref]);
+                // The gate forwards its first input and waits on the rest (xit_gate.h): the
+                // cotangent goes to the value, never to a statement the gate waits on.
+                const gc_node_ref_t forwarded = exitValueOf(*function, ref);
+                if (forwarded != rt::kInvalidNodeRef) {
+                    addCotangent(forwarded, cotangent[ref]);
                 }
                 break;
             }
