@@ -248,6 +248,8 @@ enum class SemanticDiag : uint32_t {
     HandleTypeNotNominal = 0x0001A3,
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
+    /// A clause writes a resource its declaration says nothing ever writes.
+    ReadonlyResourceWritten = 0x000217,
     // 0x00020C held `ExternalResourceNeedsVar`, the rule that a clause must write `var` before every
     // external resource. An external resource is read or written like any other resource (design
     // principles 3.3), so the rule is gone and the number is not reused.

@@ -58,7 +58,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 233
+**Semantic — errors** (`SemanticDiag`) — 234
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -198,6 +198,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ResourceGroupCycle` | The resource group '{0}' contains itself: {1}. |
 | `HandleTypeNotNominal` | '{0}' is not a nominal type declaration, so '#resource' says nothing about it. |
 | `NativeResourceMismatch` | The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'. |
+| `ReadonlyResourceWritten` | The resource '{0}' is declared 'readonly', but the clause '{1}' writes it. |
 | `VariableInUses` | The variable '{0}' is named in the resource clause '{1}'. |
 | `CmlUnsupportedConstruct` | std::cml cannot print {0}: {1}. |
 | `CmlBigConstant` | std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}). |

@@ -779,6 +779,33 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_output_contains = ["err_write_entry_reaches.cml:5:", "() => int uses var stderr"]
 
+# ---- A resource declared `readonly` is only ever read ----
+#
+# Design principles 9.12 and 15.5: `graph` (the graph a function is) and `spelling` (how a name is
+# written) are read-only, so a clause reads one with a bare entry and a write of one is a type
+# error. The pair below is what says the modifier reaches the effect check and not only the parser:
+# the read compiles, the write is refused, and the two programs read differently.
+
+[[tests]]
+name = "readonly.entry_is_a_read"
+desc = "A clause reads a resource its module declares `readonly`: `uses graph` on `twice`, not `uses var graph`. The declaration reaches the clause through the module, so the entry is a read of an external resource like `clock`'s, and a promise wider than the body is not a violation -- the program compiles and prints 42."
+kind = "behavior"
+case = "../../../cases/effects/readonly_resource_read.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+
+[[tests]]
+name = "readonly.write_refused"
+desc = "The other half: the same program writes what is declared read-only -- `uses var graph` -- and is refused where the entry is written. A `readonly` resource has no write anywhere in the program (design principles 9.12), so no call can declare one, and the diagnostic names the resource and the modifier, which is what makes it a reading of the declaration rather than of the clause."
+kind = "negative"
+case = "../../../cases/effects/err_write_readonly_resource.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReadonlyResourceWritten"
+expect_diagnostic_code = "0x03000217"
+expect_output_contains = ["err_write_readonly_resource.cml:8:", "'graph'", "'readonly'", "uses var graph"]
+
 # ---- The write a body leaves in a `var` parameter is a result of the function ----
 #
 # Came from the retired `hold/varexit-cases` branch, where the same property was built as a source
