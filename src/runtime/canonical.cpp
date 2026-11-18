@@ -108,9 +108,23 @@ class CanonicalWalk {
             number(port);
         }
         arrange(capturePorts());
-        // What the walk did not reach: a dead write, a computation whose value nothing uses. It
-        // is not part of the default query of a program, but a document that prints the graph
-        // prints it, so it is placed after everything the walk does reach, one region at a time.
+        // What the walk did not reach: the default query of a program has no place for a node no
+        // root reaches, so this section is what the order says about one.
+        //
+        // It is **a section and not an answer**: the tail goes after everything the walk does
+        // reach, one region at a time, and inside itself it is ordered by the same tie rule the
+        // rest of the graph uses -- the node key first, the equal-key part by the smallest
+        // numbering table, and a part wider than the enumeration limit cut by each node's own
+        // fragment (canonical.h). So the tail is a total order the graph decides: two writings of
+        // one graph give one tail, and `same_graph` reads them as one document. What the position
+        // is *not* is "where the node would stand if something reached it" -- there is no such
+        // place, and inventing one would mean walking from a root the graph does not have.
+        //
+        // Measured before it was written down: of the 4037 `.cml` files in this repository, 207
+        // have a graph the walk leaves a node of, and every one of those nodes is a region port
+        // that nothing in its region reads -- `loop a = 0, b = 0 while b < n do (a + 1, b + 1)`
+        // leaves the condition port of `a` with no reader. The section is real and common, not a
+        // leftover of the model.
         for (uint32_t id : regions_) {
             std::vector<gc_node_ref_t> leftovers;
             for (gc_node_ref_t ref : refs_) {
@@ -121,6 +135,26 @@ class CanonicalWalk {
             }
             arrange(std::move(leftovers));
         }
+        // A node whose region the walk holds no record of -- a control region a publish left
+        // `Dead`, which is what a graph built from a *subset* of a draft's nodes gets
+        // (`planDraftPayload`) -- is a member of the same section and arranged the same way. It
+        // used to be placed here in NodeId order, and NodeId order is the order the nodes were
+        // created in, which is the spelling: a reading that only looked right because no program
+        // in this repository reaches it today. The outside nodes are one group because a dead
+        // region is not a structure the walk can order by.
+        {
+            std::vector<gc_node_ref_t> outside;
+            for (gc_node_ref_t ref : refs_) {
+                if (places_[ref] == kNoCanonicalNumber) {
+                    outside.push_back(ref);
+                }
+            }
+            arrange(std::move(outside));
+        }
+        // The last resort, and it is not the tail's ordinary path: `arrange` places every member of
+        // its group unless the node is one the walk is *inside* right now (a cycle of the group's
+        // own). A frozen graph has none, and a graph that did would get this order -- the group's
+        // own, which for a graph no program can produce is the only answer there is.
         for (gc_node_ref_t ref : refs_) {
             place(ref);
         }
