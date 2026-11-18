@@ -1385,8 +1385,14 @@ bool specializeDirectFuncInDraft(
                 header->kind != GCNodeKind::Cast && header->kind != GCNodeKind::Dref) {
                 break;
             }
+            // A gate answers through the kernel; Copy, Cast and Dref carry the value in their
+            // first input too, so the walk reads the same end for all four (it read the last).
+            if (header->kind == GCNodeKind::Gate) {
+                current = forwardedInputOf(draft, current);
+                continue;
+            }
             const auto inputs = draft.normInputsOf(current);
-            current           = inputs.empty() ? kInvalidNodeRef : inputs.back();
+            current           = inputs.empty() ? kInvalidNodeRef : inputs.front();
         }
     }
     return true;
@@ -1694,16 +1700,19 @@ bool devirtualizeStaticCallInDraft(
         // A gate orders the callee value without changing it (sync code gates a callee after
         // the previous statement); look through it. keepCalleeOrdering keeps the gate as a
         // control input of the rewritten FUNC, so statement ordering is preserved.
+        // The step is camel::runtime::forwardedInputOf (camel/runtime/graph.h): a gate carries
+        // its first ordinary input, then its first context input, and this used to take
+        // ack() -- the last wait. Nothing to follow keeps the gate where it is.
         while (true) {
             const DraftNodeHeader *gateHeader = draft.header(calleeRef);
             if (!gateHeader || gateHeader->kind != GCNodeKind::Gate) {
                 break;
             }
-            const auto gateNorm = draft.normInputsOf(calleeRef);
-            if (gateNorm.empty()) {
+            const gc_node_ref_t forwarded = forwardedInputOf(draft, calleeRef);
+            if (forwarded == kInvalidNodeRef) {
                 break;
             }
-            calleeRef = gateNorm.back();
+            calleeRef = forwarded;
         }
     }
 
