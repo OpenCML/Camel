@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "vmap.h"
+#include "exit_gate.h"
 
 #include "node_order.h"
 #include "refusal_readings.h"
@@ -770,20 +771,10 @@ VmapGraph buildVmapGraph(
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
         // that only forward it.
-        gc_node_ref_t out = function->exitNodeRef();
-        while (out != rt::kInvalidNodeRef) {
-            const rt::GCNode *node = function->node(out);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-                break;
-            }
-            const auto norm = function->normInputsOf(out);
-            if (!norm.empty()) {
-                out = norm.back();
-                continue;
-            }
-            const auto with = function->withInputsOf(out);
-            out             = with.empty() ? rt::kInvalidNodeRef : with.back();
-        }
+        // The walk is xit_gate.h#exitValueOf: a gate's first input is the value and the rest are
+        // the statements it waits on (author,  780a83bd), so taking the last input read a write
+        // as the value in a body that printed.
+        gc_node_ref_t out = exitValueOf(*function, function->exitNodeRef());
         if (out >= function->nodeCount() || copyOf[out] == rt::kInvalidNodeRef) {
             refused.refusedOrigin =
                 out < function->nodeCount()

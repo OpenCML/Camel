@@ -1065,6 +1065,10 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kCommitOrderTestPass, CommitOrderTestPass),
         TEST_PASS(kCommitEffectTestPass, CommitEffectTestPass),
         TEST_PASS(kCommitLegalSpliceTestPass, CommitLegalSpliceTestPass),
+        TEST_PASS(kCommitExitRegionTestPass, CommitExitRegionTestPass),
+        TEST_PASS(kCommitCycleTestPass, CommitCycleTestPass),
+        TEST_PASS(kCommitAncestorTestPass, CommitAncestorTestPass),
+        TEST_PASS(kCommitTierTestPass, CommitTierTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
@@ -3457,8 +3461,8 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
-                // A commit that refused one of the two promises of analysis 4.1 is not a defect of
-                // the compiler: it is the reading's own diagnostic, the same one either commit path
+                // A commit that refused one of the checks a commit answers is not a defect of the
+                // compiler: it is the reading's own diagnostic, the same one either commit path
                 // asks (camel/runtime/resources.h, `commitViolation`), carrying the graph, the
                 // nodes and the source position it named.
                 if (const auto *refused =
