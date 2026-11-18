@@ -13,8 +13,8 @@
 | 写法 | 做什么 | 在外层的图里是什么 |
 |---|---|---|
 | 规则（由 `rewrite`、`run`、`saturate` 应用） | 声明式改写 | 一个原子操作 |
-| `view f as d { … }` | 读图、分析 | 一个原子操作：读 `f` 的图，交出普通值 |
-| `edit f as d { … }` | 改图 | 一个原子操作：读 `f` 的图，交出新函数或错误值 |
+| `view d = f { … }` | 读图、分析 | 一个原子操作：读 `f` 的图，交出普通值 |
+| `edit d = f { … }` | 改图 | 一个原子操作：读 `f` 的图，交出新函数或错误值 |
 
 块外的普通代码照常编译成图；每个块编译成算子表里的一个算子，在外层的图里只是一个普通的算子节点（第 5 节）。
 
@@ -25,14 +25,14 @@
 ```camel
 // 改一个函数：块的值是改好的函数，或一个错误值
 export func fold_zero_adds::<F>(f: F): F! when is_function::<F>() {
-    return edit f as d {
+    return edit d = f {
         nodes(d)->filter<is_add_zero>->foreach<(n: Node) => replace(n, inputs(n)[0])>
     }
 }
 
 // 加了效应时，块头写出新的函数类型
 export func log_result(f: (x: float) => float): ((x: float) => float uses console)! {
-    return edit f as d: (x: float) => float uses console {
+    return edit d = f {             // 结果类型取自函数的返回类型
         let out = exit_of(d)
         let w = inline(out, (y: float) => sync { println(`result = ${y}`); y }, out)
         replace(out, w)
@@ -41,12 +41,12 @@ export func log_result(f: (x: float) => float): ((x: float) => float uses consol
 
 // 读图：块的值是体的值，类型由体推出
 func count_muls::<F>(f: F): int when is_function::<F>() {
-    return view f as d { len(nodes(d)->filter<is_mul>) }
+    return view d = f { len(nodes(d)->filter<is_mul>) }
 }
 
 // 没有"程序"这个单独的概念：编辑一个函数，就是编辑它和它可达的全部图；对 main 编辑就是整个程序
 export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
-    return edit f as d {
+    return edit d = f {
         graphs(d)->foreach<(g: Graph) =>
             nodes(g)->filter<is_debug_print>->foreach<(n: Node) => erase(n)>>
     }
@@ -54,8 +54,8 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 ```
 
 - 两种块都是**表达式**，能出现在任何表达式的位置上；块里最后一个表达式是块的值，`return` 结束的是块本身（与原则 3.4 同步块当值同一规则）。
-- `edit f as d { … }` 的值类型是 `F!`（`F` 是 `f` 的类型）。块头的类型**可以省略**，省略时就是原函数的类型，提交按原函数的效应核对；**只有加了效应时才写**，写出的类型就是新的声明，块外的调用者按它算。所以块头有类型，读者就知道这次编辑改变了函数对外的承诺。
-- `view f as d { … }` 的值类型由体推出，和普通块一样；块外要写明类型就照常写 `let n: int = view f as d { … }`。
+- `edit d = f { … }` 的值类型是 `G!`：`G` 由块外的期望类型给出（`let` 标注、函数的返回类型、实参位置），没有期望类型时就是 `f` 的类型；它就是提交时核对的声明。块头不写类型（与 `loop` 同形，见第 15 节）。
+- `view d = f { … }` 的值类型由体推出，和普通块一样；块外要写明类型就照常写 `let n: int = view d = f { … }`。
 - `edit` 本身是纯的：它不改 `f`，交出一个新函数，`f` 对其他持有者不变（原则 9.1）。体里写了外部访问，整个表达式才有那个效应。单独写成一条语句、值没人用，报"结果没人用"。
 - 块可以嵌套，内层块对的是另一个函数值。
 
@@ -64,7 +64,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 **规则：`graph` 模块导出的类型（`Graph`、`Node<T>`、`Region`、`Op`、`TypeRef`、`Tag`……）都是句柄类型；签名里提到句柄类型的函数就是图算子，只能在块里调用。** 不为每个算子单设关键字，也不在声明上另加标记。
 
 为什么类型就够：
-1. **句柄只从块头来**。`view f as d`、`edit f as d` 把 `d` 绑定成这个块的根句柄；`graph_of` 这类"从普通值拿到句柄"的函数删除。所以块外不存在任何句柄值，图算子在块外根本拿不到实参，调不了。
+1. **句柄只从块头来**。`view d = f`、`edit d = f` 把 `d` 绑定成这个块的根句柄；`graph_of` 这类"从普通值拿到句柄"的函数删除。所以块外不存在任何句柄值，图算子在块外根本拿不到实参，调不了。
 2. **一个标记就是第二份真相**。"这个函数是图算子"若既由签名里的句柄类型决定、又由一个关键字或标记决定，两者迟早不一致（原则：同一件事只有一份）。签名已经说了它操作什么，再标一次是重复。
 3. **用户写的帮助函数自动归位**。`func is_add_zero(n: Node): bool`、`func first_input(n: Node): Node` 写在块外，签名提到 `Node`，所以只能在块里调用，并随调用它的块一起聚合进那个原子操作（第 5 节），不单独展开成图。不提到句柄的普通函数（`len`、算术）在块里照常调用。
 
@@ -80,7 +80,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 2. **不能存到块外**：块外创建的 `Ref<T>`、结构体、数组，`T` 在块外定下，不可能提到 `β`；块内新建的装着句柄的 `Ref` 带着 `β`，同样出不了块。
 3. **不能被离开块的闭包带走**：原则 3.3"握着什么，类型就提到什么"本来就要求闭包的类型提到它握着的句柄；握着节点的闭包类型提到 `β`，于是出不了块。在块内造、在块内调用的闭包完全允许。
 4. **帮助函数对标签泛型**：签名里的 `Node` 对 `β` 泛型（与原则 3.3"没写资源子句的函数类型对资源泛型、按实例化确定"同一机制），在块里调用时实例化成那个块的标签；返回的句柄仍带这个标签。
-5. **普通值可以交出**：`view f as d { show(nodes(d)[0]) }` 交出字符串，`view f as d { len(nodes(d)) }` 交出整数。
+5. **普通值可以交出**：`view d = f { show(nodes(d)[0]) }` 交出字符串，`view d = f { len(nodes(d)) }` 交出整数。
 
 **为什么两种块都要关住句柄**：`view` 里的句柄指向已提交、不可变的图，交出去也不会悬空；要关住它，是因为一旦节点流出块，块外就会出现 `inputs(n)` 这样的图算子，它们又得作为普通节点编进图里，聚合就破了。`edit` 里的句柄另有一层理由：草稿在提交或放弃后不存在，指向它的节点会悬空。
 
@@ -104,7 +104,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 2. **块内**：语句照普通语义求值。改图算子是对草稿句柄的写，同一草稿上的写按书写顺序（原则 3.3），不写 `sync`。每一步做能当场做的局部检查（第 8 节）；一步失败，块立即结束，之后的语句不执行。
 3. **正常走到块尾**：自动提交，提交做完整检查；通过则块的值是新函数，否则是错误值。
 4. **任何失败**（局部检查失败、体里出现未处理的错误值或故障、提交被拒）：放弃整份草稿，程序里不留下改了一半的图，块的值是一个错误值，说明哪一步、为什么。
-5. **没有"程序"这一层**（负责人 2026-11-18："程序就是普通的函数，或者说就是 main"，与"遍是函数"同一个出发点）：`edit f as d` 的草稿就是 `f` 加上从 `f` 可达的全部图（`graphs(d)` 列出它们），以及这次编辑新造的图（`outline` 交出的函数值），块尾一次提交，全成或全不成。编辑一个被调函数 `g`，得到的是新的 `g'`，交出的 `f'` 调用 `g'`；别处持有的 `g` 不变（图是值，9.1）。整个程序的遍就是对 `main` 的一次编辑，遍的形状仍是 `(f: F) => F!`。
+5. **没有"程序"这一层**（负责人 2026-11-18："程序就是普通的函数，或者说就是 main"，与"遍是函数"同一个出发点）：`edit d = f` 的草稿就是 `f` 加上从 `f` 可达的全部图（`graphs(d)` 列出它们），以及这次编辑新造的图（`outline` 交出的函数值），块尾一次提交，全成或全不成。编辑一个被调函数 `g`，得到的是新的 `g'`，交出的 `f'` 调用 `g'`；别处持有的 `g` 不变（图是值，9.1）。整个程序的遍就是对 `main` 的一次编辑，遍的形状仍是 `(f: F) => F!`。
 6. **确定性**：`nodes`、`graphs` 按规范顺序返回；读写法的查询（图名、创建编号、源码位置）照原则 9.5 要求类型里声明那种能力，两种块都不放宽。
 
 `view` 没有草稿、没有提交，读的是已提交的图，块尾什么也不做。
@@ -175,14 +175,14 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 ## 11. 迁移
 
 - `stdlib/graph.cml`：删除 `graph_of`、`graphs_of`、`Txn<F>`、`open`、`commit`、`abort`；查询与编辑算子的签名不变，句柄类型带上块标签；新增 `inline`、`outline`、`order`、`exit_of` 一类锚点查询；删除 `add_constant`（它是 `inline(at, () => v)` 的特例）。
-- 用 Camel 写的遍（`stdlib/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit f as d { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
+- 用 Camel 写的遍（`stdlib/opt.cml` 的 `fold`/`cse`/`dce`、`examples/case-study/edits.cml`、`test/cases/modules/graph_pass/*`）：`open … commit` 改写成 `edit d = f { … }`；只读分析改写成 `view`。遍的形状不变，仍是 `(f: F) => F!`。
 - `probe_handle`、`check_pass_boundary` 改成 `view` 块里的查询。
 - 测试：每条现有的 `Txn` 用例改写；另加反例，各报一条具名诊断：句柄作为块的值交出、存进块外的 `Ref`、被离开的闭包带走、图算子写在块外、`view` 的节点交给 `replace`。
 
 ## 12. 示例：报错的样子
 
 ```camel
-let g = edit f as d {
+let g = edit d = f {
     replace(nodes(d)[3], nodes(d)[7])   // 第 2 行
     erase(nodes(d)[5])                  // 第 3 行
 }
@@ -195,7 +195,7 @@ error[EditStepRefused]: replace at line 2: the new value is downstream of the ol
 ```
 
 ```camel
-let n = view f as d { nodes(d)[0] }
+let n = view d = f { nodes(d)[0] }
 //      ^ error: a graph handle cannot leave the view block it belongs to
 replace(a, b)
 // ^ error: replace takes a node of an edit block; there is none here
@@ -246,62 +246,72 @@ replace(a, b)
   4. 规则引擎文档与代码统一（倾向按代码的"转挂"改文档），定义处补上两侧的检查。
   5. 规则删除保护：删 `protect_order`、留 `protect_faults`（第 13 节第 7 条）；以后可用插 `GATE` 代替拒绝。
 
-## 15. 语法（草案，2026-11-18，待负责人定）
+## 15. 语法（负责人 2026-11-18 定）
 
-原则：只用语言里已有的形状——关键字引导的块（`for x in xs { }`、`match v { }`、`sync { }`）、`::<T>` 写类型实参（`range::<int>(n)`）、`uses` 写资源（`uses var console`）、`rule`/`fact` 的现有声明形式；不引入新的符号，不复用已有含义的词。
+原则：只用语言里已有的形状——关键字引导的表达式（`loop s = init for x in xs do …`、`match`、`sync`）、`::<T>` 写类型实参、`uses` 写资源、`rule`/`fact` 的现有声明形式；不引入新符号，不复用已有含义的词。
 
 ### 15.1 两种块
 
 ```camel
-view d = f { 表达式 }                 // 读：值是体的值
-edit d = f { 语句 }                   // 改：值的类型是 F!，F 是 f 的类型
-edit::<G> d = f { 语句 }              // 改了签名或加了效应：G 是结果的函数类型，值的类型是 G!
+edit d = f { 语句 }            // 改：值的类型是 G!，G 默认为 f 的类型
+view g = f { 表达式 }          // 读：值是体的值
 ```
 
-- **头部写成 `d = f`，不写 `f as d`**：`as` 在 Camel 里是类型转换（`m as Seconds`），`edit x as Seconds { … }` 无法区分"转换后编辑"还是"把草稿叫 Seconds"。`d = f` 与 `for x in xs` 同类：关键字后面先写引入的名字，再写它来自哪里。`d` 只在块里可见。
-- **结果类型用类型实参 `edit::<G>`**，与语言里显式给类型实参的写法一致；不写 `edit d = f: G`，因为 `f: G` 读起来像是给 `f` 标类型。省略时 `G` 就是 `f` 的类型。
-- 两种块都是表达式；块里最后一个表达式是块的值，`return` 结束的是块本身（与同步块当值同一规则）。
+- **块头与 `loop` 同形**：`loop s = init …` 读作"以 `init` 为初值的状态 `s`"，`edit d = f` 读作"以 `f` 为底的草稿 `d`"；等号是引入绑定，不是赋值。`d` 只在块里可见。不用 `f as d`（`as` 在 Camel 里是类型转换，也是 `import` 的改名，块头不再借用它）。
+- **块头不写类型**：结果类型由块外的期望类型给出（`let` 标注、函数的返回类型、实参位置），与给 `loop` 的结果标类型一样；没有期望类型时就是原函数的类型。期望类型就是提交时核对的声明——改了签名或加了效应，在块外写出新类型：
+  ```camel
+  func log_result(f: (x: float) => float): ((x: float) => float uses var console)! {
+      return edit d = f { … }
+  }
+  ```
+- 两种块都是表达式；块里最后一个表达式是块的值，`return` 结束的是块本身。
 - 遍照常是函数：`export func fold::<F>(f: F): F! when is_function::<F>() { return edit d = f { … } }`。
 
 ### 15.2 句柄与查询
 
-- 句柄类型：`Graph`、`Node<T>`、`Region`、`Op`、`TypeRef`、`Tag`（作用域标签由编译器补，不写）。不带实参的 `Node` 是值类型未知的节点。
-- 根查询都以 `d` 为第一个实参：`nodes(d)`、`graphs(d)`、`params(d)`（形参端口，按位置）、`exit(d)`（出口节点）。节点上的查询以节点为实参：`inputs(n)`、`users(n)`、`op(n)`、`type_of(n)`、`region_of(n)`，以及事实（`sign(n)`、`range::<int>(n)`）。
+- 句柄类型：`Graph`、`Node<T>`、`Region`、`Op`、`TypeRef`、`Tag`（作用域标签由编译器补，不写）。
+- 根查询以草稿为第一个实参：`nodes(d)`、`graphs(d)`、`params(d)`、`exit(d)`；节点上的查询以节点为实参：`inputs(n)`、`users(n)`、`op(n)`、`type_of(n)`、`region_of(n)`，以及事实。
 - 读写法的查询（`name`、`origin`、创建编号）要求所在函数 `uses spelling`（15.5）。
 
 ### 15.3 编辑操作
 
-| 写法 | 作用 | 类型 |
-|---|---|---|
-| `replace(old, new)` | 把读 `old` 的地方改读 `new`（`new` 自己上游对 `old` 的读不改接） | `old`、`new` 同类型，或 `old` 是出口时为声明的结果类型 |
-| `replace(exit(d), v)` | 换出口的值：函数的结果也是 `exit(d)` 的一个读者，所以换出口不需要另一个操作 | `v` 是块头声明的结果类型 |
-| `erase(n)` | 删一个节点（含形参端口、效应节点）；值还有人读就先 `replace` | — |
-| `inline(at, g, args…)` | 把函数值 `g` 以 `args` 为实参展开进 `at` 的区域；`at` 是链上的语句时接过它的位置，是纯节点时只选区域 | 交出 `Node<R>`，`R` 是 `g` 的结果类型 |
-| `outline::<F>(ns)` | 把节点组 `ns` 收成一个函数值 | 结果类型在编辑前无法静态推出，所以用类型实参写明 `F`，当场对照，不符则这一步失败 |
-| `order(a, b)` | 两端都执行时 `a` 在 `b` 之前 | — |
-| `eval(n)` | 把 `n` 就地算成常量，交出常量节点 | `Node<T>` |
-| `add_param::<T>(d)` / `add_param::<T>(d, at: k)` | 加一个类型为 `T` 的形参（默认追加到末尾，`at` 给位置），交出它的端口 | `Node<T>`；形参不带名字（名字是写法，9.5），外面按位置传参 |
+| 写法 | 作用 |
+|---|---|
+| `replace(old, new)` | 把读 `old` 的地方改读 `new`（`new` 自己上游对 `old` 的读不改接） |
+| `replace(exit(d), v)` | 换出口的值：函数的结果是出口的一个读者；`v` 的类型是声明的结果类型 |
+| `erase(n)` | 删一个节点（含形参端口、效应节点）；值还有人读就先 `replace` |
+| `inline(at, g, args…)` | 把函数值 `g` 以 `args` 为实参展开进 `at` 的区域；`at` 是链上的语句时接过它的位置，是纯节点时只选区域 |
+| `outline(ns)` | 把节点组收成一个函数值；类型从期望类型推出（`let body: F = outline(ns)`），推不出时写 `outline::<F>(ns)`；与实际边界不符这一步失败 |
+| `order(a, b)` | 两端都执行时 `a` 在 `b` 之前 |
+| `eval(n)` | 把 `n` 就地算成常量，交出常量节点 |
+| `add_param(d)` / `add_param(d, at: k)` | 加一个形参（默认追加），交出它的端口；类型从期望类型推出（`let lr: Node<float> = add_param(d)`），推不出时写 `add_param::<T>(d)`；形参不带名字，外面按位置传参 |
 
-所有操作都只能在 `edit` 块里调用（签名里有句柄类型），`view` 块里调用是类型错误。
+类型实参能从期望类型推出时不写，推不出才写 `::<T>`，与语言里其他调用同一条规则（5.9）。所有编辑操作只能在 `edit` 块里调用。
 
-### 15.4 规则
+### 15.4 规则与事实
 
 ```camel
-rule add_zero::<T>(x: T) when is_float::<T>() { x + 0 => x }            // 现有写法，不变
+// 声明（现有写法，不变）
+rule add_zero::<T>(x: T) when is_float::<T>() { x + 0 => x }
+fact sign(v: int): int match v { case const c => c; case _ => 0 } join max
 
-rule forward(r: Ref<int>, v: int) {                                      // 两侧可写语句块（9.11）
-    { set(r, v); get(r) } => { set(r, v); v }
-}
-rule reread(r: Ref<int>) {
-    { let a = get(r); let b = get(r); (a, b) } => { let a = get(r); (a, a) }
-}
+// 两侧可写语句块（9.11）
+rule forward(r: Ref<int>, v: int) { { set(r, v); get(r) } => { set(r, v); v } }
+
+// 表达式：声明去掉名字，关键字保留
+let r = rule (x: int) { x * 1 => x }
+let parity = fact (v: int): int match v { case const c => c % 2; case _ => -1 } join max
+let g = f->rewrite<[rule (x: int) { x * 1 => x }, rule::<T>(x: T) when is_float::<T>() { x + 0 => x }]>
 ```
 
-- 两侧的块与普通块同一文法：语句以换行或 `;` 分开，`let` 给中间值起名，最后一个表达式是块的值；左侧 `let` 起的名字在右侧可用。
-- 锚点：两侧写出的同一条语句（同一算子、同一组实参的写法，按 `let` 名对应）就是同一个节点，原样保留。
-- `when` 条件照旧写在形参之后；条件里可用事实。
-- 规则的类型实参、`with` 实参照旧。
-- **保留未定**（设计稿第 14.1 节）：右侧写 `edit { … }` 的动作规则、临时构造的规则与事实表达式（`rule (x: int) { x * 1 => x }`、`fact (v: int): int match v { … } join max`）。形状已与 `func`/lambda 对称地留出，定之前不实现。
+- **表达式写法 = 声明去掉名字**，与 `func` 声明和 lambda 的对应同理；关键字保留，因为规则与事实的体有自己的形状，省掉就读不出是什么。泛型照写 `rule::<T>(…)`。
+- **递归要名字**：临时构造的事实不能调用自己，要递归就写声明（与 lambda 同）。
+- **临时构造的规则与事实只能捕获编译期常量**：规则在定义处检查（证明、反驳或采样），内容必须在编译期确定；运行时的值写带名字的规则、经 `with` 实参传入。
+- 语句块两侧：语句以换行或 `;` 分开，`let` 给中间值起名、左侧起的名字右侧可用，最后一个表达式是块的值；两侧写出的同一条语句（按 `let` 名对应）是锚点。`when` 照旧写在形参之后。
+- **动作规则（形状已对齐，仍搁置，见 14.1）**：右侧写 `edit { … }`，不写 `d = f`（它就在规则引擎打开的草稿里）；匹配到的值用左侧 `let` 起名，不设 `root` 这样的特殊名字；左侧的模式变量在 `edit` 里是节点句柄：
+  ```camel
+  rule zero_mul(x: int) when !may_fault(x) { { let m = x * 0; m } => edit { replace(m, inline(m, () => 0)) } }
+  ```
 
 ### 15.5 效应里的两个只读资源
 
@@ -311,14 +321,5 @@ export resource spelling readonly    // 读写法：名字、源码位置、创�
 ```
 
 - 用法与其他资源相同：`uses graph`、`uses spelling`，由推断得出，一般不写。
-- 新增资源修饰 `readonly`（与已有的 `unordered` 并列）：这种资源只有读，`uses var graph` 是类型错误；只读资源之间、与任何访问之间都不冲突，不产生顺序。
-- 带 `uses graph` 的：`view`、`edit` 块，`grad`、`vjp` 等结果可能取决于写法的变换；带 `uses spelling` 的：调用了读写法查询的代码。
-
-### 15.6 要负责人定的
-
-1. 块头写成 `edit d = f { … }` / `view d = f { … }`，不用 `as`（理由见 15.1）。备选：不给草稿起名，块里用隐含的草稿（根查询写成 `nodes()`、`exit()`）——更短，但帮助函数要拿根就得另想办法，且与 Camel 里 `with` 实参显式传递的做法不一致，所以不推荐。
-2. 结果类型写成 `edit::<G> d = f { … }`。
-3. 换出口用 `replace(exit(d), v)`，不另设操作。
-4. `outline::<F>(ns)` 写明结果类型。
-5. 资源修饰 `readonly`，两个只读资源名 `graph`、`spelling`。
-6. 规则两侧语句块的文法与锚点对应方式（15.4）。
+- 新增资源修饰 `readonly`（与已有的 `unordered` 并列）：只有读，`uses var graph` 是类型错误；只读资源不与任何访问冲突，不产生顺序。
+- 带 `uses graph` 的：`view`、`edit` 块，`grad`、`vjp` 等结果可能取决于写法的变换；用证明过的规则做的改写不带。带 `uses spelling` 的：调用了读写法查询的代码。
