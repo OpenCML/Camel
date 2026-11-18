@@ -2089,6 +2089,73 @@ bool GraphDraft::eraseUnreadNodes(std::span<const gc_node_ref_t> nodes) {
     return true;
 }
 
+GraphDraft::Savepoint GraphDraft::savepoint() const {
+    return Savepoint{
+        .nodes          = nodesById_.size(),
+        .staticSlots    = staticSlots_.size(),
+        .frameSlots     = runtimeSlotTypes_.size(),
+        .regions        = regions_.size(),
+        .mutations      = mutations_,
+        .hasFrameLayout = hasFrameLayout_,
+    };
+}
+
+void GraphDraft::rollbackTo(const Savepoint &mark) {
+    requireOneWriting("rollbackTo");
+    // What a savepoint can take back is what was appended: nodes, the static values and the frame
+    // slots they took. A region is not one of them -- a rule's right side is spliced into regions
+    // that exist -- so a rollback asked of a draft that gained one is a caller that read the
+    // savepoint wrong, and taking the nodes back while leaving the region behind would be a draft
+    // whose tables no longer agree.
+    GUARD(
+        mark.nodes <= nodesById_.size() && mark.staticSlots <= staticSlots_.size() &&
+            mark.frameSlots <= runtimeSlotTypes_.size() && mark.regions == regions_.size(),
+        std::format(
+            "rollbackTo: the savepoint names {} node(s), {} static slot(s), {} frame slot(s) and "
+            "{} region(s), and the draft has {} / {} / {} / {}",
+            mark.nodes,
+            mark.staticSlots,
+            mark.frameSlots,
+            mark.regions,
+            nodesById_.size(),
+            staticSlots_.size(),
+            runtimeSlotTypes_.size(),
+            regions_.size()));
+    // Newest first, because a node the application built reads the ones built before it and an
+    // erasure unlinks its readers. Nothing outside the run reads any of them -- a right side
+    // appends nodes, it edits none -- so the run empties from the far end.
+    for (size_t at = nodesById_.size(); at > mark.nodes; --at) {
+        const gc_node_ref_t id = static_cast<gc_node_ref_t>(at - 1);
+        if (node(id) != nullptr) {
+            eraseNode(id);
+        }
+    }
+    // The slots come back with it. The ids do not: `addNode` hands out `nodesById_.size()` and
+    // never gives one to a second node, and the id lists that keep erased nodes (`gateIds_`,
+    // `brchIds_`, `joinIds_`) skip them rather than forget them, so the id space stays spent.
+    staticSlots_.resize(mark.staticSlots);
+    staticSlotTypes_.resize(mark.staticSlots);
+    runtimeSlotTypes_.resize(mark.frameSlots);
+    hasFrameLayout_ = mark.hasFrameLayout;
+    // The commit reads a node's own edits as the second half of its tier (`lowLevelEdits`): the ids
+    // of the nodes the run wrote to go with the nodes themselves, or a commit would answer for a
+    // node that is not in the graph it publishes.
+    std::erase_if(lowLevelEdits_, [&](gc_node_ref_t id) { return id >= mark.nodes; });
+    if (lowLevelSeen_.size() > mark.nodes) {
+        lowLevelSeen_.resize(mark.nodes);
+    }
+    // The draft is what the mark found, down to the count the commit reads as "something has been
+    // written since the last delivery" (draft_session.cpp): an application that was abandoned wrote
+    // nothing, and a commit that re-encoded the graph for it would publish a version nothing
+    // changed.
+    mutations_ = mark.mutations;
+    if (nodesById_.size() > mark.nodes) {
+        // The draft was written to and is now back where it was: `touchRefs` is what tells a reader
+        // that the shape it read is stale, and the erasures inside the loop do not all do it.
+        touchRefs();
+    }
+}
+
 void GraphDraft::noteLowLevelEdit(gc_node_ref_t id) {
     // A named edit is the edit: what it changes in place is that edit's, and the table of
     // docs/design/graph-editing/README.cn.md 8.1 owes the effect and order checks nothing for it.

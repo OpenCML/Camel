@@ -4124,6 +4124,7 @@ b4485d9da6600db4 ok test/cases/opt/progen/findings/specialize_inline_crash.cml
 abd9fe79d1c36fdc ok test/cases/opt/progen/judgement/macro_builtin_refused.cml
 b90bc886c8739db8 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 3d4ae02336fd6c4c ok test/cases/opt/progen/judgement/string_of_float_format.cml
+40f9c23bd3afcb23 ok test/cases/opt/rewrite/abandoned_application.cml
 5b4c3c031f42bb05 ok test/cases/para/core/arm_reads_outer_value.cml
 f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 6182a103922f5823 ok test/cases/para/core/block_sort_merge.cml
