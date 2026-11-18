@@ -995,3 +995,15 @@ args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"graph:eq\"", "label=\":op/not\""]
 expect_output_not_contains = ["graph:ne"]
+
+[[tests]]
+name = "draft_id_is_refused_and_the_published_id_is_a_position"
+desc = "A node of a draft has no canonical number, and `id` refuses rather than answer the place the node holds in the draft -- that place is the order the nodes were made in, and the commit replaces it, so an answer there is a number of the right shape and the wrong value (design principles 9.5). The refused reading is a runtime fault, `RuntimeDiag::InvalidArgument` of `graph.id`, and its message is the answer: it says the node belongs to a draft, that a draft has no canonical number, and that `creation_id` is the reading for the draft's own order. The same body with the commit in it reads `id` of every node of the published graph, and the numbers are the positions in `nodes` -- the definition of the reading, checked as `0..n-1` and not sampled."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/graph_draft_id.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["Invalid argument of 'graph.id'", "a draft has no canonical number", "creation_id", "reading `id` of a draft's node is refused, and the refusal says why: PASS", "reading `id` after the commit is the position in `nodes`: PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
