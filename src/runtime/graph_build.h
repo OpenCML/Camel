@@ -232,14 +232,13 @@ void validateRuntimeGraphEdges(
 /// (`GraphDraft::setFuncType`) published a graph that says one type to its callers and another to
 /// its own body.
 ///
-/// Asked of a graph this commit gave *another signature* than the one it had: `before` is the graph
-/// the program held for it, `after` the one the commit encoded. A graph that had no `before` was
-/// built by the compiler and not republished by a rewrite, and is not asked (see the comment at the
-/// definition for the reading that put that boundary there). Throws std::runtime_error naming the
+/// Asked of *every* graph a commit encodes, in every build, as the call and payload checks are
+/// (`validateRuntimeGraphCalls` above): a graph that is wrong from the moment it is made is exactly
+/// what a check placed only on republished graphs misses. The commit asks it beside those two, for
+/// every graph it encoded and not only for one it edited. Throws std::runtime_error naming the
 /// parameter, the declared type and the type the port node carries.
 void validateRuntimeGraphPortTypes(
-    const Program &program, const GCGraph *before, const GCGraph *after,
-    GraphState state = GraphState::Executable);
+    const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
 /// What the commit delivered, read back against the draft it encoded: `graph`, the graph the
 /// program holds for `transaction`'s draft, must hold exactly the draft's edges -- the four kinds

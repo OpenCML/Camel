@@ -1886,16 +1886,16 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
     }
-    // The promise a graph makes twice: its ports are the parameters its own signature declares. It
-    // is asked of a graph the draft gave *another signature* than the one the program held for it
-    // and not of every graph (`validateRuntimeGraphPortTypes`, src/runtime/graph_edges.cpp), which
-    // is the one thing a commit knows and the seal does not: a graph the compiler built for this
-    // commit has no earlier signature to have been rewritten from.
-    for (const auto &[graph, copy] : fresh) {
-        if (graph == nullptr || !edited_.contains(graph)) {
-            continue;
+    // The promise a graph makes twice: its ports are the parameters its own signature declares
+    // (`validateRuntimeGraphPortTypes`, src/runtime/graph_edges.cpp). Asked of every graph this
+    // commit encoded, as the two checks above are, and not only of a graph it edited: a graph that
+    // is wrong from the moment it is made is exactly what a check placed on republished graphs
+    // misses -- which is how the compiler's own specializations carried a shifted port list unseen
+    // until a check was pointed at them.
+    for (GCGraph *graph : order) {
+        if (auto it = fresh.find(graph); it != fresh.end()) {
+            validateRuntimeGraphPortTypes(*committed, it->second, graphState_);
         }
-        validateRuntimeGraphPortTypes(*committed, graph, copy, graphState_);
     }
     // The copy is the same graph to the fact store; a new revision only for a graph that was
     // edited and not encoded back to the same content (what a graph refers to is the fact

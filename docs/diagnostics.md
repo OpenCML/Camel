@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-325 diagnostics: 303 errors, 22 warnings. 15 carry a machine-applicable edit, 310 say why they carry none.
+326 diagnostics: 304 errors, 22 warnings. 15 carry a machine-applicable edit, 311 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -279,6 +279,7 @@ prints one entry.
 | `0x03000214` | [SemanticDiag::CapturedVarWrittenAfterTheClosure](#capturedvarwrittenaftertheclosure) | Error | no |
 | `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
 | `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
+| `0x03000217` | [SemanticDiag::ReadonlyResourceWritten](#readonlyresourcewritten) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -9258,6 +9259,46 @@ func add(x: int): int sync {
 func main(): int sync {
     let g = add<total>
     println(g(1), total)
+    return 0
+}
+```
+
+### ReadonlyResourceWritten
+
+`0x03000217` · Error · `SemanticDiag::ReadonlyResourceWritten`
+
+**Fix**
+
+None: choice: the write and the declaration cannot both stand, and which one changes is the intent
+
+**Message**
+
+```text
+The resource '{0}' is declared 'readonly', but the clause '{1}' writes it.
+```
+
+**Help**
+
+```text
+A `readonly` resource is only ever read (design principles 9.12, 15.5): the graph a function is, and the spelling of a name, are representations nothing that runs writes, so no call can declare a write of one and two accesses to it never conflict and need no order. Drop the `var` and write the entry as a read (`uses {0}`), or drop `readonly` from `resource {0}` if the program really writes it.
+```
+
+**Example** (`test/cases/effects/err_write_readonly_resource.cml`, run as `camel test/cases/effects/err_write_readonly_resource.cml`)
+
+```camel
+// `graph` is declared `readonly`: nothing that runs writes the graph a function is, so a clause
+// cannot declare a write of it (design principles 9.12, 15.5). `uses var graph` is that write, and
+// it is a type error -- the diagnostic names the resource and the modifier that forbids it.
+//
+// `readonly_resource_read.cml` is the same program with the bare entry, and it compiles.
+export resource graph readonly
+
+func twice(f: int): int uses var graph {
+    return f * 2
+}
+
+func main(): int {
+    println(twice(21))
     return 0
 }
 ```

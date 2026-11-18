@@ -87,6 +87,51 @@ ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t 
     return draft.allocateRuntimeSlot(type);
 }
 
+/// The same signature with one ordinary parameter taken out (`GraphDraft::removeNormPort`).
+///
+/// Everything that makes the surviving parameters the parameters they are stays: their names (a
+/// diagnostic, a graph dump and a translation refer to a parameter by name), their `var` marks, the
+/// `constas` marks that record a compile-time value, a trailing rest parameter, and the resources
+/// the signature publishes. That is why this is built through the factory instead of with
+/// `FunctionType::create`, which states a list of parameter types and drops the four other things a
+/// parameter list carries.
+camel::core::type::FunctionType *withoutNormParameter(
+    const camel::core::type::FunctionType &type, size_t dropped) {
+    camel::core::type::FunctionTypeFactory factory;
+    const bool named = type.hasArgNames();
+    factory.setHasCompileInfo(named);
+    factory.setResources(type.resources());
+    factory.setExitType(type.hasExitType() ? type.exitType() : camel::core::type::Type::Void());
+    const auto nameAt = [&type, named](size_t index) {
+        return named ? std::string(type.argNameAt(index)) : std::string();
+    };
+    // The `with` parameters are copied as they stand: this is one parameter of the ordinary list.
+    for (size_t i = 0; i < type.withTypesCount(); ++i) {
+        if (type.hasWithRest() && i + 1 == type.withTypesCount()) {
+            factory.addWithRest(nameAt(i), type.withRestType());
+        } else if (type.withIsConstasAt(i)) {
+            factory.addWithConstasArg(nameAt(i), type.withTypeAt(i));
+        } else {
+            factory.addWithArg(
+                nameAt(i), type.withTypeAt(i), type.withIsVarAt(i), type.withNeedsValueAt(i));
+        }
+    }
+    for (size_t i = 0; i < type.normTypesCount(); ++i) {
+        if (i == dropped) {
+            continue;
+        }
+        const size_t name = type.withTypesCount() + i;
+        if (type.hasRest() && i + 1 == type.normTypesCount()) {
+            factory.addRestArg(nameAt(name), type.restPack());
+        } else if (type.normIsConstasAt(i)) {
+            factory.addConstasArg(nameAt(name), type.normTypeAt(i));
+        } else {
+            factory.addNormArg(nameAt(name), type.normTypeAt(i), type.normIsVarAt(i));
+        }
+    }
+    return factory.build();
+}
+
 } // namespace
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
@@ -653,7 +698,35 @@ void GraphDraft::appendClosureNode(gc_node_ref_t id) {
 void GraphDraft::removeNormPort(gc_node_ref_t id) {
     requireOneWriting("removeNormPort");
     ++mutations_;
-    std::erase(normPorts_, id);
+    const auto it = std::find(normPorts_.begin(), normPorts_.end(), id);
+    if (it == normPorts_.end()) {
+        return;
+    }
+    const size_t port = static_cast<size_t>(it - normPorts_.begin());
+    normPorts_.erase(it);
+    // The signature loses the same parameter, for the reason `removeWithPort` below gives for the
+    // `with` list: the two are one statement about one parameter, written twice. A graph that keeps
+    // declaring a parameter whose port is gone publishes two answers to one question, and every
+    // reader that pairs the two lists by position -- a call site checking the port
+    // (`EdgeChecker::checkCall`), a translation printing the signature, the entry-argument reader
+    // -- places the parameters after it one slot too early.
+    //
+    // Measured 2026-11-18: `test/cases/opt/generic/specialize_dim_name_recursion.cml` publishes a
+    // `walk$spec0` that declares `(n: int, xs: f32[n]) => f32 pure` over the one port node it kept,
+    // whose type is `f32[n]` -- the port of the parameter declared `int` was gone and the one left
+    // stood for it. `reinferDraftTypes` refuses to rebuild a signature whose two counts disagree
+    // (src/runtime/draft_types.cpp), so nothing else corrected it.
+    //
+    // The parameter is looked up among the fixed ones: a rest parameter is the last entry of the
+    // signature and not a port a call binds a value to (a specialization walks the formal port
+    // nodes, and a rest pack has none), so what is erased here pairs with the signature entry at
+    // the same index.
+    const size_t declared = funcType_ != nullptr ? funcType_->normTypesCount() : 0;
+    const size_t fixed =
+        funcType_ != nullptr && funcType_->hasRest() ? declared - 1 : declared;
+    if (port < fixed) {
+        funcType_ = withoutNormParameter(*funcType_, port);
+    }
 }
 
 void GraphDraft::removeWithPort(gc_node_ref_t id) {

@@ -5,12 +5,13 @@
  *
  * The rule evening (recursion-specialization-fixed-point-followups, items 1 and 2)
  * is what this case pins. The call the entry makes asks for an instance the call cycle does not
- * hold yet, and gets one: `walk$spec0`, declared `(n: int, xs: f32[n]) => f32` - the declaration
- * itself, with the extent the declaration leaves to the name still unbound and never the eight the
- * entry argument is long. The call inside that instance is the group's second reading: the same
- * function with a different key along the cycle, where the extent the name stands for is widened
- * to `?`, so it binds nothing and the recursion reaches a fixed point instead of taking a copy per
- * level. The total is not held up by a count:
+ * hold yet, and gets one: `walk$spec0`, declared `(xs: f32[n]) => f32` - the declaration with the
+ * level count the entry call fixes to a constant bound out of it, so that parameter and its port are
+ * both gone, and with the extent the declaration leaves to the name still unbound and never the
+ * eight the entry argument is long. The call inside that instance is the group's second reading: the
+ * same function with a different key along the cycle, where the extent the name stands for is
+ * widened to `?`, so it binds nothing and the recursion reaches a fixed point instead of taking a
+ * copy per level. The total is not held up by a count:
  * `kMaxTypeSpecializationsPerRecursiveFunction` is on its way out (item 3), and the readings of
  * this case are the same with it at 8 and at 4096 (see
  * specialize_dim_name_recursion.bounded).

@@ -121,9 +121,9 @@ class EdgeChecker {
     }
 
     /// The violations of `checkPortTypes` alone: a graph's ports are the parameters its own
-    /// signature declares. Asked by the commit for a graph it gave another signature than the one
-    /// the graph had (`validateRuntimeGraphPortTypes`, below), which is why it is not one of the
-    /// checks `run()` makes on every graph.
+    /// signature declares. Asked of every graph a commit encodes, beside the seal
+    /// (`validateRuntimeGraphPortTypes`, below), which is why it is not one of the checks `run()`
+    /// makes on every graph.
     std::vector<std::string> portTypeViolations() {
         checkPortTypes();
         return std::move(violations_);
@@ -200,9 +200,18 @@ class EdgeChecker {
      * and declares no capture, which is what a call to it passes and what the call edge counts), so
      * the two counts are two questions and not one.
      *
-     * This is asked of a graph a commit gave a new signature and not of every graph (see
-     * `validateRuntimeGraphPortTypes` below for who calls it and why the tier is the signature and
-     * not the build). The port of a `var` parameter holds the variable and the parameter is typed by
+     * This is asked of every graph a commit encodes, in every build (see
+     * `validateRuntimeGraphPortTypes` below for where it is called). It used to be asked only of a
+     * graph the commit gave another signature than the one the graph had, because the compiler's
+     * own specializations published exactly this defect: their norm-port list was one entry short
+     * of the signature they published, so the port of parameter 0 carried parameter 1's type
+     * (`walk$spec0` in `test/cases/opt/generic/specialize_dim_name_recursion.cml` declared
+     * `(n: int, xs: f32[n])` over one port whose type was `f32[n]`). That was a defect of the
+     * specialization and not of this check -- `GraphDraft::removeNormPort` moved the port list and
+     * left the signature, fixed 2026-11-18 -- and with it fixed the check is asked unconditionally,
+     * as it was meant to be from the first.
+     *
+     * The port of a `var` parameter holds the variable and the parameter is typed by
      * its value -- the relation `reinferDraftTypes` holds the signature to when it re-infers one
      * (src/runtime/draft_types.cpp) -- so both sides are read by value, and the declaration and the
      * port node are judged the same way whichever of the two a rewrite moved.
@@ -958,58 +967,21 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
 }
 
 /**
- * Whether two function types are one signature: the same parameter lists, the same exit type. What
- * a commit asks before it judges a graph's ports -- see `validateRuntimeGraphPortTypes`.
+ * A graph's ports are the parameters its own signature declares -- asked of every graph this commit
+ * encoded, in every build (`EdgeChecker::checkPortTypes`, which does the judging).
+ *
+ * Every graph and not only one the commit gave another signature: a graph that is wrong from the
+ * moment it is made is exactly what a check placed on republished graphs misses. That placement was
+ * a holding position while the compiler's own specializations published a shifted port list (the
+ * defect `GraphDraft::removeNormPort` held, fixed 2026-11-18), and this is the end state it was
+ * holding for.
  */
-bool sameSignature(
-    const camel::core::type::FunctionType *left, const camel::core::type::FunctionType *right) {
-    if (left == right) {
-        return true;
-    }
-    if (left == nullptr || right == nullptr) {
-        return false;
-    }
-    if (left->normTypesCount() != right->normTypesCount() ||
-        left->withTypesCount() != right->withTypesCount()) {
-        return false;
-    }
-    if (!typesCompatible(left->exitType(), right->exitType())) {
-        return false;
-    }
-    for (size_t i = 0; i < left->normTypesCount(); ++i) {
-        if (!typesCompatible(left->normTypeAt(i), right->normTypeAt(i))) {
-            return false;
-        }
-    }
-    for (size_t i = 0; i < left->withTypesCount(); ++i) {
-        if (!typesCompatible(left->withTypeAt(i), right->withTypeAt(i))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 void validateRuntimeGraphPortTypes(
-    const Program &program, const GCGraph *before, const GCGraph *after, GraphState state) {
-    // A graph this commit made out of nothing is the builder's reading, not a rewrite's: its ports
-    // and its signature were written together, and the graphs the compiler builds from scratch do
-    // publish lists this check would refuse (measured 2026-11-18: a specialization's norm-port list
-    // is shifted by one entry against its own signature -- `f1$spec0` declares `bool` for parameter 0
-    // and its port node 1 carries parameter 1's type -- which is a defect of the specialization, in
-    // the builder, and not the question here). Nothing asks about a graph that had no signature
-    // before this commit.
-    if (before == nullptr || after == nullptr || !after->hasNodePayload()) {
+    const Program &program, const GCGraph *graph, GraphState state) {
+    if (graph == nullptr || !graph->hasNodePayload()) {
         return;
     }
-    // The tier is the signature and not the build: a commit that wrote no new signature over the
-    // graph it published owes no answer, and one that did owes it in every build. A rewrite that
-    // gives a graph another function's type is the whole of this case, and it makes no node at all,
-    // which is why this cannot be asked from `commitViolation` (whose checks are asked by what the
-    // draft added) and is asked here instead, beside the seal.
-    if (sameSignature(before->funcType(), after->funcType())) {
-        return;
-    }
-    EdgeChecker checker(program, *after, state);
+    EdgeChecker checker(program, *graph, state);
     const std::vector<std::string> violations = checker.portTypeViolations();
     if (violations.empty()) {
         return;
@@ -1017,7 +989,7 @@ void validateRuntimeGraphPortTypes(
     std::string text = std::format(
         "Runtime graph '{}' publishes a signature of another type than the ports it holds ({} "
         "violation(s)):",
-        after->name(),
+        graph->name(),
         violations.size());
     for (size_t i = 0; i < violations.size() && i < 8; ++i) {
         text += "\n  " + violations[i];

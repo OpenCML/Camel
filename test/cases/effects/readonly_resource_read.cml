@@ -1,0 +1,22 @@
+/**
+ * A resource declared `readonly` is only ever read (design principles 9.12, 15.5): `graph` is the
+ * graph a function is, which nothing that runs writes, and `spelling` is how a name is written.
+ * A clause names a read of one with a bare entry, the way it names the read of any other resource
+ * -- `uses graph` -- and the declaration reaches that clause through the module, so the entry is a
+ * read of an external resource like `clock`'s.
+ *
+ * This is the positive half of the pair. `err_write_readonly_resource.cml` is the same program
+ * with `uses var graph`, and it is refused: the modifier is read by the effect check and not only
+ * by the parser, and the two programs read differently.
+ */
+export resource graph readonly
+export resource spelling readonly
+
+func twice(f: int): int uses graph {
+    return f * 2
+}
+
+func main(): int {
+    println(twice(21))
+    return 0
+}
