@@ -1884,6 +1884,22 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         }
     }
 
+    // The copy is the same graph to the fact store; a new revision only for a graph that was
+    // edited and not encoded back to the same content (what a graph refers to is the fact
+    // engine's business: closureRevision). This is all `sameContent` decides: a revision is a
+    // number about the content that was delivered, and the content is the copy.
+    //
+    // It is made before the staged return and not after it, because a revision is what every
+    // reading of a body is keyed by: `footprintOf` caches by `(closureRevision(program, graph),
+    // epoch)`, so a staged copy left at the revision of the graph it was encoded from answers a
+    // later round with the footprint of a body it no longer has -- the same key, a different body.
+    // This is another defect met on the way and fixed here; it is not the cause of the two red
+    // cases this branch follows: the staged measurement of the same program still reproduces them.
+    for (const auto &[graph, copy] : fresh) {
+        const bool changed = edited_.contains(graph) && !sameContent(*graph, *copy);
+        GCGraphBuildAccess::inheritRevision(copy, graph, changed);
+    }
+
     if (staged) {
         // The encode and nothing after it: the program these drafts would publish, before the
         // checks that judge it and before anything is delivered. A pass that has to state the type
@@ -1918,14 +1934,6 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         if (auto it = fresh.find(graph); it != fresh.end()) {
             validateRuntimeGraphPortTypes(*committed, it->second, graphState_);
         }
-    }
-    // The copy is the same graph to the fact store; a new revision only for a graph that was
-    // edited and not encoded back to the same content (what a graph refers to is the fact
-    // engine's business: closureRevision). This is all `sameContent` decides now: a revision is a
-    // number about the content that was delivered, and the content is the copy.
-    for (const auto &[graph, copy] : fresh) {
-        const bool changed = edited_.contains(graph) && !sameContent(*graph, *copy);
-        GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
 
