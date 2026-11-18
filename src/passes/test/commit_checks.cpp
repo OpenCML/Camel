@@ -278,7 +278,144 @@ BranchArm findBranchArm(const Program &program) {
     return {};
 }
 
+/// One branch of one graph whose two arms compute a value each: the node that owns the branch, its
+/// join, and the two arms the edit goes between. A constant written in an arm is hoisted to the body
+/// (it has no region of its own to be read out of), so an arm whose result is a DATA node is not an
+/// arm this reading can use.
+struct SiblingArms {
+    const GCGraph *graph        = nullptr;
+    gc_node_ref_t brch          = kInvalidNodeRef;
+    gc_node_ref_t join          = kInvalidNodeRef;
+    uint32_t firstArm           = 0; // the arm the copy lands in
+    uint32_t secondArm          = 0; // the arm the value is read from
+    gc_node_ref_t firstResult   = kInvalidNodeRef; // the first arm's own value
+    gc_node_ref_t secondResult  = kInvalidNodeRef; // the second arm's value
+};
+
+SiblingArms findSiblingArms(const Program &program) {
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph == nullptr) {
+            continue;
+        }
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            const GCNode *node = graph->node(ref);
+            if (node == nullptr || node->kind != GCNodeKind::Brch) {
+                continue;
+            }
+            const auto *body = graph->nodeBodyAs<GCBrchBody>(ref);
+            if (body == nullptr || body->join == kInvalidNodeRef) {
+                continue;
+            }
+            SiblingArms found;
+            found.graph = graph;
+            found.brch  = ref;
+            found.join  = body->join;
+            for (uint32_t region = 1; region < graph->regionCount(); ++region) {
+                const GCRegion *record = graph->region(region);
+                if (record == nullptr || record->kind != GCRegionKind::Arm || record->owner != ref) {
+                    continue;
+                }
+                // The arm has to end in a node the arm itself holds: one hoisted to the body is not
+                // a value only this arm writes.
+                if (record->result == kInvalidNodeRef ||
+                    graph->nodeRegion(record->result) != region) {
+                    continue;
+                }
+                if (found.firstArm == 0) {
+                    found.firstArm    = region;
+                    found.firstResult = record->result;
+                    continue;
+                }
+                found.secondArm    = region;
+                found.secondResult = record->result;
+                return found;
+            }
+        }
+    }
+    return {};
+}
+
+/// A COPY in the first arm that reads `from`, and the branch's join reading the copy where the
+/// first arm's own value stood, so the arm ends in the copy and the read is on the arm's edge.
+/// Nothing is spliced that no execution reaches: a value nothing reads is a question nobody asks.
+gc_node_ref_t spliceCopyBetweenArms(
+    GraphTransaction &transaction, const SiblingArms &arms, gc_node_ref_t from) {
+    auto &draft                  = transaction.edit();
+    const GCNode *replaced       = arms.graph->node(arms.firstResult);
+    camel::core::type::Type *type = replaced != nullptr ? replaced->dataType() : nullptr;
+    const gc_node_ref_t copy     = draft.addCopyNode(type, 0);
+    draft.setNormInputs(copy, std::span<const gc_node_ref_t>(&from, 1));
+    draft.setNodeRegion(copy, arms.firstArm);
+    std::vector<gc_node_ref_t> joinInputs(
+        arms.graph->withInputsOf(arms.join).begin(),
+        arms.graph->withInputsOf(arms.join).end());
+    for (gc_node_ref_t &slot : joinInputs) {
+        if (slot == arms.firstResult) {
+            slot = copy;
+        }
+    }
+    draft.setWithInputs(
+        arms.join, std::span<const gc_node_ref_t>(joinInputs.data(), joinInputs.size()));
+    draft.setRegionResult(arms.firstArm, copy);
+    return copy;
+}
+
 } // namespace
+
+const camel::runtime::Program *
+CommitSiblingArmTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {
+    if (program == nullptr) {
+        return program;
+    }
+    out << "commit_sibling_arm: the seal asks whether a node reads only what runs when it runs "
+           "(`validateRuntimeBranchArms`, src/runtime/branch_arms.cpp), not only whether it reads a "
+           "port of a region it is not in (`checkGraphCrossReferences`, src/runtime/graph_edges.cpp)\n"
+        << std::flush;
+    const SiblingArms arms = findSiblingArms(*program);
+    if (arms.graph == nullptr) {
+        out << "commit_sibling_arm: no branch of two arms that compute a value each\n";
+        return program;
+    }
+    // The half that must be refused: a copy in the first arm reading the second arm's value. The
+    // arms are regions of one branch, so only one of them runs: the read never happens, and the
+    // value it would read was never written.
+    {
+        RuntimeGraphDraftSession session(context_, program);
+        auto &transaction = session.edit(const_cast<GCGraph *>(arms.graph));
+        const gc_node_ref_t copy = spliceCopyBetweenArms(transaction, arms, arms.secondResult);
+        out << "commit_sibling_arm: graph '" << arms.graph->name() << "' arm " << arms.firstArm
+            << " of BRCH " << arms.brch << " now ends in node " << copy
+            << ", which reads node " << arms.secondResult << " of arm " << arms.secondArm
+            << "\n"
+            << std::flush;
+        try {
+            const Program *committed = session.commit();
+            out << "commit_sibling_arm: the commit published it, which is the defect\n";
+            (void)committed;
+        } catch (const GraphCommitRefused &refused) {
+            out << "commit_sibling_arm: refused by the commit checks, check="
+                << commitCheckName(refused.violation().check) << '\n'
+                << std::flush;
+        } catch (const std::runtime_error &refused) {
+            out << "commit_sibling_arm: refused at the commit: " << refused.what() << '\n'
+                << std::flush;
+        }
+    }
+    // The half that must publish: the same copy reading a value of the arm it sits in. Without it,
+    // "it was refused" would mean only "a copy across arms is always refused", which is a reading
+    // of neither rule.
+    RuntimeGraphDraftSession session(context_, program);
+    auto &transaction = session.edit(const_cast<GCGraph *>(arms.graph));
+    const gc_node_ref_t copy = spliceCopyBetweenArms(transaction, arms, arms.firstResult);
+    out << "commit_sibling_arm: graph '" << arms.graph->name() << "' arm " << arms.firstArm
+        << " of BRCH " << arms.brch << " now ends in node " << copy << ", which reads node "
+        << arms.firstResult << " of the same arm\n"
+        << std::flush;
+    const Program *committed = session.commit();
+    out << "commit_sibling_arm: the copy that reads a value of its own arm was published\n"
+        << std::flush;
+    return committed;
+}
 
 const camel::runtime::Program *
 FoldFunctionTypeTestPass::apply(const camel::runtime::Program *program, std::ostream &out) {

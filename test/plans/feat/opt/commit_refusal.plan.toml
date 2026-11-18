@@ -177,3 +177,25 @@ args = ["${case}", "test::commit_ancestor", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::PassEffectOrder"
 expect_output_contains = ["commit_ancestor: the regions a commit answers for are the ones it touched and every region around them", "and now waits for nothing", "now writes stdout at node", "neither the branch node nor the write left in the body is a node this commit made", "commit_ancestor: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write stdout"]
+# The read across two arms. The port rule of the seal (`checkGraphCrossReferences`,
+# src/runtime/graph_edges.cpp) asks it of a region's *ports* only, and this value is not a port; the
+# question is asked anyway, by the branch-arm invariant of the seal (`validateRuntimeBranchArms`,
+# src/runtime/branch_arms.cpp): a node reads only nodes that run whenever it runs. The fixture's two
+# arms compute a value each -- a constant written in an arm is hoisted to the body and has no region
+# of its own to be read out of -- and the pass splices a COPY into one arm reading the other arm's
+# value, with the branch's JOIN reading the copy where the first arm's own value stood, so the read
+# sits on the edge the arm ends at and nothing can be dead about it.
+#
+# Both halves are one run, the way `commit_refusal.retier` reads two drafts in one: the copy across
+# the arms is refused at the commit, naming the node it reads and the two arms; the same copy reading
+# a value of the arm it sits in is published, and the program runs to its own value. Without the
+# second half, "it was refused" would mean only "a copy is always refused", which is a reading of
+# neither rule.
+[[tests]]
+name = "commit_refusal.sibling_arm"
+desc = "A copy spliced into one arm reads the other arm's value: the commit refuses it as a read that would run only when the other arm is taken, while the same copy reading a value of its own arm is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/sibling_arm.cml"
+args = ["${case}", "test::commit_sibling_arm", "std::nvm"]
+expect_exit = 50
+expect_stdout_contains = ["commit_sibling_arm: the seal asks whether a node reads only what runs when it runs", "which reads node", "of arm", "refused at the commit: Runtime graph 'pick' breaks the branch-arm invariant", "belongs to two arms", "it would run only when arm", "reads it", "of the same arm", "the copy that reads a value of its own arm was published"]
