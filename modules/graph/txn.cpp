@@ -364,6 +364,84 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
+/// Whether `target` runs before `start`: whether walking up the inputs of `start` -- values, `with`,
+/// control, sync and order -- reaches `target`. An input edge `u -> v` says `u` runs before `v`
+/// (design principles 3.1), so this is the reading an order edge asks before it is written: an edge
+/// that ordered `before` before `after` while the graph already computes `before` from `after` puts
+/// the graph on a cycle of runs. The seal check refuses that cycle, and a commit that wrote it would
+/// be refused with a message about a graph this operator made; asking here names the operator's own
+/// mistake instead.
+bool runsBefore(camel::runtime::GraphTransaction &transaction, gc_node_ref_t target,
+                gc_node_ref_t start) {
+    auto &draft = transaction.edit();
+    if (start == target) {
+        return true;
+    }
+    std::vector<gc_node_ref_t> work{start};
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    while (!work.empty()) {
+        const gc_node_ref_t node = work.back();
+        work.pop_back();
+        if (node == target) {
+            return true;
+        }
+        if (node >= seen.size() || seen[node] || draft.header(node) == nullptr) {
+            continue;
+        }
+        seen[node] = true;
+        for (auto group :
+             {draft.normInputsOf(node),
+              draft.withInputsOf(node),
+              draft.ctrlInputsOf(node),
+              draft.syncInputsOf(node),
+              draft.orderInputsOf(node)}) {
+            work.insert(work.end(), group.begin(), group.end());
+        }
+    }
+    return false;
+}
+
+/// `order(t, before, after)`: adds an order edge, so that when both nodes run `before` runs before
+/// `after`. An order edge only orders and never makes a node run (design principles 3.1), which is
+/// why the whole promise is the edge and nothing else is written. Refused when the two nodes are not
+/// two nodes of one graph, and when the edge would close a cycle; an edge that is there already
+/// changes nothing and is not a refusal, because the promise the caller asks for holds.
+slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.order";
+    TxnState &state         = openState(norm, 0, site);
+    const auto *before      = norm.get<Handle *>(1);
+    const auto *after       = norm.get<Handle *>(2);
+    auto [transaction, afterRef] = draftOf(state, after, site);
+    auto &draft                  = transaction.edit();
+    // A node the transaction made (what `eval` and `add_constant` answer) names the transaction and
+    // not the program, so "the same graph" is asked of the two handles rather than of the session's
+    // program: both must be nodes of that one graph, whichever way they name it.
+    if (before->graph() != after->graph() || before->program() != after->program()) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the two nodes are not nodes of the same graph");
+    }
+    const gc_node_ref_t beforeRef = before->index();
+    if (!draft.alive(beforeRef)) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
+    }
+    if (beforeRef == afterRef) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the two nodes are the same node");
+    }
+    if (runsBefore(transaction, afterRef, beforeRef)) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the graph computes 'before' from 'after' already: the edge would form a cycle");
+    }
+    draft.appendOrderDependency(afterRef, beforeRef);
+    return NullSlot;
+}
+
 /// The changed function (of the type that was opened, `F`), or the error value `GraphInvalid` when a
 /// graph it edited breaks an invariant (the message names it). The transaction is over either
 /// way. The commit is a value: it never installs the context's program, whoever the transaction
@@ -473,6 +551,7 @@ const std::vector<TxnOp> &txnOps() {
         {"commit", commitKernel},
         {"abort", abortKernel},
         {"eval", evalKernel},
+        {"order", orderKernel},
     };
     return ops;
 }

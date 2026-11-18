@@ -520,7 +520,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-3314284e5333a70d ok stdlib/graph.cml
+45e14e46b35110d4 ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -554,7 +554,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
-328db940e2249591 ok stdlib/vjp.cml
+7535a5ecc1f47e2c ok stdlib/vjp.cml
 f70d4e57b1f9b14e ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
@@ -2056,7 +2056,7 @@ ea90d120b3904b9c ok test/cases/compile/transforms/transpose_takes_a_function_par
 9da461821122abb6 ok test/cases/compile/transforms/transpose_tuple_component_first.cml
 55e63a516f5902e0 ok test/cases/compile/transforms/transpose_tuple_component_second.cml
 2766cf6f07e8cb2b ok test/cases/compile/transforms/transpose_tuple_nested.cml
-8c3698240f3b566b ok test/cases/compile/transforms/transpose_unread_array_parameter_stops_earlier.cml
+b979498945a50b67 ok test/cases/compile/transforms/transpose_unread_open_array_needs_a_witness.cml
 79b8329f005ddf96 ok test/cases/compile/transforms/transpose_unread_parameter_answers_zero.cml
 cf64ad60dada4fca ok test/cases/compile/transforms/transpose_unread_parameters.cml
 b7a53acec352ba52 ok test/cases/compile/transforms/transpose_unread_state_answers_zero.cml
@@ -2065,8 +2065,7 @@ eb22cf4fd83fba8a ok test/cases/compile/transforms/vjp_analytic_gradient.cml
 5e44a5ef5b3631d6 ok test/cases/compile/transforms/vjp_answers_abs_log_maximum_and_minimum.cml
 4b8ac60dcc91181c ok test/cases/compile/transforms/vjp_arities.cml
 efeb26c2194c13a7 ok test/cases/compile/transforms/vjp_carries_its_ruleset.cml
-04435f50f6e566b4 ok test/cases/compile/transforms/vjp_const_function_answers_zero.cml
-7dbc9999a7de596e ok test/cases/compile/transforms/vjp_const_function_open_rank_zero_is_refused_by_a_real_array.cml
+f558e6bf58d83b88 ok test/cases/compile/transforms/vjp_const_function_answers_zero.cml
 393bcaec7203612c ok test/cases/compile/transforms/vjp_gradient.cml
 1b293ef5d17a6e76 ok test/cases/compile/transforms/vjp_loop_gradient.cml
 6c3ca89659c74a24 ok test/cases/compile/transforms/vjp_loop_rounds_walk_backwards.cml
@@ -2823,7 +2822,7 @@ ed839a06bfe0e847 ok test/cases/linear/runtime/recursion_depth_limit.cml
 431b45ba8bfcf34c ok test/cases/linear/runtime/same_resource_order.cml
 b199f1e857512d01 ok test/cases/linear/runtime/same_resource_order_call.cml
 50482ac490770e33 ok test/cases/linear/runtime/second_name_in_round.cml
-b62ac03619715cd4 ok test/cases/linear/runtime/second_name_in_round_scalar.cml
+b2f088d874f3a602 ok test/cases/linear/runtime/second_name_in_round_scalar.cml
 f6283621ba8bf8a6 ok test/cases/linear/runtime/sync_block_order.cml
 5a3ccda81ed8cc21 ok test/cases/linear/runtime/sync_literal_operands.cml
 38a87f91ff7ddedf ok test/cases/linear/runtime/var_between_statements.cml
@@ -3078,6 +3077,8 @@ ae72c3f152f64055 ok test/cases/modules/graph_pass/camel_import_values.cml
 9e76d36fd0b1a2e8 ok test/cases/modules/graph_pass/chainlib.cml
 b7923a281c80d3b2 ok test/cases/modules/graph_pass/cross_arm.cml
 b552f7c949a34d32 ok test/cases/modules/graph_pass/edits.cml
+cd29d29dcb72b0ed ok test/cases/modules/graph_pass/edits_exit.cml
+cb48852bde1b514c ok test/cases/modules/graph_pass/edits_order.cml
 a430ad3f5ee80b36 ok test/cases/modules/graph_pass/entry_body.cml
 fb750683e92efc64 ok test/cases/modules/graph_pass/entry_target.cml
 38195707d426d540 ok test/cases/modules/graph_pass/firstuser.cml
@@ -3096,6 +3097,7 @@ a6397fcb59f71518 ok test/cases/modules/graph_pass/monomorphic.cml
 c8999c489aa7730a ok test/cases/modules/graph_pass/neutral_kept.cml
 a192e6315d915edf ok test/cases/modules/graph_pass/neutral_target.cml
 04d78f0e3d3d8c66 ok test/cases/modules/graph_pass/neutral_var_target.cml
+052ae7e70b4f06e4 ok test/cases/modules/graph_pass/orderprobe.cml
 12ac649c0962b334 ok test/cases/modules/graph_pass/over_function.cml
 9d8f61a3c9088d11 ok test/cases/modules/graph_pass/params.cml
 aab4aaa568b160c3 ok test/cases/modules/graph_pass/probes.cml

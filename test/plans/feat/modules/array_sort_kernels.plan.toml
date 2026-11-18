@@ -29,11 +29,11 @@ timeout_ms = 20000
 # is `Builder::inPlaceRebindingOf`, a mechanism of the statement shape from when a `var` was a cell.
 # Since stage S1 of the direct-SSA plan a same-region local `var` is a value, so there is no cell to
 # take the array out of and the rewrite cannot run at all; the author's answer of 2026-11-18
-# (`docs/handover/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules that
-# in-place is the execution plan's reuse decision and not the front end's: at `sort(v)`, when that is
-# the old `v`'s last use, the plan takes the in-place form (`StorageReuse::Input`, and `ByArrayCount`
-# when it can only count) -- design principles 10.5, "an update at the old value's last use is in
-# place". The front-end rewrite and `inPlaceCalls_` are to be deleted with it.
+# (`docs/handover/questions/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules
+# that in-place is the execution plan's reuse decision and not the front end's: at `sort(v)`, when
+# that is the old `v`'s last use, the plan takes the in-place form (`StorageReuse::Input`, and
+# `ByArrayCount` when it can only count) -- design principles 10.5, "an update at the old value's
+# last use is in place". The front-end rewrite and `inPlaceCalls_` are to be deleted with it.
 #
 # So what this entry asks now is the plan's verdict on this program, read with the ruler the plan
 # page names for exactly that question: `camel inspect --copies`. The four `v = v->sort` rebindings

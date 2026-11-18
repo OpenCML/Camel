@@ -1632,7 +1632,7 @@ for that reason. Measured 2026-11-18 on this tree: the operator resolver sees ty
 gives `lin` an empty residual list while the graph has as many as the body reads, and a call site
 typed by the resolver hands the callee the wrong number of values. That ordering is a question
 for the author (a typed hole, or the `std::macro` stage evaluating the cut where the graph *is* in
-hand), and `docs/handover/reports/2026-11-18-nested-transforms.cn.md` states it with the readings.
+hand), and the handover report of 2026-11-18 on nested transforms states it with the readings.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
@@ -5707,6 +5707,21 @@ from the exit (a pure computation nobody uses) comes after the ones that are rea
 
 - Example: `nodes(graph_of((x: int): int => x + 1))`
 
+#### `exit_of`
+
+```camel
+exit_of: (g: Graph) => Node?
+```
+
+The node the graph hands its value out of: the node a graph returns, the port of a function that
+returns a parameter, or the `JOIN` a body's branches end at. It is the one anchor an edit that
+changes what the function gives has to name, since `replace` refuses an anchor: read this node,
+build the value that takes its place, and `replace` this node by that value. Null for a graph
+that hands no value out (a function of `void`), which has no node to put anything in the place
+of.
+
+- Example: `exit_of(graph_of((x: int): int => x + 1))`
+
 ### Reading nodes
 
 #### `inputs`
@@ -6224,6 +6239,24 @@ is left as written and warned about, as the C++ fold does.
 
 - Example (a fragment, not compiled): `eval(t, n)`
 - Why it is not compiled: t is an open transaction and n a node of its graph
+
+#### `order`
+
+```camel
+order: (t: Txn<F>, before: Node, after: Node) => void uses var t
+```
+
+Adds an ordering to the graph: when both nodes run, `before` runs before `after`. An order edge
+only orders and never makes a node run (the order edges of design principles 3.1), so a
+computation that has to happen where it is written is put in a `sync` block instead; this is how
+a pass gives a node the place it needs among the accesses of one resource. Both nodes must be of
+one graph, and the edge is refused when the graph already computes `before` from `after`, which
+is the cycle it would close. Ordering two nodes that are ordered that way already changes
+nothing and is not an error.
+
+- Failure: fault `InvalidArgument` when the two nodes are not of one graph, when either is gone, or when the edge would form a cycle.
+- Example (a fragment, not compiled): `order(t, a, b)`
+- Why it is not compiled: t is an open transaction and a, b are nodes of its graph
 
 #### `add_constant`
 

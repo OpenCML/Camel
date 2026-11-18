@@ -183,6 +183,7 @@ class GraphModule final : public BuiltinModule {
                 {"check_pass_boundary", true},
                 {"name", true},
                 {"nodes", true},
+                {"exit_of", true},
                 {"inputs", true},
                 {"with_inputs", true},
                 {"sync_inputs", true},
@@ -232,6 +233,7 @@ class GraphModule final : public BuiltinModule {
                 {"commit", false},
                 {"abort", false},
                 {"eval", false},
+                {"order", false},
                 {"graph_of", true},
                 {"add_constant", false},
             });
@@ -250,6 +252,7 @@ class GraphModule final : public BuiltinModule {
                     {"replace", onTxn},
                     {"erase", onTxn},
                     {"eval", onTxn},
+                    {"order", onTxn},
                     {"add_constant", onTxn},
                     {"commit", onTxn},
                     {"abort", onTxn},
