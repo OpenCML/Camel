@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：41 页
+## 现在在等作者：42 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -45,6 +45,7 @@
 | [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
 | [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 |
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
+| [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
 | [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
 | [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
 | [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） |
