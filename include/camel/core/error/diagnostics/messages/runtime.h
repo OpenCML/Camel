@@ -34,6 +34,8 @@ enum class RuntimeDiag : uint32_t {
     ExitTypeMismatch          = 0x0001AE,
     PassBoundaryPorts         = 0x000013,
     PassEffectContainment     = 0x0001AF,
+    PassEffectBeyondType      = 0x0001B0,
+    PassEffectOrder           = 0x0001B1,
     MacroEvaluationFailed     = 0x00000E,
     EntryArgumentMissing      = 0x000010,
     EntryArgumentInvalid      = 0x000011,
@@ -104,6 +106,16 @@ enum class RuntimeDiag : uint32_t {
     // which the pipeline does not contain. The defect is the pipeline, not the program, so the message
     // names the pass to put before this one.
     GpuScopeMacroNotExpanded = 0x0001A9,
+    // The unwrap of a `T?` a program cannot write, in the one place it refuses: `:op/tag_unwrap`
+    // (`src/builtin/operators/tagged.cpp`), which the compiler places where it has already read the
+    // tag. A null there is a defect of what the compiler emitted and not a state the program made,
+    // which is the ruling of 2026-11-18 (`96714f465`: "the slot unwrap checks and reports an internal
+    // error"): it does not return the zero slot, because a zero slot is a value of the right shape and
+    // the reader could not tell the two apart (the reasoning is the question page
+    // `docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`). No other fault in
+    // this table is of that kind, so the code says so in its own words and it is never isolated by
+    // `attempt` (`isIsolatableFault`: a defect of the compiler is not a fault of the program).
+    NullSlotUnwrapped = 0x0001B2,
     // Warnings (severity bits = Warn).
     PassesNeverRun                = 0x10000F,
     ConstantExpressionFaults      = 0x100015,

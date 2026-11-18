@@ -2,6 +2,15 @@
 
 Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first. Do not change semantics to make a test pass.
 
+## Reading A Plan Result
+- **"No FAIL lines" is not a reading.** A plan that never started prints no failures, so an empty match and a clean plan look the same to a grep. Take the plan's own summary line -- `[SUMMARY] total: N, pass: ..., fail: ...` or `check=<name>-plans total=... pass=... fail=...` -- and check that its `total` is the size this plan should have. `total` and `fail` together are the reading; either alone is a shape.
+- **A path with backslashes is silently a filename.** `-Plan` is forwarded to the Linux host verbatim, so `test\plans\feat\compile` becomes one path with literal backslashes and the runner answers `ENOENT`. That answer sits next to a successful build and a full run of the report-only GPU layer, so the whole capture looks like a finished run. Use forward slashes, and read the `Error:`/`ENOENT` line together with the summary rather than instead of it -- on 2026-11-18 exactly this sequence produced a build-green, timing-populated capture in which the plan under test had executed zero cases.
+- **Do not filter a gate capture down to its last few matching lines.** `Select-String ... | Select-Object -Last 8` kept the eight lines of a report-only GPU layer and dropped the `[SUMMARY]` above them. Write the capture to a file and query it, so a second question does not need a second run.
+
+## Generated Files
+- **A conflict in a generated file is not resolved by hand.** Edit the source and regenerate. Hand-resolving leaves a file that no longer agrees with what generates it: the conflict markers are gone, the disagreement is invisible to every test, and the next regeneration silently discards the hand edit. On 2026-11-18 `docs/diagnostics.md` was resolved by editing one line of `diagnostics/registry.tsv` and re-running `--write`. If regenerating does not settle the conflict, the source itself holds two things that must be merged.
+- **After touching a diagnostic, run all seven catalog checks**: `--check`, `--verify-doc`, `--coverage`, `--coverage-check`, `--pinned-coverage-check`, `--text-coverage-check`, `--no-producer-check`.
+
 ## Running tests
 
 Do not build Camel on this workstation. Use the remote Linux build host through the repository's only gate entry:

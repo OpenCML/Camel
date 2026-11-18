@@ -422,6 +422,9 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
         {"op/tag_is_null", __is_null__},
         {"op/tag_null_value", __null_value__},
+        // The checked unwrap: pure, and the one of the group that faults (a null where the tag has
+        // already been read is the compiler's own defect; operators/tagged.cpp).
+        {"op/tag_unwrap", __unwrap__},
         {"op/tag_is_error", __is_error__},
         {"op/tag_error_value", __error_value__},
         {"op/tag_error_info", __error_info__},
@@ -636,6 +639,7 @@ void registerBuiltinOperatorTraits() {
         "op/tag_is_null",
         "op/tag_null_value",
         "op/tag_throw",
+        "op/tag_unwrap",
         "str/format",
         "str/join",
         "struct/append_arr",

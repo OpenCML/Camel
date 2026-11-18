@@ -125,6 +125,22 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::PassEffectBeyondType,
+            {
+                "PassEffectBeyondType",
+                "'{0}' committed a graph that reaches past the effect its own type declares: {1}",
+                "A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.",
+            },
+        },
+        {
+            RuntimeDiag::PassEffectOrder,
+            {
+                "PassEffectOrder",
+                "'{0}' committed a graph whose conflicting effects are not ordered: {1}",
+                "Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.",
+            },
+        },
+        {
             RuntimeDiag::MacroEvaluationFailed,
             {
                 "MacroEvaluationFailed",
@@ -338,6 +354,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "GpuScopeMacroNotExpanded",
                 "`#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one.",
                 "`grad` and `with_grad` build their derived graph ahead of time (`std::macro`), and only a graph that exists while the passes run is part of the scope's unit. Write the pass before `tiles::compile`, or move the call out of the `#gpu` scope.",
+            },
+        },
+        {
+            RuntimeDiag::NullSlotUnwrapped,
+            {
+                "NullSlotUnwrapped",
+                "The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.",
+                "The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.",
             },
         },
         {

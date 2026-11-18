@@ -1,0 +1,10 @@
+/**
+ * The checked unwrap of a `T?` (`__unwrap__`, `:op/tag_unwrap`): fed a null, it refuses. The
+ * operator is placed only where the tag has already been read, so a null here is the compiler's
+ * own defect and is reported as one instead of being handed on as a zero slot.
+ */
+
+func main(): int {
+    let slot: int? = null
+    return __unwrap__(slot)
+}
