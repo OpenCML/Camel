@@ -22,6 +22,7 @@
 #include "support.h"
 #include <format>
 
+#include <array>
 #include <iostream>
 #include <stdexcept>
 
@@ -285,6 +286,17 @@ slot_t libraryKernel(ArgsView &, ArgsView &, context::Context &) {
 }
 
 } // namespace
+
+std::span<const std::string_view> npyLoadOperatorNames() {
+    static const std::array<std::string_view, std::size(kNpyElementTypes)> names = [] {
+        std::array<std::string_view, std::size(kNpyElementTypes)> list{};
+        for (size_t i = 0; i < list.size(); ++i) {
+            list[i] = kNpyElementTypes[i].second;
+        }
+        return list;
+    }();
+    return names;
+}
 
 std::vector<OpDef> utilityOps() {
     const OpTraits impure{.pure = false};

@@ -61,7 +61,8 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `stdin`, external |
 | `io:has_input` | read `stdin`, external |
 | `io:set_terminal_raw_mode` | write `stdin`, external; the one resource of the terminal, so raw mode and a read order each other |
-| `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
+| `fs:*`, `nn:save_params`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
+| `tensor:load_npy_<dtype>` (`_f32`, `_f64`, `_i32`, `_i64`, `_bool`) | read `fs`, external; the module declares this on each of the five URIs, because `load_npy` is one operator per element type and the group's head (`tensor:load_npy`) is no operator (2026-11-19: a declaration written there reached none of them, and two loads of two files were read as two writes of one resource) |
 | `ckpt:load_tree` | read `fs` and write `stderr`, external |
 | `rand:*` | write or read-modify-write `rng`, external |
 | `time:now`, `process:sleep` | read `clock`, external |
