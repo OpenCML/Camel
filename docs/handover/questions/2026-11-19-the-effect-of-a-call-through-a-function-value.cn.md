@@ -85,7 +85,7 @@ signature.functionType = core::type::FunctionType::create(withParams, normParams
    `PassEffectBeyondType`。
 2. 或者让"值的类型"在节点上取度量后的那一份（2.2 的口径），梯度函数体的足迹是纯的，同样会给出 `pure`。
 
-## ⑤ 问题
+## ⑤ 问题（已裁定，见 ⑦）
 
 1. 要让乙报 `PassEffectBeyondType`，最小改动是 `gradientSignature` 把被变换函数的子句抄进结果类型（`result` 改成
    `Fresh`）。**但 `modules/autodiff` 本轮被明确禁止改动**（迁移台账 144 不许涨）。请判：这一轮是否放行这一行？
@@ -100,8 +100,41 @@ signature.functionType = core::type::FunctionType::create(withParams, normParams
 
 `feat/compile` 2635/2619/0（16 known）· `feat/linear` 869/864/0（2 skip、3 known）· `feat/opt` 1617/1617/0 ·
 `feat/parse` 126/126/0 · `feat/para` 104/104/0 · `feat/tools` 70/70/0。与 `ac2199f0c` 相比一条都没动 ⇒
-这一笔在语料上没有读数移动；"带子句的形参类型"这一形状在语料里没有被测到（否则足迹会从 `unknown` 变成一个具体资源，
-读数应当会动）。
+`resources.cpp` 那一笔在语料上没有读数移动；"带子句的形参类型"这一形状在语料里没有被测到（否则足迹会从 `unknown`
+变成一个具体资源，读数应当会动）。台账 ratchet（`feat/tools#tools.autodiff_migration_ledger.ratchet`）绿，记录值仍
+是 `total: 144 / library: 135 / pass: 22 / with: 56 / array: 69 / other: 10`。
+
+## ⑦ 裁定与落地（2026-11-19 傍晚，第三笔）
+
+作者放行 `modules/autodiff` 那一行，附三个条件（迁移台账 144 不许涨 · 六计划不差于 `ac2199f0c` · 单独一笔）。
+
+**改动**（`modules/autodiff/pullback.cpp#gradientSignature`）：被变换函数的子句是 `Concrete` 且不点名 capture 时，
+把它带进结果类型（`withResources`）；`result` 换成 `Fresh`（梯度是 `differentiationRefusal` 允许的第一个 `with`
+形参能有的数或张量，因此不别名任何调用者持有的资源），`allocates` 清掉。参数逐位复制（上面两个循环），所以形参编号
+原样transfer。点名 capture 的签名不搬：那些捕获位是被变换函数的，而这个类型一位也不命名，于是它保持 `Generic`
+（"一个都不说"）。
+
+**读数**：`[type] the value the call runs: <float> (float) => float pure` —— 那个值的类型现在写着子句。commit 被
+**效应**检查拒：
+
+```
+'graph::commit' committed a graph that reaches past the effect its own type declares:
+node 10 of graph 'step' (:io/println), … write stdout
+RuntimeDiag::PassEffectBeyondType
+```
+
+即作者要求的逐字诊断，不再是 `PassEffectOrder`。用例 `test/cases/modules/graph_function/commit_effect.cml` 接回
+`graph_inline` 计划（`a_call_through_a_value_reaches_what_its_type_declares`，负例，`expect_diagnostic_name` 钉
+`RuntimeDiag::PassEffectBeyondType`），`ast_hashes.txt` 用 `-UpdateAstHashes -AstOnly` 记入（新增 1 行）。
+
+**模块层读数**（`-Plan feat/modules`，一次跑，2074 条）：2074 / pass 2052 / fail 8 / skip 7 / known 7。那 8 条是
+**基地就红的**，不是这一笔带来的——把 `pullback.cpp` 那一行临时回退再跑同一计划，红的变成 **10** 条：同样的 8 条，
+加上本页的用例，加上 `grad_captured_var_written.macro.opt`（一个写模块级 `var` 的被变换函数：`grad` 的类型以前不带
+子句、调用点记 `unknown`，`std::macro` + `std::opt` 下被拒；带上子句后通过 ⇒ **这一笔把它从红变绿**）。那 8 条逐字
+原因与本笔无关（`siamese_shared_encoder.devirtualize_inline.nvm` 的 `std::cxx::inline` 排序拒在两版里**逐字相同**）。
+
+**仍未解的一条**：`Inline` 区域没有链入口、纯节点处 splice 进去的写不执行（页
+`2026-11-19-order-cannot-reach-a-node-that-inline-just-made.cn.md` ④）—— 独立缺陷，单列，不在这三笔里修。
 
 ## 附：复现
 
@@ -109,5 +142,5 @@ signature.functionType = core::type::FunctionType::create(withParams, normParams
 pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <tree> -Plan feat/modules/graph_inline -Jobs 8
 ```
 
-（本页落地时乙的用例暂时不在计划里：宁可让计划绿、让这一页红，也不把一条注定红的用例钉成"今天如此"。
-用例与它的期望留在本目录 `commit_effect.cml`，判定后一并接回 `graph_inline` 计划。）
+（落地过程里有两轮读数是在用例**还没接进计划**时取的，为的是不把一条注定红的期望钉成"今天如此"：乙的用例先放在本
+目录下，作者裁定后才接回 `graph_inline` 计划。）

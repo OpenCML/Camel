@@ -1,12 +1,14 @@
 // The effect of a call through a function value is the clause of the value's function type
-// (`src/runtime/resources.cpp`, `Resolver::call`). `grad` declares its transformation pure and the
-// type of the function it answers with is derived from the one it transforms, so the call in `step`
-// below reaches nothing; when the analysis recorded it as `write unknown` instead, a graph holding
-// one read as already beyond its own type and the effect check never asked -- which is how a commit
-// into `step` was refused by the *order* check and not by the effect check.
+// (`src/runtime/resources.cpp`, `Resolver::call`). `grad`'s product runs the transformed function, so
+// the clause of its type is the transformed function's (`modules/autodiff/pullback.cpp#gradientSignature`
+// carries it, as `modules/transforms/jvp.cpp#liftSignature` does), and `loss` is pure: the type below
+// reads `pure`, the call in `step` reaches nothing, and a graph holding one is not already beyond its
+// own type. When the analysis recorded the call as `write unknown` instead -- or when the gradient's
+// type said nothing, which is the same thing seen from the other end -- the effect check never asked,
+// and a commit into `step` was refused by the *order* check instead.
 //
-// The type text is printed first: the reading is that this call site has a clause to read at all,
-// and that the commit below is refused by `RuntimeDiag::PassEffectBeyondType` and not by
+// The type text is printed first: the reading is that this call site has a clause to read at all, and
+// that the commit below is refused by `RuntimeDiag::PassEffectBeyondType` and not by
 // `RuntimeDiag::PassEffectOrder`.
 
 import { grad } from autodiff

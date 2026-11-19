@@ -43,3 +43,22 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "[run] subject, before any edit\nfirst\n5\n[pure] prints=2->2 body=0->1 sum_kept=1 sum_reads=call(inc),call(inc) sum_readers=1 value=const(42)\n[pure] body=1 node(s), region=RegionKind::Inline parent_is_sum_region=true\n[pure] chain=:io/println<-:io/println gate<-:io/println -> :io/println<-:io/println gate<-:io/println\n[pure] the edited function runs:\nfirst\n5\n[call] inc_calls=2->2 body=0->1 target_sync_in=(none) call_reads=const(2) call_feeds=1 chain_same=true value=const(42)\n[stmt] prints=2->1 body=0->1 value=gate\n[stmt] last=gate (written after :io/println) anchor=gate reading const(42)\n[stmt] chain=:io/println<-:io/println gate<-:io/println -> gate<-:io/println gate<-gate\n[stmt] the edited function runs:\nfirst\n[order] carried=:io/println ordered_after=2\n[order] prints=2->3 ordered_before=2 body=0 sum_kept=1\n[order] the edited function runs (the body line is in a region no chain enters):\nfirst\n5\n"
 timeout_ms = 20000
+
+# The other half of the same reading, from the other end: the effect of a call through a function value
+# is the clause of that value's type, and a gradient's type carries the clause of the function it
+# transforms (`modules/autodiff/pullback.cpp#gradientSignature`, as `modules/transforms/jvp.cpp#liftSignature`
+# does). With both in place the call in `step` reaches nothing, `step`'s type is published as the pure
+# signature it measures, and a print an edit splices in is refused by the **effect** check: the refused
+# diagnostic is `PassEffectBeyondType`, and the order check -- which used to answer first, because the
+# call was recorded as `write unknown` -- is never reached. The type line is pinned too: it is the clause
+# the call site reads.
+[[tests]]
+name = "a_call_through_a_value_reaches_what_its_type_declares"
+desc = "a commit into a graph whose body holds a call through a gradient value: the type of that value prints the clause it derives, and the refused diagnostic is PassEffectBeyondType, not PassEffectOrder"
+kind = "negative"
+case = "../../../cases/modules/graph_function/commit_effect.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+timeout_ms = 20000
+expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
+expect_output_contains = ["[type] the value the call runs: <float> (float) => float pure", "write stdout", "reaches past the effect its own type declares"]

@@ -16,6 +16,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -67,6 +68,8 @@ using camel::core::error::RuntimeDiag;
 using camel::core::error::throwRuntimeFault;
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::toSlot;
+using camel::core::sem::ResourceSignature;
+using camel::core::sem::ResultAlias;
 using rt::gc_node_ref_t;
 using rt::GCGraph;
 using rt::GCNodeKind;
@@ -5143,6 +5146,27 @@ gradientSignature(FunctionType *function, bool withValue, bool hasAux) {
         normParams.emplace_back(function->normTypeAt(i), function->normIsVarAt(i));
     }
     signature.functionType = FunctionType::create(withParams, normParams, result);
+    // The gradient runs the transformed function, so what a call through the gradient touches is
+    // what the transformed function's own clause says -- and the parameters are the same, in the
+    // same order, because the two loops above copy them one for one (design effects plan 2.2/2.3: a
+    // call site reads the clause of the callee's type, and a call through a function value has no
+    // other place to read it). Without this, a gradient's type said nothing, every call through one
+    // was recorded as touching anything unknown, and a graph holding one read as already beyond its
+    // own type -- `modules/transforms/jvp.cpp#liftSignature` carries the clause for the same
+    // reason, and two transforms answering this question differently is the defect, not a choice.
+    //
+    // `result` is `Fresh` rather than a copy: the gradient is the number or tensor
+    // `differentiationRefusal` allowed the first `with` parameter to have, so it aliases no
+    // resource the caller owns. A signature that names a capture is not carried: those are the
+    // *transformed* function's capture positions and this type names none, so `Generic` (the honest
+    // "says nothing") is what it keeps.
+    const ResourceSignature &clause = function->resources();
+    if (clause.mode == ResourceSignature::Mode::Concrete && clause.captures.empty()) {
+        ResourceSignature carried = clause;
+        carried.result            = ResultAlias{.kind = ResultAlias::Kind::Fresh};
+        carried.allocates.reset();
+        signature.functionType = signature.functionType->withResources(carried);
+    }
     return signature;
 }
 
