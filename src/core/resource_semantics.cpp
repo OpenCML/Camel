@@ -469,6 +469,16 @@ bool reachesOutside(ResourceClass cls) {
 }
 
 bool writesForTheRegion(const ResourceSignature &signature) {
+    // A declared external effect that itemizes nothing is the write an undeclared operator is read
+    // as, and it is a write the region owes: the operator says it reaches outside the program and
+    // says nothing about where, so there is no access to place. A write the region does not owe is
+    // a write a pass may drop, and an effect that can be dropped is not an effect -- `foreach` on a
+    // callback that prints is the case that makes this visible (its result is the null slot, so
+    // nothing else keeps the call alive).
+    if (signature.external && signature.params.empty() && signature.ambient.empty() &&
+        signature.anyOf.empty()) {
+        return true;
+    }
     // A write that reaches state outside the program, and a write of a handle: the two questions
     // design principles 3.1 asks of a region's roots. The classes come from `reachesOutside`,
     // which is also what `OperatorSemantics::external` reads, so "outside the program" is one

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-326 diagnostics: 304 errors, 22 warnings. 15 carry a machine-applicable edit, 311 say why they carry none.
+327 diagnostics: 305 errors, 22 warnings. 15 carry a machine-applicable edit, 312 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -280,6 +280,7 @@ prints one entry.
 | `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
 | `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03000217` | [SemanticDiag::ReadonlyResourceWritten](#readonlyresourcewritten) | Error | no |
+| `0x03000218` | [SemanticDiag::OperatorAccessesUndeclared](#operatoraccessesundeclared) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
@@ -9302,6 +9303,28 @@ func main(): int {
     return 0
 }
 ```
+
+### OperatorAccessesUndeclared
+
+`0x03000218` · Error · `SemanticDiag::OperatorAccessesUndeclared`
+
+**Fix**
+
+None: internal: the report is about an operator's registration, and no program text changes it
+
+**Message**
+
+```text
+The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches.
+```
+
+**Help**
+
+```text
+An operator that itemizes none is read as writing the global resource, and the graph builder read the same operator a different way -- every operand read-modify-written -- so one call was on the sync chain for one reader and not for the other, and neither answer was a declaration. This is a mistake in the operator's registration, not in a program: declare its accesses where it is registered (OperatorTable::declareResources in src/builtin/executors/builtin_semantics.cpp) -- the empty list where it is pure, the operand or ambient resource it reads or writes otherwise -- and the load goes on.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### IgnoredSideEffect
 
