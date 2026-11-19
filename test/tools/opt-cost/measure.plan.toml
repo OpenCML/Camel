@@ -1,0 +1,48 @@
+# A reading, not a verdict: where the time of `perf_fib_smoke.opt_twice` goes.
+#
+# This file is **not** under `test/plans/`, so no tier selects it. It is named explicitly, the way
+# `test/tools/selftest/margin/tight.plan.toml` is:
+#
+#   node scripts/test.js test/tools/opt-cost/measure.plan.toml
+#
+# Why it exists. `opt.splice_place / perf_fib_smoke.opt_twice.{nvm,fvm,jit,prl}` (and, with it,
+# `modules.nn / gru_lite_large_bytecode`) crossed the runner's cost line -- `timeout_ms / 4`,
+# `TIMEOUT_MARGIN` in test/tools/run-tests.mjs -- on all four back ends at once: 6480 / 6410 / 6550
+# / 6440 ms of CPU against 5000. The author's ruling of 2026-11-19 (docs/handover/reviews/
+# questions-2026-10-29.md, the dispatch of the 0.2.45 blocker list to lanes, S3-2) is: do not raise
+# the line, measure where the slow-down is, report each check's share, and only then make the check
+# cheap (`只查波及区域、同一遍内不重复问`) rather than make it unasked.
+#
+# What the entry prints (`test/tools/opt-cost/measure.mjs` is the whole account): the CPU each run of
+# the case spends, split by `--time-phases` into the optimizer's passes and everything else, on the
+# three pipelines the plan runs anyway (`perf_fib_smoke.reference`, `.opt`, `.opt_twice`), plus the
+# counts `--trace effects` and `-vv` give for how many times the optimizer asks its whole-program
+# checks in one run. The share is a ratio inside one run, so the host's load hits both sides alike;
+# a count is independent of the host. No absolute wall is read as a work number.
+#
+# The entry is red on purpose and for one reason: `expect_exit` is 1 and the verifying script
+# refuses, so the runner prints the table the tool wrote. A measurement that quietly passed would be
+# a reading nobody could read.
+
+id = "tools.opt_cost"
+order = 1
+tier = "fast"
+tags = ["tools", "opt"]
+
+[[tests]]
+name = "opt_cost.reading"
+desc = "Print where perf_fib_smoke's CPU goes: the optimizer's passes against the rest, on the reference / opt / opt_twice pipelines of every back end, and how many whole-program boundary checks one std::opt run asks. This entry is a reading, so it fails to report itself; it gates nothing."
+kind = "behavior"
+tool = "node"
+case = "measure.mjs"
+args = ["${case}"]
+expect_exit = 1
+timeout_ms = 900000
+verify_script = """
+({ input, assert }) => {
+    const table = input.normalized.stdout.trim()
+    assert(table.length > 0, `the tool printed no reading (exit ${input.exit_code})`)
+    assert(table.includes('opt-cost'), `the tool did not print its table: ${table}`)
+    assert(false, `\n${table}`)
+}
+"""
