@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：53 页
+## 现在在等作者：54 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -44,6 +44,7 @@
 | [`2026-11-19-a-tuple-flows-into-an-operator-s-arguments`](2026-11-19-a-tuple-flows-into-an-operator-s-arguments.cn.md) | 元组当值流进了算子实参 |
 | [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
 | [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
+| [`2026-11-19-order-cannot-reach-a-node-that-inline-just-made`](2026-11-19-order-cannot-reach-a-node-that-inline-just-made.cn.md) | `order` 写不到刚 `inline` 出来的节点上，而文档说它写得到 |
 | [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 让入口图打包，并把呈现取第 0 份：方案定稿与两次失败的机制 |
 | [`2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other`](2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md) | 去掉打包位与从声明算，互为前提 |
 | [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 |
