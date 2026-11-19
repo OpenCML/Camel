@@ -1152,6 +1152,9 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();
                 reportEffectfulConditions();
+                // The same walk over the two sides of the same rules (design principles 9.11), and
+                // before the bodies are let go for the same reason.
+                reportRuleSideAccesses();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
                 // The content rule of `Ref<T>` (the author's ruling of 2026-11-14): a reference

@@ -1,0 +1,21 @@
+/**
+ * A rule whose right side inserts a read: `speak` prints, so a rewrite that applied this law would
+ * put a call of `println` into the region it rewrites, with no order against a write of the same
+ * resource already there (design principles 9.11). The check reports it where the rule is written;
+ * the program still builds and runs, because a warning is not a refusal -- the library is being
+ * repaired, and the numbers are the point of the report for now.
+ */
+
+import { rewrite } from rewrite
+
+/// The law's right side, as the declaration writes it: a call of a function that prints.
+func speak(x: int): int {
+    sync { println('speaking ', x) }
+    return x
+}
+
+rule add_zero(x: int) when true { x + 0 => speak(x) }
+
+func main(): int {
+    return 0
+}

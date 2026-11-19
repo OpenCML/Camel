@@ -891,6 +891,9 @@ bool Builder::instantiateRuleTemplates(
     // an effect is a mistake of the rule wherever it stands, and the type arguments are what
     // revealed this one (the effect of a call whose candidate the types decide).
     reportEffectInRuleInstance(entry, lhsTemplate->module, when);
+    // 9.11: what the two sides access. The instance is where every call of the side is resolved to
+    // an operator for these types, so it is where the question can be answered.
+    reportAccessInRuleSides(entry.name, entry.where, lhs, rhs);
     return true;
 }
 

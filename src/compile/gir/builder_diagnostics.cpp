@@ -33,6 +33,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <cstdlib>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -1436,12 +1437,15 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
             continue;
         }
         const bool conditional = op->uri() == "rewrite:rule_when";
+        // A rule with no condition is `rewrite:rule`: its two sides are the whole declaration, and
+        // they are what the access check reads.
+        const bool plain = op->uri() == "rewrite:rule";
         // `__rule_generic(name, two_way, needs, consts, <the id of its templates>)`: a rule whose
         // head declares type parameters has no condition function to look at here, because what
         // its sides are is decided per type tuple. Its template's body is scanned instead, and the
         // instance it was asked for is checked where it is made.
         const bool generic = op->uri() == "rewrite:rule_generic";
-        if (!conditional && !generic) {
+        if (!conditional && !plain && !generic) {
             continue;
         }
         // Where the rule is written: the maker call is the declaration (`rule ...`), so its
@@ -1501,12 +1505,28 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
             auto *function = camel::core::rtdata::fromSlot<StaticFunction *>(*value);
             return function != nullptr ? function->graph() : nullptr;
         };
+        compile_graph_ptr_t lhs;
+        compile_graph_ptr_t rhs;
+        compile_graph_ptr_t when;
         for (draft_node_ref_t ref : draft.normInputsOf(id)) {
-            const compile_graph_ptr_t condition = conditionOf(draft.ref(ref));
-            if (condition == nullptr || !std::string_view(condition->name()).ends_with("__when")) {
+            const compile_graph_ptr_t side = conditionOf(draft.ref(ref));
+            if (side == nullptr) {
                 continue;
             }
-            conditions.push_back(RuleCondition{condition, where, nullptr});
+            const std::string_view sideName = side->name();
+            if (sideName.ends_with("__when")) {
+                when = side;
+            } else if (sideName.ends_with("__lhs")) {
+                lhs = side;
+            } else if (sideName.ends_with("__rhs")) {
+                rhs = side;
+            }
+        }
+        if (when != nullptr || lhs != nullptr || rhs != nullptr) {
+            // One entry for the declaration: the condition is what the effect check reads, the
+            // two sides are what the access check reads (design principles 9.11), and both are
+            // written at the same place.
+            conditions.push_back(RuleCondition{when, where, nullptr, lhs, rhs});
         }
     }
     return conditions;
@@ -1643,6 +1663,32 @@ node_handle_t Builder::effectOfGraph(
     return nullptr;
 }
 
+void Builder::reportRuleSideAccesses() {
+    // The same walk as `reportEffectfulConditions` and for the same reason: a rule of a module's
+    // top level is a value of the root graph, and the root graph holds the top levels of every
+    // module, so `rootNodeOwners_` decides which of them this pass reports. A generic rule's sides
+    // are templates here and are checked where an instance is made
+    // (`instantiateGenericRule`).
+    std::vector<compile_graph_ptr_t> roots = unit_->builtBodies;
+    roots.push_back(rootGraph_);
+    std::unordered_set<const void *> searched;
+    for (const compile_graph_ptr_t &graph : roots) {
+        for (const RuleCondition &rule : ruleConditionsIn(graph, searched, graph == rootGraph_)) {
+            if (rule.entry != nullptr || rule.lhs == nullptr || rule.rhs == nullptr) {
+                continue;
+            }
+            std::string name = rule.lhs->name();
+            if (const size_t scope = name.rfind("::"); scope != std::string::npos) {
+                name = name.substr(scope + 2);
+            }
+            if (const size_t side = name.rfind("__lhs"); side != std::string::npos) {
+                name.resize(side);
+            }
+            reportAccessInRuleSides(name, rule.where, rule.lhs, rule.rhs);
+        }
+    }
+}
+
 void Builder::reportEffectfulConditions() {
     // A rule of a module's top level is a value of the root graph, and one written inside a
     // function is in that function's graph; the bodies of the module are still here (the dropped
@@ -1767,6 +1813,180 @@ void Builder::reportEffectInRuleInstance(
         // verdict about its own configuration.
         reported.moduleName = module->name();
         reported.modulePath = module->path();
+    }
+}
+
+// ---- 9.11: what a rule's two sides may access ------------------------------------------------
+
+compile_graph_ptr_t Builder::functionGraphOfOperand(
+    const compile_graph_ptr_t &graph, node_handle_t node) const {
+    if (graph == nullptr || node == nullptr) {
+        return nullptr;
+    }
+    Type *type = nodeTypeOf(node);
+    if (type == nullptr || type->code() != TypeCode::Function) {
+        return nullptr;
+    }
+    if (nodeIsKind(node, runtime::GCNodeKind::Fill)) {
+        // A function value whose body captured values: the node fills the captures into the value
+        // it holds, which is its first ordinary input (`gc.fill`).
+        const auto held = normInputsOf(node);
+        if (held.empty()) {
+            return nullptr;
+        }
+        node = nodeDraftOf(node)->ref(held.front());
+        type = nodeTypeOf(node);
+        if (type == nullptr || type->code() != TypeCode::Function) {
+            return nullptr;
+        }
+    }
+    if (nodeIsKind(node, runtime::GCNodeKind::Func)) {
+        return graph->funcTarget(node);
+    }
+    const std::optional<slot_t> value = staticValueOf(node);
+    if (!value.has_value()) {
+        return nullptr;
+    }
+    // A transform's value names a graph of its own program, not one of this program's
+    // (StaticProgramFunction, static_function.h).
+    auto *held = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*value);
+    if (!isStaticFunction(held)) {
+        return nullptr;
+    }
+    auto *function = camel::core::rtdata::fromSlot<StaticFunction *>(*value);
+    return function != nullptr ? function->graph() : nullptr;
+}
+
+std::vector<Builder::SideAccess> Builder::accessesOfGraph(
+    const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited) const {
+    std::vector<SideAccess> found;
+    if (graph == nullptr || !visited.insert(graph.get()).second) {
+        return found;
+    }
+    const auto &table = camel::core::OperatorTable::instance();
+    const auto &draft = graph->transaction().graph();
+    std::vector<compile_graph_ptr_t> calls;
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        if (nodeIsKind(node, runtime::GCNodeKind::Func)) {
+            if (const compile_graph_ptr_t callee = graph->funcTarget(node); callee != nullptr) {
+                calls.push_back(callee);
+            }
+            continue;
+        }
+        if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+            continue;
+        }
+        const auto &op = graph->operTarget(node);
+        if (op == nullptr) {
+            continue;
+        }
+        const std::string uri = op->uri();
+        // `hasExternalEffect` is the question 9.11 asks: running it touches something outside the
+        // program's variables. A state-only operator (`:var/get`) touches a cell the program owns
+        // and is not one of these; an operator nobody declared answers true, and its module is told
+        // so when it is loaded.
+        if (!table.hasExternalEffect(uri)) {
+            continue;
+        }
+        SideAccess access;
+        access.graph = graph;
+        access.node  = node;
+        access.uri   = uri;
+        const std::optional<camel::core::OperatorTraits> traits = table.find(uri);
+        if (traits.has_value() && traits->callsGraphs) {
+            // What such a call does is what the functions it is given do. Every function value it
+            // receives that is pure inserts no read, so a call of it over pure functions is not
+            // the "read inserted into the graph" 9.11 is about -- `map` and `reduce` on an array
+            // are declared with an effect because of the `f` a caller may hand them, and the laws
+            // that pass a pure lambda insert nothing.
+            bool allPure = true;
+            const auto pureWhenGivenPure = [&](draft_node_ref_t input) {
+                const compile_graph_ptr_t function =
+                    functionGraphOfOperand(graph, draft.ref(input));
+                if (function == nullptr) {
+                    return;
+                }
+                std::unordered_set<const void *> walked;
+                compile_graph_ptr_t owner;
+                if (effectOfGraph(function, walked, owner) != nullptr) {
+                    allPure = false;
+                }
+            };
+            for (draft_node_ref_t input : draft.normInputsOf(id)) {
+                pureWhenGivenPure(input);
+            }
+            for (draft_node_ref_t input : draft.withInputsOf(id)) {
+                pureWhenGivenPure(input);
+            }
+            access.insertsRead = !allPure;
+        }
+        found.push_back(std::move(access));
+    }
+    for (const compile_graph_ptr_t &callee : calls) {
+        std::vector<SideAccess> inside = accessesOfGraph(callee, visited);
+        for (SideAccess &one : inside) {
+            found.push_back(std::move(one));
+        }
+    }
+    return found;
+}
+
+void Builder::reportAccessInRuleSides(
+    const std::string &rule, camel::source::origin_id_t where, const compile_graph_ptr_t &lhs,
+    const compile_graph_ptr_t &rhs) {
+    camel::core::error::Diagnostics *sink = userSink();
+    if (sink == nullptr || rule.empty()) {
+        return;
+    }
+    // The survey that measured the library asks for every operator whose effect is not pure; a
+    // run that does not set it hears only about the ones that insert a read, which is the verdict
+    // 9.11 is about (see the question page,
+    // docs/handover/questions/2026-11-19-whether-a-rule-side-may-carry-an-access.cn.md).
+    const bool survey = std::getenv("CAMEL_RULE_ACCESS_REPORT") != nullptr;
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    for (int side = 0; side < 2; ++side) {
+        const compile_graph_ptr_t &graph = side == 0 ? lhs : rhs;
+        if (graph == nullptr) {
+            continue;
+        }
+        std::vector<SideAccess> accesses;
+        if (const auto known = sideAccessCache_.find(graph.get()); known != sideAccessCache_.end()) {
+            accesses = known->second;
+        } else {
+            std::unordered_set<const void *> visited;
+            accesses = accessesOfGraph(graph, visited);
+            sideAccessCache_[graph.get()] = accesses;
+        }
+        for (const SideAccess &access : accesses) {
+            if (!access.insertsRead && !survey) {
+                continue;
+            }
+            if (!ruleAccessReported_.insert(std::format("{}|{}|{}", rule, side, access.uri)).second) {
+                continue;
+            }
+            camel::source::origin_id_t origin = where;
+            if (origin == camel::source::kInvalidOriginId && sourceContext != nullptr) {
+                origin = sourceContext->debugMap().graphOrigin(access.graph->graphId());
+            }
+            auto diagnostic = sink->of(SemanticDiag::RuleSideHasAccess).atOrigin(origin);
+            if (access.insertsRead) {
+                diagnostic.commit(
+                    side == 0 ? "left" : "right",
+                    rule,
+                    access.uri,
+                    "it inserts a read of the resource it names");
+            } else {
+                diagnostic.commit(
+                    side == 0 ? "left" : "right",
+                    rule,
+                    access.uri,
+                    "the functions it is given are pure, so it inserts no read of its own");
+            }
+        }
     }
 }
 

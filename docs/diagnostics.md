@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-326 diagnostics: 304 errors, 22 warnings. 15 carry a machine-applicable edit, 311 say why they carry none.
+327 diagnostics: 304 errors, 23 warnings. 15 carry a machine-applicable edit, 312 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -295,6 +295,7 @@ prints one entry.
 | `0x031001C1` | [SemanticDiag::FailNotExecuted](#failnotexecuted) | Warn | no |
 | `0x031001C2` | [SemanticDiag::StatementAfterFail](#statementafterfail) | Warn | no |
 | `0x031001C3` | [SemanticDiag::UnusedAssignedValue](#unusedassignedvalue) | Warn | no |
+| `0x031001C4` | [SemanticDiag::RuleSideHasAccess](#rulesidehasaccess) | Warn | no |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
@@ -9836,6 +9837,28 @@ func main(): int {
     return println(y)
 }
 ```
+
+### RuleSideHasAccess
+
+`0x031001C4` · Warn · `SemanticDiag::RuleSideHasAccess`
+
+**Fix**
+
+None: choice: the operator, the resource it names, or the law has to change, and which of those is right is the writer's
+
+**Message**
+
+```text
+The {0} side of the rule '{1}' uses '{2}', whose effect is not pure: {3}.
+```
+
+**Help**
+
+```text
+Design principles 9.11: both sides of a rule use only operators that access nothing, reads included. A read inserted into the region being rewritten has no order with a write of the same resource already there, so the commit refuses the program, and 'a rule that passed the declaration check always passes the commit' stops holding. Write the law on operators that access nothing, or declare the resources the operator really touches.
+```
+
+*No example: no test small enough to show raises it.*
 
 ## Run time and passes (`RuntimeDiag`)
 

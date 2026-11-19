@@ -475,6 +475,14 @@ semantic	StatementAfterFail	0x1001C2	warn	This statement cannot run: the 'fail' 
 #/ 2026-11-15: assigning to a `var` is not an effect, so a write nothing reads is a value nothing
 #/ uses -- one rule for one thing, and the words are the words of a dropped value, not of an effect).
 semantic	UnusedAssignedValue	0x1001C3	warn	The value this assignment stores is never read.	An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.	none: choice: a stored value no reader takes can be removed or read, and which one is the intent
+#/ Design principles 9.11 (the ruling of 2026-11-14): both sides of a rule use only operators
+#/ that access nothing, reads included. What a right side builds is inserted into the program
+#/ being rewritten, and a read inserted there has no order with a write of the same resource
+#/ already in that region, so the commit refuses the program -- "a rule that passed the
+#/ declaration check always passes the commit" would not hold. Reported as a warning while the
+#/ library is repaired, with the operator and whether it really inserts a read: a higher-order
+#/ operator given a pure function inserts none of its own.
+semantic	RuleSideHasAccess	0x1001C4	warn	The {0} side of the rule '{1}' uses '{2}', whose effect is not pure: {3}.	Design principles 9.11: both sides of a rule use only operators that access nothing, reads included. A read inserted into the region being rewritten has no order with a write of the same resource already there, so the commit refuses the program, and 'a rule that passed the declaration check always passes the commit' stops holding. Write the law on operators that access nothing, or declare the resources the operator really touches.	none: choice: the operator, the resource it names, or the law has to change, and which of those is right is the writer's
 runtime	RuntimeError	0x000000	error	An error has occurred: {0}.	The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.	none: runtime: the catch-all fault; which code it should have is not known here
 runtime	DivisionByZero	0x000001	error	Attempted division by zero.	Ensure the denominator is not zero before performing division.	none: runtime: the divisor is zero at run time, and where to guard it is the program's logic
 runtime	IndexOutOfRange	0x000002	error	Index {0} is out of range for {1} of length {2}.	Ensure the index is within the valid range of the collection.	none: runtime: the index is computed at run time, and the repair is in the program's logic

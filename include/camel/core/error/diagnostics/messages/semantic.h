@@ -534,6 +534,14 @@ enum class SemanticDiag : uint32_t {
     /// 2026-11-15: assigning to a `var` is not an effect, so a write nothing reads is a value nothing
     /// uses -- one rule for one thing, and the words are the words of a dropped value, not of an effect).
     UnusedAssignedValue = 0x1001C3,
+    /// Design principles 9.11 (the ruling of 2026-11-14): both sides of a rule use only operators
+    /// that access nothing, reads included. What a right side builds is inserted into the program
+    /// being rewritten, and a read inserted there has no order with a write of the same resource
+    /// already in that region, so the commit refuses the program -- "a rule that passed the
+    /// declaration check always passes the commit" would not hold. Reported as a warning while the
+    /// library is repaired, with the operator and whether it really inserts a read: a higher-order
+    /// operator given a pure function inserts none of its own.
+    RuleSideHasAccess = 0x1001C4,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

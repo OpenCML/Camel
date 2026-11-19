@@ -2856,6 +2856,13 @@ class Builder {
     // below. Reported once per module, like the warnings above, so that the position and the
     // module are the ones the rule is written in.
     void reportEffectfulConditions();
+    // Reports RuleSideHasAccess: neither side of a rule may use an operator that accesses
+    // anything, reads included (design principles 9.11). What a right side builds is inserted into
+    // the program being rewritten, and a read inserted there has no order against a write of the
+    // same resource already in that region, so the commit would refuse the program the rewrite
+    // made. A warning, not a refusal, while the library is repaired; the same walk as
+    // `reportEffectfulConditions`, over the two sides instead of the condition.
+    void reportRuleSideAccesses();
     // The condition graphs of the `rule ... when ...` declarations written in `graph`, with the
     // place each rule is written. A maker call the front end wrote for a rule whose head has no
     // type parameters carries its condition as a function value; a generic rule carries its
@@ -2869,6 +2876,10 @@ class Builder {
         camel::source::origin_id_t where = camel::source::kInvalidOriginId;
         // The templates of a generic rule, null for an ordinary one.
         const GenericRuleEntry *entry = nullptr;
+        // The two sides of an ordinary rule, what the access check reads (design principles
+        // 9.11). A generic rule's sides are templates, so they are null here.
+        compile_graph_ptr_t lhs;
+        compile_graph_ptr_t rhs;
     };
     std::vector<RuleCondition> ruleConditionsIn(
         const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited,
@@ -2907,6 +2918,40 @@ class Builder {
     void reportEffectInRuleInstance(
         const GenericRuleEntry &entry, const camel::core::module::module_ptr_t &module,
         const compile_graph_ptr_t &condition);
+    // Warns RuleSideHasAccess (design principles 9.11): a rule's two sides use only operators that
+    // access nothing, reads included. The sides of the rule named `rule`, declared at `where`, are
+    // walked -- and the functions they call, because a read inside one of those is a read the
+    // rewrite inserts all the same -- and every operator whose effect is not pure is reported once
+    // for the rule, with the side it is on and with whether it really inserts a read: a
+    // higher-order operator (`callsGraphs`) whose function values are provably pure inserts none of
+    // its own, and that one is reported only when `CAMEL_RULE_ACCESS_REPORT` is set, which is how
+    // the survey that measured the library was taken. A warning, not an error: the library is
+    // being repaired, and the numbers are the point of the report for now.
+    void reportAccessInRuleSides(
+        const std::string &rule, camel::source::origin_id_t where,
+        const compile_graph_ptr_t &lhs, const compile_graph_ptr_t &rhs);
+    // One operator of a rule side that is not pure, and where it was found.
+    struct SideAccess {
+        compile_graph_ptr_t graph;   // the graph the operator is a node of
+        node_handle_t node = nullptr;
+        std::string uri;
+        // False when the operator is higher-order and every function value it is given is pure:
+        // what such a call inserts reads nothing.
+        bool insertsRead = true;
+    };
+    // The operator nodes of `graph` and of the functions it calls whose effect is not pure.
+    std::vector<SideAccess>
+    accessesOfGraph(const compile_graph_ptr_t &graph, std::unordered_set<const void *> &visited)
+        const;
+    // The graph of a function value held by `node`, null when the node does not hold one.
+    compile_graph_ptr_t functionGraphOfOperand(
+        const compile_graph_ptr_t &graph, node_handle_t node) const;
+    // The rules already reported, by rule name, side and operator: a generic rule is instantiated
+    // once per type tuple, and the report is about the declaration, not about one instance.
+    std::unordered_set<std::string> ruleAccessReported_;
+    // What a side graph's walk found, by graph: the walk is deterministic and a rule's side is one
+    // graph however many type tuples instantiate it.
+    mutable std::unordered_map<const void *, std::vector<SideAccess>> sideAccessCache_;
     // The sink the user reads, whatever speculative scope the compiler is in: a verdict about the
     // program itself goes here, so that a scope holding what one attempt said cannot swallow it.
     camel::core::error::Diagnostics *userSink();

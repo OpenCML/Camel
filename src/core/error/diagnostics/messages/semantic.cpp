@@ -2004,6 +2004,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.",
             },
         },
+        {
+            SemanticDiag::RuleSideHasAccess,
+            {
+                "RuleSideHasAccess",
+                "The {0} side of the rule '{1}' uses '{2}', whose effect is not pure: {3}.",
+                "Design principles 9.11: both sides of a rule use only operators that access nothing, reads included. A read inserted into the region being rewritten has no order with a write of the same resource already there, so the commit refuses the program, and 'a rule that passed the declaration check always passes the commit' stops holding. Write the law on operators that access nothing, or declare the resources the operator really touches.",
+            },
+        },
     };
     return infoMap;
 }

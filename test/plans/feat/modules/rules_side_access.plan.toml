@@ -1,0 +1,27 @@
+id = "modules.rules_side_access"
+order = 951
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite"]
+desc = "What a rule's two sides may access (design principles 9.11): a rewrite inserts what its right side builds into the program it rewrites, and a read inserted there has no order against a write of the same resource already in the region, so the commit refuses the program and 'a rule that passed the declaration check always passes the commit' stops holding. The check reports the operator and the side where the rule is written. It is a warning, not a refusal: the library is being repaired, and the survey that measured it is the report for now (docs/handover/questions/2026-11-19-whether-a-rule-side-may-carry-an-access.cn.md)."
+
+[[tests]]
+name = "rules.right_side_that_prints_is_reported"
+desc = "A rule whose right side calls a function that prints: the read is inserted by the rewrite that applies the law, and the report names the right side, the rule and the operator. The program still builds and runs -- the check reports while the library is repaired -- so the exit code is the program's own."
+kind = "behavior"
+case = "../../../cases/modules/rules/side_access.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "The right side of the rule 'add_zero' uses ':io/println'", "it inserts a read of the resource it names", "name=SemanticDiag::RuleSideHasAccess, code=0x031001C4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.pure_right_side_is_silent"
+desc = "The check's other half: a law of the shape the standard library writes (a right side that is one of the values the rule matched, over operators that access nothing) reports nothing. Reading the same kind of rule it refuses above reports no access."
+kind = "behavior"
+case = "../../../cases/modules/rules/condition_pure.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_not_contains = ["RuleSideHasAccess"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
