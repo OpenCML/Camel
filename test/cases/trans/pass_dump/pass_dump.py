@@ -59,14 +59,18 @@ def main() -> int:
         check(proc.stdout.strip() == "42", "program output unchanged (42)")
 
         names = sorted(p.name for p in out.iterdir()) if out.is_dir() else []
+        # A snapshot is named after the pass that made it, with each `::` written as `.`
+        # (tools/camel-cli/main.cpp#passDumpStem). The optimizer's inline pass answers to
+        # `std::cxx::inline` since the `cxx::` isolation (88f855ebb, 2026-11-18); the old
+        # `std::opt::inline` spelling is refused as an unknown pass and left no alias behind.
         expected = [f"{stem}.{ext}"
-                    for stem in ("00_input", "01_std.macro", "02_std.opt.inline")
+                    for stem in ("00_input", "01_std.macro", "02_std.cxx.inline")
                     for ext in ("gir.dot", "stats.json")]
         check(names == sorted(expected), f"snapshot files {sorted(expected)} (got {names})")
         if failures:
             return 1
 
-        for stem in ("00_input", "01_std.macro", "02_std.opt.inline"):
+        for stem in ("00_input", "01_std.macro", "02_std.cxx.inline"):
             stats = json.loads((out / f"{stem}.stats.json").read_text())
             check(stats.get("nodes", 0) > 0, f"{stem}: stats JSON has a node count")
 

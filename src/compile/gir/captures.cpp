@@ -58,9 +58,29 @@ node_handle_t Builder::captureInto(
     // The origin is a node of a graph that encloses this one (the root graph for a value of
     // the top level of a module): the enclosing graphs between them capture it as well, so
     // that whoever calls or makes the value of this graph can pass it on.
+    // The reading names the graphs the walk had in hand. Five of this function's six callers hand
+    // it an origin taken from a table -- the call's written captures (`builder_operators.cpp`), a
+    // function value's captures (`builder_calls.cpp`), `capturedUsesOf`
+    // (`builder_diagnostics.cpp`), name resolution (`builder.cpp`), `linkCaptureSites` -- and ask no
+    // enclosure question first; only the name-lookup path (`builder_expr.cpp`,
+    // `RestFunctionNeedsExpansion`) walks the ancestors itself. So when one of the five meets a
+    // value its graph cannot reach, this report is everything a release build says, and a sentence
+    // without the pair of graphs cannot be followed. Both `graph` (where the walk stopped, with no
+    // enclosing graph) and `currGraph_` (the graph the caller is building) are printed because they
+    // are not the same object: the walk up is what separates them.
+    // Both readings are safe here: `nodeGraphOf(origin)` was answered at `:45` of this very call,
+    // so the handle names a live draft by the time this line is reached, and the node id lives in
+    // the handle rather than in the draft.
     GUARD(
         graph->outerGraph() != nullptr,
-        "A captured value must belong to a graph that encloses the capturing one.");
+        std::format(
+            "A captured value must belong to a graph that encloses the capturing one: node {} of "
+            "graph '{}' is captured into graph '{}', and the walk up from it reached '{}', which "
+            "has no enclosing graph.",
+            nodeIdOf(origin),
+            nodeGraphOf(origin)->name(),
+            currGraph_ != nullptr ? currGraph_->name() : std::string("<no current graph>"),
+            graph->name()));
     (void)captureInto(graph->outerGraph(), origin, name);
 
     const bool isVar = isVariable(origin);

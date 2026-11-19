@@ -71,9 +71,20 @@ const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(RO
 
 /// The eight cases of A7. Each is a `test/cases/**.cml` path; the printed program goes to a scratch
 /// directory of our own, so the tree the runner handed us is not written to.
+///
+/// Nine readings were recorded when this list was made. The ninth, `effects/writer_table_through_callee`,
+/// measured "a call writes state and the read after it takes that version", and the 2026-11-16
+/// closure-capture ruling (`81fa0bac9`, design principles 3.5) took its subject away: a closure may
+/// not assign a captured `var`, so that state is a `state::ref` handle -- and `std::cml` has no
+/// spelling for a `Ref` value (`SemanticDiag::CmlUnsupportedConstruct`). The two other ways to write
+/// the reading are refused as well (a module `var` is a top-level `var`, which the printer refuses in
+/// `emitVariable`), so it has no printable subject at all: its entry could only ever answer
+/// `unmeasurable`, a `differs` of 1 for a reason that is not a defect -- the one thing this file
+/// exists to prevent. It is dropped rather than marked, and the page that asks the author whether
+/// the subset should grow instead is
+/// `docs/handover/questions/2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md`.
 const CASES = [
     'consistency/fail_never/statement_after_fail',
-    'effects/writer_table_through_callee',
     'linear/runtime/var_read_before_region',
     'linear/runtime/var_read_before_write',
     'linear/runtime/order_edges_regions',
