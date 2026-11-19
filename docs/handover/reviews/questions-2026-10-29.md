@@ -4709,3 +4709,22 @@ S2 随后，S3 最后。
 3. 然后位与 `declaredFuncType` 一起删。量 `feat/linear`：应从 93 往下走，不是往上。若仍上升，报第一条红读的是哪张图的哪个函数类型。
 **二、"回滚还原指针还是内容"——按默认，还原内容。** 回滚的契约是"草稿回到标记时的样子"，open 签名的结果类型与资源签名是原地写的，也是草稿的样子。撤销日志在第一次原地写 open 签名（`setExitType`、`setResources`）时记下它原来的结果类型与资源签名，回滚写回；自检比内容不比指针。不改 `OpenFunctionType` 的共享语义（递归函数在结果推出之前就要引用自己的类型，这是它原地写的理由）。单独一笔，不与删字段混。
 **三、"声明函数类型那一位只能判它自己"**：同第一条，删。
+
+## 下发（2026-11-19 23:30，负责人定）：ECOOP 匿名源码包的准备，以及仓库里的过程痕迹清干净
+
+决策者。负责人定：北京 11-20 中午前清完 ECOOP 的读数与发版 S1 阻断；之后做 ECOOP 的匿名源码包（随补充材料投），编译、测试。先做准备，**不挤占上面两件**。参考：11-04 给另一篇论文做匿名包的脚本与说明，已拷到 `docs/handover/plans/ecoop-package-reference/`（`make-gn.sh` 等；里面的 GN 换成本次的名字）。
+
+**一、仓库本身：代码注释里的过程痕迹一律删掉**（负责人："本就不应该存在于我们的仓库"）。注释只说这段代码做什么、为什么这样做（技术理由），不写来历：
+- 不引用 `docs/handover/` 下任何页（问题页、审查页、报告、计划）；需要依据时引用原则条目或语言文档；
+- 不写带日期的裁定、"the author's ruling"、"作者/负责人/决策者/协调者"、车道名（`lane-…`）、阶段代号（S4b、rc23、H47 之类）、"tonight""this round""measured on …"、提交哈希、主机名；
+- 测试用例与计划的描述同样适用；金标里若有，随测试更新。
+做法：先**盘点**（按模式统计各目录命中，粗读：窄模式已有 634 行、337 个文件），给出清理脚本与一条快层检查（命中即红，防止再出现）；**清理本身在 S1 合入之后一次扫完**（避免与修 S1 的车道冲突），只动注释与描述文字，六计划与闸门逐字不变。同时把这条写进 `agents/commit.md`。
+
+**二、匿名包的准备**（照参考脚本改写，范围按负责人已同意的方案）：
+1. 名字：语言 `Lang`，二进制 `lang`，扩展名 `.lang`，命名空间 `lang::`，环境变量 `LANG_*`（注意别与系统的 `LANG` 冲突，用 `LANG_` 前缀以外的若冲突就报），版权 "the Lang authors"；文件名里的 camel/cml 一并改。
+2. 去掉：git 历史；作者、邮箱、组织、仓库地址、主机与本机路径；`.github`、`.husky`、`.vscode`、`AGENTS.md`、`agents/`、`internal/`、`llms.txt`、`logo.png`、`assets/`、`promo/`、`ROADMAP.md`、`changes.log`、`CODE_OF_CONDUCT`/`CONTRIBUTING`/`SECURITY`；`docs/` 只留最小必要（见 3）。
+3. **文档只留最小必要**：构建说明、命令行与管线的基础用法、语言的基础手册（英文）。不带设计原则、设计稿、路线图、交接文档、中文文档。
+4. 裁掉论文用不到的：模块 `tiles`、`sim`、`ckpt`、`pyplot`、`python`、`process`、`onnx`；`std::cpp` 导出；工具 `lang-server`/`debugger`/`format`/`codegen`/`profiler`/C++ 翻译器；`bindings/`、`pypi/`、`editors/`、`benchmarks/`；`showcase/` 只留 `c2-mlp-mnist`、`c3-char-transformer`，`examples/` 只留 `case-study`；`export_matrix.*`、`hello.cml`。**裁之前先查依赖**（谁导入它、哪些测试用它），测试按条目名精确剪。
+5. 保留并新增 ECOOP 复现材料：案例的六份写法与反例、`edits` 里的 pass、`eval-round10` 的探针、`greedy_fuse` 与 torch.fx 对照脚本（写明需要的 torch 版本），一份 `REPRODUCE.md` 写每张表的命令。
+6. **现在就在当前 develop 上干跑一遍**：出包到临时目录，从空目录在主机上构建，跑快层，报包的规模（C++ 行数、文件数）、构建是否通过、失败清单；再用匿名检查（grep 真名、作者、路径、`handover`）证明干净。最终包在 ECOOP 读数与 S1 都合入之后的那一笔上重出，同样构建、测试，并在包上复跑论文的几项关键读数（六份写法、坏 pass、融合、优化表）与原仓库对比。
+生成脚本写着原名，不进包、不上传；放在仓库 `docs/handover/plans/` 下即可。
