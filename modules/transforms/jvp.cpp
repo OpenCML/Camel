@@ -1026,6 +1026,10 @@ bool liftGraph(
         // Each original callee graph is lifted once (state.callees), which is what makes two calls
         // of one function one graph.
         std::unordered_map<gc_node_ref_t, GraphId> liftedCalleeOf;
+        // The calls whose callee takes no ordinary parameter. The pre-pass below names them and the
+        // walk copies them as values (the `Func` case): such a call has no lifted graph to call, and
+        // its tangent is the zero of its own type.
+        std::unordered_set<gc_node_ref_t> constantCalls;
         auto liftFuncValue = [&](gc_node_ref_t ref) -> bool {
             const GraphId calleeId = function.calleeIdOf(ref);
             if (!rt::isValid(calleeId)) {
@@ -1039,6 +1043,33 @@ bool liftGraph(
             // because this build starts from one.
             const FrozenGraphRead calleeFace(*callee);
             const std::string_view calleeName = callee->name();
+            // A **call to a function of no ordinary parameters** is a constant of this lift, and it
+            // is refused nowhere: the direction a caller seeds reaches a parameter, and this callee
+            // has none to hand it, so nothing of its answer moves -- the answer and the answer's
+            // tangent are `(value, zero)`, the same reading design principles 9.9 gives a captured
+            // value.
+            //
+            // It used to be refused here, one step later and with no cause: `liftSignature` answers
+            // `nullptr` for a function of no parameter (`params.empty()`, spelled in words by
+            // `jvpOperatorSignature`), `liftGraph` returned an empty refusal, and `vjp` reported
+            // `jvp has no forward transform for this function` with no `REINTERP` line and no place
+            // -- measured 2026-11-20 on `showcase/c3-char-transformer/train.cml`, whose first wall
+            // is `causal_mask()`, a `range`/`map` body answering a constant mask. Lifting such a
+            // callee would also ask for a forward rule for every operator of a body that carries no
+            // derivative at all, which is the wrong question to ask of it.
+            //
+            // Not covered here, deliberately: the same node read as a **function value** (a `Func`
+            // node of function type). A value is carried and not called, so a value whose forward
+            // transform nobody can name stays a refusal, which is what `vjp`'s own reading says.
+            const NodeFace *calledNode = function.node(ref);
+            const bool isFunctionValue =
+                calledNode != nullptr && calledNode->dataType() != nullptr &&
+                calledNode->dataType()->code() == camel::core::type::TypeCode::Function;
+            const FunctionType *calledType = callee->funcType();
+            if (!isFunctionValue && calledType != nullptr && calledType->normTypesCount() == 0) {
+                constantCalls.insert(ref);
+                return true;
+            }
             GraphId liftedCallee;
             const auto at = state.callees.find(rt::toValue(calleeId));
             if (at == state.callees.end()) {
@@ -1591,6 +1622,51 @@ bool liftGraph(
                 // inputs are the arguments). A call is lifted as a call: the lifted callee takes
                 // pairs and answers with one, so the arguments go in as `(value, tangent)` and the
                 // readers of the result project the pair.
+                if (constantCalls.contains(ref)) {
+                    // A call to a function of no ordinary parameters: the value the call answers is
+                    // the whole of what moves, and nothing of it does (the pre-pass says why). So the
+                    // call is copied as it stands -- the same callee graph, in this program -- and the
+                    // answer's tangent is the zero of its own type: the constant the space registers
+                    // when the type states one, and otherwise the space's own `zerosLikeUri` over
+                    // this very value, which reads the shape the type leaves open
+                    // (`zeroOfValueAtRunTime`). A tangent that neither can write stays absent, and
+                    // the walk refuses the body where it reads it, exactly as it did before.
+                    const GraphId calleeId = function.calleeIdOf(ref);
+                    const gc_node_ref_t made = draft.addFuncNode(calleeId, node->dataType());
+                    draft.addDependency(calleeId);
+                    std::vector<gc_node_ref_t> carries;
+                    for (gc_node_ref_t input : function.withInputsOf(ref)) {
+                        if (input >= function.nodeCount() || !copied[input]) {
+                            return fail(refusal);
+                        }
+                        carries.push_back(copyOf[input]);
+                    }
+                    if (!carries.empty()) {
+                        draft.setWithInputs(made, carries);
+                    }
+                    // An effectful callee is copied the way it was written: a statement is executed
+                    // because it sits on the `sync` chain, and a print among them is why the chain
+                    // exists (`modules/transforms/jvp.cpp`, the operator case).
+                    std::vector<gc_node_ref_t> waits;
+                    for (gc_node_ref_t edge : function.syncInputsOf(ref)) {
+                        if (edge < function.nodeCount() && copied[edge]) {
+                            waits.push_back(copyOf[edge]);
+                        }
+                    }
+                    if (!waits.empty()) {
+                        draft.setSyncInputs(made, waits);
+                    }
+                    copyOf[ref] = made;
+                    copied[ref]   = true;
+                    ++copiedKinds;
+                    if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
+                        const gc_node_ref_t constantZero = zeroConstantFor(node->dataType());
+                        tangentOf[ref]                   = constantZero != rt::kInvalidNodeRef
+                                                               ? constantZero
+                                                               : zeroOfValueAtRunTime(made, node->dataType());
+                    }
+                    break;
+                }
                 const auto at = liftedCalleeOf.find(ref);
                 if (at == liftedCalleeOf.end()) {
                     return fail(refusal);
@@ -2504,7 +2580,7 @@ bool liftGraph(
                 exitPair != nullptr ? static_cast<Type *>(exitPair) : valueTypeOf(oldValue);
             const gc_node_ref_t gate =
                 draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
-            // The waits are the gate's **trailing ordinary inputs** (author,  780a83bd: "a
+            // The waits are the gate's **trailing ordinary inputs** (author, 780a83bd: "a
             // gate's trailing input is a wait rather than a use"), so the lifted gate carries the
             // same list after the pair it forwards -- not a sync edge, which is the shape the
             // producer stopped writing. A wait that was not copied is not re-added: the lift copies
