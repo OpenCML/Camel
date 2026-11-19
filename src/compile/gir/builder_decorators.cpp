@@ -351,7 +351,8 @@ node_handle_t Builder::lowerDecoratedGraphValue(
         throw BuildAbortException();
     }
     node_handle_t decoratorFactoryValue = createFuncDataNode(decoratedGraph, true, false);
-    node_handle_t decoratorInvoke = currGraph_->addCallNode(decoratedGraph->funcType()->exitType());
+    node_handle_t decoratorInvoke =
+        addCallSite(currGraph_, decoratedGraph->funcType()->exitType());
     linkNodes(LinkType::With, decoratorFactoryValue, decoratorInvoke);
     return decoratorInvoke;
 }
