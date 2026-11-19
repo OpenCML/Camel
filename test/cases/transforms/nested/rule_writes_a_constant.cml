@@ -14,8 +14,9 @@
 // both refused at "writes 1 `<>` value(s) of its own" over their own `dims`/`perm` parameter.
 //
 // The reading is WHICH refusal fires. The transposition half has no rule for `reshape` at all
-// (`stdlib/rulesets/transpose.cml:613`), so the run stops there; a matcher refusal instead would
-// mean the configuration had been refused before any law ran, which is the defect.
+// (`stdlib/rulesets/transpose.cml`, the section on the three operations that state their extents), so
+// the run stops there; a matcher refusal instead would mean the configuration had been refused
+// before any law ran, which is the defect.
 //
 // `rule_constant_agrees.cml` is the same program at `[2, 2]`. The two differ only in the node's
 // configuration and read the same sentence, which is what a general law should do.
