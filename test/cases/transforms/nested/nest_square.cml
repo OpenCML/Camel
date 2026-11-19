@@ -1,0 +1,19 @@
+// 判据 ①: the smallest nest through the LIBRARY's grad.  f(x)=x*x, f'(2)=4, f''(2)=2
+//
+// The library's `grad` answers a function whose weight is its first ORDINARY parameter, so the
+// reading is called with parentheses -- `grad(square)(2.0)`, the writing `nested_grad_min.cml`
+// uses. (The engine's `grad`, `stdlib/signatures/autodiff.cml`, keeps the weight on the `with`
+// list and is called `grad(f)<2.0>()`; the two are different transforms.)
+import { grad } from vjp
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+func main(): int sync {
+    let d1 = grad(square)(2.0)
+    let d2 = grad(grad(square))(2.0)
+    'nested_square x=2.0 d1={} d2={}'->format<d1, d2>->println
+    return 0
+}

@@ -1,0 +1,18 @@
+// 判据 ④ (unfold): the classic perturbation-confusion example.
+//   d/dx ( x * (d/dy (x + y) at y=1) ) at x=1  ==  1   (a confused implementation gives 2)
+//
+// The inner transform sits in the body of the function the outer one differentiates, so it is the
+// shape the plan's "expected unfold" names. The library's `grad` answers a reading of ordinary
+// parameters, so both calls use parentheses.
+import { grad } from vjp
+
+with <x: float>
+func outer(): float {
+    return x * grad(<y: float>() => x + y)(1.0)
+}
+
+func main(): int sync {
+    let d = grad(outer)(1.0)
+    'confusion x=1.0 d={}'->format<d>->println
+    return 0
+}

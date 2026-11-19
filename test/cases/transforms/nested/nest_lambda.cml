@@ -1,0 +1,16 @@
+// The same nest with the inner transform written in the LAMBDA's body rather than reached as a
+// value -- the second writing `second_order_nest.cml` names, here through the library's `grad`.
+//
+//   f(x) = x^3,  f'(x) = 3x^2,  f''(x) = 6x,  at x = 2:  12 and 12
+import { grad } from vjp
+
+with <x: float>
+func cube(): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let twice = grad(<v: float>() => grad(cube)(v))(2.0)
+    'nest_lambda x=2.0 d2={}'->format<twice>->println
+    return 0
+}
