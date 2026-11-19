@@ -1862,9 +1862,9 @@ std::optional<CommitViolation> orderIncomplete(
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
     std::span<const gc_node_ref_t> changed, const GCGraph *before) {
-    // The tier first, and before any resolver runs: the table of docs/design/graph-editing/
-    // README.cn.md 8.1 decides which of the six checks a commit is asked, and what decides that is
-    // which edit the draft used -- not "did it make a node". A draft that made no node and changed
+    // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
+    // table decides which of the six checks a commit is asked, and what decides that is which
+    // edit the draft used -- not "did it make a node". A draft that made no node and changed
     // none added no access and dropped no ordering, so it owes no answer about either, and a rewrite
     // whose only interface is the graph module pays one size check per graph and nothing else. A
     // draft that made no node but added an operand or swapped an operator is the last row of that

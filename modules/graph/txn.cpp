@@ -477,8 +477,9 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// `inline(t, at, fn)`: the body of the function value `fn` spliced into the region `at` is in,
 /// answering the node that holds the body's value. `at` decides the place as well -- the ruling of
-/// 2026-11-18 (`e55cd6157`) on docs/handover/questions/2026-11-18-the-at-of-inline-says-a-region-
-/// not-a-place.cn.md, and docs/design/graph-editing/README.cn.md 7 and 15.3:
+/// 2026-11-18 (`e55cd6157`) recorded at
+/// docs/handover/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md, and
+/// docs/design/graph-editing/README.cn.md 7 and 15.3:
 ///
 /// * `at` is the call `fn` is made at -- the shape `replace(call, inline(call, ...))` expands in
 ///   place: the body is spliced where the call stood, takes over its place in the block's chain

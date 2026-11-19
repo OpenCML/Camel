@@ -319,14 +319,79 @@ expect_exit = 0
 expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 expect_output_not_contains = ["[Warn]"]
 
+# ---- where in-place is decided now: the plan's reuse, not the front end's rewrite ----
+#
+# This entry used to read `std::rgir` and ask that the operator's in-place form appear in the graph
+# (`:var/take`, `array:sort_l_in_place`, `array:sort_d_in_place`, `:op/assn_owned`). That form is
+# produced by `Builder::inPlaceRebindingOf`, a rewrite of the statement shape from when a `var` was a
+# cell; since stage S1 of the direct-SSA plan a same-region local `var` is the value it was given, so
+# there is no cell to take the array out of and no such marker is written any more. The author's
+# answer of 2026-11-18
+# (`docs/handover/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules that
+# in-place is the execution plan's reuse decision: at `sort(v)`, when that is the old `v`'s last use,
+# the plan takes the in-place form (`StorageReuse::Input`, `ByArrayCount` when it can only count --
+# design principles 10.5), and the front-end rewrite and `inPlaceCalls_` are to be deleted with it.
+# So this entry asks that decision instead of the marker, with the ruler the plan page names for it
+# (`camel inspect --copies`, the same reading `array_sort_kernels.plan.toml#array_sort_kernels.paths`
+# takes), and the entry keeps its name for the same reason that one keeps its own.
+#
+# The five rebindings that bind a name to a sorted array are the old value's last use, so their
+# update is in place -- `in-place` (proved) or `by-count` (the array's own count decides at run
+# time), never `copied`. The closure's `fs->sort` is not one of them: it reads `fs` and returns the
+# sorted array without binding it back, so `fs` still holds the unsorted array and the sort may copy
+# -- which the case prints beside the sorted one, and `new_values.sort_rebinding` above pins.
+#
+# What it reads on `91f708389`, and the red this entry is owned for (S3b): `COPIES main updates 9
+# in-place 0 by-count 0 declared 0 copied 9`, with the four `sort_kernel` rows of `main` each
+# `copied`; the one rebinding the plan already places -- the `var` parameter's, in `sorted_param` --
+# reads `by-count`. This red is the S3b gap itself: it is not to be marked `known_fail` and the
+# assertion is not to be loosened, because nothing else in the tree says that a sort at the old
+# value's last use must reuse its storage.
+
 [[tests]]
 name = "new_values.sort_rebinding.graph"
-desc = "The rebinding is written with the in-place form of the operator between `:var/take` and `:op/assn_owned`, for each of the five rebindings that bind a name to a sorted array: `xs` three times, the `var` parameter, and the float `gs`. The closure's form is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort copies -- which the case prints beside the sorted one."
+desc = "The plan's verdict on each of the five rebindings that bind a name to a sorted array (`xs` three times, the `var` parameter, the float `gs`), read through `camel inspect --copies`: each is one row at its own place in the case, the row names the sort, and its verdict is `in-place` or `by-count` -- a rebinding at the old value's last use reuses its storage (design principles 10.5) -- never `copied`. The closure's `fs->sort` is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort may copy."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
-args = ["${case}", "std::rgir"]
+args = ["inspect", "--copies", "${case}"]
 expect_exit = 0
-expect_stdout_contains = [":var/take", "array:sort_l_in_place", "array:sort_d_in_place", ":op/assn_owned"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+    // The rows are `COPIES <file>:<line>:<column> <name> <verdict>`, one per update, at the place
+    // the program writes the call; the summaries count them.
+    const rows = new Map()
+    for (const line of lines) {
+        const f = line.split(' ')
+        if (f.length === 4) { rows.set(f[1], { name: f[2], verdict: f[3] }) }
+    }
+    const tally = lines.find((l) => /^COPIES main updates \d+ in-place \d+ by-count \d+ declared \d+ copied \d+$/.test(l))
+    assert(tally, `main's tally is not in the reading: ${JSON.stringify(lines)}`)
+    const reading = `${rows.size} row(s), ${tally}`
+    const verdicts = ['in-place', 'by-count', 'declared', 'copied']
+    // The five rebindings, at the place the case writes each of them.
+    const rebindings = [
+        ['sort_rebinding.cml:26:12', 'sorted_param: v = v->sort'],
+        ['sort_rebinding.cml:36:14', 'main: xs = xs->sort'],
+        ['sort_rebinding.cml:39:10', 'main: xs = sort(xs)'],
+        ['sort_rebinding.cml:42:10', 'main: xs = sort(xs)'],
+        ['sort_rebinding.cml:57:14', 'main: gs = gs->sort'],
+    ]
+    for (const [place, what] of rebindings) {
+        const row = rows.get(place)
+        assert(row, `the rebinding at ${place} (${what}) has a row: ${reading}`)
+        assert(row.name === 'sort_kernel', `the row at ${place} (${what}) names the sort: ${row.name}`)
+        assert(verdicts.includes(row.verdict),
+            `the row at ${place} (${what}) gives one of the four verdicts: ${row.verdict}`)
+        // The old value's last use, so the update is in place: proved (`in-place`) or counted
+        // (`by-count`), never copied (design principles 10.5).
+        assert(row.verdict === 'in-place' || row.verdict === 'by-count',
+            `the rebinding at ${place} (${what}) is at the old value's last use and must not copy: ${reading}`)
+    }
+}
+"""
+timeout_ms = 60000
 
 [[tests]]
 name = "new_values.sort_rebinding.passes"

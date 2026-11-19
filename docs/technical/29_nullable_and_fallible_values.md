@@ -112,7 +112,7 @@ is `RuntimeDiag::NullSlotUnwrapped` — an internal error of the compiler, which
 by `attempt` — rather than the zero slot, because a zero slot is a value of the right shape and
 the reader could not tell a slot that was never written from one that holds zero (the ruling of
 2026-11-18, `96714f465`; the reasoning is
-`docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
+`docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
 
 **Putting a value into the form: `CAST`.** `TupleType::castSlotFrom` allocates the box.
 Allowed conversions (`castSafetyFrom`): `T -> T?`, `T -> T!`, `U! -> T!` for the failed case (compiler-made only, the error arm

@@ -49,7 +49,7 @@ slot_t __unwrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // the zero slot, because a zero slot is a value of the right shape: the reader could not tell
     // "the slot was never written" from "the slot holds zero", and a defect that reads as a value is
     // what the ruling of 2026-11-18 (`96714f465`) refuses
-    // (`docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
+    // (`docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
     if (value == NullSlot) {
         Type *type = norm.type(0);
         throw camel::core::error::RuntimeFault(

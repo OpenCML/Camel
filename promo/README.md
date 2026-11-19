@@ -25,7 +25,7 @@ tension and reveal, drawn in real depth and light; text and music carry it.
 |---|---|
 | `poc/` | film 1's renderer: three.js scenes drawn frame by frame as a function of time (`src/film.js`), headless rendering (`render.cjs`) and the synthesised score (`score.py`) |
 | `motion/` | the earlier feature-tour film (Motion Canvas), superseded; its bundled code font `src/fonts/` (Promo Mono NL, SIL OFL) is still used |
-| `film/` | `cut.py` and `voice.py` from the earlier film, and its `NOTES.md` |
+| `film/` | `cut.py` and `voice.py` from the earlier film, and its notes (`film/NOTES.md`) |
 | `logo/` | the logo work: the faithful trace, the vector rebuild and its animation, and the redesign studies |
 
 The shipped mark itself is in `assets/brand/`.

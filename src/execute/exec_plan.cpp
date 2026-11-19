@@ -1274,7 +1274,7 @@ bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 /// the plan is where it is taken -- the operator does not take it.
 ///
 /// The author's ruling of 2026-11-18 (`812afad5c`), answering the question this lane's predecessor
-/// raised in `docs/handover/questions/questions-2026-11-17-two-rulings.cn.md`: "an element read of
+/// raised in `docs/handover/reviews/questions-2026-11-17-two-rulings.cn.md`: "an element read of
 /// a counted value is a further holder, so the plan retains there and the run-time skip goes". Read
 /// out of an array, a counted element is one holder (the array holds it) plus one (the value the
 /// read hands on), so the plan takes a hold at the read and gives it back where that value is last
