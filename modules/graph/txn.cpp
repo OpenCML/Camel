@@ -156,22 +156,37 @@ TxnState &openState(ArgsView &norm, size_t index, const char *site) {
     return *wrapper->resourceAs<TxnState>();
 }
 
-/// The transaction that owns the draft of the graph a Node handle names, and the node. The handle
-/// must belong to the Program the transaction was opened on. The transaction, not the draft: a
-/// caller that hands the draft on to a rewrite loses the only thing that says which graph it edits.
+/// The transaction that owns the draft of the graph a Node handle names, and the node. A handle
+/// names its node one of two ways, and both are this transaction's: as a node of the Program the
+/// transaction was opened on, or as a node of a draft the transaction holds -- `inline`, `outline`
+/// and `eval` all answer `Handle::createInTransaction`, which names the transaction and no program
+/// (a node the transaction just made exists in no published program, so a program-backed handle
+/// would claim one that is not there). A handle of another program, or of a transaction another
+/// session holds, is refused. The transaction, not the draft: a caller that hands the draft on to a
+/// rewrite loses the only thing that says which graph it edits.
 std::pair<camel::runtime::GraphTransaction &, camel::runtime::gc_node_ref_t>
 draftOf(TxnState &state, const Handle *node, const char *site) {
-    if (node->program() != state.base) {
+    const bool made = node->transaction() != nullptr;
+    if (!made && node->program() != state.base) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
             "the node belongs to another program than the transaction");
     }
-    GCGraph *graph = state.base->graph(node->graph());
-    if (graph == nullptr || !graph->containsNodeRef(node->index())) {
+    // A node of the program is in a graph the program holds; a node of the draft is in a graph the
+    // session works on, which is the program's until an edit makes one of its own.
+    GCGraph *graph = made ? state.session.work().graph(node->graph())
+                          : state.base->graph(node->graph());
+    if (graph == nullptr || (!made && !graph->containsNodeRef(node->index()))) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node is not in its graph");
     }
     auto &transaction = state.session.edit(graph);
+    if (made && node->transaction() != &transaction) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node belongs to another program than the transaction");
+    }
     if (!transaction.edit().alive(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
     }
@@ -425,28 +440,27 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     TxnState &state         = openState(norm, 0, site);
     const auto *before      = norm.get<Handle *>(1);
     const auto *after       = norm.get<Handle *>(2);
-    auto [transaction, afterRef] = draftOf(state, after, site);
-    auto &draft                  = transaction.edit();
-    // A node the transaction made (what `eval` and `add_constant` answer) names the transaction and
-    // not the program, so "the same graph" is asked of the two handles rather than of the session's
-    // program: both must be nodes of that one graph, whichever way they name it.
-    if (before->graph() != after->graph() || before->program() != after->program()) {
+    // Both ends are read the same way, and not only the second: a node this transaction just made
+    // (`inline`, `outline` and `eval` answer one) names the transaction and not a program, and
+    // ordering the body a splice just wrote among the accesses already there is the caller's, as
+    // the documentation of `inline` promises. Two ends that resolve to one transaction are two
+    // nodes of one draft; anything else is two graphs, whichever way the handles name them.
+    auto [beforeTransaction, beforeRef] = draftOf(state, before, site);
+    auto [afterTransaction, afterRef]   = draftOf(state, after, site);
+    if (&beforeTransaction != &afterTransaction) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
             "the two nodes are not nodes of the same graph");
     }
-    const gc_node_ref_t beforeRef = before->index();
-    if (!draft.alive(beforeRef)) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
-    }
+    auto &draft = afterTransaction.edit();
     if (beforeRef == afterRef) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
             "the two nodes are the same node");
     }
-    if (runsBefore(transaction, afterRef, beforeRef)) {
+    if (runsBefore(afterTransaction, afterRef, beforeRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,

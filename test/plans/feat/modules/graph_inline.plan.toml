@@ -20,6 +20,15 @@
 #   `at` the call of a function that writes nothing (here `inc(2)`): by the ruling's words a call is
 #   a statement, and by the graph's structure it holds no place to take over. The reading says which
 #   one the operator followed: the call is still there, still reads `2`, the chain did not move.
+#
+# The fourth reading is the ordering: `at` a pure node the body's writes have no place of their own,
+# so the caller says where they run among the accesses already there -- and `order` takes a node of
+# the transaction's draft, which is what the splice answers with. That is the promise
+# `stdlib/graph.cml` makes for `inline` at a pure node ("the ordering of the body's writes among the
+# accesses already there is `order`'s to say"), and the commit accepts it: the third print is in the
+# graph the commit published, ordered after both prints that were already there. It does not run,
+# which is the other half of the same reading: the region the body landed in is reached by no chain
+# of the block. Both halves are pinned.
 id = "modules.graph_inline"
 order = 378
 tier = "fast"
@@ -27,10 +36,10 @@ tags = ["feat", "modules", "graph", "edit", "inline"]
 
 [[tests]]
 name = "inline_at_a_statement_takes_over_its_place"
-desc = "at a statement: the node is gone and the body stands in its place; at a pure node: the chain is unchanged and the body lands in an Inline region of that node's region"
+desc = "at a statement: the node is gone and the body stands in its place; at a pure node: the chain is unchanged and the body lands in an Inline region of that node's region; the node a splice answers with is one `order` takes"
 kind = "behavior"
 case = "../../../cases/modules/graph_function/inline.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "[run] subject, before any edit\nfirst\n5\n[pure] prints=2->2 body=0->1 sum_kept=1 sum_reads=call(inc),call(inc) sum_readers=1 value=const(42)\n[pure] body=1 node(s), region=RegionKind::Inline parent_is_sum_region=true\n[pure] chain=:io/println<-:io/println gate<-:io/println -> :io/println<-:io/println gate<-:io/println\n[pure] the edited function runs:\nfirst\n5\n[call] inc_calls=2->2 body=0->1 target_sync_in=(none) call_reads=const(2) call_feeds=1 chain_same=true value=const(42)\n[stmt] prints=2->1 body=0->1 value=gate\n[stmt] last=gate (written after :io/println) anchor=gate reading const(42)\n[stmt] chain=:io/println<-:io/println gate<-:io/println -> gate<-:io/println gate<-gate\n[stmt] the edited function runs:\nfirst\n"
+expect_stdout_exact = "[run] subject, before any edit\nfirst\n5\n[pure] prints=2->2 body=0->1 sum_kept=1 sum_reads=call(inc),call(inc) sum_readers=1 value=const(42)\n[pure] body=1 node(s), region=RegionKind::Inline parent_is_sum_region=true\n[pure] chain=:io/println<-:io/println gate<-:io/println -> :io/println<-:io/println gate<-:io/println\n[pure] the edited function runs:\nfirst\n5\n[call] inc_calls=2->2 body=0->1 target_sync_in=(none) call_reads=const(2) call_feeds=1 chain_same=true value=const(42)\n[stmt] prints=2->1 body=0->1 value=gate\n[stmt] last=gate (written after :io/println) anchor=gate reading const(42)\n[stmt] chain=:io/println<-:io/println gate<-:io/println -> gate<-:io/println gate<-gate\n[stmt] the edited function runs:\nfirst\n[order] carried=:io/println ordered_after=2\n[order] prints=2->3 ordered_before=2 body=0 sum_kept=1\n[order] the edited function runs (the body line is in a region no chain enters):\nfirst\n5\n"
 timeout_ms = 20000
