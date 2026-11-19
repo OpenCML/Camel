@@ -5694,3 +5694,240 @@ lane-front-ip-del  cfc5f74ea  ⇒  tag parked/lane-front-ip-del  （已推 origi
 1. `grad`/`vjp`/`jvp` 在库里是 `#macro`。函数体里出现变换调用、且操作数是**代码已知**的函数（具名函数、捕获里不含函数的 lambda）时，在建图之后（`std::macro` 阶段）把它就地展开成变换后的代码。先用 `std::macro std::nvm` 跑一遍四条用例（`nest_named`、`nest_lambda`、`hessian`、`confusion`），看展开后外层 `jvp` 是否已能 lift；
 2. 若 `std::macro` 今天不展开嵌在体里的变换调用，就补上这一步——外层变换遇到"操作数代码已知的变换节点"时先展开再 lift，不拒绝；
 3. 验收不变：`x·x`→2.0、`x³`→12、Hessian、四后端一致；`compositions.jvp_vjp_f` 的已知失败随之消掉。扰动混淆（`confusion`）按计划用内层写法验收。
+
+## 负责人记录（2026-11-20 08:50）：S1-6 判据一已过；一处「让目标变绿同时让别处变红」被量出来了
+
+### 一、S1-6：判据一 **0/80**（改前 39/80）
+
+```
+plain probe fails : 0 / 80      ← 改前 39/80，加初值后 27/80
+poison probe fails: 0
+program.cpp:68 UBSan: 0 条（初值那笔没回退）
+win-x64 汇总: total 9874, pass 9785, fail 21, skip 23, known 45
+⇒ **那 21 条与 develop 自己那一轮（`44605480914`）的 21 条是同一张名单**，`stream.generators_shapes_consumed` 不在其中
+```
+⇒ 真因（`beea20ad6`）：`builder_operators.cpp:4837` 把 `targetGraph` 当**直接调用**，而 `:3600` 会把它赋成**值调用**的被调方 ⇒ 走值调用的被调方，捕获单元跟着值走，调用方不该再捕获一次。修法用 `addArgumentCaptures` 的**既有问法**推到这一路，没碰守卫、没加兜底。
+
+### 二、你 06:20 (a) 要的「按 id 报两张图」已拆成独立一笔 `ea4b422e3`
+
+只改句子与解释它的注释（2 files +46/−20），**不含探针 plan**，基于 `origin/develop` 可独立合。`compile 2645/2629/0/known 16`，RUN_EXIT=0。
+
+### 三、★ 一处我必须自己认的：`b307cebea` 让 `compile` 从 2604/27 变 2628/0，同时把 `docs.links.citations` 从 3 处变 6 处
+
+`git grep 'stdlib/[a-z/]*\.cml:[0-9]' origin/develop -- 'test/**/*.cml'` 在 `631a9f6a3` 上是 **6 处 / 5 文件**：
+
+```
+nested_grad_through_a_binding.cml:13   stdlib/vjp.cml:182        ← 合并前就有
+hessian_of_a_quadratic.cml:30          stdlib/vjp.cml:182        ← 合并前就有
+nested_grad_min.cml:22                 stdlib/vjp.cml:182        ← 合并前就有
+rule_constant_agrees.cml:3             stdlib/rulesets/jvp.cml:369        ← b307cebea 带进来的
+rule_constant_agrees.cml:14            stdlib/rulesets/transpose.cml:613  ← b307cebea 带进来的
+rule_writes_a_constant.cml:17          stdlib/rulesets/transpose.cml:613  ← b307cebea 带进来的
+```
+
+⇒ **严格说它不是「新增红」**（`docs.links.citations` 本来就在三端共同红里），**但它让一处已有的红多坏了三处**。而我在合并 `b307cebea` 时的判据只有 `compile`/`transforms` 两项，**没有跑 `docs_links`**。
+
+⇒ **教训：「一个改动让目标变绿时，必须同时问它让谁变红」——我这一次问的是计划，不是全部红名单。** 已派 `lane-nested-transforms` 逐处改成「引符号不引行号」，并要求它**读出那几行落在哪个符号上再定**，不许照抄猜测（另一条车道发现这四处时**拒绝替它猜**，理由是对的：那几个行号指向法则的文档注释散文）。
+
+### 四、`sum<0,false>` 那条线索已完全关闭
+
+两条新用例（`sum_axis_lane_derivative` / `sum_axis_in_a_training_step`）把解析值钉住，其中训练步那条**四个数互不相同**（`78.0 / 102.0 / 126.0 / 24.0`），**故意让「把一个标量铺满整个张量」那种错法无法蒙过**。
+
+⇒ 而本线能拿出的最强证据不是单算子求导，是 `feat/showcase_s2` **10/10**，含 `train.twelve_rounds_library_curve_is_the_engine_curve`：**十二轮真实训练，库的梯度曲线与引擎的逐轮相同**。
+
+⇒ 另开一页记录那处**类型拒绝**（`vjp` 一个写明降秩的函数停在 `ExitTypeMismatch`，`split.cpp#splitHalvesWith` 用 `exitPair->typeAt(1)` 当反向半边的声明出口）：`docs/handover/questions/2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md`。默认建议是**法则侧承担，不放宽 split 的检查**（放宽就是把拒绝换成「带声明秩的开秩值」）。
+
+## 负责人回报（2026-11-20 09:10）：S1-6 已入主干；两处**需要你裁**——一条是规则与一类算子不兼容，一条是两个正确的改动相遇
+
+### 一、S1-6 已合（`develop = 957ddb10b`）
+
+```
+beea20ad6  ⇒ 631a9f6a3..1a0b8005c   4 文件 +84/−22
+cb6ae771a  ⇒ 1a0b8005c..957ddb10b   4 文件，零冲突
+```
+判据：**Windows 80 次 0/80**（改前 39/80；单独加初值后 27/80）· Linux 80/80 · 那 21 条 FAIL 与 develop 同名单。合并说明里写死一句：**「不许与 `631a9f6a3` 的未初始化 bool 混为一谈：那是独立的一处，已单独入主干，且它没有关掉这个问题」**（它只把 39 降到 27，Fisher p≈0.066）。
+
+⇒ `ea4b422e3`（你要的「按 name+id 报两张图」）**没有单独合**：内容已随 `48156fcaa` 进树，`git diff` 之后只剩一行 `///`。**目的达到，形式不追。**
+
+### 二、★ 要裁的第一条：`checkResources` 与「拿函数当参数的算子」不兼容
+
+`tiles:run_preferred_resident` 的**真话**是「被给函数的访问 + driver」，而 `src/core/resource_semantics.cpp` 的 `checkResources` **禁止 `functionOperand` 与 `accesses`/`externalEffect` 并存**（"an operator whose accesses are a function operand's itemizes none of its own"）。
+
+⇒ 于是 **12 条红**（`tiles.{mean_grad,layout_grad,batch_matmul,mixed_matmul}.source.{nvm,fvm,jit}`）无法用一个真声明消掉。要放宽规则，必须先回答：**一个拿函数当参数的算子，它自己的资源该怎么断言？** 是「不写，让被给函数的访问决定」，还是「写，且与被给函数取并」？
+
+⇒ **我不许它放宽 `checkResources`，也不许它编一条只写 driver 的例外**（那是假断言）。请你裁。
+
+### 三、★ 要裁的第二条：两个**正确的**改动相遇，`rewrite:saturate`
+
+`opt_saturate_rhs_from_an_enclosing_region` 红：
+```
+the graph 'main' a commit was asked to edit already reached past the type its own signature declares,
+before the edit: node 9 (rewrite:saturate)
+```
+机制：`rewrite:saturate` **只 declare 了 purity，没 declareResources** ⇒ 另一条车道的「未声明就保守视为读到一切」把它的足迹算成 `Unknown`；而你 0ea4dc518 的 before-the-edit reader（`462587e7a`/`ebb384f77`）恰好把「编辑前就超出自己签名」判成内部错误 ⇒ **编译器自己产出的图被判成内部错误**。
+
+⇒ 这一条既不是那条车道做错（它的拒绝是对的），也不是你的 reader 做错（它报的确实是越界）。**需要你选**：
+1. **补 `rewrite:*`（`saturate`/`rewrite`/`run`/`why_not`/`extract`）的声明** —— 与 `tiles`/`onnx` 同一类活；
+2. **让 before-the-edit reader 对 `Unknown` 继续放过** —— 但这就等于承认「未知足迹不算越界」，与你 0ea4dc518 的意图相反。
+
+⇒ 我认为该走 1，理由是 2 会把「未知」重新变成「安全」。但这是你的判据，我不定。
+
+### 四、第三条：`tiles.cml` 里那个 `uses var driver` 是**假声明**
+
+`tiles:regions` 的 `pure=true` 做了又退回：`--verify-ops` 报
+```
+stdlib/signatures/tiles.cml:69: 'regions' (tiles:regions) declares `uses var driver` but the operator touches no such resource
+```
+⇒ 而那个 `uses var driver` 是 tiles 的 `DynamicFuncTypeResolver` **写进生成文件的**，而 `regions.h:150` 说它「without executing it or initializing CUDA」、只返回字符串 —— **它一次都不碰 driver**。
+
+⇒ **所以缺陷不在 `regions` 该不该 pure，而在 resolver 凭什么给它写 `uses var driver`。** 若那个 resolver 的判据只是「拿不准就给 driver」，那它与「编一条 driver 访问」同样不可接受。**已让车道只报读数、不改生成物**（`--write` 会改树，等主机空出来单独一次做）。
+
+### 五、`transforms` 整块不碰资源 —— 已证实 6 个里 3 个
+
+`jvp`、`split`、`first_with_as_param` 的 kernel 都只读 `f` 的图、造新图、把读数打到诊断侧，**一个资源也不碰**；三者 `#macro` 声明里本来就没有 `uses` 子句 ⇒ **pure 是声明已经写着的断言，`stdlib` 一个字没动**。`transpose`/`vmap`/`remat` 实现形状完全一样，但**没有红驱动，按纪律没动** —— 要动就是三行，你说一句就做。
+
+⇒ 这也是 42 条 `feat/opt` 红转绿的原因（`opt 1620/1620/0`），以及 `compile` 最后两条红。
+
+### 六、一条我要自己认的判据缺陷
+
+`lane-unknown-resource` 这条分支现在 **`modules` 从 0 红变成 14 红**（`2074/2046/14` vs 基线 `2074/2060/0`）。它的 `opt` 是 `1620/1620/0`（+42 绿），但**「不得有新增红条目」是硬闸，不是净账** ⇒ **我判它现在不能合**，等 第二节/第三节 两条裁定 + `regions` 的 resolver 修好。
+
+⇒ 而这一条暴露了我自己的一个盲点：**我此前只盯「目标计划变绿」，没把「其余计划不许多红一条」当成同一张表来核。** 今晚这一笔就是靠它自己报出来的。
+
+## 负责人回报（2026-11-20 09:20）：三条读数，其中一条是**实现缺口**、一条是**你 10-26 的断言过宽**、一条是**检查器的方法论**
+
+### 一、★ `Resolver::oper` **不读 `functionOperand`** —— 实现缺口，正好在今晚合并的区域内
+
+`rewrite:*` 五个算子（`saturate` / `rewrite` / `run` / `why_not` / `extract`）**不是「什么也不碰」，它们运行别人给它们的 Camel 代码**：
+
+```
+saturate :1552  session.edit(graph)+DraftWritings::saturate(compiled,budget)，而 :269-270「condition is Camel code… the closure that calls it」
+                + :230-236「the node VM the conditions of one engine … runs at a safepoint」⇒ 跑规则的**条件函数**
+rewrite  :935 · run :975 · why_not :1282 —— 同一条引擎（应用/跑到不动点/解释条件），都要评条件
+extract  :1677 CamelCostModel → :1663 `vm_->callFunction(cost_.getAs<::Function>(), args)` ⇒ 跑调用者给的**代价函数**
+```
+
+⇒ 按设计原则 3.3，它们的真话是 **`functionOperand`**（「跑函数的高阶算子，它的访问是被给的函数的」）。而 `checkResources` **允许** `functionOperand` 单独存在 —— 它禁止的是它与 `accesses`/`externalEffect` 并存。**所以这类声明写得出来。**
+
+**⇒ 但写出来的那一刻，运行时 `Resolver::oper`（`src/runtime/resources.cpp`）不读 `functionOperand`，只遍历 `spec.accesses`** ⇒ 这个节点在运行时会被读成「什么也不碰」，而它明明在跑代码。
+
+⇒ **这是实现缺口，不是声明缺失。** 它正好在今晚 `ebb384f77`/`462587e7a` 动过的那一块（足迹读法）里。**我报给你，不让车道动它** —— 因为修它要改运行时怎么读一个算子的足迹，那属于设计。
+
+⇒ 也因此，我昨天对 ③ 的表述要**修正**：`opt_saturate_rhs_from_an_enclosing_region` 那条红**不是「声明漏了」**，是「它的足迹属于条件函数，而这类足迹现在**无处安放**」。于是你 09:00 那两条选项里，第 2 条（让 reader 对 `Unknown` 继续放过）**不是解法** —— 真正的解法是让 `functionOperand` 在运行时被读起来。
+
+### 二、`uses var driver` 不是「拿不准就给 driver」—— 是你 2026-10-26 的**模块级断言**
+
+```
+写它的不是 resolver：resolver 的拼写是 modules/tiles/src/module.cpp:744 `"<fn: Function>() => string"` —— **没有 `uses`**
+写它的是 commit 54b85b923（2026-10-26，你的提交），message 原话：
+  「`tiles` from the author's drafts: `export resource driver`, a resource every function of this module uses」
+⇒ 5 条（upload/download/run_preferred_resident/benchmark/regions）全部手写 `uses var driver`
+```
+
+⇒ **而 `regions` 恰恰是这条断言唯一为假的地方**：`regions.h:150` 自己的契约写着「without executing it or initializing CUDA」、只返回字符串。
+
+⇒ 所以不是「假声明」，是**断言过宽**。该裁的是：**「这个模块的每个函数都用 driver」这句 blanket 断言，与 `regions` 自己的契约，谁说了算？** 我倾向后者（断言该收窄成「除 `regions` 外」），但这是你的断言，我不改。
+
+### 三、★ 检查器在 `Unknown` 时**放过** —— 所以这条冲突是**潜伏的**，不是今晚造出来的
+
+`--verify-ops` 之前从不报这条，原因是：**当一个算子的访问是 `Unknown` 时，检查器证明不了「touches no such resource」，只能放过。** 把 `regions` 写成 `pure` 之后，它才第一次有确定答案去比对。
+
+⇒ 这是今晚第三次遇到同一形态：**一个检查在「读不到」时沉默，于是缺席被当成通过。** 前两次是 `commitViolation` 跳过编辑前就越界的图、以及守卫在 Release 里静默。**这一次是 `--verify-ops`。**
+
+⇒ 值得你考虑：**`Unknown` 时的放过是不是也该留一条可见的读数**（例如「本算子足迹未知，未参与比对」的计数），否则「检查通过」与「检查没做」在日志里长得一样。
+
+## 负责人回报（2026-11-20 09:35）：**S1-6 结案。**读数、机制、修法、以及被排除的那条假设，全部带坐标
+
+### 一、读数（三轮 CI + 本机，逐字）
+
+| 轮次 | Windows 80 次探针 | 判据 |
+|---|---|---|
+| `44614018464`（改前） | **39 次拒绝**（exit 3） | 48.8% |
+| `44619862864`（加初值后） | 27 次 | **p≈0.066 ⇒ 不是证据**，所以我没有把它算作修好 |
+| `44626641066`（捕获修法后） | **0 次** | 通过 |
+| `44630939267`（第二轮，独立） | **0 次** + 240 条确定性比对 0 条不一致 | 通过 |
+
+本机：空载 **13/60 = 22%** · 满载 28 核 **7/20 = 35%** · 本机 Windows 二进制 **0/160**。
+
+### 二、机制（守卫那句话自己把两张图报了出来）
+
+原先它只报一句 clause；按你 06:20 (a) 的要求改成报 name + id 之后，一次响就定了：
+
+```
+node 1 / 2 / 3 of graph 'three' (#47) is captured into graph '__g_63__' (#63)（另 4 次是 #70）
+向上走两级到 '__root__' (#1) 就没有外层
+```
+
+⇒ **程序合法，守卫判定正确，错的是那条捕获记录。** `builder_operators.cpp:4837` 把 `targetGraph` 当**直接调用**（注释原文 "A function called directly brings its captured variables with it"），而 `:3600` 会把它赋成**走值调用**的被调方；走值调用的被调方是在别处造的，它的捕获单元**跟着值本身传过去**，调用方拿到的是值、不是单元。
+
+⇒ 节点 1/2/3 在两种闭包上轮流出现，是因为被调方捕获表的次序随运行改变（地址序）—— 这也是你 08:25 第 6 条那条确定性任务的来源。
+
+### 三、修法（`beea20ad6`）
+
+`captures.cpp:43` 新增 `Builder::enclosesOrigin`，**问法照抄同一文件里 `addArgumentCaptures` 的既有问法**（3.3/3.5）；`builder_diagnostics.cpp:147` 包不住就跳过；`builder_operators.cpp:4925` 写回的捕获版本留 `nullptr` **占位**，掩码仍按同一批槽位解读。**守卫一个字没动，没有兜底，直接调用那一支一个分支都没变。**
+
+### 四、被排除的那条假设（我要记清楚，因为它是错的）
+
+「读了未初始化/悬空的内存」——**Linux 120 次（含 `MALLOC_PERTURB_` 0/85/170）与 ASan/UBSan 全绿，且节点句柄答的是真话。** 缺陷是**一条被错误做出的捕获**，不是一次错误的读。
+
+⇒ 而途中那处**真的** UB（`synced_`/`varied_` 未初始化，UBSan `load of value 190 … for type 'bool'`）是**另一件事**：`8c2d57ce9`/`631a9f6a3` 单独入主干，只把 39 降到 27（p≈0.066），**没有关掉这条守卫**。合并说明里写死了这句，防止后人把两者混为一谈。
+
+### 五、七项（修法后逐条量）
+
+`compile 2644/2628/0(known 16)` · `linear 869/865/0` · `opt 1620/1620/0 单跑` · `parse 126/126/0` · `para 104/104/0` · `tools 70/70/0` · `consistency 1292/1290/2`（两条红即 `runner.backend_matrix` 与 `new_values.sort_rebinding.graph`，**develop 在三端 CI 上本来也是这两条**）。
+
+### 六、我自己复核过三件（不采信它的自述）
+
+```
+`git ls-tree -r origin/develop | grep _s16`  ⇒ **0 个**（两个探针 plan 都已取下）
+`git diff origin/develop origin/lane-win-s1-6 -- src/compile/gir/`  ⇒ **空**（逐字节相同）
+`git grep -n 'outerGraph() != nullptr' origin/develop -- src/compile/gir/captures.cpp`  ⇒ `:101`
+```
+⇒ 三件都成立，`ea4b422e3` 如它所说**已失去意义**（`develop` 已整笔收下 `48156fcaa`）。
+
+### 七、还剩的两条（都不在 S1 里）
+
+1. **`Resolver::oper` 不读 `functionOperand`**（上一条回报里说的实现缺口）—— 它让 `rewrite:*` 这类「跑被给函数」的算子无处声明足迹。
+2. **你 10-26 的模块级断言 `a resource every function of this module uses` 对 `regions` 为假** —— 断言过宽，该收窄。
+
+## 负责人记录（2026-11-20 09:45）：分支清理两条结果 + **一条会在几小时内破线的债**
+
+### 一、删了 `lane-gate-reds-a-parked`（按 `54c6b7238`：先打 `parked/` 标签再删）
+
+```
+tag parked/lane-gate-reds-a-parked @ b604554d2（已推 origin）
+git push origin --delete lane-gate-reds-a-parked ⇒ remote 已删
+git branch -D ⇒ 本地已删
+```
+**取代它的那一笔，逐字一句**：`81f1c369e` "cml: print a branch's statements and its value where the source put them (lane A)" —— **被 `36f91f6a4` 第 4 条的裁定取代**（「为打印器方便在核心表示上加字段，正是要避免的」）。`git cherry` 对它输出 `+`（内容不在主干），所以它不是「已被吸收」，是「被裁定判掉」。
+
+`maxBehind` 因此 95 → 94。
+
+### 二、★ `lane-ssa` 是**真的未合并工作**，且会在几小时内破线
+
+```
+ahead = 26（16 笔非合并）· behind = **94** · `git cherry origin/develop lane-ssa` ⇒ **16 笔全是 `+`，一笔都不在主干**
+⇒ **⇒ 它不是陈旧的残留，是一整条没进过主干的线**
+```
+
+⇒ 而它的提交名里有一条与我今晚合进主干的活**几乎是同一句话**：
+```
+lane-ssa  5559d3c6e  "gir: a call through a value asks the graph behind the value"
+今晚主干  beea20ad6  "gir: a callee reached through a value does not hand its cells to the caller"
+```
+⇒ **两笔指向同一个机制。** 可能（a）`beea20ad6` 让 `lane-ssa` 的那一笔失去意义；（b）两者互补；（c）互相冲突。**我没有读数，不猜。**
+
+⇒ **这条债的形状**：`maxBehind = 94`，而主干今晚进了 12 笔 ⇒ **按这个速度，几小时内就会破 100**。破线之后按 2026-11-14 用户定的规矩，**不是「清理分支」而是「停派新分支、转入审计合并」**。
+
+⇒ **我建议下一轮的第一件事就是它**，而第一步不该是解冲突，而是先答三个问题：
+1. `5559d3c6e` 与 `beea20ad6` 是同一个机制吗？若是，`lane-ssa` 那一笔作废、其余 15 笔重看；
+2. 那 16 笔各自还值多少？（一条一句，按作者 03:00 的四问）
+3. 它有没有**能跑出真红**的用例 —— 落后 94 笔时，它自己的改动已经无法验证，所以先看它带不带判据。
+
+### 三、其余两条我读了，但不动
+
+```
+lane-grad-form  ahead=1  `5987d5290` "test: record split_print.cml's AST row after its call form changed" ⇒ 金标更新，很可能已随主干的重录失效
+lane-front-ip-del ahead=1 内容和主干 patch 等价（`cherry` 输出 `-`），remote 已删、标签已打；本地 `-d` 被拒（内容不在祖先链上），**我没有换 `-D`**
+lane-vjp-forward-backup ahead=2  显式的备份支，留着
+```
