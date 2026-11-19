@@ -413,8 +413,17 @@ class Builder {
     camel::core::module::ProgramExports ownExports_;
     camel::core::module::ProgramExports *exports_;
 
-    bool synced_;
-    bool varied_;
+    /// Whether the statement being built is one of a sync chain, and whether it varied (the two
+    /// decide how a statement is chained, design principles 5.2). Initialized here and not left to
+    /// the first writer: `UnitContext` saves them and its destructor puts them back
+    /// (`program.cpp:68`, `:99`), and the save is the *first* read of them in a program whose
+    /// first context is built before any statement exists. UBSan reports that read as a load of a
+    /// value that is not a `bool` (CI's sanitizer leg, `program.cpp:68:64` and `:68:90`), and a
+    /// save of garbage hands garbage back when the context ends: on a target whose freed heap is
+    /// not zeroed, every later statement then believes it is in a sync chain. A boolean is a
+    /// `bool` from its first read, not from its first write.
+    bool synced_ = false;
+    bool varied_  = false;
     // The numeric permissions in force where the builder is (design principles 7.5): those of
     // the nearest GCT EXEC, which already include every enclosing block and function
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
