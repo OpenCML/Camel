@@ -704,8 +704,26 @@ class Builder {
     /// otherwise the capture port of `graph` bound to it, made (with the ports of the graphs
     /// between `graph` and the origin's graph) when there is none yet. `name` is the name
     /// the new ports are shown with.
-    node_handle_t
-    captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
+    ///
+    /// `capturing` is the graph the capture is made *for*, carried through the walk up so that
+    /// the report can name it: the outermost `graph` of this call, which is not `currGraph_`
+    /// when the caller captures on a callee's behalf (`linkCaptureSites`), and it is the pair
+    /// (capturing, origin's graph) that says which record was made of a value that graph cannot
+    /// reach. The walk itself reads only `graph`.
+    node_handle_t captureInto(
+        const compile_graph_ptr_t &graph,
+        node_handle_t origin,
+        const std::string &name,
+        DraftGraphBuilder *capturing = nullptr);
+    /// Whether the graph being built is `origin`'s own graph or one of its inner graphs, so that
+    /// a capture of `origin` here is a capture this graph can make.
+    ///
+    /// The question is a condition on the *caller*, not on `captureInto`: a capture is named by
+    /// the graph that makes it, so the places that hand a callee's captured variables to a call
+    /// ask it first. A function value made in another function carries its captures inside it --
+    /// what is handed over is the value, not the cells -- and the cells cannot be named here
+    /// (`addArgumentCaptures` asks the same question for a function-typed argument).
+    bool enclosesOrigin(node_handle_t origin) const;
     /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
     /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
     /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level

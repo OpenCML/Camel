@@ -2015,6 +2015,8 @@ ca8ab877a49754a1 ok test/cases/compile/transforms/stated_take_extents_refused.cm
 f02d274eb6e732c8 ok test/cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml
 cfbc875da509361e ok test/cases/compile/transforms/stop_gradient_gradient_through_the_library.cml
 66ebc21fa1eee0ce ok test/cases/compile/transforms/struct_member_by_index.cml
+f8927e15a2107240 ok test/cases/compile/transforms/sum_axis_in_a_training_step.cml
+8cebcf24eeb63ca6 ok test/cases/compile/transforms/sum_axis_lane_derivative.cml
 8c7d270ef738e07e ok test/cases/compile/transforms/tangent_of_a_pack_keeps_every_parameter.cml
 c75538ac14b806b0 ok test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
 edc0091c0e7595bc ok test/cases/compile/transforms/tanh_gradient_through_the_engine.cml

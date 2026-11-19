@@ -1,0 +1,41 @@
+// The derivative of a lane sum on the smallest tensor that shows it: `sum<0, false>` of a `[2, 2]`
+// value, along the leading axis, with the reduced extent dropped.
+//
+//     x      = [[1.0, 2.0], [3.0, 4.0]]
+//     lane   = sum<0, false>(x) = [4.0, 6.0]                 (the columns' sums: 1+3 and 2+4)
+//     d/dx   seeded with ones    = [[1.0, 1.0], [1.0, 1.0]]  (every element lands in exactly one lane)
+//     tangent seeded with ones   = [2.0, 2.0]                (two elements per lane, each one's tangent 1)
+//
+// Both directions are read on the same value, because they are two different laws and only one of
+// them can be wrong: `jvp` answers through `stdlib/rulesets/jvp.cml#jvp_sum_axis` (the tangent is the
+// lane sum of the tangents, `sum_axis_stated`) and `vjp` answers through
+// `stdlib/rulesets/transpose.cml#sum_axis_stated_t` (each lane's cotangent spread back over the lane,
+// `lane_spread`). The forward value is printed beside them so that a reading which is wrong only on
+// the derivative side cannot be mistaken for a wrong reduction.
+//
+// The `keepdims=false` half is the half that has to put the reduced extent back: with the flag the
+// cotangent already carries one extent per axis, without it the extent is gone from the cotangent and
+// `lane_spread` inserts it before broadcasting. The extent that comes back is one and every element
+// of the lane holds the same number, which is why a spread that never wrote its buffer reads as a
+// repeated value rather than as a wrong one.
+//
+//     camel test/cases/compile/transforms/sum_axis_lane_derivative.cml
+import { sum } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+import { vjp } from vjp
+
+func lane(x: float[...]): float[...] {
+    return sum<0, false>(x)
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let (value, tangent) = jvp(lane)(x, [[1.0, 1.0], [1.0, 1.0]] as float[2, 2])
+    `sum<0> forward={}`->format<value>->println
+    `sum<0> tangent={}`->format<tangent>->println
+    let (_v, pullback) = vjp(lane)(x)
+    let gradient = pullback([1.0, 1.0] as float[2]).0
+    `sum<0> gradient={}`->format<gradient>->println
+    return 0
+}
