@@ -5348,3 +5348,34 @@ killed = 0
 决策者。两条都是"读了不该读的内存"一类：Windows 上同一二进制同一命令约 20% 失败、负载越高越常见，说明结果取决于地址或时序（未初始化的值、按指针排序或按指针哈希的遍历、悬空引用）；`sum<0,false>` 的导数四个元素是同一个垃圾值，是读了没写过的内存。**都按 S1 级排，不等格子——`opt-twice` 已停，`print-fix` 已关，两格给它们。**
 1. **Windows 那条拿读数的通道**：(a) 把 `captures.cpp:63` 的断言信息补上被捕获节点所在图与捕获方所在图的名字与编号（Release 下也打印），推一个分支，用 CI 的 Windows 腿跑这条用例 N 次取读数；(b) 同时在 Linux 主机上用 sanitizer 构建（ASan + UBSan；clang 有 MSan 就加）跑这条用例与 `generators_shapes_consumed` 所在计划，并用 `MALLOC_PERTURB_` 之类改变分配，看能否在 Linux 上复现。找到读未初始化或悬空的那一处就是根因，不在断言处加兜底。
 2. **`sum<0,false>` 的导数**：同样先在 sanitizer 构建上跑最小用例定位；修在写这块内存的那一处（`jvp_sum_axis` 或它的转置、或内核），补用例钉住数值 `[[1,1],[1,1]]`（或按 `keepdims=false` 的正确形状）。修完在 MLP 与 transformer 的训练步上复核梯度数值不变或变对，报出来——这可能影响论文的读数。
+
+## 负责人回报（2026-11-20 06:40）：效应检查第 2 条改完，**六条绿是靠那个 bug 换来的**；我不合，先修生产者
+
+### 一、你的第 2 条（`commitViolation`）已实现，但结局是 6 条既有用例红
+
+`462587e7a`（`lane-edit-beyond-type`）按你的话把「编辑前已越界」从「跳过」改成「内部错误」，措辞指向前端：
+> `the front end accepted a graph that is beyond its own type, which is a defect of the compiler and not of the program: no commit can judge an edit against it`
+
+⇒ 新增 6 条内部错误：`pass_boundary.orphan_effect_refused` + `tiles::{compiled_region_parallel, host_resident_parallel, native_parallel, native_parallel.scheduler, native_parallel.linear}`。全量对照（同一棵树）**除这 6 条外每一项相同**。
+
+### 二、★ 这一支今天响了 6 次，而它正是那 6 条一直绿的原因
+
+车道加了一个**只写 `/tmp`、不改行为、不提交**的探针，在**改前**的全量上命中 6 次（图 `main` 1 次、`__g_49__` 5 次）。
+
+⇒ **⇒ 那 6 条绿是「借来的绿」—— 借的就是你 04:50 要删掉的那个跳过。**
+⇒ 这与今晚另外两处同形：`sum<0,false>` 的导数四个相同垃圾值（读未写过的内存）；`softmax<2>` 静默给 `13.5`（法则的左式常量不参与匹配）。**三处都是「有一个数，但它不是被算出来的」。**
+
+### 三、6 条红分两类，我的处置不同
+
+1. **`pass_boundary.orphan_effect_refused` —— 故意非法**：测试专用 `test::bounds_flip` 把 `stdout` 从 write 翻成 read，专为喂 pass 边界那条检查；新的一支在**边界之前**就拒了，它期望的那句话不再出现。**改期望能消红，但那条检查会失去唯一覆盖** ⇒ 我要求**拆成两条**（一条用不越界的装置测边界，一条测越界被拒）。
+2. **tiles 五条 —— 不是非法程序**（`native_parallel.cml`，`expect_exit=0` + 精确 stdout）。越界的是 `tiles::test_outline_*` 造出的 `__g_49__`：**型什么都不声明，体经 `chain` 带出程序外效应**，即 `2026-11-18-the-tiles-pass-publishes-a-body-before-its-type` 那族。**⇒ 生产者是 tiles 那一遍，不是前端。**
+
+### 四、我为什么不合，以及顺序
+
+**合了主干就从 0 红变 6 红。** 所以：**先修 tiles 那一遍（让 `__g_49__` 在建图时就带上效应），再把这两笔一起合** —— 那时主干 0 红进、0 红出。
+
+⇒ 我让车道先答一个能定结局的问题：**若 tiles 改成「先定类型再发体」，`native_parallel.cml` 是变合法（6 条红变绿），还是仍红但理由换成「程序真的越界」？** 这两种结局差别很大 —— 前者是修好了，后者是**程序的效应声明本来就不全**，要你去定那条 `.cml` 该不该补声明。
+
+### 五、一处我请你裁（`O=13`）
+
+`origin` 上有 13 条未合进 `develop` 的分支：今晚我们的 5 条（含待判的 `lane-nested-transforms`）与**以前会话的 8 条**（`ckb-dev`、`handover/h484-flip-audit`、`land/packing-and-rule`、`land/packing-rule-nobit`、`lane-eval`、`lane-fused-op`、`lane/inline-order`、`refactor/add-call-site`）。**删远端分支不在我的巡检授权里**，我不动。**默认：那 8 条按你 03:00 的四问逐条过一遍再删。**
