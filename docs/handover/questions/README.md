@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：26 页
+## 现在在等作者：27 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -15,6 +15,7 @@
 | [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | 一条豁免该不该连「它记的那条原因」一起校验——原因不再成立时，它还是豁免吗？ |
 | [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ |
 | [`2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value`](2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value.cn.md) | `sync` 体里一个调用把元组当成了语句的值 |
+| [`2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal`](2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal.cn.md) | 一个未被触发的并列：`arrangeEqualKeyRun` 的 `stable_sort` 在片段相等时保留创建次序 |
 | [`2026-11-19-a-tuple-flows-into-an-operator-s-arguments`](2026-11-19-a-tuple-flows-into-an-operator-s-arguments.cn.md) | 元组当值流进了算子实参 |
 | [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
 | [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
