@@ -118,6 +118,29 @@ args = ["${case}", "test::commit_legal_splice", "std::nvm"]
 expect_exit = 48
 expect_stdout_contains = ["commit_legal_splice: the draft splices a write to stdout ordered after the write that was already there", "so the commit asks the effect and order checks in every build", "writes stdout at node", ", ordered after it", "commit_legal_splice: the commit published it, and nothing was refused"]
 
+# 乙's other side, on a splice the check really has nothing to say about: two *reads* of one ambient
+# resource in one region. `std::cxx::inline` copies a callee that loads two `.npy` files into `main`;
+# the two loads carry `read ambient fs` (the tensor module's declaration, `catalog.cpp`), a read and a
+# read do not conflict, and the commit publishes. It is the twin of `commit_refusal.order` above:
+# that one is a second write to the console, this one is not a conflict at all.
+#
+# What it pins is the declaration reaching the operator: until 2026-11-19 `tensor:load_npy` named the
+# *group's head*, which is no operator, so each `load_npy_<dtype>` fell back to "writes the global
+# resource" and this same program was refused with `RuntimeDiag::PassEffectOrder` -- node 8 against
+# node 9, two loads of two files read as two writes of one resource. That was read on the build
+# without the declaration and again with it, so the case is red before the repair and green after.
+#
+# The two files differ, and that is not decoration: two calls of one operator with one operand are
+# one node to the graph, no second copy is kept, and the pair this reading is about does not exist.
+[[tests]]
+name = "commit_refusal.reads_spliced"
+desc = "A splice carries two reads of one ambient resource into one region: no write is added and no pair conflicts, so the commit is asked and publishes, and the program prints what it printed before the splice."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/inline_two_reads.cml"
+args = ["${case}", "std::cxx::inline", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["7"]
+
 # ③, the tier itself, as two drafts read under both answers the one build cell can hold. The first
 # draft adds an access and is refused with the cell off; the second adds no node at all and is
 # published with the cell on. Under the ruling of 2026-11-16 the first line would have read

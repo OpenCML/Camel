@@ -1,0 +1,35 @@
+/**
+ * Two reads of one ambient resource, carried into one region by `std::cxx::inline`.
+ *
+ * `reads_two` reads two `.npy` files in one expression, so the graph the front end builds has both
+ * loads in one region and no order between them: reading is not a write, so the two do not conflict
+ * and nothing has to order them (design principles 3.3). That is the answer the operators'
+ * declaration gives -- `read ambient fs`, the same answer `fs:read_bytes` gives -- and the splice
+ * that copies both into `main` publishes them as they are.
+ *
+ * The two loads read two *different* files on purpose: two calls of one operator with one operand
+ * are one node to the graph (it does not keep a second copy of a call it can see is the same call),
+ * and then there is no pair to ask about. A pair of two nodes is what a refusal needed.
+ *
+ * Before 2026-11-19 the declaration was written on the group's head, `tensor:load_npy`, which
+ * answers a call and is no operator: the five `load_npy_<dtype>` operators fell back to "writes the
+ * global resource", two loads of two files met as two writes of one resource with no path between
+ * them, and this splice was refused with `RuntimeDiag::PassEffectOrder` -- a conflict the program
+ * never had. That is the positive half of `commit_refusal.order`, which is the same commit answered
+ * about a second write to the console: the check still has its teeth, and this is what it has
+ * nothing to say about.
+ */
+import { load_npy, numel } from tensor
+
+func reads_two(first: string, second: string): int {
+    let a = load_npy::<f32>(first)
+    let b = load_npy::<f32>(second)
+    return numel(a) + numel(b)
+}
+
+func main(): int {
+    println(reads_two(
+        'test/cases/modules/tensor/shape_types/x3.npy',
+        'test/cases/compile/entry_args/b.npy'))
+    return 0
+}

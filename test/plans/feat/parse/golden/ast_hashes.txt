@@ -3928,6 +3928,7 @@ e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 4458f4f7e6cb467b ok test/cases/opt/commit_checks/fold_function_type.cml
 5ea4b89de03c989f ok test/cases/opt/commit_checks/generic_call.cml
 4b03f511a3efb360 ok test/cases/opt/commit_checks/identity_at_exit.cml
+3c6d2676b58add1b ok test/cases/opt/commit_checks/inline_two_reads.cml
 1a71a9d22c46c7e8 ok test/cases/opt/commit_checks/inplace_edit.cml
 3bb03717c029f772 ok test/cases/opt/commit_checks/loop_body_read.cml
 21270de361be5622 ok test/cases/opt/commit_checks/port_type.cml

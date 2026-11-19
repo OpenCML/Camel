@@ -9,6 +9,9 @@
 
 #pragma once
 
+#include <span>
+#include <string_view>
+
 #include "op_def.h"
 
 namespace camel::tensor::ops {
@@ -25,6 +28,16 @@ std::vector<OpDef> utilityOps();     // indexing, show, threading controls
 /// is computed rather than declared (`stdlib/signatures/tensor.cml`), so the group is exported
 /// from `TensorModule` by hand, like `from_bytes`.
 oper_group_ptr_t loadNpyOperatorGroup();
+
+/// The URIs `load_npy` is registered under: one operator per element type a `.npy` file can hold
+/// (`utility_ops.cpp#kNpyElementTypes`), named `load_npy_f32`, `load_npy_f64`, `load_npy_i32`,
+/// `load_npy_i64` and `load_npy_bool`. A resource declaration has to name those five: the group's
+/// head, `tensor:load_npy`, answers a call but is no operator, so a declaration written there
+/// reaches none of them and they fall back to "writes the global resource"
+/// (`catalog.cpp#declareResourcesAndDefinitions`, 2026-11-19). The names are asked for instead of
+/// written a second time, so a sixth element type cannot be added without its declaration.
+std::span<const std::string_view> npyLoadOperatorNames();
+
 std::vector<OpDef> gradientOps();    // operators derivative rules emit; zeros_like, numel, ...
 
 /// Gives the operators of `defs` that have a declaration their semantics (semantics.cpp).
