@@ -4,6 +4,12 @@
 `.../edits-ecoop.cml`（本次在其中**加**了六个 `export func`，原有的四条一条没改）。本页只记读数：源码、
 命令原文、原始输出、四样。本机不构建，构建与运行全在主机 `88zjwei`。
 
+> **先读这一句，否则本页会看起来自相矛盾。**
+> **`build asks=0` 只覆盖"遍边界检查"那一层；commit 检查的档是「这次编辑加了什么」，在每个构建里都问。**
+> 前者是 `commitChecksEnabled()`（`resources.cpp:1934`，`NDEBUG` 下 `false`，要测试主动 `asked=1` 才问）；
+> 后者是 `commitViolation`（`draft_session.cpp:2013`，档由 `commitAddsAccess` 定，与构建无关）。
+> 所以"`build asks=0`"与"甲、乙、`loss_print` 三条都被拒在这个 Release 上"**同时为真**，不冲突。详见 §2。
+
 ## 1 四样：构建标识、时刻、来源、前提
 
 | 项 | 值 | 从哪读的 |
