@@ -1,0 +1,265 @@
+// The ECOOP end-to-end lane's pass library: one instrumentation pass, the two forms of it the
+// commit refuses, and a read-only pass that measures what the commit published.
+//
+// Every pass is an ordinary library function of the shape a pass has (`(f: F) => F!`), written
+// against today's graph interface -- `open`, an edit, `commit`. The `edit` block is not used and is
+// not needed: nothing here reads how the program is written, only what the graph is.
+//
+// Run (from this directory, so that the module `passes` is found beside the program):
+//
+//   camel program.cml passes::dump std::nvm
+//   camel program.cml passes::instrument std::nvm
+//   camel program.cml passes::instrument passes::report std::nvm
+//   camel program.cml passes::instrument_ordered std::nvm     // refused
+//   camel program.cml passes::instrument_unordered std::nvm   // refused
+import { Graph, Node, NodeKind, callee, commit, exit_of, graphs_of, id, inline, inputs, is_anchor, is_constant, kind, may_be_rearranged, nodes, op, op_name, open, order, region_kind, region_of, replace, type_name, type_of } from graph
+import { flatten, sort } from array
+import { sha256 } from hash
+import { is_function } from types
+
+// ---- reading a node as text, without reading where it was written ----
+
+func op_text(n: Node): string {
+    return match op(n) {
+        case null => '-'
+        case o => op_name(o)
+    }
+}
+
+func type_text(n: Node): string {
+    return match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+}
+
+/// Whether the node runs the printing operator.
+func is_print(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':io/println'
+    }
+}
+
+/// Every node of every graph the entry function value reaches.
+func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
+    return flatten(graphs_of(p)->map<nodes>)
+}
+
+/// The graphs a `Func` node of the program names: every function value the program holds, which is
+/// every function a call by name goes through. A closure body is not one of them -- a closure is
+/// called through the value it is, so no node of the program names the graph that runs.
+func named_graphs::<F>(p: F): Graph[] when is_function::<F>() {
+    let funcs = all_nodes(p)->filter<(n: Node): bool => kind(n) == NodeKind::Func>
+    return loop acc = [] as Graph[] for n in funcs do
+        match callee(n) {
+            case null => acc
+            case g => if acc->contains<g> then acc else acc->append<g>
+        }
+}
+
+/// Whether the graph makes exactly one printing call.
+func prints(g: Graph): bool {
+    return len(nodes(g)->filter<is_print>) == 1
+}
+
+/// The one graph of the program that prints and that no node names: the closure's body.
+func closure_body::<F>(p: F): Graph? when is_function::<F>() {
+    let named = named_graphs(p)
+    let bodies = graphs_of(p)->filter<(g: Graph): bool => prints(g) && !named->contains<g>>
+    return if len(bodies) == 1 then bodies[0] else null
+}
+
+/// The print the closure makes: the one printing call of the closure's graph.
+func body_print(g: Graph): Node? {
+    let found = nodes(g)->filter<is_print>
+    return if len(found) == 1 then found[0] else null
+}
+
+/// The node a body is spliced at when it must land in a region of its own: the pure operator the
+/// graph's own value is computed from. It stands in no chain and anchors nothing, so it only names
+/// the region the body lands in.
+func splice_point(g: Graph): Node? {
+    let inners = match exit_of(g) {
+        case null => [] as Node[]
+        case ex => flatten(inputs(ex)->map<inputs>)->filter<(n: Node): bool => op(n) != null && may_be_rearranged(n) && !is_anchor(n)>
+    }
+    return if len(inners) == 1 then inners[0] else null
+}
+
+/// One node as its computation: the operator, the type it carries, and the canonical numbers of the
+/// nodes it reads. Two nodes with one key compute one thing twice.
+func node_key(n: Node): string {
+    let reads = inputs(n)->map<(m: Node): string => string(id(m))>
+    let flat = loop acc = '' for r in reads do acc + ',' + r
+    return op_text(n) + '|' + type_text(n) + '|' + flat
+}
+
+/// The node the graph hands its value out of reads it: the value the function gives.
+func handed_out(g: Graph): Node? {
+    let ins = match exit_of(g) {
+        case null => [] as Node[]
+        case ex => inputs(ex)
+    }
+    return if len(ins) == 1 then ins[0] else null
+}
+
+/// The node of the graph that computes what `keep` computes, a second time.
+func duplicate_of(g: Graph, keep: Node): Node? {
+    let same = nodes(g)->filter<(n: Node): bool => id(n) != id(keep) && op(n) != null && node_key(n) == node_key(keep)>
+    return if len(same) == 1 then same[0] else null
+}
+
+// ---- the dump: the reading the edit's choice is checked against ----
+
+/// One node of a graph: its canonical number, what it runs, what it carries, the region it is in,
+/// the two judgements the edit reads, and the key two nodes share when they compute one thing.
+func dump_line(n: Node): string {
+    return string(id(n)) + ' ' + op_text(n) + ' ' + type_text(n) + ' region=' + string(region_kind(region_of(n))) +
+        ' anchor=' + string(is_anchor(n)) + ' free=' + string(may_be_rearranged(n)) + ' key=' + node_key(n)
+}
+
+/// Read-only: every graph the function reaches, how many nodes it has and which node it hands its
+/// value out of, and one line per node.
+export func dump::<F>(p: F): F! sync {
+    let gs = graphs_of(p)
+    let _ = loop k = 0 for g in gs do sync {
+        let out = match exit_of(g) {
+            case null => '-'
+            case ex => string(id(ex))
+        }
+        'graph {} nodes={} exit={}'->format<k, len(nodes(g)), out>->println
+        let _ = loop acc = 0 for n in nodes(g) do sync {
+            dump_line(n)->println
+            acc
+        }
+        k + 1
+    }
+    return p
+}
+
+// ---- the edit ----
+
+/// The body the edit splices in: it prints one marker line and hands the printed string on. It
+/// captures nothing, which is the one thing a spliced body may not do.
+func tick(): string sync {
+    return println('# tick')
+}
+
+/// The splice that runs: `at` is the print the closure makes, so the body takes that statement's
+/// place in the block's chain and its order edges, and the marker is emitted where the closure's
+/// line was emitted -- once per call, in the round it belongs to. The statement's value is read
+/// from the body's value, and the body hands the printed string on, so nothing that read it sees a
+/// different value.
+func taken_over::<F>(p: F, at: Node): F! sync {
+    let t = open(p)
+    let _ = inline(t, at, tick)
+    return commit(t)
+}
+
+/// The splice that was specified: the body lands in a region of its own beside the print, and an
+/// order edge puts the marker after the print. The commit is expected to refuse this today; the
+/// message is quoted in `NOTES.md`.
+export func instrument_ordered::<F>(p: F): F! sync {
+    return match closure_body(p) {
+        case null => p
+        case g => match splice_point(g) {
+            case null => p
+            case at => match body_print(g) {
+                case null => p
+                case before => {
+                    let t = open(p)
+                    let added = inline(t, at, tick)
+                    order(t, before, added)
+                    commit(t)
+                }
+            }
+        }
+    }
+}
+
+/// The same splice with no order edge: the wrong version of the pass, which the commit refuses
+/// (`RuntimeDiag::PassEffectOrder`).
+export func instrument_unordered::<F>(p: F): F! sync {
+    return match closure_body(p) {
+        case null => p
+        case g => match splice_point(g) {
+            case null => p
+            case at => {
+                let t = open(p)
+                let _ = inline(t, at, tick)
+                commit(t)
+            }
+        }
+    }
+}
+
+/// Hands the program a rewritten closure body: the marker is emitted once per call, where the
+/// closure's own line was emitted. It stands in that line's place and not after it, because the
+/// additive form -- a body beside the existing print, ordered after it -- is refused (`NOTES.md`,
+/// "What the graph model forced"). `p` comes back unchanged when the shapes the edit needs are not
+/// exactly one each: an edit that picked one of two answers would edit a different node in the
+/// other writing of the same program.
+export func instrument::<F>(p: F): F! sync {
+    return match closure_body(p) {
+        case null => p
+        case g => match body_print(g) {
+            case null => p
+            case at => taken_over(p, at)
+        }
+    }
+}
+
+/// The other edit: the closure computes its printed value twice, once for the print and once for
+/// the value it returns, and the pass makes the two one node. The node kept is the one the graph
+/// hands out, so what the program prints and what it returns do not change; only the second
+/// computation stops existing. `commit` answers the new function, and the run that follows prints
+/// exactly what the run before it printed.
+export func dedupe::<F>(p: F): F! sync {
+    return match closure_body(p) {
+        case null => p
+        case g => match handed_out(g) {
+            case null => p
+            case keep => match duplicate_of(g, keep) {
+                case null => p
+                case dup => {
+                    let t = open(p)
+                    replace(t, dup, keep)
+                    commit(t)
+                }
+            }
+        }
+    }
+}
+
+// ---- the read-only pass ----
+
+/// One node, as the canonical order sees it: its operator, the type it carries, whether it is a
+/// constant, and the canonical numbers of the nodes it reads. No graph name, no creation id, no
+/// source origin: two writings that differ only in a name or in the order two independent
+/// statements were written in have to give the same text.
+func node_text(n: Node): string {
+    return node_key(n) + '|' + string(is_constant(n))
+}
+
+/// One graph, as the canonical order sees it: its nodes in that order, one after another.
+func graph_text(g: Graph): string {
+    let parts = nodes(g)->map<node_text>
+    return loop acc = '' for part in parts do acc + part + ';'
+}
+
+/// Read-only: counts the nodes of every graph the function reaches, and prints the hash of the
+/// canonical text they make. The text is built from the canonical order and from canonical input
+/// numbers only, so a rename and a swap of two independent statements leave it byte for byte the
+/// same. `std::jgir canonical=true` is the other reading of the same order; this pass does not run
+/// it, and it changes nothing.
+export func report::<F>(p: F): F! sync {
+    let gs = graphs_of(p)
+    let counts = gs->map<(g: Graph): int => len(nodes(g))>
+    let total = loop acc = 0 for c in counts do acc + c
+    let texts = gs->map<graph_text>->sort
+    let joined = loop acc = '' for t in texts do acc + t + '\n'
+    'e2e graphs={} nodes={}'->format<len(gs), total>->println
+    'e2e canonical={}'->format<sha256(joined)>->println
+    return p
+}

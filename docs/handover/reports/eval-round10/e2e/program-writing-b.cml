@@ -1,0 +1,39 @@
+/**
+ * The same program as `program.cml`, written differently: the two independent statements are
+ * swapped and three names are different. `twice` and `thrice` read nothing of each other, write
+ * nothing, and are both read by the loop's initial state, so the order they are written in is not
+ * part of the program; `mark`, `tally` and `bias` name the same values `label`, `f` and `weight`
+ * named.
+ *
+ * The two writings must give the same canonical graph. `passes::report` prints the hash of the
+ * canonical text of both, and `std::jgir canonical=true` prints a document for each whose bytes
+ * have to be equal; `NOTES.md` records both readings.
+ */
+
+/// The self-written higher-order function: it takes the closure as a value and calls it once.
+func apply(f: (x: int) => int, x: int): int sync {
+    return f(x)
+}
+
+func run(n: int, base: int): int sync {
+    let mark = 'step'
+    let thrice = base * 3
+    let twice = base * 2
+    let tally = (x: int): int => sync {
+        let bias = base + 1
+        let value = bias + x
+        '{} {} -> {}'->format<mark, x, bias + x>->println
+        return value
+    }
+    let (_, total) = loop i = 0, total = twice + thrice while i < n do sync {
+        (i + 1, total + apply(tally, i))
+    }
+    let tail = apply(tally, n)
+    'total {} tail {}'->format<total, tail>->println
+    return total
+}
+
+func main(): int sync {
+    let _ = run(3, 10)
+    return 0
+}
