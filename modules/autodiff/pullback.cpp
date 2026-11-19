@@ -51,6 +51,7 @@ namespace {
 
 namespace mm = camel::core::mm;
 namespace rt = camel::runtime;
+namespace sem = camel::core::sem;
 using ::Modifier;
 using camel::core::aggregateElement;
 using camel::core::aggregateSize;
@@ -702,6 +703,11 @@ struct PullbackPlan {
     TupleType *tangentsType     = nullptr;
     FunctionType *pullbackType  = nullptr;
     TupleType *forwardValueType = nullptr;
+    /// The clause the function being differentiated publishes, when it has one, for the forward graph
+    /// to publish in turn (same parameters, same body, so nothing is renumbered). The pullback does
+    /// not take it: it publishes `pure`, because the effect skeleton went into the forward half
+    /// (`pureClause`). Kept by value: a plan outlives the draft its source was read from.
+    std::optional<sem::ResourceSignature> sourceClause;
     TangentEligibility eligible = hasTangentType;
 
     /// Position of port `index` in the tangents, or nullopt.
@@ -717,8 +723,21 @@ struct PullbackPlan {
     }
 };
 
+/// `pure`: Concrete and touching nothing. The reverse half publishes it (design principles 9.9,
+/// author 2026-11-19): the effect skeleton goes into the forward half, and the reverse half only
+/// computes the transposed rules over the values the forward recorded, so it has no skeleton of its
+/// own. A reverse half that did touch a resource would be refused where a graph's body is compared
+/// with the clause its type declares (`effectBeyondDeclaration`), and that refusal -- not a
+/// widening of this line -- is the reading to take if such a case is ever met.
+sem::ResourceSignature pureClause() {
+    sem::ResourceSignature clause;
+    clause.mode = sem::ResourceSignature::Mode::Concrete;
+    return clause;
+}
+
 PullbackPlan makePlanTypes(
-    std::vector<Type *> portTypes, Type *valueType, TangentEligibility eligible = hasTangentType) {
+    std::vector<Type *> portTypes, Type *valueType, TangentEligibility eligible = hasTangentType,
+    const sem::ResourceSignature *clause = nullptr) {
     PullbackPlan plan;
     std::vector<Type *> tangents;
     for (Type *t : portTypes) {
@@ -730,9 +749,19 @@ PullbackPlan makePlanTypes(
     plan.portTypes     = std::move(portTypes);
     plan.valueType     = valueType;
     plan.eligible      = eligible;
+    plan.sourceClause  = clause != nullptr ? std::optional<sem::ResourceSignature>(*clause)
+                                           : std::nullopt;
     plan.tangentsType  = TupleType::create(std::move(tangents));
     plan.pullbackType =
         FunctionType::create(param_vec_t{}, param_vec_t{{dyType, false}}, plan.tangentsType);
+    // What the pullback publishes, and therefore what the function value the forward hands out
+    // declares: `pure` (see `pureClause`). A call of a differentiated function is read by walking
+    // the pullback's body when its type says nothing, and that body calls the pullbacks of the
+    // body's own calls through values whose types said nothing too: the walk then ends in "may
+    // touch anything", and two such calls in one region are refused as unordered although neither
+    // writes (design principles 3.3: a direct call and a call through a function value read one
+    // type).
+    plan.pullbackType = plan.pullbackType->withResources(pureClause());
     plan.forwardValueType = TupleType::create(std::vector<Type *>{valueType, plan.pullbackType});
     return plan;
 }
@@ -4389,8 +4418,13 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     if (auto it = plans_.find(callee); it != plans_.end()) {
         return it->second;
     }
-    PullbackPlan plan =
-        reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
+    PullbackPlan plan = reserve(
+        callee->name(),
+        makePlanTypes(
+            portTypesOf(callee),
+            callee->funcType()->exitType(),
+            hasTangentType,
+            &callee->funcType()->resources()));
     pending_.push_back(
         Pending{
             .plan   = plan,
@@ -4410,6 +4444,8 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     auto lifted        = rt::GraphTransaction::decode(inlining_.work(), graph);
     auto &liftedDraft  = lifted->edit();
     FunctionType *type = liftedDraft.funcType();
+    // Read before the draft's type is replaced below: this is the clause the closure publishes.
+    const sem::ResourceSignature clause = type->resources();
     param_vec_t withParams, normParams;
     for (size_t i = 0; i < type->withTypesCount(); ++i) {
         withParams.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
@@ -4427,8 +4463,8 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
     }
     liftedDraft.setFuncType(FunctionType::create(withParams, normParams, type->exitType()));
     liftedDraft.setClosureType(nullptr);
-    PullbackPlan plan =
-        reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
+    PullbackPlan plan = reserve(
+        graph->name(), makePlanTypes(std::move(portTypes), type->exitType(), hasTangentType, &clause));
     pending_.push_back(
         Pending{
             .plan   = plan,
@@ -4605,7 +4641,15 @@ void Engine::build(Pending &pending) {
     for (size_t i = 0; i < sourceType->normTypesCount(); ++i) {
         normParams.emplace_back(sourceType->normTypeAt(i), sourceType->normIsVarAt(i));
     }
-    forward.setFuncType(FunctionType::create(withParams, normParams, plan.forwardValueType));
+    // The forward graph runs the function's own body and hands the primal value back beside the
+    // pullback, so it touches exactly what the function touches: the clause travels as it is, and
+    // the parameters are the same positions, so nothing is renumbered.
+    FunctionType *forwardType =
+        FunctionType::create(withParams, normParams, plan.forwardValueType);
+    if (plan.sourceClause && plan.sourceClause->mode == sem::ResourceSignature::Mode::Concrete) {
+        forwardType = forwardType->withResources(*plan.sourceClause);
+    }
+    forward.setFuncType(forwardType);
 
     group_.define(plan.forward, std::move(pending.source));
     group_.define(plan.pullback, std::move(pullbackOwner));

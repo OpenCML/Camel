@@ -3076,7 +3076,7 @@ a4d54a5a8ece49dc ok test/cases/modules/autodiff/jax_names/jvp.cml
 0a20005a7e7a5b51 ok test/cases/modules/autodiff/jax_names/vmap_two_parameters.cml
 41b483e8ca08d804 ok test/cases/modules/graph_function/commit_effect.cml
 719b646e1f2f387c ok test/cases/modules/graph_function/edit.cml
-34272ba5fb745d1a ok test/cases/modules/graph_function/inline.cml
+ca7945f3cc390f67 ok test/cases/modules/graph_function/inline.cml
 6ca0c5a532e79bfa ok test/cases/modules/graph_function/open_not_function.cml
 1d39f2572e6c54ff ok test/cases/modules/graph_function/outline.cml
 a2d8495ed82bf6c1 ok test/cases/modules/graph_function/reads.cml

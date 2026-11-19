@@ -37,14 +37,17 @@
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_outline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/region_roots.h"
 #include "src/passes/opt/generic/rewrite.h"
 
 #include <algorithm>
 #include <format>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -430,11 +433,106 @@ bool runsBefore(camel::runtime::GraphTransaction &transaction, gc_node_ref_t tar
     return false;
 }
 
+/// How deep the region `region` lies: the body is 0, every region one more than the region it is in.
+uint32_t regionDepthOf(const camel::runtime::GraphDraft &draft, uint32_t region) {
+    uint32_t depth = 0;
+    for (uint32_t steps = 0; region != 0 && region < draft.regionCount() &&
+                             steps <= draft.regionCount();
+         ++steps) {
+        const camel::runtime::GCRegion &one = draft.region(region);
+        if (one.parent == region) {
+            break; // a region that is its own parent: the walk would not end
+        }
+        region = one.parent;
+        ++depth;
+    }
+    return depth;
+}
+
+/// The region both ends of an edge are judged in: the innermost region that holds both, which is
+/// the body when the two lie in different branches.
+uint32_t commonRegionOf(
+    const camel::runtime::GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b) {
+    uint32_t regionA = draft.nodeRegion(a);
+    uint32_t regionB = draft.nodeRegion(b);
+    uint32_t depthA  = regionDepthOf(draft, regionA);
+    uint32_t depthB  = regionDepthOf(draft, regionB);
+    while (depthA > depthB && regionA != 0) {
+        regionA = draft.region(regionA).parent;
+        --depthA;
+    }
+    while (depthB > depthA && regionB != 0) {
+        regionB = draft.region(regionB).parent;
+        --depthB;
+    }
+    while (regionA != regionB && regionA != 0 && regionB != 0) {
+        regionA = draft.region(regionA).parent;
+        regionB = draft.region(regionB).parent;
+    }
+    return regionA;
+}
+
+/// Whether a region only records where its code came from: an inlined body, or a block carrying
+/// tags or a decorator. Such a region "holds no execution of its own" -- it is a grouping mark a
+/// pass may dissolve, and its nodes are the nodes of the region around it
+/// (docs/design/effects/edges.cn.md 5.8) -- so it is looked through wherever the graph is read.
+bool regionIsLookedThrough(camel::runtime::GCRegionKind kind) {
+    return kind == camel::runtime::GCRegionKind::Inline ||
+           kind == camel::runtime::GCRegionKind::Block;
+}
+
+/// The node that stands for `ref` in the region `common`, walking out of the regions it is in.
+///
+/// The commit asks order completeness per region, and "a node of an arm or of a part of a loop is
+/// judged where its owner stands: the owner stands in the region around it for everything under
+/// it" (docs/handover/plans/2026-11-18-commit-checks-and-spelling.cn.md 乙第 1 条). So one end of
+/// an order edge that lies deeper is lifted to that owner, step by step, until it reaches the
+/// region the two ends share.
+///
+/// A region that is looked through has no owner to lift to, and the pure `GATE` standing at its
+/// boundary is no node of its own either: a gate orders the value it reads and runs nothing
+/// (design principles 3.1), so what the end names there is the value behind it (`ungated`). That is
+/// the whole of why an edge into such a region used to say nothing: the caller ordered the
+/// forwarder, and the write it forwards stayed unordered with the access on the other side.
+gc_node_ref_t representativeIn(
+    const camel::runtime::GraphDraft &draft, gc_node_ref_t ref, uint32_t common) {
+    gc_node_ref_t at = ref;
+    uint32_t region  = draft.nodeRegion(at);
+    if (region != common && region != 0 && region < draft.regionCount() &&
+        regionIsLookedThrough(draft.region(region).kind)) {
+        const gc_node_ref_t behind = camel::runtime::ungated(draft, at);
+        if (behind != kInvalidNodeRef && behind != at && draft.alive(behind)) {
+            at     = behind;
+            region = draft.nodeRegion(at);
+        }
+    }
+    for (uint32_t steps = 0; region != common && region != 0 && region < draft.regionCount() &&
+                             steps <= draft.regionCount();
+         ++steps) {
+        const camel::runtime::GCRegion &one = draft.region(region);
+        if (one.owner != kInvalidNodeRef && one.owner != at && draft.alive(one.owner)) {
+            at     = one.owner;
+            region = draft.nodeRegion(at);
+            continue;
+        }
+        if (one.parent == region) {
+            break;
+        }
+        region = one.parent;
+    }
+    return at;
+}
+
 /// `order(t, before, after)`: adds an order edge, so that when both nodes run `before` runs before
 /// `after`. An order edge only orders and never makes a node run (design principles 3.1), which is
 /// why the whole promise is the edge and nothing else is written. Refused when the two nodes are not
 /// two nodes of one graph, and when the edge would close a cycle; an edge that is there already
 /// changes nothing and is not a refusal, because the promise the caller asks for holds.
+///
+/// Two ends in one region are the edge they name. Two ends in different regions are lifted to the
+/// nodes that stand for them in the region they share (the ruling of 2026-11-20): the commit reads
+/// access by region, so the edge is written between the pair that region sees, and `order` speaks
+/// the same words the check does.
 slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     static const char *site = "graph.order";
     TxnState &state         = openState(norm, 0, site);
@@ -460,6 +558,21 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
             site,
             "the two nodes are the same node");
     }
+    // The pair the region the two ends share sees. Two ends in one region name that pair already;
+    // two ends in different regions are lifted out of the regions they lie in, because the check
+    // judges an access where the region runs it, not where the code was written (see
+    // `representativeIn`). When both ends stand on one node there the accesses are one access and
+    // the edge would be a self edge: the pair is left as it was named, so the caller sees what the
+    // edge it wrote does.
+    if (draft.nodeRegion(beforeRef) != draft.nodeRegion(afterRef)) {
+        const uint32_t common = commonRegionOf(draft, beforeRef, afterRef);
+        const gc_node_ref_t liftedBefore = representativeIn(draft, beforeRef, common);
+        const gc_node_ref_t liftedAfter  = representativeIn(draft, afterRef, common);
+        if (liftedBefore != liftedAfter) {
+            beforeRef = liftedBefore;
+            afterRef  = liftedAfter;
+        }
+    }
     if (runsBefore(afterTransaction, afterRef, beforeRef)) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
@@ -475,6 +588,78 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     return NullSlot;
 }
 
+/// The node a region's value and its writes leave by: the graph's own exit for the body, and the
+/// region's result for a control region (both are a `GATE` when the region writes).
+gc_node_ref_t exitOfRegion(const camel::runtime::GraphDraft &draft, uint32_t region) {
+    if (region != 0 && region < draft.regionCount()) {
+        return draft.region(region).result;
+    }
+    if (draft.exitNode() != kInvalidNodeRef) {
+        return draft.exitNode();
+    }
+    if (draft.outputNode() != kInvalidNodeRef) {
+        return draft.outputNode();
+    }
+    return draft.returnNode();
+}
+
+/// Hangs the code a splice brought on the exit `GATE` of the region it landed in, so that the region
+/// that runs the code waits for what it writes (design principles 3.1: "每个区域的出口是 `GATE`，
+/// 第一个普通输入是区域的值，其余是区域的写"; the ruling of 2026-11-20 on `inline` at a pure node).
+///
+/// A body spliced at a node that holds no place in its block's chain lands in an `Inline` region
+/// beside it, and nothing in the block reads that region: the body's value has no user, so nothing
+/// makes its statements run. The region it landed in does run whenever the node's region does, so
+/// what it writes is that region's write and belongs on that region's exit `GATE` -- the front end
+/// lays that `GATE` once (`Builder::layRegionWriteEdges`) and every rewrite that brings a region its
+/// first write owes it as well. A `GATE` only orders and makes nothing run, so the statements hung
+/// on it keep the wait they have among themselves; the ordering of those writes against the accesses
+/// already there is still `order`'s to say, which is what `inline`'s documentation promises.
+///
+/// The nodes carried are the splice's own nodes in that region that arrange themselves nowhere: an
+/// effect or a computation that may fault, which is exactly the set the model does not let a pass
+/// move (design principles 3.4, the reading the splice's own order edges take). A `GATE` is not one
+/// of them -- it runs nothing of its own and only forwards a value, so hanging it would add a wait on
+/// what the write already waits for -- and neither is a node that owns a region: that one stands in
+/// the region for what is under it. Nothing else is carried -- a pure value runs when something reads
+/// it -- and a region with no `GATE` yet owes one the front end lays and this operator cannot, so
+/// that case is left as it is (the count answers how many were carried, so a caller can tell).
+size_t hangSplicedStatements(
+    camel::runtime::GraphDraft &draft, gc_node_ref_t atRef, size_t slotsBefore) {
+    const uint32_t region = camel::runtime::decidingRegionOfDraft(draft, atRef);
+    const gc_node_ref_t exit = exitOfRegion(draft, region);
+    if (exit == kInvalidNodeRef || !draft.alive(exit)) {
+        return 0;
+    }
+    const camel::runtime::DraftNodeHeader *const exitHeader = draft.header(exit);
+    if (exitHeader == nullptr || exitHeader->kind != GCNodeKind::Gate ||
+        draft.normInputsOf(exit).empty()) {
+        return 0; // the region has no exit GATE of its own: nothing to hang a write on
+    }
+    std::vector<gc_node_ref_t> carried;
+    for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
+         ++id) {
+        const camel::runtime::DraftNodeHeader *const header = draft.header(id);
+        if (!draft.alive(id) || header == nullptr || header->kind == GCNodeKind::Dead ||
+            header->kind == GCNodeKind::Gate || header->kind == GCNodeKind::Brch ||
+            header->kind == GCNodeKind::Join || header->kind == GCNodeKind::Loop) {
+            continue;
+        }
+        if (!draft.regionWithin(draft.nodeRegion(id), region) ||
+            camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+            continue;
+        }
+        const std::span<const gc_node_ref_t> reads = draft.normInputsOf(exit);
+        if (std::ranges::find(reads, id) == reads.end()) {
+            carried.push_back(id);
+        }
+    }
+    for (const gc_node_ref_t id : carried) {
+        draft.appendInput(camel::runtime::DraftEdgeKind::Data, exit, id);
+    }
+    return carried.size();
+}
+
 /// `inline(t, at, fn)`: the body of the function value `fn` spliced into the region `at` is in,
 /// answering the node that holds the body's value. `at` decides the place as well -- the ruling of
 /// 2026-11-18 (`e55cd6157`) recorded at
@@ -488,9 +673,10 @@ slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
 ///   hands that place over to the code the body becomes and is gone afterwards. `fn` takes no
 ///   arguments: there is no call site whose arguments could be bound.
 /// * `at` stands in no chain -- a pure node -- it only selects the region: the body lands in an
-///   Inline region inside `at`'s, and `at` itself and its readers are left as they are. Where the
-///   body's writes run among the accesses already there is `order`'s to say, which is the caller's
-///   (the operator writes no order edge into that region).
+///   Inline region inside `at`'s, and `at` itself and its readers are left as they are. The body's
+///   writes are writes of the region it landed in, so that region's exit `GATE` waits for them
+///   (`hangSplicedStatements`); where they run among the accesses already there is `order`'s to
+///   say, which is the caller's (the operator writes no order edge into that region).
 ///
 /// Only a function value that captures nothing is expanded: the captures of a callee are values of
 /// the frame the value was made in, and a splice into another graph cannot name them.
@@ -570,7 +756,10 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
     }
     // The call the body is spliced out of: the splice replaces a call node by the body it names, so
     // the place is written on this call and the splice hands it on to the body's own code. The
-    // region is `at`'s either way -- that is the one thing `at` always says.
+    // region is `at`'s either way -- that is the one thing `at` always says. What the splice makes
+    // is every node from `slotsBefore` on, which is what a caller that has to keep the body's
+    // effects alive reads.
+    const size_t slotsBefore = draft.nodeSlotCount();
     const gc_node_ref_t call = draft.addFuncNode(calleeGraph->id(), valueType);
     draft.setNodeRegion(call, draft.nodeRegion(atRef));
     draft.setNodeOrigin(call, draft.nodeOrigin(atRef));
@@ -591,6 +780,12 @@ slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
         draft.replaceAllValueUses(atRef, inlined.valueExit);
         draft.replaceAllCtrlUses(atRef, inlined.valueExit);
         draft.eraseNode(atRef);
+    } else {
+        // `at` stands in no chain, so the body's value has no reader and nothing in the block
+        // reaches the region the body landed in. What it writes is a write of the region it landed
+        // in all the same, and that region's exit `GATE` is what makes the region wait for it; the
+        // ordering among the accesses already there is still `order`'s to say.
+        hangSplicedStatements(draft, atRef, slotsBefore);
     }
     return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
 }
