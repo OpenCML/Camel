@@ -196,8 +196,19 @@ bool OperatorTable::withAfterNorm(std::string_view uri) const {
 
 bool OperatorTable::mayBeRecomputed(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
+    // A macro operator is not one whose call the compiler may compute ahead of time: its
+    // expansion is a graph rewrite, and `std::macro` is the pass that performs it. Asking only
+    // "pure && foldable" let a pipeline that named `std::opt` and not `std::macro` fold
+    // `with_grad(loss)<m>` into the derived function value at compile time, so the macro operator
+    // was gone before `onnx::export` could say its `run std::macro` refusal
+    // (`modules/onnx/passes/export.cpp#refuseUnexpandedMacros`) -- three `feat/modules/onnx`
+    // entries went red when the four autodiff transforms were declared pure (c038bd187,
+    // 2026-11-18). Nothing is lost: before that commit these operators were impure and
+    // `mayBeRecomputed` answered false for them, so this restores the answer the optimizer had,
+    // for the reason the table already states on `isMacro` (a call of it is what `std::macro`
+    // evaluates, operator_table.h).
     return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
-           facts->effect() == sem::Effect::Pure && facts->foldable;
+           facts->effect() == sem::Effect::Pure && facts->foldable && !facts->macro;
 }
 
 bool OperatorTable::mayBeRecomputed(std::string_view uri) const {

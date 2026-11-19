@@ -41,3 +41,24 @@ case = "../../../cases/feat/mm/writings/rules_int.cml"
 args = ["${case}", "test::savepoint", "std::nvm"]
 expect_stdout_contains = ["SAVEPOINT fault asked=", "SAVEPOINT failed_rewrite_raised ok", "SAVEPOINT failed_rewrite_wrote_nothing ok", "SAVEPOINT rerun_is_byte_identical ok", "SAVEPOINT budget_cut cut=", "SAVEPOINT budget_cut_lands_nothing ok", "56 42 42"]
 expect_output_not_contains = ["FAIL"]
+
+# The other half of the same promise, from the other side: the journal is a set of hooks, and a
+# hook nobody calls is a write no rollback sees. `test::undo_selfcheck` takes a whole copy of the
+# draft at the mark and compares the draft a rollback leaves with it, class by class, and names the
+# one that is not back. It walks the classes twice: once with the class's own hook, where the
+# answer has to be "nothing is missing", and once with that class's hook made a no-op -- what a
+# forgotten hook amounts to -- where the answer has to be that class and no other. The second walk
+# is the one that can go red, and it is why the check is not a comment: a check that answers "fine"
+# whatever the journal did proves nothing.
+#
+# `SELFCHECK class=<name> hook=run verdict=none ok` for each class (its own hook puts it back) and
+# `SELFCHECK class=<name> hook=skipped verdict=<name> ok` for the same class with its hook made a
+# no-op (the check names exactly the class it lost), then `SELFCHECK ok`. Any round that answered
+# another class, or answered none where a class was missing, prints `FAIL` and is red here.
+[[tests]]
+name = "opt.savepoint.undo_selfcheck"
+desc = "The rollback self-check: every class the journal records is written through its hook and put back, and with that hook made a no-op the check names the class it lost. The program the rounds ran over still prints what it printed."
+case = "../../../cases/feat/mm/writings/rules_int.cml"
+args = ["${case}", "test::undo_selfcheck", "std::nvm"]
+expect_stdout_contains = ["SELFCHECK clean verdict=none ok", "SELFCHECK class=nodes hook=run verdict=none ok", "SELFCHECK class=nodes hook=skipped verdict=nodes ok", "SELFCHECK class=regions hook=run verdict=none ok", "SELFCHECK class=regions hook=skipped verdict=regions ok", "SELFCHECK class=scalars hook=run verdict=none ok", "SELFCHECK class=scalars hook=skipped verdict=scalars ok", "SELFCHECK class=ports hook=run verdict=none ok", "SELFCHECK class=ports hook=skipped verdict=ports ok", "SELFCHECK class=types hook=run verdict=none ok", "SELFCHECK class=types hook=skipped verdict=types ok", "SELFCHECK class=low-level hook=run verdict=none ok", "SELFCHECK class=low-level hook=skipped verdict=low-level ok", "SELFCHECK ok", "56 42 42"]
+expect_output_not_contains = ["FAIL"]

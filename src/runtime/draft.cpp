@@ -1255,9 +1255,10 @@ uint64_t GraphDraft::firstNodeOrigin() const {
 
 void GraphDraft::setWritings(std::vector<WritingUnion> log) {
     if (log != writings_) {
-        // The equivalence table is draft state a segment can write, so it is one of the things a
-        // rollback puts back.
-        noteOriginalWritings();
+        // The draft's copy of the equivalence log, which the encoder reads. It is a copy of the
+        // store's log and not state of its own, so the journal does not keep it and a rollback does
+        // not put it back: the store's `rollbackTo` is the one undo of the log, and the next `save`
+        // makes this copy true again (writings.h, `DraftWritings::ApplicationMark`).
         ++mutations_;
         writings_ = std::move(log);
     }
@@ -1278,6 +1279,7 @@ camel::core::sem::PermissionMask GraphDraft::nodePermissions(gc_node_ref_t id) c
 void GraphDraft::setNodePermissions(
     gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
     requireOneWriting("setNodePermissions");
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -1296,6 +1298,7 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -2047,15 +2050,19 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     std::erase(normPorts_, id);
     std::erase(withPorts_, id);
     std::erase(closureNodes_, id);
+    // The graph's own scalars go through the setters that record them. The journal already has
+    // this segment's record (`noteOriginalScalars` above), so these calls record nothing further;
+    // they are here because a node is dropped by exactly the writes a segment makes, and a write
+    // that went round the hook would be one the self-check has to catch (`dissolveUnorderedGates`
+    // wrote them before the erase, which is the defect that put the hooks on this path).
     if (entry_ == id)
-        entry_ = kInvalidNodeRef;
+        setEntryNode(kInvalidNodeRef);
     if (exit_ == id)
-        exit_ = kInvalidNodeRef;
+        setExitNode(kInvalidNodeRef);
     if (output_ == id)
-        output_ = kInvalidNodeRef;
+        setOutputNode(kInvalidNodeRef);
     if (returnNode_ == id) {
-        returnNode_ = kInvalidNodeRef;
-        returnKind_ = GCReturnKind::None;
+        setReturnNode(kInvalidNodeRef, GCReturnKind::None);
     }
 }
 
@@ -2109,378 +2116,6 @@ bool GraphDraft::eraseUnreadNodes(std::span<const gc_node_ref_t> nodes) {
                 pending.size()));
     }
     return true;
-}
-
-GraphDraft::Savepoint GraphDraft::savepoint() const {
-    // A mark taken outside a segment names no journal -- rolling back to it takes back the counts
-    // and nothing else -- so the journal marks are the sizes the journal has now.
-    return Savepoint{
-        .nodes          = nodesById_.size(),
-        .staticSlots    = staticSlots_.size(),
-        .frameSlots     = runtimeSlotTypes_.size(),
-        .regions        = regions_.size(),
-        .mutations      = mutations_,
-        .hasFrameLayout = hasFrameLayout_,
-        .undoNodes      = undoNodes_.size(),
-        .undoRegions    = undoRegions_.size(),
-        .undoScalars    = undoScalars_.size(),
-        .undoPorts      = undoPorts_.size(),
-        .undoLowLevel   = undoLowLevel_.size(),
-        .undoWritings   = undoWritings_.size(),
-    };
-}
-
-GraphDraft::Savepoint GraphDraft::beginUndo() {
-    ++journalDepth_;
-    ++journalEpoch_;
-    return savepoint();
-}
-
-GraphDraft::Savepoint GraphDraft::markUndo() {
-    // A mark without a segment records nothing: a rollback to it is the count rollback, which is
-    // what a caller outside `beginUndo` has always asked for. Inside one, the epoch moves so that
-    // every kind the next application writes is recorded again -- the mark is a rollback point of
-    // its own, and the first record after it is the state it found.
-    if (journalOpen()) {
-        ++journalEpoch_;
-    }
-    return savepoint();
-}
-
-void GraphDraft::endUndo() {
-    if (journalDepth_ == 0) {
-        return;
-    }
-    if (--journalDepth_ != 0) {
-        return;
-    }
-    dropJournal();
-}
-
-void GraphDraft::dropJournal() {
-    undoNodes_.clear();
-    undoNodeEpoch_.clear();
-    undoRegions_.clear();
-    undoScalars_.clear();
-    undoPorts_.clear();
-    undoLowLevel_.clear();
-    undoWritings_.clear();
-    undoRegionsEpoch_  = 0;
-    undoScalarsEpoch_  = 0;
-    undoPortsEpoch_    = 0;
-    undoLowLevelEpoch_ = 0;
-    undoWritingsEpoch_ = 0;
-    journalEpoch_      = 0;
-}
-
-void GraphDraft::noteOriginalNode(gc_node_ref_t id) {
-    if (!journalOpen() || undoSuspended_ || id == kInvalidNodeRef) {
-        return;
-    }
-    const DraftNode *draftNode = node(id);
-    if (draftNode == nullptr) {
-        // An erased node has no body left to record; its record was made before it was erased.
-        return;
-    }
-    if (undoNodeEpoch_.size() <= id) {
-        undoNodeEpoch_.resize(static_cast<size_t>(id) + 1, 0);
-    }
-    if (undoNodeEpoch_[id] == journalEpoch_) {
-        return;
-    }
-    undoNodeEpoch_[id] = journalEpoch_;
-    UndoNode record;
-    record.id     = id;
-    record.header = draftNode->header;
-    const size_t used = draftNode->header.usedBytes();
-    if (used != 0 && draftNode->tail != nullptr) {
-        record.tail.assign(draftNode->tail, draftNode->tail + used);
-    }
-    // The user lists are recorded with the body, not on a second touch: a producer's list of
-    // readers changes without the producer's own node being the thing the caller names, and a
-    // record that had the body but not the lists could not put the graph back. A node with no list
-    // yet records the empty one: "nobody reads it" is the state, not the absence of a state.
-    record.usersRecorded = true;
-    if (id < users_.size() && users_[id]) {
-        for (size_t k = 0; k < 5; ++k) {
-            record.users[k] = users_[id]->of(static_cast<DraftEdgeSlot>(k));
-        }
-    }
-    undoNodes_.push_back(std::move(record));
-}
-
-void GraphDraft::noteOriginalRegions() {
-    if (!journalOpen() || undoRegionsEpoch_ == journalEpoch_) {
-        return;
-    }
-    undoRegionsEpoch_ = journalEpoch_;
-    undoRegions_.push_back(UndoRegions{.regions = regions_, .regionPorts = regionPorts_});
-}
-
-void GraphDraft::noteOriginalScalars() {
-    if (!journalOpen() || undoScalarsEpoch_ == journalEpoch_) {
-        return;
-    }
-    undoScalarsEpoch_ = journalEpoch_;
-    undoScalars_.push_back(
-        UndoScalars{
-            .entry          = entry_,
-            .exit           = exit_,
-            .output         = output_,
-            .returnNode     = returnNode_,
-            .returnKind     = returnKind_,
-            .mutations      = mutations_,
-            .hasFrameLayout = hasFrameLayout_,
-            .insertRegion   = insertRegion_,
-        });
-}
-
-void GraphDraft::noteOriginalPorts() {
-    if (!journalOpen() || undoPortsEpoch_ == journalEpoch_) {
-        return;
-    }
-    undoPortsEpoch_ = journalEpoch_;
-    undoPorts_.push_back(
-        UndoPorts{.norm = normPorts_, .with = withPorts_, .closure = closureNodes_});
-}
-
-void GraphDraft::noteOriginalLowLevel() {
-    if (!journalOpen() || undoLowLevelEpoch_ == journalEpoch_) {
-        return;
-    }
-    undoLowLevelEpoch_ = journalEpoch_;
-    undoLowLevel_.push_back(UndoLowLevel{.edits = lowLevelEdits_.size()});
-}
-
-void GraphDraft::noteOriginalWritings() {
-    if (!journalOpen() || undoWritingsEpoch_ == journalEpoch_) {
-        return;
-    }
-    undoWritingsEpoch_ = journalEpoch_;
-    undoWritings_.push_back(UndoWritings{.log = writings_});
-}
-
-void GraphDraft::restoreUndoNode(UndoNode &record) {
-    const gc_node_ref_t id = record.id;
-    DraftNode *draftNode   = node(id);
-    if (draftNode == nullptr) {
-        // The id was never handed out twice, so a body put back at it is the same node and not a
-        // reuse: no class, no edge and no recorded id has to move.
-        const size_t capacity = static_cast<size_t>(record.header.capacityBytes);
-        DraftNode *fresh      = pool_.allocNode();
-        fresh->header         = record.header;
-        fresh->header.owner   = this;
-        fresh->header.selfId  = id;
-        fresh->tail           = nullptr;
-        if (capacity != 0) {
-            DraftNodeStorageClass storageClass = record.header.storageCls;
-            fresh->tail                        = pool_.allocTail(capacity, &storageClass);
-            fresh->header.storageCls           = storageClass;
-            fresh->header.capacityBytes        = static_cast<uint32_t>(capacity);
-            std::memset(fresh->tail, 0, capacity);
-        }
-        if (nodesById_.size() <= id) {
-            nodesById_.resize(static_cast<size_t>(id) + 1, nullptr);
-        }
-        nodesById_[id] = fresh;
-        draftNode      = fresh;
-        ++liveNodeCount_;
-    } else {
-        // The record was taken before the change that made the node grow, so its room is room the
-        // node still has: the body goes back over what stands there, header and all.
-        GUARD(
-            record.header.capacityBytes <= draftNode->header.capacityBytes &&
-                record.tail.size() <= record.header.capacityBytes,
-            std::format(
-                "restoring node {}: its record names {} tail byte(s) of {} of room, and the node "
-                "has {}",
-                id,
-                record.tail.size(),
-                record.header.capacityBytes,
-                draftNode->header.capacityBytes));
-        draftNode->header        = record.header;
-        draftNode->header.owner  = this;
-        draftNode->header.selfId = id;
-    }
-    if (!record.tail.empty()) {
-        std::memcpy(draftNode->tail, record.tail.data(), record.tail.size());
-    }
-    // `replaceNodeStorage` is also what a body write ends with, so the slot is the node a reader
-    // finds: the body, the counts and the class it sits in are the record's.
-    replaceNodeStorage(id, draftNode);
-    if (record.usersRecorded) {
-        if (users_.size() <= id) {
-            users_.resize(nodesById_.size());
-        }
-        if (!users_[id]) {
-            users_[id] = std::make_unique<DraftUserLists>();
-        }
-        for (size_t k = 0; k < 5; ++k) {
-            const auto slot = static_cast<DraftEdgeSlot>(k);
-            users_[id]->of(slot) = std::move(record.users[k]);
-            // The short-list index is a function of the list; a restored list makes the old one
-            // an answer about a graph nothing holds any more.
-            users_[id]->places[k].reset();
-        }
-    }
-}
-
-void GraphDraft::replayJournal(const Savepoint &mark) {
-    // The whole-value records: the first one after the mark is the state the mark found, because
-    // nothing of that kind was written between the mark and the record.
-    if (undoRegions_.size() > mark.undoRegions) {
-        const UndoRegions &record = undoRegions_[mark.undoRegions];
-        regions_                  = record.regions;
-        regionPorts_              = record.regionPorts;
-    }
-    if (undoScalars_.size() > mark.undoScalars) {
-        const UndoScalars &record = undoScalars_[mark.undoScalars];
-        entry_                    = record.entry;
-        exit_                     = record.exit;
-        output_                   = record.output;
-        returnNode_               = record.returnNode;
-        returnKind_               = record.returnKind;
-        mutations_                = record.mutations;
-        hasFrameLayout_           = record.hasFrameLayout;
-        insertRegion_             = record.insertRegion;
-    }
-    if (undoPorts_.size() > mark.undoPorts) {
-        const UndoPorts &record = undoPorts_[mark.undoPorts];
-        normPorts_              = record.norm;
-        withPorts_              = record.with;
-        closureNodes_           = record.closure;
-    }
-    if (undoLowLevel_.size() > mark.undoLowLevel) {
-        // The ids the segment put in the edit list go with the edits themselves: a node the
-        // rollback put back is not a node a commit has to answer for as changed in place.
-        const size_t base = undoLowLevel_[mark.undoLowLevel].edits;
-        for (size_t at = base; at < lowLevelEdits_.size(); ++at) {
-            const gc_node_ref_t id = lowLevelEdits_[at];
-            if (id < lowLevelSeen_.size()) {
-                lowLevelSeen_[id] = 0;
-            }
-        }
-        if (lowLevelEdits_.size() > base) {
-            lowLevelEdits_.resize(base);
-        }
-    }
-    if (undoWritings_.size() > mark.undoWritings) {
-        writings_ = undoWritings_[mark.undoWritings].log;
-    }
-    undoRegions_.resize(mark.undoRegions);
-    undoScalars_.resize(mark.undoScalars);
-    undoPorts_.resize(mark.undoPorts);
-    undoLowLevel_.resize(mark.undoLowLevel);
-    undoWritings_.resize(mark.undoWritings);
-    undoRegionsEpoch_  = 0;
-    undoScalarsEpoch_  = 0;
-    undoPortsEpoch_    = 0;
-    undoLowLevelEpoch_ = 0;
-    undoWritingsEpoch_ = 0;
-    // The nodes last: a restored body names inputs, and the record below a mark is the one that
-    // holds the lists the segment changed.
-    for (size_t at = undoNodes_.size(); at > mark.undoNodes; --at) {
-        UndoNode &record = undoNodes_[at - 1];
-        if (record.id < undoNodeEpoch_.size()) {
-            undoNodeEpoch_[record.id] = 0;
-        }
-        // A body recorded for a node the segment appended goes with the node: putting it back would
-        // be a node that the count rollback above already removed, at an id the graph no longer
-        // reaches.
-        if (record.id >= mark.nodes) {
-            continue;
-        }
-        restoreUndoNode(record);
-    }
-    undoNodes_.resize(mark.undoNodes);
-}
-
-void GraphDraft::rollbackTo(const Savepoint &mark) {
-    requireOneWriting("rollbackTo");
-    // What a savepoint can take back is what was appended and what the journal recorded. A region
-    // is not appended by a rule's right side -- it is spliced into regions that exist -- so a
-    // mark whose segment recorded no region table must still find the count it named.
-    GUARD(
-        mark.nodes <= nodesById_.size() && mark.staticSlots <= staticSlots_.size() &&
-            mark.frameSlots <= runtimeSlotTypes_.size(),
-        std::format(
-            "rollbackTo: the savepoint names {} node(s), {} static slot(s) and {} frame slot(s), "
-            "and the draft has {} / {} / {}",
-            mark.nodes,
-            mark.staticSlots,
-            mark.frameSlots,
-            nodesById_.size(),
-            staticSlots_.size(),
-            runtimeSlotTypes_.size()));
-    // Newest first, because a node the application built reads the ones built before it and an
-    // erasure unlinks its readers. Nothing outside the run reads any of them -- a right side
-    // appends nodes, it edits none -- so the run empties from the far end. The erasures themselves
-    // are not recorded: this is a rollback, so what they would record is what the journal already
-    // says, and a record taken here would be the state the segment *left*.
-    {
-        const bool wasSuspended = undoSuspended_;
-        undoSuspended_          = true;
-        for (size_t at = nodesById_.size(); at > mark.nodes; --at) {
-            const gc_node_ref_t id = static_cast<gc_node_ref_t>(at - 1);
-            if (node(id) != nullptr) {
-                eraseNode(id);
-            }
-        }
-        undoSuspended_ = wasSuspended;
-    }
-    // The half the counts cannot take back: the bodies, the user lists and the tables the segment
-    // changed in place.
-    replayJournal(mark);
-    // The slots come back with it. The ids do not: `addNode` hands out `nodesById_.size()` and
-    // never gives one to a second node, and the id lists that keep erased nodes (`gateIds_`,
-    // `brchIds_`, `joinIds_`) skip them rather than forget them, so the id space stays spent.
-    staticSlots_.resize(mark.staticSlots);
-    staticSlotTypes_.resize(mark.staticSlots);
-    runtimeSlotTypes_.resize(mark.frameSlots);
-    hasFrameLayout_ = mark.hasFrameLayout;
-    // The commit reads a node's own edits as the second half of its tier (`lowLevelEdits`): the ids
-    // of the nodes the run wrote to go with the nodes themselves, or a commit would answer for a
-    // node that is not in the graph it publishes.
-    std::erase_if(lowLevelEdits_, [&](gc_node_ref_t id) { return id >= mark.nodes; });
-    if (lowLevelSeen_.size() > mark.nodes) {
-        lowLevelSeen_.resize(mark.nodes);
-    }
-    // The draft is what the mark found, down to the count the commit reads as "something has been
-    // written since the last delivery" (draft_session.cpp): an application that was abandoned wrote
-    // nothing, and a commit that re-encoded the graph for it would publish a version nothing
-    // changed.
-    mutations_ = mark.mutations;
-    GUARD(
-        regions_.size() == mark.regions,
-        std::format(
-            "rollbackTo: the savepoint names {} region(s) and the draft has {} after the journal "
-            "was replayed; a segment that adds a region must record the table before it does",
-            mark.regions,
-            regions_.size()));
-    if (nodesById_.size() > mark.nodes) {
-        // The draft was written to and is now back where it was: `touchRefs` is what tells a reader
-        // that the shape it read is stale, and the erasures inside the loop do not all do it.
-        touchRefs();
-    }
-}
-
-void GraphDraft::noteLowLevelEdit(gc_node_ref_t id) {
-    // A named edit is the edit: what it changes in place is that edit's, and the table of
-    // docs/design/graph-editing/README.cn.md 8.1 owes the effect and order checks nothing for it.
-    if (namedEdits_ != 0 || id == kInvalidNodeRef) {
-        return;
-    }
-    if (id >= lowLevelSeen_.size()) {
-        lowLevelSeen_.resize(static_cast<size_t>(id) + 1, 0);
-    }
-    if (lowLevelSeen_[id] != 0) {
-        return;
-    }
-    lowLevelSeen_[id] = 1;
-    // The list the segment is about to grow, as it stood: a rolled back edit takes its id back
-    // out, or the commit would answer for a change that is not in the graph it publishes.
-    noteOriginalLowLevel();
-    lowLevelEdits_.push_back(id);
 }
 
 namespace {
@@ -3028,14 +2663,18 @@ size_t GraphDraft::dissolveUnorderedGates() {
                     }
                 }
             }
+            // The graph's own names move off the node before it goes, through the setters that record
+            // them: `eraseNode` records this segment's scalars at its first line, so a write made
+            // here first would be the one the record holds -- a rollback would then name `value`
+            // instead of the gate it put back.
             if (exit_ == id) {
-                exit_ = value;
+                setExitNode(value);
             }
             if (output_ == id) {
-                output_ = value;
+                setOutputNode(value);
             }
             if (returnNode_ == id) {
-                returnNode_ = value;
+                setReturnNode(value, returnKind_);
             }
             replaceAllValueUses(id, value);
             eraseNode(id); // its control users lose nothing: it waited on nothing
