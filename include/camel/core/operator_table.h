@@ -76,6 +76,10 @@ class Data;
 using data_ptr_t = std::shared_ptr<Data>;
 } // namespace camel::core::data
 
+namespace camel::core::type {
+class FunctionType;
+} // namespace camel::core::type
+
 namespace camel::core {
 
 /// Index of an operator in the OperatorTable.
@@ -835,5 +839,21 @@ void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector
         with.clear();
     }
 }
+
+/**
+ * The clause of the function value a declaration takes its accesses from: the operator names the
+ * operand (`sem::ResourceSpec::functionOperand`) and `value` is the function the program put there.
+ * Nullopt when the operator names no operand, or the type writes no clause (`Generic`) -- the caller
+ * then keeps the conservative reading, never "touches nothing".
+ *
+ * One rule, read wherever a call stands (design principles 3.3; author 2026-11-19): a call through
+ * a function value takes its accesses from the value's type (`Builder::reachOfCall`), and a
+ * higher-order operator's call is that same reading with the value at the operand its declaration
+ * names -- the builder's ordering (`Builder::reachOfOper`), what a node is worth
+ * (`Builder::isEffectNode`), the node-role registry and the effect summary (`EffectWalk::ofNodes`)
+ * all answer from it.
+ */
+std::optional<sem::ResourceSignature> functionOperandClause(
+    const OperatorTable &table, OperId id, const type::FunctionType *value);
 
 } // namespace camel::core

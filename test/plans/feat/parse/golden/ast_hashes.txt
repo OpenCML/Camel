@@ -557,7 +557,7 @@ db7b15c1d26c2d3d ok stdlib/std.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
 7535a5ecc1f47e2c ok stdlib/vjp.cml
-f70d4e57b1f9b14e ok stdlib/rulesets/jvp.cml
+fd83188beb8091dc ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
 db3ee735e8a9e867 ok stdlib/rulesets/transpose.cml
@@ -2586,6 +2586,8 @@ d6a7c15f0f666e5a ok test/cases/effects/err_write_readonly_resource.cml
 c90ca6b8bfe43728 ok test/cases/effects/exported_resource_imported.cml
 e4eadcfee18057e8 ok test/cases/effects/exported_resource_qualified.cml
 1d6435aed665a819 ok test/cases/effects/generic_parameter_takes_instantiation.cml
+5b2f241a3389c97d ok test/cases/effects/hof_map_effect.cml
+f08aedb8288d9b5a ok test/cases/effects/hof_map_pure.cml
 2ef4fedc4207f406 ok test/cases/effects/inferred_recursive_is_empty.cml
 db1c9332ac315555 ok test/cases/effects/module_var_read.cml
 925cf39d4f0d2700 ok test/cases/effects/module_var_write.cml
@@ -3072,8 +3074,9 @@ a4d54a5a8ece49dc ok test/cases/modules/autodiff/jax_names/jvp.cml
 2839084b45c9875e ok test/cases/modules/autodiff/jax_names/vjp.cml
 49c3d8258c5de697 ok test/cases/modules/autodiff/jax_names/vmap_in_axes.cml
 0a20005a7e7a5b51 ok test/cases/modules/autodiff/jax_names/vmap_two_parameters.cml
+41b483e8ca08d804 ok test/cases/modules/graph_function/commit_effect.cml
 719b646e1f2f387c ok test/cases/modules/graph_function/edit.cml
-47acaa202ed7226e ok test/cases/modules/graph_function/inline.cml
+ba02bb6462f5021a ok test/cases/modules/graph_function/inline.cml
 6ca0c5a532e79bfa ok test/cases/modules/graph_function/open_not_function.cml
 3022bbe3b441096d ok test/cases/modules/graph_function/outline.cml
 a2d8495ed82bf6c1 ok test/cases/modules/graph_function/reads.cml
@@ -3928,6 +3931,7 @@ e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 4458f4f7e6cb467b ok test/cases/opt/commit_checks/fold_function_type.cml
 5ea4b89de03c989f ok test/cases/opt/commit_checks/generic_call.cml
 4b03f511a3efb360 ok test/cases/opt/commit_checks/identity_at_exit.cml
+3c6d2676b58add1b ok test/cases/opt/commit_checks/inline_two_reads.cml
 1a71a9d22c46c7e8 ok test/cases/opt/commit_checks/inplace_edit.cml
 3bb03717c029f772 ok test/cases/opt/commit_checks/loop_body_read.cml
 21270de361be5622 ok test/cases/opt/commit_checks/port_type.cml

@@ -178,11 +178,26 @@ struct ResourceSpec {
     /// separate component of the spec rather than an access, and it is declared the same way: by
     /// the operator, once, here.
     bool spelling = false;
+    /// The accesses are the function value's that arrives in the operand `functionOperand` names
+    /// (design principles 3.3; author 2026-11-19): what a higher-order operator touches is what
+    /// the function the program hands it touches -- `map(f, xs)` over a pure `f` touches nothing,
+    /// over an `f` that prints it writes `stdout` -- so the declaration names the operand and not
+    /// a resource. The function is the first `with` operand for the array shapes and the first
+    /// ordinary operand for `:mark/isolate` (operator_semantics.h, `ElementCalls`). A reader that
+    /// has the value (`Builder::reachOfOper`, `EffectWalk::ofNodes`) reads that value's function
+    /// type, which is the rule a call through a function value already follows
+    /// (`Builder::reachOfCall`); a reader that has only the table reads it conservatively
+    /// (`signatureOf` reports an external effect that itemizes nothing), because a static answer
+    /// cannot be narrower than "unknown function". `accesses` is empty when this is set.
+    std::optional<ResourceBinding> functionOperand;
 
-    /// Touches no resource: no access, nothing allocated, no external effect (how the result
-    /// relates to the operands' resources is not a touch). Reading the spelling is not a touch of
-    /// a resource either: `none()` answers what the order edges ask.
-    bool none() const { return accesses.empty() && !allocates && !externalEffect; }
+    /// Touches no resource: no access, nothing allocated, no external effect, no function operand
+    /// to take the accesses from (how the result relates to the operands' resources is not a
+    /// touch). Reading the spelling is not a touch of a resource either: `none()` answers what the
+    /// order edges ask.
+    bool none() const {
+        return accesses.empty() && !allocates && !externalEffect && !functionOperand;
+    }
     bool operator==(const ResourceSpec &) const = default;
 };
 

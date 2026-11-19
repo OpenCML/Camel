@@ -21,6 +21,58 @@ namespace camel::runtime {
 
 namespace {
 
+/// What a higher-order operator's function operand amounts to, when its declaration takes the
+/// accesses from there (design principles 3.3; author 2026-11-19): the clause of the function value
+/// that arrives in `with` operand `functionOperand` -- the rule a call through a value follows. The
+/// conservative answer is the default, and it is what an absent or unreadable value gets: the walk
+/// must never report "touches nothing" because it could not read something.
+struct OperandClause {
+    bool external        = true;
+    bool writesVariables = true;
+};
+
+OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
+    OperandClause out;
+    const auto &table = camel::core::OperatorTable::instance();
+    const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
+    const auto *facts = table.semantics(oper);
+    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
+        return out;
+    }
+    const core::sem::ResourceBinding &where = *facts->resources->functionOperand;
+    if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
+        where.kind != core::sem::ResourceBinding::Kind::With) {
+        return out;
+    }
+    const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
+                              ? graph.normInputsOf(ref)
+                              : graph.withInputsOf(ref);
+    if (size_t(where.index) >= operands.size()) {
+        return out;
+    }
+    const GCNode *value = graph.node(operands[where.index]);
+    const auto *type =
+        value != nullptr && value->dataType() != nullptr &&
+                value->dataType()->code() == core::type::TypeCode::Function
+            ? static_cast<const core::type::FunctionType *>(value->dataType())
+            : nullptr;
+    const auto clause = core::functionOperandClause(table, oper, type);
+    if (!clause.has_value()) {
+        return out;
+    }
+    out.external        = clause->external;
+    out.writesVariables = false;
+    for (const auto &use : clause->params) {
+        const bool writes = use.mode == core::sem::AccessMode::Write ||
+                            use.mode == core::sem::AccessMode::ReadModifyWrite;
+        if (writes && (use.cls == core::sem::ResourceClass::Variable ||
+                       use.cls == core::sem::ResourceClass::Object)) {
+            out.writesVariables = true;
+        }
+    }
+    return out;
+}
+
 struct EffectWalk {
     // program-holder-exempt: borrow-or-foreign-type -- a walk over the program of the call that
     // made it; effects() holds it for the walk.
@@ -70,15 +122,24 @@ struct EffectWalk {
             case GCNodeKind::Oper: {
                 const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
                 const auto traits = table.find(oper);
+                summary.mayFault |= !traits || traits->mayFault;
+                if (traits && traits->callsGraphs) {
+                    // It runs a function the program hands it, and its accesses are that
+                    // function's (design principles 3.3; author 2026-11-19): the same reading a
+                    // call through a value follows reads the clause off the value's type, so a
+                    // `map` over a pure function is not an external effect. What the declaration
+                    // cannot narrow -- a type that writes no clause -- keeps the conservative
+                    // reading, which is what `functionOperandClause` answers.
+                    const OperandClause clause = functionOperandClause(*graph, ref);
+                    summary.external |= clause.external;
+                    summary.writesVariables |= clause.writesVariables;
+                    summary.writesVariables |= table.writesProgramState(oper);
+                    summary.mayNotTerminate = true;
+                    break;
+                }
                 summary.external |= table.hasExternalEffect(oper);
                 // What an operator writes is its resource declaration's (design principles 3.3).
                 summary.writesVariables |= table.writesProgramState(oper);
-                summary.mayFault |= !traits || traits->mayFault;
-                if (traits && traits->callsGraphs) {
-                    // It runs the function values it receives: not known here.
-                    summary.external        = true;
-                    summary.mayNotTerminate = true;
-                }
                 break;
             }
             case GCNodeKind::Call:

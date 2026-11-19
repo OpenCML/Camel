@@ -60,3 +60,22 @@ error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.order': the node
 
 论文侧的建议：这一处**不要写成"API 支持按需排序"**。今天支持的是"用位置换有序"，`order` 只能排在事务打开时
 就存在的那些节点之间。
+
+## ④ 改后的读数（2026-11-19 下午，lane J，`test/cases/modules/graph_function/inline.cml`）
+
+按作者的裁定（"`order` 必须接受同一事务刚造的节点——文档是承诺，代码是缺陷。`orderKernel` 两个参数都过同一个
+`draftOf`，`draftOf` 接受『属于本事务草稿』的句柄"）落地后，甲对照（在纯节点处 `inline` 再 `order`）读数是：
+
+1. **`order` 接受草稿节点**，两端都过 `draftOf`，同草稿图才写边。甲不再被 `InvalidArgument` 拒。
+2. **`inline` 在纯节点处交回的不是写节点，而是把体的值带出区域的桥门（bridge gate）。** 读数是
+   `[order] carried=:io/println ordered_after=2`：门只读一个节点，也就是那条打印；把它当 `order` 的一端，
+   边落在门上，打印仍然无序（第一次读数是三轮红：`PassEffectOrder`）。⇒ 调用者要排的是 `inputs(made)[0]`。
+3. **排到那条打印上之后，commit 被接受**：`[order] prints=2->3 ordered_before=2 body=0 sum_kept=1`。
+4. **但那条打印从来不会跑**：`[order] the edited function runs (…)` 之后只有 `first` / `5`，没有 `announced`。
+   体落的那个 Inline 区域不在块的链上，没有任何链入口进得去，所以"序"写下来了却没有执行。
+
+⇒ 新问题：**纯节点处的 `inline` 交回一个链上永远到不了的写，是设计如此，还是第二处缺陷？** 若是前者，
+`stdlib/graph.cml` 那句"the ordering of the body's writes among the accesses already there is `order`'s to say"
+承诺的是一条**不会跑的写**的序，读者会以为加了打印就能打印；若是后者，缺的是"让调用者把这块区域接进链"的
+API（今天导出的算子只有 `replace` / `erase` / `eval` / `order` / `inline` / `outline` / `add_constant`）。
+本读数已按"今天如此"钉在计划里，标明两半（序写下来了／那条写不跑），等判定后再改钉。

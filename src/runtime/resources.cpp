@@ -119,6 +119,19 @@ const ::Function *staticFunctionOf(const GCGraph &graph, gc_node_ref_t ref) {
         graph.staticArea()->get<slot_t>(static_cast<size_t>(-node->dataIndex)));
 }
 
+/// The function type of a value, or nullptr when the value has no type or is no function. A call
+/// through a function value is read from the type of the value it calls (`declaredClauseAt`,
+/// `Resolver::call`): the type is where a function value's effect clause is written, and it is the
+/// one thing a call site can read when the callee's body is not statically known.
+const core::type::FunctionType *functionTypeOfValue(const GCGraph &graph, gc_node_ref_t value) {
+    const GCNode *node = graph.node(value);
+    if (node == nullptr || node->dataType() == nullptr ||
+        node->dataType()->code() != core::type::TypeCode::Function) {
+        return nullptr;
+    }
+    return static_cast<const core::type::FunctionType *>(node->dataType());
+}
+
 // ---- Footprints --------------------------------------------------------------------------------
 
 struct FootprintCache {
@@ -535,7 +548,25 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
         }
     }
     if (callee == nullptr) {
-        // A call through a value: anything may happen.
+        // A call through a value: the value's function type is where its effect is written, and it
+        // is the one thing a call site can read when the callee's body is not statically known --
+        // `declaredClauseAt` reads the same place. A type that writes a clause and names no capture
+        // is read as written. A type that promises nothing (a `Generic` clause: no clause written,
+        // `docs/design/effects/plan.cn.md` 2.2) is not a reading at all, so the call keeps the
+        // conservative one: recording it as `unknown` is the honest answer about a value whose reach
+        // the program does not state. Reaching that fallback is a fact about the type, not about the
+        // call site, and the handover page of 2026-11-19 records one type that lands there (the one
+        // `autodiff`'s `grad` answers with) and the question it raises.
+        if (!with.empty()) {
+            if (const core::type::FunctionType *type =
+                    functionTypeOfValue(graph, valueBehindGates(graph, with[0]));
+                type != nullptr &&
+                type->resources().mode == sem::ResourceSignature::Mode::Concrete &&
+                type->resources().captures.empty()) {
+                return fromSignature(type->resources(), type->withTypesCount(), graph, ref);
+            }
+        }
+        // No clause to read: anything may happen.
         NodeResources r;
         r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
         r.result   = ResultAlias{.kind = ResultAlias::Kind::Unknown};
@@ -1267,14 +1298,12 @@ CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_
         return {};
     }
     const gc_node_ref_t value = valueBehindGates(graph, with[0]);
-    const GCNode *node        = graph.node(value);
-    if (node == nullptr || node->dataType() == nullptr ||
-        node->dataType()->code() != core::type::TypeCode::Function) {
+    const auto *type          = functionTypeOfValue(graph, value);
+    if (type == nullptr) {
         return {};
     }
-    const auto *type = static_cast<const core::type::FunctionType *>(node->dataType());
-    site.declared    = &type->resources();
-    site.withCount   = type->withTypesCount();
+    site.declared  = &type->resources();
+    site.withCount = type->withTypesCount();
     // The body behind it, when the value names a function statically: without it there is no
     // footprint to compare, and the type promises nothing it is known to break.
     if (const ::Function *fn = staticFunctionOf(graph, value)) {

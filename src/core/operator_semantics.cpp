@@ -224,6 +224,13 @@ bool OperatorSemantics::external() const {
     if (resources->externalEffect) {
         return true;
     }
+    if (resources->functionOperand) {
+        // The accesses are a function operand's, so this answer cannot be narrower than "may
+        // reach outside the program" (design principles 3.3): the reader that has the value reads
+        // that value's type (`Builder::reachOfOper`, `EffectWalk::ofNodes`), which is where a
+        // `map` over a pure function is known to touch nothing.
+        return true;
+    }
     for (const ResourceAccess &access : resources->accesses) {
         if (reachesOutside(access.resource.cls)) {
             return true;

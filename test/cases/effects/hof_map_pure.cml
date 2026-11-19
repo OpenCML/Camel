@@ -1,0 +1,17 @@
+/**
+ * `map` over a pure function is no effect of its own. What a higher-order operator touches is the
+ * function the program hands it (design principles 3.3; author 2026-11-19): the declaration names
+ * the function operand and the readers take the accesses from that value's type, so a call of
+ * `inc`, which writes no clause, adds nothing that has to be ordered. This case pins the node: it
+ * carries no `effect` role. The other half of the pair is `hof_map_effect.cml`.
+ */
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let ys = xs->map<inc>
+    return ys[0]
+}
