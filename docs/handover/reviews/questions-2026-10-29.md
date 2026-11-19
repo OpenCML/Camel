@@ -4524,3 +4524,11 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 1. **撤回**：13:25 那条说 `writings/swapped.cml` 不同是"并列常量按书写顺序编号"的缺陷，诊断错了，是我照 `examples/case-study/README.md` 第 2 条的旧说法写的、没先核对。`item3b` §2 查清：两处被交换的是两个可能出故障的 `reshape`，交换改变了先失败的是哪一个（原则 3.4：可能出故障的不可自由安排），所以两份**本来就不该相同**；`--ties` 为 0 组。施工方没有为了让它们相等去动规范形代码，做得对。`README.md` 第 2 条的说法同样错，改成这个结论。
 2. **定版 = `2d7c5c3a1`**，不再有 P′：论文用的六份写法在它上面逐字节相同，`train-reorder-output` 应异且异；融合 `--require-one-form` PASS，`loss-a`/`loss-b` 融合后同一份（`83c00574…`），两次 commit 都接受。六计划全绿。全部转论文。
 3. **答"并列段超宽时 `stable_sort` 保留创建次序"**：按默认，定版后不动；截稿后修，修法照页上最小改法（相等片段再按只依赖结构的键排），先造一个 `inspect --ties` 看得见的复现程序（宽 > 6 的等键段或嵌套并列），修前修后两份读数。
+
+## 下发（2026-11-19 15:10）：MLP 上 `cxx::inline` 被冲突检查拒，归类
+
+决策者。`item1` 读数里 MLP 训练步上 `std::cxx::inline` 的 commit 被 `PassEffectOrder` 拒：`fs:read_bytes` 与 `:struct/copy_arr` 在 `main` 同一区域无先后。论文要知道它属于哪一类，今天判：
+- (i) `inline` 把带访问的被调体拼进来时漏了顺序（遍的缺陷，检查拒得对）；
+- (ii) `:struct/copy_arr` 的声明把它说成了一个访问而它不是（算子声明的缺陷，检查因此误拒）；
+- (iii) 两者确实冲突、原程序里也无先后（建图的缺陷）。
+报：`copy_arr` 声明的资源与读写方式、原程序（inline 前）这两个节点之间有没有路径、inline 后路径从哪里断的。char-transformer 上 inline 的失败（`NOTES` §2.4）一并归类。第 3 项（真实优化 pass 的接受/拒绝表）照常做。
