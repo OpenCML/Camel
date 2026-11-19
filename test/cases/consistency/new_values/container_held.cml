@@ -1,0 +1,33 @@
+/**
+ * A value read out of a container is that container's value: handing it to an update in place
+ * would write through the container, and no count of the value reveals the container.
+ *
+ * Two shapes, one fact:
+ *
+ *   * `b.xs` -- a field read is a node of its own (`GCNodeKind::Accs`) handing out the array the
+ *     struct holds, and `var b = a` is a second name of the struct whose leaves are not counted
+ *     for it at all;
+ *   * `rows[1]` on an `int[][]` -- an element read hands out the inner array itself, the same
+ *     object the outer array holds, and `rows` is still a name of it.
+ *
+ * Both updates read `copied` from `camel inspect --copies`, and `by-count` would be wrong for
+ * both: `Array::writableInPlace` answers from the element's own block count, and a container's
+ * slot never increments it. See
+ * docs/handover/plans/2026-11-20-container-held-elements-as-one-clause.cn.md.
+ *
+ * Expected output: [1, 2] [9, 2] / [[0], [1]] [1, 2]
+ */
+
+type Bag = { label: string, xs: int[] }
+
+func main(): int sync {
+    let a: Bag = { label: 'a', xs: [1, 2] }
+    var b = a
+    b.xs[0] = 9
+    println(a.xs, b.xs)
+
+    let rows = (0..2)->map<(i: int): int[] => [i]>
+    let grown = rows[1]->append<2>
+    println(rows, grown)
+    return 0
+}

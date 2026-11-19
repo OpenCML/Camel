@@ -2438,6 +2438,7 @@ daf0cb834381d51a ok test/cases/consistency/narrowing/outside_arm.cml
 5dd2ac548b5a83d7 ok test/cases/consistency/narrowing/shadowed_not_narrowed.cml
 8704d61361f2149a ok test/cases/consistency/narrowing/var_not_narrowed.cml
 5375b3ec8611e99e ok test/cases/consistency/new_values/append_new.cml
+53e82a2107e59d8a ok test/cases/consistency/new_values/container_held.cml
 291aaf5bd2d86c43 ok test/cases/consistency/new_values/dropped_foreach_lambda.cml
 867a4196abd0f075 ok test/cases/consistency/new_values/dropped_if_arm.cml
 c6a70733d1d83ee6 ok test/cases/consistency/new_values/dropped_nested_block.cml
