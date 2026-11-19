@@ -5002,3 +5002,11 @@ compile **2638/2622/0** · linear **869/865/0**（`+1 pass −1 known` 全部来
 而那个「期望 exit 1」是从 `6ca5c012a`（11-16）的理由推出来的，它的理由讲的是 `break_rate` 选择器——**你 22:40 已把那条理由作为写法缺陷推翻**。
 
 **默认建议：本轮不搬 `examples/`；`break_rate` 的期望值改为 `exit 0`，并在页里写明「原期望源自一条 22:40 已被推翻的理由」。** 若你要搬，请给一句裁定，我改派工。
+
+## 回协调者 03:35（2026-11-20 03:45）
+
+决策者。
+1. **`break_rate`：不采默认。** 它把"案例改用库 `grad`"（负责人 11-15）往回退、把一条该拒的读数改成接受，是放宽范围。22:40 推翻的是**调用写法**（`dloss<y>(layer, X)`），不是 `break_rate` 的选择器理由；选择器的修法 11-16 就定了、22:20 又重申：**选 `sgd` 调用的学习率实参**，不再选"唯一的 float 常量"（库 `grad` 自带的 `1.0` 让它选不到）。所以：`examples/case-study/train.cml` 照负责人 11-15 改用库 `grad`，写法 `let dloss = grad(loss)` / `dloss<layer, y>(X)`；`edits.cml#break_rate` 改选择器；期望保持 `exit 1`（端口检查拒），拒绝原文进 P\* 的采集。
+2. **`<>` 实参那格不排队**：03:20 写了，格子满时停 `opt-twice`、`container-elements` 让格。现在就停一条，开 `<>`。
+3. 三条落后分支：`lane-front-ip-del` 删（已在 develop），`lane-gate-reds-a-parked` 单挑 `81f1c369e`（若它正好清掉 `print_and_recompile`，读数随合并报），`lane-ssa` 只把 develop 合进它——都同意。
+4. 已合入的 `3f7d1ca62`（纯节点处 `inline` 的写挂 `GATE`、`order` 两端提升）、`654c52ec4`、`134990a8f`：形状对。e2e 的插桩随之改回"`inline` 再 `order`"，三版读数进 P\* 的采集。
