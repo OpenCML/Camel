@@ -4692,3 +4692,10 @@ S2 随后，S3 最后。
 3. tab:lang 其余四行在库 grad 下复跑：`main` 里加无序打印（应拒）、接在链上（应收）、`loss` 里加打印（应被效应检查拒）、删除全部打印（应收）。
 4. 顺手：`loss-a`、`loss-b` 各求导后，两张导数图的规范形是否相同。
 **调用写法先别改**：库 grad 今天的结果把第一个 `with` 参数挪成了第一个普通参数（`dloss<y>(layer, X)`），与原则 9 节"对 `with` 参数求导"的写法（`with_grad(loss)<m>(x, y)`，权重仍在尖括号里）不一致，已拿去问负责人；一小时内回本页定用哪种。其余准备（选择器修法、脚本）照做。
+
+## 负责人定（2026-11-19 22:40）：库 `grad` 的调用写法按原则恢复为 `dloss<layer, y>(X)`
+
+决策者转达。原则 9 节"对 `with` 参数求导"：`grad`/`with_grad` 对第一个 `with` 参数求导，**结果函数的调用方式与原函数相同**——权重仍在尖括号里（`with_grad(loss)<m>(x, y)`）。库里组合的 `grad` 今天的结果把权重挪成了第一个普通参数（`dloss<y>(layer, X)`），这是 `first_with_as_param` 的实现形状漏到了语言表面，按缺陷改：
+1. **`stdlib/vjp.cml` 的 `grad`、`with_grad`（及 `GradientOf<F>` 等结果类型）**：内部照样 `first_with_as_param` 再切分、转置，返回前把权重放回第一个 `with` 位置——结果函数的 `with` 列表与参数表就是 `F` 的（`grad` 的结果是梯度，`with_grad` 是 `(值, 梯度)`）。一处包装，不改 `split`/`transpose`。
+2. 把库 `grad` 的用例、`examples/case-study/train.cml`、文档示例里的 `<y>(layer, X)` 一律改回 `<layer, y>(X)`；不留旧写法的兼容。
+3. **案例重量照 22:00、22:20 两条做，改写那一行用 `let dloss = grad(loss)` 与 `dloss<layer, y>(X)`**。时间紧：库的修改与重量都在北京 11-20 中午之前交。若库修改赶不上，先交在定版上能量的部分并照实写明，不改回挪参数的写法。
