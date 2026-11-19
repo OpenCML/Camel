@@ -363,7 +363,6 @@ enum class UndoClass : uint8_t {
     Ports,
     Types,
     LowLevel,
-    Writings,
 };
 std::string_view undoClassName(UndoClass cls);
 
@@ -797,15 +796,15 @@ class GraphDraft {
         uint64_t mutations  = 0;
         bool hasFrameLayout = false;
         // The journal's own marks, one per record kind (see the `UndoNode`, `UndoRegions`,
-        // `UndoScalars`, `UndoTypes`, `UndoPorts`, `UndoLowLevel` and `UndoWritings` records
-        // below).
+        // `UndoScalars`, `UndoTypes`, `UndoPorts` and `UndoLowLevel` records below). The
+        // equivalence log is not one of them: the store owns it (`writings.h`,
+        // `DraftWritings::ApplicationMark`), and the draft's copy of it is a copy.
         size_t undoNodes     = 0;
         size_t undoRegions   = 0;
         size_t undoScalars   = 0;
         size_t undoTypes     = 0;
         size_t undoPorts     = 0;
         size_t undoLowLevel  = 0;
-        size_t undoWritings  = 0;
         /// The draft as the mark found it, when the self-check was on: `rollbackTo` compares the
         /// draft it put back with this and reports the first class that differs.
         std::shared_ptr<const UndoSnapshot> check;
@@ -1334,9 +1333,6 @@ class GraphDraft {
     struct UndoLowLevel {
         size_t edits = 0;
     };
-    struct UndoWritings {
-        std::vector<WritingUnion> log;
-    };
 
     bool journalOpen() const { return journalDepth_ != 0; }
     /// Records `id` as the segment found it, once per segment: the body and its user lists.
@@ -1346,7 +1342,6 @@ class GraphDraft {
     void noteOriginalTypes();
     void noteOriginalPorts();
     void noteOriginalLowLevel();
-    void noteOriginalWritings();
     /// Puts one recorded node back at its own id: allocated again when the segment erased it, and
     /// written over the body that stands there when it did not.
     void restoreUndoNode(UndoNode &record);
@@ -1361,13 +1356,11 @@ class GraphDraft {
     std::vector<UndoTypes> undoTypes_;
     std::vector<UndoPorts> undoPorts_;
     std::vector<UndoLowLevel> undoLowLevel_;
-    std::vector<UndoWritings> undoWritings_;
     uint64_t undoRegionsEpoch_  = 0;
     uint64_t undoScalarsEpoch_  = 0;
     uint64_t undoTypesEpoch_    = 0;
     uint64_t undoPortsEpoch_    = 0;
     uint64_t undoLowLevelEpoch_ = 0;
-    uint64_t undoWritingsEpoch_ = 0;
     uint64_t journalEpoch_      = 0;
     unsigned journalDepth_      = 0;
     /// Set while the journal is putting itself back: a restore writes bodies, and a body write is
@@ -1543,8 +1536,6 @@ struct UndoSnapshot {
     std::vector<gc_node_ref_t> closureNodes;
     // The nodes this draft changed in place, as the commit checks read them.
     std::vector<gc_node_ref_t> lowLevelEdits;
-    // The equivalence log the graph carries.
-    std::vector<WritingUnion> writings;
 };
 
 inline std::string_view undoClassName(UndoClass cls) {
@@ -1561,8 +1552,6 @@ inline std::string_view undoClassName(UndoClass cls) {
         return "types";
     case UndoClass::LowLevel:
         return "low-level";
-    case UndoClass::Writings:
-        return "writings";
     }
     return "unknown";
 }

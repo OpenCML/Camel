@@ -516,19 +516,32 @@ class DraftWritings : private WritingObserver {
     /// Closes the classes over congruence: nodes whose inputs changed class are looked up again.
     void rebuild();
 
-    /// Where one rule application started (docs/design/graph-editing/README.cn.md 16.1, 16.4), as
-    /// the draft names it.
-    using ApplicationMark = GraphDraft::Savepoint;
+    /// Where one rule application started (docs/design/graph-editing/README.cn.md 16.1, 16.4).
+    ///
+    /// The two halves of the state an application writes have one undo, not two: the draft's
+    /// journal puts back the nodes, the bodies and the tables (`GraphDraft::Savepoint`), and the
+    /// store's log puts back the equivalences (`WritingStore::rollbackTo`), and a mark names both.
+    /// The draft keeps a copy of the log for the encoder to read, but it is a copy -- `save`
+    /// refreshes it -- so a rollback does not restore it: the store is what a rollback answers for,
+    /// and `save` after it is what makes the copy true again.
+    struct ApplicationMark {
+        GraphDraft::Savepoint draft;
+        /// `WritingStore::log().size()` when the mark was taken.
+        size_t log = 0;
+    };
     ApplicationMark markApplication();
+    /// Opens a segment (`GraphDraft::beginUndo`) and marks it: what a round applies lands together
+    /// or not at all, and the mark names both halves of the state it would write.
+    ApplicationMark beginApplication();
     /// Takes an abandoned application back, index first: the rows of the congruence index are keyed
     /// by node id (`keyOf`, `takes`, `written`, and the `byKey` map by what `keyOf` sweeps), and
     /// the draft hands the same ids out to no second node, so a row the rollback did not clear
     /// would be read as an answer about a node that is gone -- a constant node whose row still
     /// names it is the shape where the next constant of that value is not made at all.
     ///
-    /// What it takes back is what the application did, both halves: the nodes it appended (the counts)
-    /// and the bodies, user lists, region tables and scalars it changed in place (the draft's
-    /// journal, which `GraphDraft::Savepoint` describes).
+    /// What it takes back is what the application did, both halves: the nodes it appended and the
+    /// bodies, user lists, region tables and scalars it changed in place (the draft's journal), and
+    /// the merges it made (the store's log, rolled back to the mark).
     void abandonApplication(const ApplicationMark &mark);
 
     /// The smallest node of the value `node` is a writing of, in the context of its own
@@ -560,9 +573,9 @@ class DraftWritings : private WritingObserver {
     /// that stayed would answer about a node that is gone.
     void clearIndexRows(const ApplicationMark &mark);
     /// Takes a saturation round back whole: the index rows and the queue the round filled, the
-    /// classes it merged, and the bodies it changed. `logSize` is the store's log before the round
+    /// classes it merged, and the bodies it changed. `mark` carries the store's log before the round
     /// and `pendingBase` its queue: the round did not finish, so nothing of it lands.
-    void abandonRound(const ApplicationMark &mark, size_t logSize, size_t pendingBase);
+    void abandonRound(const ApplicationMark &mark, size_t pendingBase);
     /// 1: the node takes part in congruence and in every match — it computes its value from its
     /// data inputs; 2: it does not. A control input takes no part in this question: it orders the
     /// node, it does not make the value different (design principles 3.3, 3.4).

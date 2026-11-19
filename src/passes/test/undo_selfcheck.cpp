@@ -42,10 +42,9 @@ using camel::runtime::UndoClass;
 using camel::runtime::undoClassName;
 
 /// The classes in the order the check compares them, which is the order a report names them in.
-/// `Writings` is not walked: the equivalence table is not state a segment may change at all -- a
-/// draft that has values with several writings refuses every edit, and `rollbackTo` refuses with
-/// them (`requireOneWriting`) -- so there is no round to run and nothing for a hook to miss. The
-/// class stays in the check's comparison, where an empty write costs nothing to compare.
+/// The equivalence log is not one of them: it is the store's (see
+/// `DraftWritings::ApplicationMark`), and a draft that has values with several writings refuses
+/// every edit anyway (`requireOneWriting`), so there is no round to run for it.
 constexpr UndoClass kClasses[] = {
     UndoClass::Nodes,
     UndoClass::Regions,
@@ -202,10 +201,6 @@ std::optional<Probe> makeProbe(UndoClass cls, GraphDraft &draft) {
             [id = *id, old](GraphDraft &target) { target.setNormInputs(id, old); },
         };
     }
-    case UndoClass::Writings:
-        // Not walkable: see `kClasses`. A round would have to put the table back outside a segment,
-        // and a draft with values that have several writings refuses to be edited at all.
-        return std::nullopt;
     }
     return std::nullopt;
 }

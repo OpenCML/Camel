@@ -106,8 +106,8 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
     // result the first run that finished gave. The journal is open for the whole call, and every
     // application marks a point inside it, so one application's all-or-nothing is the inner case of
     // the same mechanism.
-    const GraphDraft::Savepoint start = draft_.beginUndo();
-    greedy_                           = true;
+    const ApplicationMark start = beginApplication();
+    greedy_                     = true;
     RewriteStats stats;
     try {
         auto &ix = *index_;
@@ -465,9 +465,8 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
         // the first application, and the segment is closed when the round lands (`endUndo`) or takes
         // itself back (`abandonRound`). `found` is the round's only temporary area, so a round the
         // budget cuts has nothing on disk to leave half done.
-        const ApplicationMark roundMark = draft_.beginUndo();
+        const ApplicationMark roundMark = beginApplication();
         const JournalSegment closing(draft_);
-        const size_t logSize     = store_.log().size();
         const size_t pendingBase = pending_.size();
         size_t roundWritings     = 0;
         size_t roundUnions       = 0;
@@ -530,7 +529,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             // reported and taken back: a state with half of a round in it is a state neither the
             // budget nor the fixpoint explains, and the caller could not tell where the budget ran
             // out from it, because the half that stayed is all it would see.
-            abandonRound(roundMark, logSize, pendingBase);
+            abandonRound(roundMark, pendingBase);
             stats.appliedThisRound = appliedThisRound;
             stats.stoppedMidRound  = true;
             // The cut round was started, so it is one of the rounds the run reports, and the time it
