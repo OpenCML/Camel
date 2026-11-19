@@ -1902,9 +1902,21 @@ void Builder::reportUnusedFallibleValues() {
             // "Ordered" here means a statement of a `sync` block: the edge that says so is a
             // sync edge, and the old control edge still carries it where one is left.
             const bool ordered = !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            // The arms of a JOIN that joins nothing that actually give a value: the written arm
+            // of an `if` without `else` and the `null` the empty arm hands over are two WITH
+            // inputs, so the number of inputs says nothing -- the `null` placeholder is a void
+            // value no arm could have written and no error can be lost in it.
+            const auto givesAValue = [&](draft_node_ref_t armId) {
+                node_handle_t armValue = draft.ref(armId);
+                if (nodeIsKind(armValue, runtime::GCNodeKind::Gate) &&
+                    !normInputsOf(armValue).empty()) {
+                    armValue = draft.ref(normInputsOf(armValue).front());
+                }
+                return !isVoidGraphExitType(nodeTypeOf(armValue));
+            };
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
                 isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id)) &&
-                draft.withInputsOf(id).size() == 1) {
+                std::ranges::count_if(draft.withInputsOf(id), givesAValue) == 1) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends. A branch with two arms is answered where its arms
                 // end instead (`ExitInUnusedBranch`, `unused_arm_exit`): both arms hand a value to
