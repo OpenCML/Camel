@@ -19,6 +19,7 @@
 
 #include "camel/utils/assert.h"
 
+#include <cstdint>
 #include <format>
 
 using namespace camel::core::error;
@@ -40,8 +41,15 @@ std::string Builder::captureNameOf(node_handle_t origin, const std::string &fall
 }
 
 node_handle_t Builder::captureInto(
-    const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name) {
+    const compile_graph_ptr_t &graph,
+    node_handle_t origin,
+    const std::string &name,
+    DraftGraphBuilder *capturing) {
     GUARD(graph != nullptr && origin != nullptr, "A capture needs a graph and a value.");
+    // The graph the capture is made for: this frame's graph when the walk starts here, and
+    // whatever the outermost frame was otherwise. It is not `currGraph_`: a call site captures
+    // on a callee's behalf while the builder stands in another graph (`linkCaptureSites`).
+    DraftGraphBuilder *const capturingGraph = capturing != nullptr ? capturing : graph.get();
     if (nodeGraphOf(origin) == graph.get()) {
         return origin;
     }
@@ -58,30 +66,40 @@ node_handle_t Builder::captureInto(
     // The origin is a node of a graph that encloses this one (the root graph for a value of
     // the top level of a module): the enclosing graphs between them capture it as well, so
     // that whoever calls or makes the value of this graph can pass it on.
-    // The reading names the graphs the walk had in hand. Five of this function's six callers hand
-    // it an origin taken from a table -- the call's written captures (`builder_operators.cpp`), a
-    // function value's captures (`builder_calls.cpp`), `capturedUsesOf`
-    // (`builder_diagnostics.cpp`), name resolution (`builder.cpp`), `linkCaptureSites` -- and ask no
-    // enclosure question first; only the name-lookup path (`builder_expr.cpp`,
-    // `RestFunctionNeedsExpansion`) walks the ancestors itself. So when one of the five meets a
-    // value its graph cannot reach, this report is everything a release build says, and a sentence
-    // without the pair of graphs cannot be followed. Both `graph` (where the walk stopped, with no
-    // enclosing graph) and `currGraph_` (the graph the caller is building) are printed because they
-    // are not the same object: the walk up is what separates them.
-    // Both readings are safe here: `nodeGraphOf(origin)` was answered earlier in this call,
-    // so the handle names a live draft by the time this line is reached, and the node id lives in
-    // the handle rather than in the draft.
+    // The reading names the three graphs the walk had in hand, by name and by id. Five of this
+    // function's six callers hand it an origin taken from a table -- the call's written captures
+    // (`builder_operators.cpp`), a function value's captures (`builder_calls.cpp`),
+    // `capturedUsesOf` (`builder_diagnostics.cpp`), name resolution (`builder.cpp`),
+    // `linkCaptureSites` -- and ask no enclosure question first; only the name-lookup path
+    // (`builder_expr.cpp`, `RestFunctionNeedsExpansion`) walks the ancestors itself. So when one of
+    // the five meets a value its graph cannot reach, this report is everything a release build
+    // says, and a sentence without the graphs cannot be followed. Printed:
+    //   * the origin's graph -- where the captured node really lives;
+    //   * the *capturing* graph, `capturingGraph`, which is the graph the port had to be made in
+    //     and is *not* `currGraph_` when the caller captured on a callee's behalf;
+    //   * `graph` -- where the walk stopped, the one with no enclosing graph;
+    // and `currGraph_` as well, because when it differs from `capturingGraph` it names the code
+    // that asked. The ids are what a graph is looked up by in a build that prints nothing else:
+    // a name repeats (`__gen_step__`, `__sync__`), an id does not.
+    // Every reading is safe here: `nodeGraphOf(origin)` was answered earlier in this call, so the
+    // handle names a live draft by the time this line is reached, and the node id lives in the
+    // handle rather than in the draft.
     GUARD(
         graph->outerGraph() != nullptr,
         std::format(
             "A captured value must belong to a graph that encloses the capturing one: node {} of "
-            "graph '{}' is captured into graph '{}', and the walk up from it reached '{}', which "
-            "has no enclosing graph.",
+            "graph '{}' (#{}) is captured into graph '{}' (#{}), and the walk up from it reached "
+            "'{}' (#{}), which has no enclosing graph. The builder stands in graph '{}' (#{}).",
             nodeIdOf(origin),
             nodeGraphOf(origin)->name(),
+            static_cast<uint32_t>(nodeGraphOf(origin)->graphId()),
+            capturingGraph->name(),
+            static_cast<uint32_t>(capturingGraph->graphId()),
+            graph->name(),
+            static_cast<uint32_t>(graph->graphId()),
             currGraph_ != nullptr ? currGraph_->name() : std::string("<no current graph>"),
-            graph->name()));
-    (void)captureInto(graph->outerGraph(), origin, name);
+            currGraph_ != nullptr ? static_cast<uint32_t>(currGraph_->graphId()) : 0u));
+    (void)captureInto(graph->outerGraph(), origin, name, capturingGraph);
 
     const bool isVar = isVariable(origin);
     // A name the program declares with `var` is a name even where it stands for a value and not a
