@@ -5835,3 +5835,57 @@ extract  :1677 CamelCostModel → :1663 `vm_->callFunction(cost_.getAs<::Functio
 ⇒ 这是今晚第三次遇到同一形态：**一个检查在「读不到」时沉默，于是缺席被当成通过。** 前两次是 `commitViolation` 跳过编辑前就越界的图、以及守卫在 Release 里静默。**这一次是 `--verify-ops`。**
 
 ⇒ 值得你考虑：**`Unknown` 时的放过是不是也该留一条可见的读数**（例如「本算子足迹未知，未参与比对」的计数），否则「检查通过」与「检查没做」在日志里长得一样。
+
+## 负责人回报（2026-11-20 09:35）：**S1-6 结案。**读数、机制、修法、以及被排除的那条假设，全部带坐标
+
+### 一、读数（三轮 CI + 本机，逐字）
+
+| 轮次 | Windows 80 次探针 | 判据 |
+|---|---|---|
+| `44614018464`（改前） | **39 次拒绝**（exit 3） | 48.8% |
+| `44619862864`（加初值后） | 27 次 | **p≈0.066 ⇒ 不是证据**，所以我没有把它算作修好 |
+| `44626641066`（捕获修法后） | **0 次** | 通过 |
+| `44630939267`（第二轮，独立） | **0 次** + 240 条确定性比对 0 条不一致 | 通过 |
+
+本机：空载 **13/60 = 22%** · 满载 28 核 **7/20 = 35%** · 本机 Windows 二进制 **0/160**。
+
+### 二、机制（守卫那句话自己把两张图报了出来）
+
+原先它只报一句 clause；按你 06:20 (a) 的要求改成报 name + id 之后，一次响就定了：
+
+```
+node 1 / 2 / 3 of graph 'three' (#47) is captured into graph '__g_63__' (#63)（另 4 次是 #70）
+向上走两级到 '__root__' (#1) 就没有外层
+```
+
+⇒ **程序合法，守卫判定正确，错的是那条捕获记录。** `builder_operators.cpp:4837` 把 `targetGraph` 当**直接调用**（注释原文 "A function called directly brings its captured variables with it"），而 `:3600` 会把它赋成**走值调用**的被调方；走值调用的被调方是在别处造的，它的捕获单元**跟着值本身传过去**，调用方拿到的是值、不是单元。
+
+⇒ 节点 1/2/3 在两种闭包上轮流出现，是因为被调方捕获表的次序随运行改变（地址序）—— 这也是你 08:25 第 6 条那条确定性任务的来源。
+
+### 三、修法（`beea20ad6`）
+
+`captures.cpp:43` 新增 `Builder::enclosesOrigin`，**问法照抄同一文件里 `addArgumentCaptures` 的既有问法**（3.3/3.5）；`builder_diagnostics.cpp:147` 包不住就跳过；`builder_operators.cpp:4925` 写回的捕获版本留 `nullptr` **占位**，掩码仍按同一批槽位解读。**守卫一个字没动，没有兜底，直接调用那一支一个分支都没变。**
+
+### 四、被排除的那条假设（我要记清楚，因为它是错的）
+
+「读了未初始化/悬空的内存」——**Linux 120 次（含 `MALLOC_PERTURB_` 0/85/170）与 ASan/UBSan 全绿，且节点句柄答的是真话。** 缺陷是**一条被错误做出的捕获**，不是一次错误的读。
+
+⇒ 而途中那处**真的** UB（`synced_`/`varied_` 未初始化，UBSan `load of value 190 … for type 'bool'`）是**另一件事**：`8c2d57ce9`/`631a9f6a3` 单独入主干，只把 39 降到 27（p≈0.066），**没有关掉这条守卫**。合并说明里写死了这句，防止后人把两者混为一谈。
+
+### 五、七项（修法后逐条量）
+
+`compile 2644/2628/0(known 16)` · `linear 869/865/0` · `opt 1620/1620/0 单跑` · `parse 126/126/0` · `para 104/104/0` · `tools 70/70/0` · `consistency 1292/1290/2`（两条红即 `runner.backend_matrix` 与 `new_values.sort_rebinding.graph`，**develop 在三端 CI 上本来也是这两条**）。
+
+### 六、我自己复核过三件（不采信它的自述）
+
+```
+`git ls-tree -r origin/develop | grep _s16`  ⇒ **0 个**（两个探针 plan 都已取下）
+`git diff origin/develop origin/lane-win-s1-6 -- src/compile/gir/`  ⇒ **空**（逐字节相同）
+`git grep -n 'outerGraph() != nullptr' origin/develop -- src/compile/gir/captures.cpp`  ⇒ `:101`
+```
+⇒ 三件都成立，`ea4b422e3` 如它所说**已失去意义**（`develop` 已整笔收下 `48156fcaa`）。
+
+### 七、还剩的两条（都不在 S1 里）
+
+1. **`Resolver::oper` 不读 `functionOperand`**（上一条回报里说的实现缺口）—— 它让 `rewrite:*` 这类「跑被给函数」的算子无处声明足迹。
+2. **你 10-26 的模块级断言 `a resource every function of this module uses` 对 `regions` 为假** —— 断言过宽，该收窄。
