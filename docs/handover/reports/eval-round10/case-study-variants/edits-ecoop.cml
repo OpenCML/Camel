@@ -7,7 +7,7 @@
 // nodes in, so renaming a value or swapping two independent declarations would silently change which
 // node a rewrite edits.
 import { flatten } from array
-import { Graph, Node, commit, erase, graphs_of, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
+import { Graph, Node, commit, erase, graphs_of, inline, inputs, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
 import { is_function } from types
 
 // What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
@@ -93,5 +93,159 @@ export func break_rate::<F>(p: F): F! sync {
             case null => p
             case w => swapped(p, r, w)
         }
+    }
+}
+
+// ---- two rewrites that add a printing call (the ECOOP paper's item (1)) ----
+//
+// `inline` is the edit that can make a node carrying an access: `replace`, `erase` and `add_constant`
+// cannot, and `inline` splices a body whose code prints. Every rewrite below splices one body in and
+// lets `commit` judge it; they differ in nothing but the place the body lands in, which is what makes
+// the pairs a reading of the checks rather than of the print.
+//
+// The place is what decides the ordering, and it is the only thing a pass can decide it with today:
+// `order` takes two nodes of the program the transaction was *opened* on, and the node `inline`
+// answers with names the transaction (modules/graph/txn.cpp, `orderKernel` -> `draftOf`), so a pass
+// cannot write an order edge to the node it just spliced. An `at` that is a statement of the block's
+// chain therefore orders the body by construction, and an `at` that is a pure node only picks the
+// region and leaves the body's ordering to `order`, which is exactly where the two cases part.
+
+/// The body every rewrite splices in: it prints, and it hands the printed string on.
+func announce(): string sync {
+    return println('announced')
+}
+
+/// The type text a node carries, or `-` where it has none.
+func type_text(n: Node): string {
+    return match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+}
+
+/// Whether the node runs the model update of the training step: `step` has one, and no other graph of
+/// the program has any, so this names the graph without reading how it is written.
+func is_update(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == 'nn:sgd'
+    }
+}
+
+/// Whether the node runs the gradient of the loss the training step takes: `step` has one, and no
+/// other graph of the program has any, so this names the graph without reading how it is written.
+func is_grad(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == 'autodiff:grad'
+    }
+}
+
+/// The training inputs of the entry function: the program's only constant of type `f32[4, 2]`, and it
+/// stands in no chain.
+func is_inputs(n: Node): bool {
+    return constant_of(n, 'f32[4, 2]')
+}
+
+/// The entry function's print of the model's weights: the one printing call whose operand is the
+/// tensor. Chosen by what it prints and not by where it stands, so the three prints of the program
+/// are not told apart by the order they were written in.
+func is_weight_print(n: Node): bool {
+    let ins = inputs(n)
+    return if !is_print(n) then false
+        else if len(ins) != 1 then false
+        else type_text(ins[0]) == 'f32[...]'
+}
+
+/// The printing call whose operand is a string the program already holds. `train.cml` has none of that
+/// shape; `train-step-sync.cml` has the one the training step writes.
+func is_literal_print(n: Node): bool {
+    let ins = inputs(n)
+    return if !is_print(n) then false
+        else if len(ins) != 1 then false
+        else is_constant(ins[0]) && type_text(ins[0]) == 'string'
+}
+
+/// Splices `announce` in at `at` and commits. Whether the print is ordered is `at`'s to say.
+func spliced_at::<F>(p: F, at: Node): F! sync {
+    let t = open(p)
+    inline(t, at, announce)
+    return commit(t)
+}
+
+/// 甲: a print added to `main` at a pure node, so the print is unordered against the three prints the
+/// entry function already has. `commit` is expected to refuse it (the conflict check,
+/// `RuntimeDiag::PassEffectOrder`).
+export func print_unordered::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_inputs(n))
+    return match at {
+        case null => p
+        case a => spliced_at(p, a)
+    }
+}
+
+/// 甲对照: the same body, the same print, spliced at a statement of the block's chain instead of at a
+/// pure node -- the statement hands its place over, so the print is ordered there and `commit` is
+/// expected to accept it. The statement it takes over is the entry function's print of the weights,
+/// which is why the edited program prints the announcement where that line was.
+export func print_ordered::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_weight_print(n))
+    return match at {
+        case null => p
+        case a => spliced_at(p, a)
+    }
+}
+
+/// 乙: a print added to `step` at the node of the model update. `step`'s type declares nothing, and the
+/// reading is not the one the paper predicted: `commit` refuses, but with `RuntimeDiag::PassEffectOrder`
+/// -- the pair it names is the call of the gradient value and the print. `loss_print` below is the same
+/// edit on a graph whose body is operations alone, and that one is refused by `PassEffectBeyondType`.
+export func step_print::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_update(n))
+    return match at {
+        case null => p
+        case a => spliced_at(p, a)
+    }
+}
+
+/// The same print in `step`, spliced at the node that takes the gradient instead. That node is read by
+/// a call statement, so the splice changes a node in place as well as making one (`changed` is not
+/// empty), and the reading is a different one: it is `commit_order` that answers, not `commit_effect`.
+export func step_print_at_grad::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_grad(n))
+    return match at {
+        case null => p
+        case a => spliced_at(p, a)
+    }
+}
+
+/// Whether the node runs the sum the loss takes of the squared error: `loss` has one, and no other
+/// graph of the program has any.
+func is_sum(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == 'tensor:sum'
+    }
+}
+
+/// The same print in `loss`, whose type declares nothing either but whose body is made of operations
+/// alone: no call whose footprint the analysis cannot name. This is the reading that separates "the
+/// effect check declined this graph" from "the effect check does not run on this build".
+export func loss_print::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_sum(n))
+    return match at {
+        case null => p
+        case a => spliced_at(p, a)
+    }
+}
+
+/// 乙对照: the same print added to `step`, in the program whose `step` prints and therefore declares
+/// the write to stdout, and spliced at a statement of `step`'s own chain so it takes that place and is
+/// ordered there. Expected to be accepted. Run it on `train-step-sync.cml`.
+export func step_print_ordered::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_literal_print(n))
+    return match at {
+        case null => p
+        case a => spliced_at(p, a)
     }
 }
