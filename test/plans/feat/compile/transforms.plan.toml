@@ -698,6 +698,34 @@ expect_stdout_contains = ["the real tree has no difference the list does not hol
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
+# The other direction of the same two files, and the check the C3 showcase's refusal asked for.
+#
+# The library is `transpose(split(reinterp<jvp>(f)))`, so one ruleset writes the operators the other
+# ruleset walks. A key `stdlib/rulesets/transpose.cml` files a law for and `stdlib/rulesets/jvp.cml`
+# does not is a step the composition takes in one direction only, and the refusal a user meets names
+# nothing -- `transforms: jvp has no forward transform for this function`. That is why the closure is
+# a check and why it is here rather than in a lane's notes.
+#
+# The unit is `head@arity`, the key the compiler derives from the operator
+# (`src/core/forward.cpp#ruleKeyOf`), and not the parameter-type list: a family may file several laws
+# under one key (`jvp.cml` files four for `float(x)`), and what the walk asks is whether the key has a
+# law at all. `scripts/vjp-parity.mjs --closure` is the reading; `test/tools/check-transforms-closure.mjs`
+# is the two readings that say it bites -- the real tree answers `0 missing`, and a `fake_closure_op_t`
+# backward law added to a copy of the two rulesets, with no forward twin, is reported by its key with
+# exit 1. A checker that answered `0 missing` for the second reading would be green on the day
+# someone files a backward law alone.
+[[tests]]
+name = "vjp_api.the_forward_half_closes_over_the_backward_half"
+desc = "Every operator `stdlib/rulesets/transpose.cml` files a law for has a law in `stdlib/rulesets/jvp.cml`, read as the `head@arity` key the compiler derives from the operator: `scripts/vjp-parity.mjs --closure` prints the two counts and `0 missing` on this tree, and `test/tools/check-transforms-closure.mjs` pins two readings -- the real tree is closed, and a `fake_closure_op_t` backward law appended to a copy of the two rulesets, with no forward twin beside it, is reported by its key with exit 1. The comparison is the one the composition `transpose(split(reinterp<jvp>(f)))` needs: one half writes the operators the other walks, so a key with a backward law and no forward law is a step that can only be taken one way, and the run-time refusal it produces names no operator."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-transforms-closure.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["every key the backward half files has a forward law", "a backward law with no forward twin is reported by its key", "PASS the closure check answers the two readings it exists for"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
 # The comparison the author named: one `f` with two parameters, and the library's gradient beside
 # the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
 # `df/dy = x*x = 9`, and both numbers are printed -- `library` first, `analytic` under it -- so the
