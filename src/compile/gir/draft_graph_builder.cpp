@@ -90,8 +90,12 @@ void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
     // record yet: the readers that need the declaration ask for it in a later change, and the
     // replacement below keeps its meaning exactly (`GraphDraft::declaredFuncType`).
     draft().setDeclaredFuncType(funcType);
-    if (auto *open = funcType->asOpen()) {
-        open->setExitType(exitType);
+    // An open signature is filled where it stands: it is the function's identity while the body is
+    // built, and a recursive function refers to its own type before this result is known. The draft
+    // owns that write because the journal has to record the *content* it replaces -- the pointer
+    // does not move, so a record of the pointer would put nothing back (author, 2026-11-19).
+    if (funcType->isOpen()) {
+        draft().setOpenExitType(exitType);
     } else {
         draft().setFuncType(funcType->withExitType(exitType));
     }
@@ -100,10 +104,12 @@ void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
 void DraftGraphBuilder::setResources(const camel::core::sem::ResourceSignature &resources) {
     camel::core::type::FunctionType *funcType = draft().funcType();
     GUARD(funcType != nullptr, "A graph under construction has a function type.");
-    if (auto *open = funcType->asOpen()) {
+    if (funcType->isOpen()) {
         // The declaration's own signature, which no other function shares: what a function
-        // promises about resources is part of its type, so it is written where the type is.
-        open->setResources(resources);
+        // promises about resources is part of its type, so it is written where the type is -- and
+        // through the draft, which records what the signature held before the write so that a
+        // rollback can put it back (author, 2026-11-19).
+        draft().setOpenResources(resources);
     } else {
         draft().setFuncType(funcType->withResources(resources));
     }
