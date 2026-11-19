@@ -3,10 +3,11 @@
 **测的是哪一页**：`docs/handover/questions/2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md`
 （页问：`develop` 上的十六条引用指向一份只活在作者分支上的设计页，检查该不该按分支解析？）
 
-**这一页的结论（一句话）**：页里那个数（16）今天已经变成 **23**（同一个目标页），整条检查报 **27** 条
-unverified citation；页的**结构性事实**仍然成立并且只有一条路径可走：
+**这一页的结论（一句话）**：页里那个数（16）今天已经变成 **23**（同一个目标页，另有 2 条是同一目标的折行），
+整条检查报 **27** 条 unverified citation；页的**结构性事实**仍然成立：
 `docs/design/graph-editing/README.cn.md` 在 `develop` 的树里不存在、在 `origin/fsh-dev` 上存在
-（`git cat-file -e` 直接验过）。另有 4 条与「分支布局」无关、**是真的坏引用**，它们不该被那条裁定顺带赦免。
+（`git cat-file -e` 直接验过）。另有 **2** 条与「分支布局」无关（一条引的页两个分支上都没有，
+一条是行号式的引用），它们不该被那条裁定顺带赦免。
 
 ## 四样东西
 
@@ -29,7 +30,7 @@ exit=1
 ## 2. 27 条按目标分
 
 ```
-$ node scripts/check-doc-links.mjs --citations 2>&1 | Set-Content D:\Temp\lane-ledger-citations.txt
+$ $l = node scripts/check-doc-links.mjs --citations 2>&1
 $ ($l | Select-String "graph-editing/README.cn.md").Count
 23          ← 指向 docs/design/graph-editing/README.cn.md
 $ $l | Select-String -NotMatch "graph-editing/README.cn.md"
