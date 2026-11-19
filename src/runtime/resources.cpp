@@ -1883,7 +1883,8 @@ std::optional<CommitViolation> orderIncomplete(
 
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
-    std::span<const gc_node_ref_t> changed, const GCGraph *before) {
+    std::span<const gc_node_ref_t> changed, const GCGraph *before,
+    const Program *beforeProgram) {
     // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
     // table decides which of the six checks a commit is asked, and what decides that is which
     // edit the draft used -- not "did it make a node". A draft that made no node and changed
@@ -1919,9 +1920,18 @@ std::optional<CommitViolation> commitViolation(
     // went unreported, and the skip looked like an answer.
     std::vector<UnorderedPair> alreadyUnordered;
     if (!changed.empty() && before != nullptr) {
-        const NodeAccessTable beforeTable(*before, resolver);
+        // The graph it started from, read in the program that published it: a call's footprint is the
+        // callee's declared clause, and this commit is publishing new declarations for the callees it
+        // rewrote. Reading `before` against them would measure the old body through a promise it was
+        // never published under, and report the graph as beyond a type it satisfied (the measurement
+        // constraint of the 2026-11-18 page; `tiles` widens a callee and its caller in one commit).
+        const Program &beforeIn = beforeProgram != nullptr ? *beforeProgram : program;
+        FootprintWalk beforeWalk(beforeIn, core::OperatorTable::instance().declarationEpoch());
+        Resolver beforeResolver(
+            beforeIn, [&beforeWalk](const GCGraph *callee) { return beforeWalk.run(callee); });
+        const NodeAccessTable beforeTable(*before, beforeResolver);
         if (const auto beforeBeyond = effectBeyondDeclaration(
-                program, *before, walk, beforeTable, EffectReader::BeforeTheEdit)) {
+                beforeIn, *before, beforeWalk, beforeTable, EffectReader::BeforeTheEdit)) {
             throw GraphBeforeEditBeyondType(std::format(
                 "the graph '{}' a commit was asked to edit already reached past the type its own "
                 "signature declares, before the edit: {}",

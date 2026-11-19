@@ -2,7 +2,7 @@
 
 **日期**：2026-11-20
 **提出者**：车道 `lane-edit-beyond-type`（基线 `c75611862`）
-**状态**：待裁定（本页写死一条默认）
+**状态**：待作者过目（本线已落地 §7.3 的修正：同一条规则，读数按自己的程序版本量 —— 六条红全消）
 **触发**：作者 2026-11-20 04:50 下发（`0ea4dc518`）第 2 条 P\* 必需项：「编辑前的图若已超出它的类型，提交就不问编辑后的效应（`commitViolation` 那一支）……那是编译器缺陷，**改成内部错误报出**，不再跳过。」
 
 ## 1. 问句
@@ -17,6 +17,8 @@
 ⇒ 除这 6 条外，每一个计数相同；两条既有红（consistency 的 runner.backend_matrix、
   new_values.sort_rebinding.graph）在两次运行里都在。
 ```
+
+**⇒ 这两行是 §7.3 修正之前的状态。修正之后（§7.4）是 `7179/7143/2/9/known 25`，六条全绿。**
 
 六条（三族只有两族）：
 
@@ -73,100 +75,81 @@ nothing, has an effect outside the program: … (name=RuntimeDiag::PassInternalE
    gate 于是报「RED FOR ANOTHER REASON」（5 条）与「NOT RECORDED」（4 条）。
 ```
 
-**一句**：①是**故意**造的非法图（测试装置的问题），②是**真缺陷但生产者不是前端**（tiles 那一遍的发布顺序）。
+**一句（已按 §7 更正）**：两条其实都**不是**越界 —— 都是**我的读数**把两个程序版本混在一起量出来的假红。
+①的图在它自己的程序里合法；②的 `tiles` 那一遍**把型加宽了**（见 §7.1 的探针）。§4 与 §5 的初版判断留在这里
+只作对照，结论以 §7 为准。
 
-## 5. 两条路与代价
+## 5. 两条路与代价（初版，已被 §7 作废）
 
-- **甲（默认）：规则照下发保留，修生产者。** ②由 tiles 车道按体加宽（同一问题上已有页）；①把测试装置换成不经过 commit 的形式，或把用例的期望改成新诊断并另加一条覆盖 pass 边界的用例。
-  代价：两条车道各有一笔活；在它们落地之前，`feat/compile` 与 `feat/modules` 各带红（1 + 5），七计划读数不是基线。
-- **乙：收窄到只问「前端建的那张图」。** 代价：需要一张图的「谁建的」标记（今天没有这样的读数），且 `__g_49__` 那种遍造图越界就继续不报——正是下发要堵的那类；`bounds_flip` 那条仍会红（它改的是 `main`）。
+- **甲：规则照下发保留，修生产者。** 初版说 ② 由 tiles 车道按体加宽 —— **不成立**：它已经加宽了。
+- **乙：收窄到只问「前端建的那张图」。** 代价：需要一张图的「谁建的」标记（今天没有这样的读数），且遍造的图越界就继续不报 —— 正是下发要堵的那类。
 - **丙：退回跳过。** 作者已否（下发明写「不再跳过」），不列为候选。
 
-## 6. 默认（写死：甲）
+## 6. 结论
 
-按下发保留这一支：它把一直静默跳过的越界显形，六条红是**读数本身**，不是抖动。
-在生产者的修复到位之前，`feat/compile :: pass_boundary.orphan_effect_refused` 与
-`feat/modules/tiles` 五条按红记账；本页是它们的依据。
+按下发保留这一支（不跳过、报内部错误），**并且把读数放在它自己的程序版本里量**（§7.4）：
+这样今天**零新增红**，六条全绿，规则仍然有牙。
 
-拆法（2026-11-20 协调人裁定，按两类分别处理）：①那条**拆成两条**——一条仍测 pass 边界
-（换一个不越界的装置），一条测「越界图被拒」；②tiles 那一族**先修生产者再合**，位置与建议修法见 §7。
+初版曾按「两类分别处理」排出「①拆成两条用例、②先修 tiles 再合」这两步 —— **两步都不需要了**：
+①继续测 pass 边界并且绿；②tiles 那一遍是清白的。修正一处之后全量
+`7179/7143/2/9/known 25` 与**无行为改动的探针运行逐项相同**，2 条红就是两条既有 consistency 红。
 
-## 7. `native_parallel.cml` 那五条：体在哪一步发、型在哪一步写（纯读代码，基线 `462587e7a`）
+## 7. 探针的结果，以及初版猜错的地方（`462587e7a` 之后）
 
-### 7.1 是哪些图、越的是哪一处
+### 7.1 四行探针（跑完删掉，仓库里不留改动）
 
-`__g_49__` 是**前端**为 `test/cases/modules/tiles/native_parallel.cml:8` 的 lambda
-（`(i: int): float => float(sum(chain(x)))`）合成的图，不是遍造的（名字形状见
-`src/compile/gir/builder_helpers.h:400`）。诊断点的 node 2 是「a call of 'chain'」，而
-`chain` 正是 `:2-5` 那个纯张量函数 —— 也就是 tiles 遍要搬去设备的那一个。
-⇒ **`__g_49__` 自己的算子一个都没改，越界是「被调方的体变大、调用方的型没跟上」。**
-
-### 7.2 时间线，逐处行号
+在 `region_outline.cpp` 的加宽循环四个 `continue` 前各写一行到 `/tmp/camel-tiles-widen-probe.log`
+（不写 stdout，免得动任何用例的期望），只跑 `test/plans/feat/modules/tiles.plan.toml`：
 
 ```
-体被改、被发   modules/tiles/src/region_outline.cpp:972  declareBodiesOverDrafts(session)
-               modules/tiles/src/region_outline.cpp:986  return session.commit();   ← 一次 commit
-型被写         modules/tiles/src/region_outline.cpp:350-352  session.edit(graph).edit()
-                     .setFuncType(type->withResources(clause));
-               量的是 session.prepared()（:309）＝该会话要发布的、已编码的副本
-               （src/runtime/draft_session.cpp:1903-1914，裁定 f61196246 的落点）
-晚一批的那处   modules/tiles/src/region_outline.cpp:989  settleDeclarations
-               由 region_pass.cpp:82 / region_test_pass.cpp:404 在**下一次** commit 之后调，
-               它的定点是 for (;;)（:1003）
+1423 行，出口计数：
+  620  exit2-generic            619  exit3-covered            184  widened
+    0  exit1-not-in-closure       0  exit1b-no-type            0  exit4-widened-not-cover
 ```
 
-⇒ 两次加宽都对，但**中间隔着至少一次 commit**：`__g_49__` 是在「`chain` 已经加宽、它自己还没
-加宽」的那一次 commit 里被发布出去的 —— 这就是 `2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`
-记的「先发体、后补型」，只是那一页的修法（`f61196246`，让遍在 commit 前读 `prepared()`）只覆盖到
-它当时量到的那些图。
-
-### 7.3 `declareBodiesOverDrafts` 为什么漏了它：四个出口，各带行号
-
-`region_outline.cpp:325-353` 的循环对每张图做四件事，任一为真就**跳过这张图**：
+`__g_49__` 自己的行（逐字，不同用例各一份）：
 
 ```
-① :330-333  staged->graph(id) == nullptr  这张图不在本次编码的闭包里
-            （collectCommitClosure，draft_session.cpp:1361：从 runtimeRoot_ 沿 refs() 走，
-             made 由 :1403-1405 补种；refs() 的五个来源见 graph.cpp:2751-2789，
-             静态函数值算 kGraphRefStatic，算子操作数里的图不算）
-② :339-341  型是 Generic（"promises nothing"）
-③ :343-345  covers(declared, body) 已经成立 ⇒ 无事可做
-④ :346-349  widened 出来的 clause 仍不盖住 body ⇒ 留下，交给 commit 拒
+round=0 exit=widened graph=__g_49__ declared=[pure] body=[uses any unknown]
+round=0 exit=widened graph=__g_49__ declared=[pure] body=[uses var tiles::driver, any unknown, any foreign]
+round=1 exit=exit3-covered graph=__g_49__ declared=[uses var tiles::driver, any unknown, any foreign] …
 ```
 
-两处**范围/深度**限制：`:308` 的定点只跑 **4 轮**；`settleDeclarations` 无上限但晚一批。
+⇒ **遍把型加宽了，而且加宽到覆盖住。** 初版 §7.3 的四个出口假设里 **出口①一次都没发生**，
+所以初版 §7.4 的「出口①不许跳过 + 4 轮换成到不动为止」**不是这条红的修法**（这里留档，免得下一个人再走一遍）。
 
-`covers` 只有两道关：名字+模式（`src/core/resource_semantics.cpp:443-451`）与 **`external` 标志**
-（`:469-471`：`source.external && !target.external` 直接 false）。`tiles:driver` 是
-`externalAmbient`（`modules/tiles/src/module.cpp:940-943`）⇒ 体的 footprint `external=true`，
-而「什么都不声明」的型 `external=false` ⇒ **`external` 是硬的一关**，名字对不上是次要的。
-`widened` 会把 `external` 带过去（`resources.cpp:1424` + `sem::ambientCarriesExternal`），
-所以「能加宽」是有解的那一档。
+### 7.2 真正的原因：一次读数混了两个程序版本（是读数错，不是图错）
 
-### 7.4 该修哪一处（建议，最小）
+`commitViolation` 拿 `program`（**这次要发布的那个**）去量 `before`（**上一版的图**）。而一次调用的足迹是按
+**被调方声明的 clause** 读的 —— 本次 commit 恰好正在改写这些声明。`tiles` 在同一次 commit 里既加宽 `chain`
+（`chain` 的体里多了设备提交），又把调用它的 `__g_49__` 加宽：用**新版**的 `chain` 去量**旧版**的 `__g_49__`，
+它的体就凭空多出 `tiles::driver`，于是旧的 `pure` 型「不盖住」⇒ 报内部错误。**那张图在自己程序里一直是合法的。**
 
-把「被调方变大 ⇒ 调用方**当场**跟上」做在**发布它的那一次 commit 之前**：
+这正是 `2026-11-18-the-tiles-pass-publishes-a-body-before-its-type` §二.2 立下的那条约束
+（「任何『拿草稿 + 现在的程序去量』的读数，答的是没人有的那个程序」）的**反面**：拿**旧图 + 新程序**去量，
+得到的是比真实更大的足迹。约束是对称的：**一次读数，一个程序版本。**
+
+### 7.3 修法（已落地）
 
 ```
-① region_outline.cpp:306 declareBodiesOverDrafts 的定点不许因「图不在本次编码闭包里」而跳过
-   （出口①）——作者在 :313-317 已经为「本遍造的图」补种过一次同样的洞，前端造的图是同一条理由；
-② :308 的 4 轮换成「到不动为止」，与 settleDeclarations:1003 的 for(;;) 一致。
+include/camel/runtime/resources.h:434   commitViolation(..., const Program *beforeProgram = nullptr)
+src/runtime/resources.cpp:1921-1940     量 before 用它自己的程序版本（自己的 walk / resolver / table）
+src/runtime/draft_session.cpp:2013      调用处传 program_（`graph` 正是它名下的那一版）
 ```
 
-不改检查、不给已发布的图开设型入口（那正是 `2026-11-18` 页 §四 否掉的那条）。
+`beforeProgram` 为 `nullptr` 时读 `program` —— 两个程序是同一个对象的那种调用者，这就是完整答案。
+**规则本身一个字没改**：还是「编辑前的图越界 ⇒ 内部错误」，只是终于在自己的程序里量它。
 
-### 7.5 `native_parallel.cml` 会不会因此变合法 —— **会（5 条转绿）**，附条件
+### 7.4 读数（全量，Release，主机，`-Jobs 8`）
 
-**不是「仍红但理由换成真越界」**，条件是 7.3 的出口①（或出口③+①）就是它红的原因。理由：
-越界效应是**遍自己插的设备提交**（upload / exec / download 写 ambient `tiles:driver`），
-`widened` + `ambientCarriesExternal` 写得出这条 clause；而这条链上的型全是机器推的
-（`sync` 体、lambda 的 `nothing`），没有作者手写的、比体更窄的 clause，所以
-`f61196246` 的 ① 「这一遍没有改承诺」成立，加宽是有解的。
+```
+探针（无行为改动）  total 7179, pass 7143, fail 2, skip 9, known 25
+修正后              total 7179, pass 7143, fail 2, skip 9, known 25   ← 逐项相同
+六条新红：全部转绿（pass_boundary.orphan_effect_refused + tiles 五条）
+两条红：consistency 的 runner.backend_matrix、new_values.sort_rebinding.graph（既有，与本次无关）
+```
 
-唯一会让它变成「仍红而理由是真越界」的情形：出口②（型是 `Generic`）或出口④
-（`widened` 不盖住体）为真 —— 那说明这张图的型**本来就写不出**它要的承诺，是第二轮问题
-（要给 lambda 一个能写 clause 的型），不是加宽能修的。
+### 7.5 `native_parallel.cml` 会不会因为修 tiles 变合法 —— 这个问题已经不需要答
 
-**这一步要一次读数钉死**（占主机，按规矩报等位）：在 `region_outline.cpp:330/339/343/346`
-四个 `continue` 前各打一行临时探针（图名 + 出口号），只跑
-`test/plans/feat/modules/tiles.plan.toml` 的五条，五行之内就知道是哪一个出口。
+它**本来就合法**；`tiles` 那一遍**已经**在建图时把 `uses var tiles::driver` 写进了 `__g_49__` 的型。
+初版 §7.5 里「会变合法（5 条转绿）」这个答案方向对，但归因错了：不是「修了才合法」，是**一直合法**。

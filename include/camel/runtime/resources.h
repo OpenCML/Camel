@@ -431,9 +431,20 @@ struct CommitViolation {
 /// (`GraphBeforeEditBeyondType`, thrown from here) instead of answering the edit's effect question
 /// out of a graph nobody vouches for. Asking the edited graph anyway is not the answer either: what
 /// the edit added would be measured against a declaration already known to be wrong.
+///
+/// `beforeProgram` is the program `before` belongs to -- the one that published it -- and the
+/// reading of `before` is taken there. One reading, one program version: a call's footprint is read
+/// through the callee's *declared* clause, so an old graph read against the program this commit is
+/// publishing measures a callee that grew in this very commit and reports a body the graph never
+/// had. That is the measurement constraint of the 2026-11-18 page (`f61196246`: "a draft plus the
+/// program as it is now, read together, answers about a program nobody has"), and the one commit that
+/// states a widened type is exactly where it bites: `tiles` widens `chain` and its caller in the same
+/// commit, and the caller's old version is lawful in the old program and beyond in the new one. A
+/// caller whose two programs are the same object passes nothing, which is the whole answer there.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
-    std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr);
+    std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
+    const Program *beforeProgram = nullptr);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
 /// effect outside the program). This is the first half of the tier of the ruling of 2026-11-18; the
