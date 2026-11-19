@@ -5694,3 +5694,45 @@ lane-front-ip-del  cfc5f74ea  ⇒  tag parked/lane-front-ip-del  （已推 origi
 1. `grad`/`vjp`/`jvp` 在库里是 `#macro`。函数体里出现变换调用、且操作数是**代码已知**的函数（具名函数、捕获里不含函数的 lambda）时，在建图之后（`std::macro` 阶段）把它就地展开成变换后的代码。先用 `std::macro std::nvm` 跑一遍四条用例（`nest_named`、`nest_lambda`、`hessian`、`confusion`），看展开后外层 `jvp` 是否已能 lift；
 2. 若 `std::macro` 今天不展开嵌在体里的变换调用，就补上这一步——外层变换遇到"操作数代码已知的变换节点"时先展开再 lift，不拒绝；
 3. 验收不变：`x·x`→2.0、`x³`→12、Hessian、四后端一致；`compositions.jvp_vjp_f` 的已知失败随之消掉。扰动混淆（`confusion`）按计划用内层写法验收。
+
+## 负责人记录（2026-11-20 08:50）：S1-6 判据一已过；一处「让目标变绿同时让别处变红」被量出来了
+
+### 一、S1-6：判据一 **0/80**（改前 39/80）
+
+```
+plain probe fails : 0 / 80      ← 改前 39/80，加初值后 27/80
+poison probe fails: 0
+program.cpp:68 UBSan: 0 条（初值那笔没回退）
+win-x64 汇总: total 9874, pass 9785, fail 21, skip 23, known 45
+⇒ **那 21 条与 develop 自己那一轮（`44605480914`）的 21 条是同一张名单**，`stream.generators_shapes_consumed` 不在其中
+```
+⇒ 真因（`beea20ad6`）：`builder_operators.cpp:4837` 把 `targetGraph` 当**直接调用**，而 `:3600` 会把它赋成**值调用**的被调方 ⇒ 走值调用的被调方，捕获单元跟着值走，调用方不该再捕获一次。修法用 `addArgumentCaptures` 的**既有问法**推到这一路，没碰守卫、没加兜底。
+
+### 二、你 06:20 (a) 要的「按 id 报两张图」已拆成独立一笔 `ea4b422e3`
+
+只改句子与解释它的注释（2 files +46/−20），**不含探针 plan**，基于 `origin/develop` 可独立合。`compile 2645/2629/0/known 16`，RUN_EXIT=0。
+
+### 三、★ 一处我必须自己认的：`b307cebea` 让 `compile` 从 2604/27 变 2628/0，同时把 `docs.links.citations` 从 3 处变 6 处
+
+`git grep 'stdlib/[a-z/]*\.cml:[0-9]' origin/develop -- 'test/**/*.cml'` 在 `631a9f6a3` 上是 **6 处 / 5 文件**：
+
+```
+nested_grad_through_a_binding.cml:13   stdlib/vjp.cml:182        ← 合并前就有
+hessian_of_a_quadratic.cml:30          stdlib/vjp.cml:182        ← 合并前就有
+nested_grad_min.cml:22                 stdlib/vjp.cml:182        ← 合并前就有
+rule_constant_agrees.cml:3             stdlib/rulesets/jvp.cml:369        ← b307cebea 带进来的
+rule_constant_agrees.cml:14            stdlib/rulesets/transpose.cml:613  ← b307cebea 带进来的
+rule_writes_a_constant.cml:17          stdlib/rulesets/transpose.cml:613  ← b307cebea 带进来的
+```
+
+⇒ **严格说它不是「新增红」**（`docs.links.citations` 本来就在三端共同红里），**但它让一处已有的红多坏了三处**。而我在合并 `b307cebea` 时的判据只有 `compile`/`transforms` 两项，**没有跑 `docs_links`**。
+
+⇒ **教训：「一个改动让目标变绿时，必须同时问它让谁变红」——我这一次问的是计划，不是全部红名单。** 已派 `lane-nested-transforms` 逐处改成「引符号不引行号」，并要求它**读出那几行落在哪个符号上再定**，不许照抄猜测（另一条车道发现这四处时**拒绝替它猜**，理由是对的：那几个行号指向法则的文档注释散文）。
+
+### 四、`sum<0,false>` 那条线索已完全关闭
+
+两条新用例（`sum_axis_lane_derivative` / `sum_axis_in_a_training_step`）把解析值钉住，其中训练步那条**四个数互不相同**（`78.0 / 102.0 / 126.0 / 24.0`），**故意让「把一个标量铺满整个张量」那种错法无法蒙过**。
+
+⇒ 而本线能拿出的最强证据不是单算子求导，是 `feat/showcase_s2` **10/10**，含 `train.twelve_rounds_library_curve_is_the_engine_curve`：**十二轮真实训练，库的梯度曲线与引擎的逐轮相同**。
+
+⇒ 另开一页记录那处**类型拒绝**（`vjp` 一个写明降秩的函数停在 `ExitTypeMismatch`，`split.cpp#splitHalvesWith` 用 `exitPair->typeAt(1)` 当反向半边的声明出口）：`docs/handover/questions/2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md`。默认建议是**法则侧承担，不放宽 split 的检查**（放宽就是把拒绝换成「带声明秩的开秩值」）。
