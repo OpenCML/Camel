@@ -158,24 +158,51 @@ expect_stdout_contains = ["pullback f32  ct=1 sum -> 20.0", "pullback float ct=1
 timeout_ms = 30000
 [[tests]]
 name = "compositions.nested_grad_min"
-desc = "The nest of `grad` in `grad` at its smallest, through the library's transform: f(x)=x*x, f'(x)=2x, f''(x)=2, so the second derivative at 2 would be 2.0. It is refused, and the weight is the reason and not the nest: `grad(f)` answers a function whose weight is its first ordinary parameter (`GradientOf<F>`), so the outer `grad` meets a function with no `with` parameter and `first_with_as_param` refuses it -- design principles 9.9 refuses `grad` of a function with no `with` parameter at compile time, with the reason. The sentence is pinned so the wall cannot move silently; the day a ruling makes the nest answer, this entry turns red and the number is 2.0. Brought here from `880e83417`, where it was written; the reading was taken again on this branch and the two sentences are unchanged, which is what says the transposition this lane hoisted is not what refuses the nest."
-kind = "negative"
+desc = "The nest of `grad` in `grad` at its smallest, through the library's transform: f(x)=x*x, f'(x)=2x, f''(x)=2, so the second derivative at 2 is 2.0. The call form is the restored one: `grad(f)` keeps the weight in the `with` list (`GradientOf<F>`), so the outer `grad` finds the first `with` parameter the inner one differentiated and the nest is the same composition twice (design principles 9.9). That form is reached now -- the writing typechecks and builds, where it used to be refused by `first_with_as_param` with 'this function has no `with` parameter: there is no first one to move' -- and the reading is one wall further on: `jvp` is asked to lift the inner answer, and the inner answer is a function value computed at run time (`split(jvp(f))<...ws>(...xs)`), which `jvp` lifts only when the callee is evident. So the number stays pinned while the mark is on: 2.0, not 4.0 (the first derivative read twice) and not 0.0 (a cut that lost the first pass)."
+known_fail = ["nvm", "fvm", "jit", "prl"]
+known_fail_owner = "lane-grad-form (2026-11-20): it wrote this registration when the call form was restored, and it is done when the mark comes off"
+known_fail_reason = "the call form is restored and the nest builds; what refuses is the transform layer one wall deeper -- `jvp` has no forward transform for a function value computed at run time, which is the same wall `vmap(jvp(pullback))` in this plan already names (measured there 2026-11-05, `be43289aa`/`f0dfafba6`: `jvp` lifts a callee only when it is evident)"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Read 2026-11-20 on the tree build of lane-grad-form: `stdlib/vjp.cml:182` reports it, identical on nvm, fvm, jit and prl, and it is `split(jvp(f))`'s own line -- the value `jvp` is asked to lift is the function the inner `grad` answered, which is computed at run time. The entry used to pin the `first_with_as_param` sentence; that sentence is gone from this writing (the weight is answered in the `with` list again), so the pin moved to this one. The target number is the arithmetic and not a reading: f''(2) = 2 for x*x, and the first derivative beside it, f'(2) = 4, is the number a nest that differentiated once would print. What this run reads is the sentence, not either number."
+kind = "behavior"
 case = "../../../cases/transforms/compositions/nested_grad_min.cml"
-args = ["${case}", "std::nvm"]
-backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float)", "this function has no `with` parameter: there is no first one to move"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["nested_grad_min second=2.0"]
+timeout_ms = 30000
 
 [[tests]]
 name = "compositions.nested_grad_through_a_binding"
-desc = "The same nest written through two bindings (`let inner = grad(square)`, `let outer = grad(inner)`): refused by the same rule and with the same sentence as the one-expression form, at the call that takes `grad` of a value. Two writings, one wall -- the inner gradient's weight is an ordinary parameter, so there is no `with` parameter for the outer one to move (design principles 9.9)."
-kind = "negative"
+desc = "The same nest written through two bindings (`let inner = grad(cube)`, `let outer = grad(inner)`): f(x)=x*x*x, f'(x)=3x^2, f''(x)=6x, so the second derivative at 2 is 12.0. Two writings, one reading -- the inner gradient's weight is a `with` value, so the outer `grad` differentiates it the way it differentiates any `with` parameter (design principles 9.9). The form is reached and the wall is the transform layer's, exactly as in `compositions.nested_grad_min`: the inner answer is a function value computed at run time and `jvp` lifts only an evident callee. 12.0 is pinned and not 6.0, which is the first derivative read once and the answer a nest that differentiated its subject only once would print."
+known_fail = ["nvm", "fvm", "jit", "prl"]
+known_fail_owner = "lane-grad-form (2026-11-20): it wrote this registration when the call form was restored, and it is done when the mark comes off"
+known_fail_reason = "as `compositions.nested_grad_min`: the call form is restored, and `jvp` cannot lift the inner answer because it is a function value computed at run time"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Read 2026-11-20, identical on the four back ends. This pair's point is that the two bindings change nothing about the refusal or the number: the answer is a function value whether it is written inline or behind a `let`, which is why the same sentence covers both entries."
+kind = "behavior"
 case = "../../../cases/transforms/compositions/nested_grad_through_a_binding.cml"
-args = ["${case}", "std::nvm"]
-backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float)", "this function has no `with` parameter: there is no first one to move"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["nested_grad_through_a_binding second=12.0"]
+timeout_ms = 30000
+
+[[tests]]
+name = "compositions.hessian_of_a_quadratic"
+desc = "A Hessian element by element, through the library's `grad` nested: f(a,b) = a^2 + 3ab + 2b^2 has df/da = 2a + 3b and df/db = 3a + 4b, so the matrix is [[2, 3], [3, 4]]. `grad` differentiates the first `with` parameter, so the pure second derivatives are read on two declarations of the same body, `<a, b>` and `<b, a>`, and each mixed member on a function of the order the step after it needs whose body is one first derivative already computed; nothing here is a derivative written by hand. The last line pins the symmetry as a number: 0.0, not 'close'. An order lost between the two `with` values -- the weight moved onto the ordinary list -- puts 4 in one mixed member and 2 in the other, which is what this entry is here to catch. The four readings are pinned and not reached yet: every one of them is a nest, and a nest meets `jvp`'s inability to lift a function value computed at run time (the two entries above name the same wall), so the mark stays until that is answered. The five numbers are the target, and they are the same five on all four back ends."
+known_fail = ["nvm", "fvm", "jit", "prl"]
+known_fail_owner = "lane-grad-form (2026-11-20): it wrote this registration with the call form's restore, and it is done when the mark comes off"
+known_fail_reason = "every reading here is a nest of the library's `grad`, so each one is a `jvp` over a function value computed at run time -- the wall `compositions.nested_grad_min` names. Nothing in this entry is blocked by the declaration or by the writing: with `grad(square)<2.0>()` first-order readings on the same build are green."
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Read 2026-11-20 on the four back ends: the case stops at its first nested call and reports `stdlib/vjp.cml:182`'s sentence, so no member of the matrix is read yet. The four numbers are pinned anyway, because the day the mark comes off they are what a Hessian is: the same five on nvm, fvm, jit and prl, and `h_ab - h_ba` exactly 0.0."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/hessian_of_a_quadratic.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["hessian h_aa=2.0", "hessian h_bb=4.0", "hessian h_ab=3.0", "hessian h_ba=3.0", "hessian h_ab_minus_h_ba=0.0"]
+timeout_ms = 30000

@@ -197,39 +197,47 @@ export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>
 export type Gradient<F> =
     <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
 
-/// The same derivative with the weight on the ordinary list: the shape the library's `grad` has,
-/// and the one difference between it and `Gradient<F>`. A reverse transform differentiates the
-/// ordinary parameters (design principles 9.9), so the library moves the first `with` parameter onto
-/// that list -- the signature reinterpretation `first_with_as_param`, which reclassifies one port and
-/// copies the body -- and its gradient is a function of the weight first, then `F`'s parameters:
-/// `grad(weighted)(3.0, 2.0)` for `<x: float> (y: float) => float`.
+/// The same derivative, and the name the library's `grad` answers in: the weight stays a `with`
+/// argument and the parameters are the differentiated function's, so a call writes the weight where
+/// the differentiated function reads it -- `grad(loss)<layer, y>(X)` for a loss declared
+/// `with <layer: Linear, y: f32[?, ?]> func loss(X)`.
 ///
-/// Written out where `Gradient<F>` writes its own shape, out of the same pieces: the case binds the
-/// weight's type and `Tangent` of it is what a gradient of it is. Both names exist because the two
-/// answers are two types: a `with` argument is written in the angle brackets of a call, an ordinary
-/// one in its parentheses, and only one of the two spellings reaches each.
+/// It is one shape with `Gradient<F>` above, written out of the same three pieces, and the two
+/// aliases denote one type: this one exists because it is the name `grad`'s own declaration spells
+/// (`stdlib/vjp.cml#grad`). Two names for one type is a spelling a reader has to learn, and the
+/// merge into one is the rework the 2026-11-19 review already asks for (R1); it is not done here,
+/// where the subject is the call form.
 ///
-/// **The rest of the `with` list stays**, and that is the one thing this alias says that
-/// `Gradient<F>` does not: a function with a second `with` value -- the data `y` beside the weight
-/// in `examples/case-study/train.cml`, which is the port the derivative is *not* taken of -- is
-/// still called with it, `grad(loss)<y>(layer, X)`. So the remaining ports are spliced back as the
-/// derivative's own `with` list, the way `FirstWithAsParam<F>` splices them
-/// (`stdlib/signatures/transforms.cml`): the case binds `W` and `Rest`, the weight becomes the first
-/// ordinary parameter, and `Rest` is written where `F` wrote it.
+/// **The weight is inside the angle brackets, and it was not.** Until 2026-11-19 this alias was
+/// `<...Rest> (w: W, ...ParamsOf<F>) => Tangent<W>`: the weight as the first *ordinary* parameter,
+/// which is the list `first_with_as_param` moves it to and the list a reverse transform
+/// differentiates. That put an implementation's shape on the language's surface. `grad`
+/// differentiates a function's first `with` parameter (design principles 9.9) and a `with` value is
+/// written in the angle brackets of a call, so the derivative is called the way the differentiated
+/// function is called (`with_grad(loss)<m>(x, y)`) -- the author's ruling of 2026-11-19 22:40
+/// restores it. Two readings turn on it: a caller who wrote `grad(loss)<y>(layer, X)` was reading
+/// `first_with_as_param`'s answer and not `grad`'s meaning, and an inner `grad` of a library
+/// gradient met a function with no `with` parameter at all, which is why a nest of this `grad` was
+/// refused at `first_with_as_param`. With the form restored a nest builds, and what refuses it now
+/// is the layer after this one -- `jvp` over a function value computed at run time
+/// (`stdlib/vjp.cml#grad`) -- so the form is no longer the thing that stops it.
 ///
-/// This alias used to be `(w: HeadOf<WithOf<F>>, ...ParamsOf<F>) => Tangent<HeadOf<WithOf<F>>>` --
-/// an empty `with` list, with `HeadOf` the primitive -- and then a second `with` value had nowhere
-/// to go: `grad` handed `(...xs)` to a reading declared `<...ws> (...xs)`, and a program with one
-/// more `with` value was refused at that call with `ArgumentsMismatch` (measured 2026-11-15, on the
-/// case study's loss). The spelling that was measured and *could not* carry the list is
-/// `...RestOf<WithOf<F>>` inside the angle brackets: a primitive applied to a pack comes through a
-/// generic function's body unexpanded (`<RestOf<float>>`, measured 2026-11-05). A `match type` is
-/// not that spelling -- its case binds the pack, which is how `FirstOf<P>` and `FirstWithAsParam<F>`
-/// are written -- so the two names it binds are not left for a caller to fill.
-/// @example is_same::<GradientOf<<w: f32[2]> (x: float) => float>, (w: f32[2], x: float) => f32[2]>()    // true
-/// @example is_same::<GradientOf<<w: f32[2], y: f32[1]> (x: float) => float>, <y: f32[1]> (w: f32[2], x: float) => f32[2]>()    // true
+/// **The whole `with` list is carried, in its own order.** A function with a second `with` value --
+/// the data `y` beside the weight in `examples/case-study/train.cml`, the port the derivative is
+/// *not* taken of -- is called with its own list, in its own order, in the angle brackets, and the
+/// parameters are `F`'s ordinary parameters with nothing prepended to them.
+///
+/// The cost is one wrapper and no new mechanism: `grad`'s body still composes
+/// `split(jvp(first_with_as_param(f)))` -- the move and the cut stay internal -- and hands the
+/// weight back in the `with` position when it answers. `split` and `transpose` are untouched.
+///
+/// A function with no `with` parameter has no gradient -- there is no parameter to differentiate --
+/// and `WithOf<F>` is then an empty pack, which is the empty parameter list of this function type:
+/// `grad` itself refuses that function, saying so, before any of this applies.
+/// @example is_same::<GradientOf<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => f32[2]>()    // true
+/// @example is_same::<GradientOf<<w: f32[2], y: f32[1]> (x: float) => float>, <w: f32[2], y: f32[1]> (x: float) => f32[2]>()    // true
 export type GradientOf<F> =
-    match type WithOf<F> { case (W, ...Rest) => <...Rest> (w: W, ...ParamsOf<F>) => Tangent<W> }
+    <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
 /// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`

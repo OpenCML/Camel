@@ -5,11 +5,12 @@
  * `grad(f)` is `vjp(first_with_as_param(f))` read at the seed 1, its first cotangent taken
  * (`stdlib/vjp.cml`). The signature reinterpretation is what makes the weight differentiable at all:
  * `vjp` differentiates the ordinary parameters, so `first_with_as_param` moves the first `with`
- * value onto the front of that list -- `grad(weighted)(3.0, 2.0)` here -- and everything else about
- * the body is untouched. The engine's leg is `with_grad(weighted)<3.0>(2.0)`, which reads the same
- * weight in the angle brackets a `with` parameter is written in; the two legs differ in who computes
- * the gradient and not in the function they differentiate, which is what makes 3.0 the number worth
- * pinning twice.
+ * value onto the front of that list and everything else about the body is untouched -- and `grad`
+ * then hands the weight back to the angle brackets when it answers, so the derivative is called the
+ * way `weighted` is: `grad(weighted)<3.0>(2.0)` here. The engine's leg is
+ * `with_grad(weighted)<3.0>(2.0)`, the same weight in the angle brackets a `with` parameter is
+ * written in; the two legs differ in who computes the gradient and not in the function they
+ * differentiate, which is what makes 3.0 the number worth pinning twice.
  *
  * **The shape this file used to measure is gone, and its number was wrong.** Until 2026-11-05 the
  * library's leg moved the weight onto an ordinary parameter with a written lambda,
@@ -53,9 +54,9 @@ func main(): int sync {
     // The engine's leg, for the number the library's leg has to match.
     let (engine_value, engine_gradient) = with_grad(weighted)<3.0>(2.0)
 
-    // The library's leg: the weight as the first ordinary parameter, which is where
-    // `first_with_as_param` puts it.
-    let library = grad(weighted)(3.0, 2.0)
+    // The library's leg: the weight where `weighted` reads it, which is where `grad` puts it back
+    // after `first_with_as_param` moved it for the differentiation.
+    let library = grad(weighted)<3.0>(2.0)
     'weighted engine={} value={} grad={}'->format<engine_gradient, engine_value, library>->println
 
     // The same call with the number on an ordinary parameter too: one member per source of

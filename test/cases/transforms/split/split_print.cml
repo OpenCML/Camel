@@ -18,6 +18,6 @@ func noisy(): float {
 }
 
 func main(): int sync {
-    println(grad(noisy)(3.0))
+    println(grad(noisy)<3.0>())
     return 0
 }
