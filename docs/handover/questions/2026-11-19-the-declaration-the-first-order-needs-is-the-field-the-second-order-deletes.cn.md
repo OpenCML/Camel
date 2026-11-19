@@ -94,3 +94,19 @@ src/compile/gir/builder_helpers.h:186          graph->setExitType(resultType);
 
 - **`lane-ssa` 相对基线仍差 104 条**：`feat/linear` −93、`feat/opt` −4、`feat/tools` −1、`feat/modules` −5、`feat/trans` −1（`compile` 2622/0、`parse` 126/0、`para` 104/0 与基线逐字相同）。这 93 条**不是合 `develop` 带来的**：`5559d3c6e`（合之前）与 `4d308fc72`（合之后）的 `feat/linear` 都是 `869 / 771 / 93 / 2 / 3`，逐字相同；合 `develop` 反而把 `modules` 从 13 条红降到 7、`trans` 从 6 降到 2。
 - **`origin/develop` 已经撤过打包**：`782007912`（作者 `a1b57552a`）revert 了 `9997910f4` 与 `c049f90ec`，理由是 `opt / loop_wait_after_inline.non_contiguous_loop.refused` 与 `tools / lsp.navigation` 两条新红，并写明「the standard they violate is that `develop` carries no new red at all」。develop 的树因此等于 `2d7c5c3a1`，而 `2d7c5c3a1` 正是 `lane-ssa` 的祖先（`git merge-base --is-ancestor 2d7c5c3a1 lane-ssa` 为真）。⇒ 这条车道要合的是 develop 刚撤掉的那批，合入条件不是「不差于基线」，而是**先把第 7 节第一条那 104 条红做完**。
+
+## 八、补一条更好的路（量出它的人给的，使两条裁定**同时成立**）
+
+前面写甲（保留字段、挪时机）与乙（删字段、① 做不成）是二选一，但还有第三条：
+
+`
+**对每个签名后来没被补过/换过的图，uncType() **本身就是那份声明**，graphExitTypeOf(funcType()) 直接能答，不需要另存**
+**真要给「后来补过/换过」的图存一份，**冻结图 GCGraph**（include/camel/runtime/graph.h:1279）是更贴切的位置：
+   在 encode 时把声明签名写进去一次 —— 它**按图持久**，builder 与 draft 都不必活着
+⇒ **⇒ 所以两条裁定不必互斥**：把「每图打包前的声明」记在**声明还完整可读的时候**（创建 / encode），
+   而不是记在一个**只在 open 签名被补完时才跑一次**的 setter 里；那个位恰恰对完整签名的图是空的
+`
+
+**⇒ 甲'（默认建议，取代前面的甲）**：把声明记到 GCGraph（创建 / encode 时一次），declaredFuncType 与它的钩子**照 ② 删掉**，① 成立。这样两条裁定同时成立，且字段「零读者」的判定也不再有例外。
+
+**⇒ 请作者确认甲'；若不受，则退回甲。**

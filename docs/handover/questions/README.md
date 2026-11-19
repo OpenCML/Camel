@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：34 页
+## 现在在等作者：36 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -31,6 +31,7 @@
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
 | [`2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes`](2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes.cn.md) | ① 要的那份声明，正是 ② 要删的那个字段 |
+| [`2026-11-19-the-declared-type-slot-is-its-own-only-witness`](2026-11-19-the-declared-type-slot-is-its-own-only-witness.cn.md) | 声明函数类型那一位：判据不冗余，但它唯一能判的是它自己 |
 | [`2026-11-19-the-effect-of-a-call-through-a-function-value`](2026-11-19-the-effect-of-a-call-through-a-function-value.cn.md) | 经函数值的调用，足迹取那个值的函数类型——而那个类型今天不写子句 |
 | [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 |
 | [`2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised`](2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised.cn.md) | 那 53 条在要求语言没承诺的东西 |
@@ -42,6 +43,7 @@
 | [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve.cn.md) | 那 13 条期望的 `TILES_OUTLINED 10`，模型被实测推翻了 |
 | [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） |
 | [`2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted`](2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted.cn.md) | 对一次调用交出的值做投影：三次尝试各自否掉了什么 |
+| [`2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content`](2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content.cn.md) | 回滚要还原的是指针，还是内容？ |
 | [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
