@@ -4671,3 +4671,15 @@ S2 随后，S3 最后。
 决策者。按默认：只挑不带位的提交进 develop，`lane-ssa` 留着。那个位（`packsVarParameters`，前身 `exitTypeIsPacked`）不进 develop——06:40、07:00 两条已定：打包是全称的，"这张图打包了没有"永远等于"声明里有没有 `var` 形参"，由 `graphExitTypeOf(声明)` 回答。`lane-ssa` 在分支上把位删掉、四处调用改问声明，再整体合入，合入条件不变（六计划与当天闸门都不差于基线）。
 同时：develop 上的 `declaredFuncType`（零读者，06:15 与今天每日审查第 11 条两次要求删除）还在，而且多了一个钩子——删掉它与它的钩子，一笔。
 另批 `7ba2a034b`（转置对一张图只做一次，不再每次调用做）：变换嵌套甲剩下的那一半，形状对。
+
+## 下发（2026-11-19 22:00，ECOOP，截止北京 11-20 12:00）：案例程序改用库里组合的 `grad`，全套重量
+
+决策者。负责人 11-15 定：案例程序用库里组合的 `grad`（`stdlib/vjp.cml`），不用原生引擎算子。论文第 6 节的读数都是旧写法量的，需按新写法重量。
+1. **改写**：`docs/handover/reports/eval-round10/case-study-variants/` 的七个文件（六个写法加反例），把求导那一行从 `grad(loss)` 引擎算子与 `dloss<layer, y>(X)` 改成 `grad(loss)<y>(layer, X)` / `dloss<y>(layer, X)`（11-16 已跑过的形式），只改这一处，七个文件同样改，存为同目录 `lib-grad/`。
+2. **在 `2d7c5c3a1` 上量**（Release；若库 `grad` 在定版上跑不起来，照实报，再在当前 develop 上量并写明哈希）：
+   - 六个写法的规范图是否逐字节相同（md5/sha256），反例应不同；
+   - `train.cml` 的函数图数与节点数（与第 3 项同一数法）；
+   - 三个后端（`std::nvm`、`std::fvm`、`std::tf`）的程序输出，与旧写法的三行比；
+   - 两个坏 pass 与对照（`edits-ecoop.cml` 的甲、甲对照、`loss_print`、乙对照）是否仍拒或接受，拒绝原文；
+   - 空 `open`+`commit` 与一次规范顺序的墙钟（9 次中位数与区间）。
+3. 报告 `eval-round10/case-study-lib-grad.md`，第一行写构建哈希；决策者转入归档 `artifacts/case-study/`。排在 S1 剩余两项之后、其余一切之前。
