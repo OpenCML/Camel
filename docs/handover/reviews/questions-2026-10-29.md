@@ -5068,3 +5068,12 @@ Invalid call to 'first_with_as_param' with argument types <> ((w: float) => floa
    - 写法恢复后 `grad(sq)` 的结果仍带 `<x>`，外层 `grad` 有第一个 `with` 参数可求——这正是写法恢复要保证的；
    - 若仍不通，报下一堵墙原文（预计在乙）。
    这仍是 P\* 的必需项。
+
+## 补充（2026-11-20 04:10，ECOOP）：优化表要证明"带循环"，B 组的三个意图
+
+决策者。
+1. **优化表的图里有没有循环**：论文要写"按定理 5(c)，带循环时提交必然会拒某些确定的图，但这些带循环的程序上库里的 pass 一个都没被误拒"，前提是被优化的图里确实有循环区域。`capture-all.sh` 在优化表每个程序旁加一行：pass 作用的范围（从入口可达的全部图，还是单个函数）、各类区域的条数（`Root`/`Arm`/`LoopBody`/`LoopCond`/`Inline`），尤其 `LoopBody` 是否 > 0。MLP 源码里训练步在一个 `loop` 里、transformer 也有训练循环，但规范图里还在不在要读数为准。另把同一组 pass（`opt::cse`/`fold`/`dce`/`saturate`）跑在案例 `train.cml` 的整个程序上（含 `run` 的训练循环），同格式报。
+2. **B 组三个坏编辑**，论文暂定的意图供参考，以实际能造的为准，采集输出里写明实际跑的是什么：
+   - Exit：把 `run` 的结果换成循环体内的某个节点（`replace(exit, v)`，`v` 在 `LoopBody` 里）；
+   - Acyclic：给 `main` 的第三个打印加一条排在第一个打印之前的顺序边、闭合成环（预计 `order` 当场就拒——那就报"每步检查拒、原文"）；
+   - Scoped：让 `run` 里对 `loss` 的调用读循环体内的状态（预计 `replace` 的可见性检查当场拒）。
