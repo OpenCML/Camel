@@ -7786,6 +7786,13 @@ which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>
 `showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
 lifted at all.
 
+The right side cannot write `reshape<dims>(dx)` itself. A rule's right side is a closure over
+the values its left side bound, and a `<>` position written there asks for something the closure
+does not carry -- measured 2026-11-20, it is refused by name: "jvp has no forward rule for
+`tensor:reshape` (the rule's right side passes a context argument it does not carry)". So `dims`
+is handed to a function that writes the reshape, which is the arrangement `rulesets.vmap`'s
+`vmap_reshape` already uses for the same argument.
+
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])` gives `[[1.0, 2.0], [3.0, 4.0]]`
 

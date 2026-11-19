@@ -444,13 +444,32 @@ struct CommitViolation {
 ///
 /// What the two questions are asked *of* is the edit, and `before` is what says that: the graph as
 /// the commit started from, when the commit changed existing nodes in place (the caller that has it
-/// passes it; a commit that only made nodes passes nothing). A body that already reached past its
-/// declaration, and a pair the graph already left unordered, are what the program already was -- the
-/// pass boundary's question, not this commit's -- so an in-place edit answers for what it changed:
-/// the pairs that were ordered and are not any more, and the reach it added.
+/// passes it; a commit that only made nodes passes nothing). A pair the graph already left unordered
+/// is what the program already was -- the pass boundary's question, not this commit's -- so an
+/// in-place edit answers for the pairs that were ordered and are not any more.
+///
+/// A *body* that already reached past its declaration is not the same thing and is not passed over
+/// (the ruling of 2026-11-20). The graph a commit starts from is the compiler's own product: the
+/// front end built it, or a commit published it after answering for it. One whose body reaches past
+/// the type its own signature declares is a graph the front end accepted beyond its type, and no
+/// program writes that -- so the reading reports it as the compiler's defect
+/// (`GraphBeforeEditBeyondType`, thrown from here) instead of answering the edit's effect question
+/// out of a graph nobody vouches for. Asking the edited graph anyway is not the answer either: what
+/// the edit added would be measured against a declaration already known to be wrong.
+///
+/// `beforeProgram` is the program `before` belongs to -- the one that published it -- and the
+/// reading of `before` is taken there. One reading, one program version: a call's footprint is read
+/// through the callee's *declared* clause, so an old graph read against the program this commit is
+/// publishing measures a callee that grew in this very commit and reports a body the graph never
+/// had. That is the measurement constraint of the 2026-11-18 page (`f61196246`: "a draft plus the
+/// program as it is now, read together, answers about a program nobody has"), and the one commit that
+/// states a widened type is exactly where it bites: `tiles` widens `chain` and its caller in the same
+/// commit, and the caller's old version is lawful in the old program and beyond in the new one. A
+/// caller whose two programs are the same object passes nothing, which is the whole answer there.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
-    std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr);
+    std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
+    const Program *beforeProgram = nullptr);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
 /// effect outside the program). This is the first half of the tier of the ruling of 2026-11-18; the
@@ -477,6 +496,26 @@ class GraphCommitRefused : public std::runtime_error {
 
   private:
     CommitViolation violation_;
+};
+
+/// A graph a commit was asked to edit reached past the type its own signature declares, before the
+/// edit: the compiler handed over a graph that is outside its own declaration.
+///
+/// This is not one of the two checks a commit owes the program, and it is not the program's error.
+/// A graph whose own signature does not cover its body was built by the front end (or published by
+/// a commit that did not answer for it) and accepted past its type, which is a defect of the
+/// compiler: no program can write it. So it travels as itself and is reported as the internal error
+/// of the run that asked (`RuntimeDiag::PassInternalError`), by the one receiver that already
+/// reports every other exception a pass gives up with (src/execute/pass.cpp, `reportPassFailure`).
+/// `what()` names the graph, the node that makes the uncovered access and the clause the
+/// declaration does not cover, and says the front end is where the defect is -- a report about the
+/// program would send its writer looking for a mistake they cannot make.
+///
+/// Thrown by `commitViolation` (src/runtime/resources.cpp), where the commit still holds the graph
+/// as it started from; nothing has been published at that point, so the throw is the stop.
+class GraphBeforeEditBeyondType : public std::runtime_error {
+  public:
+    explicit GraphBeforeEditBeyondType(std::string what) : std::runtime_error(std::move(what)) {}
 };
 
 /// Records a refusal as the diagnostic both commit paths carry, and says who asked: `site` is the

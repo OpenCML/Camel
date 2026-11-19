@@ -85,3 +85,51 @@ a structural class has 1 vertex/vertices on the left and 0 on the right
 
 ⇒ **请裁**：`print_and_recompile` 是否属于 0.2.45 的阻断清单。属于，就按 ③ 做（那就该在
 `lane-arm-carry-write` 之外单开一条，因为要改打印器的输入模型）；不属于，本笔到此为止。
+
+## ⑤ 2026-11-20 ｜ `lane-print-fix`：独立复现，两处更锐的读数，④ 的建议不变
+
+在同一格上另起一树（基线 `ea8b0cfc4`）重剖了一遍，结论与 ① / ② 相同，但有两处读数比原文更锐。
+
+**(a) 两种拼法各多花一个节点——缺的不是「名字」，是「位置」。** 把打印件第 16 行从 `3` 改成 `t`
+（只改 `cml.cpp` 里那条早退判据：兄弟臂的写不该挡住名字，用 `ControlRegions::within` 判「写在读的
+region 里或在其祖先上」），第 16 行就成了源的样子：
+
+```
+改前 16|         3        右图多一个   DATA {"k":"i64","v":3}
+改后 16|         t        右图多一个   OPER :var/get@1.0  "region": 2
+```
+
+两次都是 `left 52 / right 53`。原因在原件的那三个顶点：
+
+```
+N:g3:n2:  COPY(n1 = DATA 3)                  ← `var t = 3` 声明用的值，也是 `:var/new` 的算子
+N:g3:n13: OPER :var/get@1.0  "region": 2     ← else 臂里唯一的一次读（report 的第三实参）
+N:g3:n15: GATE(n2, n14)      "region": 2     ← else 臂的出口：直接转发 n2
+```
+
+**该臂一个版本都没改，所以它的出口是「进入时的版本」——图上没有、也不该有「值表达式」。**
+写 `3` 造第二个 `DATA`，写 `t` 造一个新的 `get`，**两种印法都多一个顶点**。这也解释了 ② 那版为什么
+能到 52：它把 `if` 印成**语句**、臂根本不出口值，不是因为它找到了名字。
+
+**(b) 「认携带变量」的判据要比 ② 更靠前一步。** ② 的判据是「JOIN 某臂的 `with` 槽值 ＝ 该臂里某个
+`:op/assn` 存下的值」；`arm_read` 的 else 臂里**一次赋值都没有**，这个判据在那里找不到东西，能命中
+靠的是别的臂。真正的签名是「**该臂的出口 ＝ 这个单元的创建值**」（打印器 `cellOfValue_` 记的
+cell → 创建值），与写集无关：本次实测，把写集按 region 收窄后 16 例语料 **15 例 EQUAL、`linear`
+不回归**，`arm_read` 仍 DIFF —— **打印器内部没有一条能补上这个缺口的规则**。
+
+**(c) 读死（基线 `ea8b0cfc4`，本车道实测）：**
+
+- 16 例语料：`linear` / `branch` / `arm_write` / `unused_loop` / `loop` / `interval` / `closure` /
+  `with_param` / `var_param` / `write_value` / `string_conversion` / `named_type` / `map_with_closure` /
+  `jgir_duplicate` / `hello` **EQUAL**；`arm_read` **DIFF（52 / 53）**。
+- 钉着 `std::cml` 输出的三条计划共 **4 个条目**（`compile/escapes` 那处只是描述里的行文，没有条目），
+  在 `ea8b0cfc4` 上全绿：`interval_bounds_constant.opt_cml`（opt/generic）、`stream.interval_cml`、
+  `stream.interval_loop_cml`（compile/stream）、`cml_var_holding_a_lambda`（compile/transforms）；
+  三条计划合计 `total 485, pass 472, fail 0, known failures 13`。
+  ⇒ 任何「把分支在尾位置改印成语句」的改动，第一道闸是这 4 个条目加 `print_then_run_*` 的八例
+  （② 已实测后者会读到旧版本）。
+- 本车道**零 tracked 改动**：跑完 `git status` 干净，`print_and_recompile` 仍红。
+
+**(d) 结论不变：④ 的建议照旧，等作者裁。** 补一份打印器侧的记录以示不是没试：把 `writtenCells_`
+按 region 收窄的那版补丁留在 `out/printprobe/region-write-rule.patch`（未提交），它让 `arm_read`
+的印文更忠实（`3` → `t`），但**不改判定**，所以不进门。

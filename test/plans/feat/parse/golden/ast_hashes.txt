@@ -557,10 +557,10 @@ db7b15c1d26c2d3d ok stdlib/std.cml
 b2579aff6f390432 ok stdlib/tree.cml
 150190786e12d366 ok stdlib/types.cml
 70d6933dcc326f71 ok stdlib/vjp.cml
-a2f43a110650b3b1 ok stdlib/rulesets/jvp.cml
+3c09a0494de711d5 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-8704211257d6f3c9 ok stdlib/rulesets/transpose.cml
+16c6d5fd430af982 ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f3e1daeaada48d18 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
@@ -1983,6 +1983,7 @@ e6549fc9f051841a ok test/cases/compile/transforms/min_gradient_both_legs.cml
 d2a162ec73e72b3d ok test/cases/compile/transforms/relu_gradient_through_the_library.cml
 cfbafc4c297df779 ok test/cases/compile/transforms/remat_capture_is_a_constant.cml
 8ea0981064fb91f5 ok test/cases/compile/transforms/rsqrt_gradient_both_legs.cml
+43a1748ec1c21243 ok test/cases/compile/transforms/rules_angle_args_reshape_shape.cml
 eb65396fce5dc861 ok test/cases/compile/transforms/rulesets_probe_missing.cml
 513ebd0879293a89 ok test/cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml
 4c7f84611a327ae6 ok test/cases/compile/transforms/sigmoid_gradient_through_the_engine.cml
