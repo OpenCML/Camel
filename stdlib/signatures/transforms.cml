@@ -86,6 +86,13 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// **`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
 /// that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
 /// called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
+///
+/// The member is built once for a graph version and kept (author, 2026-11-19 15:40): the walk reads
+/// the graph and the graphs it refers to and never the value of a call, so a second call about the
+/// same version names the member the first one built. `vjp`'s pullback and `grad`'s derivative are
+/// called once per step of a loop over one `lin` graph, and the transposition is what the transform
+/// costs, not what a call of it costs. What stays per call is the function value, closed over the
+/// residuals that call's `lin` carries.
 /// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
 #macro
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
