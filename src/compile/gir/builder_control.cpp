@@ -4553,7 +4553,7 @@ node_handle_t Builder::handBackVariableParameters(
     // The source is what the signature declared (`GraphDraft::declaredFuncType`); the exit the body
     // hands on is derived from it, and that is what the graph's own type becomes below. While nothing
     // has replaced the exit yet the two are the same signature, which is the usual case here.
-    const FunctionType *funcType =
+    FunctionType *funcType =
         graph->declaredFuncType() != nullptr ? graph->declaredFuncType() : graph->funcType();
     if (!packsVariableParameters(funcType)) {
         // An open signature is a declaration being built for a generic, and the type a caller sees
@@ -4626,11 +4626,14 @@ node_handle_t Builder::handBackVariableParameters(
     // the tuple, and the body's return node is that tuple. The signature keeps its own result --
     // `inspect` and the diagnostics go on showing it -- so the graph takes a copy of the signature
     // with the exit replaced rather than changing the declaration's own type.
+    // The graph keeps the signature its declaration stated, because the replacement below is this
+    // body's exit and not the signature's, and a caller's question about packing is a question about
+    // the declaration (`callHandsBackResult`). An earlier record wins: `setExitType` writes one for a
+    // body whose result it had to infer, and that record already is the declaration.
+    if (graph->declaredFuncType() == nullptr) {
+        graph->setDeclaredFuncType(funcType);
+    }
     graph->setFuncType(funcType->withExitType(exitType));
-    // The bit that says the exit type was packed, not written (`GraphDraft::packsVarParameters`):
-    // a caller asks the graph whether a call hands `var` parameters back, and the shape of the exit
-    // type cannot answer it -- a signature written with a tuple result has the same shape.
-    graph->setPacksVarParameters(true);
     // The value and its type are two statements of one shape: a tuple whose size is not the number
     // of parts this body hands out would be a graph that does not say what it returns, so it is
     // refused here rather than at the encode.

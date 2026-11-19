@@ -131,14 +131,24 @@ inline Type *graphExitTypeOf(const FunctionType *funcType) {
     return TupleType::create(parts);
 }
 
-/// Whether a call of this graph hands on a result beside the values of its `var` parameters: the
-/// body said so where it packed them into its exit type, and the graph keeps that answer. It is
-/// asked here rather than read off the signature, because the tuple a packing makes and a tuple a
-/// user wrote with a tuple result have the same shape -- counting parts then calls a signature that
-/// packs nothing a packing one, which is what the module cases returning tuples met. The graph is
-/// the only place that knows, so this asks it and nothing re-derives the answer.
+/// Whether a call of this graph hands on a result beside the values of its `var` parameters.
+///
+/// It is computed from the signature the graph declared, not stored: packing is total (author,
+/// 2026-11-19: "packing is total, so no bit"), so every graph whose declared signature has a `var`
+/// parameter and does not already state a tuple packs, and the graph carries no second statement of
+/// whether it did. The shape of the exit type alone cannot answer it -- the tuple a packing makes
+/// and a tuple a user wrote with a tuple result have the same shape, which is what the module cases
+/// returning tuples met -- but the *declaration* can, because `packsVariableParameters` excludes a
+/// signature that already states a tuple. So the graph is asked for the type its signature declared
+/// (`GraphDraft::declaredFuncType`), and the one derivation decides.
 inline bool callHandsBackResult(const compile_graph_ptr_t &callee) {
-    return callee != nullptr && callee->packsVarParameters();
+    if (callee == nullptr) {
+        return false;
+    }
+    const FunctionType *declared = callee->declaredFuncType() != nullptr
+                                       ? callee->declaredFuncType()
+                                       : callee->funcType();
+    return packsVariableParameters(declared);
 }
 
 inline runtime::GCFillKind fillKindForType(Type *type) {

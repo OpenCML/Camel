@@ -81,11 +81,9 @@ class DraftGraphBuilder {
     /// (`GraphDraft::declaredFuncType`): what an operator's rule about a `var` parameter asks for,
     /// as against the exit type the body ended up stating.
     camel::core::type::FunctionType *declaredFuncType() const { return draft().declaredFuncType(); }
-    /// Whether the exit type the graph states was packed from its `var` parameters rather than
-    /// written (`GraphDraft::packsVarParameters`): what a caller reads to know that a call hands values
-    /// back beside the result.
-    bool packsVarParameters() const { return draft().packsVarParameters(); }
-    void setPacksVarParameters(bool packed) { draft().setPacksVarParameters(packed); }
+    void setDeclaredFuncType(camel::core::type::FunctionType *funcType) {
+        draft().setDeclaredFuncType(funcType);
+    }
     camel::core::type::TupleType *closureType() const { return draft().closureType(); }
     bool hasFrameLayout() const { return draft().hasFrameLayout(); }
     size_t frameSize() const { return draft().frameSize(); }
