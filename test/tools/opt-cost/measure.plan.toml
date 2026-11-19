@@ -3,7 +3,12 @@
 # This file is **not** under `test/plans/`, so no tier selects it. It is named explicitly, the way
 # `test/tools/selftest/margin/tight.plan.toml` is:
 #
-#   node scripts/test.js test/tools/opt-cost/measure.plan.toml
+#   node scripts/test.js test/tools/opt-cost/measure.plan.toml --jobs 1
+#
+# **It runs alone.** The share it prints is a ratio inside one run, which is what lets it be read on
+# a busy host, but the CPU figures are still the work's own, and a run sharing cores with eight other
+# plans moves the arithmetic of every side: `--jobs 1`, and no second plan in the same invocation, is
+# how the reading is taken -- the same rule `feat/opt`'s own readings follow.
 #
 # Why it exists. `opt.splice_place / perf_fib_smoke.opt_twice.{nvm,fvm,jit,prl}` (and, with it,
 # `modules.nn / gru_lite_large_bytecode`) crossed the runner's cost line -- `timeout_ms / 4`,

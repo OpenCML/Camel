@@ -94,6 +94,7 @@ function runInvocation(camel, argv) {
         stdio: ['ignore', 'pipe', 'pipe'],
         encoding: 'utf8',
         timeout: 300000,
+        maxBuffer: 256 * 1024 * 1024,
         env: { ...process.env, CAMEL_HOME: installOf(camel) },
     })
     const wallMs = Number(process.hrtime.bigint() - startedAt) / 1e6
@@ -134,27 +135,52 @@ function summarize(doc) {
     }
 }
 
-// One `--trace effects` + `-vv` run: how many whole-program questions the optimizer's one run asks.
-// The two counts are read from wherever the binary wrote them, so a stream that moved does not read
-// as "the check was never asked".
+// How many whole-program questions the optimizer's one run asks, from two runs and for a reason: the
+// log counts (`-vv`) and the trace counts (`--trace effects`) are different readings of the same run,
+// and a build that accepts one but not the other must not read as "the check was never asked". Each
+// count is taken from wherever the binary wrote it, so a stream that moved does not read as zero.
 function countChecks(camel, backend) {
-    const run = runInvocation(camel, ['-vv', '--trace', 'effects', CASE, 'std::opt', 'std::opt', `std::${backend}`])
-    const text = `${run.stdout}\n${run.stderr}`
-    const sessions = (text.match(/Decoded runtime graph '[^']*' into editable draft/g) || []).length
-    const boundaryAsks = (text.match(/boundary asked after session /g) || []).length
+    // The scope list keeps the log to the two scopes the counts come from: the whole run at `-vv` is
+    // tens of megabytes, and a reading that costs a buffer overflow reads as a smaller number.
+    const logged = runInvocation(camel, [
+        '-vv',
+        '--log-include',
+        'DraftSession,Opt',
+        CASE,
+        'std::opt',
+        'std::opt',
+        `std::${backend}`,
+    ])
+    const traced = runInvocation(camel, ['--trace', 'effects', CASE, 'std::opt', 'std::opt', `std::${backend}`])
+    const logText = `${logged.stdout}\n${logged.stderr}`
+    const traceText = `${traced.stdout}\n${traced.stderr}`
+    const sessions = (logText.match(/Decoded runtime graph '[^']*' into editable draft/g) || []).length
+    const boundaryAsks = (logText.match(/boundary asked after session /g) || []).length
+    // One line per sub-pass of the optimizer, with the rewrites it made: `std::cxx::fold: 16
+    // rewrite(s)` (the name is the pass's own, so it is read as written and not by a fixed prefix --
+    // `std::opt::fold` before 2026-11-18, `std::cxx::fold` since). Each of those is a draft commit,
+    // which is what the commit checks are asked of.
+    const rewrites = new Map()
+    for (const match of logText.matchAll(/<Opt> (\S+): (\d+) rewrite\(s\)/g)) {
+        rewrites.set(match[1], (rewrites.get(match[1]) || 0) + Number(match[2]))
+    }
     let containmentCalls = 0
     let containmentSites = 0
     let containmentDeclined = 0
-    for (const match of text.matchAll(/effect containment: checked (\d+) call site\(s\), declined (\d+)/g)) {
+    for (const match of traceText.matchAll(/effect containment: checked (\d+) call site\(s\), declined (\d+)/g)) {
         containmentCalls += 1
         containmentSites += Number(match[1])
         containmentDeclined += Number(match[2])
     }
     return {
-        exit: run.exit,
-        traceRead: containmentCalls > 0 || boundaryAsks > 0,
+        exit: logged.exit,
+        traceExit: traced.exit,
+        logRead: sessions > 0 || boundaryAsks > 0,
+        traceRead: containmentCalls > 0,
         drafts: sessions,
         boundaryAsks,
+        rewrites: [...rewrites].sort((one, two) => one[0].localeCompare(two[0])),
+        rewriteTotal: [...rewrites.values()].reduce((sum, one) => sum + one, 0),
         containmentCalls,
         containmentSites,
         containmentDeclined,
@@ -264,9 +290,12 @@ function main() {
     }
     console.log(
         `  checks(${countBackend}) drafts=${counts.drafts} boundary_asks=${counts.boundaryAsks} ` +
-            `containment_calls=${counts.containmentCalls} call_sites=${counts.containmentSites} ` +
+            `rewrites=${counts.rewriteTotal}` +
+            (counts.rewrites.length > 0 ? ` (${counts.rewrites.map(([name, count]) => `${name.split('::').pop()}:${count}`).join(', ')})` : '') +
+            ` containment_calls=${counts.containmentCalls} call_sites=${counts.containmentSites} ` +
             `declined=${counts.containmentDeclined}` +
-            (counts.traceRead ? '' : ` (no trace lines: exit ${counts.exit}; did this build accept --trace effects?)`),
+            (counts.logRead ? '' : ` [no -vv lines: exit ${counts.exit}]`) +
+            (counts.traceRead ? '' : ` [no --trace effects lines: exit ${counts.traceExit}]`),
     )
     for (const trouble of troubles) console.log(`  trouble: ${trouble}`)
     // A reading, not a verdict: the plan that runs this expects exit 0 and therefore prints the
