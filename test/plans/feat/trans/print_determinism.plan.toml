@@ -11,7 +11,7 @@ tags = ["feat", "trans", "dump", "determinism"]
 
 [[tests]]
 name = "gir_prints_one_hash"
-desc = "Twenty runs in twenty processes of one program print one dump: same lines, same order, one SHA-256. The case is the by-reference capture program the two orders were observed on, and the dump is long enough (over a hundred lines) that a printer with nothing to do cannot pass this."
+desc = "Twenty runs in twenty processes of one program print one dump: same lines, same order, one SHA-256. The case is a by-reference capture program (the family the two orders were observed on; the file the case was written against, `var_capture_reference.cml`, is a refusal program since `81fa0bac9` and can no longer be dumped at all), and the dump is long enough (over a hundred lines) that a printer with nothing to do cannot pass this."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/print_determinism.py"
