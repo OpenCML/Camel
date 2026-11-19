@@ -3,8 +3,8 @@
 
 // The reverse of `inline` at the draft level: a group of nodes becomes a graph of its own, and a call
 // of it takes the place of the value the group handed on. `inline` (draft_inline.h) copies a callee
-// into a graph; this copies a part of a graph into a callee, and `docs/design/graph-editing/
-// README.cn.md` 7 and 15.3 name the two as each other's reverse.
+// into a graph; this copies a part of a graph into a callee, and
+// `docs/design/graph-editing/README.cn.md` 7 and 15.3 name the two as each other's reverse.
 //
 // Three things are the whole of it:
 //

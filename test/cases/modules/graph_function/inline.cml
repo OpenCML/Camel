@@ -1,6 +1,6 @@
-// The two semantics of `inline` the ruling of 2026-11-18 gave (`e55cd6157`; docs/design/
-// graph-editing/README.cn.md 7 and 15.3): `at` a statement of a block's chain takes over its
-// place, `at` a pure node only picks the region.
+// The two semantics of `inline` the ruling of 2026-11-18 gave (`e55cd6157`;
+// docs/design/graph-editing/README.cn.md 7 and 15.3): `at` a statement of a block's chain takes
+// over its place, `at` a pure node only picks the region.
 //
 // The two are not told apart by counting nodes -- both add the body's code -- so each reading says
 // three things: what the block's exit gate is written after, which nodes the graph has, and where

@@ -68,7 +68,7 @@ node_handle_t Builder::captureInto(
     // without the pair of graphs cannot be followed. Both `graph` (where the walk stopped, with no
     // enclosing graph) and `currGraph_` (the graph the caller is building) are printed because they
     // are not the same object: the walk up is what separates them.
-    // Both readings are safe here: `nodeGraphOf(origin)` was answered at `:45` of this very call,
+    // Both readings are safe here: `nodeGraphOf(origin)` was answered earlier in this call,
     // so the handle names a live draft by the time this line is reached, and the node id lives in
     // the handle rather than in the draft.
     GUARD(
