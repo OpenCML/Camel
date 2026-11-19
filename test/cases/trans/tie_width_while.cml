@@ -1,0 +1,31 @@
+// A reproduction of the one tie the canonical numbering does not enumerate.
+//
+// `arrangeEqualKeyRun` (src/runtime/canonical.cpp:496-541) enumerates the arrangements of an
+// equal-key part only while that part is no wider than `kMaxTieWidth` (6, canonical.cpp:44-47).
+// Wider, it takes the other branch: `std::stable_sort` on each node's own fragment (canonical.cpp
+// :504-521), and `stable_sort` keeps the order its input came in where two fragments are equal --
+// which is the order the nodes were created in, that is, the spelling.
+//
+// To reach that branch a program needs one `arrange` group holding seven or more nodes of one
+// equal key. Here a `while` loop carries eight states and its condition reads only the first, so
+// the condition ports of the other seven are read by nobody: they do not enter the walk, they stay
+// in the loop's condition region, and they meet in one group whose members have one kind, one
+// role and one type -- seven equal keys, over the limit.
+//
+//   camel inspect --ties test/cases/trans/tie_width_while.cml
+//   canonical ties: 1 group(s) wider than one node, widest 7, over the limit 1 (kMaxTieWidth 6)
+//   tie width 7 (equal keys 7, not enumerated) in graph main
+func main(): int sync {
+    let n = 4
+    let z1 = 0
+    let z2 = 0
+    let z3 = 0
+    let z4 = 0
+    let z5 = 0
+    let z6 = 0
+    let z7 = 0
+    let z8 = 0
+    let r = loop x1 = z1, x2 = z2, x3 = z3, x4 = z4, x5 = z5, x6 = z6, x7 = z7, x8 = z8 while x1 < n do (x1 + 1, x2 + 1, x3 + 1, x4 + 1, x5 + 1, x6 + 1, x7 + 1, x8 + 1)
+    println(r)
+    return 0
+}
