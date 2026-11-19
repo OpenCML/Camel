@@ -4828,3 +4828,7 @@ develop 上只删 `declaredFuncType`；三步的前两步随 `lane-ssa`。`lane-
 | 16:00 | `capture-all.sh` 在 P\* 上跑完；决策者交论文 |
 | 18:00 | 决策者交源码包 |
 **现在就单开一条车道做变换嵌套计划乙**（`plans/2026-11-18-nested-transforms.cn.md` 乙：函数值按类型提升、变换递归进闭包、`pb` 闭包可再变换、展开 unfold），与"调用写法恢复"并行：写法恢复拆掉第一堵墙后，下一堵墙几乎必在乙里，不能等第一件合完才开工。两条车道动的文件：写法恢复在 `stdlib/vjp.cml`、`stdlib/types.cml`；乙在 `modules/transforms/`——不重叠。任何一项到点没到，当即回本页卡在哪。
+
+## 补充（2026-11-20 02:30）：二阶导读数进采集脚本
+
+决策者。`capture-all.sh` 加一节：`x·x` 在 2 处、`x³` 在 2 处、Hessian 例子，各在 `std::nvm`、`std::fvm`、`std::jit`、`std::tf` 上的输出与是否一致。P\* 上随整套一起跑。
