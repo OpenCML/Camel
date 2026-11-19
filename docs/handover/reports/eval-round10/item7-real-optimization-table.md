@@ -35,7 +35,16 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
    --> showcase/c3-char-transformer/train.cml:121:…  let forward = split(jvp(f))
 ```
 
-`mode=train` 与 `mode=forward` 都在 `split(jvp(f))`（第 121 行，先于任何 `mode` 分支）上停；
+`mode=train` 与 `mode=forward` 都停在同一处，而诊断指的**不是**展示程序的第 121 行，是 `vjp` 的宏体：
+`--> /home/zjwei/camel-work/eval/out/latest/stdlib/vjp.cml:121:25`，原文
+
+```
+ 121 |     let forward = split(jvp(f))
+     |                         ^^^
+```
+
+（`stdlib/vjp.cml:121`，在 `#macro export func vjp::<F>` 里，先于任何 `mode` 分支；
+`showcase/c3-char-transformer/train.cml:121` 是 `wq2: float[...],`，与 `jvp` 无关。）
 加 `std::macro` 改成在宏求值里报同一件事（`MacroEvaluationFailed: … jvp has no forward transform for this function`）。
 ⇒ **表里这一列的「前后输出」一律「未运行」**，只报图形读数是硬伤最小的一步：
 
