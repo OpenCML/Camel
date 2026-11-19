@@ -1037,13 +1037,6 @@ class Builder {
     // value, which only a call that writes something has; `parts[0]` is null for one that does
     // not, and such a call's value stays the node itself.
     std::unordered_map<node_handle_t, uint32_t> callWriteMasks_;
-    // The calls whose callee hands its `var` parameters back beside the result, recorded where the
-    // call is resolved. The node keeps the tuple as its value (the run time hands one on, and the
-    // caller needs the `var` arguments' new versions from it), so a reader that is asked *what the
-    // expression is worth* -- the branch's diagnostic names it -- reads the language type through
-    // this record instead of the node's type (author, 2026-11-19). Recorded for a call inside its
-    // own body too, where the graph has not packed yet: that call's callee is this graph.
-    std::unordered_set<node_handle_t> handsBackParameterCalls_;
     struct CallValue {
         std::vector<node_handle_t> variables;
         std::vector<node_handle_t> parts;
@@ -2336,13 +2329,17 @@ class Builder {
     // writes), which is also what the run time packs it from (GCFuncRef::reserved).
     node_handle_t addCallNodeOf(const compile_graph_ptr_t &callee);
     // The one place a CALL node is constructed: every construction site in the builder comes
-    // through here and passes, as `exitType`, the exit type its call hands on *as that site states
-    // it today* -- a plain declaration at the two sites that take one, the derivation
-    // (`graphExitTypeOf`) at the rest, `pullType` at the loop's pull. Unifying the construction is
-    // what gives a later rule one place to stand; unifying which of those answers a site asks for is
-    // a different change and this one does not make it (author `3a580d29a`: unify first as a pure
-    // refactor, then apply the rule in that one place). The FUNC node of a direct call is the other
-    // half and was already one place: `addCallNodeOf` above.
+    // through here and passes, as `exitType`, the type the call hands on exactly as that site
+    // states it today -- the declared exit type at five of them, `pullType` (itself the exit type of
+    // the step it calls) at the loop's pull. Unifying the construction is what gives a later rule
+    // one place to stand; which of those answers a site asks for is a different change and this one
+    // does not make it (author `3a580d29a`: unify first as a pure refactor, then apply the rule in
+    // that one place). The derivation the rule will ask for lives on the lane that built the
+    // packing (`graphExitTypeOf`, `5695e055c`) and is not taken here: on this tree it answers a
+    // tuple for a signature that states a `var` parameter, while a call on this tree still hands a
+    // bare value, so taking it at all five sites was measured to move `compile` and `linear` and to
+    // kill cases. The FUNC node of a direct call is the other half and was already one place:
+    // `addCallNodeOf` above.
     node_handle_t addCallSite(const compile_graph_ptr_t &graph, Type *exitType);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
@@ -3832,13 +3829,6 @@ class Builder {
     /// silence). Returns `anchor` when there is nothing to add.
     node_handle_t
     exitUsesVariableParameterWrites(const compile_graph_ptr_t &graph, node_handle_t anchor);
-    /// The value the body of `graph` returns: `value`, or -- for a body that hands its `var`
-    /// parameters' final values back beside the result (`graphExitTypeOf`) -- the tuple of the
-    /// result and those values, with the graph's exit type stating it. `value` is null for a body
-    /// that returns nothing, which then hands the parameters' values alone. Answers `value`
-    /// unchanged when the signature packs nothing.
-    node_handle_t handBackVariableParameters(
-        const compile_graph_ptr_t &graph, node_handle_t value);
     /// Reports SemanticDiag::ArgumentNeedsConversion (and aborts) when the arguments of `call`
     /// fit exactly one of `candidates` but for types that leave open what a parameter fixes,
     /// i.e. when writing `as` at those arguments makes the call compile. Returns otherwise.
