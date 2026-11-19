@@ -499,3 +499,93 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "a [1, 2]\nb [9, 2]\n[3, 4] [7, 4]\n[5, 6] [5, 8]\n"
+
+# ---- the container holds its element: the clause the guard stands in for ----
+#
+# `valueMadeHere` is what answers for these updates today, and the answer is `copied`. It has to be
+# `copied` and not `by-count`: `Array::writableInPlace` answers from the element's own block count,
+# and a container's slot never increments it, so the array's own count cannot see the container's
+# hold (docs/handover/plans/2026-11-20-container-held-elements-as-one-clause.cn.md, sections 3-4).
+# The first reading below is the shape itself; the other three pin the two standing cases that the
+# clause exists for, so that the day the guard is loosened one of these goes red because a verdict
+# moved rather than because someone read the cases and noticed.
+[[tests]]
+name = "new_values.container_held"
+desc = "A value read out of a container is written by copy, not in place: `b.xs[0] = 9` after `var b = a` leaves `a.xs` as it was, and `rows[1]->append<2>` leaves `rows` as it was -- the struct's leaves and an array of references' elements are held by a container the graph does not count."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/container_held.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[1, 2] [9, 2]\n[[0], [1]] [1, 2]\n"
+
+[[tests]]
+name = "new_values.container_held.copies"
+desc = "`camel inspect --copies` on the container-held program: two updates, both `copied` -- the path assignment whose array is a struct field read and the append whose array is an element of an array of references. Neither is `in-place` (the plan did not make the value) and neither is `by-count` (the array's count cannot see the container)."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/container_held.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  const tally = 'COPIES main updates 2 in-place 0 by-count 0 declared 0 copied 2'
+  assert(lines.includes(tally), 'both updates of main copy: ' + lines.join(' | '))
+  const rows = lines.filter((l) => /\s(set_index|append)\s/.test(l))
+  assert(rows.length === 2, 'main lays two update rows, not ' + rows.length + ': ' + lines.join(' | '))
+  for (const row of rows) {
+    assert(/ copied$/.test(row), 'a container-held value is copied, never in place: ' + row)
+  }
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.two_names_for_a_struct.copies"
+desc = "`camel inspect --copies` on the two-names case: all three path assignments read `copied`. Each one writes an array the struct holds, and the struct has a second name whose leaves are not counted, so the plan must not hand the storage over -- this is the reading that says the case above still holds for that reason."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/two_names_for_a_struct.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  const tally = 'COPIES main updates 3 in-place 0 by-count 0 declared 0 copied 3'
+  assert(lines.includes(tally), 'all three writes of main copy: ' + lines.join(' | '))
+  const rows = lines.filter((l) => /\sset_index\s/.test(l))
+  assert(rows.length === 3, 'main lays three set_index rows, not ' + rows.length + ': ' + lines.join(' | '))
+  for (const row of rows) {
+    assert(/ copied$/.test(row), 'a write through a struct name copies, never in place: ' + row)
+  }
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.value_used.copies"
+desc = "`camel inspect --copies` on the value-used case: the append whose array is an element of `rows` reads `copied`, so `rows` keeps `[[0], [1]]`; the `var`-less parameter of `plus_two` copies too, its array being the caller's. Neither may read `in-place` or `by-count`, because the outer array's slot is a holder the array's own count does not see."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/value_used.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  const main = 'COPIES main updates 2 in-place 0 by-count 0 declared 0 copied 2'
+  assert(lines.includes(main), 'both appends of main copy: ' + lines.join(' | '))
+  // The parameter is a value the caller made: the callee's update copies rather than take it over.
+  const callee = 'COPIES plus_two updates 1 in-place 0 by-count 0 declared 0 copied 1'
+  assert(lines.includes(callee), 'the callee copies the array its caller made: ' + lines.join(' | '))
+  const rows = lines.filter((l) => /\sappend\s/.test(l))
+  assert(rows.length === 3, 'three append rows, not ' + rows.length + ': ' + lines.join(' | '))
+  for (const row of rows) {
+    assert(/ copied$/.test(row), 'an element of a container is copied, never in place: ' + row)
+  }
+}
+"""
+timeout_ms = 60000
