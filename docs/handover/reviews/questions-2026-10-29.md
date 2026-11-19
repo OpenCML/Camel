@@ -5133,3 +5133,34 @@ AssertionError: (…/arm_read.before.json, …/arm_read.after.json,
 2. **编辑前的图若已超出它的类型，提交就不问编辑后的效应**（`commitViolation` 那一支）。编辑前的图是编译器交出的，越界说明前端接受了一个超出类型的图——那是编译器缺陷，**改成内部错误报出**，不再跳过。
 3. （不进必需项，排在后面）**图模块的读不带读图效应**：`graph_of`/`graphs_of`/`nodes`/`inputs`/`op`/`exit_of` 与 `open` 都没有 `uses graph`；`graph` 只读资源已能声明（原则 9.12 定的读图效应）。按 9.12 给这些读与 `open` 加上 `uses graph`，属编辑块车道 L 的范围。
 另，**规则的定义处检查**（原则 9.11：右侧效应含于左侧、锚点相对顺序不变）尚未实现，车道 K 一直没开——开一格。
+
+## 负责人回报（2026-11-20 04:10）：基线补一条 `consistency`，其中一条红有精确病因
+
+决策者。`feat/consistency` 不在我原来的六计划基线里，今天第一次量到，补进来。
+
+### 一、基线更新（`8061352f6` 上量，树干净）
+
+```
+[SUMMARY] total: 1288, pass: 1286, fail: 2
+[FAIL] runner.backend_matrix
+[FAIL] new_values.sort_rebinding.graph
+killed = 0
+```
+
+⇒ **两条都是既有红**（`432753f0c` 合前后都红，已按判据合入并写明）。**六计划基线因此变成七项**：compile 2638/2622/0 · linear 869/865/0 · opt 1620/1620/0 单跑 · parse 126/126/0 · para 104/104/0 · tools 70/70/0 · **consistency 1288/1286/2**。
+
+### 二、`new_values.sort_rebinding.graph` 那条红有逐字病因
+
+```
+[INFO] verification output: Error: the rebinding at sort_rebinding.cml:36:14 (main: xs = xs->sort) is at the old value's
+       last use and must not copy: 11 row(s), COPIES main updates 9 in-place 6 by-count 0 declared 0 copied 3
+```
+
+⇒ **它断言的正是设计原则 10.5**：「在旧值的最后一次使用处做的返回新值一定原地进行」。而实测 `updates 9 / in-place 6 / copied 3`，**有一个 `xs = xs->sort` 在旧值最后一次使用处仍然复制**。
+⇒ 我核过 S3b（`02939ffb7`）对这条 plan 的 diff：它**只新增**了 `new_values.sort_rebinding.copies`（`['sort_rebinding.cml:26:12', 'sorted_param: v = v->sort']`），`.graph` 那条的内容行**没有任何 `+` 标记** ⇒ **这条红比 S3b 更早存在，不是它引入的。**
+⇒ **它不在六计划里，所以我今晚一直没看见它。** 这是「基线覆盖不到的东西，不会被任何一轮读数发现」的第三个实例（前两个：`registry.reference_is_generated` 任何计划都看不见、`trans.cml.print_and_recompile` 只有 `feat/trans` 看得见）。
+
+### 三、八格现状与排队
+
+八格全满，`<>` 实参格在跑（已绿 `bddc8d6ab`，等六计划读数）。**你 03:40 下发的四组论文读数（调度不变性 / 相干性覆盖 / 每个提交检查各必要 / 不排序的反例）排在后面，没有空位。**
+⇒ **其中「不排序的反例」我们今晚已经做出证据了**：`docs/handover/reports/eval-round10/e2e/raw-output-after-inline-gate-and-order-lift.txt`，不排序版被拒、拒绝原文与改前**逐字节相同**（8 行切片、大小写敏感比较 `byte-identical`），而排序版与反向排序版都收、各带四个 `# tick`。**你要的那一组不用再跑，把这份文件取去即可。**
