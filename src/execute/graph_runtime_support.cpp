@@ -690,14 +690,22 @@ gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
         if (node->kind != camel::runtime::GCNodeKind::Gate) {
             break;
         }
-        const auto normInputs = graph->normInputsOf(current);
-        if (!normInputs.empty()) {
-            current = normInputs.front();
+        // What a gate passes on is the kernel's one reading of it
+        // (`camel/runtime/graph.h#forwardedInputOf`: the first ordinary input, else the first
+        // context input), and this walk asks that function rather than reading the inputs again:
+        // a copy here is what would drift from the reading every other walker of a graph uses.
+        if (const gc_node_ref_t forwarded = camel::runtime::forwardedInputOf(*graph, current);
+            forwarded != camel::runtime::kInvalidNodeRef) {
+            current = forwarded;
             continue;
         }
-        // The value a GATE forwards is its data input; when it has none, what it waits on is all
-        // there is to show, so the walk follows the wait instead: the sync predecessor carries it
-        // (docs/design/effects/edges.cn.md 5.3).
+        // Below is **not** that reading, and it is not a second copy of it: a gate that forwards no
+        // value still stands somewhere in the graph, and this walk asks a different question -- the
+        // last *statement* the graph does, seen through forwarding gates -- so a gate with no value
+        // falls back to what it waits on instead of answering "no tail". The sync predecessor
+        // carries it (docs/design/effects/edges.cn.md 5.3); `forwardedInputOf` answers
+        // `kInvalidNodeRef` for this same gate, because the value it forwards and the statement it
+        // waits for are two different questions.
         const auto syncInputs = graph->syncPredsOf(current);
         if (!syncInputs.empty()) {
             current = syncInputs.back().pred;
