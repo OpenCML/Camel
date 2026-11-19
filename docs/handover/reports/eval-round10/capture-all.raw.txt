@@ -1,0 +1,1046 @@
+===== capture-all: the ECOOP section 6 readings and the e2e lane, one run =====
+# the build every reading below ran on:
+#   tree       /home/zjwei/camel-work/capture
+#   git HEAD   6893324ccfe09fad5fbbe246592577f4c05e7da8
+#   camel      /home/zjwei/camel-work/capture/out/latest/bin/camel
+#   config       Release
+#   revision     6893324ccfe09fad5fbbe246592577f4c05e7da8
+#   dirty        False (0 path(s))
+#   builtAt      2026-11-19T17:02:54.437Z
+#   footprint    261119_163909_8cf53d32c0
+#   fingerprint  fd5bc8cb02a99b59b62695ca9efaecfa84cfd795fb5f525bd4073b0402c84724 of 1347 files under src, include, modules, tools, stdlib, third_party, cmake, CMakeLists.txt, conanfile.txt
+#   buildOptions 09afb0dfe7d81fa16f24b988b659ee775dbc81de33490bcdc1387375a003f5e0 platform linux/x64
+#                cmake {"CAMEL_ENABLE_PYTHON": "ON", "CAMEL_TENSOR_BLAS": "ON", "ENABLE_FASTVM_JIT": "ON"}
+#                env   {"CAMEL_SKIP_PYTHON": "0", "CAMEL_TARGET_ARCH": "native"}
+#   version    Camel v0.2.45 (Build 261119_163909_8cf53d32c0)
+#   linked at  8cf53d32c0; the files this tree has on top of it (the binary does not include
+#             them, so no reading below depends on them):
+#               docs/handover/reports/eval-round10/capture-all.sh
+#
+# No reading below came from another build. A row that could only be taken on an older pin
+# would say so on the row; there is none in this run.
+# The scratch directory the module roots and the pass copies live in is /tmp/camel-capture-all, fixed on
+# purpose: a diagnostic quotes it, and a path that changed per run would make two runs differ.
+
+=== [1] the six writings of the case-study program, and the counterexample ===
+# build=6893324cc
+# The writing form is the library's: `let dloss = grad(loss)` then `dloss<layer, y>(X)`.
+# The six are the ways of writing the program that change no meaning; `train-reorder-output` is
+# the counterexample, which moves the prints and so moves the order edges and must differ.
+# The reading is the canonical document of each, so it is the graph and not the file name.
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train.cml std::jgir canonical=true > train.json
+doc=train exit=0 bytes=26097 md5=68940aecd0dc6ac1fa8da5cd00ec28e5 sha256=740b7a29f1b50b059261569df38bac889657ca76fea6467c62826e837a1e9bd1
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-rename.cml std::jgir canonical=true > train-rename.json
+doc=train-rename exit=0 bytes=26097 md5=68940aecd0dc6ac1fa8da5cd00ec28e5 sha256=740b7a29f1b50b059261569df38bac889657ca76fea6467c62826e837a1e9bd1
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-swap.cml std::jgir canonical=true > train-swap.json
+doc=train-swap exit=0 bytes=26097 md5=68940aecd0dc6ac1fa8da5cd00ec28e5 sha256=740b7a29f1b50b059261569df38bac889657ca76fea6467c62826e837a1e9bd1
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-inline.cml std::jgir canonical=true > train-inline.json
+doc=train-inline exit=0 bytes=26097 md5=68940aecd0dc6ac1fa8da5cd00ec28e5 sha256=740b7a29f1b50b059261569df38bac889657ca76fea6467c62826e837a1e9bd1
+
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-a.cml std::jgir canonical=true > loss-a.json
+doc=loss-a exit=0 bytes=26097 md5=68940aecd0dc6ac1fa8da5cd00ec28e5 sha256=740b7a29f1b50b059261569df38bac889657ca76fea6467c62826e837a1e9bd1
+
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-b.cml std::jgir canonical=true > loss-b.json
+doc=loss-b exit=0 bytes=26097 md5=68940aecd0dc6ac1fa8da5cd00ec28e5 sha256=740b7a29f1b50b059261569df38bac889657ca76fea6467c62826e837a1e9bd1
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-reorder-output.cml std::jgir canonical=true > train-reorder-output.json
+doc=train-reorder-output exit=0 bytes=26097 md5=33556fbe2b760c9c00e5ef053231e583 sha256=4d5ab9a2a3f6868401ba2de52a053f17d71d2daccb7ce3cfb7d8e54bbd9d8631
+
+# the six against the baseline, then the counterexample against it
+train-rename           same
+train-swap             same
+train-inline           same
+loss-a                 same
+loss-b                 same
+train-reorder-output   differs first_difference_byte=4151
+
+
+=== [2] the scale of train.cml ===
+# build=6893324cc
+# Node = `graphs[*].nodes` summed; edge = one entry of a node's `inputs`, which is what a
+# reference is in a canonical document (it has no `edges` array); region = `graphs[*].regions`;
+# bytes = the canonical document itself. The two programs are printed apart: the six writings'
+# baseline, and the copy the tree ships under examples/case-study/.
+
+### camel examples/case-study/train.cml std::jgir canonical=true > case.json
+doc=case exit=0 bytes=29945 md5=4db1dcf922c71556bdc681356bb6546d sha256=f3978b42249f6224ec3a43a841ab5f2ddf5c010173491c5d2778f4fa8e90969d
+
+train        graphs=5 nodes=57 edges=72 regions=1 bytes=26097
+             per graph, in the document's order: 2 17 14 8 16
+             entry=g1 root=g0
+case         graphs=5 nodes=63 edges=93 regions=2 bytes=29945
+             per graph, in the document's order: 2 26 14 8 13
+             entry=g1 root=g0
+
+
+=== [3] the three backends on the training program ===
+# build=6893324cc
+# The program is the one the tree ships, examples/case-study/train.cml. The paper's sentence is
+# that the three backends print the same thing; the comparison at the end is the reading.
+
+### camel examples/case-study/train.cml std::nvm
+### exit=0
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+
+### camel examples/case-study/train.cml std::fvm
+### exit=0
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+
+### camel examples/case-study/train.cml std::jit
+### exit=0
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+
+# the three outputs against each other (the masked text: the program itself prints no time, and
+# a comparison of the raw files would part on one if it ever did)
+nvm against fvm  same
+nvm against jit  same
+
+
+=== [4] the rows of tab:lang, under the library's grad ===
+# build=6893324cc
+# `edits-ecoop.cml` is copied into the scratch root as `eco.cml`: a module's name is its file's
+# stem, so a pass library reaches a command under that name. The file in the tree is not renamed
+# and not edited. The program is the six writings' baseline.
+#   print_unordered  a print spliced at a pure node of main -- expected refused (order check)
+#   print_ordered    the same body spliced at a statement of the chain -- expected accepted
+#   loss_print       the same print in loss, whose body has no call the analysis cannot name --
+#                    expected refused (effect check, PassEffectBeyondType)
+#   drop_print       every println erased -- expected accepted, and nothing printed
+#   break_rate       the targets tensor put in the learning-rate slot -- expected refused by the
+#                    check on the edge's types
+# The break_rate row selects the one constant of type float and the one of type f32[4, 1]; if
+# either is not unique the pass returns the program unchanged, so the row would print the
+# program's own output instead of a refusal. That is the one way this row can go quiet, and the
+# record shows which of the two happened.
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/train.cml eco::print_unordered std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 8 of graph 'main' (:io/println), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write stdout / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /tmp/camel-capture-all/eco.cml:115:12
+     |
+ 115 |     return println('announced')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/train.cml eco::print_ordered std::nvm
+loss before: 3.7500
+loss after:  0.0000
+announced
+### exit=0
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/train.cml eco::loss_print std::nvm
+error[RuntimeDiag::PassEffectBeyondType]: 'graph::commit' committed a graph that reaches past the effect its own type declares: node 16 of graph 'loss' (:io/println), in a graph whose type declares nothing, makes an access the type does not cover (write stdout): the commit would publish a body that reaches past its own declared effect
+    --> /tmp/camel-capture-all/eco.cml:115:12
+     |
+ 115 |     return println('announced')
+     |            ^^^^^^^
+help: A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/train.cml eco::drop_print std::nvm
+### exit=0
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/train.cml eco::break_rate std::nvm
+error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'main' breaks its edge invariants (1 violation(s)):
+  graph 'main' node 3 (10): passes a f32[4, 1] as ordinary argument 2 of 'run', which takes a float.
+   --> /tmp/camel-capture-all/train.cml:28:1
+    |
+ 28 | func main(): int sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+ 29 |     let X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]] as f32[4, 2]
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   ...
+ 36 | }
+    | ^
+note: the error was made by <graph::commit>, which records no position
+help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+
+### exit=1
+
+
+=== [5] the optimization table: the MLP and the char-transformer ===
+# build=6893324cc
+# Two kinds of row per pass, printed apart:
+#   the document  -- `<prog> <pass> std::jgir canonical=true`, WITH NO --arg on either program:
+#                    the canonical document is read from the program as written, and a document
+#                    compared against one taken with another --arg set is not a comparison.
+#   the run       -- the program actually runs, with the arguments each program documents.
+#                    The MLP's data comes from probes/gen_mlp_data.py (same seed, same shapes),
+#                    64 train / 16 val, 2 epochs; the transformer's is its own committed corpus.
+# The transformer cannot run on this build: its loss goes through the library's vjp, and that
+# stops at 'jvp has no forward transform'. Its run row therefore shows the diagnostic once per
+# pass, and its table row is the document alone. That is the reading, not a gap.
+
+# --- the MLP: showcase/c2-mlp-mnist/train.cml ---
+### camel showcase/c2-mlp-mnist/train.cml std::jgir canonical=true > mlp-baseline.json
+doc=mlp-baseline exit=0 bytes=161340 md5=accdb811e724b4a9bf26870ecc81bd04 sha256=9b0a390c01fb7f3ea4caa48b9def23cfaa939a80f9da2ae7e809dbed88ecb7e7
+
+### camel showcase/c2-mlp-mnist/train.cml opt::cse std::jgir canonical=true > mlp-cse.json
+doc=mlp-cse exit=0 bytes=159220 md5=2577ac2d8ec52bf832964f842602ede0 sha256=f814d7b18cac2cce19d172464c6b9421e67dfe91f9e9c8e322819654befdcc59
+
+### camel showcase/c2-mlp-mnist/train.cml opt::fold std::jgir canonical=true > mlp-fold.json
+doc=mlp-fold exit=0 bytes=161223 md5=6c8e429c7ce394af1e3ec2eb527c5be6 sha256=fde9a2ecd10e560abd601829f98471690d373d3e315c2c4bf47d3c9882f713ef
+
+### camel showcase/c2-mlp-mnist/train.cml opt::dce std::jgir canonical=true > mlp-dce.json
+doc=mlp-dce exit=0 bytes=161340 md5=accdb811e724b4a9bf26870ecc81bd04 sha256=9b0a390c01fb7f3ea4caa48b9def23cfaa939a80f9da2ae7e809dbed88ecb7e7
+
+### camel showcase/c2-mlp-mnist/train.cml opt::saturate std::jgir canonical=true > mlp-saturate.json
+doc=mlp-saturate exit=0 bytes=164102 md5=94f987f0f8a0148613e13fcf77e6a5f6 sha256=f77e8fd4a0857d9406b3e737bf224fbabcc9bef4da7e94bfd1f6f7cfcc10cde1
+
+# the document rows against the baseline
+opt::cse               differs first_difference_byte=263
+opt::fold              differs first_difference_byte=263
+opt::dce               same
+opt::saturate          differs first_difference_byte=263
+
+# the MLP's runs: does the pass leave the output alone (seconds= is masked)
+### python3 docs/handover/reports/eval-round10/probes/gen_mlp_data.py --out /tmp/camel-capture-all/mlp-data
+wrote /tmp/camel-capture-all/mlp-data train 64 val 16 hidden 128 order 128
+
+### camel --arg data=/tmp/camel-capture-all/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::cse std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::fold std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::dce std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::saturate std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+# each run against the baseline run (the masked text, so the run's own seconds= is not the
+# difference: that field moves every run and says nothing about the pass)
+opt::cse               same
+opt::fold              same
+opt::dce               same
+opt::saturate          same
+
+# --- the char-transformer: showcase/c3-char-transformer/train.cml ---
+### camel showcase/c3-char-transformer/train.cml std::jgir canonical=true > tr-baseline.json
+doc=tr-baseline exit=0 bytes=276924 md5=0e189332766fce28e536e4cedec57008 sha256=360e2ebe782bf2ae70ae07a10e9d63bdf29b9d5d6d392583cc73ac8c5d28694b
+--- stderr (tr-baseline)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-baseline)
+
+### camel showcase/c3-char-transformer/train.cml opt::cse std::jgir canonical=true > tr-cse.json
+doc=tr-cse exit=0 bytes=274055 md5=4910065d934d1200b4a2c701f53ac8e6 sha256=d75e2eed7625838a9d47738f606a933fd560c2cf3be55461e70f5f65dafe47d8
+--- stderr (tr-cse)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-cse)
+
+### camel showcase/c3-char-transformer/train.cml opt::fold std::jgir canonical=true > tr-fold.json
+doc=tr-fold exit=0 bytes=326597 md5=82b57661c5ea737646747e85dedc65c2 sha256=c4dc05e54b8842143be128ccf04f4e2afd7881e98632cf103fba6fe97bb1b0fb
+--- stderr (tr-fold)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-fold)
+
+### camel showcase/c3-char-transformer/train.cml opt::dce std::jgir canonical=true > tr-dce.json
+doc=tr-dce exit=0 bytes=276924 md5=0e189332766fce28e536e4cedec57008 sha256=360e2ebe782bf2ae70ae07a10e9d63bdf29b9d5d6d392583cc73ac8c5d28694b
+--- stderr (tr-dce)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-dce)
+
+### camel showcase/c3-char-transformer/train.cml opt::saturate std::jgir canonical=true > tr-saturate.json
+doc=tr-saturate exit=0 bytes=277154 md5=dd6a522efd7cc72f32633057f447eb32 sha256=b5feb32ea6650bb9d298eb3526cc9ba42f37b7bb6744372e22f337cdd86284a6
+--- stderr (tr-saturate)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-saturate)
+
+# the document rows against the baseline
+opt::cse               differs first_difference_byte=337
+opt::fold              differs first_difference_byte=337
+opt::dce               same
+opt::saturate          differs first_difference_byte=337
+
+# the transformer's run, with its own documented arguments
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
+    --> /home/zjwei/camel-work/capture/out/latest/stdlib/vjp.cml:135:25
+     |
+ 135 |     let forward = split(jvp(f))
+     |                         ^^^
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::cse std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
+    --> /home/zjwei/camel-work/capture/out/latest/stdlib/vjp.cml:135:25
+     |
+ 135 |     let forward = split(jvp(f))
+     |                         ^^^
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::fold std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
+    --> /home/zjwei/camel-work/capture/out/latest/stdlib/vjp.cml:135:25
+     |
+ 135 |     let forward = split(jvp(f))
+     |                         ^^^
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::dce std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
+    --> /home/zjwei/camel-work/capture/out/latest/stdlib/vjp.cml:135:25
+     |
+ 135 |     let forward = split(jvp(f))
+     |                         ^^^
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::saturate std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
+    --> /home/zjwei/camel-work/capture/out/latest/stdlib/vjp.cml:135:25
+     |
+ 135 |     let forward = split(jvp(f))
+     |                         ^^^
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+
+=== [6] the fusion ===
+# build=6893324cc
+# The transform is `greedy::fuse`, a pass written in Camel (test/cases/opt/writings/
+# greedy_fuse.cml.in), copied into the scratch root as `greedy.cml`. The reading below is the
+# strict one: the two writings of one program must fuse to ONE canonical form.
+
+### python3 test/cases/opt/writings/greedy_fusion_writings.py --camel /home/zjwei/camel-work/capture/out/latest/bin/camel --require-one-form
+programs: /tmp/camel-capture-all/fusion
+transform: test/cases/opt/writings/greedy_fuse.cml.in -> /tmp/camel-capture-all/fusion/greedy.cml
+control (torch.fx, run on the ECOOP side; this host has no torch): test/cases/opt/writings/fx_greedy_fusion.py present
+the transform asks no writing-visible query (id/name/origin/show): PASS
+the two writings differ by exactly this swap of two adjacent lines (2 <-> 3):
+  2: let a = x * 2
+  3: let b = y * 3
+writings: base, different, renamed, swapped, swapped_renamed
+
+reading: raw_one_form -- the two writings, before the transform
+  canonical[left] base__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
+  canonical[right] swapped__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
+same_graph /tmp/camel-capture-all/fusion/base__raw.json /tmp/camel-capture-all/fusion/swapped__raw.json = true
+nodes=14 edges=13
+canonical: 5446 bytes, sha256=e68d3eb674bc0f5f (both sides)
+
+reading: changes_the_graph -- the same program, fused and unfused -- a transform that fused nothing reads as a no-op
+  canonical[left] base__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
+  canonical[right] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all/fusion/base__raw.json /tmp/camel-capture-all/fusion/base__fused.json = false
+nodes=14 edges=13   (base__raw.json)
+nodes=13 edges=11   (base__fused.json)
+canonical: first difference at byte 188 (line 11, column 16); 5446 bytes vs 5023 bytes
+the node and edge relation is not one
+symmetric difference
+  nodes only in base__raw.json (14) and only in base__fused.json (13):
+    - 1 x DATA 2 : int @ body
+    + 1 x DATA 3 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body
+    - 1 x PORT param normal#0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body
+    + 1 x DATA 5 : int @ body
+    + 1 x DATA 3 : int @ body
+    - 1 x CALL : int @ body
+    + 1 x DATA 2 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body
+    ... 15 further node class(es) moved
+  edges only in base__raw.json (13) and only in base__fused.json (11):
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:1--> DATA 5 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:0--> DATA 3 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/add_l@1.0 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> DATA 2 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:0--> PORT param normal#0 : int @ body
+    - 1 x CALL : int @ body --in:context:0--> DATA {"graph": "g1", "k": "func"} callee=<graph> : func @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> PORT param normal#1 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:0--> PORT param normal#0 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> DATA 2 : int @ body
+    ... 12 further edge class(es) moved
+
+reading: renamed -- the same program with every local renamed, both fused
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] renamed__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all/fusion/base__fused.json /tmp/camel-capture-all/fusion/renamed__fused.json = true
+nodes=13 edges=11
+canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
+
+reading: swapped -- two adjacent statements swapped, both fused -- THE CRITERION
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] swapped__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all/fusion/base__fused.json /tmp/camel-capture-all/fusion/swapped__fused.json = true
+nodes=13 edges=11
+canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
+
+  => the two writings of one program are ONE canonical form (swapped)
+
+reading: swapped_and_renamed -- both changes at once, both fused
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] swapped_renamed__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all/fusion/base__fused.json /tmp/camel-capture-all/fusion/swapped_renamed__fused.json = true
+nodes=13 edges=11
+canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
+
+  => the two writings of one program are ONE canonical form (swapped_and_renamed)
+
+reading: different_constant -- `y * 4` for `y * 3`, both fused -- the comparator must be able to say no
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] different__fused.json: 5023 bytes, sha256=7bb09cf32a818ebc66bf50193b2a801d649bfe6be8f0adc68d1ed6dfdca7c64a
+same_graph /tmp/camel-capture-all/fusion/base__fused.json /tmp/camel-capture-all/fusion/different__fused.json = false
+nodes=13 edges=11
+canonical: first difference at byte 4408 (line 220, column 18); 5023 bytes vs 5023 bytes
+the node and edge relation is not one
+symmetric difference
+  nodes only in base__fused.json (13) and only in different__fused.json (13):
+    + 1 x OPER :op/add_l@1.0 : int @ body
+    - 1 x DATA 3 : int @ body
+    + 1 x DATA {"graph": "g1", "k": "func"} callee=<graph> : func @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body
+    - 1 x FUNC callee=<graph> : int @ body
+    + 1 x DATA 4 : int @ body
+    + 1 x DATA 3 : int @ body
+    + 1 x PORT param normal#0 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body
+    + 1 x DATA 5 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body
+    ... 14 further node class(es) moved
+  edges only in base__fused.json (11) and only in different__fused.json (11):
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/add_l@1.0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/mul_l@1.0 : int @ body
+    - 1 x FUNC callee=<graph> : int @ body --in:normal:1--> DATA 5 : int @ body
+    - 1 x FUNC callee=<graph> : int @ body --in:normal:0--> DATA 3 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> DATA 2 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:0--> PORT param normal#0 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:1--> DATA 5 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:0--> DATA 3 : int @ body
+    ... 10 further edge class(es) moved
+
+
+the two writings of one program are ONE canonical form: PASS
+the greedy fusion is not a no-op, a rename fuses to the same graph, and a different constant does not: PASS
+### exit=0
+
+# the two losses, each fused, and each against its own unfused document
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/loss-a.cml greedy::fuse std::jgir canonical=true > fused-loss-a.json
+doc=fused-loss-a exit=0 bytes=26097 md5=5bff8788844488252b09a72f054c3a5c sha256=83c00574b7ab22043c1b9872e340ca138467e30afd94b37ed865406137c078ef
+
+fused loss-a against unfused differs first_difference_byte=263
+### CAMEL_PACKAGES=/tmp/camel-capture-all camel /tmp/camel-capture-all/loss-b.cml greedy::fuse std::jgir canonical=true > fused-loss-b.json
+doc=fused-loss-b exit=0 bytes=26097 md5=5bff8788844488252b09a72f054c3a5c sha256=83c00574b7ab22043c1b9872e340ca138467e30afd94b37ed865406137c078ef
+
+fused loss-b against unfused differs first_difference_byte=263
+# and the two fused documents against each other
+fused loss-a against fused loss-b  same
+
+
+=== [7] commit and normalization time (this section floats: it is the only one that does) ===
+# build=6893324cc
+# Three probes in docs/handover/reports/eval-round10/probes, each run as an ordinary pass on examples/case-study/train.cml:
+#   canonical_once::run    one normalization, one call of `nodes(graph_of)`
+#   canonical_walk::walk   one normalization per graph, the way a pass that walks every graph
+#                          pays it
+#   commit_only::touch     `open` + `commit` with no edit in between (it includes open)
+# Nine fresh processes each, because a repeat inside one process drifts upward; the number is
+# the `pass` phase's wall and CPU time from --time-phases, median with the range beside it.
+# This whole section floats by construction: these are times, and the host's load line, which is
+# printed here because a time with no load beside it cannot be read, moves with the host too.
+
+# the host's load, which is part of this section for the reason above
+#   /proc/loadavg 25.26 42.65 48.61 18/9940 858849
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/capture/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_once::run std::jgir canonical=true --time-phases=/tmp/camel-capture-all/ph-once-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=1.23 cpu_ms=1.23 total_ms=32.71
+run=2 wall_ms=1.32 cpu_ms=1.32 total_ms=36.14
+run=3 wall_ms=1.30 cpu_ms=1.30 total_ms=38.84
+run=4 wall_ms=1.23 cpu_ms=1.23 total_ms=36.85
+run=5 wall_ms=1.17 cpu_ms=1.17 total_ms=31.09
+run=6 wall_ms=1.14 cpu_ms=1.14 total_ms=29.19
+run=7 wall_ms=1.13 cpu_ms=1.13 total_ms=31.71
+run=8 wall_ms=1.33 cpu_ms=1.33 total_ms=37.45
+run=9 wall_ms=1.20 cpu_ms=1.20 total_ms=31.94
+canonical_once::run    n=9 median_wall_ms=1.23 [1.13, 1.33] median_cpu_ms=1.23
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/capture/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_walk::walk std::jgir canonical=true --time-phases=/tmp/camel-capture-all/ph-walk-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=16.79 cpu_ms=16.78 total_ms=91.25
+run=2 wall_ms=16.94 cpu_ms=16.94 total_ms=89.10
+run=3 wall_ms=16.61 cpu_ms=16.61 total_ms=86.49
+run=4 wall_ms=16.90 cpu_ms=16.90 total_ms=90.45
+run=5 wall_ms=16.52 cpu_ms=16.52 total_ms=91.07
+run=6 wall_ms=16.76 cpu_ms=16.76 total_ms=90.46
+run=7 wall_ms=16.45 cpu_ms=16.45 total_ms=86.62
+run=8 wall_ms=16.83 cpu_ms=16.83 total_ms=88.40
+run=9 wall_ms=16.93 cpu_ms=16.93 total_ms=92.95
+canonical_walk::walk   n=9 median_wall_ms=16.79 [16.45, 16.94] median_cpu_ms=16.78
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/capture/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml commit_only::touch std::jgir canonical=true --time-phases=/tmp/camel-capture-all/ph-commit-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=1.18 cpu_ms=1.18 total_ms=32.87
+run=2 wall_ms=1.19 cpu_ms=1.19 total_ms=33.08
+run=3 wall_ms=1.22 cpu_ms=1.22 total_ms=34.61
+run=4 wall_ms=1.21 cpu_ms=1.21 total_ms=34.18
+run=5 wall_ms=1.15 cpu_ms=1.15 total_ms=32.48
+run=6 wall_ms=1.16 cpu_ms=1.16 total_ms=32.46
+run=7 wall_ms=1.26 cpu_ms=1.26 total_ms=35.09
+run=8 wall_ms=1.17 cpu_ms=1.17 total_ms=34.24
+run=9 wall_ms=1.16 cpu_ms=1.16 total_ms=32.04
+commit_only::touch     n=9 median_wall_ms=1.18 [1.15, 1.26] median_cpu_ms=1.18
+
+#   /proc/loadavg 25.26 42.65 48.61 15/9910 859205
+
+=== [8] the two derivative graphs: loss-a against loss-b ===
+# build=6893324cc
+# The two losses are two writings of one loss, and the derivative is a library transform that
+# runs at compile time, so the derivative graph is a graph of the canonical document -- the
+# comparison of the two documents is the comparison of the two derivative graphs. The node
+# counts per graph are printed so the size of the derivative graph is visible, and the
+# signatures are printed because they are the only content of a canonical document that says
+# what a graph is.
+
+loss-a.json
+  g0 id=g0   nodes=2   regions=0  signature=1
+  g1 id=g1   nodes=17  regions=0  signature=1
+  g2 id=g2   nodes=14  regions=0  signature=9
+  g3 id=g3   nodes=8   regions=0  signature=11
+  g4 id=g4   nodes=16  regions=1  signature=14
+loss-b.json
+  g0 id=g0   nodes=2   regions=0  signature=1
+  g1 id=g1   nodes=17  regions=0  signature=1
+  g2 id=g2   nodes=14  regions=0  signature=9
+  g3 id=g3   nodes=8   regions=0  signature=11
+  g4 id=g4   nodes=16  regions=1  signature=14
+# the two documents against each other
+loss-a against loss-b  same
+
+
+=== [9] the e2e lane: all of e2e/capture.sh, run unchanged ===
+# build=6893324cc
+# This is that script, not a copy of its commands: if the two ever drift, this section says so.
+# It moves to the worktree root and to the e2e directory itself, which is where `passes` is
+# found beside the program. Its own header prints the build it ran on, and its two readings that
+# the paper quotes verbatim are in it: the forward edit refused, and the reverse one accepted
+# with the marker never printing.
+
+===== build =====
+{
+  "schema": 3,
+  "config": "Release",
+  "tag": "latest",
+  "footprint": "261119_163909_8cf53d32c0",
+  "builtAt": "2026-11-19T17:02:54.437Z",
+  "revision": "6893324ccfe09fad5fbbe246592577f4c05e7da8",
+  "dirty": false,
+  "dirtyCount": 0,
+  "dirtyPaths": [],
+  "git": true,
+  "fingerprint": {
+    "version": 1,
+    "roots": [
+      "src",
+      "include",
+      "modules",
+      "tools",
+      "stdlib
+
+===== A: before the edit =====
+### camel program.cml std::nvm
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml std::jgir canonical=true | sha256sum
+591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5  -
+
+### camel program.cml passes::report std::nvm
+e2e graphs=5 nodes=53
+e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+===== B: the same program, written differently =====
+### camel program-writing-b.cml std::nvm
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program-writing-b.cml std::jgir canonical=true | sha256sum
+591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5  -
+
+### camel program-writing-b.cml passes::report std::nvm
+e2e graphs=5 nodes=53
+e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+===== the edit that runs: the marker, once per closure call =====
+### camel program.cml passes::instrument std::nvm
+# tick
+# tick
+# tick
+# tick
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument passes::report std::nvm
+e2e graphs=5 nodes=55
+e2e canonical=de98a8b6489a3c15a044b7995d85ee5eedcce81600c9ff398df13c6c176abcf3
+# tick
+# tick
+# tick
+# tick
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument std::jgir canonical=true | sha256sum
+fe1e102cbe7a45778458b34023fa2c47c2cedd976f4010dd45b120d1ff8f4a71  -
+
+### camel program-writing-b.cml passes::instrument passes::report std::nvm
+e2e graphs=5 nodes=55
+e2e canonical=de98a8b6489a3c15a044b7995d85ee5eedcce81600c9ff398df13c6c176abcf3
+# tick
+# tick
+# tick
+# tick
+total 86 tail 14
+### exit=0
+
+### camel program-writing-b.cml passes::instrument std::jgir canonical=true | sha256sum
+fe1e102cbe7a45778458b34023fa2c47c2cedd976f4010dd45b120d1ff8f4a71  -
+
+===== the edit that runs: the dedupe, output unchanged =====
+### camel program.cml passes::dedupe passes::report std::nvm
+e2e graphs=5 nodes=52
+e2e canonical=034e7b20e073b2b0fbe418b2f2abced8dda2702ebf46913cfc29adf95606a3a9
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::dedupe std::jgir canonical=true | sha256sum
+6723e24b26ac1b189917772362f3336d7f1fbea3387ea5061e6fee6915bbf33f  -
+
+### camel program-writing-b.cml passes::dedupe passes::report std::nvm
+e2e graphs=5 nodes=52
+e2e canonical=034e7b20e073b2b0fbe418b2f2abced8dda2702ebf46913cfc29adf95606a3a9
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program-writing-b.cml passes::dedupe std::jgir canonical=true | sha256sum
+6723e24b26ac1b189917772362f3336d7f1fbea3387ea5061e6fee6915bbf33f  -
+
+===== the edits the commit refuses =====
+### camel program.cml passes::instrument_unordered std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 9 of graph '__g_441__' (:io/println), in one region of graph '__g_441__', has no order against node 13 of graph '__g_441__' (:io/println), and at least one of the two writes (write stdout / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /home/zjwei/camel-work/capture/docs/handover/reports/eval-round10/e2e/passes.cml:146:12
+     |
+ 146 |     return println('# tick')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### camel program.cml passes::instrument_ordered std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 9 of graph '__g_441__' (:io/println), in one region of graph '__g_441__', has no order against node 13 of graph '__g_441__' (:io/println), and at least one of the two writes (write stdout / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /home/zjwei/camel-work/capture/docs/handover/reports/eval-round10/e2e/passes.cml:146:12
+     |
+ 146 |     return println('# tick')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+===== and the one it accepts and drops: the marker never runs =====
+### camel program.cml passes::instrument_reversed std::nvm
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument_reversed passes::report std::nvm
+e2e graphs=5 nodes=56
+e2e canonical=58ce1b9f2d44b9175092ce94e1a680278a098b1b016bcc89e61ee2805ae8aff7
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument_reversed passes::dump std::nvm
+graph 0 nodes=2 exit=1
+0 - () => int region=RegionKind::Root anchor=false free=true key=-|() => int|
+1 - int region=RegionKind::Root anchor=true free=false key=-|int|
+graph 1 nodes=4 exit=3
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - (x: int) => int region=RegionKind::Root anchor=false free=true key=-|(x: int) => int|
+2 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+3 - int region=RegionKind::Root anchor=true free=false key=-|int|,2
+graph 2 nodes=31 exit=29
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,2
+4 - int region=RegionKind::Root anchor=false free=true key=-|int|
+5 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,4
+6 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,3,5
+7 - (int, int) region=RegionKind::Root anchor=false free=true key=-|(int, int)|
+8 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+9 - int region=RegionKind::Root anchor=false free=true key=-|int|
+10 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,8,9
+11 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+12 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|
+13 - string region=RegionKind::Root anchor=false free=true key=-|string|
+14 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|,12
+15 - int region=RegionKind::LoopBody anchor=false free=false key=-|int|,14,8
+16 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,11,15
+17 - (int, int) region=RegionKind::LoopBody anchor=false free=true key=-|(int, int)|,7
+18 - (int, int) region=RegionKind::LoopBody anchor=false free=false key=-|(int, int)|,17
+19 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+20 - int region=RegionKind::Root anchor=false free=true key=-|int|
+21 :op/lt_l bool region=RegionKind::LoopCond anchor=false free=true key=:op/lt_l|bool|,19,20
+22 - int region=RegionKind::Root anchor=false free=true key=-|int|
+23 - (int, int) region=RegionKind::Root anchor=false free=false key=-|(int, int)|,0,6
+24 - int region=RegionKind::Root anchor=true free=true key=-|int|,23
+25 - string region=RegionKind::Root anchor=false free=true key=-|string|
+26 - int region=RegionKind::Root anchor=false free=false key=-|int|,14,20
+27 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,25
+28 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,27
+29 - int region=RegionKind::Root anchor=true free=false key=-|int|,24
+30 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+graph 3 nodes=5 exit=4
+0 - int region=RegionKind::Root anchor=true free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 - int region=RegionKind::Root anchor=false free=false key=-|int|,1,2
+4 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+graph 4 nodes=14 exit=13
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,0,1
+3 - int region=RegionKind::Root anchor=false free=true key=-|int|
+4 :op/add_l int region=RegionKind::Root anchor=true free=true key=:op/add_l|int|,2,3
+5 - string region=RegionKind::Root anchor=false free=true key=-|string|
+6 - string region=RegionKind::Root anchor=false free=true key=-|string|
+7 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,2,3
+8 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,5
+9 - string region=RegionKind::Inline anchor=false free=true key=-|string|
+10 :io/println string region=RegionKind::Inline anchor=false free=false key=:io/println|string|,9
+11 - string region=RegionKind::Inline anchor=false free=false key=-|string|,10
+12 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,8
+13 - int region=RegionKind::Root anchor=true free=false key=-|int|,4
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+===== the reading the edit's choice is checked against =====
+### camel program.cml passes::dump std::nvm
+graph 0 nodes=2 exit=1
+0 - () => int region=RegionKind::Root anchor=false free=true key=-|() => int|
+1 - int region=RegionKind::Root anchor=true free=false key=-|int|
+graph 1 nodes=4 exit=3
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - (x: int) => int region=RegionKind::Root anchor=false free=true key=-|(x: int) => int|
+2 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+3 - int region=RegionKind::Root anchor=true free=false key=-|int|,2
+graph 2 nodes=31 exit=29
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,2
+4 - int region=RegionKind::Root anchor=false free=true key=-|int|
+5 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,4
+6 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,3,5
+7 - (int, int) region=RegionKind::Root anchor=false free=true key=-|(int, int)|
+8 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+9 - int region=RegionKind::Root anchor=false free=true key=-|int|
+10 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,8,9
+11 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+12 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|
+13 - string region=RegionKind::Root anchor=false free=true key=-|string|
+14 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|,12
+15 - int region=RegionKind::LoopBody anchor=false free=false key=-|int|,14,8
+16 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,11,15
+17 - (int, int) region=RegionKind::LoopBody anchor=false free=true key=-|(int, int)|,7
+18 - (int, int) region=RegionKind::LoopBody anchor=false free=false key=-|(int, int)|,17
+19 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+20 - int region=RegionKind::Root anchor=false free=true key=-|int|
+21 :op/lt_l bool region=RegionKind::LoopCond anchor=false free=true key=:op/lt_l|bool|,19,20
+22 - int region=RegionKind::Root anchor=false free=true key=-|int|
+23 - (int, int) region=RegionKind::Root anchor=false free=false key=-|(int, int)|,0,6
+24 - int region=RegionKind::Root anchor=true free=true key=-|int|,23
+25 - string region=RegionKind::Root anchor=false free=true key=-|string|
+26 - int region=RegionKind::Root anchor=false free=false key=-|int|,14,20
+27 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,25
+28 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,27
+29 - int region=RegionKind::Root anchor=true free=false key=-|int|,24
+30 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+graph 3 nodes=5 exit=4
+0 - int region=RegionKind::Root anchor=true free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 - int region=RegionKind::Root anchor=false free=false key=-|int|,1,2
+4 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+graph 4 nodes=11 exit=10
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,0,1
+3 - int region=RegionKind::Root anchor=false free=true key=-|int|
+4 :op/add_l int region=RegionKind::Root anchor=true free=true key=:op/add_l|int|,2,3
+5 - string region=RegionKind::Root anchor=false free=true key=-|string|
+6 - string region=RegionKind::Root anchor=false free=true key=-|string|
+7 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,2,3
+8 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,5
+9 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,8
+10 - int region=RegionKind::Root anchor=true free=false key=-|int|,4
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### e2e capture.sh exit=0
+
+===== capture-all: the end =====
