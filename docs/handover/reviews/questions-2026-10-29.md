@@ -4976,3 +4976,29 @@ compile **2638/2622/0** · linear **869/865/0**（`+1 pass −1 known` 全部来
 4. 源码包前期准备五件；
 5. P\* 选定后 `capture-all.sh` 全量重跑，交决策者。
 车道开满 8 格，卡住当即回报。
+
+## 负责人回报（2026-11-20 03:35）：transformer 收回归队，两条老支按四问处置，一处请裁
+
+决策者。你 03:20 与 03:30 两条我照办：撤回 03:10 的放宽，**transformer 训练步在 P\* 上能运行列为必需项，与二阶导同级**；中间时间点撤回，按优先级与依赖推进，每完成一件当即回报。
+
+### 一、`<>` 实参那一格：8 格全满，排队中
+
+`permute` 规则已由 `lane-vjp-forward` 在做（它已把兜底句改成有名字有位置的诊断，`50cfe4d17` 已在 develop）。**`<>` 实参那一格我按你说的「与 `nested-b` 并行开一格」写了完整派工，但此刻 8 格全占满，派不出去**（工具直接拒了）。占用的八格：合并位、`permute`、`grad-callform`、`nested-b`、`opt-twice`、容器持有、`print_and_recompile` 复验（见下）、`inline-order` 收尾。**任一格一交件，我立刻把它派出去。** 这条我如实写，不等你想起来问。
+
+### 二、三条落后分支，按你 03:00 的四问逐条
+
+| 分支 | 落后 | ①为什么没合 | ②还值多少 | ③最快怎么合 | 处理 |
+|---|---|---|---|---|---|
+| `lane-front-ip-del` | 29 | 做完了没人合 | **0** —— 唯一那笔 `cfc5f74ea` 的 `git cherry` 是 `-`（已在 develop，即 `848f151a7`） | 无需合 | **删**（已打 tag `parked/lane-front-ip-del`；`front` 工作树还占着它，收树后删） |
+| `lane-gate-reds-a-parked` | 47 | **当证据停着**，从没人验过它还管不管用 | **1 笔** `81f1c369e`「把分支的语句和它的值打在源码放它的地方」，只动 `src/passes/trans/cml/cml.cpp` +62/−3 | cherry-pick 单笔 | **正在验**：若它就是 `print_and_recompile` 的修法就挑着合，然后删枝并记一行 |
+| `lane-ssa` | 46 | 在做中的活，红着 | 4 笔起，全是 `+`（算子 var 参数规则问声明、打包携带、两篇文档） | 不合 | **按你的话：留在分支上继续做，只把 develop 合进它，不反过来** |
+
+`lane-gate-reds-a-parked` 这条值得单说：**它被当「证据」停了四个小时，而它的标题与今天 `feat/trans` 唯一那条红（`print_and_recompile`，病因是「打印器不能重述携带分支」）字面对上了。** 我之前一直把它当破线的账想清掉，没验过它。这是我今晚第二次在「停着的分支」上判错方向。
+
+### 三、请裁一处：`break_rate` 的期望值
+
+`grad-callform` 发现：`examples/case-study/train.cml` 现在写的是引擎 `autodiff.grad`；若换成库 `grad`，会重开 `examples.case_study.break_rate`（四个后端 `expected exit 1, got exit 0`，1988 行 stderr），要改 `edits.cml` 的选择器。
+
+而那个「期望 exit 1」是从 `6ca5c012a`（11-16）的理由推出来的，它的理由讲的是 `break_rate` 选择器——**你 22:40 已把那条理由作为写法缺陷推翻**。
+
+**默认建议：本轮不搬 `examples/`；`break_rate` 的期望值改为 `exit 0`，并在页里写明「原期望源自一条 22:40 已被推翻的理由」。** 若你要搬，请给一句裁定，我改派工。
