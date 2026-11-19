@@ -739,17 +739,20 @@ class GraphDraft {
     bool eraseUnreadNodes(std::span<const gc_node_ref_t> nodes);
 
     /// Where the draft stood: the counts its node table and its two slot tables had, the regions it
-    /// had, and how many writes it had seen (docs/design/graph-editing/README.cn.md 16.1, 16.4).
+    /// had, how many writes it had seen, and where the undo journal stood.
     ///
-    /// A savepoint exists for one caller: a rule application, which appends nodes and the slots
-    /// they take and edits nothing it found. What it appends is what `rollbackTo` takes back, so an
-    /// application the engine abandons -- a right side whose constant faults, a writing that cannot
-    /// be given the waits the node it replaces had -- leaves the draft as it found it, which is the
-    /// "all or nothing" one application is ("一次应用就是一个小的 edit：全成或全不成").
+    /// A savepoint names a *segment*: what `rollbackTo` takes back is what the draft appended and
+    /// what it changed in the nodes it already had. The two halves are both in it. What an
+    /// application appends is the counts below; what it changes in place -- a node's inputs, a
+    /// region result, the entry or the exit, the user lists -- is in the journal the `undo*`
+    /// marks below name, which is written by the draft itself and only while a segment is open.
     ///
-    /// It is not the undo log of 16.4, and the difference is what it can be asked: a change made
-    /// *in place* on a node the draft already had (an operand taken away, an operator swapped) has
-    /// no record here to walk back, so a caller that made one must not ask for a rollback.
+    /// The undo rule this serves is the draft's own: one edit lands whole or leaves nothing, and
+    /// what an edit changed in place is kept in an undo log while a segment is open (the
+    /// graph-editing notes' 16.1 and 16.4). It is stated here in full rather than left to a
+    /// document, because it is what this type has to satisfy: a node the segment erased comes back at
+    /// the same id with the same body, since a node id is never handed out twice and a rollback that
+    /// moved one would break every class and every edge that names it.
     struct Savepoint {
         size_t nodes        = 0;
         size_t staticSlots  = 0;
@@ -757,17 +760,38 @@ class GraphDraft {
         size_t regions      = 0;
         uint64_t mutations  = 0;
         bool hasFrameLayout = false;
+        // The journal's own marks, one per record kind (see the `UndoNode`, `UndoRegions`,
+        // `UndoScalars`, `UndoPorts`, `UndoLowLevel` and `UndoWritings` records below).
+        size_t undoNodes     = 0;
+        size_t undoRegions   = 0;
+        size_t undoScalars   = 0;
+        size_t undoPorts     = 0;
+        size_t undoLowLevel  = 0;
+        size_t undoWritings  = 0;
     };
     Savepoint savepoint() const;
-    /// Drops every node, static value and frame slot the draft appended after `mark`, and puts the
-    /// draft's own write count back, so that a commit after an abandoned application sees a draft
-    /// that was not written to.
+    /// Opens a segment: the journal starts recording, and the returned mark names its start. Every
+    /// `markUndo` taken while it is open is a rollback point inside it; `endUndo` closes the
+    /// outermost one and drops the journal. The record cost is what the segment changed, not the
+    /// size of the graph, so a caller that never rolls back pays the copies of the nodes it wrote
+    /// to and nothing else.
+    Savepoint beginUndo();
+    /// A rollback point inside the segment already open. Outside one it names no journal, and a
+    /// rollback to it is the count rollback `savepoint()` always was.
+    Savepoint markUndo();
+    /// Closes one segment; the outermost one drops the journal and the recording stops.
+    void endUndo();
+    /// Puts the draft back where `mark` found it: every node, static value and frame slot it
+    /// appended after the mark goes, then the journal is replayed backwards over the nodes it
+    /// changed in place and the ones it erased, and the counters go back. A commit after a rolled
+    /// back segment sees a draft that was not written to.
     ///
     /// The **ids** are not given back: `addNode` never reuses one, and the lists that keep the ids
     /// of erased nodes (`gateIds_` and its two siblings) count on that, so the nodes go and the id
-    /// space keeps them. What the application took out of the tables does come back -- a static
-    /// value and a frame slot exist for the node that made them, and a graph published with them
-    /// would carry a constant nothing reads and a frame larger than its body needs.
+    /// space keeps them. A node the segment erased comes back **at its own id** with the body it
+    /// had -- the id was never handed out twice, so putting the old body back at it is not a
+    /// reuse, and every class and edge that names the id is right again. A rollback with no
+    /// journal (a mark taken outside a segment) restores the counts alone, as it always did.
     void rollbackTo(const Savepoint &mark);
 
     /// Whether the graph names `id` by something other than a read, so that a policy which erases a
@@ -1064,18 +1088,22 @@ class GraphDraft {
     void removeWithPort(gc_node_ref_t id);
     void removeClosureNode(gc_node_ref_t id);
     void setEntryNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         entry_ = id;
     }
     void setExitNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         exit_ = id;
     }
     void setOutputNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         output_ = id;
     }
     void setReturnNode(gc_node_ref_t id, GCReturnKind kind) {
+        noteOriginalScalars();
         ++mutations_;
         returnNode_ = id;
         returnKind_ = kind;
@@ -1193,6 +1221,75 @@ class GraphDraft {
     std::vector<gc_node_ref_t> gateIds_;
     std::vector<gc_node_ref_t> brchIds_;
     std::vector<gc_node_ref_t> joinIds_;
+
+    /// One segment's undo journal: what it changed outside its own appends. The records are kept
+    /// per kind, so a rollback takes the *first* record a mark has of each kind -- the state the
+    /// mark found -- instead of replaying later records over it. Every mark bumps `journalEpoch_`,
+    /// which is what makes that first record per segment: a node written by the outer segment and
+    /// again by an inner one is recorded once with the outer epoch and once with the inner one.
+    struct UndoNode {
+        gc_node_ref_t id = kInvalidNodeRef;
+        DraftNodeHeader header{};
+        std::vector<std::byte> tail; // the payload and the five input runs, as the node had them
+        std::vector<gc_node_ref_t> users[5]; // its user lists, when the segment wrote them
+        bool usersRecorded = false;
+    };
+    struct UndoRegions {
+        std::vector<GCRegion> regions;
+        std::vector<gc_node_ref_t> regionPorts;
+    };
+    struct UndoScalars {
+        gc_node_ref_t entry      = kInvalidNodeRef;
+        gc_node_ref_t exit       = kInvalidNodeRef;
+        gc_node_ref_t output     = kInvalidNodeRef;
+        gc_node_ref_t returnNode = kInvalidNodeRef;
+        GCReturnKind returnKind  = GCReturnKind::None;
+        uint64_t mutations       = 0;
+        bool hasFrameLayout      = false;
+        uint32_t insertRegion    = 0;
+    };
+    struct UndoPorts {
+        std::vector<gc_node_ref_t> norm, with, closure;
+    };
+    struct UndoLowLevel {
+        size_t edits = 0;
+    };
+    struct UndoWritings {
+        std::vector<WritingUnion> log;
+    };
+
+    bool journalOpen() const { return journalDepth_ != 0; }
+    /// Records `id` as the segment found it, once per segment: the body and its user lists.
+    void noteOriginalNode(gc_node_ref_t id);
+    void noteOriginalRegions();
+    void noteOriginalScalars();
+    void noteOriginalPorts();
+    void noteOriginalLowLevel();
+    void noteOriginalWritings();
+    /// Puts one recorded node back at its own id: allocated again when the segment erased it, and
+    /// written over the body that stands there when it did not.
+    void restoreUndoNode(UndoNode &record);
+    /// Drops the records after `mark` and restores what they held (the journal half of
+    /// `rollbackTo`).
+    void replayJournal(const Savepoint &mark);
+    void dropJournal();
+    std::vector<UndoNode> undoNodes_;
+    std::vector<uint64_t> undoNodeEpoch_; // by node id: the epoch a node was last recorded in
+    std::vector<UndoRegions> undoRegions_;
+    std::vector<UndoScalars> undoScalars_;
+    std::vector<UndoPorts> undoPorts_;
+    std::vector<UndoLowLevel> undoLowLevel_;
+    std::vector<UndoWritings> undoWritings_;
+    uint64_t undoRegionsEpoch_  = 0;
+    uint64_t undoScalarsEpoch_  = 0;
+    uint64_t undoPortsEpoch_    = 0;
+    uint64_t undoLowLevelEpoch_ = 0;
+    uint64_t undoWritingsEpoch_ = 0;
+    uint64_t journalEpoch_      = 0;
+    unsigned journalDepth_      = 0;
+    /// Set while the journal is putting itself back: a restore writes bodies, and a body write is
+    /// not an edit of the segment that is being rolled back.
+    bool undoSuspended_         = false;
 
     /// What the commit checks read as the second half of their tier (see `lowLevelEdits`): the
     /// existing nodes this draft changed in place, in the order the changes were first made, and a

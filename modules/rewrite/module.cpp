@@ -1581,7 +1581,22 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 {with.get<Bool>(3), with.get<Bool>(4)},
                 with.get<Bool>(5));
             writings.build();
-            writings.saturate(compiled, budget);
+            // What a round applied and whether the budget cut it is the run's own answer, and the
+            // driver reports it instead of dropping it: a run that stopped inside a round is not
+            // saturated, and a pass that returned its program anyway would hand the caller a state
+            // its own documentation says it does not produce (the library stops without an error --
+            // the arithmetic is the pass's, so the reading of it is too).
+            const camel::runtime::SaturateStats stats = writings.saturate(compiled, budget);
+            if (stats.stoppedMidRound) {
+                return makeError(
+                    "SaturateBudget",
+                    std::format(
+                        "saturation stopped inside round {} after applying {} writing(s): the program "
+                        "is not a fixpoint, so the pass returns no program",
+                        stats.rounds,
+                        stats.appliedThisRound),
+                    "<rewrite::saturate>");
+            }
             writings.save();
         }
         // Detached, as `rewrite`: the result is a value, the context's program is left alone.

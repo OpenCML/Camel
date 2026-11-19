@@ -155,6 +155,21 @@ bool WritingStore::merge(
     return isNew;
 }
 
+void WritingStore::rollbackTo(size_t size) {
+    if (size >= log_.size()) {
+        return;
+    }
+    log_.resize(size);
+    // The layers are a replay of the log, so the state after a rollback is the replay of the shorter
+    // log: every context already asked for is asked for again, which is what makes the answer the
+    // one the shorter log gives.
+    const std::vector<camel::core::sem::PermissionMask> kept = contexts();
+    layers_.clear();
+    for (const camel::core::sem::PermissionMask context : kept) {
+        layer(context);
+    }
+}
+
 gc_node_ref_t WritingStore::canon(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     return findIn(layer(context), node);
 }
