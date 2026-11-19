@@ -557,7 +557,7 @@ db7b15c1d26c2d3d ok stdlib/std.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
 6eeb1f124e9b3f90 ok stdlib/vjp.cml
-7cbfce64ad75e01f ok stdlib/rulesets/jvp.cml
+a2f43a110650b3b1 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
 8704211257d6f3c9 ok stdlib/rulesets/transpose.cml
