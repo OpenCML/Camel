@@ -3196,7 +3196,7 @@ node_handle_t Builder::visitLinkNode(
                         })));
             throw BuildAbortException();
         }
-        targetNode = currGraph_->addCallNode(factoryType->exitType());
+        targetNode = addCallSite(currGraph_, factoryType->exitType());
         linkNodes(LinkType::With, decoratorInvoke, targetNode);
         // The call is written in the program: it is located where it is written, not where
         // the function's decorators left it.
@@ -4469,7 +4469,7 @@ node_handle_t Builder::visitLinkNode(
                 .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
-        node_handle_t invokeNode = currGraph_->addCallNode(funcType->exitType());
+        node_handle_t invokeNode = addCallSite(currGraph_, funcType->exitType());
         linkNodes(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
