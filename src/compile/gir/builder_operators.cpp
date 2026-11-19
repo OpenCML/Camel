@@ -2400,6 +2400,10 @@ node_handle_t Builder::visitLinkNode(
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
     FunctionType *targetFuncType    = nullptr;
+    // The value a call *through a value* invokes, kept beside the signature so that the question
+    // "does this callee hand its `var` parameters back" can be asked of the graph behind the value
+    // -- the same question a direct call asks, with the same answer (`callHandsBackResult`).
+    node_handle_t calleeValueNode = nullptr;
     std::vector<Argument> withInputs, normInputs;
     type_vec_t withInputTypes, normInputTypes;
 
@@ -3196,12 +3200,24 @@ node_handle_t Builder::visitLinkNode(
                         })));
             throw BuildAbortException();
         }
-        targetNode = addCallSite(currGraph_, factoryType->exitType());
-        linkNodes(LinkType::With, decoratorInvoke, targetNode);
+        // The call's value is what the callee's graph hands on: its result, and -- for a callee
+        // that hands its `var` parameters back -- those values beside it (`graphExitTypeOf`).
+        // The statement's value is the result, the tuple's first part: the tuple itself is the
+        // call's own value and what the `var` arguments' new versions are read from.
+        const node_handle_t callNode = addCallSite(currGraph_, graphExitTypeOf(factoryType));
+        linkNodes(LinkType::With, decoratorInvoke, callNode);
+        calleeValueNode = decoratorInvoke;
         // The call is written in the program: it is located where it is written, not where
         // the function's decorators left it.
-        registerCallExpressionOrigin(context_, targetNode, gct, "gir.link.call");
+        registerCallExpressionOrigin(context_, callNode, gct, "gir.link.call");
         targetFuncType = factoryType;
+        targetNode     = callNode;
+        if (packsVariableParameters(factoryType) && factoryType->hasExitType() &&
+            !isVoidGraphExitType(factoryType->exitType())) {
+            // This path holds the signature and no graph: the signature says whether it packs,
+            // and a signature written with a tuple result is never packed (`graphExitTypeOf`).
+            targetNode = callValuePartOf(callNode, 0);
+        }
     };
 
     // Design principles 5.7: an instance also uses the operators of the module that declares
@@ -3948,6 +3964,16 @@ node_handle_t Builder::visitLinkNode(
                             continue;
                         }
                         const auto *func   = tt::as_ptr<FunctionType>(type);
+                        // Ask what the *declaration* says, when the graph that declares it is still
+                        // reachable: an operator's rule about a `var` parameter is a rule about the
+                        // function the program declared, not about the exit type its body ended up
+                        // stating (author, 2026-11-19). The fallback is the node's own type, for a
+                        // value whose graph is not known here.
+                        if (const auto callee = functionValueGraphOf(input.node); callee != nullptr) {
+                            if (auto *declared = callee->declaredFuncType(); declared != nullptr) {
+                                func = tt::as_ptr<FunctionType>(declared);
+                            }
+                        }
                         bool takesVariable = false;
                         for (size_t i = 0; i < func->normTypesCount(); ++i) {
                             takesVariable = takesVariable || func->normIsVarAt(i);
@@ -4469,8 +4495,9 @@ node_handle_t Builder::visitLinkNode(
                 .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
-        node_handle_t invokeNode = addCallSite(currGraph_, funcType->exitType());
+        node_handle_t invokeNode = addCallSite(currGraph_, graphExitTypeOf(funcType));
         linkNodes(LinkType::With, targetNode, invokeNode);
+        calleeValueNode = targetNode;
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
             auto calleeOrigin = sourceContext->resolveGirNodeOrigin(draftDebugKey(targetNode));
@@ -5017,16 +5044,54 @@ node_handle_t Builder::visitLinkNode(
         writeNodes_[targetNode] = *store;
     }
 
+    // A callee that hands its `var` parameters' final values back ("a `var` parameter is one value
+    // in and one value out", author 2026-11-19) hands a tuple: its result first, then those values.
+    // What the expression is worth is the result, the first part; the call itself stays the node
+    // that runs, and the tuple it holds is where its `var` arguments' new versions are read from
+    // (Builder::valueVersionOf, once the caller rebinds them).
+    const node_handle_t callNode = targetNode;
+    // The callee graph answers this one question itself (`callHandsBackResult`): its body recorded
+    // whether it packs `var` parameters into the exit type, and the signature cannot be asked
+    // instead -- a user-written tuple result looks exactly like a packed one. A call *through a
+    // value* has no `targetGraph`, and the value it invokes holds one when that value is a graph's
+    // function (`functionValueGraphOf`), so the question is put to that graph and answered the same
+    // way; a value that names no graph of this program (a transform's, a builtin's) answers no.
+    compile_graph_ptr_t answeredCallee = targetGraph;
+    if (answeredCallee == nullptr) {
+        answeredCallee = functionValueGraphOf(calleeValueNode);
+    }
+    // A call inside its own body has a callee that cannot answer yet -- its body ends after this
+    // expression -- so the signature answers for it, which is the reading the record below already
+    // makes: a graph built for a signature that states a `var` parameter packs, so this call's
+    // value is that tuple and what the expression is worth is its first part. Without this, a
+    // `let r = f(...)` inside `f` binds the tuple and the arm that hands `r` back joins a tuple
+    // where the block hands out the result (the caller-side reading, at `setArmResult`).
+    const bool selfCall = targetGraph != nullptr && targetGraph.get() == currGraph_.get() &&
+                          packsVariableParameters(targetGraph->funcType());
+    const bool handsBackParams = callHandsBackResult(answeredCallee) || selfCall;
+    // Recorded for a reader that asks what the expression is *worth*, which is the result and not
+    // the tuple -- including a call inside its own body: that call's callee is this graph, whose
+    // exit is packed when the body ends, so the graph answers "not yet" and the declared signature
+    // answers for it. Recording changes nothing about the value or the nodes.
+    if (handsBackParams ||
+        (targetGraph != nullptr && targetGraph.get() == currGraph_.get() &&
+         packsVariableParameters(targetGraph->funcType()))) {
+        handsBackParameterCalls_.insert(callNode);
+    }
+    if (handsBackParams) {
+        targetNode = callValuePartOf(callNode, 0);
+    }
+
     // Outside a `sync` block there is no chain to be a statement of. Inside one, a call is a
     // statement by what its callee turns out to be (design principles 3.4): a call of a body that
     // reaches no resource, holds nothing that may fault and is not recursive is one of the
     // computations the compiler arranges freely, so the chain passes it by and the statement before
     // this one keeps its place.
-    const bool chainStatement = synced_ && callIsChainStatement(targetNode);
+    const bool chainStatement = synced_ && callIsChainStatement(callNode);
     if (synced_ && chainStatement) {
-        linkSyncStatement(lastSyncedNode_, targetNode);
+        linkSyncStatement(lastSyncedNode_, callNode);
         lastSyncedNode_ = targetNode;
-        chainedNodes_.insert(targetNode);
+        chainedNodes_.insert(callNode);
     }
     if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
