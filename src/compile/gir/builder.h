@@ -2328,6 +2328,19 @@ class Builder {
     // the call hands on (callValueTypeOf, from the mask of captured variables the callee
     // writes), which is also what the run time packs it from (GCFuncRef::reserved).
     node_handle_t addCallNodeOf(const compile_graph_ptr_t &callee);
+    // The one place a CALL node is constructed: every construction site in the builder comes
+    // through here and passes, as `exitType`, the type the call hands on exactly as that site
+    // states it today -- the declared exit type at five of them, `pullType` (itself the exit type of
+    // the step it calls) at the loop's pull. Unifying the construction is what gives a later rule
+    // one place to stand; which of those answers a site asks for is a different change and this one
+    // does not make it (author `3a580d29a`: unify first as a pure refactor, then apply the rule in
+    // that one place). The derivation the rule will ask for lives on the lane that built the
+    // packing (`graphExitTypeOf`, `5695e055c`) and is not taken here: on this tree it answers a
+    // tuple for a signature that states a `var` parameter, while a call on this tree still hands a
+    // bare value, so taking it at all five sites was measured to move `compile` and `linear` and to
+    // kill cases. The FUNC node of a direct call is the other half and was already one place:
+    // `addCallNodeOf` above.
+    node_handle_t addCallSite(const compile_graph_ptr_t &graph, Type *exitType);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
     node_handle_t valueNodeOf(const std::any &res);

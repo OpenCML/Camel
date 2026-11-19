@@ -152,7 +152,7 @@ void Builder::buildEntryCall() {
             rootGraph_->setFuncType(rootTypeFactory.build());
         }
         auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
-        auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
+        auto entryCall      = addCallSite(rootGraph_, entryGraph->funcType()->exitType());
         linkNodes(LinkType::With, entryFuncValue, entryCall);
         for (node_handle_t arg : entryWithArgs) {
             linkNodes(LinkType::With, arg, entryCall);
