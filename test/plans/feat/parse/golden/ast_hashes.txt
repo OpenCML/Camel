@@ -2617,7 +2617,7 @@ dcfc2854902fa5b2 ok test/cases/feat/bindings/python_boundary.cml
 4d38bd131a3ecbbf ok test/cases/feat/mm/blocks.cml
 35ca1c96b27bc89c ok test/cases/feat/mm/complex.cml
 a4aa0871c7c78c0f ok test/cases/feat/mm/mem_blocks.cml
-46fa40e4e6db6a4e ok test/cases/feat/mm/capacity/perm_query_types.cml
+9961fcb0e2ee103b ok test/cases/feat/mm/capacity/perm_query_types.cml
 2b7da24b60e790f0 ok test/cases/feat/mm/gc/context_lifetime.cml
 65a02407b381f59d ok test/cases/feat/mm/gc/contexts.cml
 0cb238358f2f0014 ok test/cases/feat/mm/gc/gc_block_adopted.cml
