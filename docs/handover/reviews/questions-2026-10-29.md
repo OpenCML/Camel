@@ -4832,3 +4832,60 @@ develop 上只删 `declaredFuncType`；三步的前两步随 `lane-ssa`。`lane-
 ## 补充（2026-11-20 02:30）：二阶导读数进采集脚本
 
 决策者。`capture-all.sh` 加一节：`x·x` 在 2 处、`x³` 在 2 处、Hessian 例子，各在 `std::nvm`、`std::fvm`、`std::jit`、`std::tf` 上的输出与是否一致。P\* 上随整套一起跑。
+
+## 负责人回报（2026-11-20 02:35，首次逐格回报车道；此前只有决策者→负责人的单向）
+
+决策者。此前我只有把你的裁定落成派工、把读数写进 `questions/` 页，**没有把车道状态回报到本页**。这是缺陷，本页起改为按点回报。以下数字全部带来源与时刻。
+
+### 一、主干与已落地
+
+`origin/develop = 740c8c9c6`（2026-11-20 02:28，`git rev-parse origin/develop`）。今晚 21:00 起落地 6 笔，逐笔：
+
+| 提交 | 内容 | 车道 |
+|---|---|---|
+| `91f708389` | 打印器保留 `var` 的名字 | `printer` |
+| `f0ad3dac9` | 19 条未验证引用清零 | `cite` |
+| `02939ffb7` | **S3b**：`in-place 0` → 6/3 与 4/6；读数与执行改由同一处决定 | `inplace` |
+| `36a786ced` | 回滚还原**内容**不是指针（`sameTypes` 比指针 + 签名内容） | `undo` |
+| `cd1f9f568` | ECOOP 九项读数一次跑完（1046 行原始记录） | `capture` |
+| `740c8c9c6` | autodiff：被变换的图公布它那一半骨架的子句；`*.pb` 与函数值写 `pure` | `xdev` |
+
+`declared` 块数 **6760 / 407 文件**（`test/plans/**/*.plan.toml`，02:30 现数）；`questions/` 页 **42**。
+
+### 二、三档 S1 的现状
+
+**① `inline` 在纯节点处把写挂到 `GATE`、`order` 两端提升到公共区域** —— **两条都已落地、三版判据全中**（`3fd76e564` 修法 · `82e2ba936` 期望值，在 `origin/lane-inline-order`，待合）：
+
+- 排序版 `exit=0`，`step 0 -> 11 / # tick / step 1 -> 12 / … / total 86 tail 14`
+- 不排序版 `exit=1`，`PassEffectOrder` 拒绝原文与 `raw-output.txt` **逐字相同**（`node 9 … node 13`）⇒ 检查没被放宽
+- 反向版 `exit=0`，`# tick` **先于**每行原打印（照你 `10212e8f7` 更正后的判据）
+
+**② 臂内写之后语句静默消失** —— 已修（`855882bc2`），根因二分到 `f257714fe`；判据从「有没有人读出口」改成 **「读它的是不是那个让它成为出口的人」**（`readerTakesExit`，臂看 JOIN 该臂的 `with` 槽）。`arm_read.cml` → `int 3 4` / `int 0 3`，不变量触发 **0**。待合。
+
+**③ `declaredFuncType` 删除** —— 已落地（`72c0ec7f8`），`\bdeclaredFuncType\b` 在 `src`/`include`/`modules` = **0**。
+
+### 三、你 02:10–02:30 的三条下发：**我尚未派工，现在开始**
+
+如实报：这三条到 02:35 还没有车道在做，是我的遗漏，不是在等。
+
+1. **库 `grad` 调用写法恢复为 `dloss<layer, y>(X)`**（`stdlib/vjp.cml`、`stdlib/types.cml`）
+2. **变换嵌套计划乙**（`modules/transforms/`：函数值按类型提升、变换递归进闭包、`pb` 闭包可再变换、展开 unfold）
+3. **二阶导读数进 `capture-all.sh`**（`x·x` 2 处、`x³` 2 处、Hessian 例子；`nvm`/`fvm`/`jit`/`tf` 输出与是否一致）
+
+### 四、P\* 的三处卡点（15:00 前必须清）
+
+| 卡点 | 现状 | 谁在修 |
+|---|---|---|
+| `jvp has no forward transform`（`stdlib/vjp.cml:135`） | transformer 训练步任何 pass 下都跑不起来；两条独立读数（采集脚本与你的 01:30 下发）指向同一处 | `lane-vjp-forward` |
+| `feat/modules` / `array_sort_kernels.paths` | `feat/modules` 现 `2074/2059/1`，`arm` 与 `ordedge` 合入后应只剩这一条 | `lane-sort-paths` |
+| `feat/trans` / `print_and_recompile` | `109/108/1`，原因已从「图缺语句」换成「打印器不能重述携带分支」（JOIN 没记它是哪个 `var` 的版本）；页里写死默认建议：**先不给 JOIN 记 var，留红，等你裁它是否属于 0.2.45** | 等你裁 |
+
+### 五、六份计划（本机单跑，`740c8c9c6` 之上合入待合笔后的合成树不另算）
+
+compile **2638/2622/0** · linear **869/865/0**（`+1 pass −1 known` 全部来自 `3fc7904da` 摘掉 `element_assigned_append.in_place_form` 的标记，不是净变化）· opt **1620/1620/0** · parse **126/126/0** · para **104/104/0** · tools **70/70/0**。
+
+### 六、车道槽位
+
+8 格 = 6 实现 + 1 合并 + 1 闸门。此刻在跑 **6 条**：合并位 `mrg`、实现 5 条（`vjp` · `sort-paths` · `opt-twice` · `container-elements` · `inline-order` 收尾）。闸门位空。
+
+**上一窗口我在主干冻结时把格子也空着，理由写的是「主机只有两个并发位」——那是错的：读代码、定判据、写用例、二分提交都不占主机，槽位不该跟着主机排。**
