@@ -4596,3 +4596,33 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 
 决策者。`31faaf8ef`（前向规则集对转置规则集闭合，11 个缺口补齐，检查进快层）与 `1f617b8d8`（保存点带撤销日志，只在标记与回滚之间记账）形状都对。
 C3 展示程序的 `jvp has no forward transform for this function` 不是缺规则：下一步由 D 接着查是**哪个函数值**让 `reinterp<jvp>` 认不出来——在报错处打出被变换的那个值是什么（具名函数、lambda、闭包、经 `with` 来的），对照变换嵌套计划乙的"函数值按类型提升"看它属于哪一种未覆盖的情形；并查清 C3 从哪一笔开始坏（展示程序的计划为什么没拦住）。
+
+## 每日审查（2026-11-19）
+
+范围：develop 过去 24 小时非合并提交 68 笔，动代码 20 笔（29%），代码 +2154/−546。两个只读子代理按领域读 diff，下面每条决策者核对过。做得好的：十五处 `GATE` 读法收进内核、故障归还单一入口、内建算子必须列出访问、变换规则集闭包检查（纯计算，无名单）、融合内核复用 `relu` 与 GEMM 的唯一实现、撤销日志只在标记与回滚之间记账。问题按设计缺口排：
+
+**一、撤销日志看不见的写（`1f617b8d8`，最先）**
+1. 已核对的漏洞：`draft_construct.cpp` 的 `appendNormPort`/`appendWithPort`/`removeNormPort`/`removeWithPort`/闭包端口增删不记 `noteOriginalPorts`；`funcType_` 没有撤销记录（`setFuncType`、端口删除时重建函数类型）；`mutablePayloadOf` 交出可写载荷，`retargetOperNode`、`setFuncWriteMask`、`setLoopCollectionCount`、`setLoopIterableInterval` 直接写载荷；`draft_regions.cpp` 的 `clearRegions`；`setInsertRegion`；`eraseUnreadNodes` 先改 `exit_`/`output_`/`returnNode_` 再进 `eraseNode`（记下的是改过的值）。
+2. 缺口在形状：钩子挂在"每类一个写入口"，但成员仍可绕过入口直接写。修法：草稿的可变成员只经带钩子的设置函数写（把直接写的地方全部改走它们），再加一道**调试构建的回滚自检**——标记时整份快照，回滚后逐项比对，不一致即报出是哪一类。以后漏挂钩子在测试里就红。
+3. 等价日志有两条撤销路（`writings_` 整份进草稿日志，`WritingStore::rollbackTo` 另退一遍）：收成一条。区域、端口、`writings_` 每段整表复制，与 16.4"记账代价与改动成正比"不符，记为后续项。撤销日志移到自己的文件（`draft.cpp` 2986→3303）。
+
+**二、访问声明还剩两份答案与一处按前缀（`fca7f686c`）**
+4. 模块算子（非内建）缺声明时：`OperatorSemantics::accessList` 答"写 `global`"（`operator_semantics.cpp:309`），建图与运行时用 `sem::conservativeResources`（每个操作数读改写）——同一个算子仍两种答法。收成一个保守读法、三处共用。
+5. "是不是内建"按 URI 前缀 `':'` 判（`operator_semantics.cpp:302`，`requireDeclaredBuiltinAccesses` 拼 `":" + name`）：改按算子表登记的归属。
+6. `map`/`filter`/`foreach`/`unordered_foreach`/`reduce`/`:mark/isolate` 一律声明为外部效应（`builtin_semantics.cpp:596`）：重申 16:50 第 3 条，访问取函数实参类型的 `uses`，与经函数值调用同一处实现。
+
+**三、tiles 遍自写了一份可达性（`16ad8fd1a`）**
+7. `region_outline.cpp:171` 的 `leads()` 注释自称"与提交检查同一个遍历"、`standingIn()` 自走区域父链、`keepsOrder()` 在可自由安排判定外加分支与循环的特例：改调提交检查与内核的同一组函数（可达、区域祖先、可自由安排），不另写。提交说明里"遍以为排好了、提交看不到排好"正是两份真相的症状。
+
+**四、融合内核（`110edc3a6`）**
+8. "走不走库 GEMM"判了两次：先读 `tensor.kernel` 属性，又按尺寸 `libraryGemmRuns(M, N, K)` 重判（`fusion_group.cpp:593-597`）。只读属性——`tensor::fuse` 定属性时已经按尺寸决定过。
+9. 组名 `linear`/`linear_relu` 在标记一侧与注册一侧各拼一次：放进同一个头文件的常量，两侧引用。
+
+**五、规则集里的副本（`31faaf8ef`）**
+10. `stdlib/rulesets/jvp.cml` 的 `add`、`log_d`（连同既有的 `mul_tensor`、`divide`）是 `transpose.cml` 同名私有函数的复制，理由是"一个规则族读不到另一模块的私有函数"。改为放进两边共同导入的一个模块，导出一份。
+
+**六、旧返工未做**
+11. `GraphDraft::declaredFuncType`（零读者字段）仍在 develop（`draft.h:443`）——06:15 要求删除。删掉。
+12. `src/execute/graph_runtime_support.cpp:703/715` 仍有一份不同的 `GATE` 读法，注释自称"第二个读者"：改调内核那一个，或写明它读的不是同一件事。
+
+无需负责人裁定的语义或原则改动。
