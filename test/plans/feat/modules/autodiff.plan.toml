@@ -3591,7 +3591,7 @@ timeout_ms = 20000
 # 8.0 with a gradient of 12.0, and the point is 2 and not 3, where all three numbers are 27.
 [[tests]]
 name = "has_aux.library.plain"
-desc = "The library's own two names with no auxiliary value: `vjp(f)(2.0)` is `(8.0, pullback)` with `pullback(1.0) == (12.0)`, and `grad(f)(2.0)` -- `vjp` read at the seed 1 -- is 12.0, for `f(x) = x*x*x`. The value and the gradient are different numbers, so a `grad` that answered the value it differentiates is caught; the point is 2 and not 3 for that reason, since at 3 the value and the derivative `3x^2` are both 27 (`vjp_gradient` in test/plans/feat/compile/transforms.plan.toml makes the same choice and records the reading as P2-22 of the 2026-11-01 review)."
+desc = "The library's own two names with no auxiliary value: `vjp(f)(2.0)` is `(8.0, pullback)` with `pullback(1.0) == (12.0)`, and `grad(f_at)<2.0>()` -- `vjp` read at the seed 1, the weight written where the differentiated function reads it -- is 12.0, for `f(x) = x*x*x`. The value and the gradient are different numbers, so a `grad` that answered the value it differentiates is caught; the point is 2 and not 3 for that reason, since at 3 the value and the derivative `3x^2` are both 27 (`vjp_gradient` in test/plans/feat/compile/transforms.plan.toml makes the same choice and records the reading as P2-22 of the 2026-11-01 review)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/has_aux_library_plain.cml"
 args = ["${case}", "${backend}"]

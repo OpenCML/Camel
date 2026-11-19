@@ -85,6 +85,20 @@ computation key.
 
     sh docs/handover/reports/eval-round10/e2e/capture.sh > docs/handover/reports/eval-round10/e2e/raw-output.txt 2>&1
 
+That is the record **before** the two defects at the bottom of this page were fixed (`02939ffb7a`, and
+the build the paper cites; both before `3fd76e564`). `raw-output-after-inline-gate-and-order-lift.txt`
+is the same script's whole output on `932ee03d0`, the commit that fixes them (`modules/graph/txn.cpp`:
+the body spliced at a pure node hangs its writes on the exit `GATE` of the region it lands in, and
+`order` lifts its two ends to the region they share). So the two files are one script's output in one
+order, 301 lines against 316, and `diff raw-output.txt raw-output-after-inline-gate-and-order-lift.txt`
+is the whole of what the fix changed: seven hunks, 37 lines in and 22 out -- the build header; the
+ordered run, refused before and accepted after; the reversed run's four markers and the canonical hash
+of the graph it commits; and the `passes::dump` of that graph, 13 nodes against 12. The unordered run
+does not appear in the diff at all: its refusal is the same bytes. Each reading is in "The readings"
+below. The fix landed as `3fd76e564`; this file was captured on `932ee03d0` with the tree clean
+(`dirty: false`), and its `footprint` field still names an earlier dirty configure because that string
+is set when cmake reconfigures, not when a file changes.
+
 and one command of it by hand:
 
     cd docs/handover/reports/eval-round10/e2e
@@ -93,6 +107,24 @@ and one command of it by hand:
     $CAMEL_HOME/bin/camel program.cml passes::instrument passes::report std::nvm
 
 ## The readings
+
+**After the fix, the three readings are these -- and the three subsections that follow are the record
+of what the lane found before it, the defect report the author's 00:55 answer of 2026-11-20 ruled on,
+kept as it was written:**
+
+* **ordered** -- `camel program.cml passes::instrument_ordered std::nvm`, exit 0: the original five
+  lines with `# tick` after each of the four. Accepted, and the marker runs.
+* **unordered** -- `camel program.cml passes::instrument_unordered std::nvm`, exit 1, the refusal
+  quoted in "Item 4" below **character for character** (same two nodes, 9 and 13, same source
+  position `passes.cml:146:12`). The check was not widened to accept this one.
+* **reversed** -- `camel program.cml passes::instrument_reversed std::nvm`, exit 0, `# tick`
+  **before** each original line: the marker runs, where before the fix the pass exited 0 and the
+  marker never printed.
+
+`passes::instrument` is still the take-over form (the body stands where the closure's own line stood),
+so writing the pass back as "`inline` at a pure node + `order`" is a commit of its own -- the author's
+00:55 answer, item 3 -- and the section header `capture.sh` prints for the reversed run ("the one it
+accepts and drops: the marker never runs") still says the old thing until that commit lands.
 
 ### The edit that runs: the marker
 
@@ -254,5 +286,6 @@ compare a program with an edited one should know that bit.
 | `program-writing-b.cml` | the same program, two statements swapped and three names different |
 | `passes.cml` | the passes: `instrument`, `dedupe`, `report`, `dump`, and the two the commit refuses |
 | `capture.sh` | the run, every command in one script |
-| `raw-output.txt` | its output, verbatim |
+| `raw-output.txt` | its output, verbatim -- the record **before** the two fixes (`02939ffb7a`) |
+| `raw-output-after-inline-gate-and-order-lift.txt` | the same script's output after them, verbatim (`932ee03d0`) |
 | `NOTES.md` | this file |
