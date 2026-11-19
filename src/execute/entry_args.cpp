@@ -54,6 +54,27 @@ using type::TypeCode;
 
 namespace {
 
+/// Whether the signature has a `var` parameter, which is what makes a graph built for it pack: the
+/// exit is the result beside the final value of each one (`graphExitTypeOf`), and "for every graph
+/// built for a `var` signature, pack" is total (author, 2026-11-19). A signature with none states
+/// its own result, so a tuple there is what the declaration wrote and is handed out as it stands.
+bool handsBackVarParameters(const type::FunctionType *funcType) {
+    if (funcType == nullptr) {
+        return false;
+    }
+    for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
+        if (funcType->withIsVarAt(i)) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+        if (funcType->normIsVarAt(i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 struct LoaderRegistry {
     std::mutex mutex;
     std::unordered_map<uint32_t, EntryArgumentLoader> loaders;
@@ -606,6 +627,19 @@ void writeEntryResultTo(
                     declared && graph && graph->funcType() && graph->funcType()->hasExitType()
                         ? graph->funcType()->exitType()
                         : nullptr;
+                // The entry graph packs the final value of each `var` parameter beside the result,
+                // like every graph built for that signature (author, 2026-11-19). What the program
+                // hands out is the result, part 0: the rest of the tuple stays inside. A signature
+                // with no `var` parameter packs nothing and says its own result, a tuple the user
+                // wrote included, so that one is handed out as it stands.
+                if (resultType != nullptr && resultType->code() == TypeCode::Tuple &&
+                    !type::asFallible(resultType) && handsBackVarParameters(graph->funcType())) {
+                    const auto *packed = rtdata::fromSlot<const ::Tuple *>(value);
+                    if (packed != nullptr && packed->size() > 0) {
+                        value      = packed->slotAt(0);
+                        resultType = static_cast<type::TupleType *>(resultType)->typeAt(0);
+                    }
+                }
                 if (type::TupleType *fallible = type::asFallible(resultType)) {
                     if (rtdata::isErrorValue(value)) {
                         // The exit code is non-zero (Context::captureProcessExitCode).

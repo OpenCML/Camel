@@ -35,6 +35,27 @@ bool isAnonymous(const std::string &name) {
     return name.size() >= 4 && name.starts_with("__") && name.ends_with("__");
 }
 
+/// Whether the signature has a `var` parameter, which is what makes a graph built for it pack: the
+/// exit is the result beside the final value of each one (`graphExitTypeOf`), and "for every graph
+/// built for a `var` signature, pack" is total (author, 2026-11-19). A signature with none states
+/// its own result, so a tuple there is what the declaration wrote.
+bool signatureHandsBackVarParameters(const camel::core::type::FunctionType *funcType) {
+    if (funcType == nullptr) {
+        return false;
+    }
+    for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
+        if (funcType->withIsVarAt(i)) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+        if (funcType->normIsVarAt(i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// The EntryNumberText of a parameter of `main` (camel/standalone/entry.h) as a C++
 /// initializer: the sentences InvalidNumberText and ConversionOutOfRange give a number text
 /// that cannot be read, rendered from the diagnostics catalogue with the text left as mark 0
@@ -525,7 +546,14 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     // principles 9.8): an integer or a bool is the exit code, any other value is printed. A
     // declared `T!` that failed is an error nobody handled: reported on standard error, exit
     // code 1 (src/execute/entry_args.cpp, writeEntryResultTo).
-    const Type *type    = entry.main->funcType()->exitType();
+    // A graph built for a `var` signature packs it: the exit is the result beside the final value
+    // of each `var` parameter (author, 2026-11-19). What the program presents is the result, part
+    // 0, and the rest of the tuple stays inside.
+    const Type *type = entry.main->funcType()->exitType();
+    if (type != nullptr && type->code() == TypeCode::Tuple &&
+        signatureHandsBackVarParameters(entry.main->funcType())) {
+        type = static_cast<const camel::core::type::TupleType *>(type)->typeAt(0);
+    }
     const bool declared = context_->entryResultDeclared();
     std::string body;
     std::string value = call;
