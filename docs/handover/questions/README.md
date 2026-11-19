@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：36 页
+## 现在在等作者：37 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -41,6 +41,7 @@
 | [`2026-11-19-the-packing-slot-came-back-under-another-name`](2026-11-19-the-packing-slot-came-back-under-another-name.cn.md) | 打包位换了名字回来：删它拆掉一半功能，留它把作者撤掉的位放回 develop |
 | [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md) | 13 条 `TILES_OUTLINED` 红：期望 10，而机制给出 12 或 5，且树里已经自相矛盾 |
 | [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve.cn.md) | 那 13 条期望的 `TILES_OUTLINED 10`，模型被实测推翻了 |
+| [`2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch`](2026-11-19-the-three-steps-target-code-exists-only-on-the-parked-branch.cn.md) | 三步裁定的目标代码只在 lane-ssa 上；而 develop 上没有打包 |
 | [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） |
 | [`2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted`](2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted.cn.md) | 对一次调用交出的值做投影：三次尝试各自否掉了什么 |
 | [`2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content`](2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content.cn.md) | 回滚要还原的是指针，还是内容？ |
