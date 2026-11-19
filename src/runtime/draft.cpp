@@ -2120,7 +2120,7 @@ bool GraphDraft::eraseUnreadNodes(std::span<const gc_node_ref_t> nodes) {
 GraphDraft::Savepoint GraphDraft::savepoint() const {
     // A mark taken outside a segment names no journal -- rolling back to it takes back the counts
     // and nothing else -- so the journal marks are the sizes the journal has now.
-    return Savepoint{
+    Savepoint mark{
         .nodes          = nodesById_.size(),
         .staticSlots    = staticSlots_.size(),
         .frameSlots     = runtimeSlotTypes_.size(),
@@ -2135,6 +2135,13 @@ GraphDraft::Savepoint GraphDraft::savepoint() const {
         .undoLowLevel   = undoLowLevel_.size(),
         .undoWritings   = undoWritings_.size(),
     };
+    // The self-check's copy is taken here, where every mark is made: what a rollback has to put
+    // back is what the draft was at this instant, and a copy taken anywhere else would answer for
+    // another state.
+    if (selfCheck_ != SelfCheckMode::Off) {
+        mark.check = takeUndoSnapshot(*this);
+    }
+    return mark;
 }
 
 GraphDraft::Savepoint GraphDraft::beginUndo() {
@@ -2183,7 +2190,8 @@ void GraphDraft::dropJournal() {
 }
 
 void GraphDraft::noteOriginalNode(gc_node_ref_t id) {
-    if (!journalOpen() || undoSuspended_ || id == kInvalidNodeRef) {
+    if (!journalOpen() || undoSuspended_ || journalSkips(UndoClass::Nodes) ||
+        id == kInvalidNodeRef) {
         return;
     }
     const DraftNode *draftNode = node(id);
@@ -2219,7 +2227,7 @@ void GraphDraft::noteOriginalNode(gc_node_ref_t id) {
 }
 
 void GraphDraft::noteOriginalRegions() {
-    if (!journalOpen() || undoRegionsEpoch_ == journalEpoch_) {
+    if (!journalOpen() || journalSkips(UndoClass::Regions) || undoRegionsEpoch_ == journalEpoch_) {
         return;
     }
     undoRegionsEpoch_ = journalEpoch_;
@@ -2227,7 +2235,7 @@ void GraphDraft::noteOriginalRegions() {
 }
 
 void GraphDraft::noteOriginalScalars() {
-    if (!journalOpen() || undoScalarsEpoch_ == journalEpoch_) {
+    if (!journalOpen() || journalSkips(UndoClass::Scalars) || undoScalarsEpoch_ == journalEpoch_) {
         return;
     }
     undoScalarsEpoch_ = journalEpoch_;
@@ -2245,7 +2253,7 @@ void GraphDraft::noteOriginalScalars() {
 }
 
 void GraphDraft::noteOriginalTypes() {
-    if (!journalOpen() || undoTypesEpoch_ == journalEpoch_) {
+    if (!journalOpen() || journalSkips(UndoClass::Types) || undoTypesEpoch_ == journalEpoch_) {
         return;
     }
     undoTypesEpoch_ = journalEpoch_;
@@ -2261,7 +2269,7 @@ void GraphDraft::noteOriginalTypes() {
 }
 
 void GraphDraft::noteOriginalPorts() {
-    if (!journalOpen() || undoPortsEpoch_ == journalEpoch_) {
+    if (!journalOpen() || journalSkips(UndoClass::Ports) || undoPortsEpoch_ == journalEpoch_) {
         return;
     }
     undoPortsEpoch_ = journalEpoch_;
@@ -2270,7 +2278,7 @@ void GraphDraft::noteOriginalPorts() {
 }
 
 void GraphDraft::noteOriginalLowLevel() {
-    if (!journalOpen() || undoLowLevelEpoch_ == journalEpoch_) {
+    if (!journalOpen() || journalSkips(UndoClass::LowLevel) || undoLowLevelEpoch_ == journalEpoch_) {
         return;
     }
     undoLowLevelEpoch_ = journalEpoch_;
@@ -2278,7 +2286,7 @@ void GraphDraft::noteOriginalLowLevel() {
 }
 
 void GraphDraft::noteOriginalWritings() {
-    if (!journalOpen() || undoWritingsEpoch_ == journalEpoch_) {
+    if (!journalOpen() || journalSkips(UndoClass::Writings) || undoWritingsEpoch_ == journalEpoch_) {
         return;
     }
     undoWritingsEpoch_ = journalEpoch_;
@@ -2497,6 +2505,26 @@ void GraphDraft::rollbackTo(const Savepoint &mark) {
         // The draft was written to and is now back where it was: `touchRefs` is what tells a reader
         // that the shape it read is stale, and the erasures inside the loop do not all do it.
         touchRefs();
+    }
+    // The audit, last, when the mark carries a copy of the draft: the classes are compared one by
+    // one, in the order the journal writes them, and the first that is not back is the answer. A
+    // hook that was forgotten is exactly a class the segment wrote and the journal did not keep, so
+    // this is what makes such a hook red in the test that walks the path -- and, in the mode a
+    // debug build starts in, an invariant rather than a line of output.
+    lastMismatch_.reset();
+    if (mark.check) {
+        lastMismatch_ = camel::runtime::undoMismatch(*this, *mark.check);
+        if (lastMismatch_) {
+            const std::string reading = std::format(
+                "the {} did not come back from the rollback (mark at {} node(s), draft at {}); a "
+                "write of that class went round its hook",
+                undoClassName(*lastMismatch_),
+                mark.nodes,
+                nodesById_.size());
+            if (selfCheck_ == SelfCheckMode::Abort) {
+                ::cml::fail_invariant("rollbackTo leaves the draft the mark found", reading);
+            }
+        }
     }
 }
 
