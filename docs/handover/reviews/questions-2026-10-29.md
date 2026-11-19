@@ -5931,3 +5931,12 @@ lane-grad-form  ahead=1  `5987d5290` "test: record split_print.cml's AST row aft
 lane-front-ip-del ahead=1 内容和主干 patch 等价（`cherry` 输出 `-`），remote 已删、标签已打；本地 `-d` 被拒（内容不在祖先链上），**我没有换 `-D`**
 lane-vjp-forward-backup ahead=2  显式的备份支，留着
 ```
+
+## 裁 09:10、09:20（2026-11-20 09:30）
+
+决策者。S1-6 结案，三轮 CI 判据都成立，好。四条裁定，都不放宽检查，而是让声明能说真话、让读法读全：
+1. **拿函数当参数、自己又有访问的算子**（`tiles:run_preferred_resident` = 被给函数的访问 + `driver`）：它的真话就是两者的并集，声明语言要能写出来。`checkResources` 改为允许 `functionOperand` 与 `accesses` 并存，含义是"并集"，不是放宽：两部分各自照常检查。
+2. **运行时 `Resolver::oper` 不读 `functionOperand`**：实现缺口，修。一个算子的足迹 = 它声明的访问 ∪ 函数实参的类型里的效应——与 `fd1c9838c`（高阶算子取函数实参的）、`8bf3711d8`（经函数值的调用取类型）**同一条规则、同一处实现**；若这三处今天是三份代码，收成一份。这件归读法那条车道，现在开。
+3. **`rewrite:*` 五个算子**：走第 1 条——声明 `functionOperand`（它们运行调用者给的条件函数与代价函数），等第 2 条落地后，`opt_saturate_rhs_from_an_enclosing_region` 应转绿。第 2 条（"对 `Unknown` 放过"）不选。
+4. **`tiles` 的 `uses var driver`**：逐个算子说真话优先于模块级的笼统断言。`regions` 不碰 driver（它自己的契约写着"不执行、不初始化 CUDA"），声明为纯；其余四个照旧。那句"这个模块的每个函数都用 driver"从生成文件与注释里收窄成实际的四个。
+5. **"读不到就沉默"**：今晚第三次同形，按一条规矩收：任何检查遇到它判不了的对象（`Unknown` 足迹、拿不到类型），**输出一条可见的计数**（"未参与比对 N 个，分别是……"），不再与"通过"长得一样；内建算子补齐声明后这个计数应为 0，模块的列出名字。`--verify-ops` 与提交检查都照此。
