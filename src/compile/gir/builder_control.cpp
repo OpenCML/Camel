@@ -1679,12 +1679,25 @@ node_handle_t Builder::buildBranch(
                             tt::as_ptr<ArrayType>(exitType)->elemType()->toString());
                     throw BuildAbortException();
                 }
+                // The type the report names is the one the *expression* is worth, not the one the
+                // node carries (author, 2026-11-19: "the language type and the graph's exit type
+                // were being treated as one"). A call whose callee hands its `var` parameters back
+                // carries a tuple as its value, and stands for the tuple's first part; only the
+                // message reads this, and nothing about the check or the values changes.
+                Type *reportedExit = exitType;
+                if (exitType != nullptr && exitType->code() == TypeCode::Tuple &&
+                    arm->value != nullptr && handsBackParameterCalls_.contains(arm->value)) {
+                    if (auto *tuple = tt::as_ptr<TupleType>(exitType);
+                        tuple != nullptr && tuple->size() >= 2) {
+                        reportedExit = tuple->typeAt(0);
+                    }
+                }
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->origin())
                     .commit(
                         currGraph_->name() + ": " + currGraph_->funcType()->toString(),
                         joinType->toString(),
-                        exitType->toString());
+                        reportedExit->toString());
                 throw BuildAbortException();
             }
         }
@@ -3962,11 +3975,18 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             // the cell is the caller's, and what the body last wrote into it is what the caller
             // finds there afterwards (design principles 3.1).
             outputAnchor = exitUsesVariableParameterWrites(currGraph_, outputAnchor);
+            // The value the body hands on is packed *before* the exit is made to use the writes:
+            // a body that hands its `var` parameters back returns the tuple, so the tuple is what
+            // the exit has to forward -- the exit node and the returned node are one value.
+            const node_handle_t handed = handBackVariableParameters(currGraph_, resNode);
+            if (handed != resNode) {
+                outputAnchor = exitUsesVariableParameterWrites(currGraph_, handed);
+            }
             setGraphReturnFromResult(
                 currGraph_,
                 nodeIdOf(outputAnchor),
-                nodeIdOf(resNode),
-                nodeTypeOf(resNode));
+                nodeIdOf(handed),
+                nodeTypeOf(handed));
         }
     }
 
@@ -4519,14 +4539,137 @@ Builder::exitUsesVariableParameterWrites(const compile_graph_ptr_t &graph, node_
     return gate != nullptr ? gate : anchor;
 }
 
+node_handle_t Builder::handBackVariableParameters(
+    const compile_graph_ptr_t &graph, node_handle_t value) {
+    // "A `var` parameter is one value in and one value out" (author, 2026-11-19): the body's exit
+    // hands the final value of each `var` parameter back beside the result, in the signature's own
+    // order, and a call's value is that tuple. The graph states it (`graphExitTypeOf`), so a
+    // reader of the graph -- inline, the exporter, inference, `std::cpp` -- needs no rule of its
+    // own, and the signature itself keeps the declared result that `inspect` and the diagnostics
+    // show.
+    if (graph == nullptr || graph.get() != currGraph_.get()) {
+        return value;
+    }
+    // The source is what the signature declared (`GraphDraft::declaredFuncType`); the exit the body
+    // hands on is derived from it, and that is what the graph's own type becomes below. While nothing
+    // has replaced the exit yet the two are the same signature, which is the usual case here.
+    const FunctionType *funcType =
+        graph->declaredFuncType() != nullptr ? graph->declaredFuncType() : graph->funcType();
+    if (!packsVariableParameters(funcType)) {
+        // An open signature is a declaration being built for a generic, and the type a caller sees
+        // is the *instantiated* one: packing this graph's exit writes the tuple onto the shared open
+        // type, and a function passed to an operator then reads as `=> (float, int)` where its
+        // declaration says `=> float` -- `var_through_with_grad.cml:26` reports exactly that, as
+        // "an operator calls a function argument with values". A generic's exit is not this body's
+        // to state, so it is left alone.
+        return value;
+    }
+    // The value this body hands on is the value its own expression computed. It is not asked again
+    // here what a call hands on (author, 2026-11-19, ruling on
+    // docs/handover/questions/2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value:
+    // "the chain records the node that orders, the statement's value is what the expression
+    // computed; the `sync` path records the same value and does not derive 'what a call hands on'
+    // again at the exit"). A value that is a call already handing on this body's own tuple means
+    // exactly that re-derivation, so it is refused rather than accepted as a shape.
+    GUARD(value == nullptr || !nodeIsKind(value, runtime::GCNodeKind::Call) ||
+              nodeTypeOf(value) == nullptr || !nodeTypeOf(value)->equals(graphExitTypeOf(funcType)),
+          "The exit hands on the value the body computed; it does not derive what a call hands on.");
+    // The ports of this body in the order the exit hands them back: the `with` parameters first,
+    // then the ordinary ones -- the order the signature writes them in and the order the ports
+    // were made in. Each says where the parameter's value is now: the port itself, or the value
+    // the body's last write rebound it to (`readVariable` is the one read every other reader
+    // takes, so the edge that orders the write is the read's own).
+    std::vector<node_handle_t> parts;
+    const auto collect = [&](const auto &ports, size_t count, bool with) {
+        for (size_t i = 0; i < ports.size() && i < count; ++i) {
+            if (!(with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i))) {
+                continue;
+            }
+            const node_handle_t port = graph->view().ref(ports[i]);
+            if (port == nullptr) {
+                continue;
+            }
+            parts.push_back(readVariable(port));
+        }
+    };
+    collect(graph->view().withPorts(), funcType->withTypesCount(), true);
+    collect(graph->view().normPorts(), funcType->normTypesCount(), false);
+    if (parts.empty()) {
+        return value;
+    }
+    std::vector<node_handle_t> held;
+    std::vector<Type *> types;
+    Type *declared = funcType->hasExitType() ? funcType->exitType() : nullptr;
+    // Whether the body hands a result beside the parameters is the signature's answer when it
+    // states one (a `: void` body hands the parameters alone, whatever the body's last value is),
+    // and what the body returned when the result type is the one the body infers.
+    const bool hasResult =
+        declared != nullptr ? !isVoidGraphExitType(declared)
+                            : (value != nullptr && !isVoidGraphExitType(nodeTypeOf(value)));
+    if (hasResult && value != nullptr && !isVoidGraphExitType(nodeTypeOf(value))) {
+        held.push_back(value);
+        types.push_back(nodeTypeOf(value));
+    }
+    for (node_handle_t part : parts) {
+        if (part == nullptr || nodeTypeOf(part) == nullptr) {
+            continue;
+        }
+        held.push_back(part);
+        types.push_back(nodeTypeOf(part));
+    }
+    // One derivation, taken where the signature states its result (`graphExitTypeOf`); the type a
+    // body infers is only known here, so the parts it actually returned are the answer.
+    TupleType *exitType = declared != nullptr
+                              ? static_cast<TupleType *>(graphExitTypeOf(funcType))
+                              : TupleType::create(types);
+    // The graph now says what it hands on: from here on a caller reading this graph's type reads
+    // the tuple, and the body's return node is that tuple. The signature keeps its own result --
+    // `inspect` and the diagnostics go on showing it -- so the graph takes a copy of the signature
+    // with the exit replaced rather than changing the declaration's own type.
+    graph->setFuncType(funcType->withExitType(exitType));
+    // The bit that says the exit type was packed, not written (`GraphDraft::packsVarParameters`):
+    // a caller asks the graph whether a call hands `var` parameters back, and the shape of the exit
+    // type cannot answer it -- a signature written with a tuple result has the same shape.
+    graph->setPacksVarParameters(true);
+    // The value and its type are two statements of one shape: a tuple whose size is not the number
+    // of parts this body hands out would be a graph that does not say what it returns, so it is
+    // refused here rather than at the encode.
+    GUARD(
+        exitType->size() == held.size(),
+        "The exit of a body that hands its `var` parameters back states a different number of "
+        "parts than the body hands out.");
+    std::vector<size_t> slots(held.size());
+    std::iota(slots.begin(), slots.end(), size_t{0});
+    auto &draft          = currGraph_->transaction().edit();
+    node_handle_t packed = currGraph_->addFillNode(
+        exitType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+    const slot_t empty =
+        camel::core::rtdata::toSlot(::Tuple::create(held.size(), camel::core::mm::autoSpace()));
+    node_handle_t source = draft.ref(draft.materializeStaticValue(empty, exitType));
+    linkNodes(LinkType::Norm, source, packed);
+    for (node_handle_t part : held) {
+        linkNodes(LinkType::With, part, packed);
+    }
+    return packed;
+}
+
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
     if (graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     if (result == nullptr) {
-        result               = graph->addStaticDataNode(Data::null());
-        node_handle_t anchor = exitUsesVariableParameterWrites(graph, result);
-        setGraphReturnFromResult(graph, nodeIdOf(anchor), nodeIdOf(result), Type::Void());
+        result = graph->addStaticDataNode(Data::null());
+        // A body that returns nothing still hands its `var` parameters' final values back: those
+        // values are the whole of what it returns (author, 2026-11-19).
+        const node_handle_t handed = handBackVariableParameters(graph, nullptr);
+        const node_handle_t anchor = handed != nullptr
+                                         ? exitUsesVariableParameterWrites(graph, handed)
+                                         : exitUsesVariableParameterWrites(graph, result);
+        setGraphReturnFromResult(
+            graph,
+            nodeIdOf(anchor),
+            nodeIdOf(handed != nullptr ? handed : result),
+            handed != nullptr ? nodeTypeOf(handed) : Type::Void());
         return;
     }
     // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
@@ -4536,11 +4679,15 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
         value = nodeDraftOf(result)->ref(normInputsOf(result).front());
     }
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
+    const node_handle_t handed = handBackVariableParameters(graph, value);
+    // The exit forwards what the body hands on: the tuple, when it hands one back, so that the
+    // node the run reads and the node it stops at are one value.
     setGraphReturnFromResult(
         graph,
-        nodeIdOf(exitUsesVariableParameterWrites(graph, result)),
-        nodeIdOf(value),
-        nodeTypeOf(value));
+        nodeIdOf(exitUsesVariableParameterWrites(
+            graph, handed != value ? handed : result)),
+        nodeIdOf(handed),
+        nodeTypeOf(handed));
 }
 
 } // namespace camel::compile::gir
