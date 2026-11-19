@@ -147,21 +147,12 @@ struct RuleChoiceWords {
 /// wrong
 /// (`x * 2.0` is one array operand and one constant, and the law for two arrays answers it). Null
 /// asks about every port, which is what a family that has not asked itself the question does.
-/// `portValues` is the configuration the node actually carries, one entry per port in the same
-/// order as `operandTypes`, with `std::nullopt` for a port the node passes as a value. It is what
-/// makes a law that writes its own `<>` value answerable at all: without it such a law fits every
-/// node of that operator, because the type does not carry the value (`reshape<[2, 2]>` and
-/// `reshape<[2, 1, 2]>` are assignable to one another -- measured 2026-11-20, the extents are not in
-/// the type). Null means the caller cannot answer, and a law that writes a `<>` value is then
-/// refused rather than guessed: answering with the law's own constant is how the tangent of a
-/// `reshape<[8, 2, 8]>` came out `[2, 2]`.
 RuleChoice chooseRuleAmong(
     camel::core::context::Context &context,
     const std::vector<camel::parse::ast::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
-    const RuleChoiceWords &words = {}, const std::vector<bool> *answered = nullptr,
-    const std::vector<std::optional<slot_t>> *portValues = nullptr);
+    const RuleChoiceWords &words = {}, const std::vector<bool> *answered = nullptr);
 
 /// The rule's right side expanded at the match site: the body of the closure it answers with is
 /// copied into this graph, its captures bound to the operands and its parameters to the tangents,

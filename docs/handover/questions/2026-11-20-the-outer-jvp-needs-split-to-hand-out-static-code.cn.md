@@ -69,9 +69,75 @@ Hessian（`hessian`，四个元素无一产出）、扰动混淆（`confusion`�
 ⇒ **⇒ 「二阶导受 9.9 约束」这一条的现代表述是**：内层 `grad` 在四条写法里全绿（`first_with_as_param` → `jvp` → `split` → `transpose` 都留了读数）；外层拒绝**可见且逐字**；把外层变成绿的唯一前提是 `split` 换产物形态。
 ⇒ **⇒ 普通参数写法（`grad(grad(square))(2.0)`）不是被这堵墙挡的**：它更早就被 `first_with_as_param` 按 9.9 拒绝，作者 `fb484ca03` 已裁定保持为拒绝。两条已转成 negative 用例并 PASS。
 
-## 五、要作者裁的只有一句
+## 五、作者的裁定（已到，2026-11-20 05:55，`36f91f6a4` 第 2 条 / `ea05b6826`）
 
-`split` 交出静态可读的答案代码，是不是 0.2.45 的范围？
+**问句已答**：这条路在 0.2.45 的范围**里**，而且不是降级、是改表示层。原文：
 
-- **甲（默认建议）**：不是。记进 0.2.45 的已知限制，`compositions.jvp_vjp_f` 的 `known_fail` 保留原样（它的注记已经把这件事写清了），二阶导目标形状降到「内层全绿 + 外层拒绝可见」。
-- **乙**：是。那么它要先于乙-1 排期，且需要甲的面（`split`/`transpose`）先动，乙才能接着做 lift。
+> `lane-nested-transforms` 的活是「`split` 把反向一半建成**静态图** + `jvp` 对代码已知的闭包做前向」，与 `grad-form` 合力
+
+> second order goes by the planned shape, **split builds the backward half as a static graph**
+
+⇒ **⇒ 所以这页从「要不要做」变成「做在哪里」。** 第六节是读码之后的答案：**图已经是静态的，缺的是读法**，
+而且补读法的那一侧正好落在 `modules/transforms/`（本车道的面），`split` 侧可以保持现状。
+
+被否掉的那条（我原先的默认）：~~记进 0.2.45 的已知限制、二阶导目标形状降到「内层全绿 + 外层拒绝可见」~~。
+
+## 六、`split` 今天交付什么：图已经是静态的，缺的是「读法」（2026-11-20 03:52 读码写入）
+
+作者 `36f91f6a4` 第 2 条把这条车道重新定向到「`split` 把反向一半建成**静态图**」。读完 `modules/transforms/split.cpp`（4120 行）之后，这条的要求**比它听上去小**：图已经是静态的，缺的是 `jvp` 不去看它。
+
+**① 今天就是静态的部分**
+
+| 东西 | 位置 | 形态 |
+|---|---|---|
+| 前向/反向两半的**图** | `split.cpp:3445 buildSplitGraph`、`:1767 splitHalvesWith`、`:2439 cutLoopGraph`、`:2908 cutBranchGraph`、`:1963 buildHalfBranch` | 在 `GraphDraftGroup` 里 `reserve` 出 `split_of_<f>_backward` 这样的 `GraphId`，**一次建好、发布进 program**，之后是普通的 `GCGraph` |
+| 反向一半的签名 | `split.cpp:263 splitOperatorType` | `(残差…) => (cotangent) => (cotangents…)`，残差**不进 `split` 的结果类型** |
+| 残差清单 | `split.cpp:1217 residualsOf`（按出口 pair 的 result 半边 / tangent 半边划前后） | 静态算出来的 `std::vector<Residual>` |
+| 反向图的形参 | `split.cpp:1173 addResidualCaptures` | 每个残差一个 closure port |
+
+**② 运行期才造的，只有那个「壳」**
+
+`split.cpp:1202 buildLinearClosure` 的注释是这件事的原文：
+
+> A FILL of the `FunctionClosure` kind -- ... the static input is a function value naming the backward
+> graph, whose closure layout is the one this build read from that graph, and the `with` inputs are
+> the residual values in slot order. ... the values do not exist before the forward half runs, so
+> `lin` is built where they do, and what it captures is stated by no signature.
+
+⇒ **⇒ 每个调用点造的是一个 `FILL(FunctionClosure)` 值**：静态源是 `Function(backwardId)`，`with` 是这次调用的残差。**代码（反向图）不是每次重造的；重造的是「把静态图和这次的值绑在一起」的那个值。**
+
+这比设计稿 2.2 那句「闭包代码本身要到运行时才由 `split` 造出来，而且每次调用都重造」更精确：**代码已经是静态的**；今天每次调用重造的是闭包实例。
+
+**③ 缺的一块：`jvp` 只认 `Func` 节点**
+
+```
+src/runtime/graph.cpp:3300  GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) {
+                                if (!n || n->kind != GCNodeKind::Func || !n->hasPayload()) return kInvalidGraphId;
+                                ... }
+modules/transforms/jvp.cpp:1037  const GraphId calleeId = function.calleeIdOf(ref);
+                                 if (!rt::isValid(calleeId)) { return false; }   // ⇒ 空拒绝
+```
+
+`FunctionClosure` 在仓里被 **28 个文件**读到（`split.cpp`、`rule_expand.cpp`、`autodiff/pullback.cpp`、
+`execute/exec_plan.cpp`、`defunctionalize.cpp`、三个 VM、C++/JSON 发射器……），
+**但在 `modules/transforms/jvp.cpp`、`jvp_operator.cpp`、`transpose.cpp`、`vmap.cpp` 里出现 0 次。**
+
+⇒ **⇒ 所以「代码已知」在图里是成立的，在 `jvp` 的读法里不成立。** `split` 交出的闭包值，`jvp` 的 lift 根本不认识这种节点，
+`calleeIdOf` 对它答 `kInvalidGraphId`，lift 在那里 `return false`，于是 `jvp has no forward transform for this function`，不带 cause、不带位置。
+
+**④ 这条对新目标意味着什么**
+
+「`split` 把反向一半建成静态图」这一步，**在 `split` 这边基本已经到了**；要走完，缺的是**读的一侧**：
+
+```
+· 让 `jvp` 的 lift 认识 `FILL(FunctionClosure)`：静态源 → `Function` → `GraphId` → 与 `Func` 节点同一条 lift 路径
+· 残差（`with` 输入）成为这次 lift 的参数，与今天 `liftFuncValue` 处理被调者 `with` 列表的那条路一致
+· `transpose` 同理（它今天也不认识 `FunctionClosure`），否则反向一半转置不出来
+```
+
+⇒ **⇒ 这不是「换产物形态」，是「让两个变换认识已经存在的产物形态」。** 与 `grad-form` 合力时，分工可以是：`split` 侧保持现状（图已静态），
+`modules/transforms/` 侧补 `FunctionClosure` 的读法 —— 这正好落在本车道的面里。
+
+⇒ 附带读数：`c74e59759`（`grad-form`）把 `grad` 的调用写法恢复成 `grad(f)<w, ...ws>(...xs)` 之后，
+**`grad(grad(square))<2.0>()` 不再撞 9.9 的那条 `first_with_as_param` 拒绝** —— 内层 `grad` 现在交出的是 `<w: float>() => float`，
+有 `with` 参数可移。六条 nest 用例因此**全部落到同一堵墙**上，`test/plans/feat/transforms/nested.plan.toml` 已按此改写（六条 `known_fail`、两条 negative）。

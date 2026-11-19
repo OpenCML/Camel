@@ -7,7 +7,6 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
-#include "camel/core/rtdata/equality.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
@@ -46,104 +45,6 @@ rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
         ports.push_back(func->normTypeAt(i));
     }
     return ports;
-}
-
-/// One `<>` value a law's own left side writes, with the type it was written at.
-struct WrittenConstant {
-    camel::core::type::Type *type = nullptr;
-    slot_t value                  = 0;
-};
-
-/// The `<>` values a law's **own left side** writes: the `with` inputs of the operator node of
-/// `instance.lhs`, each with the value that graph's static area holds for it.
-///
-/// `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, and the shape is written by the left side, so
-/// it is no parameter of the rule -- it is one `<>` value, an `int[]` holding `2, 2`. Empty for a law
-/// that names its configuration as a parameter instead (`(x, dims: int[])`), and for an operator that
-/// takes none.
-///
-/// The left side's operator node is found the way `rule_templates.cpp` found it when it recorded
-/// `lhsOperatorUri`: the first `Oper` node of the published left side.
-std::vector<WrittenConstant>
-leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
-    std::vector<WrittenConstant> written;
-    if (instance.lhs == nullptr) {
-        return written;
-    }
-    const std::span<const slot_t> slots = instance.lhs->staticSlots();
-    for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.lhs->nodeCount(); ++ref) {
-        const camel::runtime::GCNode *node = instance.lhs->node(ref);
-        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
-            continue;
-        }
-        for (const gc_node_ref_t input : instance.lhs->withInputsOf(ref)) {
-            const camel::runtime::GCNode *constant =
-                input < instance.lhs->nodeCount() ? instance.lhs->node(input) : nullptr;
-            WrittenConstant one;
-            if (constant != nullptr) {
-                one.type = constant->dataType();
-                if (constant->dataIndex < 0) {
-                    const auto index = static_cast<size_t>(-constant->dataIndex);
-                    if (index < slots.size()) {
-                        one.value = slots[index];
-                    }
-                }
-            }
-            written.push_back(one);
-        }
-        break;
-    }
-    return written;
-}
-
-/// Whether the `<>` values the law's own left side writes are the ones the node carries.
-///
-/// This is the half the fit was missing. A `<>` value is compared **by content** against the value
-/// the node holds at that port -- `valuesEqualByContent`, the same relation `==` uses on the two
-/// arrays -- because the type does not carry it: measured 2026-11-20, `reshape<[2, 2]>` and
-/// `reshape<[2, 1, 2]>` are assignable to one another, so a type comparison lets the law through and
-/// its right side then writes `[2, 2]` into the tangent of a rank-three reshape. A law written for
-/// one configuration therefore answers only the node that carries that configuration, which is the
-/// defect this closes: `reshape<[8, 2, 8]>` used to match the law written for `[2, 2]` and the run
-/// died with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
-///
-/// A law that writes **no** `<>` value is not asked about the node's configuration here: what such a
-/// law says about it is nothing, and `namesTheNode` already settles how many ports it must name.
-/// That leaves one hole open and it is written down rather than closed by guessing: `jvp_sum` names
-/// one port and writes none, so it would fit the three ports of `sum<0, false>(xs)`. Today the wider
-/// `jvp_sum_axis` wins on `fitting.size()` before the choice is made (`the `widest` step below`);
-/// closing it here would mean comparing against a law that states nothing.
-///
-/// A caller that passes no `portValues` cannot answer the question, and a law that writes a `<>`
-/// value is then **refused** rather than guessed: answering with the law's own constant is exactly
-/// the wrong answer this function exists to stop.
-bool lawConstantsFitNode(
-    const camel::compile::gir::GenericRuleInstance &instance, size_t namedPorts,
-    const std::vector<camel::core::type::Type *> &operandTypes,
-    const std::vector<std::optional<slot_t>> *portValues) {
-    const std::vector<WrittenConstant> written = leftSideConstantsOf(instance);
-    if (written.empty()) {
-        return true;
-    }
-    // The law's parameters are the node's first ports, so its own `<>` values are the ports after
-    // them, in the order the left side wrote them.
-    if (namedPorts + written.size() != operandTypes.size()) {
-        return false;
-    }
-    if (portValues == nullptr || portValues->size() != operandTypes.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < written.size(); ++i) {
-        const std::optional<slot_t> &nodePort = (*portValues)[namedPorts + i];
-        if (!nodePort.has_value() || written[i].type == nullptr) {
-            return false;
-        }
-        if (!camel::core::rtdata::valuesEqualByContent(
-                written[i].value, *nodePort, written[i].type)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 bool narrowerPortsThan(
@@ -212,8 +113,7 @@ RuleChoice chooseRuleAmong(
     const std::vector<camel::parse::ast::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
-    const RuleChoiceWords &words, const std::vector<bool> *answered,
-    const std::vector<std::optional<slot_t>> *portValues) {
+    const RuleChoiceWords &words, const std::vector<bool> *answered) {
     using camel::core::type::Type;
     RuleChoice choice;
     const auto &table = camel::compile::gir::genericRuleTable(context);
@@ -225,10 +125,6 @@ RuleChoice chooseRuleAmong(
     // law to read them again.
     std::vector<Type *> shapePorts;
     std::string lastWhy;
-    // The most specific refusal there is: a candidate whose own left side writes a `<>` value. It is
-    // more specific than a shape mismatch, because the law's types may well fit -- what it cannot do
-    // is describe the node's configuration (see the check in the loop).
-    std::string constantWhy;
     // Every candidate that instantiates and whose ports take the operands. A key can hold more than
     // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first
     // and the choice made after it.
@@ -267,19 +163,6 @@ RuleChoice chooseRuleAmong(
                           : instance.why;
             continue;
         }
-        // A law that writes a `<>` value of its own must find the node's configuration to be that value.
-        // The fit below compares **types and counts**, and `namesTheNode` lets a law name only some
-        // of the node's ports, so a law whose left side writes a constant used to fit every node of
-        // that operator however the node spelled its configuration -- and its right side then wrote
-        // the law's constant into the answer. Measured 2026-11-20 (`probes/06_layout.cml`):
-        // `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, a `reshape<[8, 2, 8]>` node matched it,
-        // and the tangent came out as `[2, 2]` -- `TensorDimensionMismatch: [6] -> [2, 2]`. Design
-        // principles 9.9: the right derivative, or a refusal at compile time that names the
-        // operator; running and answering a wrong value is not allowed.
-        //
-        // A law that names its configuration as a parameter (`(x: T[...], dims: int[])` reading
-        // `reshape<dims>`) writes no `<>` value of its own and is not asked this question: what it
-        // says about the configuration is nothing.
         // The shape first: a candidate whose ports are not the operands' own types cannot be built,
         // however well its condition holds at the element. Refusing here is what keeps a `float[]`
         // out of a `float` port -- the run that did it was killed by a signal, and a named refusal
@@ -335,35 +218,10 @@ RuleChoice chooseRuleAmong(
             shapePorts = ports;
             continue;
         }
-        // The `<>` values the law wrote, against the configuration the node carries. This is a
-        // refusal of its own kind: the law's types fit, and it is the value the left side spelled
-        // that the node does not have. It is recorded separately so it can outrank a shape refusal
-        // in the report -- it says more, because a law that nearly fitted on types is exactly the
-        // case a reader needs named.
-        if (!lawConstantsFitNode(instance, ports.size(), operandTypes, portValues)) {
-            const std::vector<WrittenConstant> written = leftSideConstantsOf(instance);
-            std::vector<camel::core::type::Type *> writtenTypes;
-            writtenTypes.reserve(written.size());
-            for (const WrittenConstant &one : written) {
-                writtenTypes.push_back(one.type);
-            }
-            constantWhy = std::string("the ") + words.subject + " '" + candidate.rule + "' writes " +
-                          std::to_string(written.size()) + " `<>` value(s) of its own (" +
-                          typeTextOf(writtenTypes) +
-                          "), and this node's configuration is not that one (" +
-                          typeTextOf(operandTypes) + ")";
-            continue;
-        }
         fitting.push_back(Fit{&instance, candidate.rule, std::move(ports)});
     }
     if (fitting.empty()) {
-        // Every candidate refused. The one that wrote its own configuration says the most, because
-        // the law's types fit and only its hard-coded `<>` value is what stops it; then the shape
-        // that nearly fitted.
-        if (!constantWhy.empty()) {
-            choice.why = constantWhy;
-            return choice;
-        }
+        // Every candidate refused: the shape that nearly fitted says the most.
         choice.why = !shapeWhy.empty() ? shapeWhy : lastWhy;
         if (!shapeWhy.empty()) {
             // A law was found and instantiated and its shape refused: that is `Shape`, not `NoLaw`,

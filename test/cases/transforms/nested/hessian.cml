@@ -15,21 +15,21 @@ func f(): f32 {
 
 with <x: f32[]>
 func df0(): f32 {
-    let g = grad(f)(x)
+    let g = grad(f)<x>()
     return g[0]
 }
 
 with <x: f32[]>
 func df1(): f32 {
-    let g = grad(f)(x)
+    let g = grad(f)<x>()
     return g[1]
 }
 
 func main(): int sync {
     let xs: f32[] = [2.0, 3.0]
-    let g = grad(f)(xs)
-    let r0 = grad(df0)(xs)
-    let r1 = grad(df1)(xs)
+    let g = grad(f)<xs>()
+    let r0 = grad(df0)<xs>()
+    let r1 = grad(df1)<xs>()
     'hessian g=[{},{}] row0=[{},{}] row1=[{},{}]'->format<g[0], g[1], r0[0], r0[1], r1[0], r1[1]>->println
     return 0
 }

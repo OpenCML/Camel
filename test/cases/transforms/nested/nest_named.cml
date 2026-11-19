@@ -13,12 +13,12 @@ func cube(): float {
 
 with <x: float>
 func dcube(): float {
-    return grad(cube)(x)
+    return grad(cube)<x>()
 }
 
 func main(): int sync {
     let d1 = dcube<2.0>()
-    let d2 = grad(dcube)(2.0)
+    let d2 = grad(dcube)<2.0>()
     'nest_named x=2.0 d1={} d2={}'->format<d1, d2>->println
     return 0
 }

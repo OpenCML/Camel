@@ -7,8 +7,8 @@ func cube(): float {
 }
 
 func main(): int sync {
-    let d1 = grad(cube)(2.0)
-    let d2 = grad(grad(cube))(2.0)
+    let d1 = grad(cube)<2.0>()
+    let d2 = grad(grad(cube))<2.0>()
     'nested_cube x=2.0 d1={} d2={}'->format<d1, d2>->println
     return 0
 }

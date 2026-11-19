@@ -10,7 +10,7 @@ func cube(): float {
 }
 
 func main(): int sync {
-    let twice = grad(<v: float>() => grad(cube)(v))(2.0)
+    let twice = grad(<v: float>() => grad(cube)<v>())<2.0>()
     'nest_lambda x=2.0 d2={}'->format<twice>->println
     return 0
 }

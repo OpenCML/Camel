@@ -1,6 +1,5 @@
-// A law whose own left side writes a `<>` value describes the operator at that one configuration,
-// and the fit used to compare types and counts only -- so the law answered for any configuration
-// and its right side wrote the law's own constant into the answer.
+// The `chooseRuleAmong` hole, pinned where it is visible: a law whose own left side writes a `<>`
+// value describes the operator at that ONE configuration, and the fit compares types and counts only.
 //
 // The law (`stdlib/rulesets/jvp.cml:369`) is written for a rank-two reshape:
 //
@@ -8,18 +7,25 @@
 //
 // and the node below reshapes to a rank-three one. The counts agree (four elements each), so the
 // program is a reshape anyone can write; what does not agree is the configuration the law spelled.
-// The law's `<>` value is an `int[2]` and the node's is an `int[3]`, so the law is refused here and
-// the refusal names it. Measured 2026-11-20 through this same hole (`probes/06_layout.cml`, the
-// `angleargs` lane): a `reshape<[8, 2, 8]>` node silently got the tangent `reshape<[2, 2]>(dx)`,
-// and the run died with `TensorDimensionMismatch: [6] -> [2, 2]`.
+// The law is selected anyway and its right side rewrites the tangent as `reshape<[2, 2]>(dx)`.
 //
-// Design principles 9.9: a transform either answers the right derivative or refuses at compile time
-// and names the operator; running and answering a wrong value is not allowed.
+// Read with `rule_constant_agrees.cml`, which differs from this file only in the node's
+// configuration (`reshape<[2, 2]>`) and is refused with the same sentence: the two together are the
+// reading that shows the matcher cannot tell the two configurations apart.
+//
+// What keeps a wrong NUMBER from reaching the user today is not the matcher but the transposition
+// half having no rule for `reshape` at all (`stdlib/rulesets/transpose.cml:613`), so the run stops
+// at `transpose has no transpose for this function`. No number is pinned here, because no number is
+// reached: design principles 9.9 allows the right derivative or a refusal that names the operator,
+// and never a wrong value.
+//
+// Measured through this same hole on 2026-11-20 (`probes/06_layout.cml`, the `angleargs` lane), at a
+// configuration whose adjoint does exist: a `reshape<[8, 2, 8]>` node silently got the tangent
+// `reshape<[2, 2]>(dx)` and the run died with `TensorDimensionMismatch: [6] -> [2, 2]`.
 //
 // The rule's own half of this is naming the configuration as a parameter (`(x: T[...], dims: int[])`
-// reading `reshape<dims>`), which writes no `<>` value and is what the `angleargs` lane is doing.
-// This case pins the matcher's half; the day the law names its dims this entry turns red and the
-// derivative runs.
+// reading `reshape<dims>`), which writes no `<>` value; that is the `angleargs` lane's, and this pair
+// of cases is here so its completion has something to turn green.
 import { grad } from vjp
 import { reshape, sum } from tensor
 
@@ -31,6 +37,6 @@ func loss(): f32 {
 
 func main(): int sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
-    println(grad(loss)(xs))
+    println(grad(loss)<xs>())
     return 0
 }

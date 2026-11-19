@@ -170,8 +170,7 @@ gc_node_ref_t buildRuleTangent(
     camel::core::type::Type *elementType, const std::vector<camel::core::type::Type *> &portTypes,
     size_t dataOperandCount, std::string &ruleName, std::string &why,
     const std::unordered_set<gc_node_ref_t> *structurallyZero = nullptr,
-    std::vector<std::string> *omitted                         = nullptr,
-    const std::vector<std::optional<slot_t>> *portValues       = nullptr) {
+    std::vector<std::string> *omitted                         = nullptr) {
     // The candidates, in the order the family filed them. A key can hold several rules -- one
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
@@ -200,9 +199,7 @@ gc_node_ref_t buildRuleTangent(
         std::vector<camel::core::type::Type *>{elementType},
         portTypes,
         dataOperandCount,
-        RuleChoiceWords{"rule", "arguments"},
-        nullptr,
-        portValues);
+        RuleChoiceWords{"rule", "arguments"});
     if (!choice.found()) {
         why = choice.why;
         return rt::kInvalidNodeRef;
@@ -2192,28 +2189,6 @@ bool liftGraph(
                 // that answer, and it is the same one `vmap` asks for.
                 Type *ruleElementType = camel::transforms::rules::ruleElementTypeOf(
                     camel::transforms::rules::firstOperandTypeOf(function, ref));
-                // The configuration the node carries, port for port, so a law that wrote a `<>`
-                // value of its own is checked against it (`rule_expand.h#chooseRuleAmong`): a port
-                // the node passes a value to is `nullopt`, and a port its `<>` configuration fills
-                // is the value in this graph's static area. Without this a law written for
-                // `reshape<[2, 2]>` answers a `reshape<[8, 2, 8]>` node and its right side writes
-                // `[2, 2]` into the tangent (measured 2026-11-20, `probes/06_layout.cml`).
-                std::vector<std::optional<slot_t>> portValues;
-                {
-                    const std::span<const slot_t> staticSlots = function.staticSlots();
-                    portValues.reserve(operandTypes.size());
-                    for (const gc_node_ref_t original : originals) {
-                        const camel::runtime::gc_slot_idx_t index = function.dataIndexOf(original);
-                        if (index < 0) {
-                            const auto slot = static_cast<size_t>(-index);
-                            portValues.push_back(
-                                slot < staticSlots.size() ? std::optional<slot_t>{staticSlots[slot]}
-                                                          : std::optional<slot_t>{});
-                        } else {
-                            portValues.push_back(std::nullopt);
-                        }
-                    }
-                }
                 tangentOf[ref] = buildRuleTangent(
                     *context,
                     state.group,
@@ -2227,8 +2202,7 @@ bool liftGraph(
                     ruleName,
                     ruleWhy,
                     &structurallyZero,
-                    &omitted,
-                    &portValues);
+                    &omitted);
                 if (!omitted.empty()) {
                     // The reading of the omission, in the rule's own words: these are the places
                     // the expansion did *not* copy, because they fed only a product whose tangent
