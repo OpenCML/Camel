@@ -627,10 +627,12 @@ class GraphDraft {
     void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
     void setFuncType(camel::core::type::FunctionType *funcType) {
+        noteOriginalTypes();
         ++mutations_;
         funcType_ = funcType;
     }
     void setCaptureNames(std::span<const camel::core::SymId> names) {
+        noteOriginalTypes();
         ++mutations_;
         captureNames_.assign(names.begin(), names.end());
     }
@@ -638,11 +640,13 @@ class GraphDraft {
     void addCaptureName(std::string_view name);
     /// Gives the graph this frame layout (possibly one without slots).
     void setRuntimeSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteOriginalTypes();
         ++mutations_;
         runtimeSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
         hasFrameLayout_ = true;
     }
     void setClosureType(camel::core::type::TupleType *closureType) {
+        noteOriginalTypes();
         ++mutations_;
         closureType_ = closureType;
     }
@@ -650,6 +654,7 @@ class GraphDraft {
     /// are. A rewrite that retypes what a constant stands for changes the layout here and not the
     /// value (camel/runtime/retype.h), which is why the two are set apart.
     void setStaticSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteOriginalTypes();
         ++mutations_;
         staticSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
     }
@@ -761,10 +766,12 @@ class GraphDraft {
         uint64_t mutations  = 0;
         bool hasFrameLayout = false;
         // The journal's own marks, one per record kind (see the `UndoNode`, `UndoRegions`,
-        // `UndoScalars`, `UndoPorts`, `UndoLowLevel` and `UndoWritings` records below).
+        // `UndoScalars`, `UndoTypes`, `UndoPorts`, `UndoLowLevel` and `UndoWritings` records
+        // below).
         size_t undoNodes     = 0;
         size_t undoRegions   = 0;
         size_t undoScalars   = 0;
+        size_t undoTypes     = 0;
         size_t undoPorts     = 0;
         size_t undoLowLevel  = 0;
         size_t undoWritings  = 0;
@@ -1036,7 +1043,12 @@ class GraphDraft {
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }
-    void setInsertRegion(uint32_t region) { insertRegion_ = region; }
+    /// Which region a node is added into. A segment writes it and puts it back with everything
+    /// else the draft itself holds (`UndoScalars`), so the write goes through the hook.
+    void setInsertRegion(uint32_t region) {
+        noteOriginalScalars();
+        insertRegion_ = region;
+    }
     /// Whether a node that reads a node of a deeper control region moves into that region
     /// (inheritRegion). The front end places every node itself, so a read across the border
     /// of an arm is left for the validator to report.
@@ -1251,6 +1263,20 @@ class GraphDraft {
     struct UndoPorts {
         std::vector<gc_node_ref_t> norm, with, closure;
     };
+    /// The graph's own types, as the segment found them. `funcType_` is graph content a segment
+    /// writes: a rewrite republishes the graph under another signature (`setFuncType`), and a port
+    /// that goes takes its parameter out of the signature with it (`removeNormPort`,
+    /// `removeWithPort`). The other members are the same kind of state -- the frame layout a
+    /// rewrite retypes, the closure type, the capture names -- so one record holds them and one
+    /// class of the self-check compares them.
+    struct UndoTypes {
+        camel::core::type::FunctionType *funcType         = nullptr;
+        camel::core::type::FunctionType *declaredFuncType = nullptr;
+        camel::core::type::TupleType *closureType         = nullptr;
+        std::vector<camel::core::SymId> captureNames;
+        std::vector<camel::core::type::Type *> runtimeSlotTypes;
+        std::vector<camel::core::type::Type *> staticSlotTypes;
+    };
     struct UndoLowLevel {
         size_t edits = 0;
     };
@@ -1263,6 +1289,7 @@ class GraphDraft {
     void noteOriginalNode(gc_node_ref_t id);
     void noteOriginalRegions();
     void noteOriginalScalars();
+    void noteOriginalTypes();
     void noteOriginalPorts();
     void noteOriginalLowLevel();
     void noteOriginalWritings();
@@ -1277,11 +1304,13 @@ class GraphDraft {
     std::vector<uint64_t> undoNodeEpoch_; // by node id: the epoch a node was last recorded in
     std::vector<UndoRegions> undoRegions_;
     std::vector<UndoScalars> undoScalars_;
+    std::vector<UndoTypes> undoTypes_;
     std::vector<UndoPorts> undoPorts_;
     std::vector<UndoLowLevel> undoLowLevel_;
     std::vector<UndoWritings> undoWritings_;
     uint64_t undoRegionsEpoch_  = 0;
     uint64_t undoScalarsEpoch_  = 0;
+    uint64_t undoTypesEpoch_    = 0;
     uint64_t undoPortsEpoch_    = 0;
     uint64_t undoLowLevelEpoch_ = 0;
     uint64_t undoWritingsEpoch_ = 0;

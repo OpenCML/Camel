@@ -1278,6 +1278,7 @@ camel::core::sem::PermissionMask GraphDraft::nodePermissions(gc_node_ref_t id) c
 void GraphDraft::setNodePermissions(
     gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
     requireOneWriting("setNodePermissions");
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -1296,6 +1297,7 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -2047,15 +2049,19 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     std::erase(normPorts_, id);
     std::erase(withPorts_, id);
     std::erase(closureNodes_, id);
+    // The graph's own scalars go through the setters that record them. The journal already has
+    // this segment's record (`noteOriginalScalars` above), so these calls record nothing further;
+    // they are here because a node is dropped by exactly the writes a segment makes, and a write
+    // that went round the hook would be one the self-check has to catch (`dissolveUnorderedGates`
+    // wrote them before the erase, which is the defect that put the hooks on this path).
     if (entry_ == id)
-        entry_ = kInvalidNodeRef;
+        setEntryNode(kInvalidNodeRef);
     if (exit_ == id)
-        exit_ = kInvalidNodeRef;
+        setExitNode(kInvalidNodeRef);
     if (output_ == id)
-        output_ = kInvalidNodeRef;
+        setOutputNode(kInvalidNodeRef);
     if (returnNode_ == id) {
-        returnNode_ = kInvalidNodeRef;
-        returnKind_ = GCReturnKind::None;
+        setReturnNode(kInvalidNodeRef, GCReturnKind::None);
     }
 }
 
@@ -2124,6 +2130,7 @@ GraphDraft::Savepoint GraphDraft::savepoint() const {
         .undoNodes      = undoNodes_.size(),
         .undoRegions    = undoRegions_.size(),
         .undoScalars    = undoScalars_.size(),
+        .undoTypes      = undoTypes_.size(),
         .undoPorts      = undoPorts_.size(),
         .undoLowLevel   = undoLowLevel_.size(),
         .undoWritings   = undoWritings_.size(),
@@ -2162,11 +2169,13 @@ void GraphDraft::dropJournal() {
     undoNodeEpoch_.clear();
     undoRegions_.clear();
     undoScalars_.clear();
+    undoTypes_.clear();
     undoPorts_.clear();
     undoLowLevel_.clear();
     undoWritings_.clear();
     undoRegionsEpoch_  = 0;
     undoScalarsEpoch_  = 0;
+    undoTypesEpoch_    = 0;
     undoPortsEpoch_    = 0;
     undoLowLevelEpoch_ = 0;
     undoWritingsEpoch_ = 0;
@@ -2232,6 +2241,22 @@ void GraphDraft::noteOriginalScalars() {
             .mutations      = mutations_,
             .hasFrameLayout = hasFrameLayout_,
             .insertRegion   = insertRegion_,
+        });
+}
+
+void GraphDraft::noteOriginalTypes() {
+    if (!journalOpen() || undoTypesEpoch_ == journalEpoch_) {
+        return;
+    }
+    undoTypesEpoch_ = journalEpoch_;
+    undoTypes_.push_back(
+        UndoTypes{
+            .funcType           = funcType_,
+            .declaredFuncType   = declaredFuncType_,
+            .closureType        = closureType_,
+            .captureNames       = captureNames_,
+            .runtimeSlotTypes   = runtimeSlotTypes_,
+            .staticSlotTypes    = staticSlotTypes_,
         });
 }
 
@@ -2350,6 +2375,15 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
         withPorts_              = record.with;
         closureNodes_           = record.closure;
     }
+    if (undoTypes_.size() > mark.undoTypes) {
+        const UndoTypes &record = undoTypes_[mark.undoTypes];
+        funcType_               = record.funcType;
+        declaredFuncType_       = record.declaredFuncType;
+        closureType_            = record.closureType;
+        captureNames_           = record.captureNames;
+        runtimeSlotTypes_       = record.runtimeSlotTypes;
+        staticSlotTypes_        = record.staticSlotTypes;
+    }
     if (undoLowLevel_.size() > mark.undoLowLevel) {
         // The ids the segment put in the edit list go with the edits themselves: a node the
         // rollback put back is not a node a commit has to answer for as changed in place.
@@ -2369,11 +2403,13 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
     }
     undoRegions_.resize(mark.undoRegions);
     undoScalars_.resize(mark.undoScalars);
+    undoTypes_.resize(mark.undoTypes);
     undoPorts_.resize(mark.undoPorts);
     undoLowLevel_.resize(mark.undoLowLevel);
     undoWritings_.resize(mark.undoWritings);
     undoRegionsEpoch_  = 0;
     undoScalarsEpoch_  = 0;
+    undoTypesEpoch_    = 0;
     undoPortsEpoch_    = 0;
     undoLowLevelEpoch_ = 0;
     undoWritingsEpoch_ = 0;
@@ -3028,14 +3064,18 @@ size_t GraphDraft::dissolveUnorderedGates() {
                     }
                 }
             }
+            // The graph's own names move off the node before it goes, through the setters that record
+            // them: `eraseNode` records this segment's scalars at its first line, so a write made
+            // here first would be the one the record holds -- a rollback would then name `value`
+            // instead of the gate it put back.
             if (exit_ == id) {
-                exit_ = value;
+                setExitNode(value);
             }
             if (output_ == id) {
-                output_ = value;
+                setOutputNode(value);
             }
             if (returnNode_ == id) {
-                returnNode_ = value;
+                setReturnNode(value, returnKind_);
             }
             replaceAllValueUses(id, value);
             eraseNode(id); // its control users lose nothing: it waited on nothing

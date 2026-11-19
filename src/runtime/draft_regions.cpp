@@ -141,7 +141,10 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user, DraftEdg
         return;
     }
     if (regionWithin(readControl, readerControl)) {
-        reader->header.region = readControl;
+        // The move is a write of the node's region, so it goes through the setter that records it
+        // (`noteOriginalNode`): a node a rewrite pulled into a branch arm and then took back is a
+        // node the rollback has to put back where it stood.
+        setNodeRegion(user, readControl);
     }
 }
 
@@ -158,8 +161,7 @@ void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
         const uint32_t around = region.parent;
         for (DraftNode *held : nodesById_) {
             if (held && held->header.region == r) {
-                noteOriginalNode(held->header.selfId);
-                held->header.region = around;
+                setNodeRegion(held->header.selfId, around);
             }
         }
         for (uint32_t other = 1; other < regions_.size(); ++other) {
@@ -186,8 +188,7 @@ void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
         }
         for (DraftNode *held : nodesById_) {
             if (held && held->header.region == r) {
-                noteOriginalNode(held->header.selfId);
-                held->header.region = around;
+                setNodeRegion(held->header.selfId, around);
             }
         }
         regions_[r].kind   = GCRegionKind::Dead;
@@ -227,8 +228,7 @@ void GraphDraft::flattenRegion(uint32_t id) {
     }
     for (DraftNode *held : nodesById_) {
         if (held && !kept[held->header.region]) {
-            noteOriginalNode(held->header.selfId);
-            held->header.region = 0;
+            setNodeRegion(held->header.selfId, 0);
         }
     }
     for (uint32_t r = 1; r < regions_.size(); ++r) {
@@ -344,10 +344,13 @@ size_t GraphDraft::rehomeOrderEdges() {
 }
 
 void GraphDraft::clearRegions() {
+    // The table goes and every node comes out of its region: both halves are recorded, the table
+    // once (`noteOriginalRegions`) and each node through the setter that records it.
+    noteOriginalRegions();
     ++mutations_;
     for (DraftNode *held : nodesById_) {
         if (held) {
-            held->header.region = 0;
+            setNodeRegion(held->header.selfId, 0);
         }
     }
     regions_.clear();
@@ -356,18 +359,21 @@ void GraphDraft::clearRegions() {
 }
 
 void GraphDraft::setRegionOrigin(uint32_t id, uint32_t origin) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].origin = origin;
 }
 
 void GraphDraft::setRegionParams(uint32_t id, const camel::core::type::FunctionType *params) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].params = params;
 }
 
 void GraphDraft::setRegionAttrs(uint32_t id, uint32_t attrs) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id < regions_.size(), "No such region.");
     regions_[id].attrs = attrs;
