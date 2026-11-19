@@ -5387,3 +5387,129 @@ killed = 0
 2. `pass_boundary.orphan_effect_refused`：它是故意非法的测试遍，要钉的是"被拒"。现在更早一层（提交）就以"前端接受了越界的图"拒了——这不对：`test::bounds_flip` 是**遍**改坏的，不是前端。那句"defect of the compiler"的措辞在这条上是错的。区分两种来源：编辑前的图来自编译器前端时，报内部错误；来自本流水线里上一个遍（遍改坏了它）时，报那个遍的错（就是 pass 边界那条诊断该说的话）。改完这条用例应仍被拒、诊断指向 `test::bounds_flip`。
 3. 13 条未合分支：按 03:00 的四问逐条判，不需要先裁；判完在本页给表，"直接删"的列出有用部分已在哪笔。以前会话的 8 条一样处理。
 补 06:50 第 3 条：负责人给的规则里本就包括"判定可以直接删的就删"。删远端分支前先打 `parked/<分支名>` 标签（可找回），再删，并在本页记一行；`hold/fsh-dev`、`release` 与负责人专用引用不动（`agents/branching.md`）。
+
+## 负责人回报（2026-11-20 07:05）：四条前提被读数推翻；主干在 CI 上从未绿过
+
+### 一、效应检查第 2 条：**是度量对象错了，不是 tiles 那一遍漏了**（`ebb384f77`，已在合）
+
+我上一份回报说「先修 tiles 生产者」。**那是错的归因，被一次探针推翻。**
+
+探针量了 `region_outline.cpp` 四个出口的全部计数：`exit2-generic 620` · `exit3-covered 619` · **`widened 184`** · **`exit1-not-in-closure 0`** · `exit1b-no-type 0` · `exit4-widened-not-cover 0`。`__g_49__` 自己那两行：`round=0 exit=widened declared=[pure] body=[uses var tiles::driver, any unknown, any foreign]` → `round=1 … covered`。**遍确实把型加宽了、也盖住了。**
+
+真因：`commitViolation` 拿 `program`（**这次要发布的**）去量 `before`（**上一版的图**），而足迹按**被调方声明的 clause** 读 —— 这次提交恰好正在改写这些声明。`tiles` 在同一次 commit 里既加宽 `chain`、又加宽调用它的 `__g_49__` ⇒ 用**新** `chain` 量**旧** `__g_49__`，它的体凭空多出 `tiles::driver`，旧的 `pure` 型不盖 ⇒ 内部错误。**图在自己程序里一直合法。**
+
+⇒ **这是 `2026-11-18` 页 §二.2 那条约束的反面：一次读数，一个程序版本。** 修法是 `commitViolation(..., const Program *beforeProgram)`，`before` 用自己的 walk/resolver/table；**规则一个字没改**，越界照报，还是不跳过。
+
+⇒ 读数与「无行为改动」的探针**逐项相同**（`7179/7143/2/9/25`，gpu `13 red / 13 recorded / 0 new`，opt `1620/1620/0`），六条新红全绿。**§7.2/§7.3/§7.4 与「拆用例」两件事一并作废，页面已改正并留档我猜错的那一版。**
+
+### 二、`unknownres` 那 42 条：**不是类型发布不完全，是算子根本没声明资源**
+
+`'onnx:export_model' declares no resources, so every resource its operands may name is read conservatively: the operator's declaration is where one would be named`。`sem::conservativeResources` 给「没声明资源的算子」造 `ResourceClass::Unknown` 的访问 ⇒ `any unknown` ⇒ 被拒。**机制没冤枉任何人，42 条是真拒绝。**
+
+两类：
+- **算子侧**（3 个模块）：`onnx:export_model`；`tiles:regions / retain_host / retain_preferred / run_host_resident / run_preferred_resident`；`tensor:gemm_library_threads`。补 `declareResources` 即可（我已批准，附「每条必须由该算子自己的实现证明」）。
+- **`stdlib` 侧**（`export_model` 是**宏**）：`std::macro` 展开后 `main` 里才出现该节点，而 `main` 的推断签名在展开**之前**算 ⇒ **类型永远带不上它**。**这不是补声明能解决的，是宏展开与类型推断的次序问题，请你裁。**
+
+⇒ 附一条读数：**Camel 的行动子句语法是 `uses var? identRef`，`any unknown` 写不出来** ⇒ 「让程序自己声明它说不清」这条路对 `Unknown` 类**不存在**。
+
+### 三、`lane-nested-transforms` 的 8 条红是**主干上的真回归**，不是用例过时
+
+`134990a8f` 上那句 `Function of type '<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)` **不存在**（且原有两句拒绝正常）；`2ea1b0fd9` 上已出现。区间内能改行为的只有三笔：`654c52ec4`、`5a1f7e655`、`2ea1b0fd9`（grad-form 的 `6b5b5bd9b` + `c74e59759`）。**正在二分。**
+
+⇒ 最可能的机制：`6b5b5bd9b` 让空 rest pack 也建零成员元组当 base 值，于是**带 rest pack 的 lambda 多出一个 `__pack_0_0` 形参**，`<> (float)` 调它就失败。**若成立，这是 `6b5b5bd9b` 破坏了「空 rest pack 不引入形参」这条既有性质，而它的四条判据没有一条覆盖「闭包作为值被 `<>` 调用」。**
+
+### 四、S1-6：Linux 上一整族根因被排除；「Windows-only」这个前提可能要改
+
+`MALLOC_PERTURB_` = 0 / 85 / 170 各 20 次 ⇒ **60 次 0 复现**，而主机当时**满载**（load 19.1 / 19.9 / 20.0），满载本该是最容易复现的条件。加上此前正常 60 次 ⇒ **Linux 上 120 次 0 失败**。`85/170` 会让 glibc 把释放过的块与新分配的块填上扰动值 ⇒ **任何一处读已死草稿的内存，60 次里必然出偏差** ⇒ 一次都不出 ⇒ **Linux 这条路径上不存在「读已死内存」，只可能是「所有东西都活着、记录本身是错的」**。这与 ASan leg 一直绿、与「值是对的、问错了对象」三条独立合流。
+
+⇒ **但 `win-x64` 与 `linux-x64` 在 CI 上都失败在 `20 Test (smoke + feat)` 同一步** ⇒ 最省的解释是**主干在这条测试层上本来就红**，与平台无关。日志在整轮结束前取不到，两端 `[FAIL]` 名单一比就能定。
+
+### 五、★ 一件我该早报的事：**主干在 CI 上从来没绿过**
+
+`develop` 的 CI 历史：`44494656996`（51 分钟，失败）· `44494125607`（30 秒，失败）· 本轮 `44605480914`（失败）。**我方所有「主干零红」的读数都是本地计划读数，不是 CI 读数。** 若「34 条闸门红转绿」以 CI 为准，那么今天的主干一次都没绿过 —— 这两件事不能混为一谈，我此前混了。
+
+## 负责人回报（2026-11-20 07:10）：你 06:50 第 1 条的前提被探针推翻；`6b5b5bd9b` 已确认是主干回归
+
+### 一、★ 你 06:50 说「fix the tiles producer first」——**tiles 那一遍没有漏，这条裁定的前提不成立**
+
+探针量了 `region_outline.cpp` 四个出口的**全部**计数（1423 行，跑完即删）：
+
+```
+exit2-generic 620 · exit3-covered 619 · widened 184 · exit1-not-in-closure 0 · exit1b-no-type 0 · exit4-widened-not-cover 0
+```
+
+`__g_49__` 自己那两行：`round=0 exit=widened declared=[pure] body=[uses var tiles::driver, any unknown, any foreign]` → `round=1 … covered`。
+
+⇒ **遍把型加宽了、而且盖住了。出口①一次都没发生。** 我按它的 §7.4 批准的「出口①不许跳过 + 4 轮换成到不动为止」是照错的归因下的，已作废。
+
+真因是**度量对象错了**：`commitViolation` 拿 `program`（这次要发布的）去量 `before`（上一版的图），而足迹按**被调方声明的 clause** 读 —— 这次提交恰好正在改写这些声明。`tiles` 在同一次 commit 里既加宽 `chain`、又加宽调用它的 `__g_49__`，于是用**新** `chain` 量**旧** `__g_49__`，它的体凭空多出 `tiles::driver`，旧的 `pure` 型不盖 ⇒ 报内部错误。**图在自己程序里一直合法。**
+
+修法已落主干（`ebb384f77`，合并为 `cc685ea21`）：`commitViolation(..., const Program *beforeProgram)`，`before` 用自己的 walk/resolver/table；**规则一个字没改，越界照报，还是不跳过**。读数与「无行为改动」的探针逐项相同（`7179/7143/2/9/25`、gpu `13/13/0`、opt `1620/1620/0`），六条新红全绿。
+
+⇒ **你那条裁定的用意（生产者自己修）我认，但这一处没有生产者可修。** 请你据此撤回它，别让别的面按它去改 tiles。
+
+### 二、`6b5b5bd9b` 已确认是**主干上的回归**，二分收敛到它单独一笔
+
+```
+134990a8f  那句 'cannot be called with argument types' 不在
+5a1f7e655  仍不在（rulesets `<>` 当端口不是病灶）
+6b5b5bd9b  在（`fix: a lambda's empty rest pack is a value in its body`，单独一笔）
+2ea1b0fd9  在
+```
+
+⇒ 机制：空 rest pack 变成形参 ⇒ `<__pack_0_0: float> () => float` 被 `<> (float)` 调用失败 ⇒ `nested` 的 8 条用例在**前端**就停住，走不到它们要量的那面墙。
+
+⇒ **要紧的一点：`6b5b5bd9b` 当时的四条判据里没有一条是「把闭包当值、用 `<>` 调用」** ⇒ 它当时**不可能**发现这个。所以这不是它做错了，是**判据缺一面**。
+
+⇒ 两条可能的修法，我请你裁（我不自己定）：
+1. **让 pack 不当形参** —— 空 rest pack 不引入形参，与 `6b5b5bd9b` 想要的性质（空 pack 在体内是一个值）能否并存，要读那笔的实现才知道；
+2. **报成设计问题** —— 若「空 pack 的 lambda 作为值被调用」本来就该带那个形参，那么 `vjp.cml:175` 那类调用点写错了，改调用点而不改语义。
+
+⇒ 无论哪条，那 8 条红**不许改用例期望**，也不许加 `known_fail`。
+
+### 三、你 06:50 第 3 条（删远端分支先打 `parked/` 标签）已收到，照办
+
+`O=13` 的构成我今天已报过：今晚我们的 5 条 + 以前会话的 8 条。按你这条，我先打标签再删，并在本页记一行。`hold/fsh-dev`、`release` 与负责人专用引用不动。
+
+## 负责人回报（2026-11-20 07:20）：`sum<0,false>` 那条读数**撤回**；`rule_expand` 的两分已修好
+
+### 一、★ 你 06:20 第 2 条（`sum<0,false>` 的导数）——**证据被它自己撤回了，我请你据此改写这一条**
+
+```
+原文它是这么报的：「前向正确 [[1,2],[3,4]] → [4.0, 6.0]，导数四个元素全是未初始化内存（1.0350817e-24，四个相同）」
+```
+
+今天它自己撤回，三件事逐条：
+
+1. **程序给不出**：那是 `probes/*.cml`，按规矩**从不入库**，跑完即删。原程序已不存在。
+2. **逐字输出给不出**：没有存副本，主机上的日志按「保留最新 20」滚动。**⇒「四个相同值」这条标为未复核。**
+3. **今天也读不出来**：按记忆重建的同形状程序，在 `b307cebea` 上直接炸在
+   `stdlib/vjp.cml:194:40 [Error]: Function of type '(f32[2]) => (f32[2, 2],)' cannot be called with argument types: <> (float)`
+   —— 正是第二节那笔 pack 回归，挡在最前面。
+
+⇒ **它撤回的判断我认，而且理由正确：一条无法复现的读数不该留在决策者案头。** 但它留下的推论有价值：
+
+**另一条车道在 `88` 的 Release 上按「只做 `sum<0,false>` 的 jvp」重建了 6 种写法，四条后端全绿**：`jvp` tangent `[2.0, 2.0]`（对）、`vjp` 的 pullback `[[1,1],[1,1]]`（正是你要钉的值）、`with_grad` 两条也对。
+
+⇒ **于是问法变了**：`jvp` 对、`vjp` 对、而 `grad` 错 ⇒ **病灶在 `grad` 这一层 —— `grad = split(jvp(f))` 的 pair 出口，或 `transpose(lin)` 那一步，不是 `sum_axis`。**
+
+⇒ 你若仍要这一条，它的判据应改成：**先修 `6b5b5bd9b` 那笔 pack 回归，再重取 `grad` 这一层的读数**；在回归修好之前，这一条**谁都取不到**。我已让那条车道停手，不重复跑。
+
+### 二、`rule_expand` 的两分修好了（`b307cebea`，待合）
+
+`leftSideConstantsOf` 现在只认**字面量**（`kind == Data && dataIndex < 0`），`Port`（规则自己的参数）跳过。判据四条全绿：
+
+| 判据 | 读数 |
+|---|---|
+| `feat/compile` | **2644 / 2628 / 0 / known 16**（一条不多红）|
+| `feat/transforms` | **69 / 43 pass / 0 fail / known 26** |
+| `softmax<2>` / `log_softmax<1>` | 仍按名拒绝；静默的 `13.5` 没了 |
+| `jvp_reshape` / `jvp_permute` | 回到绿（27 条红全回）|
+
+⇒ 这正是你把「`<>` 常量当端口」那条裁定拆成两半所需的实现：**写字面量的比内容，写参数的照旧绑定。**
+
+### 三、一个连带事实，关系到 `nested` 那两条负用例
+
+`angleargs` 已把 `jvp_reshape` 改成**通法**（`stdlib/rulesets/jvp.cml` 注释自己写着「It used to be written for one constant -- `reshape<[2, 2]>`」），`dims` 现在是它的第二个端口。⇒ 那两条 `nested.rule_*` 用例的**注释原本在说假话**（它们照样通过，但靠的不再是「法则写了一个 `<>` 值」）。已把注释改成它们真正钉的东西：**一个没有法则 spell 过的配置也必须走到法则**。性质未动。
+
+⇒ 这一点值得你看一眼，因为它涉及你 04:50 那条「`<>` 常量必须参与匹配」的**判据该怎么写**：它现在钉的是「回归」，不是「匹配」。
