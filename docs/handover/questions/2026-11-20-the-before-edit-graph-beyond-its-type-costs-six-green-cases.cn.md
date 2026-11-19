@@ -87,3 +87,86 @@ nothing, has an effect outside the program: … (name=RuntimeDiag::PassInternalE
 按下发保留这一支：它把一直静默跳过的越界显形，六条红是**读数本身**，不是抖动。
 在生产者的修复到位之前，`feat/compile :: pass_boundary.orphan_effect_refused` 与
 `feat/modules/tiles` 五条按红记账；本页是它们的依据。
+
+拆法（2026-11-20 协调人裁定，按两类分别处理）：①那条**拆成两条**——一条仍测 pass 边界
+（换一个不越界的装置），一条测「越界图被拒」；②tiles 那一族**先修生产者再合**，位置与建议修法见 §7。
+
+## 7. `native_parallel.cml` 那五条：体在哪一步发、型在哪一步写（纯读代码，基线 `462587e7a`）
+
+### 7.1 是哪些图、越的是哪一处
+
+`__g_49__` 是**前端**为 `test/cases/modules/tiles/native_parallel.cml:8` 的 lambda
+（`(i: int): float => float(sum(chain(x)))`）合成的图，不是遍造的（名字形状见
+`src/compile/gir/builder_helpers.h:400`）。诊断点的 node 2 是「a call of 'chain'」，而
+`chain` 正是 `:2-5` 那个纯张量函数 —— 也就是 tiles 遍要搬去设备的那一个。
+⇒ **`__g_49__` 自己的算子一个都没改，越界是「被调方的体变大、调用方的型没跟上」。**
+
+### 7.2 时间线，逐处行号
+
+```
+体被改、被发   modules/tiles/src/region_outline.cpp:972  declareBodiesOverDrafts(session)
+               modules/tiles/src/region_outline.cpp:986  return session.commit();   ← 一次 commit
+型被写         modules/tiles/src/region_outline.cpp:350-352  session.edit(graph).edit()
+                     .setFuncType(type->withResources(clause));
+               量的是 session.prepared()（:309）＝该会话要发布的、已编码的副本
+               （src/runtime/draft_session.cpp:1903-1914，裁定 f61196246 的落点）
+晚一批的那处   modules/tiles/src/region_outline.cpp:989  settleDeclarations
+               由 region_pass.cpp:82 / region_test_pass.cpp:404 在**下一次** commit 之后调，
+               它的定点是 for (;;)（:1003）
+```
+
+⇒ 两次加宽都对，但**中间隔着至少一次 commit**：`__g_49__` 是在「`chain` 已经加宽、它自己还没
+加宽」的那一次 commit 里被发布出去的 —— 这就是 `2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`
+记的「先发体、后补型」，只是那一页的修法（`f61196246`，让遍在 commit 前读 `prepared()`）只覆盖到
+它当时量到的那些图。
+
+### 7.3 `declareBodiesOverDrafts` 为什么漏了它：四个出口，各带行号
+
+`region_outline.cpp:325-353` 的循环对每张图做四件事，任一为真就**跳过这张图**：
+
+```
+① :330-333  staged->graph(id) == nullptr  这张图不在本次编码的闭包里
+            （collectCommitClosure，draft_session.cpp:1361：从 runtimeRoot_ 沿 refs() 走，
+             made 由 :1403-1405 补种；refs() 的五个来源见 graph.cpp:2751-2789，
+             静态函数值算 kGraphRefStatic，算子操作数里的图不算）
+② :339-341  型是 Generic（"promises nothing"）
+③ :343-345  covers(declared, body) 已经成立 ⇒ 无事可做
+④ :346-349  widened 出来的 clause 仍不盖住 body ⇒ 留下，交给 commit 拒
+```
+
+两处**范围/深度**限制：`:308` 的定点只跑 **4 轮**；`settleDeclarations` 无上限但晚一批。
+
+`covers` 只有两道关：名字+模式（`src/core/resource_semantics.cpp:443-451`）与 **`external` 标志**
+（`:469-471`：`source.external && !target.external` 直接 false）。`tiles:driver` 是
+`externalAmbient`（`modules/tiles/src/module.cpp:940-943`）⇒ 体的 footprint `external=true`，
+而「什么都不声明」的型 `external=false` ⇒ **`external` 是硬的一关**，名字对不上是次要的。
+`widened` 会把 `external` 带过去（`resources.cpp:1424` + `sem::ambientCarriesExternal`），
+所以「能加宽」是有解的那一档。
+
+### 7.4 该修哪一处（建议，最小）
+
+把「被调方变大 ⇒ 调用方**当场**跟上」做在**发布它的那一次 commit 之前**：
+
+```
+① region_outline.cpp:306 declareBodiesOverDrafts 的定点不许因「图不在本次编码闭包里」而跳过
+   （出口①）——作者在 :313-317 已经为「本遍造的图」补种过一次同样的洞，前端造的图是同一条理由；
+② :308 的 4 轮换成「到不动为止」，与 settleDeclarations:1003 的 for(;;) 一致。
+```
+
+不改检查、不给已发布的图开设型入口（那正是 `2026-11-18` 页 §四 否掉的那条）。
+
+### 7.5 `native_parallel.cml` 会不会因此变合法 —— **会（5 条转绿）**，附条件
+
+**不是「仍红但理由换成真越界」**，条件是 7.3 的出口①（或出口③+①）就是它红的原因。理由：
+越界效应是**遍自己插的设备提交**（upload / exec / download 写 ambient `tiles:driver`），
+`widened` + `ambientCarriesExternal` 写得出这条 clause；而这条链上的型全是机器推的
+（`sync` 体、lambda 的 `nothing`），没有作者手写的、比体更窄的 clause，所以
+`f61196246` 的 ① 「这一遍没有改承诺」成立，加宽是有解的。
+
+唯一会让它变成「仍红而理由是真越界」的情形：出口②（型是 `Generic`）或出口④
+（`widened` 不盖住体）为真 —— 那说明这张图的型**本来就写不出**它要的承诺，是第二轮问题
+（要给 lambda 一个能写 clause 的型），不是加宽能修的。
+
+**这一步要一次读数钉死**（占主机，按规矩报等位）：在 `region_outline.cpp:330/339/343/346`
+四个 `continue` 前各打一行临时探针（图名 + 出口号），只跑
+`test/plans/feat/modules/tiles.plan.toml` 的五条，五行之内就知道是哪一个出口。
