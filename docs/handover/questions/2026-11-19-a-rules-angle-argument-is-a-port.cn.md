@@ -33,16 +33,24 @@ was `softmax<1>` of everything.
 ## What was measured
 
 **The constants are not matched.** A law whose left side states `softmax<1>` matches a call written
-`softmax<2>`, and answers the `1` law to it. `f(x) = sum(softmax<2>(x) * w)` on `x = 0` along
-`dx = 1..12` (by hand: `sum(w)/3 = 26` and `4 * 2/3 = 2.666667`):
+`softmax<2>`, and answers the `1` law to it. Two readings, each with the answer computed by hand:
+
+`f(x) = sum(softmax<2>(x) * w)` on `x = 0` along `dx = 1..12` (by hand: `sum(w)/3 = 26` and
+`4 * 2/3 = 2.666667`):
 
 ```
 softmax axis 2 value=26.000000 tangent=13.500000     <- the law in the tree, which says `softmax<1>`
 softmax axis 2 value=26.000000 tangent=2.666667      <- the same law with the axis bound
 ```
 
-A wrong tangent read quietly is worse than a missing one, and nothing in the tree reported it. The
-same shape of law is `jvp_log_softmax` and `log_softmax_t`, both at `<0>`.
+`f(x) = sum(log_softmax<1>(x) * w)` on `x = 0` (`[2, 3]`, `w = 1..6`) along `dx = 1..6` (by hand:
+`f = -log(3) * 21 = -23.070858`, and `dy = dx - mean(dx)` per row gives `f' = 4.0`):
+
+```
+log_softmax axis 1 value=-23.070858 tangent=13.500000   <- `jvp_log_softmax`, which says `<0>`
+```
+
+A wrong tangent read quietly is worse than a missing one, and nothing in the tree reported either.
 
 **Naming the port works.** Three laws were written the way `vmap_rule_reshape` and
 `vmap_rule_permute` already write theirs -- the `<>` port named as the rule's last parameter, the
@@ -89,9 +97,10 @@ One refusal is real and stays: a `<>` name written **in the rule's own right sid
 jvp has no forward rule for `tensor:softmax` (the rule's right side uses a node written after it)
 ```
 
-so the value goes through a function body (`softmax_axis_jvp`), which is where a `<>` argument
-stated at run time already lives (`vmap_permute`, `reshape<batched_shape(xs, dims)>`). And that
-function is a callee with an open-rank parameter, which is what the transposed walk refuses:
+so the value goes through a function body, which is where a `<>` argument stated at run time already
+lives (`vmap_permute`, `reshape<batched_shape(xs, dims)>`; in this tree `reshape_jvp` and
+`permute_jvp`). And in the reverted `softmax` repair that function was a callee with an open-rank
+parameter, which is what the transposed walk refuses:
 
 ```
 TRANSPOSE function=rulesets.jvp::softmax_axis_jvp<float> skip=parameter-shape uri=tensor:multiply
@@ -99,14 +108,26 @@ TRANSPOSE function=rulesets.jvp::softmax_axis_jvp<float> skip=parameter-shape ur
 
 ## Why it matters
 
-`reshape` and `permute` landed (`6df52b106`); `softmax`'s repair is written, measured and **reverted**,
-because `test/cases/compile/vjp/softmax_gradient_stops_at_split.cml` pins today's sentence
+`reshape` and `permute` landed (`0e9e882a5`, with the `@example` and snapshot follow-ups after it);
+`softmax`'s repair is written, measured and **reverted**, because
+`test/cases/compile/vjp/softmax_gradient_stops_at_split.cml` pins today's sentence
 (`split does not build this function`, `skip=backward construct=a node whose input was not copied`)
 and the named form makes the split *succeed* and fail one step later at the transpose. Moving a wall
 is not supposed to move a case under it, and this lane may not edit expectations, so the wrong-axis
 law stays and the case stays green.
 
-The transformer therefore stops where it stopped, one operator further on than `permute`:
+`permute` is off the list: the operator mix `attention` writes lifts whole -- a `[8, 16]` input
+through `reshape<[8, 2, 8]>`, `permute<[1, 0, 2]>`, `softmax<2>`, `transpose`, a multiply and a sum:
+
+```
+REINTERP jvp function=f ... rules=jvp_reshape,jvp_permute,jvp_softmax,jvp_transpose,jvp_mul_tensor,jvp_sum
+mix value=2.000000 tangent=0.000000
+```
+
+(`2.0` is `128 / 64`, the same by hand; the tangent is zero because the direction of ones is the one
+`softmax` is invariant along.)
+
+The transformer itself stops on the operator that comes before the attention call: `layer_norm`.
 
 ```
 REINTERP jvp function=block skip=rule uri=tensor:layer_norm reason=the operator has no forward rule bound at all
@@ -151,5 +172,7 @@ What changed today is what the wall *is*. It used to read "a rule cannot name th
 that is not true. It now reads "one law answers the wrong axis quietly, one law is missing, and two
 law families are unwritten", and only the first of those is a defect.
 
-Laws: `stdlib/rulesets/jvp.cml:376` (`reshape_jvp`), `:1022` (`permute_jvp`),
-`stdlib/rulesets/transpose.cml:1092` (`permute_cotangent`). Commit `6df52b106`.
+Laws: `stdlib/rulesets/jvp.cml:377` (`reshape_jvp`), `:1031` (`permute_jvp`), and
+`stdlib/rulesets/transpose.cml:1092` (`permute_cotangent`), `:1097` (`permute_t`). Commits
+`0e9e882a5` (the laws), then `7e6981346`, `4a5f68386` and `d5b157a8a` (the `@example` lines the
+reference asks for, and the two-line, then one-line, AST snapshot those follow).
