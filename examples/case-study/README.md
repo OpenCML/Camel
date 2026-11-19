@@ -241,18 +241,18 @@ Three readings, and only the first is what the paper says today:
 
 1. **Renamed: identical.** 29941 bytes, same sha256. Design principles 9.5, "the graph interface
    does not see spelling by default": a change of names changes nothing in the canonical document.
-2. **Swapped: the same graph, a different numbering.** Both documents hold 63 nodes and 93 edges;
-   every difference is a **permutation of the canonical node numbers** -- the two constants
-   `[2, -1, 1, 3]` (the `y` array) and `[1, 0, 0, 1, 1, 1, 2, 1]` (the `X` array) swap canonical
-   positions `n4` and `n6` (and their shape nodes `n5` and `n7`). So the graph is the same and the
-   *document* is not. Two sibling constants are a tie -- port order decides nothing between them --
-   and 9.5 says a tie is settled "with the smallest numbering table ... over the whole program" and
-   that the canonical order "does not depend on the order nodes were created in". Today it does:
-   the numbering follows the order the writer wrote the two `let`s in. That is a defect in the
-   canonical numbering of `std::jgir canonical=true`, not in the writer, and not in the graph.
-   -> It is a red of the canonical-numbering acceptance of principle 9.5 (the graph interface does
-   not see spelling by default): `docs/handover/reviews/questions-2026-10-29.md`, the rework section
-   of 2026-11-15 night, item 2, and it is queued there, not a defect of this example.
+2. **Swapped: not the same graph, and not meant to be.** Both documents hold 63 nodes and 93 edges.
+   The two constants `[2, -1, 1, 3]` (the `y` array) and `[1, 0, 0, 1, 1, 1, 2, 1]` (the `X` array)
+   stand at canonical positions `n4` and `n6` (with their shape nodes `n5` and `n7`) one way in one
+   document and the other way in the other. That is not a permutation of one numbering: each constant
+   reaches its value through a `tensor:reshape`, and a reshape may fault, so the two reshapes lie on
+   the timeline in the order the declarations are written -- principle 3.4, an operation that may
+   fault is not free to be arranged. Swapping the two `let`s swaps which of the two fails first, so
+   the two programs are **not** equivalent and their canonical documents are rightly different.
+   There is nothing left to repair here: `camel inspect --ties` reports no tie group in either
+   writing (`0 group(s) wider than one node, widest 0`), so the numbering never had two
+   interchangeable constants to choose between, and no canonicalization can make these two
+   documents equal.
 3. **Moved: one more edge, so not the same graph.** 63 nodes on both sides but **94 edges** against
    93, and the extra one is an ordering input on the `train` call, coming from `:io/println`. A sync
    block is a chain: "in a sync block the later statements depend on the earlier ones through sync
