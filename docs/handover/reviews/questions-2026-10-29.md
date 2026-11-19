@@ -5125,3 +5125,34 @@ AssertionError: (…/arm_read.before.json, …/arm_read.after.json,
 ### 四、请你注意的一点
 
 **这条红与「携带分支」无关，也不需要给 JOIN 加 `var`。** 我上一条建议里那个「请你裁它是否属于 0.2.45」的前提已不成立 —— 它是一个打印器里的集合作用域错误，改法明确。**我按上面四条判据推进，不再等裁定。**
+
+## 负责人回报（2026-11-20 04:10）：基线补一条 `consistency`，其中一条红有精确病因
+
+决策者。`feat/consistency` 不在我原来的六计划基线里，今天第一次量到，补进来。
+
+### 一、基线更新（`8061352f6` 上量，树干净）
+
+```
+[SUMMARY] total: 1288, pass: 1286, fail: 2
+[FAIL] runner.backend_matrix
+[FAIL] new_values.sort_rebinding.graph
+killed = 0
+```
+
+⇒ **两条都是既有红**（`432753f0c` 合前后都红，已按判据合入并写明）。**六计划基线因此变成七项**：compile 2638/2622/0 · linear 869/865/0 · opt 1620/1620/0 单跑 · parse 126/126/0 · para 104/104/0 · tools 70/70/0 · **consistency 1288/1286/2**。
+
+### 二、`new_values.sort_rebinding.graph` 那条红有逐字病因
+
+```
+[INFO] verification output: Error: the rebinding at sort_rebinding.cml:36:14 (main: xs = xs->sort) is at the old value's
+       last use and must not copy: 11 row(s), COPIES main updates 9 in-place 6 by-count 0 declared 0 copied 3
+```
+
+⇒ **它断言的正是设计原则 10.5**：「在旧值的最后一次使用处做的返回新值一定原地进行」。而实测 `updates 9 / in-place 6 / copied 3`，**有一个 `xs = xs->sort` 在旧值最后一次使用处仍然复制**。
+⇒ 我核过 S3b（`02939ffb7`）对这条 plan 的 diff：它**只新增**了 `new_values.sort_rebinding.copies`（`['sort_rebinding.cml:26:12', 'sorted_param: v = v->sort']`），`.graph` 那条的内容行**没有任何 `+` 标记** ⇒ **这条红比 S3b 更早存在，不是它引入的。**
+⇒ **它不在六计划里，所以我今晚一直没看见它。** 这是「基线覆盖不到的东西，不会被任何一轮读数发现」的第三个实例（前两个：`registry.reference_is_generated` 任何计划都看不见、`trans.cml.print_and_recompile` 只有 `feat/trans` 看得见）。
+
+### 三、八格现状与排队
+
+八格全满，`<>` 实参格在跑（已绿 `bddc8d6ab`，等六计划读数）。**你 03:40 下发的四组论文读数（调度不变性 / 相干性覆盖 / 每个提交检查各必要 / 不排序的反例）排在后面，没有空位。**
+⇒ **其中「不排序的反例」我们今晚已经做出证据了**：`docs/handover/reports/eval-round10/e2e/raw-output-after-inline-gate-and-order-lift.txt`，不排序版被拒、拒绝原文与改前**逐字节相同**（8 行切片、大小写敏感比较 `byte-identical`），而排序版与反向排序版都收、各带四个 `# tick`。**你要的那一组不用再跑，把这份文件取去即可。**
