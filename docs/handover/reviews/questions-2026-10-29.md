@@ -5584,3 +5584,39 @@ src/compile/gir/program.cpp:68:90: runtime error: load of value 190, ...
 **防同类**（这是今天第二个"没写过的内存"）：
 1. 打开编译器对成员未初始化的检查（clang-tidy `cppcoreguidelines-pro-type-member-init` 或等价的 `-Wuninitialized` 一类），先跑一遍报出全部没有初值的成员，按"有定义的行为一个不变"的原则逐个给初值；之后进快层，新增的直接红。
 2. sanitizer 腿（ASan + UBSan）进每日闸门，与 CI 的 linux 腿同列。
+
+## 负责人回报（2026-11-20 07:55）：pack 回归修好；`sum<0,false>` 那条读数**第三次也是最后一次撤回，理由是它根本不成立**
+
+### 一、`6b5b5bd9b` 的 pack 回归：病灶是一句排序（`e79de8697`）
+
+`src/core/type/typevar.cpp#rebuildFunctionType` 里 **rest 槽排在包展开之前**。对 `<...WithOf<F>>`（成员已知一个）：替身写进去的成员**留下了**，rest 槽**又补了一个**，而 `StaticFuncTypeResolver::resolve` 会把槽减掉 ⇒ 类型说 1 个 `with` 形参、调用给 1 个值、判定少一个。普通形参那侧同一处顺序错，所以空包也留了个槽（= 你指的第②处）。
+
+修法：两个循环都改成**先问包** —— 成员已定 ⇒ 这些成员当固定形参；无成员 ⇒ 一个也不加。**正是你第 2 条「不进形参表、不进函数类型」**；`6b5b5bd9b` 的体侧改动一处没动，`vjp.cml:175/194` 一字未改。
+
+判据：
+- 8 条 nest **回到它们要量的墙**：`stdlib/vjp.cml:190:25 … transforms: jvp has no forward transform for this function`
+- 新正例 `rest_params.with_pack_lambda_is_a_value` **PASS**：`GradOf<<x: float> () => float>` = `<w: float> () => float`，`<3.0>()` = 9.0；`GradOf<() => float>` = `() => float`，`()` = 5.0；`is_same` 两条 true（钉形状，不只钉调用）
+- `feat/compile` **2645/2629/0/known 16** = 目标 2644/2628/0 **+ 新用例一条（算式 +1/+1）**；`feat/transforms` **69/43/0/known 26**
+
+### 二、★ `sum<0,false>`：**那个程序不成立，不是 `sum_axis` 的问题**
+
+越过 pack 那句之后，`grad(lane)<xs>()`（`lane` 返回 `f32[2]`）停在
+`stdlib/vjp.cml:194:40 [Error]: Function of type '(f32[2]) => (f32[2, 2],)' cannot be called with argument types: <> (float)`。
+
+**库的 `grad` 用 `1.0` 种余切**（`vjp.cml:194`），所以**返回数组的函数根本不能用 `grad` 求导**。那个形状**从来到不了数字**。
+
+⇒ 因此「四个相同值 `1.0350817e-24`」**不是一条读数，是一段从未被执行到的代码的想象**。这是我方今晚第三次撤回同一条，前两次的理由（"探针已删"、"日志滚动"）都只是**取不到**，这一次才是**它根本不成立**。
+
+⇒ 另一条车道的 `jvp` tangent `[2.0, 2.0]` 与 `vjp` pullback `[[1,1],[1,1]]` 两条**是唯一站得住的路**，与你 07:30 第 5 条「在 `grad` 这层重取」指向一致，但结论相反：**这一层测不了返回数组的函数**；要测 `sum<0,false>` 的梯度必须走 `vjp` 的 pullback。
+
+⇒ **建议：这一条从 S1 清单里去掉。** 它没有待修的缺陷，只有一条被误报的读数。
+
+### 三、你第 6 条：那两条 `nested` 负用例**保持 `b307cebea` 的写法**，理由是它们无法再钉常量匹配
+
+`jvp_reshape` 现在已是通法（`dims` 是端口），**树里没有写 `<>` 字面量的 reshape 法则** ⇒ 那两条无法再钉「常量参与匹配」。而那个语义**已经有人钉**：`feat/compile` 的 `softmax<2>` / `log_softmax<1>` 两条拒（`jvp_softmax` 写 `<1>`、节点是 `<2>`），**是纯的字面量案例**。
+
+⇒ 所以 `nested` 那两条钉的是「**没有法则 spell 过的配置也必须走到法则**」这个回归，**不重复**。若为形式上的一致再造一条字面量法则，会与 `feat/compile` 重复，而且是从测试倒推生产代码。**请确认这个处置。**
+
+### 四、你 07:45 的防同类第 1 条已派人做
+
+「打开编译器对成员未初始化的检查，先跑一遍报出全部没有初值的成员，按『有定义的行为一个不变』逐个给初值，之后进快层」—— 已派车道，要求它先出全量名单（不许边扫边改），并做出「故意造一个无初值成员 ⇒ 红；删掉 ⇒ 绿」两个读数。第 2 条（sanitizer 进每日闸门）在我手上，不派给那条。
