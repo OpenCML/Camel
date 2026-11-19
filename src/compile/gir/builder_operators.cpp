@@ -2400,6 +2400,10 @@ node_handle_t Builder::visitLinkNode(
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
     FunctionType *targetFuncType    = nullptr;
+    // The value a call *through a value* invokes, kept beside the signature so that the question
+    // "does this callee hand its `var` parameters back" can be asked of the graph behind the value
+    // -- the same question a direct call asks, with the same answer (`callHandsBackResult`).
+    node_handle_t calleeValueNode = nullptr;
     std::vector<Argument> withInputs, normInputs;
     type_vec_t withInputTypes, normInputTypes;
 
@@ -3202,6 +3206,7 @@ node_handle_t Builder::visitLinkNode(
         // call's own value and what the `var` arguments' new versions are read from.
         const node_handle_t callNode = addCallSite(currGraph_, graphExitTypeOf(factoryType));
         linkNodes(LinkType::With, decoratorInvoke, callNode);
+        calleeValueNode = decoratorInvoke;
         // The call is written in the program: it is located where it is written, not where
         // the function's decorators left it.
         registerCallExpressionOrigin(context_, callNode, gct, "gir.link.call");
@@ -4492,6 +4497,7 @@ node_handle_t Builder::visitLinkNode(
         }
         node_handle_t invokeNode = addCallSite(currGraph_, graphExitTypeOf(funcType));
         linkNodes(LinkType::With, targetNode, invokeNode);
+        calleeValueNode = targetNode;
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {
             auto calleeOrigin = sourceContext->resolveGirNodeOrigin(draftDebugKey(targetNode));
@@ -5046,8 +5052,15 @@ node_handle_t Builder::visitLinkNode(
     const node_handle_t callNode = targetNode;
     // The callee graph answers this one question itself (`callHandsBackResult`): its body recorded
     // whether it packs `var` parameters into the exit type, and the signature cannot be asked
-    // instead -- a user-written tuple result looks exactly like a packed one.
-    const bool handsBackParams = callHandsBackResult(targetGraph);
+    // instead -- a user-written tuple result looks exactly like a packed one. A call *through a
+    // value* has no `targetGraph`, and the value it invokes holds one when that value is a graph's
+    // function (`functionValueGraphOf`), so the question is put to that graph and answered the same
+    // way; a value that names no graph of this program (a transform's, a builtin's) answers no.
+    compile_graph_ptr_t answeredCallee = targetGraph;
+    if (answeredCallee == nullptr) {
+        answeredCallee = functionValueGraphOf(calleeValueNode);
+    }
+    const bool handsBackParams = callHandsBackResult(answeredCallee);
     // Recorded for a reader that asks what the expression is *worth*, which is the result and not
     // the tuple -- including a call inside its own body: that call's callee is this graph, whose
     // exit is packed when the body ends, so the graph answers "not yet" and the declared signature
