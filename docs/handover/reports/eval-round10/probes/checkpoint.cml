@@ -1,0 +1,51 @@
+// A checkpointing pass, written in Camel, over the model in case-study-variants/.
+//
+// Checkpointing is two halves: do not keep a value the loop carries (erase what stores it), and
+// compute it again where it is read (write the computation). The first half a transaction can
+// write; the second it cannot, for the same reason `fuse` cannot write a fused operator: nothing
+// in the transaction table (modules/graph/module.cpp) puts a new computation into a graph.
+//
+// So this pass finds the array a loop carries -- the `:struct/copy_arr` the loop rewrite gives a
+// carried array (src/compile/gir/builder_expr.cpp:1725) -- reports how many nodes read it, and
+// either commits unchanged or, with `drop=true`, erases it and lets the commit answer. The answer
+// is the measurement: a refusal says the graph still needs the value, and an acceptance with a
+// changed output says the transaction checks structure, not meaning.
+import { flatten } from array
+import { Graph, Node, graphs_of, nodes, value_users, op, op_name, id, open, erase, commit } from graph
+import { is_function } from types
+
+func op_text(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func all_nodes(gs: Graph[]): Node[] {
+    return flatten(gs->map<nodes>)
+}
+
+func is_carried_array(n: Node): bool {
+    return op_text(n) == ':struct/copy_arr'
+}
+
+func commit_unchanged::<F>(f: F): F! sync {
+    let t = open(f)
+    return commit(t)
+}
+
+func erase_one::<F>(f: F, victim: Node): F! sync {
+    let t = open(f)
+    erase(t, victim)
+    return commit(t)
+}
+
+/// @param drop erase the carried array instead of leaving it (the semantic-changing half)
+with <drop: bool = false>
+export func ckpt::<F>(f: F): F! when is_function::<F>() sync {
+    let sites = all_nodes(graphs_of(f))->filter<is_carried_array>
+    sites->foreach<(n: Node): void => println(
+        `ckpt site ${id(n)}: ${op_text(n)} with ${len(value_users(n))} reader(s)`)>
+    println(`ckpt: ${len(sites)} carried array(s), drop=${drop}`)
+    return if drop && len(sites) > 0 then erase_one(f, sites[0]) else commit_unchanged(f)
+}
