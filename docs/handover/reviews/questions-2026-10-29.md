@@ -5171,3 +5171,36 @@ killed = 0
 1. 现在回一张车道表（照 02:40 的格式），每条必需项写**在哪条车道、做到哪一步、卡在什么**；
 2. 各车道把工作分支推到远端（`lane-…`），进展看得见；
 3. 必需项没有车道的，停非必需的（`opt-twice`、容器持有、读数组 C–G 里还没开始的）让格。
+
+## 负责人回报（2026-11-20 04:20）：催办两件都做了 —— 全表 + 分支已推
+
+决策者。你 04:15 的催办（`41569755f`）两件：**① 全表 ② 把车道分支推上去**。
+
+### 一、先说第二件，因为它是真缺口，不是拖延
+
+**七条车道分支全部只在本地，一条都没在 origin 上。** 已全部推出（`pushExit=0`）：`lane-angle-args` · `lane-grad-form` · `lane-nested-transforms` · `lane-vjp-forward` · `lane-gate-reds-a-parked` · `lane-front-ip-del` · `lane-ssa`（后者此前在 origin 上但本地领先 278 笔，已快进）。
+
+⇒ **这意味着今晚每一条未合车道的全部工作，在 04:20 之前只存在于这一台机器上。** 这是我的漏：我给每条车道写了「建树、提交、报 sha」，**但从没写过「推分支」**。已加入派工模板。
+
+### 二、全表（`develop = ea8b0cfc4`，`U=7`，`maxBehind=58`，`Wr=16`）
+
+| 车道 | 在做什么 | 状态 | 分支领先 |
+|---|---|---|---|
+| 合并位 `mrg` | 合 + 推 | **手上 0 条**，主干 `ea8b0cfc4` 已推 | — |
+| `lane-vjp-forward` | `tensor:permute` 前向 + 转置规则 | 5 分钟前有提交，3 笔 | 3 |
+| `lane-angle-args` | 规则带出 `<>` 实参 | **已绿**（`bddc8d6ab`），等六计划读数 | 1 |
+| `lane-grad-form` | 库 `grad` 写法恢复 + 二阶导测试钉数值 | 3 分钟前有提交，2 笔 | 2 |
+| `lane-nested-transforms` | 乙四条 + `chooseRuleAmong` 常量洞 + 四后端一致 | **74 分钟无提交**（`chooseRuleAmong` 要改签名 + 三家族传参，不是一行改） | 1 |
+| `lane-print-fix` | `arm_read` 的 JOIN 尾位置印法 | 已定位真因（打印器把 JOIN 提成 `return if…else…`），上一笔**自行撤回**并留补丁，现按新判据重做 | — |
+| `lane-opt-twice` | `opt_twice` 成本线 | 工具 + 页 + `cpu_budget_ms` 已合入主干；**欠 A/B 两张表**（要两次主机跑，等位） | — |
+| `lane-ssa` | 算子 var 参规则问声明 + 打包携带 | 按你的裁定：**留在分支上继续做，只把 develop 合进它** | 26 |
+
+**占用的八格**：合并位 · `vjp-forward` · `angle-args` · `grad-form` · `nested-transforms` · `print-fix` · `opt-twice` · `lane-ssa`（后者不做新活，只保号）。**`<>` 实参格已在其中**（`angle-args` 就是它）—— 你 03:20 点名那一格今天已开、已绿。
+
+### 三、你 04:50 下发的两处提交检查缺口，**没有空位移出来**
+
+`0ea4dc518` 第 1 条（效应检查对「说不出资源」的访问只计数、不判 —— `beyondCoverage` 的 `ResourceClass::Unknown → ++anyUnknown`）我已读完并认定该做，**但八格全满**。它排队的顺序在 `opt-twice` 的 A/B 表之后 —— 前者是你要的必需项，后者是 S3-2 的测量，**若你要我立刻开工，我停 `opt-twice` 让位**（它已交付工具与页，A/B 表可以稍后）。
+
+### 四、一条我要如实交代的现象
+
+`lane-nested-transforms` **74 分钟没有提交**。它 03:00 前后报过一次进展（选了 A，判出 `chooseRuleAmong` 只比类型的机制与代价），此后没有新读。**我没有催它第三次** —— 按规矩该催，我记着这条。
