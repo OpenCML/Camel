@@ -610,10 +610,11 @@ export rule matmul_stated_t::<T, A, B, SA, SB>(a: A, b: B, sa: SA, sb: SB) when 
 // The three operations whose adjoint needs the extents they consumed are below, written against the
 // **stated** spelling their forward halves call (`sum_stated`, `take_stated`, `mean_axis_stated`):
 // that spelling's second operand is the shape, so the law reads a known value instead of the tensor
-// the cotangent comes back through. `reshape` and `softmax` still have no rule here, and their
-// reason is the **pattern** half and not the law: each states its deciding value in angle brackets
-// only (`stdlib/signatures/tensor.cml`: `reshape<dims>(t)`, `softmax<axis>(t)`), and a rule cannot
-// name that position yet.
+// the cotangent comes back through. `reshape` and `softmax` still have no rule here, and what a
+// rule's pattern cannot do is not the reason any more: a law *can* name the position the call writes
+// in angle brackets (`rulesets.jvp#jvp_reshape` names `reshape`'s shape now), and what it names is
+// the **target** shape -- not the extents the value had before it was reshaped, which is the shape
+// this side needs and which no port of the node states.
 
 // ---- the transpose rules of the three operations that state their extents ----
 //

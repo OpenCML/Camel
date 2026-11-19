@@ -236,20 +236,32 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // `reshape` and `softmax` are the two operators that state a deciding value in angle brackets --
 // `reshape<shape>(x)`, `softmax<axis>(x)` -- because the shape and the axis are what decides which
 // function this is (design principles 4.4: `<...>` is configuration, `(...)` is the data). A rule's
-// own parameter cannot be that value yet: the builder asks a name in angle brackets to be a
-// compile-time value (`builder_generics.cpp#Builder::ruleWithArgumentValue`,
-// `RuleWithArgumentNotConstant`), so the pattern half is open and the two laws below are written for
-// the one shape and the one axis a rule can state, as the constants a call site states them.
-// Their right sides name the operator with that same constant: `modules/transforms/rule_expand.cpp`
-// carries a `with` input of the right side over like an operand, so the copied node's angle argument
-// is the rule's own constant and no context argument of the matched node is invented.
+// parameters are the operator's ports in port order, the `<>` ones included, so the *pattern* half
+// names that position the way it names an operand: `reshape<dims>(x)` binds the value the node
+// writes, and the right side receives it as a value it can hand on (`jvp_reshape` below and the
+// `reshape_dims` it calls; `rulesets.vmap`'s `vmap_rule_reshape`/`vmap_reshape` is where that same
+// arrangement was first landed, `ff09ab5a0`).
+//
+// What a law must not do is write a **constant** there. The fit compares port types and port counts
+// and never the value a `<>` port carries (`modules/transforms/rule_expand.cpp#chooseRuleAmong`), so
+// a law whose left side says `reshape<[2, 2]>` is chosen for a node of any shape and its right side
+// then answers `reshape<[2, 2]>`: the tangent of `reshape<[8, 2, 8]>(x)` came back reshaped to
+// `[2, 2]` and stopped the program at `TensorDimensionMismatch: [128] -> [2, 2]`. That is a wrong
+// number, not a missing one, and the repair is in the pattern half and nowhere else -- which is why
+// `jvp_reshape` names its shape and `jvp_softmax` cannot name its axis: `softmax`'s axis is a
+// parameter with a default, so `softmax(x)` has one port and `softmax<0>(x)` has two under the same
+// key, and a law that names the axis is refused for the first spelling -- the one most programs
+// write. Its `<1>` is the last axis that default names, so the axis is right for `softmax(x)` and
+// for `softmax<1>(x)`, and a `softmax<0>(x)` under forward mode is answered by a law that writes
+// `<1>`. That limit is real, it is reported, and it is not something this ruleset can repair.
+//
 // The paragraph that used to stand here said `softmax` and `reshape` were not in this file because a
 // rule's right side may not pass a context argument of its own -- `4fb738332` removed exactly that
 // refusal (the `with` input of a right side is carried over like an operand, and one the body does
-// not carry is still refused by name), so the statement is no longer true and the two laws are
-// written below. What is left is the pattern half, which is the next paragraph.
+// not carry is still refused by name) -- and then said the pattern half could not name the position
+// at all, which `ff09ab5a0` also stopped being true.
 // `test/plans/feat/compile/rules_angle_args.plan.toml` pins the numbers these two laws have to
-// answer once a rule can name what the node carries.
+// answer; `rules_angle_args.reshape_shape` is the one a constant could not have answered.
 //
 // Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
 // operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
@@ -364,9 +376,25 @@ export rule jvp_mean::<T>(xs: T[...]) when is_float::<T>() {
     mean(xs) => (dxs: T[...]) => mean_stated(dxs, shape(xs))
 }
 
-/// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
-export rule jvp_reshape::<T>(x: T[...]) when is_float::<T>() {
-    reshape<[2, 2]>(x) => (dx: T[...]) => reshape<[2, 2]>(dx)
+/// `d(reshape<dims>(x)) = reshape<dims>(dx)`: a reshape moves no element, so the tangent moves with
+/// the value -- into **the shape the node wrote**. `dims` is the operator's second port
+/// (`OpDef::params` is `t` then `shape`, `withAfterNorm`), so it is the law's second parameter, and
+/// the left side names it instead of stating it. A law cannot state it: the fit never compares the
+/// value a `<>` port carries, so `reshape<[2, 2]>` on the left was chosen for a `reshape<[8, 2, 8]>`
+/// node and the right side handed back a `[2, 2]` tangent.
+///
+/// The right side cannot write `reshape<dims>(dx)` itself. A rule's right side is a closure over the
+/// values its left side bound, and a `<>` position written there asks for something the closure does
+/// not carry -- measured 2026-11-20, it is refused by name: "jvp has no forward rule for
+/// `tensor:reshape` (the rule's right side passes a context argument it does not carry)". So `dims`
+/// is handed to a function that writes the reshape, which is the arrangement `rulesets.vmap`'s
+/// `vmap_reshape` already uses for the same argument.
+func reshape_dims::<T>(dx: T[...], dims: int[]): T[...] when is_float::<T>() {
+    return reshape<dims>(dx)
+}
+
+export rule jvp_reshape::<T>(x: T[...], dims: int[]) when is_float::<T>() {
+    reshape<dims>(x) => (dx: T[...]) => reshape_dims(dx, dims)
 }
 
 /// `d(take(t, indices)) = take(dt, indices)`: which rows a take reads is the call's, not the value's,
