@@ -126,6 +126,12 @@ git grep -n "not a value a rewrite may read"        # 只有 src/runtime/writing
 用例：`test/cases/modules/rules/side_access.cml` + `test/plans/feat/modules/rules_side_access.plan.toml`
 （一条会插进读的规则必须报，一条纯 lambda 的规则必须不报）。
 
+**两条路径，一条有用例一条没有**：普通规则（`rewrite:rule` / `rewrite:rule_when`）走上面的遍历，有用例钉住；
+泛型规则的两侧是模板，只能在**实例化**那里查（`src/compile/gir/builder_generics.cpp#instantiateGenericRule`
+末尾的 `reportAccessInRuleSides`），而今天库里没有一条泛型规则会插进读，所以这条路径**没有用例走过**——
+它的正确性是读出来的，不是量出来的。六计划里 `RuleSideHasAccess` 出现 **0 次**（对整个库都没报），
+这与 ② 为 0 一致，但也说明泛型那条分支没被触发过。
+
 **③ 为什么本轮没量到**：`CAMEL_RULE_ACCESS_REPORT` 是进程环境变量，而远端闸门
 `internal/tools/camel-remote.ps1` 只能传文件、计划和 `-Check`，没有设置环境变量的入口；把调查口径做成
 仓库检查器要改 `test/tools`（墙），不在本 lane 的范围里。⇒ 本页按裁定的退路报 `15～38` 并写明**上界未量**。
