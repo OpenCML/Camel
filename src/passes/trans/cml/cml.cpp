@@ -2662,8 +2662,26 @@ class CmlPrinter {
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Port:
         case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Copy:
         case camel::runtime::GCNodeKind::Brch:
+            return;
+        case camel::runtime::GCNodeKind::Copy:
+            // A copy the source named is the value a `var` was *declared* with, and it is the
+            // declaration: a `var` the builder makes a value rather than a cell (stage S1,
+            // `builder_expr.cpp`'s NREF) gives the name its own copy of the initializer, and no
+            // `:var/new` exists for `emitVariable` to write. Printing it away -- which is what
+            // `expression` does with every other copy -- writes the initializer where the source
+            // had a name, and the printed program comes back one node short: `trans/cml/linear.cml`
+            // printed `let cml1: int = 1 + score` for `var bonus: int = 1` then
+            // `bonus = bonus + score`, and the `describe` graph's `DATA 1 -> COPY(bonus)` came back
+            // as the literal alone. `var` is the one spelling that rebuilds it: a `let` of the same
+            // value is that value's own node and no copy (measured), and the scan that decides a
+            // `var` is a value reads the source shape, so the printed `var` is built the same way.
+            if (!isRoot_ && !sourceName(ref).empty()) {
+                emitValueDeclaration(ref);
+                if (ref == tail) {
+                    tailPrintedAsStatement = true;
+                }
+            }
             return;
         case camel::runtime::GCNodeKind::Oper: {
             const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
@@ -2871,6 +2889,40 @@ class CmlPrinter {
             }
             return;
         }
+    }
+
+    /// A `var` the builder made a value rather than a cell (stage S1): there is no `:var/new` node,
+    /// and the declaration is the copy of the initializer that carries the source name, so
+    /// `emitVariable` is never reached for it and a declaration has to be written here. The name is
+    /// what the reads below take (`expression` answers with it), and `var` is what rebuilds the
+    /// copy: a `let` of the same value is the value's own node (see `processNode`).
+    void emitValueDeclaration(gc_node_ref_t ref) {
+        const auto inputs = graph_->normInputsOf(ref);
+        if (inputs.empty()) {
+            fail(ref, "'var' without an initial value");
+        }
+        std::string name = sourceName(ref);
+        if (!blockNames_.insert(name).second) {
+            // The same rule as a `let`: a block cannot declare one name twice.
+            fail(
+                ref,
+                std::format(
+                    "two bindings of the name '{}' in one block: a `var` and the bindings beside "
+                    "it share the source's names, and a block declares one name once",
+                    name));
+        }
+        const camel::runtime::GCNode *node = graph_->node(ref);
+        // The initializer is read before the name is recorded: `expression(ref)` must not answer
+        // with the name the declaration is about to give this node.
+        const Expr initial = expression(inputs.back());
+        declared_[ref]     = name;
+        emit(
+            std::format(
+                "{}var {}{} = {}",
+                indent_,
+                name,
+                annotationOf(node->dataType()),
+                initial.text));
     }
 
     void emitVariable(gc_node_ref_t ref) {
