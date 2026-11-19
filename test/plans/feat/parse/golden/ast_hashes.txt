@@ -4374,6 +4374,7 @@ f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 216257761cb074d5 ok test/cases/transforms/compositions/grad_vjp_g_zero.cml
 2673b5760b0bb445 ok test/cases/transforms/compositions/grad_vmap_f.cml
 c10050589b920401 ok test/cases/transforms/compositions/jvp_vjp_f.cml
+7a3b6f871ae4a184 ok test/cases/transforms/compositions/nested_grad_min.cml
 1e6325d17962b018 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
 de0da90b01639e54 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
 97cf5ad689355fb3 ok test/cases/transforms/compositions/vjp_single.cml
@@ -4392,6 +4393,7 @@ abb2fbd581eff852 ok test/cases/transforms/split/split_int_parameter_slot.cml
 74bcf35d26a8858f ok test/cases/transforms/split/split_linear_in_dx.cml
 99b49ec714f251df ok test/cases/transforms/split/split_loop_taped_rounds.cml
 690914cc805168db ok test/cases/transforms/split/split_loop_value_projected.cml
+4f1d5bd79bc286b2 ok test/cases/transforms/split/split_print.cml
 a298299d25135b95 ok test/cases/transforms/split/split_product_chain.cml
 586c308b050044e1 ok test/cases/transforms/split/split_struct_field_read.cml
 5dca01c8f65573fd ok test/cases/transforms/split/split_struct_port.cml
