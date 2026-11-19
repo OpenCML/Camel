@@ -4548,3 +4548,7 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
    - **M**：保存点的另一半（`rewrite` 的撤销日志、饱和的临时区）。
    - **J/图模块**：`order` 接受本事务刚造的节点；经函数值调用的足迹取函数类型的效应（14:45 那两条）。
    - **D**（`wide` 已开）、**N**（`ssa` 分支）、`ties` 复现探针照常。
+
+## 补充（2026-11-19 15:50）：声明补齐后的重跑，论文要的读数
+
+决策者。O 车道补齐声明（`copy_arr` 等、加载时缺声明报错）之后，在 `showcase/c2-mlp-mnist/train.cml` 与 `showcase/c3-char-transformer/train.cml` 上各跑 `std::cxx::inline`（与 `item1` 同一命令），报：commit 接受还是拒绝（拒绝给原文）；inline 前后程序输出是否逐字节相同（固定种子、少量步数即可）。char-transformer 上次 inline 失败（`NOTES` §2.4）的原因若与声明无关，单独报。两个都接受，论文补一句；有一个不接受就不写——照实报，不为读数改用例。北京 11-20 12:00 之前交。
