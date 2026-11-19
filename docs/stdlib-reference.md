@@ -7772,6 +7772,7 @@ which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>
 lifted at all.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])` gives `[[1.0, 2.0], [3.0, 4.0]]`
 
 ### The forward rule of `^` (a power)
 
@@ -7838,6 +7839,7 @@ parameters are the operator's ports in port order, the normal ones then the `<>`
 states an ordinary argument, which is the shape that needs no context argument of its own.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `permute_jvp([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 0])` gives `[[1.0, 3.0], [2.0, 4.0]]`
 
 <a id="rulesets.vmap"></a>
 

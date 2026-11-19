@@ -373,6 +373,7 @@ export rule jvp_mean::<T>(xs: T[...]) when is_float::<T>() {
 /// `reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
 /// `showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
 /// lifted at all.
+/// @example reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])    // [[1.0, 2.0], [3.0, 4.0]]
 export func reshape_jvp::<T>(dx: T[...], dims: int[]): T[...] when is_float::<T>() {
     return reshape<dims>(dx)
 }
@@ -1026,6 +1027,7 @@ export rule jvp_transpose::<T>(x: T[...]) when is_float::<T>() {
 /// `vmap_rule_permute` already relies on (`stdlib/rulesets/vmap.cml`). It is written as a call to
 /// `permute_jvp` rather than as `permute<perm>(dx)`: the right side hands the value on where a call
 /// states an ordinary argument, which is the shape that needs no context argument of its own.
+/// @example permute_jvp([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 0])    // [[1.0, 3.0], [2.0, 4.0]]
 export func permute_jvp::<T>(dx: T[...], perm: int[]): T[...] when is_float::<T>() {
     return permute<perm>(dx)
 }
