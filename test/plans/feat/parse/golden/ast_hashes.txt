@@ -3628,7 +3628,7 @@ f2933cf30bda32e2 ok test/cases/modules/tensor/erfc_grad_f64.cml
 ab48e9841a09e6a1 ok test/cases/modules/tensor/fusion_group.cml
 fe8bad4a071ed5ac ok test/cases/modules/tensor/fusion_group_mul_neg.cml
 fe3782ba0bcdc5f6 ok test/cases/modules/tensor/fusion_group_none.cml
-d2f53ba383de02f1 ok test/cases/modules/tensor/fusion_group_profile.cml
+447e1697f445099d ok test/cases/modules/tensor/fusion_group_profile.cml
 e77b94dff21ca4a6 ok test/cases/modules/tensor/fusion_group_step.cml
 2ab5562800cdd184 ok test/cases/modules/tensor/gc_tail_chain.cml
 1c555826d45c45a0 ok test/cases/modules/tensor/gelu_grad_bits.cml
