@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：42 页
+## 现在在等作者：43 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -41,6 +41,7 @@
 | [`2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters`](2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters.cn.md) | 前端那条原地复用路径对 `var` 形参仍然可达 |
 | [`2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed`](2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed.cn.md) | 前端那条原地改写：它已经不可达，但还在 |
 | [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
+| [`2026-11-19-the-join-does-not-record-which-var-it-carries`](2026-11-19-the-join-does-not-record-which-var-it-carries.cn.md) | JOIN 不记「自己是哪个 `var` 的版本」，打印器无法重述携带的分支 |
 | [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
 | [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 |
 | [`2026-11-19-the-packing-slot-came-back-under-another-name`](2026-11-19-the-packing-slot-came-back-under-another-name.cn.md) | 打包位换了名字回来：删它拆掉一半功能，留它把作者撤掉的位放回 develop |
