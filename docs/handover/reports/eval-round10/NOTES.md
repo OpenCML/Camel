@@ -123,6 +123,53 @@ for f in sys.argv[1:]:
   同 sha256。这是 `var` 化成 SSA 落地后的状态，本页按今天量到的写。
 - 本项**没有**跑任何计划（六计划与本项无关），因此没有 `[SUMMARY]`，也没有 `pass/fail` 计数可报。
 
+## 8. 重钉之后（`1e6cfcb80`）：构建标识、命令、原始输出
+
+配套正文：`item3b-canonical-graph-size-at-1e6cfcb80.md`。§1–§7 是 `2d7c5c3a1` 那一版，保留作对照。
+
+| 项 | 值 |
+| --- | --- |
+| 提交 | `1e6cfcb80309e264a910845dcbaf78fbd2177c55`（`c4746823d` 派工提交 + `1e6cfcb80` 拷入六份写法） |
+| 版本串 / footprint | `Camel v0.2.45 (Build 261119_051158_2d7c5c3a14)` / `261119_051158_2d7c5c3a14`（与旧钉相同：没有改版本号） |
+| 源指纹 | `0244fca0cbac…`（1344 文件，与 `2d7c5c3a1` 相同 ⇒ 两次构建的**源码一致**） |
+| dirty | `true`，`dirtyCount 2`，`dirtyPaths` = `docs/handover/reports/eval-round10/item1-commit-and-normalization-time.md`、`…/probes/` ⇒ **只有未跟踪的报告文件，没有源码改动** |
+| 构建时刻 | `2026-11-19T05:21:12Z` |
+| 构建结论 | `BUILD_EXIT=0`，`BUILD_SECONDS=3.1`（增量，`82/82` 链接完成） |
+| 负载 | `25.79 29.26 30.31`（32 核） |
+
+原始输出（宿主上一条命令打印，未编辑）：
+
+```
+file                   graphs nodes edges regions bytes  sha256
+train                  5      57    72    1       26097  740b7a29f1b50b05
+train-rename           5      57    72    1       26097  740b7a29f1b50b05
+train-swap             5      57    72    1       26097  740b7a29f1b50b05
+train-reorder-output   5      57    72    1       26097  4d5ab9a2a3f68684
+train-inline           5      57    72    1       26097  740b7a29f1b50b05
+loss-a                 5      57    72    1       26097  740b7a29f1b50b05
+loss-b                 5      57    72    1       26097  740b7a29f1b50b05
+```
+
+旧四份写法在新钉上（与旧钉逐字节相同）：
+
+```
+examples/case-study/train.cml          29945  f3978b42249f6224
+examples/case-study/writings/renamed.cml 29945  f3978b42249f6224
+examples/case-study/writings/swapped.cml 29945  f2fa36d4f1a20af8
+examples/case-study/writings/moved.cml   30060  66138fb5950779fd
+```
+
+`inspect --ties`（`train`、`writings/swapped`、`case-study-variants/train-swap` 三份都）：
+`canonical ties: 0 group(s) wider than one node, widest 0, over the limit 0 (kMaxTieWidth 6)`。
+
+`swapped` 与 `train` 的差异定位用的是规范文档本身：`g1` 第 4 个节点一份是 `array[4]`、一份是 `array[8]`；
+`train` 里 `n9`（`y` 的 reshape）带 `control`+`sync` 指回 `n8`（`X` 的 reshape），`swapped` 里 `n8`/`n9` 的身份对调。
+即：两处 reshape 之间的时间线方向随声明次序翻转 —— 图不同，不是编号不同。
+
+**§6 的第 1 条到此作废**：作者已把六份写法拷进 `docs/handover/reports/eval-round10/case-study-variants/`
+（`train`、`train-rename`、`train-reorder-output`、`train-swap`、`train-inline`、`loss-a`、`loss-b` 七个文件），
+本页 §8 量的就是它们。
+
 ## 7. 复现（从本机，两步）
 
 ```powershell
