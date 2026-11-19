@@ -205,7 +205,37 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         if (op->uri() == ":var/after") {
             return false;
         }
-        return camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
+        // A higher-order operator's accesses are the function operand's (design principles 3.3;
+        // author 2026-11-19): the same reading the Call case below makes of a value's type, at the
+        // operand the declaration names. A value that is not there, or a type that writes no
+        // clause, keeps the answer the table gives -- a `map` over a pure function is not an
+        // effect, and one over a function that prints is.
+        const auto &table = camel::core::OperatorTable::instance();
+        const auto id     = table.lookup(op->uri());
+        if (id.has_value()) {
+            if (const auto *facts = table.semantics(*id);
+                facts != nullptr && facts->resources && facts->resources->functionOperand) {
+                const auto &where = *facts->resources->functionOperand;
+                if (where.kind == sem::ResourceBinding::Kind::Norm ||
+                    where.kind == sem::ResourceBinding::Kind::With) {
+                    const auto operands = where.kind == sem::ResourceBinding::Kind::Norm
+                                              ? normInputsOf(node)
+                                              : withInputsOf(node);
+                    if (where.index < operands.size()) {
+                        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(operands[where.index]));
+                        const auto *value =
+                            type != nullptr && type->code() == TypeCode::Function
+                                ? tt::as_ptr<FunctionType>(type)
+                                : nullptr;
+                        if (const auto clause =
+                                camel::core::functionOperandClause(table, *id, value)) {
+                            return !clause->pure();
+                        }
+                    }
+                }
+            }
+        }
+        return table.hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
         // A call of a function this compiler has a body for is judged by that body first

@@ -455,6 +455,51 @@ bool Builder::readCalleeSignature(
     return true;
 }
 
+Builder::OperandReach Builder::readFunctionOperandReach(
+    BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+    draft_node_ref_t id, const sem::ResourceBinding &where, sem::ElementShape shape) const {
+    if (where.kind != sem::ResourceBinding::Kind::With) {
+        // An operator that takes the function as an ordinary operand (`:mark/isolate`) puts its
+        // other operands after it, so the callback's parameters do not line up with the node's
+        // operands here: left as the walk found it.
+        return OperandReach::CannotPlace;
+    }
+    if (shape == sem::ElementShape::Fold) {
+        // A fold's accumulator is the initial value -- the `with` operand after the function --
+        // and not one of the callback's parameters, so reading the signature onto the operands
+        // would place it on the array: left as the walk found it.
+        return OperandReach::CannotPlace;
+    }
+    const auto &draft = transaction.graph();
+    const auto with   = draft.withInputsOf(id);
+    if (where.index >= with.size()) {
+        return OperandReach::Unreadable;
+    }
+    Type *type = nodeTypeOf(draft.ref(with[where.index]));
+    if (type == nullptr || type->code() != TypeCode::Function) {
+        return OperandReach::Unreadable;
+    }
+    const auto *fn = tt::as_ptr<FunctionType>(type);
+    if (fn->resources().mode != ResourceSignature::Mode::Concrete) {
+        // A parameter of function type that writes no clause promises nothing (`Generic`).
+        return OperandReach::Unreadable;
+    }
+    // The value stands where a call's callee stands and the operator's ordinary operands are the
+    // call's arguments (`ElementCalls`, operator_semantics.h): this is `reachOfCall`'s reading.
+    if (!readCalleeSignature(
+            walk,
+            graph,
+            transaction,
+            fn->resources(),
+            fn->withTypesCount(),
+            true,
+            id,
+            functionValueGraphOf(draft.ref(with[where.index])))) {
+        return OperandReach::Unreadable;
+    }
+    return OperandReach::Placed;
+}
+
 void Builder::readUnknownValue(BodyReach &walk) const {
     // A signature that says nothing promises nothing, and what a call through it reaches is the
     // instantiation's: any instantiation may write a cell or print. Read conservatively
@@ -626,11 +671,13 @@ bool Builder::reachOfOper(
     const std::string uri(op->uri());
     const auto traits = table.find(uri);
     sem::ResourceSpec spec;
+    sem::ElementCalls elementCalls;
     bool declared = false;
     if (const auto found = table.lookup(uri); found.has_value()) {
         if (const auto *facts = table.semantics(*found); facts != nullptr && facts->resources) {
-            spec     = *facts->resources;
-            declared = true;
+            spec         = *facts->resources;
+            elementCalls = facts->elementCalls.value_or(sem::ElementCalls{});
+            declared     = true;
         }
     }
     if (!declared) {
@@ -639,6 +686,26 @@ bool Builder::reachOfOper(
             draft.withInputsOf(id).size(),
             traits.has_value() && traits->pure,
             table.hasExternalEffect(uri));
+    }
+    if (spec.functionOperand) {
+        // The accesses are the function operand's (design principles 3.3; author 2026-11-19), so
+        // they are read off that value's type -- the same reading `reachOfCall` makes for a call
+        // through a value, with the value standing where the call's value does. A value that is
+        // not there, is not a function, or whose type writes no clause promises nothing and is
+        // read conservatively; a fold's accumulator is the initial value and not one of the
+        // callback's parameters, so that shape keeps the reading this walk had before rather than
+        // placing a use on the wrong operand.
+        switch (readFunctionOperandReach(walk, graph, transaction, id, *spec.functionOperand,
+                                         elementCalls.shape)) {
+        case OperandReach::Placed:
+            break;
+        case OperandReach::Unreadable:
+            readUnknownValue(walk);
+            break;
+        case OperandReach::CannotPlace:
+            break;
+        }
+        return true;
     }
     for (const sem::ResourceAccess &access : spec.accesses) {
         if (access.binding.kind == sem::ResourceBinding::Kind::Ambient) {

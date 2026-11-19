@@ -586,24 +586,38 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     // (src/compile/gct/builder.cpp, `ReservedDataOp::Comp`), and the two operands are function
     // values it never calls.
     // The operators that run a function the program hands them (`map`, `filter`, `foreach` and the
-    // unordered loop of the same shape): what they touch is that function's, which no declaration
-    // here can name. They declare an external effect and itemize nothing -- design principles 3.3's
-    // "declares an effect it does not itemize" -- because the empty list would say they touch
-    // nothing (a callback that prints says otherwise) and an ambient resource would name a
-    // resource they do not own. The result is a new array (or the null slot), so nothing is claimed
-    // about it either.
+    // unordered loop of the same shape): what they touch is that function's, so the declaration
+    // names the operand the function arrives in and not a resource (design principles 3.3; author
+    // 2026-11-19). It is the same rule a call through a function value already follows
+    // (`Builder::reachOfCall`): a reader that has the value reads its function type, and `map` over
+    // a pure function touches nothing at all -- itemizing "external" here made such a call enter
+    // compare) would make such a call enter the sync chain and lose its freedom. A reader that has
+    // only the table takes it as an effect outside the program that itemizes nothing, which is the
+    // conservative reading a type without a clause gets too. The function is the first `with`
+    // operand in all of them: src/builtin/operators/higher_order.cpp, `functionOf`, takes
+    // `with.get<Function *>(0)`. The result is a new array (or the null slot), so nothing is
+    // claimed about it either.
     for (const char *uri :
          {":mark/map_arr", ":mark/filter_arr", ":mark/foreach_arr", ":mark/unordered_foreach_arr"}) {
-        table.declareResources(uri, ResourceSpec{.externalEffect = true});
+        table.declareResources(
+            uri, ResourceSpec{.functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
     }
     // The two that hand a value back out of the callback: `reduce` gives the accumulator it was
     // given or the value the last call made, and the marked call of `attempt(f)` gives what the
-    // callee gave, which may be an object the callee holds. Nothing is known about either result.
-    for (const char *uri : {":mark/reduce_arr", ":mark/unordered_reduce_arr", ":mark/isolate"}) {
+    // callee gave, which may be an object the callee holds. Nothing is known about either result,
+    // and that stays even though the accesses are the function's. `reduce`'s function is its first
+    // `with` operand too; `:mark/isolate`'s is its first ordinary one (operator_semantics.h,
+    // `ElementCalls`, and the resolver of the marked call in tagged.cpp).
+    for (const char *uri : {":mark/reduce_arr", ":mark/unordered_reduce_arr"}) {
         table.declareResources(
             uri,
             ResourceSpec{
-                .result         = ResultAlias{.kind = ResultAlias::Kind::Unknown},
-                .externalEffect = true});
+                .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
+                .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
     }
+    table.declareResources(
+        ":mark/isolate",
+        ResourceSpec{
+            .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
+            .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::Norm}});
 }

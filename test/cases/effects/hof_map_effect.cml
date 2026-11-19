@@ -1,0 +1,17 @@
+/**
+ * `map` over a function that prints is an effect, and it says so: the accesses a higher-order
+ * operator has are the function operand's (design principles 3.3; author 2026-11-19), and `show`
+ * writes `stdout`, so the call stays on the order chain and the node carries the `effect` role.
+ * The other half of the pair is `hof_map_pure.cml`: the same `map`, a callback without an effect.
+ */
+
+func show(x: int): int uses var stdout sync {
+    println(x)
+    return x
+}
+
+func main(): int uses var stdout sync {
+    let xs = [1, 2, 3]
+    let ys = xs->map<show>
+    return ys[0]
+}

@@ -8,6 +8,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
@@ -721,10 +722,15 @@ std::string checkSemantics(
             return "resources: " + *problem;
         }
         if (traits) {
-            if (traits->pure && (!r.accesses.empty() || r.allocates || r.externalEffect)) {
+            // A function operand is a touch as far as this rule is concerned: the operator says
+            // what it touches by naming where the accesses come from (design principles 3.3), and
+            // a static reader takes that as "an effect it does not itemize".
+            if (traits->pure &&
+                (!r.accesses.empty() || r.allocates || r.externalEffect || r.functionOperand)) {
                 return "resources: a pure operator touches no resource";
             }
-            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect) {
+            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect &&
+                !r.functionOperand) {
                 return "resources: an operator that is not pure touches, allocates or affects "
                        "something (declare it pure instead)";
             }
@@ -916,6 +922,18 @@ std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
         return std::nullopt;
     }
     return id;
+}
+
+std::optional<sem::ResourceSignature> functionOperandClause(
+    const OperatorTable &table, OperId id, const type::FunctionType *value) {
+    const sem::OperatorSemantics *facts = table.semantics(id);
+    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
+        return std::nullopt;
+    }
+    if (value == nullptr || value->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+        return std::nullopt;
+    }
+    return value->resources();
 }
 
 } // namespace camel::core
