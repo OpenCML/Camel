@@ -1,0 +1,74 @@
+// A Hessian read element by element, through the library's `grad` nested: the differentiation is a
+// function of a function, and `grad`'s weight has no direction of its own that the second step
+// could lose, so the second derivative is read the same way the first one is.
+//
+//   f(a, b) = a^2 + 3ab + 2b^2
+//   df/da = 2a + 3b      d2f/da2  = 2      d2f/da db = 3
+//   df/db = 3a + 4b      d2f/db2  = 4      d2f/db da = 3
+//
+// `grad` differentiates the first `with` parameter (design principles 9.9), so the parameter the
+// second step takes must be first in the list that step reads: `quadratic` declares `<a, b>` and
+// `quadratic_ba` declares the same body as `<b, a>`. The mixed members are read by differentiating
+// a function of the other order whose body is one first derivative already computed --
+// `d2f/dadb` is `grad(df_da_of_b)<2.0, 1.0>`, and `df_da_of_b`'s body is `grad(quadratic)<a, b>()`
+// at the enclosing function's own `with` values, so the number is read and not written by hand.
+//
+// The four entries are the symmetric matrix
+//
+//     [ 2  3 ]
+//     [ 3  4 ]
+//
+// and the last line prints the two mixed members subtracted: 0.0, not "close". An order lost
+// between the two `with` values -- the weight moved onto the ordinary list, which is the shape this
+// library answered before 2026-11-19 -- puts 4 in one of them and 2 in the other.
+//
+// Every number is exact in binary floating point at a = 1, b = 2, so the readings are compared for
+// equality and not against a tolerance.
+//
+// Read on 2026-11-20: the case stops at its first nested call with
+//
+//   stdlib/vjp.cml:182: [Error]: An error has occurred: transforms: jvp has no forward transform
+//   for this function
+//
+// the wall `nested_grad_min.cml` records -- a nest is `jvp` over a function value computed at run
+// time, and `jvp` lifts only an evident callee. The writing is the restored one, and the one-step
+// readings this case builds on are the header's arithmetic (8.0 for df/da and 11.0 for df/db at
+// a = 1, b = 2); what the case cannot reach yet is the second step over any of them.
+import { grad } from vjp
+
+with <a: float, b: float>
+func quadratic(): float {
+    return a * a + 3.0 * a * b + 2.0 * b * b
+}
+
+with <b: float, a: float>
+func quadratic_ba(): float {
+    return a * a + 3.0 * a * b + 2.0 * b * b
+}
+
+// `df/da` of `quadratic`, as a function whose first `with` value is `b`: one step, so that the step
+// after it differentiates `b`.
+with <b: float, a: float>
+func df_da_of_b(): float {
+    return grad(quadratic)<a, b>()
+}
+
+// `df/db` of `quadratic_ba`, as a function whose first `with` value is `a`.
+with <a: float, b: float>
+func df_db_of_a(): float {
+    return grad(quadratic_ba)<b, a>()
+}
+
+func main(): int sync {
+    let hAA = grad(grad(quadratic))<1.0, 2.0>()
+    let hBB = grad(grad(quadratic_ba))<2.0, 1.0>()
+    let hAB = grad(df_da_of_b)<2.0, 1.0>()
+    let hBA = grad(df_db_of_a)<1.0, 2.0>()
+    let skew = hAB - hBA
+    println('hessian h_aa={}'->format<hAA>)
+    println('hessian h_bb={}'->format<hBB>)
+    println('hessian h_ab={}'->format<hAB>)
+    println('hessian h_ba={}'->format<hBA>)
+    println('hessian h_ab_minus_h_ba={}'->format<skew>)
+    return 0
+}

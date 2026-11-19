@@ -1,25 +1,33 @@
 // The same nest as `nested_grad_min.cml`, written through two bindings instead of one expression:
 //
-//   let inner = grad(square)
+//   let inner = grad(cube)
 //   let outer = grad(inner)
 //
-// It is the same wall and not a second one. `grad` is `vjp`'s, whose answer type is `GradientOf<F>`
-// -- a function whose first ordinary parameter is the weight -- so `inner` is a function with no
-// `with` parameter, and `grad(inner)` refuses at the same call with the same sentence: there is no
-// first `with` parameter to move (design principles 9.9). Written down separately because a reader
-// asking "does the nest work" writes it this way as often as the one-expression form, and the two
-// are refused by the same rule; the day a ruling makes the nest answer, both entries turn red and
-// the answer is 2.0.
+// It is the same wall gone and not a second one. A derivative of the library's `grad` still takes
+// its weight as a `with` value (`GradientOf<F>`, `stdlib/types.cml`), so a gradient of a gradient,
+// bound to a name or written in one expression, is the same composition twice. Written down
+// separately because a reader asking "does the nest work" writes it this way as often as the
+// one-expression form, and the two must answer the same kind of number.
+//
+// Bound or inline changes nothing about where it stops: the next wall is `jvp`'s, as in
+// `nested_grad_min.cml` -- `jvp has no forward transform for this function` at `stdlib/vjp.cml:182`
+// -- because the inner answer is a function value computed at run time, and `jvp` lifts only an
+// evident callee. The weight in the `with` list is what makes the nest build at all.
+//
+//   f(x) = x*x*x,  f'(x) = 3x^2,  f''(x) = 6x,  so the second derivative at 2 is 12.0
+//
+// 12.0 is pinned and not 6.0: 6.0 is `f'(2)` read once, which is what a nest that answered the
+// first derivative -- and only differentiated the outer name's body once -- would print.
 import { grad } from vjp
 
 with <x: float>
-func square(): float {
-    return x * x
+func cube(): float {
+    return x * x * x
 }
 
 func main(): int sync {
-    let inner = grad(square)
+    let inner = grad(cube)
     let outer = grad(inner)
-    println(outer(2.0))
+    println('nested_grad_through_a_binding second={}'->format<outer<2.0>()>)
     return 0
 }

@@ -1,6 +1,6 @@
 // The gradient, the day the library is written: `f(x) = x*x*x` at 2, so `f(2) = 8` and
 // `f'(2) = 3*x^2 = 12`. The surface is JAX's (author's ruling of 2026-11-01), so `vjp(f)(2.0)` is
-// the pair `(8.0, pullback)` and `pullback(1.0)` is the cotangent tuple `(12.0)`; `grad(f_at)(2.0)`
+// the pair `(8.0, pullback)` and `pullback(1.0)` is the cotangent tuple `(12.0)`; `grad(f_at)<2.0>()`
 // is the same number read through the wrapper. All three come from the library's own composition --
 // `transpose(split(jvp(f)))` -- and not from the C++ autodiff; the rulesets that composition needs
 // are the library's own imports, so this file imports `vjp` and nothing else.
@@ -31,6 +31,6 @@ func main(): int sync {
     println('vjp_gradient value={}'->format<value>)
     println(cotangents)
     println('vjp_gradient cotangent={}'->format<cotangents.0>)
-    println('vjp_gradient grad={}'->format<grad(f_at)(2.0)>)
+    println('vjp_gradient grad={}'->format<grad(f_at)<2.0>()>)
     return 0
 }

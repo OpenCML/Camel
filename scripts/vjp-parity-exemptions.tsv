@@ -98,7 +98,6 @@ erf_f	lane-rulesets	`math:erf_f` has no `jvp_erf_f`, and `math:` is a module the
 erfc_d	lane-rulesets	`math:erfc_d` has no `jvp_erfc_d`, and `math:` is a module the rulesets do not file for
 erfc_f	lane-rulesets	`math:erfc_f` has no `jvp_erfc_f`, and `math:` is a module the rulesets do not file for
 layer_norm	lane-rulesets	no `jvp_layer_norm`: the library's forward half stops a program before the reverse is asked
-permute	lane-rulesets	no `jvp_permute`: the library's forward half states a reshape, not a permutation
 pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
 sqrt_d	lane-rulesets	`math:sqrt_d` has no `jvp_sqrt_d`, and `math:` is a module the rulesets do not file for

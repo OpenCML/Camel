@@ -27,7 +27,7 @@ with <x: float>
 func g_at(): float { return g(x) }
 
 func main(): int sync {
-    println(grad(f_at)(2.0))
-    println(grad(g_at)(2.0))
+    println(grad(f_at)<2.0>())
+    println(grad(g_at)<2.0>())
     return 0
 }

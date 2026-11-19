@@ -15,8 +15,11 @@
  *   d/dw = data * scale = 12
  *
  * The engine reads the two `with` values in declaration order and the ordinary parameters after
- * them (`grad(loss)<2.0, 3.0>(4.0)`); the library reads the weight as its first ordinary parameter
- * and keeps the second `with` value in the angle brackets (`grad(loss)<3.0>(2.0, 4.0)`). Both lines
+ * them (`grad(loss)<2.0, 3.0>(4.0)`); the library's `grad` is called the same way -- the whole
+ * `with` list in its own order, then the ordinary parameters (`grad(loss)<2.0, 3.0>(4.0)`) -- and
+ * that is the point of this file: the derivative of a function with a second `with` value is a
+ * call of the shape the differentiated function has, not a call with the weight pulled onto the
+ * ordinary list. Both lines
  * print 12.0, and the third line prints the subtraction of the two -- 0.0, not "close to zero" --
  * because the point of the pair is that the two gradients are the same number and not two
  * neighbouring ones. An implementation that carried `scale` at another value, or that
@@ -38,8 +41,8 @@ func loss(data: float): float {
 func main(): int sync {
     // d/dw = data * scale = 12, the engine's reading: both `with` values in declaration order.
     let engine = engine_grad(loss)<2.0, 3.0>(4.0)
-    // The same 12 off the library's composition: the weight first, the second `with` value carried.
-    let library = library_grad(loss)<3.0>(2.0, 4.0)
+    // The same 12 off the library's composition: the same list, the same order, the same call.
+    let library = library_grad(loss)<2.0, 3.0>(4.0)
     let difference = engine - library
     println(`engine   d/dw = ${engine:.1f}`)
     println(`library  d/dw = ${library:.1f}`)

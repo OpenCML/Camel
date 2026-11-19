@@ -1594,9 +1594,9 @@ wrapped around it.
 
 The pullback answers a tuple in every case, one member per parameter, so a function of one
 parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
-number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
-ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
-function that takes an element out of a one-long tuple).
+number a gradient is comes out of it by position: the first cotangent of the pullback read at
+`1.0` (author's ruling of 2026-11-01 14:30: one rule for every arity, no exception for one
+parameter, no type function that takes an element out of a one-long tuple).
 The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
 `(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
 parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
@@ -1641,11 +1641,8 @@ values read off the body (`residualsOf`), not a position in a type, so they cann
 of the member and are not known before the forward half has run.
 
 What is **not** done here, and why: the residuals the linear half reads still travel in `lin`'s
-closure, so the member is a fresh function value per call even though its graph is not rebuilt,
-and `grad(grad(f))` is still refused -- by `first_with_as_param`, one step earlier than the
-transposition: an inner `grad` answers a function whose weight is an ordinary parameter, so the
-outer one finds no `with` parameter to differentiate (design principles 9.9). The design's next
-step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
+closure, so the member is a fresh function value per call even though its graph is not rebuilt.
+The design's next step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
 (`fwd: x => (y, residuals)`, `lin: (residuals, tangents) => tangent`), which needs the residual
 *list* in a type: it is a property of the body (`residualsOf`), not of the signature, and no
 declaration can write it -- the `ResidualsOf<F>` / `_`-position hole that used to try was removed
@@ -1665,26 +1662,32 @@ grad: (f: F) => GradientOf<F> when is_function::<F>()
 ```
 
 The gradient of a function with respect to its first `with` parameter (design principles 9.9):
-`grad(f)` takes the weight first and `f`'s own parameters after it, and answers the weight's
-cotangent -- `grad(weighted)(3.0, 2.0)` for `<x: float> func weighted(y) = x*y + x`.
+`grad(f)` answers the weight's cotangent, and it is called the way `f` is -- the weight in the
+angle brackets, `f`'s own parameters after it -- `grad(weighted)<3.0>(2.0)` for
+`with <x: float> func weighted(y) = x*y + x`.
 
 It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
-taken. The weight is on the ordinary list because that is the list `vjp` differentiates, so the
-step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
-port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
-differentiated body reads a `with` value that would need a direction of its own.
-`GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters,
-and the `with` values `F` did not spend -- `f`'s first `with` parameter became the weight, the
-rest of that list travels on the derivative.
+taken. The weight is moved onto the ordinary list *inside this body*, because that is the list
+`vjp` differentiates, by `first_with_as_param` -- the signature reinterpretation that reclassifies
+that one port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in
+the differentiated body reads a `with` value that would need a direction of its own. That move is
+the composition's business and not the caller's: the lambda below takes the whole `with` list
+back and hands the weight to the moved function in the parameter position the move put it in.
+`GradientOf<F>` (`stdlib/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
+`f`'s own parameters -- and the first member of the pullback's answer is the weight's cotangent.
 
-**The rest of the `with` list is carried, not dropped.** `reading` is a `vjp` read, and a `vjp`
-reading is declared `<...ws> (...xs)` (`Vjp<F>`, `stdlib/types.cml`): it takes the `with` values
-its function takes. So the lambda this call answers writes the same pack and hands it over --
-`grad(loss)<y>(layer, X)` for a loss declared `with <layer: Linear, y: f32[?, ?]>`, whose data
-`y` is a `with` value the derivative never differentiates and cannot do without. Written
-without the pack
-(`reading(...xs)`) the call was refused at this very line with `ArgumentsMismatch`
-(measured 2026-11-15): the reading takes `<...ws>` and was given `<>`.
+**The whole `with` list is carried, and in its own order.** The reading the body builds is a `vjp`
+read, declared `<...ws> (...xs)` (`Vjp<F>`, `stdlib/types.cml`), so it takes the `with` values its
+function takes; the lambda that answers takes `f`'s list as `f` wrote it -- `grad(loss)<layer, y>(X)`
+for a loss declared `with <layer: Linear, y: f32[?, ?]>`, whose data `y` is a `with` value the
+derivative never differentiates and cannot do without. The lambda binds that list as a *named*
+first member plus the rest (`<w, ...ws>`), because the moved function's own list is the rest and
+the weight is its first parameter: `forward<...ws>(w, ...xs)`. Written with one pack and no name
+(`<...ws> (...xs)`) the weight has nowhere to come out of the pack into the parameter list. A
+function with no ordinary parameter at all is `xs` with no member, and the line is the same one:
+a lambda's rest pack is a value in its body whether or not it has a member (bound on 2026-11-20;
+until then `xs` was `UnresolvedReference` for exactly that arity, while the same forwarding in a
+declaration answered).
 
 **The cut is made here, once** (author, 2026-11-18), for the reason `vjp` above states and with
 the same limit: `split(jvp(first_with_as_param(f)))` is written in `grad`'s own body, so a call of
@@ -1694,6 +1697,16 @@ body is the composition written out (`split`, then `transpose`) rather than `vjp
 that the derivative is a graph by the time `grad(f)` answers. The transposition is one call for
 the same reason and by the same rule as `vjp`'s: written where the graph is asked about, done
 once for that graph version (`modules/transforms/transpose_operator.cpp#TransposeMember`).
+
+**A nest of this `grad` is this composition twice, and it is read one wall further on.** `grad(f)`
+answers a function that still takes its weight as a `with` value, so `grad(grad(f))` finds a first
+`with` parameter to differentiate and the second derivative is the same step again:
+`grad(grad(square))<2.0>()` typechecks and builds, where it used to be refused by
+`first_with_as_param` ("this function has no `with` parameter: there is no first one to move").
+What it does not do yet is answer 2.0: the value the outer `jvp` is asked to lift is what the inner
+`grad` answered, a function computed at run time, and `jvp` lifts a callee only when it is evident
+-- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The
+numbers are pinned against that wall and not against the call form.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`
@@ -1708,9 +1721,11 @@ has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), flo
 The value, the auxiliary value and the gradient together, for a function whose result is the pair
 `(value, aux)`: `has_aux(f)` gives a function of the weight that answers `((value, aux), gradient)`
 -- the shape and the order the engine's `with_grad(f, has_aux: true)` answers, JAX's
-`value_and_grad(f, has_aux=True)`. The weight is the one ordinary parameter `f` takes, as it is
-for `grad` above: the library's names are functions of ordinary parameters, and the subject's
-`with` values are closed over where the lambda is written.
+`value_and_grad(f, has_aux=True)`. This name is written once, for a subject of one `float`
+parameter, and that parameter *is* the weight here: a declaration whose parameter list is a pack
+is what the generic form needs, and the library does not have it yet (see the last paragraph).
+`grad` above does not read its weight that way -- it takes the differentiated function's own
+`with` list, because that is where a `with` value is written (`GradientOf<F>`).
 
 The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
 function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --
@@ -7732,6 +7747,48 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The extents a reduction's or a gather's adjoint spreads over
+
+Each of the three laws below is linear in its data, so its tangent is the same operation on the
+tangents -- and the adjoint of that operation gives one cotangent back to every element the
+operation consumed. That is `shape(xs)` of them, a value of the primal which the tangent does not
+carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
+that answers it (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
+that argument and nothing of the operand the cotangent comes back through. A transpose law may
+read only known operands (author, 2026-11-03 11:10 and 17:35), and `T[...]` carries no extents in
+its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
+`tensor.pick_at` is the operator it states a length to.
+
+The extents used to ride inside one integer list with the axis and the flag, on the reading that
+the transpose walk refuses an operator with a third operand (`skip=arity
+uri=tensor:mean_axis operands=3`, measured 2026-11-03). That is true of a third *tensor*: the
+stated reductions take their axis, their flag and their extents as three parameters today
+(`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
+node with five operands, and the laws read them by name. The plain axis form never needed the
+reading either: with the axis and the flag in angle brackets it carries one normal operand and two
+context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds (author's ruling,
+2026-11-05). A list would have needed a function to build it. Nothing builds a list for a
+call's arguments any more: every one of those parameters is a parameter of its own.
+
+#### `reshape_jvp`
+
+```camel
+reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
+```
+
+`d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
+
+`dims` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+the right side as an ordinary value (the protocol stated over `jvp_sum`, and the one
+`vmap_rule_reshape` already uses). It used to be written for one constant -- `reshape<[2, 2]>` --
+which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` answered
+`reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
+`showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
+lifted at all.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])` gives `[[1.0, 2.0], [3.0, 4.0]]`
+
 ### The forward rule of `^` (a power)
 
 #### `pow_tangent`
@@ -7768,6 +7825,36 @@ could omit it, which is why the law below is written out rather than called.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `pow_tangent(2.0, 3.0, 0.0, 1.0)` gives `5.545177444479562`
 - Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `nan`
+
+### The forward rules of the second tranche
+
+Eight operators the engine could already differentiate and neither half of the library could. Each
+law below is one straight line whose right side names only registered operators: a *function* of
+this module on a rule's right side becomes a call in the graph the linear half has to transpose,
+and the walk refuses a call it has no transpose for (`skip=call-no-transpose`, measured on
+`pow_tangent`, which is why `jvp_pow` writes the same law out instead of calling it). The two
+`erf`-family laws are written in the engine's own grouping because the
+two legs of one `grad` are compared bit for bit; the knot each one is tied to is written where it
+sits.
+
+#### `permute_jvp`
+
+```camel
+permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
+```
+
+`d(permute<perm>(x)) = permute<perm>(dx)`: a permutation moves elements and combines none, so the
+tangent is the same permutation of the tangents, and one law holds for every permutation.
+
+`perm` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+the right side as an ordinary value -- the protocol the expansion states over `jvp_sum` (a rule's
+parameters are the operator's ports in port order, the normal ones then the `<>` ones) and the one
+`vmap_rule_permute` already relies on (`stdlib/rulesets/vmap.cml`). It is written as a call to
+`permute_jvp` rather than as `permute<perm>(dx)`: the right side hands the value on where a call
+states an ordinary argument, which is the shape that needs no context argument of its own.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `permute_jvp([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 0])` gives `[[1.0, 3.0], [2.0, 4.0]]`
 
 <a id="rulesets.vmap"></a>
 

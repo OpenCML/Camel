@@ -56,8 +56,10 @@ func main(): int sync {
     'squared value={} weight={} y={}'->format<squaredValue, sdw, sdy>->println
 
     // The same 4.0 through the library's `grad`, which takes the first cotangent: 12.0 here would be
-    // the second member, and 3.0 would be the weight's value.
-    let squaredGradient = grad(squared)(3.0, 2.0)
+    // the second member, and 3.0 would be the weight's value. `grad` is called the way `squared` is
+    // called -- the weight in the angle brackets -- because it puts the weight back where the move
+    // took it from.
+    let squaredGradient = grad(squared)<3.0>(2.0)
     'squared grad={}'->format<squaredGradient>->println
     return 0
 }

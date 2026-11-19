@@ -1620,26 +1620,38 @@ void Builder::buildFuncBody(
                         members.push_back(graph->view().ref(normPorts[norm]));
                         parts.push_back(funcType->normTypeAt(norm));
                     }
-                    if (!members.empty()) {
-                        // The tuple is built by `fillStaticValues` rather than here, because a FILL
-                        // reads the shape it fills through a `Norm` input and carries the members
-                        // as `With` inputs (`builder_static.cpp`). Linking the members alone made a
-                        // node with no ordinary input, and the scheduler refused it when the body
-                        // read the pack as a value -- `(..xs) => xs.[0]` at run time:
-                        //
-                        //     Camel Invariant Violation: !normInputs.empty()
-                        //     FILL node must have one source input.   (nodevm.cpp, NodeVMSchedPass)
-                        //
-                        // A tuple that is only ever spread (`(..xs) => forward(..xs)`) never
-                        // reached the scheduler, which is why the case written for spreading was
-                        // green while reading the same pack was not.
-                        node_handle_t tuple = fillStaticValues(
-                            TupleType::create(parts),
-                            members,
-                            gct,
-                            "gir.lambda.rest.tuple");
-                        insertNode(restName, tuple);
-                    }
+                    // The tuple is built by `fillStaticValues` rather than here, because a FILL
+                    // reads the shape it fills through a `Norm` input and carries the members
+                    // as `With` inputs (`builder_static.cpp`). Linking the members alone made a
+                    // node with no ordinary input, and the scheduler refused it when the body
+                    // read the pack as a value -- `(..xs) => xs.[0]` at run time:
+                    //
+                    //     Camel Invariant Violation: !normInputs.empty()
+                    //     FILL node must have one source input.   (nodevm.cpp, NodeVMSchedPass)
+                    //
+                    // A tuple that is only ever spread (`(..xs) => forward(..xs)`) never
+                    // reached the scheduler, which is why the case written for spreading was
+                    // green while reading the same pack was not.
+                    //
+                    // A pack with no member gets the same node, with nothing to fill: the name is a
+                    // value in the body like any other, and a spread of it expands to no argument.
+                    // Binding it only when it had a member made the name undeclared instead, so
+                    //
+                    //     let zero: () => float = (...ys) => add3(1.0, 2.0, ...ys)
+                    //
+                    // was `UnresolvedReference: 'ys'` in a lambda while the same forwarding in a
+                    // declaration (`func pad(...ys) = add3(1.0, ...ys)`, called as `pad()`) answers
+                    // -- one construct with two answers, and only the lambda's a refusal. The base
+                    // value of the empty tuple is a `Norm` input all the same, so the node is one
+                    // the scheduler accepts: the `with` pack below builds the same tuple with no
+                    // member today, and a body that spreads it (`f<..ws>(..xs)` with no `with` value
+                    // past the ones the lambda wrote) has always run.
+                    node_handle_t tuple = fillStaticValues(
+                        TupleType::create(parts),
+                        members,
+                        gct,
+                        "gir.lambda.rest.tuple");
+                    insertNode(restName, tuple);
                     break;
                 }
             }

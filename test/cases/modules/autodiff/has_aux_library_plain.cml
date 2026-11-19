@@ -2,7 +2,7 @@
  * `has_aux` form four of four: the library's leg with no auxiliary value -- the control group.
  *
  * The library's own two names (`stdlib/vjp.cml`): `vjp(cube)(2.0)` is the pair `(value, pullback)`
- * and `grad(cube_at)(2.0)` is `vjp` read at the seed 1, its first cotangent taken. `x * x * x` at 2
+ * and `grad(cube_at)<2.0>()` is `vjp` read at the seed 1, its first cotangent taken. `x * x * x` at 2
  * gives 8.0, and its derivative `3x^2` gives 12.0, so the value and the gradient are different
  * numbers and a `grad` that answered the value it differentiates is caught here.
  *
@@ -29,7 +29,7 @@ func cube_at(): float {
 func main(): int sync {
     let (y, pullback) = vjp(cube)(2.0)
     let cotangents = pullback(1.0)
-    let g = grad(cube_at)(2.0)
+    let g = grad(cube_at)<2.0>()
     println('has_aux_off_library')
     println('value={}'->format<y>)
     println(cotangents)
