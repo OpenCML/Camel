@@ -14,6 +14,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/tangent_space.h"
 #include "camel/core/type/resolver.h"
+#include "camel/runtime/facts.h"
 #include "camel/utils/type.h"
 
 #include <iostream>
@@ -393,8 +394,77 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
     return namedShape();
 }
 
+/// The member `transpose(f)` built for one graph version, and the program it is a graph of.
+///
+/// `transpose` answers a graph built by reading another one (`buildTransposeGraph`), and what the
+/// walk reads is that graph and every graph it refers to -- never the value of any call. Two calls
+/// that hand it the same graph version therefore ask for the same member, and building it again is
+/// work with no answer to show for it. The cut is already made once, where `vjp(f)` and `grad(f)`
+/// are evaluated (`stdlib/vjp.cml#vjp`, author 2026-11-18, `befe6c399`); this is the other half of
+/// that step: `lin` is a new value on every call of a reading and always one of the same graph, so
+/// the walk runs once for that graph and the calls after it name the member the walk built
+/// (author, 2026-11-19 15:40: the transposition is a cost of the transform, not of every call).
+///
+/// What a call still does per call is what only it can do: `Function::create` over the member's
+/// graph, closed over the residuals *this* call's `lin` carries. The residuals are values, they are
+/// read off the body (`residualsOf`) rather than stated in a type, so they cannot be a parameter of
+/// the member and cannot be known before the forward half has run.
+///
+/// Kept as a fact of the source graph (`camel/runtime/facts.h`), stamped by `closureRevision` --
+/// the number that changes when the graph or anything below it does -- so a rewritten graph reads
+/// as absent and is built again, rather than answered with a member of the version before it.
+/// `program` is held because the member is a graph of a program of its own
+/// (`buildTransposeGraph` reserves one), and the fact outlives the call that made it.
+struct TransposeMember {
+    camel::runtime::ProgramHold program;
+    camel::runtime::GraphId graph = camel::runtime::kInvalidGraphId;
+    /// What the walk printed when it built the member: the reading describes *this* member, and a
+    /// caller that asked about the same version is handed it again rather than a second walk's
+    /// reading of a member that would have been built beside it.
+    std::string reading;
+
+    /// What "the same member" means for a reader of the store: the graph, the program it is a graph
+    /// of, and the reading. `registerKind` requires the comparison to exist; no kind without a
+    /// `compute` has one called (`verify` answers nothing for it), so this is written for the
+    /// shapes the store would ask about and not as a rule about members.
+    bool operator==(const TransposeMember &other) const {
+        return graph == other.graph && program.get() == other.program.get() &&
+               reading == other.reading;
+    }
+};
+
+/// The kind the members are kept under. Registered on first use, once per process.
+camel::runtime::fact::KindId transposeMemberKind() {
+    static const auto kind = camel::runtime::fact::registerKind<TransposeMember>(
+        {.key               = "transforms.transpose_member",
+         .owner             = "transforms",
+         .cls               = camel::runtime::fact::FactClass::Derived,
+         .scope             = camel::runtime::fact::Scope::Graph,
+         .readsDeclarations = true,
+         .print             = [](const TransposeMember &member) {
+             return std::string("the transposed member, graph=") +
+                    camel::runtime::toText(member.graph);
+         }});
+    return kind;
+}
+
+/// The function value of the member `graph` of `program`, closed over `source`'s closure -- the
+/// residuals its `lin` carries. The walk's own answer and the stored one are made here, so the two
+/// cannot differ in what a call site receives.
+slot_t transposeMemberValue(
+    ::Function *source, const camel::runtime::Program *program, camel::runtime::GraphId graph) {
+    auto *result = ::Function::create(program, graph, source->tupleType(), mm::autoSpace());
+    if (::Tuple *closure = source->tuple()) {
+        for (size_t i = 0; i < closure->size(); ++i) {
+            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), source->tupleType());
+        }
+    }
+    return toSlot<::Function *>(result);
+}
+
 /// transpose(f) at run time: the new graph, as a function value. Nothing of `f` is changed, and the
-/// value keeps `f`'s closure.
+/// value keeps `f`'s closure. A graph version whose member was built already is answered with that
+/// member; `TransposeMember` says why that is the same answer.
 slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     auto *function = norm.get<::Function *>(0);
@@ -403,11 +473,25 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             RuntimeDiag::RuntimeError,
             "transforms: transpose needs a function value");
     }
+    // The member this graph version's walk already built, when it has run. Asked before the walk,
+    // because the answer to "what is the transpose of this graph" is a function of the graph: the
+    // reading is written again rather than re-derived -- it is what the walk said about *this*
+    // member, and this is that member.
+    const camel::runtime::fact::KindId kind = transposeMemberKind();
+    const camel::runtime::fact::Anchor anchor{function->program(), function->graph()};
+    camel::runtime::fact::FactStore &facts = ctx.facts();
+    if (const std::shared_ptr<const TransposeMember> known =
+            facts.get<TransposeMember>(kind, anchor)) {
+        readings() << known->reading;
+        // The two arity refusals below are not repeated: they are questions about the member the
+        // walk built, and the member stored under this anchor is the one they were asked of.
+        return transposeMemberValue(function, known->program.get(), known->graph);
+    }
     // The reading log is what a reader greps and what the plan's cases assert, so it is captured
     // and then forwarded: a tee, not a replacement. *Why* the build refused is not read back out of
     // it -- `built.refusal` is what the walk recorded, and the sentence below is its reading.
     std::ostringstream why;
-    const TransposeGraph built = buildTransposeGraph(
+    TransposeGraph built = buildTransposeGraph(
         ctx.shared_from_this(),
         function->program(),
         function->graph(),
@@ -416,10 +500,11 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // The walk is a reading, and the run has to ask for it; the sentence of a *refused* build is
     // not, because a reader who never heard of `readings=true` still has to be able to read why
     // their derivative was refused (`readings.h`, `verdicts`). One site, two channels, same text.
+    const std::string walked = why.str();
     if (built.graph == nullptr) {
-        verdicts() << why.str();
+        verdicts() << walked;
     } else {
-        readings() << why.str();
+        readings() << walked;
     }
     if (built.graph == nullptr) {
         // A cause the language has a rule for is raised as the diagnostic the registry declares for
@@ -454,9 +539,11 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                                      : std::string("-");
     const std::string handedBack =
         built.graph->funcType() != nullptr ? built.graph->funcType()->toString() : "-";
-    readings() << "TRANSPOSE op signature=" << spelled << " resolved=" << produced
-               << " transposed=" << given << " graph=" << handedBack
-               << " same=" << (given == handedBack ? "yes" : "no") << '\n';
+    std::ostringstream op;
+    op << "TRANSPOSE op signature=" << spelled << " resolved=" << produced
+       << " transposed=" << given << " graph=" << handedBack
+       << " same=" << (given == handedBack ? "yes" : "no") << '\n';
+    readings() << op.str();
     // The ports the member takes against the parameters the operator promised. A call site fills
     // the parameters a type writes and nothing else, so a member that takes one more is refused
     // here instead of being met by the run: both facts are in hand -- the resolver answered the
@@ -508,17 +595,15 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                     "carries that value in its backward half's closure");
         }
     }
-    auto *result = ::Function::create(
-        built.program,
-        built.graph->id(),
-        function->tupleType(),
-        mm::autoSpace());
-    if (::Tuple *closure = function->tuple()) {
-        for (size_t i = 0; i < closure->size(); ++i) {
-            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
-        }
-    }
-    return toSlot<::Function *>(result);
+    const slot_t value = transposeMemberValue(function, built.program, built.graph->id());
+    // The member is now this graph version's answer, so the call sites after this one name it
+    // instead of walking the body again. Written after the value is made: `built.program` is moved
+    // into the fact, and the fact is what keeps the member's program alive from here on.
+    facts.put<TransposeMember>(
+        kind, anchor,
+        TransposeMember{
+            std::move(built.program), built.graph->id(), walked + op.str()});
+    return value;
 }
 
 } // namespace
