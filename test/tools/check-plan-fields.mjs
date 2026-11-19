@@ -722,32 +722,49 @@ function verifyRunner(runnerPath) {
     return 0
 }
 
-let root = path.resolve(HERE, '..', '..')
 let ENFORCE = false
 let REPORT_ONLY = false
-let mode = 'tree'
-let UPDATE_BASELINE = false
-for (let index = 2; index < process.argv.length; index++) {
-    const argument = process.argv[index]
-    if (argument === '--root' && index + 1 < process.argv.length) {
-        root = path.resolve(process.argv[++index])
-    } else if (argument === '--enforce') {
-        ENFORCE = true
-    } else if (argument === '--report-only') {
-        ENFORCE = false
-        REPORT_ONLY = true
-    } else if (argument === '--verify-runner') {
-        mode = 'runner'
-    } else if (argument === '--update-baseline') {
-        UPDATE_BASELINE = true
-    } else {
-        console.log(`FAIL plan-fields unknown argument: ${argument}`)
-        process.exit(2)
+
+/**
+ * Everything the command line decides, in one function and with one exit code at the end.
+ *
+ * The code is *set*, never `process.exit`ed. This check's reading is three hundred-odd findings and
+ * then the two lines that say what they amount to (`plan-fields read ...`, `ratchet=...`), and the
+ * gate reads stdout through a pipe (`spawn(..., stdio: ['ignore', 'pipe', 'pipe'])`,
+ * run-tests.mjs). A write to a pipe is queued and returns; `process.exit` leaves with the queue
+ * still full, so the reading arrived as 43,283 bytes ending inside a finding and
+ * `feat/tools/plan_fields.tree` went red on a tree that passes -- the child's own exit code 0 and
+ * empty stderr say it had printed the whole thing. Ending at the end of the script writes the last
+ * line first. `writing-freedom.mjs` carries the same note for the same reason: it reported an empty
+ * stdout under the plan while printing its report on a terminal.
+ */
+function main(argv) {
+    let root = path.resolve(HERE, '..', '..')
+    let mode = 'tree'
+    let UPDATE_BASELINE = false
+    for (let index = 0; index < argv.length; index++) {
+        const argument = argv[index]
+        if (argument === '--root' && index + 1 < argv.length) {
+            root = path.resolve(argv[++index])
+        } else if (argument === '--enforce') {
+            ENFORCE = true
+        } else if (argument === '--report-only') {
+            ENFORCE = false
+            REPORT_ONLY = true
+        } else if (argument === '--verify-runner') {
+            mode = 'runner'
+        } else if (argument === '--update-baseline') {
+            UPDATE_BASELINE = true
+        } else {
+            console.log(`FAIL plan-fields unknown argument: ${argument}`)
+            return 2
+        }
     }
+    if (mode === 'runner') {
+        return verifyRunner(path.join(HERE, 'run-tests.mjs'))
+    }
+    const result = scanTree(root)
+    return UPDATE_BASELINE ? updateBaseline(result, BASELINE_PATH) : report(result)
 }
 
-if (mode === 'runner') {
-    process.exit(verifyRunner(path.join(HERE, 'run-tests.mjs')))
-}
-const result = scanTree(root)
-process.exit(UPDATE_BASELINE ? updateBaseline(result, BASELINE_PATH) : report(result))
+process.exitCode = main(process.argv.slice(2))
