@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：22 页
+## 现在在等作者：23 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -30,6 +30,7 @@
 | [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 |
 | [`2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve`](2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve.cn.md) | 那 13 条期望的 `TILES_OUTLINED 10`，模型被实测推翻了 |
 | [`2026-11-19-the-writes-a-clause-refresh-adds-have-no-order`](2026-11-19-the-writes-a-clause-refresh-adds-have-no-order.cn.md) | 刷新声明出的写没有序边（交给 effect order） |
+| [`2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted`](2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted.cn.md) | 对一次调用交出的值做投影：三次尝试各自否掉了什么 |
 | [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
