@@ -19,7 +19,7 @@ namespace profiler {
 struct TraceEvent {
     std::string name;
     std::string ph;   // Phase: B=begin, E=end, i=instant, X=complete, C=counter
-    uint64_t ts;      // Timestamp in microseconds
+    uint64_t ts = 0;      // Timestamp in microseconds
     uint64_t dur = 0; // Duration in microseconds (for complete events)
     uint32_t pid = 1;
     uint32_t tid = 0;

@@ -94,7 +94,7 @@ namespace {
 /// What a table became when an entry was put in: one table, or two when it had to be split.
 /// `first` is the table itself when nothing changed.
 struct Grown {
-    Table *first;
+    Table *first = nullptr;
     Table *second = nullptr;
 };
 

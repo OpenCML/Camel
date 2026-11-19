@@ -215,7 +215,7 @@ class Evaluator {
         const Value *hole        = nullptr;
     };
     struct Activation {
-        GCGraph *graph;
+        GCGraph *graph = nullptr;
         std::unordered_map<gc_node_ref_t, Value> ports;
         const LinearCtx *linear = nullptr;
         // Memo layers: the base layer plus one per enclosing If arm being emitted. A value first

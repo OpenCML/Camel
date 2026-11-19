@@ -47,9 +47,9 @@ using camel::core::type::TypeCode;
 
 /// The four numeric suffixes of the typed `:op/` operators and their types.
 struct NumericType {
-    const char *suffix;
-    TypeCode type;
-    bool isFloat;
+    const char *suffix = nullptr;
+    TypeCode type = TypeCode::Int32;
+    bool isFloat = false;
     bool isComplex = false;
 };
 constexpr NumericType kNumericTypes[] = {

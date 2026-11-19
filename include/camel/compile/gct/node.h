@@ -570,7 +570,7 @@ class Node {
     uint32_t childCount_ = 0;
     origin_id_t origin_  = camel::source::kInvalidOriginId;
     Node **children_     = nullptr;
-    Payload payload_;
+    Payload payload_ = {};
 };
 
 static_assert(sizeof(Node) == 32, "A GCT node is four words");

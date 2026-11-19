@@ -129,7 +129,7 @@ class Builder {
     // declaration (`let`/`var`, one or several names) or a function.
     enum class BuildState { Declared, Building, Built, Failed };
     struct TopLevelDeclaration {
-        GCT::node_ptr_t gct;
+        GCT::node_ptr_t gct = {};
         ModuleUnit *unit = nullptr;
         BuildState state = BuildState::Declared;
         // The names a value declaration binds; the function's name for a function.
@@ -375,7 +375,7 @@ class Builder {
     // declares it and its name there (with the namespaces it is declared in). A capture of
     // such a node is a capture of that value; diagnostics name it so.
     struct TopLevelValue {
-        const camel::core::module::Module *module;
+        const camel::core::module::Module *module = nullptr;
         std::string name;
     };
     std::unordered_map<node_handle_t, TopLevelValue> topLevelValues_;
@@ -413,8 +413,8 @@ class Builder {
     camel::core::module::ProgramExports ownExports_;
     camel::core::module::ProgramExports *exports_;
 
-    bool synced_;
-    bool varied_;
+    bool synced_ = false;
+    bool varied_ = false;
     // The numeric permissions in force where the builder is (design principles 7.5): those of
     // the nearest GCT EXEC, which already include every enclosing block and function
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
@@ -680,7 +680,7 @@ class Builder {
     struct CaptureSite {
         compile_graph_ptr_t caller;
         node_handle_t call;
-        compile_graph_ptr_t callee;
+        compile_graph_ptr_t callee = {};
         // How many of the call's `with` inputs are its captures: the last that many, once the
         // link step has placed them (`placed`).
         size_t linked = 0;
@@ -1112,7 +1112,7 @@ class Builder {
     // it, a branch whose arm did) is the direct user.
     struct VariableUse {
         node_handle_t node;
-        bool isRead;
+        bool isRead = false;
     };
     std::unordered_map<node_handle_t, std::vector<VariableUse>> pendingUses_;
 
@@ -1362,7 +1362,7 @@ class Builder {
     struct CapturedUse {
         node_handle_t variable;
         node_handle_t origin;
-        bool written;
+        bool written = false;
     };
     // A write of captured variables outside a sync block, reported once every body
     // is built: while a recursive function's body is open its writes are only an upper bound.
@@ -1652,7 +1652,7 @@ class Builder {
 
       private:
         Builder &self_;
-        SpeculativeInstantiation *scope_;
+        SpeculativeInstantiation *scope_ = nullptr;
         camel::core::error::diagnostics_ptr_t outer_;
     };
     /// The diagnostics of a body that does not compile for the types it was tried with, and the
@@ -1750,7 +1750,7 @@ class Builder {
         /// The name the tuple was written with (`ts`), for the escape diagnostic.
         std::string name;
         /// Where the tuple was written, for the escape diagnostic and the materialized FILL.
-        GCT::node_ptr_t origin;
+        GCT::node_ptr_t origin = {};
     };
     //  ---- Rest parameters (design principles 5.5, step 6) ----
     // A rest function has no runtime arity, so it is never an instance: each direct call
@@ -2189,7 +2189,7 @@ class Builder {
     // ---- evaluateCallAtBuildTime, in the steps it is made of ----
     /// The callee of a call, once its `with` applications are taken off.
     struct FoldRequest {
-        GCT::node_ptr_t callee;
+        GCT::node_ptr_t callee = {};
         bool typeApplied = false;
         std::string name;
         const std::vector<data_ptr_t> *arguments = nullptr;
@@ -2201,7 +2201,7 @@ class Builder {
     /// What a call names, ready to be read: the body, the signature with the types bound, and
     /// where the declaration's own `when` is answered.
     struct FoldTarget {
-        GCT::node_ptr_t func;
+        GCT::node_ptr_t func = {};
         FunctionType *signature = nullptr;
         camel::core::type::type_bindings_t bindings;
         generic_template_ptr_t declaring;
@@ -3233,7 +3233,7 @@ class Builder {
     /// One case of a `match` whose cases carry guards: the form `buildCaseChain` lowers them
     /// in.
     struct CaseStep {
-        GCT::node_ptr_t exec;            // the arm of the case: its region, and its body
+        GCT::node_ptr_t exec = {};            // the arm of the case: its region, and its body
         node_handle_t condition{};       // the test of its pattern, none for the case that ends
         GCT::node_ptr_t guard = nullptr; // its guard, when it has one
         std::function<void()> bind{};    // takes out the names its pattern binds, in the arm

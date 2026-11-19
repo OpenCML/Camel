@@ -64,9 +64,9 @@ class CallTracer {
     struct CallFrame {
         std::string function_name;
         std::string file;
-        int line;
-        uint64_t start_time;
-        int depth;
+        int line = 0;
+        uint64_t start_time = 0;
+        int depth = 0;
     };
 
 #ifndef NDEBUG
