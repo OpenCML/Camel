@@ -253,9 +253,9 @@ func atStatement(): int spelling sync {
 /// gate that carries the body's value out of the region it landed in, so the node the write is on is
 /// the one that gate reads; the two prints that were already there are ordered before it, and the
 /// commit is accepted -- the third print is in the graph the commit published, ordered after both.
-/// It does not run, and that is the other half of what a splice at a pure node is: the region the
-/// body landed in is reached by no chain of the block, so what the ordering says is the order of a
-/// write the block's chain never reaches. The reading pins both halves.
+/// It runs as well, because design principles 3.1 makes the body's write a write of the region it
+/// landed in and that region's exit `GATE` waits for it (the author's ruling of 2026-11-20): the
+/// splice at a pure node changes nothing the block's chain says, and still prints the body's line.
 func atPureThenOrder(): int spelling sync {
     let g = graph_of(subject)
     let sum = theSum(g)
@@ -272,7 +272,7 @@ func atPureThenOrder(): int spelling sync {
     let h = graph_of(edited)
     let sumAfter = theSum(h)
     println(`[order] prints=${len(prints(g))}->${len(prints(h))} ordered_before=${ordered} body=${len(bodyNodes(h))} sum_kept=${len(nodes(h)->filter<isSumOp>)}`)
-    println('[order] the edited function runs (the body line is in a region no chain enters):')
+    println('[order] the edited function runs (the body runs: its write waits on the region exit gate):')
     edited()
     return 0
 }
