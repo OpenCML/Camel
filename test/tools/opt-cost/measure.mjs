@@ -215,6 +215,14 @@ function main() {
         return 2
     }
 
+    // The build the numbers belong to, on the first line of the reading: a table without the commit
+    // it was taken on is a table a later reader has to guess the tree of.
+    const version = runInvocation(camel, ['--version'])
+    const build = `${version.stdout}\n${version.stderr}`
+        .split('\n')
+        .map((one) => one.trim())
+        .find((one) => one.length > 0) || '<no --version output>'
+
     const rows = []
     const troubles = []
     for (const backend of options.backends) {
@@ -249,11 +257,12 @@ function main() {
     const counts = countChecks(camel, countBackend)
 
     if (options.json) {
-        console.log(JSON.stringify({ camel, case: path.relative(REPO_ROOT, CASE), rows, counts, troubles }, null, 2))
+        console.log(JSON.stringify({ camel, build, case: path.relative(REPO_ROOT, CASE), rows, counts, troubles }, null, 2))
         return 1
     }
 
     console.log(`opt-cost camel=${path.relative(REPO_ROOT, camel)} case=${path.relative(REPO_ROOT, CASE)}`)
+    console.log(`  build ${build}`)
     // One space between the columns, so a `-` and a `0.0` cannot be read as one number.
     const cells = (values) => `  ${values.map((one) => pad(one, 10)).join('')}`
     console.log(cells(['backend', 'pipeline', 'exit', 'cpu_ms', 'wall_ms', 'opt_ms', 'opt_share']) + 'pass(m)')
