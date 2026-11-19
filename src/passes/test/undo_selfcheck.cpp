@@ -271,6 +271,78 @@ bool checkClass(
     return good;
 }
 
+/// What the graph's own signature says, as text: the two halves a segment can change without the
+/// signature object moving -- the result type (an open signature has none until its body decides
+/// one) and the resources (Generic until a clause publishes them).
+std::string signatureContent(const GraphDraft &draft) {
+    const auto *signature = draft.funcType();
+    if (signature == nullptr) {
+        return "none";
+    }
+    const std::string exit =
+        signature->hasExitType() ? signature->exitType()->toString() : std::string("none");
+    return std::format(
+        "exit={} resources={}",
+        exit,
+        signature->resources().mode == camel::core::sem::ResourceSignature::Mode::Concrete
+            ? "concrete"
+            : "generic");
+}
+
+/// The shape a pointer comparison cannot see (author, 2026-11-19): a segment **fills an open
+/// signature where it stands**, so the draft's `funcType_` names the same object before and after
+/// the write and every comparison of the parts of `UndoTypes` came out equal -- the check answered
+/// "nothing is missing" for a signature whose result type was still the one the segment wrote, and a
+/// rollback that put the pointer back was reported as a rollback that put the signature back.
+///
+/// The round is the same two halves the classes are walked with: with the journal's hook running,
+/// the content has to come back (`after` is `before`, and the verdict is none); with the hook made a
+/// no-op -- what a forgotten one amounts to -- the check has to name `types`. Before the content was
+/// recorded and restored, the first round left the signature filled and the second answered `none`:
+/// both look clean, and neither is.
+bool checkOpenSignature(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    GCGraph *graph, bool resources, bool skip, std::ostream &os) {
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
+    GraphDraft &draft = session.edit(graph).edit();
+    draft.setUndoSelfCheck(GraphDraft::SelfCheckMode::Report);
+    // An open signature with no result type yet and Generic resources: what the builder makes for a
+    // function before its body decides the result (func.h, "Open signatures").
+    camel::core::type::FunctionTypeFactory factory;
+    factory.addNormArg("n", camel::core::type::Type::Int(), false);
+    draft.setFuncType(factory.buildOpen());
+    const std::string before = signatureContent(draft);
+    if (skip) {
+        draft.skipUndoClassForTest(UndoClass::Types);
+    }
+    const auto mark = draft.beginUndo();
+    if (resources) {
+        camel::core::sem::ResourceSignature written;
+        written.mode = camel::core::sem::ResourceSignature::Mode::Concrete;
+        draft.setOpenResources(written);
+    } else {
+        draft.setOpenExitType(camel::core::type::Type::Int());
+    }
+    const std::string filled = signatureContent(draft);
+    draft.rollbackTo(mark);
+    const std::string after = signatureContent(draft);
+    const auto verdict     = draft.undoMismatch();
+    draft.endUndo();
+    draft.clearSkippedUndoClassForTest();
+    const bool good = skip ? (verdict.has_value() && *verdict == UndoClass::Types)
+                           : (!verdict.has_value() && after == before);
+    os << std::format(
+        "SELFCHECK open_signature={} hook={} before=[{}] filled=[{}] after=[{}] verdict={} {}\n",
+        resources ? "resources" : "exit",
+        skip ? "skipped" : "run",
+        before,
+        filled,
+        after,
+        verdict ? undoClassName(*verdict) : std::string_view("none"),
+        good ? "ok" : "FAIL");
+    return good;
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -293,6 +365,12 @@ UndoSelfCheckTestPass::apply(const camel::runtime::Program *program, std::ostrea
         ok = checkClass(context_, program, target, cls, false, os) && ok;
         ok = checkClass(context_, program, target, cls, true, os) && ok;
     }
+    // The class whose write does not move the pointer that records it, walked separately: the two
+    // in-place halves of an open signature (see `checkOpenSignature`).
+    ok = checkOpenSignature(context_, program, target, false, false, os) && ok;
+    ok = checkOpenSignature(context_, program, target, false, true, os) && ok;
+    ok = checkOpenSignature(context_, program, target, true, false, os) && ok;
+    ok = checkOpenSignature(context_, program, target, true, true, os) && ok;
     os << std::format("SELFCHECK {}\n", ok ? "ok" : "FAIL");
     return program;
 }

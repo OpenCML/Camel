@@ -27,6 +27,8 @@
 
 #include "camel/runtime/draft.h"
 
+#include "camel/core/type/composite/func.h"
+
 #include <algorithm>
 #include <cstring>
 #include <format>
@@ -133,8 +135,34 @@ bool sameRun(const T &here, const std::vector<U> &found) {
     return here.size() == found.size() && std::equal(here.begin(), here.end(), found.begin());
 }
 
+/// The result type a signature holds, or nullptr while it holds none yet: `exitType()` answers
+/// `void` for both an open signature without a result and one whose result is `void`, and those two
+/// are different states of the draft. The types are interned and immutable, so the pointer a
+/// signature holds a result type by *is* that type's content, and comparing it compares what the
+/// signature says rather than which object the draft points at.
+camel::core::type::Type *exitTypeOf(const camel::core::type::FunctionType *signature) {
+    if (signature == nullptr || !signature->hasExitType()) {
+        return nullptr;
+    }
+    return signature->exitType();
+}
+
+/// The resources a signature publishes, as a value; Generic for a draft with no signature.
+camel::core::sem::ResourceSignature
+resourcesOf(const camel::core::type::FunctionType *signature) {
+    return signature != nullptr ? signature->resources() : camel::core::sem::ResourceSignature{};
+}
+
 bool sameTypes(const GraphDraft &draft, const UndoSnapshot &snapshot) {
+    // The signature is compared by what it *holds*, not only by which object it is. A segment that
+    // fills an open signature writes it where it stands -- `funcType_` keeps pointing at the same
+    // object -- so a comparison of the pointer finds the draft unchanged however much the signature
+    // now says, and `test::undo_selfcheck` reports "back" for a signature that was never put back
+    // (author, 2026-11-19: the self-check compares content, not the pointer). The pointer still has
+    // to match: a different one is a different signature, its parameters included.
     return draft.funcType() == snapshot.funcType &&
+           exitTypeOf(draft.funcType()) == snapshot.exitType &&
+           resourcesOf(draft.funcType()) == snapshot.resources &&
            draft.closureType() == snapshot.closureType &&
            sameRun(draft.captureNames(), snapshot.captureNames) &&
            sameRun(draft.runtimeSlotTypes(), snapshot.runtimeSlotTypes) &&
@@ -185,8 +213,10 @@ std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft) {
     snapshot->mutations      = draft.mutations();
     snapshot->hasFrameLayout = draft.hasFrameLayout();
     snapshot->insertRegion   = draft.insertRegion();
-    snapshot->funcType       = draft.funcType();
-    snapshot->closureType    = draft.closureType();
+snapshot->funcType         = draft.funcType();
+    snapshot->exitType         = exitTypeOf(draft.funcType());
+    snapshot->resources        = resourcesOf(draft.funcType());
+    snapshot->closureType      = draft.closureType();
     snapshot->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     snapshot->runtimeSlotTypes.assign(
         draft.runtimeSlotTypes().begin(), draft.runtimeSlotTypes().end());
@@ -365,11 +395,32 @@ void GraphDraft::noteOriginalTypes() {
     undoTypes_.push_back(
         UndoTypes{
             .funcType           = funcType_,
+            .exitType           = exitTypeOf(funcType_),
+            .resources          = resourcesOf(funcType_),
             .closureType        = closureType_,
             .captureNames       = captureNames_,
             .runtimeSlotTypes   = runtimeSlotTypes_,
             .staticSlotTypes    = staticSlotTypes_,
         });
+}
+
+void GraphDraft::setOpenExitType(camel::core::type::Type *exitType) {
+    // The record comes first and once per segment (the epoch rule `noteOriginal*` follows), so what
+    // a rollback writes back is the result type the mark found and not one of the values the
+    // segment wrote in between.
+    noteOriginalTypes();
+    camel::core::type::OpenFunctionType *open =
+        funcType_ != nullptr ? funcType_->asOpen() : nullptr;
+    GUARD(open != nullptr, "Only an open signature has a result type written in place.");
+    open->setExitType(exitType);
+}
+
+void GraphDraft::setOpenResources(const camel::core::sem::ResourceSignature &resources) {
+    noteOriginalTypes();
+    camel::core::type::OpenFunctionType *open =
+        funcType_ != nullptr ? funcType_->asOpen() : nullptr;
+    GUARD(open != nullptr, "Only an open signature has its resources written in place.");
+    open->setResources(resources);
 }
 
 void GraphDraft::noteOriginalPorts() {
@@ -482,6 +533,19 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
     if (undoTypes_.size() > mark.undoTypes) {
         const UndoTypes &record = undoTypes_[mark.undoTypes];
         funcType_               = record.funcType;
+        // The signature goes back to the object the record names, and that object goes back to what
+        // it held: a segment fills an open signature where it stands, so putting the pointer back
+        // leaves the write in place -- the result type the segment wrote and the resources with it.
+        // An open signature is the one kind that can be written in place (the type table never holds
+        // one), so it is the one with content to write back (author, 2026-11-19). The two writes go
+        // to the signature and not through `setOpenExitType` / `setOpenResources`: a restore is not
+        // a write of the segment, and the recording entries do not check `undoSuspended_`, so going
+        // through them would record the state this rollback is leaving.
+        if (camel::core::type::OpenFunctionType *open =
+                funcType_ != nullptr ? funcType_->asOpen() : nullptr) {
+            open->setExitType(record.exitType);
+            open->setResources(record.resources);
+        }
         closureType_            = record.closureType;
         captureNames_           = record.captureNames;
         runtimeSlotTypes_       = record.runtimeSlotTypes;

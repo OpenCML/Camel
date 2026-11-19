@@ -26,6 +26,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
@@ -650,6 +651,18 @@ class GraphDraft {
         ++mutations_;
         funcType_ = funcType;
     }
+    /// Fills the result type of an open signature **where it stands**
+    /// (`OpenFunctionType::setExitType`). The signature is the function's identity while its body
+    /// is built -- a recursive function refers to its own type before the result is worked out --
+    /// so it is not replaced by an interned copy, and its pointer does not move. What a rollback
+    /// has to put back is therefore the *content*: the record is taken first (`noteOriginalTypes`,
+    /// once per segment), and `replayJournal` writes the recorded result type and resources back
+    /// into that same object (author, 2026-11-19: a rollback restores content, not the pointer).
+    /// This is the one place the write is made, so that a caller cannot fill a signature without the
+    /// journal seeing it.
+    void setOpenExitType(camel::core::type::Type *exitType);
+    /// The same for the resources the signature publishes (`OpenFunctionType::setResources`).
+    void setOpenResources(const camel::core::sem::ResourceSignature &resources);
     void setCaptureNames(std::span<const camel::core::SymId> names) {
         noteOriginalTypes();
         ++mutations_;
@@ -1303,13 +1316,25 @@ class GraphDraft {
         std::vector<gc_node_ref_t> norm, with, closure;
     };
     /// The graph's own types, as the segment found them. `funcType_` is graph content a segment
-    /// writes: a rewrite republishes the graph under another signature (`setFuncType`), and a port
-    /// that goes takes its parameter out of the signature with it (`removeNormPort`,
-    /// `removeWithPort`). The other members are the same kind of state -- the frame layout a
+    /// writes: a rewrite republishes the graph under another signature (`setFuncType`), a port that
+    /// goes takes its parameter out of the signature with it (`removeNormPort`, `removeWithPort`),
+    /// and the builder fills an open signature where it stands (`setOpenExitType`,
+    /// `setOpenResources`). The other members are the same kind of state -- the frame layout a
     /// rewrite retypes, the closure type, the capture names -- so one record holds them and one
-    /// class of the self-check compares them.
+    /// class of the self-check compares them, by content rather than by pointer (see `exitType`
+    /// below):
     struct UndoTypes {
         camel::core::type::FunctionType *funcType = nullptr;
+        /// What that signature *holds*, which is the half a segment can change without its pointer
+        /// moving: an open signature is the function's identity while its body is built -- a
+        /// recursive function names its own type before its result is known -- so it is filled
+        /// where it stands (`OpenFunctionType::setExitType`, `setResources`) instead of being
+        /// replaced by an interned copy. `exitType` is nullptr while the signature has no result
+        /// type yet; `resources` is the signature the declaration publishes. A rollback writes these
+        /// two back into the signature the record names, and the self-check compares them (author,
+        /// 2026-11-19: "还原内容").
+        camel::core::type::Type *exitType = nullptr;
+        camel::core::sem::ResourceSignature resources;
         camel::core::type::TupleType *closureType = nullptr;
         std::vector<camel::core::SymId> captureNames;
         std::vector<camel::core::type::Type *> runtimeSlotTypes;
@@ -1510,6 +1535,12 @@ struct UndoSnapshot {
     uint32_t insertRegion    = 0;
     // The graph's own types.
     camel::core::type::FunctionType *funcType = nullptr;
+    /// What the signature held at the mark, for the same reason the journal records it: a segment
+    /// fills an open signature where it stands, so its pointer names the same object on both sides
+    /// of the write and a copy of the pointer answers "unchanged" for a signature that changed.
+    /// `exitType` is nullptr while the signature had no result type yet.
+    camel::core::type::Type *exitType = nullptr;
+    camel::core::sem::ResourceSignature resources;
     camel::core::type::TupleType *closureType = nullptr;
     std::vector<camel::core::SymId> captureNames;
     std::vector<camel::core::type::Type *> runtimeSlotTypes;
