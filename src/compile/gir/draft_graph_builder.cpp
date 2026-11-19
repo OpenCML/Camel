@@ -86,10 +86,6 @@ void DraftGraphBuilder::setFuncType(camel::core::type::FunctionType *funcType) {
 void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
     camel::core::type::FunctionType *funcType = draft().funcType();
     GUARD(funcType != nullptr, "A graph under construction has a function type.");
-    // What the signature stated is recorded before anything replaces it, and nothing reads the
-    // record yet: the readers that need the declaration ask for it in a later change, and the
-    // replacement below keeps its meaning exactly (`GraphDraft::declaredFuncType`).
-    draft().setDeclaredFuncType(funcType);
     // An open signature is filled where it stands: it is the function's identity while the body is
     // built, and a recursive function refers to its own type before this result is known. The draft
     // owns that write because the journal has to record the *content* it replaces -- the pointer

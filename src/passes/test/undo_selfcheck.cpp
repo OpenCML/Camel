@@ -170,22 +170,19 @@ std::optional<Probe> makeProbe(UndoClass cls, GraphDraft &draft) {
     case UndoClass::Types: {
         // The graph's own signature: the empty one is a different interned signature from any a
         // function has, so this is a change whatever the draft holds.
-        auto *old   = draft.funcType();
-        auto *empty = camel::core::type::FunctionType::create();
-        if (empty != old) {
-            return Probe{
-                cls,
-                [empty](GraphDraft &target) { target.setFuncType(empty); },
-                [old](GraphDraft &target) { target.setFuncType(old); },
-            };
+        auto *old    = draft.funcType();
+        auto *probed = camel::core::type::FunctionType::create();
+        if (probed == old) {
+            // A draft that already holds the empty signature: a signature with one parameter is a
+            // signature no function of the case has, and `setFuncType` writes it the same way, so
+            // the class is still written and still has to come back.
+            probed = camel::core::type::FunctionType::create(
+                {{camel::core::type::Type::Int(), false}}, {}, nullptr);
         }
-        // A draft that already holds the empty signature: the declared one is the other member of
-        // this class, and it is written the same way.
-        auto *declared = draft.declaredFuncType();
         return Probe{
             cls,
-            [old](GraphDraft &target) { target.setDeclaredFuncType(old); },
-            [declared](GraphDraft &target) { target.setDeclaredFuncType(declared); },
+            [probed](GraphDraft &target) { target.setFuncType(probed); },
+            [old](GraphDraft &target) { target.setFuncType(old); },
         };
     }
     case UndoClass::LowLevel: {

@@ -240,13 +240,16 @@ class ExecPlan {
     /// ---- In-place updates: where the decision lives
     /// (docs/design/arrays-memory/README.cn.md 4.3.1) -------------------
     //
-    // An update node is an OPER node that names the in-place form of an operator and takes its
-    // array from `:var/take` of a variable's cell (Builder::pathAssignmentOf,
-    // Builder::inPlaceRebindingOf). The plan decides, once, whether the update reuses the storage
-    // of the value it is given (StorageReuse), and every back end follows: a node the plan marks
-    // Copy runs the plain form of the operator (operatorUriFor), which copies; the two forms that
-    // reuse the storage run the in-place form, which asks the array itself where the plan could
-    // not prove it (StorageReuse::ByArrayCount).
+    // An update node is an OPER node that could reuse the storage of the value it is given: it
+    // names the in-place form of an operator and takes its array from `:var/take` of a variable's
+    // cell (Builder::pathAssignmentOf, Builder::inPlaceRebindingOf), or it names the *copying*
+    // form of an operator that has one (`v = v->append(x)`, `xs = xs->sort`, `xs[i] = v` on a
+    // value -- where a same-region local `var` has been a value and not a cell since stage S1 of
+    // the direct-SSA construction plan). The plan decides, once, whether the update reuses the
+    // storage of the value it is given (StorageReuse), and every back end follows: a node the plan
+    // marks Copy runs the plain form of the operator (operatorUriFor), which copies; the two
+    // forms that reuse the storage run the in-place form, which asks the array itself where the
+    // plan could not prove it (StorageReuse::ByArrayCount).
     std::vector<StorageReuse> storageReuseAt; // by topo index; None for every other node
     StorageReuse storageReuseOf(gc_node_ref_t ref) const {
         const size_t index = ref < topoIndexByRef.size() ? topoIndexByRef[ref] : kNotInPlan;
@@ -458,10 +461,26 @@ class ExecPlan {
     size_t refEntriesOfKind(RefEntryKind kind) const;
     bool refEntriesBalance() const;
 
-    /// The operator a back end runs for the OPER node `ref`: the URI the node names, or -- for an
-    /// update node the plan marked Copy -- the plain (copying) form of the in-place form it names
-    /// (OperatorTable::plainForm). The text lives in the operator table, so the view stays valid.
-    std::string_view operatorUriFor(gc_node_ref_t ref) const;
+    /// The operator a back end runs for the OPER node `ref`: the URI the node names, or the form
+    /// the plan's decision names instead of it (`OperatorTable::inPlaceForm` and `plainForm`). Two
+    /// swaps, one question -- does this node reuse the storage of the value it was given:
+    ///
+    ///   * the node names an *in-place* form and the plan marked it Copy: it runs the plain
+    ///     (copying) form, which allocates;
+    ///   * the node names the *copying* form of an operator that has an in-place one and the plan
+    ///     marked it Input or ByArrayCount: it runs the in-place form, which is the one that writes
+    ///     where the plan handed the storage (stage S3b of the direct-SSA construction plan: the
+    ///     value an update is given at its last use is handed over, so `v = v->append(x)` on a value
+    ///     runs the form that appends in the storage instead of making a new array).
+    ///
+    /// Everything else runs the URI it names, and a node the plan decided nothing about runs it
+    /// too (StorageReuse::None): the reading that needs a word for that
+    /// (camel/runtime/storage_reuse.h) says `copied` for the copying form and `by-count` for a
+    /// form that asks the array, because those are what the run does.
+    ///
+    /// A `std::string` and not a view: the answer for a marked node comes from the operator table's
+    /// own `std::string` (`inPlaceForm`) and there is no buffer the caller could be given.
+    std::string operatorUriFor(gc_node_ref_t ref) const;
     /// What FastVM records about the code it made for this version: where its bytecode starts and
     /// how long it is (each stored plus one; 0 is "not compiled"), the JIT entry, flags, and how
     /// often an indirect call from it was made. Only FastVM reads and writes it.

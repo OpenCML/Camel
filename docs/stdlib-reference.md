@@ -1494,6 +1494,13 @@ the transposed graph takes a port that is not a cotangent, because the call site
 that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
 called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 
+The member is built once for a graph version and kept (author, 2026-11-19 15:40): the walk reads
+the graph and the graphs it refers to and never the value of a call, so a second call about the
+same version names the member the first one built. `vjp`'s pullback and `grad`'s derivative are
+called once per step of a loop over one `lin` graph, and the transposition is what the transform
+costs, not what a call of it costs. What stays per call is the function value, closed over the
+residuals that call's `lin` carries.
+
 - Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 
 #### `vmap`
@@ -1622,9 +1629,23 @@ function again. Before this the body of the lambda opened with `split(jvp(f))<..
 training loop redid the whole lift and the whole cut on every step -- the cost the author named
 on 11-17, and the reason an outer transform met a derivative that was not a graph yet.
 
+**Where the transposition happens** (author, 2026-11-19 15:40): the same reading, one step on.
+`transpose(lin)` is still written inside the lambda, because `lin` does not exist until the
+forward half has run -- but the *walk* is a function of the graph `lin` is of, and a call keeps
+asking about the same graph. So the module keeps the member it built for a graph version and a
+call names the stored one (`modules/transforms/transpose_operator.cpp#TransposeMember`, a fact of
+the source graph stamped by `closureRevision`), and a loop that steps a gradient many times pays
+for one transposition rather than one per step. What a call still does, and only it can, is make
+the function value closed over the residuals *that* call's `lin` carries: the residuals are
+values read off the body (`residualsOf`), not a position in a type, so they cannot be a parameter
+of the member and are not known before the forward half has run.
+
 What is **not** done here, and why: the residuals the linear half reads still travel in `lin`'s
-closure, so `transpose(lin)` is still a per-call step, and `grad(grad(f))` is still refused. The
-design's next step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
+closure, so the member is a fresh function value per call even though its graph is not rebuilt,
+and `grad(grad(f))` is still refused -- by `first_with_as_param`, one step earlier than the
+transposition: an inner `grad` answers a function whose weight is an ordinary parameter, so the
+outer one finds no `with` parameter to differentiate (design principles 9.9). The design's next
+step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
 (`fwd: x => (y, residuals)`, `lin: (residuals, tangents) => tangent`), which needs the residual
 *list* in a type: it is a property of the body (`residualsOf`), not of the signature, and no
 declaration can write it -- the `ResidualsOf<F>` / `_`-position hole that used to try was removed
@@ -1668,9 +1689,11 @@ without the pack
 **The cut is made here, once** (author, 2026-11-18), for the reason `vjp` above states and with
 the same limit: `split(jvp(first_with_as_param(f)))` is written in `grad`'s own body, so a call of
 the gradient calls the graph the cut built instead of lifting and cutting the function again. The
-body is the composition written out (`split`, then `transpose` per call) rather than `vjp` read at
-the seed 1, because a `vjp` read would put the cut back inside the lambda it answers: the whole
-point is that the derivative is a graph by the time `grad(f)` answers.
+body is the composition written out (`split`, then `transpose`) rather than `vjp` read at the seed
+1, because a `vjp` read would put the cut back inside the lambda it answers: the whole point is
+that the derivative is a graph by the time `grad(f)` answers. The transposition is one call for
+the same reason and by the same rule as `vjp`'s: written where the graph is asked about, done
+once for that graph version (`modules/transforms/transpose_operator.cpp#TransposeMember`).
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`

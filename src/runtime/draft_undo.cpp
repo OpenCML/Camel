@@ -163,7 +163,6 @@ bool sameTypes(const GraphDraft &draft, const UndoSnapshot &snapshot) {
     return draft.funcType() == snapshot.funcType &&
            exitTypeOf(draft.funcType()) == snapshot.exitType &&
            resourcesOf(draft.funcType()) == snapshot.resources &&
-           draft.declaredFuncType() == snapshot.declaredFuncType &&
            draft.closureType() == snapshot.closureType &&
            sameRun(draft.captureNames(), snapshot.captureNames) &&
            sameRun(draft.runtimeSlotTypes(), snapshot.runtimeSlotTypes) &&
@@ -214,10 +213,9 @@ std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft) {
     snapshot->mutations      = draft.mutations();
     snapshot->hasFrameLayout = draft.hasFrameLayout();
     snapshot->insertRegion   = draft.insertRegion();
-    snapshot->funcType         = draft.funcType();
+snapshot->funcType         = draft.funcType();
     snapshot->exitType         = exitTypeOf(draft.funcType());
     snapshot->resources        = resourcesOf(draft.funcType());
-    snapshot->declaredFuncType = draft.declaredFuncType();
     snapshot->closureType      = draft.closureType();
     snapshot->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     snapshot->runtimeSlotTypes.assign(
@@ -399,7 +397,6 @@ void GraphDraft::noteOriginalTypes() {
             .funcType           = funcType_,
             .exitType           = exitTypeOf(funcType_),
             .resources          = resourcesOf(funcType_),
-            .declaredFuncType   = declaredFuncType_,
             .closureType        = closureType_,
             .captureNames       = captureNames_,
             .runtimeSlotTypes   = runtimeSlotTypes_,
@@ -549,7 +546,6 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
             open->setExitType(record.exitType);
             open->setResources(record.resources);
         }
-        declaredFuncType_       = record.declaredFuncType;
         closureType_            = record.closureType;
         captureNames_           = record.captureNames;
         runtimeSlotTypes_       = record.runtimeSlotTypes;

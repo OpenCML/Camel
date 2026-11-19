@@ -212,23 +212,27 @@ void dumpStorageReuse(
             // `by-count` reading. The loop-state append asks the array by construction, and so does
             // an operator that declared it reuses an operand: the plan has no cell to read a
             // decision for a tree it never sees as one value, so `decided` is `None` for both. The
-            // copying form allocates by construction, which is `copied`.
+            // copying form allocates by construction, which is `copied` -- unless the plan handed it
+            // the value it was given (stage S3b: nothing else reads that value, so the node runs the
+            // in-place form the operator declares, `ExecPlan::operatorUriFor`), and then the answer
+            // is the plan's own decision and this row is where it is read.
             // `declared` is the fourth answer and it is not the third: `by-count` is measured (the
             // leaf's count answered), `declared` is only claimed (the operator says it reuses, and
             // whether this run allocated cannot be told from here). Printing one word for both
             // would put a promise and a measurement in the same column, and the column is the one
             // the S3b criterion is read with.
             CopyVerdict read = verdictOfDecision(decided);
-            if (!plain.has_value() || decided == StorageReuse::None) {
+            if (copyingForm) {
+                read = decided == StorageReuse::Input || decided == StorageReuse::ByArrayCount
+                           ? verdictOfDecision(decided)
+                           : CopyVerdict::Copied;
+            } else if (!plain.has_value() || decided == StorageReuse::None) {
                 // An in-place form the plan decided nothing about, the loop-state append, and an
                 // operator that only declared reuse: the form asks the array at run time.
                 read = CopyVerdict::ByCount;
             }
             if (declaredOnly) {
                 read = CopyVerdict::Declared;
-            }
-            if (copyingForm) {
-                read = CopyVerdict::Copied;
             }
             switch (read) {
             case CopyVerdict::InPlace:

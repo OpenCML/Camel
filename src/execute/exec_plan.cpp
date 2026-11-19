@@ -646,6 +646,127 @@ struct ValueUses {
 void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses);
 void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses);
 
+/// Whether the value `value` is one this graph **made**, so that handing it to an update can be a
+/// hand-over rather than a read out of something that already names it.
+///
+/// The second half of the proof `nothingElseReadsIt` states, and the half that two cases on this
+/// tree say is missing where it is absent: a value *read out of a container* is the container's,
+/// and no count of the value reveals the container. Two shapes, one fact:
+///
+///   * `b.xs` -- a field read is a node of its own (`GCNodeKind::Accs`) that writes the field into
+///     its slot, and `var b = a` is a second name of the struct, whose leaves are not counted for
+///     it at all (`test/cases/consistency/new_values/two_names_for_a_struct.cml`: the append wrote
+///     where `a` still pointed, and the case printed `a [9, 2]` instead of `a [1, 2]`);
+///   * `rows[1]` on a `int[][]` -- an element read hands out the inner array itself, the same
+///     object the outer array holds, and `rows` is still a name of it
+///     (`test/cases/consistency/new_values/value_used.cml`: `[[0], [1, 2]]` instead of
+///     `[[0], [1]]`).
+///
+/// The answer accepted here is the narrow one that is true today: a COPY (a value made for one
+/// holder), a FILL (an aggregate made from its inputs), a call's return (the callee's own value),
+/// and another *update* -- an operator that names an in-place form makes a new value out of the one
+/// it was given (`:struct/append_arr` clones when it is not handed storage, `array:sort_l` sorts
+/// into a clone, `:op/set_index` writes into one), so a chain of rebindings stays in place. Every
+/// other producer -- a constant, a `var` read, a port, a field read, an element read, a cast --
+/// answers false and the update copies.
+///
+/// This is deliberately narrower than "the graph says nothing else reads it": the day a value read
+/// out of a container is counted for the second name, the clause comes off and the two cases above
+/// keep their readings because the *count* then says so at run time
+/// (`docs/handover/questions/2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md`).
+bool valueMadeHere(const GCGraph &graph, const camel::core::OperatorTable &table, gc_node_ref_t value) {
+    const GCNode *node = graph.node(value);
+    if (node == nullptr) {
+        return false;
+    }
+    switch (node->kind) {
+    case GCNodeKind::Copy:
+    case GCNodeKind::Fill:
+    case GCNodeKind::Call:
+    case GCNodeKind::Func:
+        return true;
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(value);
+        return body != nullptr && table.inPlaceForm(body->uri()).has_value();
+    }
+    default:
+        return false;
+    }
+}
+
+/// Whether the graph shows that nothing but the update `update` reads the value `value` -- the
+/// proof an update needs before it may reuse that value's storage (design principles 10.5: at the
+/// old value's last use a "returns a new value" operation happens in place, and that is a
+/// guarantee, not an optimisation).
+///
+/// It is the caller's half of the author's ruling of 2026-11-17 (docs/handover/reviews/
+/// 2026-11-17-who-owns-the-argument-after-a-call.cn.md, `9699824aa`): "value semantics; the
+/// argument binding is a holder, handed on at the caller's last use and added otherwise, so reuse
+/// in place happens only at count one". A value nothing else reads is handed on -- the count stays
+/// what it was, one -- and the update writes in its storage. Where this answers false the count is
+/// the one that decides, at run time, inside the form itself.
+///
+/// Read as "no other reader at all", not as "the last use in this linear order". The proof has to
+/// hold under the partial order a parallel back end runs in, and only the graph's edges order two
+/// nodes: a reader the walk placed earlier is ordered after the update by nothing, and reading it
+/// as "already done" is the misreading `laterUsersAreOrderedAfter` exists for. No other reader is
+/// a fact the edges cannot take away, so nothing here asks about order.
+///
+/// "Reads it" counts the nodes that *carry* the value as well as the value itself: a JOIN hands on
+/// the arm's value, a GATE passes its input through, a port hands on what it was given
+/// (Builder-level facts: `carried` in planValueUses, `forwardsItsValue`).
+/// A carrier's reader is therefore not yet a reader of the value, and the walk follows them until
+/// it reaches a node that ends the value: the update, or something that keeps it (a store into a
+/// cell, a container that packs it, a call, a `var` read).
+///
+/// Three shapes it must not answer "yes" for, and each falls out of a different clause:
+///
+///   * a constant -- a `Data` node carries nothing, so it is not a carrier of itself and the value
+///     is not one this graph makes. A static value is the program's and never written in place;
+///   * a `var` parameter -- a port with no input of its own carries nothing, so the same clause
+///     answers false, and the array stays the caller's;
+///   * the value the graph returns -- `keptByProgram`: the caller takes it over, so it outlives the
+///     update even though no node in this graph reads it again.
+///
+/// This is one of the two halves. The other is `valueMadeHere`: "nothing else in this graph reads
+/// it" is not yet "nobody else names it", because a container names what it holds and this graph
+/// does not count that.
+bool nothingElseReadsIt(
+    const ValueUses &uses, const std::vector<std::vector<gc_node_ref_t>> &carriersOf,
+    const std::vector<std::vector<gc_node_ref_t>> &users, gc_node_ref_t value,
+    gc_node_ref_t update) {
+    if (value >= uses.carried.size() || value >= users.size()) {
+        return false;
+    }
+    const std::vector<gc_node_ref_t> &carriedByTheValue = uses.carried[value];
+    if (carriedByTheValue.empty() || carriedByTheValue.front() != value) {
+        return false; // not a value this graph makes: a constant, a port, a carrier of another
+    }
+    if (value < uses.keptByProgram.size() && uses.keptByProgram[value] != 0) {
+        return false; // the program keeps it: the caller's reference outlives this graph
+    }
+    size_t reads = 0;
+    for (const gc_node_ref_t carrier : carriersOf[value]) {
+        if (carrier >= users.size()) {
+            continue;
+        }
+        for (const gc_node_ref_t user : users[carrier]) {
+            if (user == update) {
+                ++reads; // the update hands itself the value; exactly one such read is the proof
+                continue;
+            }
+            if (user >= uses.carried.size()) {
+                return false;
+            }
+            const std::vector<gc_node_ref_t> &carriedOn = uses.carried[user];
+            if (std::find(carriedOn.begin(), carriedOn.end(), value) == carriedOn.end()) {
+                return false; // a reader that does not carry the value on: it keeps it
+            }
+        }
+    }
+    return reads == 1;
+}
+
 /// Where each in-place update runs and whether it reuses the storage of the value it is given
 /// (docs/design/arrays-memory/README.cn.md 4.3.1). The update node takes its array from
 /// `:var/take` of a cell; the plan walks the graph in execution order carrying, per cell, whether
@@ -712,6 +833,18 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
     for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderEdges()) {
         if (edge.user >= position.size() || position[edge.user] == count) {
             noteSuccessor(edge.pred, edge.user);
+        }
+    }
+    // Who carries a value: the value's own node and every node that only hands it on (a JOIN, a
+    // GATE, a port, `:enum/field`, an element read outside an array). A value's readers are read
+    // off the carriers one step further out, which is what `nothingElseReadsIt` walks. Built once,
+    // in one pass over the carriers the uses walk already found.
+    std::vector<std::vector<gc_node_ref_t>> carriersOf(nodeCount);
+    for (size_t at = 0; at < nodeCount; ++at) {
+        for (const gc_node_ref_t carriedValue : valueUses.carried[at]) {
+            if (carriedValue < carriersOf.size()) {
+                carriersOf[carriedValue].push_back(static_cast<gc_node_ref_t>(at));
+            }
         }
     }
     std::vector<uint8_t> escapeCache(nodeCount, 0);
@@ -813,6 +946,37 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 const gc_node_ref_t cell = cellOfNode(graph, at);
                 if (cell != kInvalidNodeRef && cell < owned.size()) {
                     owned[cell] = uri == ":op/assn_owned" ? 1 : 0;
+                }
+            } else if (table.inPlaceForm(uri).has_value()) {
+                // The *copying* form of an operator that has an in-place one. A same-region local
+                // `var` is a value and not a cell since stage S1 of the direct-SSA construction
+                // plan, so this is where `v = v->append(x)`, `xs = xs->sort` and `xs[i] = v` on a
+                // value reach the plan now: the expression the program wrote is the copying form,
+                // and the builder's rewriting it into the in-place one
+                // (`Builder::inPlaceRebindingOf`) has nowhere to write.
+                //
+                // What decides is not the shape of the statement -- that is the unit era's rule,
+                // and the author's answer of 2026-11-18 retired it: the decision is the plan's, and
+                // the plan asks two things of the value the update is given: that this graph
+                // *made* it (`valueMadeHere` -- a value read out of a container is that
+                // container's, and the container's second name is not counted anywhere), and that
+                // nothing but this update reads it (`nothingElseReadsIt`). Where both hold the
+                // storage is handed over (StorageReuse::Input) and the node runs the in-place form
+                // instead of the copying one (ExecPlan::operatorUriFor); where either fails, the
+                // node keeps its copying form and allocates, which is the reading's `copied` and
+                // the safe answer (design principles 10.5, "都证明不了就拷贝").
+                //
+                // Nothing is left to the array's own count (`ByArrayCount`) here, and that is the
+                // difference from the cell branch above: a cell can escape the graph, so the count
+                // is the fallback; a value this graph makes cannot, and the plan either has the
+                // proof or does not.
+                const auto norm = graph.normInputsOf(at);
+                const gc_node_ref_t given =
+                    norm.empty() ? kInvalidNodeRef : valueBehindGates(graph, norm.front());
+                if (given != kInvalidNodeRef &&
+                    valueMadeHere(graph, table, given) &&
+                    nothingElseReadsIt(valueUses, carriersOf, users, given, at) && final) {
+                    plan.storageReuseAt[idx] = StorageReuse::Input;
                 }
             }
         }
@@ -1830,17 +1994,35 @@ size_t ExecPlan::storageReuseCount(StorageReuse decision) const {
     return static_cast<size_t>(std::count(storageReuseAt.begin(), storageReuseAt.end(), decision));
 }
 
-std::string_view ExecPlan::operatorUriFor(gc_node_ref_t ref) const {
+std::string ExecPlan::operatorUriFor(gc_node_ref_t ref) const {
     const auto *body = graph != nullptr ? graph->nodeBodyAs<GCOperBody>(ref) : nullptr;
     if (body == nullptr) {
         return {};
     }
     const std::string_view declared = body->uri();
-    if (storageReuseOf(ref) != StorageReuse::Copy) {
-        return declared;
+    const auto &table               = camel::core::OperatorTable::instance();
+    const StorageReuse decided      = storageReuseOf(ref);
+    // The two forms an update has, and the two swaps:
+    //
+    //   * an *in-place* form runs itself, which asks the array at run time
+    //     (Array::writableInPlace). The plan answers Copy only where it proved the storage must
+    //     not be reused, and then the plain (copying) form runs instead.
+    //   * the *copying* form of the same operator runs the in-place form only where the plan
+    //     handed it the value it was given -- the decision is a proof that the value has no other
+    //     reader (stage S3b; `planStorageReuse`). With no decision (StorageReuse::None) it runs
+    //     the URI it names and allocates, which is the safe answer and what the reading calls
+    //     `copied`: swapping on "not Copy" would make every undecided append and sort write in
+    //     place, and the reading would still say `copied` -- the two would disagree about the same
+    //     node, which is how a measured reading and a run can stop describing one table.
+    if (const auto plain = table.plainForm(declared); plain.has_value()) {
+        return decided == StorageReuse::Copy ? std::string(*plain) : std::string(declared);
     }
-    const auto plain = camel::core::OperatorTable::instance().plainForm(declared);
-    return plain.has_value() ? *plain : declared;
+    if (const auto form = table.inPlaceForm(declared); form.has_value()) {
+        return decided == StorageReuse::Input || decided == StorageReuse::ByArrayCount
+                   ? *form
+                   : std::string(declared);
+    }
+    return std::string(declared);
 }
 
 std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
