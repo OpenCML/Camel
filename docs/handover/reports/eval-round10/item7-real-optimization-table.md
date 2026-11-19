@@ -26,13 +26,27 @@
 `step=1 loss=2.882916447` / `trained … val_loss=2.490763096 val_accuracy=0.062500000` / `checkpoint …` / `leaves …`。
 比较时把 `seconds=<数>` 抹掉（每次运行都会变），其余逐字节相同。
 
+**规范文档读数**（同一基座 `2d7c5c3a1` / `2d7c5c3a14` clean，同一 `--arg`，每个一次进程）：
+
+| 图 | 字节 | md5 |
+| --- | --- | --- |
+| 基线 | 161678 | `ba142fd682a19b0e67ff7efd0e8aa932` |
+| `opt::cse` | 159368 | `0faf22f2f4af40d07d7c53c2a0f787f8` |
+| `opt::fold` | 188237 | `21ac5b825af8b29a975a212d9dd7c64f` |
+| `opt::dce` | 161678 | `ba142fd682a19b0e67ff7efd0e8aa932`（**未改图**） |
+| `opt::saturate` | 162945 | `f1f0f4d12dc603352357358f4da8a299` |
+
+`opt::dce` 的文档与基线逐字节相同 ⇒ **未改图**；`cse` / `fold` / `saturate` 三个都改了图。基线连跑两次 md5 相同。
+命令：`camel --arg data=… --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml <pass> std::jgir canonical=true`
+
 ### 2b `showcase/c3-char-transformer/train.cml`（跑不起来）
 
 **程序在定版上跑不起来，与 pass 无关**，原文：
 
 ```
 error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
-   --> showcase/c3-char-transformer/train.cml:121:…  let forward = split(jvp(f))
+   --> /home/zjwei/camel-work/eval/out/latest/stdlib/vjp.cml:121:25
+ 121 |     let forward = split(jvp(f))
 ```
 
 `mode=train` 与 `mode=forward` 都停在同一处，而诊断指的**不是**展示程序的第 121 行，是 `vjp` 的宏体：
