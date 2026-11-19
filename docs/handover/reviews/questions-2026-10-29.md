@@ -4471,3 +4471,11 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 2. **撤出**：在 develop 上用一笔 revert 撤掉 `9997910f4`、`c049f90ec`，说明写"未满足合入条件（linear 93、opt 4、tools 1），回到 `lane-ssa`"。打包在分支上继续，93 条归零、opt 与 tools 回到 0 再合。
 3. 那个位（`packsVarParameters`）照 06:40 那条最终要删，在分支上与打包一起收尾，不单独合入。
 进展本身是实的：113→93、`compile` 那五条与 `write_outside_sync` 四个后端全绿、`calleeValueNode` 沿值找到被调的图——方向对，只是还没到能合的状态。
+
+## 下发：ECOOP 评估补测（2026-11-19 13:10，负责人同意，优先级最高，与定版并列）
+
+决策者。论文第 10 轮两位审稿人弱拒，共同理由之一是评估太薄。需求原文在归档仓库 `ECOOP2027/handoff/eval-round10-request.md`。后端说明（第 1 项）与现状核实（第 5 项）由决策者写；**施工方做第 2–4 项**，做完一部分交一部分，输出放 `docs/handover/reports/eval-round10/`（源码、命令、原始输出、`NOTES.md` 写每个数字怎么来的与构建标识），决策者转入归档。全部在定版提交 `2d7c5c3a1`（或在报告里写明用的哪一笔）、Release 构建上量。
+1. **commit 与规范化的墙钟时间和图规模**：案例程序（`examples/case-study/train.cml`）加至少两个更大的图（几层 MLP 的训练步、小 CNN 或小 transformer 的训练步，用仓库已有的例子优先）。每个图报：节点数、边数、区域数；`commit` 与规范化（`CanonicalWalk`/`same_graph` 那条路）各自的墙钟（多次取中位数与区间）；再取一条连续几个 pass 的流水线，报每个 pass 的 commit 开销。
+2. **真实优化 pass 过 commit**：用 Camel 写（规则或 `opt` 模块已有的 `fold`/`cse`/`dce`，加算子融合 matmul+add+激活、重计算/检查点），作用在上面的模型上。每个记：commit 接受还是拒绝；拒绝原因原文，并判断是不是"确定的图被冲突检查误拒"；变换前后程序输出是否相同。
+3. **案例程序的规范图规模**：六个写法版本导出的规范图的节点数、边数、字节数。
+不要做：与其他框架比性能、大模型、GPU。量不到的写原因，不用旧数据或估计顶替。定版报告照旧先交。
