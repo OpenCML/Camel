@@ -5523,3 +5523,57 @@ exit2-generic 620 · exit3-covered 619 · widened 184 · exit1-not-in-closure 0 
 4. **42 条 `unknown`**：算子侧补声明，批。`stdlib` 侧 `onnx:export_model` 是宏、`main` 的签名在展开前推断——修法是**宏算子与普通算子一样声明它的效应**（`export_model` 写文件，就声明那个写），展开前的签名就带上它；不靠"展开后再推断一遍"。
 5. **`sum<0,false>` 那条撤回，接受**；pack 回归修好后，在 `grad` 这一层（`split(jvp(f))` 的出口与 `transpose(lin)`）重取读数，不对就修那一层。
 6. `rule_expand` 字面量与参数两分（`b307cebea`）：对，合。`nested` 那两条负用例改为钉"`<>` 常量参与匹配"本身（字面量不同就不匹配），不钉回归。
+
+## 负责人回报（2026-11-20 07:35）：**S1-6 的根因找到了 —— 一个没初值的 `bool`**，修法与两条判据已就位
+
+### 一、根因：`builder.h:416-417` 的 `bool synced_; bool varied_;` 没有初值
+
+sanitizer 腿（`44614018464`，Linux Debug + ASan/UBSan）**每一个 stream 用例都在同一处报**：
+
+```
+src/compile/gir/program.cpp:68:64: runtime error: load of value 190, which is not a valid value for type 'bool'
+  #0 camel::compile::gir::Builder::UnitContext::UnitContext(...) program.cpp:68:64
+src/compile/gir/program.cpp:68:90: runtime error: load of value 190, ...
+```
+
+`program.cpp:68` 的两列正是 `synced_(builder.synced_)`、`varied_(builder.varied_)`；而 `builder.h:416-417` 逐字是 `bool synced_;` / `bool varied_;` —— **没有初值**（旁边的 `declaresVariable_ = false`、`genericCalleeAllowed_ = false` 都有）。**`UnitContext` 保存这两个标志时读的是未初始化内存，`~UnitContext` 又把保存的垃圾值原样写回。**
+
+### 二、★ 这一个 `bool` 解释了我们此前全部对不上的现象
+
+| 此前对不上的事 | 现在的解释 |
+|---|---|
+| 为什么**平台相关** | Linux 的页多半是干净的 0（⇒ false ⇒ 正确）；Windows Release 拿到回收堆里的旧字节（⇒ 190 ⇒ true） |
+| 为什么是 **22%** 而不是 100% | 取决于那块内存在每次进程里恰好是什么 |
+| 为什么**满载更高（35%）** | 满载时堆被别的进程扰动 |
+| 为什么**与程序形状有关** | 不同程序有不同的分配历史 |
+| 为什么 **Linux 120 次（含 `MALLOC_PERTURB_` 0/85/170）一次不出** | 这条路径上**没有读已死内存**，读的是**没写过的内存** —— `MALLOC_PERTURB_` 只填「释放后」的块，管不到「从未写过」 |
+
+⇒ 而 `synced_` / `varied_` 决定**语句怎么串成 sync 链、循环/机器怎么建** ⇒ 一个垃圾桶里的 `true` 足以让某个闭包建在另一张图下，于是捕获记录落在包不住的地方，最后在我们那句守卫上炸。
+
+⇒ **这正是你 06:20 给 `sum<0,false>` 定性的那一类：「读了不该读的内存」。** 两条是同一类缺陷的两个实例。
+
+### 三、修法（`8c2d57ce9`，一行真改）
+
+```cpp
+    bool synced_ = false;
+    bool varied_  = false;
+```
+
+取 `false`，也就是每个 context 在开始建语句之前都会赋的那个值 ⇒ **凡是此前有定义的行为一个都不变，变的只有此前未定义的那些读。** 没有碰守卫、没有在断言处加兜底。全文件扫过：`builder.h` 里没有初值的标量成员**只有这两个**。
+
+### 四、两条互不相干的判据（验证轮 `44619882864` 进行中）
+
+1. **Windows 正面**：80 次探针里 39 次失败（**48.8%**）→ **0 次**（48.8% 下 80 次全绿的概率低于 1e-26）
+2. **Linux 第二条独立通道**：ASan/UBSan 腿里 `program.cpp:68` 的 UBSan 报错 → **消失**
+
+⇒ 只有一条成立不算修好。
+
+### 五、三端 `[FAIL]` 名单（你 07:30 第 3 条要的）
+
+三端 `total` 均为 **9793**：win `fail 21` / linux `fail 9` / macos `fail 23`。**linux 那 9 条全部包含在 win 那 21 条里。**
+
+三端共同红 8 条：`print_and_recompile` · `runner.backend_matrix` · `runtime.graph_draft_ledger.never_rises` · `new_values.sort_rebinding.graph` · `05_effect_order` · `gpu_scope.a_run_without_a_device_names_its_own_configuration` · `docs.links.citations` · `docs.ai_reference.current`
+
+⇒ 其中后两条是**好修的债**：`docs.links.citations` 是某用例引 `stdlib/vjp.cml:182`（应改 `#Symbol`）；`docs.ai_reference.current` 是 `stdlib-signatures` 区过期，`node scripts/camel-for-ai.mjs --write` 即可。
+
+⇒ **注意：CI 的 9793 与我方七项计划的 8163 不是同一个选择** —— 所以「本地绿」与「CI 绿」在数量上不是同一件事。这一点印证你第 3 条的判断。
