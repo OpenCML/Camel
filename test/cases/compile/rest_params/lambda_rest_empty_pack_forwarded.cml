@@ -1,0 +1,28 @@
+// A lambda's rest pack with no member is a value in its body like any other: the name is bound,
+// and a spread of it after a fixed argument expands to the arguments before it and nothing else.
+//
+//   let none: () => float = (...ys) => add3(1.0, 2.0, ...ys)
+//
+// The pack has no member here -- the lambda is called with no argument -- so the call is
+// `add3(1.0, 2.0)` and the third parameter takes its default: 3.0. Until 2026-11-20 the name was not
+// bound at all and this line was `UnresolvedReference: 'ys'`, while the same forwarding written in a
+// declaration (`func pad(...ys) = add3(1.0, ...ys)`, called as `pad(1.0)`) answered: one construct
+// with two answers, and the lambda's was the refusal (`src/compile/gir/builder.cpp`, the rest
+// parameter's tuple was built only when it had a member).
+//
+// The one-member pack is here beside it, because the point is that the empty one is not a case of
+// its own: both are the same tuple, and the difference between the two calls is how many members
+// the caller gave it. 3.0 and 6.0 are different numbers, so a spread that dropped the fixed
+// arguments, or that put the pack's member where a fixed argument belongs, shows as a wrong line
+// and not as the right one twice.
+func add3(a: float, b: float, c: float = 0.0): float {
+    return a + b + c
+}
+
+func main(): int sync {
+    let none: () => float = (...ys) => add3(1.0, 2.0, ...ys)
+    let one: (v: float) => float = (...ys) => add3(1.0, ...ys)
+    println('rest empty {}'->format<none()>)
+    println('rest onemember {}'->format<one(5.0)>)
+    return 0
+}

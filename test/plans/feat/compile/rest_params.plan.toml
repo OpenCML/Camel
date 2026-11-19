@@ -158,6 +158,19 @@ expect_output_not_contains = ["Unresolved reference", "is not a compile-time tup
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 [[tests]]
+name = "lambda_rest_empty_pack_forwarded"
+desc = "A lambda's rest pack with no member is a value in its body too: `let none: () => float = (...ys) => add3(1.0, 2.0, ...ys)` names a pack the position gave no member, spreads it after two fixed arguments, and reads 3.0 (the third parameter takes its default). It was `UnresolvedReference: 'ys'` while the same forwarding in a declaration (`func pad(...ys) = add3(1.0, ...ys)`, called as `pad(1.0)`) answered -- the lambda's tuple was built only when it had a member (`src/compile/gir/builder.cpp`), so one construct had two answers and only the lambda's was a refusal. The one-member pack is the same entry's second line and reads 6.0 (`add3(1.0, 5.0)`), because the empty one is the same tuple with nothing in it and not a case of its own; 3.0 and 6.0 are different numbers, so a spread that dropped a fixed argument shows as a wrong line."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/lambda_rest_empty_pack_forwarded.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rest empty 3.0", "rest onemember 6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "rest_argument_not_last"
 desc = "`...e` is the last argument: what follows it cannot be told from its elements."
 kind = "negative"

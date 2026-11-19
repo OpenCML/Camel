@@ -58,7 +58,7 @@ func main(): int sync {
              engine_curve = [] as float[],
              worst = 0.0
         while round < 12 do {
-            let library_gradient = library_step(library_weight, x, t)
+            let library_gradient = library_step<library_weight>(x, t)
             let library_loss = loss<library_weight>(x, t)
             let (engine_loss, engine_gradient) = with_grad(loss)<engine_weight>(x, t)
             (
