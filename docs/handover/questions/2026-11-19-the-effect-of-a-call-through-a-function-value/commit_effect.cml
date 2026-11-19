@@ -1,0 +1,79 @@
+// The effect of a call through a function value is the clause of the value's function type
+// (`src/runtime/resources.cpp`, `Resolver::call`). `grad` declares its transformation pure and the
+// type of the function it answers with is derived from the one it transforms, so the call in `step`
+// below reaches nothing; when the analysis recorded it as `write unknown` instead, a graph holding
+// one read as already beyond its own type and the effect check never asked -- which is how a commit
+// into `step` was refused by the *order* check and not by the effect check.
+//
+// The type text is printed first: the reading is that this call site has a clause to read at all,
+// and that the commit below is refused by `RuntimeDiag::PassEffectBeyondType` and not by
+// `RuntimeDiag::PassEffectOrder`.
+
+import { grad } from autodiff
+import { Node, NodeKind, graph_of, nodes, op, op_name, kind, type_of, type_name, open, inline, commit } from graph
+
+// The differentiated function: `grad` differentiates the first `with` parameter (design principles
+// 9.9), so `loss` takes the weight as one and the data as its ordinary parameter.
+with <w: float>
+func loss(x: float): float {
+    let e = x * w - 1.0
+    return e * e
+}
+
+// The call through a function value: `dloss` is `grad`'s answer, and nothing in the program says
+// which graph it runs -- what the call does is what the type of `dloss` says.
+func step(w: float, x: float): float {
+    let dloss = grad(loss)
+    let g = dloss<w>(x)
+    return w - 0.1 * g
+}
+
+// The body the edit splices in: one print, which `step`'s type does not declare.
+func announce(): int sync {
+    println('announced')
+    return 42
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+}
+
+func isGrad(n: Node): bool spelling {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == 'autodiff:grad'
+    }
+}
+
+// A constant: a pure node that stands in no chain, so the splice only picks the region and the
+// commit is asked about the effect alone.
+func isConstant(n: Node): bool {
+    return kind(n) == NodeKind::Data
+}
+
+func isPrint(n: Node): bool spelling {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':io/println'
+    }
+}
+
+func firstWhere(ns: Node[]): Node {
+    return ns[0]
+}
+
+func main(): int spelling sync {
+    let g = graph_of(step)
+    let gradNode = firstWhere(nodes(g)->filter<isGrad>)
+    println(`[type] the value the call runs: ${typeText(gradNode)}`)
+    let at = firstWhere(nodes(g)->filter<isConstant>)
+    let t = open(step)
+    inline(t, at, announce)
+    let edited = commit(t) !! step
+    let h = graph_of(edited)
+    println(`[commit] accepted, prints=${len(nodes(h)->filter<isPrint>)}`)
+    return 0
+}
