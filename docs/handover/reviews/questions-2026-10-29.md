@@ -4492,3 +4492,14 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 
 决策者。论文第 6.1 节的"六个写法逐字节相同"是 ECOOP 一侧 11-15 在 `29ea0a011` 上用自己做的变体测的，文件不在 Camel 树里，已拷到 `docs/handover/reports/eval-round10/case-study-variants/`：`train.cml`、`train-swap.cml`（交换 `before` 与 `model` 两条调用声明）、`train-rename.cml`、`train-inline.cml`、`loss-a.cml`、`loss-b.cml`（商的两半命名、两种顺序），另有反例 `train-reorder-output.cml`（交换两条 `println`，应当不同）；当时的校验和在 `MD5SUMS-at-29ea0a011.txt`。
 在**常量编号修复之后的新定版 P′** 上：六个文件各跑 `camel <f> std::jgir canonical=true`，报 md5 与 sha256；反例一个；再报 `train.cml` 的图数、节点数、边数、字节数（与第 3 项同一数法）。若六个不全相同，逐对报第一处差异（与第 3 项 §2 同样的写法）。修复若今天落不了地，先在 `2d7c5c3a1` 上跑一遍交，修复后再跑一遍。
+
+## 下发（2026-11-19 13:55，今天必须给结论）：论文正文两处占位，只能靠实测填
+
+决策者。今天是投稿日，这两项**今天做不完论文就删掉那两处**，所以排在第 2 项之前、与定版并列。都在 `2d7c5c3a1` 上、Release，输出放 `docs/handover/reports/eval-round10/`，做完立即合入 develop（只加用例与报告）。
+**(1) 案例程序上的两个坏 pass**（用 Camel 写，走图模块今天的接口：`open`/编辑/`commit`；以 `case-study-variants/train.cml` 为对象，`edits-ecoop.cml` 是 ECOOP 一侧已有的 pass 库，可在其中加）：
+- 甲：在 `main` 里加一个 `println`，不与已有三个 `println` 排序（例如在纯节点处 `inline` 一个打印的函数）。预期：commit 被**冲突检查**拒。
+- 乙：在 `step` 里加一个 `println`，`step` 的类型不声明 `console`/`stdout`。预期：commit 被**效应检查**拒。
+- 报：是否被拒、退出码、拒绝信息**原文**；再给一个合法对照（同样的打印但排好序、或类型声明了效应）被接受、程序输出正确。若被接受了，照实报——那是缺陷，同样要交。
+- 现成的参照：`reports/2026-11-18-eco-measurements.cn.md` §2 的三条（`fold_function_type.cml` 上的 C++ 测试遍）；这次要的是案例程序上、Camel 写的 pass。
+**(2) 融合 pass 作用于 `loss-a.cml`、`loss-b.cml`**（同在 `case-study-variants/`）：用 Camel 写的融合变换（`test/cases/opt/writings/greedy_fuse.cml.in` 的贪心融合可直接用，或一个乘加融合）分别作用于两种写法，各导出 `std::jgir canonical=true`，报两份的 md5/sha256 与是否相同；不同就报第一处差异。
+**做不到的那一项，在本页回一行"今天做不到 + 原因"，越早越好**——决策者据此告诉论文删哪一处。
