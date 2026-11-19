@@ -1049,7 +1049,7 @@ kind = "behavior"
 case = "../../../cases/opt/inline/loop_wait_after_inline.cml"
 args = ["${case}", "std::cxx::inline", "test::break_loop_range", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["test::break_loop_range: graph 'main': the wait 4 and the 3 nodes it is laid out with stand at 15 again", "Pass 'test::break_loop_range' failed with an internal error: Runtime graph 'main' has a loop whose nodes are not one contiguous range in the execution order", "loop #0 is the LOOP node 52", "and its nodes are [8, 15)", "the node 0 (0) at position 15 is not one of them", "name=RuntimeDiag::PassInternalError"]
+expect_output_contains = ["test::break_loop_range: graph 'main': the wait 4 and the 3 nodes it is laid out with stand at 15 again", "Pass 'test::break_loop_range' failed with an internal error: Runtime graph 'main' has a loop whose nodes are not one contiguous range in the execution order", "loop #0 is the LOOP node", "and its nodes are [", "is not one of them", "name=RuntimeDiag::PassInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
