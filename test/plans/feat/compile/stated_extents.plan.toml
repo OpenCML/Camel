@@ -354,3 +354,43 @@ expect_output_contains = ["The transpose of 'total' needs the shape of the param
 expect_output_not_contains = ["open through transpose answered", "Nothing is missing from the language here", "compiler defect", "not the program's fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The smallest reading of the lane sum's derivative, and the only case in this plan that asks for
+# the derivative of `sum<axis, keepdims>` and nothing else: the value is the reduction's, the
+# tangent is `sum_axis_stated`'s (`jvp_sum_axis`), the gradient is `sum_axis_stated_t`'s
+# (`lane_spread`, `keepdims=false`, so the reduced extent is put back before the broadcast).
+#
+# `[[1, 2], [3, 4]]` summed down the leading axis is `[4.0, 6.0]`; every element of the operand
+# lands in exactly one lane, so a cotangent of ones gives `[[1.0, 1.0], [1.0, 1.0]]`, and a tangent
+# of ones gives `[2.0, 2.0]` (two elements per lane, each contributing 1).
+[[tests]]
+name = "sum_axis_lane_derivative"
+desc = "The derivative of `sum<0, false>` on `[[1.0, 2.0], [3.0, 4.0]]`, both directions on one value: the forward is `[4.0, 6.0]`, the tangent of a ones seed is `[2.0, 2.0]`, and the pullback of a ones cotangent is `[[1.0, 1.0], [1.0, 1.0]]`. The three numbers are pinned as literals because they are the whole point of the case: the forward half and the derivative half are different laws (`jvp_sum_axis` against `sum_axis_stated_t`), and the `keepdims=false` half is the one whose adjoint has to put the dropped extent back before it broadcasts. A repeated wrong number reads as a plausible answer here -- every element of a lane holds the same value -- so the case pins the exact digits rather than a magnitude or a shape."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sum_axis_lane_derivative.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sum<0> forward=[4.0, 6.0]", "sum<0> tangent=[2.0, 2.0]", "sum<0> gradient=[[1.0, 1.0], [1.0, 1.0]]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The lane sum in the shape a real step reads it: a bias shared by both rows of a batch, whose
+# gradient is the sum down the batch axis. Both legs are pinned, and the numbers are hand-derived in
+# the case's header, so a lane sum that answered a repeated wrong value would be caught by the digits
+# and not by the shape.
+[[tests]]
+name = "sum_axis_in_a_training_step"
+desc = "A two-row MLP whose bias gradient is `sum<0, false>` of the hidden gradient, with every number hand-derived in the case's header: the engine's step answers `loss=180.0`, `dL/db=[24.0, 24.0]` and `dL/dw=[[78.0, 78.0], [102.0, 102.0], [126.0, 126.0]]`, and the library's forward transform reads four of those positions back one seed at a time -- `dL/dw[0][0]=78.0`, `dL/dw[1][0]=102.0`, `dL/dw[2][0]=126.0`, `dL/db[0]=24.0`. The four numbers are distinct on purpose: an all-ones gradient, which is what a lane sum that spread one number over the whole tensor would answer here, matches none of them. The library's reverse leg is not asked, and the case's header says why: `dy * dy` stops the transposition at `skip=law-reads-a-value uri=tensor:multiply position=1`, the wall `broadcast_product_gradient_of_an_open_rank.cml` already records, and that refusal is not the lane sum's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sum_axis_in_a_training_step.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["step engine  loss=180.0 dL/db=[24.0, 24.0] dL/dw=[[78.0, 78.0], [102.0, 102.0], [126.0, 126.0]]", "step library dL/dw[0][0]=78.0", "step library dL/dw[1][0]=102.0", "step library dL/dw[2][0]=126.0", "step library dL/db[0]=24.0"]
+expect_stderr_contains = ["jvp_sum_axis"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

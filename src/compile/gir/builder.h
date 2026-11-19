@@ -413,8 +413,17 @@ class Builder {
     camel::core::module::ProgramExports ownExports_;
     camel::core::module::ProgramExports *exports_;
 
+    /// Whether the statement being built is one of a sync chain, and whether it varied (the two
+    /// decide how a statement is chained, design principles 5.2). Initialized here and not left to
+    /// the first writer: `UnitContext` saves them and its destructor puts them back
+    /// (`program.cpp:68`, `:99`), and the save is the *first* read of them in a program whose
+    /// first context is built before any statement exists. UBSan reports that read as a load of a
+    /// value that is not a `bool` (CI's sanitizer leg, `program.cpp:68:64` and `:68:90`), and a
+    /// save of garbage hands garbage back when the context ends: on a target whose freed heap is
+    /// not zeroed, every later statement then believes it is in a sync chain. A boolean is a
+    /// `bool` from its first read, not from its first write.
     bool synced_ = false;
-    bool varied_ = false;
+    bool varied_  = false;
     // The numeric permissions in force where the builder is (design principles 7.5): those of
     // the nearest GCT EXEC, which already include every enclosing block and function
     // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
@@ -695,8 +704,26 @@ class Builder {
     /// otherwise the capture port of `graph` bound to it, made (with the ports of the graphs
     /// between `graph` and the origin's graph) when there is none yet. `name` is the name
     /// the new ports are shown with.
-    node_handle_t
-    captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
+    ///
+    /// `capturing` is the graph the capture is made *for*, carried through the walk up so that
+    /// the report can name it: the outermost `graph` of this call, which is not `currGraph_`
+    /// when the caller captures on a callee's behalf (`linkCaptureSites`), and it is the pair
+    /// (capturing, origin's graph) that says which record was made of a value that graph cannot
+    /// reach. The walk itself reads only `graph`.
+    node_handle_t captureInto(
+        const compile_graph_ptr_t &graph,
+        node_handle_t origin,
+        const std::string &name,
+        DraftGraphBuilder *capturing = nullptr);
+    /// Whether the graph being built is `origin`'s own graph or one of its inner graphs, so that
+    /// a capture of `origin` here is a capture this graph can make.
+    ///
+    /// The question is a condition on the *caller*, not on `captureInto`: a capture is named by
+    /// the graph that makes it, so the places that hand a callee's captured variables to a call
+    /// ask it first. A function value made in another function carries its captures inside it --
+    /// what is handed over is the value, not the cells -- and the cells cannot be named here
+    /// (`addArgumentCaptures` asks the same question for a function-typed argument).
+    bool enclosesOrigin(node_handle_t origin) const;
     /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
     /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
     /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level
