@@ -1389,6 +1389,14 @@ const PINNED_COVERAGE_EXCEPTIONS = [
             'the compiler reporting that it has no code for a state it reached; no program provokes it,'
             + ' so no case can pin it -- the registry entry exists so the reporter has something to say',
     },
+    {
+        fullName: 'SemanticDiag::OperatorAccessesUndeclared',
+        reason:
+            'raised at the load of the built-in module when one of its operators itemizes no accesses;'
+            + ' every built-in operator itemizes them now, so a program cannot provoke it -- the load'
+            + ' refuses before a program is read, and a case that pinned it would have to register an'
+            + ' operator without a declaration, which is the mistake it refuses',
+    },
 ]
 
 // Back to 16, and this time it is a reading rather than the prediction it was two commits ago.

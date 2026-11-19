@@ -11,6 +11,12 @@ desc = "A body-less `export func` in a `.cml` is the declaration of an operator 
 # functions of the module; a declaration whose operator is not loaded (a located diagnostic, not
 # silence); a call of the wrong arity and of the wrong type; and the `#op` exception for a name
 # whose module is not the declaration's.
+#
+# The other half of a native operator's declaration -- what it touches -- is refused where the
+# operator is registered and not here: an operator of the built-in module that itemizes no accesses
+# stops the load with `SemanticDiag::OperatorAccessesUndeclared` (author 2026-11-19, design
+# principles 3.3). No program provokes it, because every built-in operator itemizes its accesses
+# now; what it retires is the pair of readers that answered such an operator two different ways.
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]

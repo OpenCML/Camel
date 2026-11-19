@@ -1885,6 +1885,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::OperatorAccessesUndeclared,
+            {
+                "OperatorAccessesUndeclared",
+                "The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches.",
+                "An operator that itemizes none is read as writing the global resource, and the graph builder read the same operator a different way -- every operand read-modify-written -- so one call was on the sync chain for one reader and not for the other, and neither answer was a declaration. This is a mistake in the operator's registration, not in a program: declare its accesses where it is registered (OperatorTable::declareResources in src/builtin/executors/builtin_semantics.cpp) -- the empty list where it is pure, the operand or ambient resource it reads or writes otherwise -- and the load goes on.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

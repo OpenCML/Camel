@@ -474,6 +474,29 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     return map;
 }
 
+namespace {
+/// The built-in module's operators itemize their accesses (design principles 3.3, author
+/// 2026-11-19), or the load stops. One report for all of them: the repair is the same in each and
+/// it is the module's, not the program's -- an operator that leaves its accesses out is read two
+/// different ways (the graph builder read-modify-writes every operand; the declaration's readers
+/// see one write of the global resource), and declaring what it touches settles both.
+void requireDeclaredBuiltinAccesses(std::span<const std::string_view> names) {
+    auto &registry = camel::core::OperatorTable::instance();
+    std::string missing;
+    for (std::string_view name : names) {
+        const std::string uri = ":" + std::string(name);
+        const auto id         = registry.lookup(uri);
+        if (id.has_value() && registry.declaresAccesses(*id)) {
+            continue;
+        }
+        missing += (missing.empty() ? "" : ", ") + uri;
+    }
+    if (!missing.empty()) {
+        throw DiagnosticBuilder::of(SemanticDiag::OperatorAccessesUndeclared).commit(missing);
+    }
+}
+} // namespace
+
 void registerBuiltinOperatorTraits() {
     // The access list is the effect declaration (design principles 3.3; the record's fields are
     // docs/design/op-semantics/README.cn.md 4.2). This list is the operators of the table that
@@ -513,6 +536,17 @@ void registerBuiltinOperatorTraits() {
         "enum/field",
         "enum/make",
         "enum/tag",
+        // The two function-valued operators the compiler no longer builds: `:macro/cmp` answers
+        // the null slot and `:struct/copy_arr` is the private copy a loop state starts from (its
+        // `copyWithRoom` allocates a new array and leaves the argument as it was). Neither touches
+        // a resource, so both are declared here, where the empty list is the declaration
+        // (design principles 3.3; author 2026-11-19).
+        "macro/cmp",
+        "struct/copy_arr",
+        // The append the loop rewrite gives a state it knows is held alone: it appends inside that
+        // storage and copies when the array has another holder, which is `:struct/append_arr`'s
+        // own answer, and that one is in this list too.
+        "struct/append_arr_owned",
         "op/add_bf",
         "op/add_bytes",
         "op/add_c",
@@ -674,13 +708,15 @@ void registerBuiltinOperatorTraits() {
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
-        // An operator outside kAccessFree has an effect and does not itemize it here: it
-        // declares that much and is read as writing the global resource until
-        // declareBuiltinOperatorResources says what it really touches (the variable
-        // operators, the console, the profiler). `op/keep` is in that group on purpose: a pass
-        // inserts it for a node that must keep running, and an operator nobody declared is
-        // read the same way, so no pass drops it, merges it, moves it or computes it early
-        // (`src/builtin/operators/ops.h`).
+        // An operator outside kAccessFree has an effect and does not itemize it here: it declares
+        // that much and `declareBuiltinOperatorResources` says what it really touches (the
+        // variable operators, the console, the profiler). An operator left out of both lists is
+        // refused by the load below, not read as writing the global resource: the two readers that
+        // used to disagree about such an operator (the builder read-modify-wrote every operand,
+        // the declaration's readers saw one write of the global resource) are what this file now
+        // makes impossible instead of deciding differently. What keeps a node that must keep
+        // running is its own declaration -- a run the program can observe is an effect the region
+        // owes (design principles 3.4), not a resource guessed for it.
         registry.set(
             ":" + name,
             {.pure        = kAccessFree.contains(key) || conversionNames.contains(key),
@@ -724,15 +760,18 @@ void registerBuiltinOperatorTraits() {
         {.pure = false, .callsGraphs = true});
     // The transform that gives the function of that node (:mark/attempt) is read by the builder,
     // which turns `attempt(f)` into the value itself: no graph ever holds this node, and the
-    // declaration is the conservative one, as for the operator the value calls.
-    registry.set(
-        std::string(camel::execute::kAttemptTransformUri),
-        {.pure = false, .callsGraphs = true});
+    // transform calls nothing -- the marked call the value stands for is `:mark/isolate`'s, and
+    // that one declares the external effect. So the transform is pure: it touches no resource,
+    // and what a call of the value it gives does is the value's own effect (author 2026-11-19).
+    registry.set(std::string(camel::execute::kAttemptTransformUri), {.pure = true});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
+    // The cell a generator's local is made with before it has a value: a variable of the
+    // program's, made the same way, and nothing outside the program changes (author 2026-11-19).
+    registry.set(":var/new/empty", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/after", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
@@ -774,6 +813,13 @@ void registerBuiltinOperatorTraits() {
         names.push_back(name);
     }
     declareBuiltinOperatorResources(names);
+    // Every operator of the built-in module itemizes its accesses (design principles 3.3, author
+    // 2026-11-19). An operator that itemizes none was read as writing the global resource, while
+    // the graph builder read the same operator as read-modify-writing every operand: one call was
+    // on the sync chain for one reader and not for the other, and neither answer was a declaration.
+    // The check is here, where the module's operators are registered and once, so a new one that
+    // leaves its accesses out stops the load rather than being read two ways forever.
+    requireDeclaredBuiltinAccesses(names);
     // What two of those operators answer when the value is not one of their own: the element read
     // hands on the slot the array holds and the field read the slot the variant holds, so the plan
     // counts them as carriers instead of reading a list of their names (src/execute/exec_plan.cpp,
