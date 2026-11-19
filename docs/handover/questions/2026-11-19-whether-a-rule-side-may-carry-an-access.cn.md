@@ -129,3 +129,25 @@ git grep -n "not a value a rewrite may read"        # 只有 src/runtime/writing
 **③ 为什么本轮没量到**：`CAMEL_RULE_ACCESS_REPORT` 是进程环境变量，而远端闸门
 `internal/tools/camel-remote.ps1` 只能传文件、计划和 `-Check`，没有设置环境变量的入口；把调查口径做成
 仓库检查器要改 `test/tools`（墙），不在本 lane 的范围里。⇒ 本页按裁定的退路报 `15～38` 并写明**上界未量**。
+
+## 六计划的原始读数（`lane-K-rule-access` @ `3b00109c1`）
+
+一条计划一次调用，`-Plan` 用正斜杠，闸门 `internal/tools/camel-remote.ps1`，`-Jobs 8`：
+
+```
+feat/compile  [SUMMARY] total: 2635, pass: 2619, fail: 0, known failures: 16
+feat/parse    [SUMMARY] total: 126, pass: 126, fail: 0
+feat/tools    [SUMMARY] total: 70, pass: 70, fail: 0
+feat/opt      [SUMMARY] total: 1617, pass: 1617, fail: 0
+feat/trans    [SUMMARY] total: 109, pass: 104, fail: 5
+feat/linear   [SUMMARY] total: 869, pass: 864, fail: 0, skip: 2, known failures: 3
+```
+
+- `feat/parse` 第一次是 `125/1`：新用例 `side_access.cml` 还没进 `ast_hashes.txt`；用 `-UpdateAstHashes`
+  记上那一行（4443 行）后 `126/126`。
+- `feat/tools` 的计划本身 `70/70`，进程退出 1 来自闸门的 `gpu-plans` **报告式**检查（host 侧 GPU 证据与
+  记录的 `0x040001B0` 对不上），与本次改动无关。
+- `feat/trans` 的 5 条红（`dump_after_each_pass`、`print_and_recompile`、
+  `print_then_run_agrees_with_the_origin`、`print_then_run_negative_swap_is_seen`、`gir_prints_one_hash`）
+  **不是本次改动带来的**：把工作树退回 `9b3869d66` 的内容再跑同一计划，读数是
+  `[SUMMARY] total: 109, pass: 104, fail: 5`，红的正是这五条。
