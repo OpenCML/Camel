@@ -50,6 +50,7 @@ CAMEL="$CAMEL_HOME/bin/camel"
 
 VARIANTS=docs/handover/reports/eval-round10/case-study-variants
 PROBES=docs/handover/reports/eval-round10/probes
+PROBES_ROOT=$ROOT/$PROBES
 E2E=docs/handover/reports/eval-round10/e2e
 MLP=showcase/c2-mlp-mnist/train.cml
 TRANSFORMER=showcase/c3-char-transformer/train.cml
@@ -95,8 +96,10 @@ runkept() {
     shift
     echo "### camel $*"
     "$CAMEL" "$@" > "$SCRATCH/$tag.out" 2>&1
-    echo "### exit=$?"
-    sed -E 's/seconds=[0-9.]+/seconds=<masked>/g' "$SCRATCH/$tag.out"
+    st=$?
+    sed -E 's/seconds=[0-9.]+/seconds=<masked>/g' "$SCRATCH/$tag.out" > "$SCRATCH/$tag.masked"
+    echo "### exit=$st"
+    cat "$SCRATCH/$tag.masked"
     echo
 }
 
@@ -153,11 +156,33 @@ import json
 import sys
 
 d = json.load(open(sys.argv[1]))
-for key in ("config", "revision", "footprint", "fingerprint", "builtAt", "dirty", "dirtyCount", "sourceFiles", "buildOptions"):
-    if key in d:
-        print("#   %-12s %s" % (key, d[key]))
+fp = d.get("fingerprint", {})
+opt = d.get("buildOptions", {})
+print("#   %-12s %s" % ("config", d.get("config")))
+print("#   %-12s %s" % ("revision", d.get("revision")))
+print("#   %-12s %s" % ("dirty", "%s (%s path(s))" % (d.get("dirty"), d.get("dirtyCount"))))
+print("#   %-12s %s" % ("builtAt", d.get("builtAt")))
+print("#   %-12s %s" % ("footprint", d.get("footprint")))
+print("#   %-12s %s of %s files under %s"
+      % ("fingerprint", fp.get("hash"), fp.get("files"), ", ".join(fp.get("roots", []))))
+print("#   %-12s %s platform %s" % ("buildOptions", opt.get("hash"), opt.get("platform")))
+print("#   %-12s cmake %s" % ("", json.dumps(opt.get("cmake", {}), sort_keys=True)))
+print("#   %-12s env   %s" % ("", json.dumps(opt.get("env", {}), sort_keys=True)))
 PY
 echo "#   version    $("$CAMEL" --version 2>&1)"
+# The binary carries the sha of the sources it was linked from, inside its footprint; the reading
+# is only reproducible if this tree is those sources, so the difference is printed.
+FPSHA=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["footprint"].split("_")[-1])' "$CAMEL_HOME/build-info.json" 2>/dev/null)
+if [ -n "$FPSHA" ]; then
+    CHANGED=$(git -C "$ROOT" diff --name-only "$FPSHA" HEAD 2>/dev/null)
+    if [ -z "$CHANGED" ]; then
+        echo "#   linked at  $FPSHA, and this tree is exactly those sources"
+    else
+        echo "#   linked at  $FPSHA; the files this tree has on top of it (the binary does not include"
+        echo "#             them, so no reading below depends on them):"
+        printf '%s\n' "$CHANGED" | sed 's/^/#               /'
+    fi
+fi
 echo "#"
 echo "# No reading below came from another build. A row that could only be taken on an older pin"
 echo "# would say so on the row; there is none in this run."
@@ -214,9 +239,10 @@ echo
 for b in nvm fvm jit; do
     runkept "back-$b" "$CASE" "std::$b"
 done
-echo "# the three outputs against each other"
-printf 'nvm against fvm  %s\n' "$(first_diff "$SCRATCH/back-nvm.out" "$SCRATCH/back-fvm.out")"
-printf 'nvm against jit  %s\n' "$(first_diff "$SCRATCH/back-nvm.out" "$SCRATCH/back-jit.out")"
+echo "# the three outputs against each other (the masked text: the program itself prints no time, and"
+echo "# a comparison of the raw files would part on one if it ever did)"
+printf 'nvm against fvm  %s\n' "$(first_diff "$SCRATCH/back-nvm.masked" "$SCRATCH/back-fvm.masked")"
+printf 'nvm against jit  %s\n' "$(first_diff "$SCRATCH/back-nvm.masked" "$SCRATCH/back-jit.masked")"
 echo
 
 # ---------------------------------------------------------------------------------------------
@@ -273,9 +299,10 @@ for p in "" opt::cse opt::fold opt::dce opt::saturate; do
         "--arg" "data=$SCRATCH/mlp-data" --arg steps=2 --arg batch=16 --arg lr=0.001 \
         --arg log_every=1 --arg threads=1 "$MLP" $p std::nvm
 done
-echo "# each run against the baseline run"
+echo "# each run against the baseline run (the masked text, so the run's own seconds= is not the"
+echo "# difference: that field moves every run and says nothing about the pass)"
 for p in opt::cse opt::fold opt::dce opt::saturate; do
-    printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/mlp-run-baseline.out" "$SCRATCH/mlp-run-$(leaf "$p").out")"
+    printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/mlp-run-baseline.masked" "$SCRATCH/mlp-run-$(leaf "$p").masked")"
 done
 echo
 echo "# --- the char-transformer: showcase/c3-char-transformer/train.cml ---"
@@ -330,10 +357,10 @@ echo
 timing() {
     tag=$1
     word=$2
-    echo "### CAMEL_PACKAGES=$PROBES camel examples/case-study/train.cml $word std::jgir canonical=true --time-phases=$SCRATCH/ph-$tag-<n>.json   (nine times, a fresh process each)"
+    echo "### CAMEL_PACKAGES=$PROBES_ROOT camel examples/case-study/train.cml $word std::jgir canonical=true --time-phases=$SCRATCH/ph-$tag-<n>.json   (nine times, a fresh process each)"
     i=1
     while [ "$i" -le 9 ]; do
-        CAMEL_PACKAGES="$PROBES" "$CAMEL" examples/case-study/train.cml "$word" std::jgir canonical=true \
+        CAMEL_PACKAGES="$PROBES_ROOT" "$CAMEL" examples/case-study/train.cml "$word" std::jgir canonical=true \
             --time-phases="$SCRATCH/ph-$tag-$i.json" > "$SCRATCH/ph-$tag-$i.out" 2>&1
         i=$((i + 1))
     done
@@ -348,14 +375,19 @@ for i in range(1, 10):
     d = json.load(open("%s/ph-%s-%d.json" % (scratch, tag, i)))
     hit = [p for p in d["phases"] if p["name"] == "pass" and p["detail"] == word]
     if not hit:
-        print("run=%d no 'pass' phase named %s" % (i, word))
+        said = open("%s/ph-%s-%d.out" % (scratch, tag, i)).read().strip().splitlines()
+        print("run=%d no 'pass' phase named %s; its first line of output: %s"
+              % (i, word, said[0] if said else "(it printed nothing)"))
         continue
     p = hit[0]
     wall.append(p["wall_ns"] / 1e6)
     cpu.append(p["cpu_ns"] / 1e6)
     print("run=%d wall_ms=%.2f cpu_ms=%.2f total_ms=%.2f" % (i, wall[-1], cpu[-1], d["total_ns"] / 1e6))
-print("%-22s n=%d median_wall_ms=%.2f [%.2f, %.2f] median_cpu_ms=%.2f"
-      % (word, len(wall), statistics.median(wall), min(wall), max(wall), statistics.median(cpu)))
+if not wall:
+    print("%-22s NO READING: the probe did not run" % word)
+else:
+    print("%-22s n=%d median_wall_ms=%.2f [%.2f, %.2f] median_cpu_ms=%.2f"
+          % (word, len(wall), statistics.median(wall), min(wall), max(wall), statistics.median(cpu)))
 PY
     echo
 }
