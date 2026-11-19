@@ -9858,7 +9858,23 @@ The {0} side of the rule '{1}' uses '{2}', whose effect is not pure: {3}.
 Design principles 9.11: both sides of a rule use only operators that access nothing, reads included. A read inserted into the region being rewritten has no order with a write of the same resource already there, so the commit refuses the program, and 'a rule that passed the declaration check always passes the commit' stops holding. Write the law on operators that access nothing, or declare the resources the operator really touches.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/rules/side_access.cml`, run as `camel test/cases/modules/rules/side_access.cml`)
+
+```camel
+import { rewrite } from rewrite
+
+/// The law's right side, as the declaration writes it: a call of a function that prints.
+func speak(x: int): int {
+    sync { println('speaking ', x) }
+    return x
+}
+
+rule add_zero(x: int) when true { x + 0 => speak(x) }
+
+func main(): int {
+    return 0
+}
+```
 
 ## Run time and passes (`RuntimeDiag`)
 

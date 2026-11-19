@@ -11,7 +11,9 @@ kind = "behavior"
 case = "../../../cases/modules/rules/side_access.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]:", "The right side of the rule 'add_zero' uses ':io/println'", "it inserts a read of the resource it names", "name=SemanticDiag::RuleSideHasAccess, code=0x031001C4"]
+expect_diagnostic_name = "SemanticDiag::RuleSideHasAccess"
+expect_diagnostic_code = "0x031001C4"
+expect_stderr_contains = ["[Warn]:", "The right side of the rule 'add_zero' uses ':io/println'", "it inserts a read of the resource it names"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
