@@ -93,3 +93,39 @@ git grep -n "not a value a rewrite may read"        # 只有 src/runtime/writing
 
 **不许为了让它绿而放宽判据**：如果 9.11 要的是"访问表非空"，那么 `mark/map_arr` 就是访问，
 修的是库或声明，不是 9.11。
+
+## 作者的裁定（2026-11-19）：判据写死，先报三个数
+
+裁定原文要点：「**(b)**：报告式检查 + **一次报三个数** —— 开工」；「9.11 拦的是**真的插进一个读**，
+不是『声明表非空』」；因为 `mark/map_arr` 传的是纯 lambda，所以「字面判 15，按 9.11 要拦的判 0」。
+判据因此写死为：
+
+> **右侧构造出的算子的实际效应不是纯**（`.pure = false` **且** 传进去的函数无法证明纯）。
+
+于是三个数不是三个候选答案，而是**同一条判据下的三个量**：
+
+| 数 | 值 | 它问的是什么 | 今天怎么读 |
+|---|---|---|---|
+| ① | **15** | 两侧文本**够得到**非纯算子的规则（按"访问表非空"的字面口径） | 上界口径的下界：量得出来，全部在右侧 |
+| ② | **0** | 按裁定判据**真会插进一个读**的规则（`callsGraphs` 的算子传的全是纯 lambda） | 9.11 真正要拦的东西，今天**一条都没有** |
+| ③ | **15～38** | 把 `sum`/`max`/`min`/`mean` 的 `#impl` 展开后仍算①的规则数 | **上界未量**：要在 `2d7c5c3a1` 上跑「dump 每条规则两侧算子 + `#impl` 是否展开」的探针才定得下来，这条读数本轮没取到（见下） |
+
+`15～38` 的区间是 `15`（已确证）+ `23`（那批调 `sum`/`max`/`min`/`mean` 的规则，见上节）。
+**区间中点不是数**：没有探针读数就不许写 26 或 27，只能写区间并注明「上界未量」。
+
+## 检查落点与命令证明
+
+定义期检查已落地，落在 `src/compile/gir/builder_diagnostics.cpp#Builder::reportRuleSideAccesses`
+（走的是和 `reportEffectfulConditions` 同一条遍历：根图 + 各模块体，认 `rewrite:rule` /
+`rewrite:rule_when` / `rewrite:rule_generic` 三种 maker），两侧的算子集合由
+`#Builder::accessesOfGraph` 给（跟随 `Func` callee，`callsGraphs` 的算子再问一次其函数实参的图是否纯）。
+警告号 `SemanticDiag::RuleSideHasAccess = 0x1001C4`，在 `diagnostics/registry.tsv` 里声明、由
+`scripts/diagnostics-catalog.mjs --write` 生成表；`-W` 级、不红。环境变量 `CAMEL_RULE_ACCESS_REPORT`
+把口径放宽到「访问表非空」（① 的口径），survey 就是这么取的。
+
+用例：`test/cases/modules/rules/side_access.cml` + `test/plans/feat/modules/rules_side_access.plan.toml`
+（一条会插进读的规则必须报，一条纯 lambda 的规则必须不报）。
+
+**③ 为什么本轮没量到**：`CAMEL_RULE_ACCESS_REPORT` 是进程环境变量，而远端闸门
+`internal/tools/camel-remote.ps1` 只能传文件、计划和 `-Check`，没有设置环境变量的入口；把调查口径做成
+仓库检查器要改 `test/tools`（墙），不在本 lane 的范围里。⇒ 本页按裁定的退路报 `15～38` 并写明**上界未量**。

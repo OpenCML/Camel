@@ -3454,6 +3454,7 @@ fead5d53a77b1c61 ok test/cases/modules/rules/saturate_outer_operand.cml
 382f7b78207e39d5 ok test/cases/modules/rules/scalar_counts.cml
 050ad1512210e988 ok test/cases/modules/rules/schedule_target.cml
 650aba45384ef11e ok test/cases/modules/rules/schedulers.cml
+8f63f0cfefe6d7b9 ok test/cases/modules/rules/side_access.cml
 c6b3ef6313346001 ok test/cases/modules/rules/simplify.cml
 87aa159b20c4f00a ok test/cases/modules/rules/strict_target.cml
 8f1f7fe5235445fe ok test/cases/modules/rules/target.cml
