@@ -1,0 +1,81 @@
+// A lane sum inside a training step, read three ways: the step's gradient through the engine, and the
+// same step's derivative through the library's forward transform, seeded one direction at a time.
+//
+// The model is the smallest MLP whose bias needs a lane sum: two rows of three features, a `[3, 2]`
+// weight and a `[2]` bias, and a per-row loss summed over the two columns:
+//
+//     p   = { w = [[1, 0], [0, 1], [1, 1]],  b = [0, 0] }
+//     x   = [[1, 2, 3], [4, 5, 6]]
+//     h   = relu(x @ w + b) = [[4, 5], [10, 11]]
+//     dy  = h - t           = [[3, 3], [9, 9]]          t = [[1, 2], [1, 2]]
+//     row = sum<1, false>(dy * dy) = [18, 162]          one number per row
+//     loss = sum(row) = 180.0
+//
+// and the gradient, by hand:
+//
+//     dL/d(row)  = [1, 1]
+//     dL/ddy     = 2 * dy           = [[6, 6], [18, 18]]   (the lane's number back over both columns)
+//     dL/dh      = dL/ddy           (relu is the identity where the value is positive)
+//     dL/db      = sum<0, false>(dL/dh) = [24, 24]         the batch summed, one number per feature
+//     dL/dw      = x^T @ dL/dh = [[78, 78], [102, 102], [126, 126]]
+//
+// `dL/db` is the shape a real step reads: the bias is shared by both rows of the batch, so its
+// gradient is the sum down the batch axis -- `sum<0, false>` -- and that is a lane sum whose adjoint
+// is `lane_spread` with `keepdims=false`. The engine reaches the same numbers by its own route (the
+// bias's adjoint is `sum_to` over the broadcast, `modules/tensor/kernels/gradient.cpp`).
+//
+// The library's leg is the forward transform, seeded four times, because the reverse one is refused
+// on this program by a law that is not this one's: `TRANSPOSE ... skip=law-reads-a-value
+// uri=tensor:multiply position=1` -- the product `dy * dy` needs an operand shape the transposed
+// function is not handed (the same wall `broadcast_product_gradient_of_an_open_rank.cml` records).
+// Each seed picks one element of the gradient out of the answer, so the four numbers below name four
+// different positions: 78, 102 and 126 are column 0 of the three rows of `dL/dw`, and 24 is the
+// first element of `dL/db`. An all-ones answer, which is what a lane sum that spread one number
+// everywhere would give, matches none of them.
+//
+//     camel test/cases/compile/transforms/sum_axis_in_a_training_step.cml
+import { relu, sum } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+import { with_grad } from autodiff
+
+type Cache = {
+    w: float[3, 2],
+    b: float[2]
+}
+
+with <p: Cache>
+func loss(x: float[2, 3]): float {
+    let h = relu(x @ p.w + p.b)
+    let dy = h - [[1.0, 2.0], [1.0, 2.0]] as float[2, 2]
+    return sum(sum<1, false>(dy * dy))
+}
+
+func loss_plain(w: float[3, 2], b: float[2]): float {
+    let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let h = relu(x @ w + b)
+    let dy = h - [[1.0, 2.0], [1.0, 2.0]] as float[2, 2]
+    return sum(sum<1, false>(dy * dy))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let w = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]] as float[3, 2]
+    let b = [0.0, 0.0] as float[2]
+    let p = { w: w, b: b }
+    let zero_w = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[3, 2]
+    let zero_b = [0.0, 0.0] as float[2]
+
+    let (value, g) = with_grad(loss)<p>(x)
+    `step engine  loss={} dL/db={} dL/dw={}`->format<value, g.b, g.w>->println
+
+    let (_l0, t00) = jvp(loss_plain)(w, b, [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[3, 2], zero_b)
+    `step library dL/dw[0][0]={}`->format<t00>->println
+    let (_l1, t10) = jvp(loss_plain)(w, b, [[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]] as float[3, 2], zero_b)
+    `step library dL/dw[1][0]={}`->format<t10>->println
+    let (_l2, t20) = jvp(loss_plain)(w, b, [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0]] as float[3, 2], zero_b)
+    `step library dL/dw[2][0]={}`->format<t20>->println
+    let (_l3, tb0) = jvp(loss_plain)(w, b, zero_w, [1.0, 0.0] as float[2])
+    `step library dL/db[0]={}`->format<tb0>->println
+    return 0
+}
