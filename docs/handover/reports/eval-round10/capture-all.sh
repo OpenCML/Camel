@@ -256,11 +256,11 @@ echo "# stops at 'jvp has no forward transform'. Its run row therefore shows the
 echo "# pass, and its table row is the document alone. That is the reading, not a gap."
 echo
 echo "# --- the MLP: showcase/c2-mlp-mnist/train.cml ---"
-for p in "" std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in "" opt::cse opt::fold opt::dce opt::saturate; do
     doc "mlp-$(leaf "$p")" "$MLP" $p std::jgir canonical=true
 done
 echo "# the document rows against the baseline"
-for p in std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in opt::cse opt::fold opt::dce opt::saturate; do
     printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/mlp-baseline.json" "$SCRATCH/mlp-$(leaf "$p").json")"
 done
 echo
@@ -268,27 +268,27 @@ echo "# the MLP's runs: does the pass leave the output alone (seconds= is masked
 echo "### python3 $PROBES/gen_mlp_data.py --out $SCRATCH/mlp-data"
 python3 "$PROBES/gen_mlp_data.py" --out "$SCRATCH/mlp-data" 2>&1
 echo
-for p in "" std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in "" opt::cse opt::fold opt::dce opt::saturate; do
     runkept "mlp-run-$(leaf "$p")" \
         "--arg" "data=$SCRATCH/mlp-data" --arg steps=2 --arg batch=16 --arg lr=0.001 \
         --arg log_every=1 --arg threads=1 "$MLP" $p std::nvm
 done
 echo "# each run against the baseline run"
-for p in std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in opt::cse opt::fold opt::dce opt::saturate; do
     printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/mlp-run-baseline.out" "$SCRATCH/mlp-run-$(leaf "$p").out")"
 done
 echo
 echo "# --- the char-transformer: showcase/c3-char-transformer/train.cml ---"
-for p in "" std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in "" opt::cse opt::fold opt::dce opt::saturate; do
     doc "tr-$(leaf "$p")" "$TRANSFORMER" $p std::jgir canonical=true
 done
 echo "# the document rows against the baseline"
-for p in std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in opt::cse opt::fold opt::dce opt::saturate; do
     printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/tr-baseline.json" "$SCRATCH/tr-$(leaf "$p").json")"
 done
 echo
 echo "# the transformer's run, with its own documented arguments"
-for p in "" std::opt::cse std::opt::fold std::opt::dce std::opt::saturate; do
+for p in "" opt::cse opt::fold opt::dce opt::saturate; do
     runkept "tr-run-$(leaf "$p")" \
         --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 \
         --arg lr=0.001 --arg seed=1 "$TRANSFORMER" $p std::nvm
