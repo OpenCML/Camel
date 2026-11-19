@@ -941,6 +941,16 @@ class TilesModule final : public BuiltinModule {
                     {"inspect", externalAmbient("tiles:driver", AccessMode::Read)},
                     {"available", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
                     {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                    // `retain_preferred` keeps a value where the run prefers to compute it: with a
+                    // device it uploads (`retainPreferredKernel` falls through to `uploadKernel`,
+                    // which is the `upload` entry above -- the driver read-modify-written and a
+                    // device value made), and without one it answers the host value. The union of
+                    // the two paths is what it may do, which is what a clause states.
+                    {"retain_preferred",
+                     ResourceSpec{
+                         .accesses       = {driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
                 });
         }
         // The driver asks this before the first graph runs; the selection is the run's, and this
