@@ -890,8 +890,12 @@ class TilesModule final : public BuiltinModule {
         // string, and its own contract says it does neither execute the graph nor initialize CUDA
         // (tiles/internal/regions.h, `inspectRegions`). The other reports compile the program they
         // are given for a device and so touch the driver; this one touches no resource, and a
-        // clause that named one would be a claim its body contradicts (2026-11-20).
-        core::OperatorTable::instance().set("tiles:regions", {.pure = true, .readsGraphs = true});
+        // clause that named one would be a claim its body contradicts (2026-11-20). It is not
+        // foldable either: the answer is the analysis of a graph the compiler cannot see through,
+        // which is what `readsGraphs` says, and `pure` here is the resource claim and not a promise
+        // that a call may be computed ahead of time (operator_table.h, `declareUnfoldable`).
+        core::OperatorTable::instance().set(
+            "tiles:regions", {.pure = true, .readsGraphs = true, .foldable = false});
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
