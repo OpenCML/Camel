@@ -76,3 +76,9 @@ True
 顺带一条可核的读数：`builder.cpp:6076-6080` 的注释本身就写着 `6ce3bf1f2` 与
 `the-generator-state-holds-only-pc.cn.md`，所以**代码侧已经把这件事记在离改动最近的地方**；
 页里担心的「下一个人会再问一次」在代码里已经有答案，只在索引里还没有。
+## 复读：树在本轮期间动过
+
+lane-ledger 检出时 origin/develop 的尖端是 c049f90ec（2026-11-19 12:41 +0800）。本轮结束时
+它已经是 782007912（2026-11-19 12:52 +0800，「Revert the packing and the rule from develop」）。
+上面每一条**代码事实**都在新尖端上用 `git grep/git ls-tree <tree>` 复读过，结论不变；
+本页没有在新尖端重跑任何构建或计划。

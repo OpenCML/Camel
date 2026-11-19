@@ -91,3 +91,9 @@ $ git merge-base --is-ancestor 52c3b9852 origin/develop ; git merge-base --is-an
 要不要也改走 `giveBackOpenLoopsOfEveryFrame` / `releaseWithOpenLoops`**。
 这是「5 行一件事」的第 2 批，页 §4 里写着「先 nodevm、量六个计划、再推其余 4 个后端」——
 所以它属于作者级调度（要不要现在推），不是「单点落在哪一处」这个已经落地的问题。
+## 复读：树在本轮期间动过
+
+lane-ledger 检出时 origin/develop 的尖端是 c049f90ec（2026-11-19 12:41 +0800）。本轮结束时
+它已经是 782007912（2026-11-19 12:52 +0800，「Revert the packing and the rule from develop」）。
+上面每一条**代码事实**都在新尖端上用 `git grep/git ls-tree <tree>` 复读过，结论不变；
+本页没有在新尖端重跑任何构建或计划。

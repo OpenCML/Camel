@@ -75,3 +75,8 @@ $ git log --oneline "71b046452..origin/develop" -- docs/stdlib-reference.md
 
 **⇒ 要作者裁的那一句没变**（要不要把它变成提交检查表上的一条），但它现在有了可引的复发记录，
 不再是一条一次性的红。
+## 复读：树在本轮期间动过
+
+lane-ledger 检出时 origin/develop 的尖端是 c049f90ec（2026-11-19 12:41 +0800）；本轮结束时已是
+782007912（同日 12:52，「Revert the packing and the rule from develop」）。本页两条读数
+（1 problem(s)、552 entries）**是在 c049f90ec 的树上**跑出来的，没有在 782007912 上重跑。

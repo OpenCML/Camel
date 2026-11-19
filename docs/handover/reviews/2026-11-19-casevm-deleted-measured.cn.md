@@ -76,3 +76,9 @@ $ git merge-base --is-ancestor 468685ec9 origin/develop ; # 退出码 0
 
 它的默认建议是「本轮什么都不做，但把它记成待办」——而记成待办之后，下一笔提交选的就是删掉它。
 当页面的默认和树的实际走向相反时，只有命令能分辨谁落后：`git merge-base --is-ancestor` 说删的那一支在 `develop` 里。
+## 复读：树在本轮期间动过
+
+lane-ledger 检出时 origin/develop 的尖端是 c049f90ec（2026-11-19 12:41 +0800）。本轮结束时
+它已经是 782007912（2026-11-19 12:52 +0800，「Revert the packing and the rule from develop」）。
+上面每一条**代码事实**都在新尖端上用 `git grep/git ls-tree <tree>` 复读过，结论不变；
+本页没有在新尖端重跑任何构建或计划。
