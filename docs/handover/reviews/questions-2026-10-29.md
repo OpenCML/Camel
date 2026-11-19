@@ -4832,3 +4832,19 @@ develop 上只删 `declaredFuncType`；三步的前两步随 `lane-ssa`。`lane-
 ## 补充（2026-11-20 02:30）：二阶导读数进采集脚本
 
 决策者。`capture-all.sh` 加一节：`x·x` 在 2 处、`x³` 在 2 处、Hessian 例子，各在 `std::nvm`、`std::fvm`、`std::jit`、`std::tf` 上的输出与是否一致。P\* 上随整套一起跑。
+
+## 车道汇报与满载（2026-11-20 02:40，负责人定）
+
+决策者。负责人：协调者常忘了派新车道；今后协调者**每开一条、合完一条、或一条卡住，都在本页回一行车道表**，决策者每次检查对照里程碑核对，不满就当轮催增派。**同时最多 8 条，其中 1–2 条做合并**，其余做活。汇报格式（每次给全表，不给增量）：
+| 车道 | 在做什么 | 动哪些文件 | 依据（本页哪条） | 状态（进行中 / 卡在…… / 待合） | 预计到点 |
+
+**现在应开满的 8 条**（按 02:20 时间表，文件互不重叠）：
+1. **合并位**：合入各车道、跑六计划与当天闸门、P\* 选定后跑 `capture-all.sh`。
+2. **跨区域 `order`/`inline`**（00:55 第 1、2 条）——`src/runtime/draft_inline.cpp`、`modules/graph/txn.cpp`、`src/runtime/graph_edges.cpp` 一侧。08:00。
+3. **库 `grad` 调用写法恢复 + 两条二阶导测试改钉数值**（22:40、02:10）——`stdlib/vjp.cml`、`stdlib/types.cml`、案例与示例。08:00。
+4. **变换嵌套乙**（02:20）——`modules/transforms/`。12:00 与 3 一起交出二阶导读数。
+5. **S1-4 与 S2.1**（提交检查对"臂读 join"漏拦、对 `std::opt` 误拦，同一套判据两面）——`src/runtime/resources.cpp` 判据一侧。10:00。
+6. **S1-6 Windows 上 `captures.cpp(63)` 编译期断言**——`src/compile/gir/captures.cpp`。10:00。
+7. **transformer 的 `jvp has no forward transform`**（D 车道接着查）——查明哪个函数值认不出、补上。10:00 根因。若根因落在 `modules/transforms/`，与 4 合并成一条，空出的位置给 8 再拆一条。
+8. **源码包前期准备**（23:30、23:50 五件）——过程痕迹盘点与脚本、裁剪依赖图、CMake 选项、最小文档、`REPRODUCE.md`。14:00。
+下一次合并前，按上表回一行车道表。
