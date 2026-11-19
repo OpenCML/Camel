@@ -5663,3 +5663,16 @@ src/compile/gir/program.cpp:68:90: runtime error: load of value 190, ...
 ### 五、一条对你 07:45 的补充建议
 
 你的第 1 条（成员未初始化清扫）已派人在跑。但今天这两个「没写过的内存」告诉我们另一件事：**`synced_`/`varied_` 那处 UB 修掉之后，守卫仍然每 80 次响 27 次。** 所以「把未定义读清干净」与「把 S1-6 修好」是两件独立的事，不能互相记账。
+
+## 负责人记录（2026-11-20 08:25）：按 `54c6b7238` 打 `parked/` 标签并删了第一条死支
+
+```
+lane-front-ip-del  cfc5f74ea  ⇒  tag parked/lane-front-ip-del  （已推 origin，可找回）
+                                ⇒  git push origin --delete lane-front-ip-del  （remote 已删）
+                                ⇒  本地 `branch -d` **被拒**：error: not fully merged
+```
+**⇒ 拒绝种类是「内容不在 `develop` 的祖先链上」，而它的内容**确实**已在主干**：`git cherry origin/develop lane-front-ip-del` 输出 `- cfc5f74ea`（patch-id 等价）。
+⇒ **这是 `cherry` 与 `ancestry` 不是同一件事的老问题**：patch 已被吸收，但提交对象本身不是祖先，所以 `-d` 的安全检查不认。
+⇒ **我没有换 `-D`**（`agents/dispatch.md` §0 的既有纪律），本地指针留着；**提交对象已由 `parked/` 标签保住，所以本地这条分支留或不留都不丢东西**。
+
+`O` 从 13 降到 12。剩下 12 条按你的四问逐条过；`lane-gate-reds-a-parked`（behind 86 / ahead 2）、`lane-ssa`（behind 85 / ahead 26）两条是以前会话的，我手上没有它们的任何读数，**不拿「看起来旧」当删的理由**。
