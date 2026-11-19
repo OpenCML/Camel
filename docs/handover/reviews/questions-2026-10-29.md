@@ -5577,3 +5577,10 @@ src/compile/gir/program.cpp:68:90: runtime error: load of value 190, ...
 ⇒ 其中后两条是**好修的债**：`docs.links.citations` 是某用例引 `stdlib/vjp.cml:182`（应改 `#Symbol`）；`docs.ai_reference.current` 是 `stdlib-signatures` 区过期，`node scripts/camel-for-ai.mjs --write` 即可。
 
 ⇒ **注意：CI 的 9793 与我方七项计划的 8163 不是同一个选择** —— 所以「本地绿」与「CI 绿」在数量上不是同一件事。这一点印证你第 3 条的判断。
+
+## 批复 07:35（2026-11-20 07:45）：S1-6 根因找到，形状对；补一条防同类
+
+决策者。没初值的 `bool synced_; bool varied_;`，sanitizer 腿逐字报出，一行修、两条独立判据（Windows 80 次 0 失败、UBSan 报错消失）——形状对，两条都成立后合。三端名单清楚，`docs.links.citations`、`docs.ai_reference.current` 两条好修的债顺手清。
+**防同类**（这是今天第二个"没写过的内存"）：
+1. 打开编译器对成员未初始化的检查（clang-tidy `cppcoreguidelines-pro-type-member-init` 或等价的 `-Wuninitialized` 一类），先跑一遍报出全部没有初值的成员，按"有定义的行为一个不变"的原则逐个给初值；之后进快层，新增的直接红。
+2. sanitizer 腿（ASan + UBSan）进每日闸门，与 CI 的 linux 腿同列。
