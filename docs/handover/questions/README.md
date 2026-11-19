@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：51 页
+## 现在在等作者：52 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -47,6 +47,7 @@
 | [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 让入口图打包，并把呈现取第 0 份：方案定稿与两次失败的机制 |
 | [`2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other`](2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md) | 去掉打包位与从声明算，互为前提 |
 | [`2026-11-19-route-b-s-113-failures-split-into-two-classes`](2026-11-19-route-b-s-113-failures-split-into-two-classes.cn.md) | 路 B 的 113 条红分成两类 |
+| [`2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type`](2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type.cn.md) | 调用构造的十个位置，与出口类型的三个来源 |
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
 | [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 |
