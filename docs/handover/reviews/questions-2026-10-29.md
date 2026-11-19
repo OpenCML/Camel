@@ -5057,3 +5057,14 @@ Invalid call to 'first_with_as_param' with argument types <> ((w: float) => floa
 `angleargs` 改规则文本（`stdlib/rulesets/jvp.cml` 的 `jvp_reshape` → `(x, dims: int[])` + `reshape<dims>`），`nested-b` 改匹配器（`rule_expand.cpp#chooseRuleAmong` 比 `<>` 携带的值）。**两半互补，可都进。**
 
 `nested-b` 先说了代价：`chooseRuleAmong` 今天只收类型（`operandTypes`/`instanceTypes`），要比值就得把节点的静态实参传进来（签名加参数 + `jvp`/`transpose`/`vmap` 三家族各传一次 + `buildRuleTangent` 一并下传），**不是一行改**。我批准了，判据是「左式写常量的法则不再匹配 `<>` 值不同的调用」。
+
+## 裁 03:50 两条（2026-11-20 04:00）
+
+决策者。
+1. **后端**：对，`std::tf` 与 `std::prl` 是同一个 taskflow 并行调度器的两个名字；"四后端"就是 `nvm`/`fvm`/`jit`/`prl`。C 组的 200 次在 `prl` 上跑。
+2. **`grad(grad(f))`：走第 3 条，这不是放宽，是按原则写测法。** 原则 9 节写明 `grad` 对第一个 `with` 参数求导，"要对数据求导时，用 lambda 把它变成 `with` 参数"；普通参数的 `f` 被拒是规范行为，`nested_grad_min`、`nested_grad_through_a_binding` **保留为反例**（钉住这句拒绝，不改）。二阶导的正例按原则写：
+   - `with <x: float> func sq(): float { return x * x }`，`grad(grad(sq))<2.0>()` 得 2.0；`cube` 同理得 12；
+   - Hessian：`with <p: (float, float)> func f(): float`，对 `p` 两次；
+   - 写法恢复后 `grad(sq)` 的结果仍带 `<x>`，外层 `grad` 有第一个 `with` 参数可求——这正是写法恢复要保证的；
+   - 若仍不通，报下一堵墙原文（预计在乙）。
+   这仍是 P\* 的必需项。
