@@ -1507,13 +1507,25 @@ class NodeAccessTable {
     mutable std::vector<std::optional<NodeResources>> rows_;
 };
 
+/// Which reader asks the effect question, because the same fact is said for two of them: a commit
+/// about to publish `graph`, and the graph that commit started from. The second is not this edit's
+/// doing, and -- since that graph is the compiler's own product -- a reach past its type there is a
+/// defect of the compiler, not a reason to refuse the program, so its sentence says that instead.
+enum class EffectReader : uint8_t {
+    Publishing,    // the body this commit would publish
+    BeforeTheEdit, // the body the commit started from
+};
+
 /// Analysis 4.1, effect containment, read over the whole body of `graph`: what the nodes' operator
 /// declarations make it reach (principle 3.3, resolved bottom-up) must stay inside the clause the
 /// graph's own type declares. What a type cannot spell -- a cell of a variable, a class the
 /// analysis cannot name -- is passed over, which is the line the call-site check draws too.
+///
+/// `reader` changes only the closing sentence: who is being told, and so whether the reach is
+/// something the commit is about to do or something the compiler already handed over.
 std::optional<CommitViolation> effectBeyondDeclaration(
-    const Program &program, const GCGraph &graph, FootprintWalk &walk,
-    const NodeAccessTable &table) {
+    const Program &program, const GCGraph &graph, FootprintWalk &walk, const NodeAccessTable &table,
+    EffectReader reader) {
     const auto *type = graph.funcType();
     if (type == nullptr) {
         return std::nullopt; // nothing declares anything here
@@ -1528,6 +1540,16 @@ std::optional<CommitViolation> effectBeyondDeclaration(
     if (beyond.empty()) {
         return std::nullopt;
     }
+    // The one sentence that differs. The graph a commit starts from was built by the front end and
+    // accepted as it is, so a body outside its own declaration was let through there: it is the
+    // compiler's defect, and the reading says so rather than blaming the program (2026-11-20).
+    const std::string closing =
+        reader == EffectReader::Publishing
+            ? std::string("the commit would publish a body that reaches past its own declared "
+                          "effect")
+            : std::string("the front end accepted a graph that is beyond its own type, which is a "
+                          "defect of the compiler and not of the program: no commit can judge an "
+                          "edit against it");
     const std::string declaredText =
         declared.ambient.empty() && declared.params.empty() && declared.captures.empty() &&
                 declared.anyOf.empty() && !declared.external
@@ -1553,11 +1575,11 @@ std::optional<CommitViolation> effectBeyondDeclaration(
                 .origin = graph.nodeOrigin(ref),
                 .text   = std::format(
                     "{}, in a graph whose type declares {}, makes an access the type does not "
-                    "cover ({}): the commit would publish a body that reaches past its own "
-                    "declared effect",
+                    "cover ({}): {}",
                     namedNode(program, graph, ref),
                     declaredText,
-                    nodeAccessText(access)),
+                    nodeAccessText(access),
+                    closing),
             };
         }
         if (resources.external &&
@@ -1569,10 +1591,10 @@ std::optional<CommitViolation> effectBeyondDeclaration(
                 .first  = ref,
                 .origin = graph.nodeOrigin(ref),
                 .text   = std::format(
-                    "{}, in a graph whose type declares {}, has an effect outside the program: the "
-                    "commit would publish a body that reaches past its own declared effect",
+                    "{}, in a graph whose type declares {}, has an effect outside the program: {}",
                     namedNode(program, graph, ref),
-                    declaredText),
+                    declaredText,
+                    closing),
             };
         }
     }
@@ -1861,7 +1883,8 @@ std::optional<CommitViolation> orderIncomplete(
 
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
-    std::span<const gc_node_ref_t> changed, const GCGraph *before) {
+    std::span<const gc_node_ref_t> changed, const GCGraph *before,
+    const Program *beforeProgram) {
     // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
     // table decides which of the six checks a commit is asked, and what decides that is which
     // edit the draft used -- not "did it make a node". A draft that made no node and changed
@@ -1882,18 +1905,42 @@ std::optional<CommitViolation> commitViolation(
     }
     // The two readings the in-place half owes are asked of what the edit *did*, and the graph it
     // started from is what says that: `before` is the graph as it was. An edit of existing nodes in
-    // place cannot make the body reach past its own type where it did not already, nor leave a pair
-    // of accesses unordered where the program already left them so -- and refusing either would
-    // refuse the program for what it already was, which the pass boundary asks and a commit does
-    // not. A splice answers by construction (the node it made was in no pair before), so that half
-    // keeps the whole-body reading it always had.
+    // place cannot leave a pair of accesses unordered where the program already left them so -- and
+    // refusing that would refuse the program for what it already was, which the pass boundary asks
+    // and a commit does not. A splice answers by construction (the node it made was in no pair
+    // before), so that half keeps the whole-body reading it always had.
+    //
+    // The effect half is not the same shape, and it is not answered that way any more (the ruling of
+    // 2026-11-20). The graph a commit starts from is the compiler's own product -- the front end
+    // built it, or a commit published it after answering for it -- so one whose body already reaches
+    // past its own signature is a graph the front end accepted beyond its type. No program writes
+    // that: it is a defect of the compiler, and it is reported as an internal error instead of being
+    // stepped over. Stepping over it was worse than it sounds: the effect question about the edited
+    // graph was then not asked at all, so an edit that added reach on a graph nobody vouches for
+    // went unreported, and the skip looked like an answer.
     std::vector<UnorderedPair> alreadyUnordered;
     if (!changed.empty() && before != nullptr) {
-        const NodeAccessTable beforeTable(*before, resolver);
-        if (!effectBeyondDeclaration(program, *before, walk, beforeTable)) {
-            if (auto effect = effectBeyondDeclaration(program, graph, walk, table)) {
-                return effect;
-            }
+        // The graph it started from, read in the program that published it: a call's footprint is the
+        // callee's declared clause, and this commit is publishing new declarations for the callees it
+        // rewrote. Reading `before` against them would measure the old body through a promise it was
+        // never published under, and report the graph as beyond a type it satisfied (the measurement
+        // constraint of the 2026-11-18 page; `tiles` widens a callee and its caller in one commit).
+        const Program &beforeIn = beforeProgram != nullptr ? *beforeProgram : program;
+        FootprintWalk beforeWalk(beforeIn, core::OperatorTable::instance().declarationEpoch());
+        Resolver beforeResolver(
+            beforeIn, [&beforeWalk](const GCGraph *callee) { return beforeWalk.run(callee); });
+        const NodeAccessTable beforeTable(*before, beforeResolver);
+        if (const auto beforeBeyond = effectBeyondDeclaration(
+                beforeIn, *before, beforeWalk, beforeTable, EffectReader::BeforeTheEdit)) {
+            throw GraphBeforeEditBeyondType(std::format(
+                "the graph '{}' a commit was asked to edit already reached past the type its own "
+                "signature declares, before the edit: {}",
+                before->name(),
+                beforeBeyond->text));
+        }
+        if (auto effect =
+                effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
+            return effect;
         }
         forEachUnorderedPair(
             *before,
@@ -1905,7 +1952,8 @@ std::optional<CommitViolation> commitViolation(
                 alreadyUnordered.push_back(unorderedPairKey(first, second));
                 return true;
             });
-    } else if (auto effect = effectBeyondDeclaration(program, graph, walk, table)) {
+    } else if (auto effect =
+                   effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
         return effect;
     }
     // The order reading answers for the regions the commit touched, and judges a pair when one side
