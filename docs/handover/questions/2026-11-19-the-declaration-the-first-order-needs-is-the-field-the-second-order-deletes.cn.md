@@ -1,74 +1,96 @@
-# 第一条裁定要的声明，就是第二条裁定要删的字段
+# ① 要的那份声明，正是 ② 要删的那个字段
 
-**问句（一句）**：`d5a5c1839` 同日下的两条裁定——①「打包由 `graphExitTypeOf(声明)` 回答」、②「删掉 `declaredFuncType` 与它的钩子」——在代码现状下互斥，请问撤回哪一条？
+**日期**：2026-11-19
+**提出者**：打包位下线车道（工作树 `D:\Projects\Camel-wt\ssa2`，分支 `lane-ssa`；基线 `origin/develop` = `3217f0312`，合完 `4d308fc72`）
+**状态**：**给作者的问题页**。第 5 节写死一条默认（甲），**在作者回答之前这条车道停手**：位没删，树停在 `4d308fc72`。
+**触发**：按作者 `d5a5c1839` 在 `lane-ssa` 上把打包位删掉、四处调用改问声明，一次落完再量（第 2 节）。
 
-**默认建议（本轮按此开工）**：**甲**——保留 `declaredFuncType`，把它的**调用时机**改成「每个图在**打包之前**录一份声明」，于是 ① 成立、② 撤回。
+## 1. 两条裁定，与它们互斥的那一点
 
-## 一、两条裁定的原文
+**①（作者 `d5a5c1839`，2026-11-19 21:45）**：
 
-`d5a5c1839`（2026-11-19 21:45）：
+> 打包是全称的，"这张图打包了没有"永远等于"声明里有没有 `var` 形参"，由 `graphExitTypeOf(声明)` 回答。
 
-> 那个位（`packsVarParameters`，前身 `exitTypeIsPacked`）不进 develop——06:40、07:00 两条已定：打包是全称的，"这张图打包了没有"永远等于"声明里有没有 `var` 形参"，由 `graphExitTypeOf(声明)` 回答。`lane-ssa` 在分支上把位删掉、四处调用改问声明，再整体合入……
+**②（作者裁定，由合并车道转述；落点 `6d2da50e1`「the declared function type goes, and its hook with it」，在车道 `lane-drop-declared-functype` 上）**：
 
-> 同时：develop 上的 `declaredFuncType`（零读者，06:15 与今天每日审查第 11 条两次要求删除）还在，而且多了一个钩子——删掉它与它的钩子，一笔。
+> `declaredFuncType` 零读者，删掉它与它的钩子，一笔。
 
-## 二、① 需要一个「每个图都有、且在打包之前录好」的声明，而现在没有
+② 的前提在树里也写着（`include/camel/runtime/draft.h:468-469` 的注释原文）：
 
-```
-`declaredFuncType_` 全树只有一个生产写者：`DraftGraphBuilder::setExitType`（`src/compile/gir/draft_graph_builder.cpp:92`）
-   而它只在 `!graph->funcType()->hasExitType()` 时被调（`builder_helpers.h:174–187`）
-⇒ **凡签名自己写了结果的函数**（`func bump_then(z: var int, k: int): int`，绝大多数）**`declaredFuncType_` 永远是 nullptr**
-   ⇒ 没有声明可问；回落到 `funcType()` 又**已经被打包过**（exit 是元组），`graphExitTypeOf` 对它逐字幂等 ⇒ 答案恒为「不交回」
-```
+> **Nothing reads this yet**; the readers that need the declaration move over in the following change, and the bit goes after them.
 
-次生问题：签名不写结果的那一支，`setExitType` 是在 `handBackVariableParameters`（`builder_control.cpp:4682`）**之后**才跑的，所以录下来的「声明」是**打包后**的类型再换掉 exit —— 它对每个带 `var` 形参的签名都答「打包了」，包括体根本没打包的图。
+**⇒ ① 说「问声明」，② 说「声明这个字段零读者，删掉」。两者只在「声明有没有读者」这一句上冲突，而 ① 一落地，② 的前提就不成立了。**
 
-**⇒ 所以「问声明」要成立，缺的正是「每个图在打包之前录一份声明」。**
+## 2. 现象（可验）
 
-## 三、那份声明唯一能放的地方，就是 ② 要删的字段
-
-第四处调用 `src/compile/gir/builder_helpers.h:141`（`callHandsBackResult(callee)`）改成问 `callee` 自己的 `funcType()` 也不行：`funcType()` 已被打包，`graphExitTypeOf` 幂等。改成问 `declaredFuncType_` 则如上，多半是 `nullptr`。
-
-⇒ **⇒ 现状下没有第二个载体。** 所以要 ①，就不能 ②。
-
-## 四、把「问声明」真做下去会怎样（实测）
+照 ① 把那四处改完（删两个访问器、删字段、删 `builder_control.cpp` 的写、把 `builder_helpers.h:141` 的读者改成问声明），`feat/linear` 同一台主机上：
 
 ```
-`packsVarParameters` 命中：改前 **9 行 / 4 文件**（`draft_graph_builder.h:85,87,88`、`draft.h:479,480,1254`、
-   `builder_control.cpp:4630,4633`、`builder_helpers.h:141`）；`exitTypeIsPacked` **0 命中**
-前三处（两处访问器 + `builder_control.cpp:4633` 的写）是**纯删**，编译通过、无需替代
-第四处改成问声明后：**`feat/linear` 869 → pass 680 / fail 184**
-   第一条红 `var_params.nvm`：`unexpected output: 1 3 13 (6, 13)`
-   ⇒ `r = bump_then(c,5)` 拿到的还是整个元组 —— **该问出 true 的地方问出了 false**
+4d308fc72（位仍在）      [SUMMARY] total: 869, pass: 771, fail:  93, skip: 2, known failures: 3
+位删掉、改问声明          [SUMMARY] total: 869, pass: 680, fail: 184, skip: 2, known failures: 3
 ```
 
-同一个缺口的另一半：`test/cases/…/var_through_with_grad.cml:26` 报 `Invalid call to 'with_grad' … (x: float[…], var cnt: int) => (float, int) uses var cnt`，而 `builder_control.cpp:4559` 的注释**逐字预言了**这条失败。
-
-## 五、另有一条更要紧的事实：`lane-ssa` 自己就是红的
+第一条红是 `var_params.nvm`：
 
 ```
-`5559d3c6e`（合 develop 之前，lane-ssa 原样）`feat/linear`：**869 / 771 / 93 / skip 2 / known 3**
-`4d308fc72`（合完 277 笔，位仍在）              **869 / 771 / 93 / skip 2 / known 3**  ← 逐字相同
-⇒ **合并本身一个数都没变坏**（`feat/modules` 反而 13→7、`feat/trans` 6→2）
-⇒ **⇒ 104 条红（linear −93 / opt −4 / tools −1 / modules −5 / trans −1）全是车道自己的**，
-   形状集中 `var_*`，且是**编译期**错：`Return type mismatch between branches (in function 'count_up: (var acc: int, n: int) => int'): expected 'int', found 'int'`
+[INFO] verification output: Error: unexpected output: 1 3 13 (6, 13) 15 8 113 20001
 ```
 
-而 `origin/develop` 已经用 `782007912`（作者 `a1b57552a`）把打包 revert 掉，理由是 `opt/loop_wait_after_inline.non_contiguous_loop.refused` 与 `tools/lsp.navigation` 两条红，并写明「develop 不带任何新红」⇒ **develop 的树因此等于 `2d7c5c3a1`，而那个提交正是 `lane-ssa` 的第 3 笔**。
+期望的第三、四行是 `13` 与 `6`；实际打出了 `(6, 13)`。`test/cases/linear/nvm/var_params.cml:52` 是 `let r = bump_then(c, 5)`，`bump_then` 是 `z: var int` —— **该答「交回形参」的地方答了「不交回」，投影没做，整个元组被当成了结果**。
 
-⇒ **⇒ 所以 `lane-ssa` 要合进来的，是 develop 刚刚撤掉的那一批。合入条件因此不是「不差于基线」，是「先把这 104 条红做完」。**
+这与 `docs/handover/questions/2026-11-19-removing-the-packing-bit-and-computing-from-the-declaration-presuppose-each-other.cn.md` §7 那次（`pass 683 / fail 181`）是同一个缺口的**另一半**：那次是「派生对所有带 `var` 形参的签名都为真」⇒ true 得太早；这次是「声明根本不在」⇒ false 得太晚。
 
-## 六、所以本轮的处理
+## 3. 声明拿不到：`declaredFuncType_` 的唯一生产写者，只在「签名没写结果」时跑
 
 ```
-① `lane-ssa` **挂着：不删、不合**（`4d308fc72` 留在分支上）
-② `declaredFuncType` **暂停删除**，等本条裁定
-③ `packsVarParameters` 的下线**暂停在第四处**，补丁留档
+$ git grep -n "declaredFuncType_" -- src include
+include/camel/runtime/draft.h:470    camel::core::type::FunctionType *declaredFuncType() const { return declaredFuncType_; }
+include/camel/runtime/draft.h:473            declaredFuncType_ = funcType;      ← setDeclaredFuncType 里
+include/camel/runtime/draft.h:1247   camel::core::type::FunctionType *declaredFuncType_ = nullptr;
+src/runtime/draft_undo.cpp:370,488   （撤销日志的快照与恢复，不是生产者）
 ```
 
-## 七、请裁决（二选一，写死默认）
+`setDeclaredFuncType` 在 `src include` 里只有一个**生产**调用点：`DraftGraphBuilder::setExitType`（`src/compile/gir/draft_graph_builder.cpp:92`）。而 `setExitType` 只在签名**没有**出口类型时被调：
 
-**甲（默认建议）**：保留 `declaredFuncType`，把 `setDeclaredFuncType` 的**调用时机**改成「每个图、在打包之前，都录一份声明」（即不再只在 `!hasExitType()` 时才录），于是「问声明」成立、打包位可以真删；② 撤回，`noteOriginalTypes` 的钩子保留。
-**乙**：② 照做删掉字段与钩子；① 改成「打包由**签名**回答」——但需要另一个能承载「每图打包前声明」的载体，目前没有 ⇒ **等于 ① 做不成**，而 `lane-ssa` 的 104 条红也失去解法。
+```
+src/compile/gir/builder_helpers.h:178      if (!graph->funcType()->hasExitType()) {
+src/compile/gir/builder_helpers.h:179          graph->setExitType(Type::Void());
+src/compile/gir/builder_helpers.h:185      if (!graph->funcType()->hasExitType()) {
+src/compile/gir/builder_helpers.h:186          graph->setExitType(resultType);
+```
 
-**⇒ 另有独立一问（`lane-ssa` 本身）**：它自带 104 条红且重建的是 develop 已 revert 的那批，是否按新设计重做、还是废弃这条分支？默认建议：**先挂着，等本条①的裁定落地后再决定重做还是废弃。**
+⇒ **`func bump_then(z: var int, k: int): int` 这类自己写了结果的函数，`declaredFuncType_` 永远是 `nullptr`，没有声明可问。** 回落到 `funcType()` 也不行：打包已经在 `builder_control.cpp:4629`（`graph->setFuncType(funcType->withExitType(exitType))`）把它换成了元组，而 `graphExitTypeOf` 对已打包的输入逐字幂等（`builder_helpers.h:115` 的第一支，元组进、元组出）⇒ **答案恒为 false**。
+
+**这就是 +91 条的来源**（184 − 93 条车道本来就红的，见第 7 节）。
+
+## 4. 次生：录下来的那一份，是打包之后的
+
+`Builder::setBodyResult`（`src/compile/gir/builder_control.cpp:4656`）先打包、后录声明：
+
+```
+:4682   const node_handle_t handed = handBackVariableParameters(graph, value);   ← 打包，:4629 换掉 exit
+:4685   setGraphReturnFromResult(...)                                          ← 这里才 setExitType → 录声明
+```
+
+⇒ 在「签名没写结果」那一支，录下来的「声明」是**打包后**的类型再把 exit 换成体推断的结果。它对**每一个**带 `var` 形参的签名都答「打包了」，**包括体根本没有打包的图**——`:4558` 的 `!packsVariableParameters` 早退与 `:4597` 的 `parts.empty()` 早退都发生在打包之前。
+
+**同一个字段，在两个方向上各错一半：拿不到时恒 false，拿得到时恒 true。** 所以问题不是「再算一次」，而是**这份声明今天没有一处是「打包之前的那个签名」**。
+
+## 5. 默认（本页写死：甲）
+
+**甲：保留 `declaredFuncType`，把它的调用时机改成「每个图在打包**之前**录一份声明」。** ⇒ ① 成立，② 撤回。
+
+改动面是 `setDeclaredFuncType` 的**调用时机**（在打包前录，且对每个图都录，不只看 `hasExitType()`），不是新增字段、不是新增读者规则：图的 `funcType` 照旧是打包后的出口，声明照旧只回答「本来是什么」。
+
+**乙：② 照做删掉它，① 改成「打包由签名回答」。** ⇒ 需要一个在**打包之后**仍能回答「这个签名本来就带 `var` 形参」的载体；`funcType()` 已被换掉、`graphExitTypeOf` 对已打包的输入幂等、`packsVariableParameters(funcType())` 因此恒 false，**目前没有这样的载体** ⇒ 等于 ① 做不成，代价就是第 2 节那 91 条。
+
+**选甲的理由**：① 是「把位删掉」这件事的唯一依据（`af2cab221`「packing is total, so no bit」→ `d5a5c1839` 落地成「问声明」）；② 的前提是「零读者」，而**① 在落地的那一刻给了它第一个读者**。甲不是驳回 ②，而是把两份事实的先后写对：**先有声明，再删位**；乙则是把 ① 撤回。
+
+## 6. 要作者回答的一句
+
+**① 与 ② 现在只能留一条：让 `declaredFuncType` 活下来、在打包之前录（甲），还是把 ① 撤回、承认「打包由声明回答」还需要一个今天不存在的载体（乙）？**
+
+## 7. 两条相邻读数（不是本页的问题，但决定这条车道的下一步）
+
+- **`lane-ssa` 相对基线仍差 104 条**：`feat/linear` −93、`feat/opt` −4、`feat/tools` −1、`feat/modules` −5、`feat/trans` −1（`compile` 2622/0、`parse` 126/0、`para` 104/0 与基线逐字相同）。这 93 条**不是合 `develop` 带来的**：`5559d3c6e`（合之前）与 `4d308fc72`（合之后）的 `feat/linear` 都是 `869 / 771 / 93 / 2 / 3`，逐字相同；合 `develop` 反而把 `modules` 从 13 条红降到 7、`trans` 从 6 降到 2。
+- **`origin/develop` 已经撤过打包**：`782007912`（作者 `a1b57552a`）revert 了 `9997910f4` 与 `c049f90ec`，理由是 `opt / loop_wait_after_inline.non_contiguous_loop.refused` 与 `tools / lsp.navigation` 两条新红，并写明「the standard they violate is that `develop` carries no new red at all」。develop 的树因此等于 `2d7c5c3a1`，而 `2d7c5c3a1` 正是 `lane-ssa` 的祖先（`git merge-base --is-ancestor 2d7c5c3a1 lane-ssa` 为真）。⇒ 这条车道要合的是 develop 刚撤掉的那批，合入条件不是「不差于基线」，而是**先把第 7 节第一条那 104 条红做完**。

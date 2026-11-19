@@ -30,7 +30,7 @@
 | [`2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type`](2026-11-19-the-call-construction-sites-and-the-three-sources-of-an-exit-type.cn.md) | 调用构造的十个位置，与出口类型的三个来源 |
 | [`2026-11-19-the-call-site-refresh-in-the-tiles-pass`](2026-11-19-the-call-site-refresh-in-the-tiles-pass.cn.md) | 调用点刷新在 tiles 遍里为什么没落到发布程序上 |
 | [`2026-11-19-the-card-quiets-signalling-nans`](2026-11-19-the-card-quiets-signalling-nans.cn.md) | 设备写出的 f32 差在 NaN 负载位，而这四条判据不容忍它 |
-| [`2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes`](2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes.cn.md) | 第一条裁定要的声明，就是第二条裁定要删的字段 |
+| [`2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes`](2026-11-19-the-declaration-the-first-order-needs-is-the-field-the-second-order-deletes.cn.md) | ① 要的那份声明，正是 ② 要删的那个字段 |
 | [`2026-11-19-the-effect-of-a-call-through-a-function-value`](2026-11-19-the-effect-of-a-call-through-a-function-value.cn.md) | 经函数值的调用，足迹取那个值的函数类型——而那个类型今天不写子句 |
 | [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 |
 | [`2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised`](2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised.cn.md) | 那 53 条在要求语言没承诺的东西 |
