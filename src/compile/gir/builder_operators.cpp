@@ -5060,7 +5060,15 @@ node_handle_t Builder::visitLinkNode(
     if (answeredCallee == nullptr) {
         answeredCallee = functionValueGraphOf(calleeValueNode);
     }
-    const bool handsBackParams = callHandsBackResult(answeredCallee);
+    // A call inside its own body has a callee that cannot answer yet -- its body ends after this
+    // expression -- so the signature answers for it, which is the reading the record below already
+    // makes: a graph built for a signature that states a `var` parameter packs, so this call's
+    // value is that tuple and what the expression is worth is its first part. Without this, a
+    // `let r = f(...)` inside `f` binds the tuple and the arm that hands `r` back joins a tuple
+    // where the block hands out the result (the caller-side reading, at `setArmResult`).
+    const bool selfCall = targetGraph != nullptr && targetGraph.get() == currGraph_.get() &&
+                          packsVariableParameters(targetGraph->funcType());
+    const bool handsBackParams = callHandsBackResult(answeredCallee) || selfCall;
     // Recorded for a reader that asks what the expression is *worth*, which is the result and not
     // the tuple -- including a call inside its own body: that call's callee is this graph, whose
     // exit is packed when the body ends, so the graph answers "not yet" and the declared signature
