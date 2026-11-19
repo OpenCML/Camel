@@ -5021,3 +5021,39 @@ compile **2638/2622/0** · linear **869/865/0**（`+1 pass −1 known` 全部来
 **B 提交的每项检查都必要**：各造一个**只违反** 出口在顶层区域（Exit）、无环（Acyclic）、作用域（Scoped）的坏编辑，用现有编辑操作；报是否被拒、被哪一层拒（当场的每步检查还是提交检查）、原文。造不出来的写明原因（例如每步检查先拦下了、或接口不允许构造那种图——这本身是一条读数）。
 **D 不排序的反面**：若有现成入口能不经提交检查运行"打印不排序"的草稿（测试遍、关检查的开关之类），在 `std::tf` 上跑 200 次，报是否出现不同输出，并附提交检查拒绝它的原文；**没有现成入口就跳过，不为此加代码**。
 四组读数都进 `capture-all.sh`，与其他读数同一构建。
+
+## 负责人回报（2026-11-20 03:50）：两条推翻前提的读数，其中一条与 9.9 冲突，请裁
+
+决策者。`nested-b` 报来两条读得出、不是推的两条，都影响你 03:20 那三条下发的前提。
+
+### 一、**「四后端」实际是 nvm/fvm/jit/prl，`tf` 不是本仓库的后端**
+
+`test/vars.toml` 只有 `run_nvm / run_fvm / run_jit / run_prl`（+ inline/prl 变体）；全树唯一一处四项 `backends` 是 `test/plans/feat/compile/utf8_strings.plan.toml:60` 的 `["nvm","fvm","jit","prl"]`。`git grep '"tf"' -- test/` 零命中。**所以「四后端一致」的第四项是 `prl`，不是 `tf`。** 我已按 `prl` 派工；若你指的是别的，请纠正。
+
+### 二、**`grad(grad(f))` 的第一堵墙不在乙里，而在 `stdlib/vjp.cml:175`，且它与 9.9 冲突**
+
+主机实测（`nest_square.cml`）逐字诊断：
+
+```
+Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float):
+... this function has no `with` parameter: there is no first one to move.
+ --> stdlib/vjp.cml:175
+```
+
+而 `docs/design-principles.cn.md` 9.9 原文写死：**「函数没有 `with` 参数时，`grad` 在编译期拒绝并说明原因」**。
+
+⇒ **这是规范行为，不是缺陷。** 所以「`grad(grad(f))` 必须进 P\*」与 9.9 直接冲突：按 9.9，`grad(grad(f))` 在 `f` 是普通函数时**应当被拒**。
+⇒ 乙的四条（函数值按类型提升、变换递归进闭包、`pb` 闭包可再变换、展开）在它**下游**，不修这一条，乙修了也不会让 `grad(grad(f))` 跑起来。
+
+**请裁一句（三条路，我按你选的派）：**
+1. **9.9 不动，`grad(grad(f))` 从 P\* 必需项里去掉**，正文写「按 9.9 编译期拒绝，这是规范行为」；
+2. **9.9 改**：允许无 `with` 参数的函数被 `grad` 两次（那是语言改动，需要你在 9.9 里加一段）；
+3. **换测法**：`grad(grad(f))` 只在 `f` 带 `with` 参数时测（那是另一段程序，不是今天我们卡住的那段）。
+
+**默认建议：选 3**，理由是它既守住 9.9、又能给出「二阶导成立」的读数，代价最小。**但这个默认我只能执行一次，选 2 是语言改动，我不自行决定。**
+
+### 三、`angleargs` 与 `nested-b` 已对齐，不重叠
+
+`angleargs` 改规则文本（`stdlib/rulesets/jvp.cml` 的 `jvp_reshape` → `(x, dims: int[])` + `reshape<dims>`），`nested-b` 改匹配器（`rule_expand.cpp#chooseRuleAmong` 比 `<>` 携带的值）。**两半互补，可都进。**
+
+`nested-b` 先说了代价：`chooseRuleAmong` 今天只收类型（`operandTypes`/`instanceTypes`），要比值就得把节点的静态实参传进来（签名加参数 + `jvp`/`transpose`/`vmap` 三家族各传一次 + `buildRuleTangent` 一并下传），**不是一行改**。我批准了，判据是「左式写常量的法则不再匹配 `<>` 值不同的调用」。
