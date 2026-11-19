@@ -10,9 +10,10 @@
 // one-expression form, and the two must answer the same kind of number.
 //
 // Bound or inline changes nothing about where it stops: the next wall is `jvp`'s, as in
-// `nested_grad_min.cml` -- `jvp has no forward transform for this function` at `stdlib/vjp.cml:182`
-// -- because the inner answer is a function value computed at run time, and `jvp` lifts only an
-// evident callee. The weight in the `with` list is what makes the nest build at all.
+// `nested_grad_min.cml` -- `jvp has no forward transform for this function`, written in `grad`'s own
+// doc (`stdlib/vjp.cml#grad`) -- because the inner answer is a function value computed at run time,
+// and `jvp` lifts only an evident callee. The weight in the `with` list is what makes the nest build
+// at all.
 //
 //   f(x) = x*x*x,  f'(x) = 3x^2,  f''(x) = 6x,  so the second derivative at 2 is 12.0
 //

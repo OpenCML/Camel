@@ -2311,11 +2311,33 @@ void Builder::dropCarriedVariableUnits() {
             cells.push_back(cell);
         }
     }
+    // Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
+    // `hash<const void*>(draft) * 31 + id` (`runtime/node_ref.h`) -- so walking them walks the
+    // allocator's order, and the units dropped further down are created in that order. Two runs of
+    // one program then number the nodes of this body differently (the reading `wins1` measured on
+    // 2026-11-20: "node 1/2/3 differ between runs, close to uniform"). A graph numbers its nodes in
+    // creation order, so the table is sorted by the id the graph already gave the node, which is a
+    // function of the program and not of where the node happens to live.
+    const auto byNodeId = [](node_handle_t left, node_handle_t right) {
+        // The node's own id, then the edit epoch it was made at: both are counts the draft keeps,
+        // so both are a function of the program, and neither is an address. Ids are per graph and
+        // a capture table can hold handles from two of them, which is what the epoch separates.
+        if (left.id != right.id) {
+            return left.id < right.id;
+        }
+        return left.epoch < right.epoch;
+    };
+    std::sort(cells.begin(), cells.end(), byNodeId);
+    const size_t carriedCount = cells.size();
     for (const node_handle_t cell : valueCapturedCells_) {
         if (draft.isNamedBy(cell)) {
             cells.push_back(cell);
         }
     }
+    // `valueCapturedCells_` is the same kind of table. Its cells follow the carried ones -- the two
+    // questions are asked in that order and the order is kept -- and each stretch is sorted inside
+    // itself.
+    std::sort(cells.begin() + static_cast<std::ptrdiff_t>(carriedCount), cells.end(), byNodeId);
     for (const node_handle_t cell : cells) {
         // A cell this graph no longer holds has no unit left to drop, and asking it for its kind
         // is a read of a header the erasure took away: `carriedVersions_` and the capture table
