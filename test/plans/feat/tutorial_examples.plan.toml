@@ -157,17 +157,17 @@ golden = "golden/tutorial_examples/06_var_order.txt"
 # is exactly the claim this plan exists to keep true.
 [[tests]]
 name = "tutorial.examples.06_let_to_var"
-desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 11:10, and the un-synced write above it is a warning at 6:5."
+desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 10:10, and the whole report is what the chapter prints. `bump`'s own `counter += 1` in a body that is not a `sync` block draws no `SemanticDiag::IgnoredSideEffect`: a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), the same reason the entry next door (`10_write_nobody_reads`) pins that report's absence."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/06_let_to_var.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_not_contains = []
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect"]
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 10
-expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter of 'bump'", "SemanticDiag::IgnoredSideEffect"]
+expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter of 'bump'"]
 
 [[tests]]
 name = "tutorial.examples.07_closures"

@@ -156,3 +156,26 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["pullback f32  ct=1 sum -> 20.0", "pullback float ct=1 sum -> 20.0", "pullback f32  ct=1 by hand -> 20.0", "pullback float ct=1 by hand -> 20.0", "pullback f32  ct=0.5 sum -> 10.0", "pullback float ct=0.5 sum -> 10.0"]
 timeout_ms = 30000
+[[tests]]
+name = "compositions.nested_grad_min"
+desc = "The nest of `grad` in `grad` at its smallest, through the library's transform: f(x)=x*x, f'(x)=2x, f''(x)=2, so the second derivative at 2 would be 2.0. It is refused, and the weight is the reason and not the nest: `grad(f)` answers a function whose weight is its first ordinary parameter (`GradientOf<F>`), so the outer `grad` meets a function with no `with` parameter and `first_with_as_param` refuses it -- design principles 9.9 refuses `grad` of a function with no `with` parameter at compile time, with the reason. The sentence is pinned so the wall cannot move silently; the day a ruling makes the nest answer, this entry turns red and the number is 2.0. Brought here from `880e83417`, where it was written; the reading was taken again on this branch and the two sentences are unchanged, which is what says the transposition this lane hoisted is not what refuses the nest."
+kind = "negative"
+case = "../../../cases/transforms/compositions/nested_grad_min.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float)", "this function has no `with` parameter: there is no first one to move"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "compositions.nested_grad_through_a_binding"
+desc = "The same nest written through two bindings (`let inner = grad(square)`, `let outer = grad(inner)`): refused by the same rule and with the same sentence as the one-expression form, at the call that takes `grad` of a value. Two writings, one wall -- the inner gradient's weight is an ordinary parameter, so there is no `with` parameter for the outer one to move (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/transforms/compositions/nested_grad_through_a_binding.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float)", "this function has no `with` parameter: there is no first one to move"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

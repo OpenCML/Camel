@@ -426,3 +426,15 @@ expect_exit = 1
 expect_output_contains = ["has no transpose for this function", "skip=component", "member=0 memberType=Point space=Point why=no-zero-for-an-unread-member"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "split_print"
+desc = "A body that prints, differentiated -- `grad` is `split(jvp(...))` in the library, so the cut meets the statement the print stands in. `f(x) = x*x` with `println(x)` in the body: the derivative at 3 is 6.0 and `3.0` is printed once, which is the count because a call of the derivative calls the lift's forward side once. Before the forward half carried the statements its exit gate waits on, the cut dropped the print and the call was silent with the right number; a statement it cannot carry is still refused by name, never dropped."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_print.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n6.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

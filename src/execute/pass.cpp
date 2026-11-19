@@ -48,6 +48,7 @@
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/rules.h"
+#include "camel/passes/test/undo_selfcheck.h"
 #include "camel/passes/test/saturate.h"
 #include "camel/passes/test/tangent_space.h"
 #include "camel/passes/test/throw_bad_alloc.h"
@@ -1135,6 +1136,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateTestPass, SaturateTestPass),
         TEST_PASS(kRulesTestPass, RulesTestPass),
         TEST_PASS(kRulesGreedyTestPass, RulesGreedyTestPass),
+        TEST_PASS(kSavepointTestPass, SavepointTestPass),
+        TEST_PASS(kUndoSelfCheckTestPass, UndoSelfCheckTestPass),
         TEST_PASS(kSaturateSafeTestPass, SaturateSafeTestPass),
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),

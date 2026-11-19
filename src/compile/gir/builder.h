@@ -2732,6 +2732,16 @@ class Builder {
         BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
         draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const;
+    /// How the function operand of a higher-order operator was read (`readFunctionOperandReach`).
+    enum class OperandReach : uint8_t {
+        Placed,      // the clause was read onto the operands it names
+        Unreadable,  // nothing to read, or a type that writes no clause: read conservatively
+        CannotPlace, // the operand names no value this walk can place the uses on
+    };
+    OperandReach readFunctionOperandReach(
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+        draft_node_ref_t id, const camel::core::sem::ResourceBinding &where,
+        camel::core::sem::ElementShape shape) const;
     void readUnknownValue(BodyReach &walk) const;
     bool reachOfOper(
         DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,

@@ -1050,3 +1050,105 @@ export rule jvp_linear::<T>(x: T[...], w: T[...]) when is_float::<T>() {
         matmul_stated(dx, w, shape(x), shape(w)) + matmul_stated(x, dw, shape(x), shape(w))
 }
 
+// ---- the forward rules of the operators the transpose half spells ----
+//
+// The library is `transpose(split(reinterp<jvp>(f)))`: one half writes the operators the other half
+// then walks. So a step of the composition has two authors, and an operator one half files a law for
+// and the other does not is a step the composition can take in one direction only. `rulesets.jvp` is
+// the forward half, so every operator `stdlib/rulesets/transpose.cml` files a law for needs a law
+// here. The closure is checked (`scripts/vjp-parity.mjs --closure`, a case of
+// `feat/compile/transforms`), so an operator added to one half alone is a red and not a refusal a
+// user meets a month later.
+//
+// The stated spellings below are the **linear half's** own: `jvp_sum`'s tangent is
+// `sum_stated(dxs, shape(xs))` and `jvp_take`'s is `take_stated(dt, shape(t))`, so a law that
+// computes a tangent already writes them. A program that writes the stated spelling is the other
+// route to the same operator, and on that route the forward half used to stop -- `grad` answered it
+// through the engine and `vjp` refused it, the crossing recorded in
+// `docs/handover/reviews/2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings.cn.md`.
+// The author's ruling of 2026-11-04 is 甲: write them. Each is one line, because each operator is
+// linear in the operand that carries data and the extents are the call's, not the value's.
+
+/// `d(sum_stated(t, at)) = sum_stated(dt, at)`: the extents say which lanes the sum takes, and the
+/// tangent of that sum is the same sum of the tangents.
+export rule jvp_sum_stated::<T>(t: T[...], at: int[]) when is_float::<T>() {
+    sum_stated(t, at) => (dt: T[...]) => sum_stated(dt, at)
+}
+
+/// `d(sum<axis, keepdims>(t, extents)) = sum<axis, keepdims>(dt, extents)`: the same law with the
+/// axis and the flag the call carries.
+export rule jvp_sum_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]) when is_float::<T>() {
+    sum_axis_stated(t, axis, keepdims, extents) => (dt: T[...]) =>
+        sum_axis_stated(dt, axis, keepdims, extents)
+}
+
+/// `d(mean_stated(t, extents)) = mean_stated(dt, extents)`: a mean is a sum divided by a count, and
+/// the count is read off the extents, not off the value.
+export rule jvp_mean_stated::<T>(t: T[...], extents: int[]) when is_float::<T>() {
+    mean_stated(t, extents) => (dt: T[...]) => mean_stated(dt, extents)
+}
+
+/// `d(mean<axis, keepdims>(t, extents)) = mean<axis, keepdims>(dt, extents)`.
+export rule jvp_mean_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]) when is_float::<T>() {
+    mean_axis_stated(t, axis, keepdims, extents) => (dt: T[...]) =>
+        mean_axis_stated(dt, axis, keepdims, extents)
+}
+
+/// `d(take_stated(t, indices, extents)) = take_stated(dt, indices, extents)`: which rows a take
+/// reads is the call's, so the tangent takes the same rows.
+export rule jvp_take_stated::<T>(t: T[...], indices: int[], extents: int[]) {
+    take_stated(t, indices, extents) => (dt: T[...]) => take_stated(dt, indices, extents)
+}
+
+/// `d(x * w) = dx * w + x * dw`, each term's shapes stated: the product rule `jvp_mul_tensor`
+/// writes, for the spelling that carries the two extent lists as operands.
+export rule jvp_mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) when is_float::<T>() {
+    mul_stated(x, w, ax, aw) => (dx: T[...], dw: T[...]) =>
+        mul_stated(dx, w, ax, aw) + mul_stated(x, dw, ax, aw)
+}
+
+/// `d(a · b) = da · b + a · db`, with the two extent lists the call carries.
+export rule jvp_matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]) when is_float::<T>() {
+    matmul_stated(a, b, sa, sb) => (da: T[...], db: T[...]) =>
+        matmul_stated(da, b, sa, sb) + matmul_stated(a, db, sa, sb)
+}
+
+/// `d(max<axis, keepdims>(t, extents)) = max<axis, keepdims>(dt, extents)` where the lane's largest
+/// element is: the mask is the call's selection, so passing it through is the whole law -- the same
+/// reading `jvp_max_axis` writes, with the mask the caller already computed.
+export rule jvp_max_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) when is_float::<T>() {
+    max_axis_stated(t, mask, axis, keepdims, extents) => (dt: T[...]) =>
+        max_axis_stated(dt, mask, axis, keepdims, extents)
+}
+
+/// `min`'s mirror of the law above, the same mask rule turned round.
+export rule jvp_min_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) when is_float::<T>() {
+    min_axis_stated(t, mask, axis, keepdims, extents) => (dt: T[...]) =>
+        min_axis_stated(dt, mask, axis, keepdims, extents)
+}
+
+/// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
+/// Declared here because a family cannot read another module's private function, the same stand-in
+/// `mul_tensor` and `divide` above are (`stdlib/rulesets/transpose.cml` declares its own copy for
+/// the backward half).
+func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
+    return x + w
+}
+
+/// `d(x + w) = dx + dw`: a sum passes both tangents through, the forward reading of the backward
+/// law's `(ct, ct)`.
+export rule jvp_add_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
+    add(x, w) => (dx: T[...], dw: T[...]) => dx + dw
+}
+
+/// `log(x)`: what `math:log_d` means, and the left side `log_d_t` files in the backward half. The
+/// same local stand-in as `add` above, and the same reason.
+func log_d(x: float): float {
+    return math_log(x)
+}
+
+/// `d(log(x)) = dx / x`: the whole law, which is what the backward half's `ct / x` turns round.
+export rule jvp_log_d(x: float) {
+    log_d(x) => (dx: float) => dx / x
+}
+

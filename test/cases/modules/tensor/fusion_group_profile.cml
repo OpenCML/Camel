@@ -6,6 +6,19 @@
  * multiply and no neg. With `fused=0` the numerator is differentiated too, so the gradient
  * struct reads the divide's result, the backend declines, and the three operators run one by one.
  * The group is marked in both programs; only the backend's choice differs.
+ *
+ * `x` and `w` are written to a variable before they are read, and that is what makes the table
+ * them measure. A value computed from constants is a value the compiler may compute itself
+ * (design principles 3.4): `std::opt` folds a pure operator whose operands are all constants, and
+ * `tensor:zeros`, `tensor:divide` and `tensor:sum` are pure. Written as one expression
+ * (`zeros::<f32>([8, 8]) + 1.0`) the whole program -- the call to `with_grad` included -- folds to
+ * the two numbers it prints, the operator table is empty, and a count taken from it answers 0 for
+ * every operator: the safe-mode case below read `expected one divide call (the forward one), got
+ * 0` for exactly that reason, with the printed `v=128.0 sum=-256.0` unchanged and correct. A slot
+ * the program writes is not one value -- it holds what each write put there -- so nothing is
+ * folded across a read of it (`src/passes/opt/generic/generic.cpp#isFoldable`,
+ * `readsNoWrittenSlot`), and the operators stay in the graph under `std::opt` as they are without
+ * it. The values are the operators' either way: the table is what this program is for.
  */
 
 import { sum, zeros } from tensor
@@ -26,8 +39,10 @@ func shared_chain(): float {
 }
 
 func main(fused: int): int sync {
-    let x = zeros::<f32>([8, 8]) + 1.0
-    let w = zeros::<f32>([8, 8]) + 0.5
+    var x = zeros::<f32>([8, 8])
+    x = x + 1.0
+    var w = zeros::<f32>([8, 8])
+    w = w + 0.5
     if fused != 0 then {
         let g = with_grad(private_chain)
         let (value, gradient) = g<{w: w}>(x)

@@ -1,0 +1,52 @@
+id = "compile.higher_order_clause"
+order = 344
+tier = "fast"
+tags = ["feat", "compile", "effects", "hof"]
+
+# The pair: the same `map`, once over a function that writes no clause and once over one that
+# writes `stdout`. What a higher-order operator's call touches is the function operand's
+# (design principles 3.3; author 2026-11-19), so the declaration names the operand
+# (`sem::ResourceSpec::functionOperand`) and every reader takes the clause from that value's type:
+# the builder's ordering (`Builder::reachOfOper`, `Builder::isEffectNode`), the node-role registry
+# and the effect summary (`EffectWalk::ofNodes`), all through
+# `camel::core::functionOperandClause`. Before that, the declaration said "external, itemizes
+# nothing" and every `map` was an effect, whatever the callback.
+[[tests]]
+name = "map.pure_callback"
+desc = "`map` over a function that writes no clause is not an effect: the node carries no `effect` role and the dump lists no such role at all."
+case = "../../../cases/effects/hof_map_pure.cml"
+kind = "behavior"
+args = ["${case}", "std::agir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const lines = input.normalized.output.split('\n')
+    const map = lines.find((line) => line.includes('label=":mark/map_arr"'))
+    assert(map !== undefined, 'no :mark/map_arr node in the dump')
+    assert(!map.includes('role="'), `the map node carries a role: ${map}`)
+    assert(!lines.some((line) => line.includes('legend_effect')),
+        'the dump lists an effect role, so the map was counted as one')
+}
+"""
+
+[[tests]]
+name = "map.effectful_callback"
+desc = "`map` over a function that writes `stdout` stays an effect: the node carries the `effect` role and the dump has a legend for it."
+case = "../../../cases/effects/hof_map_effect.cml"
+kind = "behavior"
+args = ["${case}", "std::agir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+    const lines = input.normalized.output.split('\n')
+    const map = lines.find((line) => line.includes('label=":mark/map_arr"'))
+    assert(map !== undefined, 'no :mark/map_arr node in the dump')
+    assert(map.includes('role="effect"'), `the map node lost its effect role: ${map}`)
+    assert(lines.some((line) => line.includes('legend_effect')),
+        'no effect legend, so nothing was counted as an effect')
+}
+"""

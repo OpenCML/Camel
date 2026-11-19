@@ -34,12 +34,24 @@ void declareResourcesAndDefinitions() {
         "tensor",
         {
             {"show", externalAmbient("stdout", AccessMode::Write)},
-            {"load_npy", externalAmbient("fs", AccessMode::Read)},
             {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},
             {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
             {"num_threads", externalAmbient("tensor:threads", AccessMode::Read)},
             {"gemm_threads", externalAmbient("tensor:threads", AccessMode::Read)},
         });
+    // `load_npy` is not one operator but one per element type a `.npy` file can hold, registered
+    // under its own URI each (`utility_ops.cpp#kNpyElementTypes`). The declaration goes on those
+    // five: `tensor:load_npy` is the group's head, which answers a call and is no operator, so a
+    // declaration written there reached none of them and each fell back to "writes the resource
+    // every effect conflicts with". Two loads of two different files then met as two writes of one
+    // resource, and a commit that published them unordered -- a splice that carries the callee's
+    // own two loads into a caller -- was refused for a conflict the program never had
+    // (2026-11-19). Reading a file is a read of `fs`, the answer `fs:read_bytes` gives.
+    for (std::string_view name : npyLoadOperatorNames()) {
+        table.declareResources(
+            std::string("tensor:") + std::string(name),
+            externalAmbient("fs", AccessMode::Read));
+    }
     const auto operand = [](uint8_t index,
                             std::optional<DefinitionDefault> fallback = std::nullopt) {
         return DefinitionParam{

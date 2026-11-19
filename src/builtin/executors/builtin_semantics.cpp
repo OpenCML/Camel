@@ -188,14 +188,24 @@ void declareUnorderedReduce() {
         inst.law    = 0;
         return inst;
     };
-    OperatorTable::instance().declareSemantics(
-        uri,
-        OperatorSemantics{
-            .key          = OperatorKey::of(uri),
-            .indexing     = indexing,
-            .laws         = {law},
-            .elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true},
-        });
+    // What the operator already has is kept and this declares the addition: its declared accesses
+    // (author 2026-11-19) and, on the second context that loads the module, the version the record
+    // already carries. A record declared again from a fixed key is refused as a lower version, so
+    // the key comes from the table the way `declareElementCalls` takes it.
+    OperatorSemantics record{
+        .key          = OperatorKey::of(uri),
+        .indexing     = indexing,
+        .laws         = {law},
+        .elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true},
+    };
+    auto &table = OperatorTable::instance();
+    if (const auto id = table.lookup(uri); id && table.semantics(*id) != nullptr) {
+        record = *table.semantics(*id);
+        record.indexing     = indexing;
+        record.laws         = {law};
+        record.elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true};
+    }
+    table.declareSemantics(uri, std::move(record));
 }
 
 /**
@@ -544,4 +554,70 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
                 .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
                 .externalEffect = true});
     }
+    // The private copy of an array made for one state of a loop whose body only appends to it
+    // (`Builder::markLoopStateInPlace`) is pure and declared in the pure list of
+    // `registerBuiltinOperatorTraits`: `copyWithRoom` allocates a new array, fills it with the
+    // elements of the one it is given and leaves that one exactly as it was. The loop-state append
+    // (`:struct/append_arr_owned`) sits in the same list, for the reason `:struct/append_arr` is:
+    // it appends inside storage the program holds alone and copies when it does not, so what a
+    // program with a second holder of the array sees does not change. Its parameter is ordinary,
+    // not `var` -- it promises nothing about the array it is handed -- and a declared write through
+    // an ordinary parameter is refused by the declaration check, which is the same answer.
+
+    // A local of a generator body, whose cell is made before it has a value (`Tuple::create(1)`
+    // and nothing in its slot): a new variable, the same resource `:var/new` makes.
+    table.declareResources(
+        ":var/new/empty",
+        ResourceSpec{.allocates = Resource{.cls = ResourceClass::Variable}});
+    // `std::mem::blocks()` reports the block counters of the process: state outside the program,
+    // read and never written. Reads are dependencies and not effects, so the call is ordered by the
+    // values it gives -- and it is not pure, because those values change without an argument
+    // changing (design principles 3.3: an observer of a counter the program does not own).
+    table.declareResources(":op/mem_blocks", externalAmbient("mm", AccessMode::Read));
+    // `tee_note` writes the record of a tee into the report of a profile session: the profiler's
+    // own ambient resource, written the way the profiler's operators write it.
+    table.declareResources(
+        ":stream/tee_note",
+        ResourceSpec{
+            .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
+            .externalEffect = true});
+    // `:macro/cmp` is pure and declared in the pure list of `registerBuiltinOperatorTraits`: its
+    // executor answers the null slot and the compiler makes no node of it any more
+    // (src/compile/gct/builder.cpp, `ReservedDataOp::Comp`), and the two operands are function
+    // values it never calls.
+    // The operators that run a function the program hands them (`map`, `filter`, `foreach` and the
+    // unordered loop of the same shape): what they touch is that function's, so the declaration
+    // names the operand the function arrives in and not a resource (design principles 3.3; author
+    // 2026-11-19). It is the same rule a call through a function value already follows
+    // (`Builder::reachOfCall`): a reader that has the value reads its function type, and `map` over
+    // a pure function touches nothing at all -- itemizing "external" here made such a call enter
+    // compare) would make such a call enter the sync chain and lose its freedom. A reader that has
+    // only the table takes it as an effect outside the program that itemizes nothing, which is the
+    // conservative reading a type without a clause gets too. The function is the first `with`
+    // operand in all of them: src/builtin/operators/higher_order.cpp, `functionOf`, takes
+    // `with.get<Function *>(0)`. The result is a new array (or the null slot), so nothing is
+    // claimed about it either.
+    for (const char *uri :
+         {":mark/map_arr", ":mark/filter_arr", ":mark/foreach_arr", ":mark/unordered_foreach_arr"}) {
+        table.declareResources(
+            uri, ResourceSpec{.functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
+    }
+    // The two that hand a value back out of the callback: `reduce` gives the accumulator it was
+    // given or the value the last call made, and the marked call of `attempt(f)` gives what the
+    // callee gave, which may be an object the callee holds. Nothing is known about either result,
+    // and that stays even though the accesses are the function's. `reduce`'s function is its first
+    // `with` operand too; `:mark/isolate`'s is its first ordinary one (operator_semantics.h,
+    // `ElementCalls`, and the resolver of the marked call in tagged.cpp).
+    for (const char *uri : {":mark/reduce_arr", ":mark/unordered_reduce_arr"}) {
+        table.declareResources(
+            uri,
+            ResourceSpec{
+                .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
+                .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
+    }
+    table.declareResources(
+        ":mark/isolate",
+        ResourceSpec{
+            .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
+            .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::Norm}});
 }

@@ -1,0 +1,32 @@
+// The smallest nest of `grad` inside `grad`, through the *library's* transform: `grad` here is
+// `vjp`'s (`stdlib/vjp.cml#grad`), which is `split(jvp(first_with_as_param(f)))` and not the
+// engine's operator (`stdlib/signatures/autodiff.cml#grad`, which does nest).
+//
+//   f(x) = x*x,  f'(x) = 2x,  f''(x) = 2,  so the second derivative at 2 would be 2.0
+//
+// It is refused, and the reason is the weight and not the nest: `grad(f)` answers a function whose
+// weight is its first **ordinary** parameter (`GradientOf<F>`), so the outer `grad` finds no `with`
+// parameter to move and `first_with_as_param` refuses it --
+//
+//   Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float):
+//   `first_with_as_param` moves the first `with` parameter onto the ordinary list, and this
+//   function has no `with` parameter: there is no first one to move
+//
+// That is design principles 9.9: `grad` differentiates a function's first `with` parameter, and a
+// function with none is refused at compile time with the reason. So a nest of *this* `grad` is not
+// a defect of the cut; it needs a ruling on what the second derivative of a function of no `with`
+// parameter means (the weight taken as the first ordinary parameter, or a `grad` that keeps a
+// `with` slot for it). The case is pinned so the wall cannot move silently: the day a ruling makes
+// the nest answer, this entry turns red and the answer is 2.0.
+
+import { grad } from vjp
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+func main(): int sync {
+    println(grad(grad(square))(2.0))
+    return 0
+}

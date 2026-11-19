@@ -489,6 +489,7 @@ enum class SemanticDiag : uint32_t {
     CapturedVarWrittenAfterTheClosure = 0x000214,
     CapturedVarHandedToVarParameter   = 0x000215,
     VarContextParameterCannotBeBound  = 0x000216,
+    OperatorAccessesUndeclared        = 0x000218,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

@@ -353,6 +353,33 @@ enum class PlaceHandover {
     DissolvedIntoIdsBlock,
 };
 
+/// Which part of a draft a rollback did not put back. One name per kind of state the journal
+/// records, in the order the self-check compares them: a class that is not back is reported alone,
+/// as the class, because that is what a hook that was forgotten is.
+enum class UndoClass : uint8_t {
+    Nodes,
+    Regions,
+    Scalars,
+    Ports,
+    Types,
+    LowLevel,
+};
+std::string_view undoClassName(UndoClass cls);
+
+/// A whole draft as a savepoint found it: taken when the self-check is on, compared with the draft
+/// a rollback leaves. It is a copy of every part the journal is responsible for -- one entry per
+/// node slot with the body and the five user lists, the region table with the ports of each region,
+/// the draft's own scalars, its types, its port tables, the low-level edit list and the equivalence
+/// log -- so a part the journal missed shows up as a difference and not as a graph that merely
+/// looks plausible.
+struct UndoSnapshot;
+
+/// The whole draft, copied (see UndoSnapshot).
+std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft);
+/// The first class that differs between `draft` and `snapshot`; empty when the draft is the one the
+/// snapshot holds.
+std::optional<UndoClass> undoMismatch(const GraphDraft &draft, const UndoSnapshot &snapshot);
+
 class GraphDraft {
   public:
     /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
@@ -441,7 +468,10 @@ class GraphDraft {
     /// packed exit type is computed from it; the packing bit goes"). **Nothing reads this yet**; the
     /// readers that need the declaration move over in the following change, and the bit goes after them.
     camel::core::type::FunctionType *declaredFuncType() const { return declaredFuncType_; }
-    void setDeclaredFuncType(camel::core::type::FunctionType *funcType) { declaredFuncType_ = funcType; }
+    void setDeclaredFuncType(camel::core::type::FunctionType *funcType) {
+        noteOriginalTypes();
+        declaredFuncType_ = funcType;
+    }
     /// Whether the body packed `var` parameters into the exit type, as against writing that tuple
     /// itself (`Builder::handBackVariableParameters`). The exit type cannot say which: a packed tuple
     /// and a user's tuple result have the same shape, which is what the module cases returning tuples
@@ -633,10 +663,12 @@ class GraphDraft {
     void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
     void setFuncType(camel::core::type::FunctionType *funcType) {
+        noteOriginalTypes();
         ++mutations_;
         funcType_ = funcType;
     }
     void setCaptureNames(std::span<const camel::core::SymId> names) {
+        noteOriginalTypes();
         ++mutations_;
         captureNames_.assign(names.begin(), names.end());
     }
@@ -644,11 +676,13 @@ class GraphDraft {
     void addCaptureName(std::string_view name);
     /// Gives the graph this frame layout (possibly one without slots).
     void setRuntimeSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteOriginalTypes();
         ++mutations_;
         runtimeSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
         hasFrameLayout_ = true;
     }
     void setClosureType(camel::core::type::TupleType *closureType) {
+        noteOriginalTypes();
         ++mutations_;
         closureType_ = closureType;
     }
@@ -656,6 +690,7 @@ class GraphDraft {
     /// are. A rewrite that retypes what a constant stands for changes the layout here and not the
     /// value (camel/runtime/retype.h), which is why the two are set apart.
     void setStaticSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteOriginalTypes();
         ++mutations_;
         staticSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
     }
@@ -745,17 +780,20 @@ class GraphDraft {
     bool eraseUnreadNodes(std::span<const gc_node_ref_t> nodes);
 
     /// Where the draft stood: the counts its node table and its two slot tables had, the regions it
-    /// had, and how many writes it had seen (docs/design/graph-editing/README.cn.md 16.1, 16.4).
+    /// had, how many writes it had seen, and where the undo journal stood.
     ///
-    /// A savepoint exists for one caller: a rule application, which appends nodes and the slots
-    /// they take and edits nothing it found. What it appends is what `rollbackTo` takes back, so an
-    /// application the engine abandons -- a right side whose constant faults, a writing that cannot
-    /// be given the waits the node it replaces had -- leaves the draft as it found it, which is the
-    /// "all or nothing" one application is ("一次应用就是一个小的 edit：全成或全不成").
+    /// A savepoint names a *segment*: what `rollbackTo` takes back is what the draft appended and
+    /// what it changed in the nodes it already had. The two halves are both in it. What an
+    /// application appends is the counts below; what it changes in place -- a node's inputs, a
+    /// region result, the entry or the exit, the user lists -- is in the journal the `undo*`
+    /// marks below name, which is written by the draft itself and only while a segment is open.
     ///
-    /// It is not the undo log of 16.4, and the difference is what it can be asked: a change made
-    /// *in place* on a node the draft already had (an operand taken away, an operator swapped) has
-    /// no record here to walk back, so a caller that made one must not ask for a rollback.
+    /// The undo rule this serves is the draft's own: one edit lands whole or leaves nothing, and
+    /// what an edit changed in place is kept in an undo log while a segment is open (the
+    /// graph-editing notes' 16.1 and 16.4). It is stated here in full rather than left to a
+    /// document, because it is what this type has to satisfy: a node the segment erased comes back at
+    /// the same id with the same body, since a node id is never handed out twice and a rollback that
+    /// moved one would break every class and every edge that names it.
     struct Savepoint {
         size_t nodes        = 0;
         size_t staticSlots  = 0;
@@ -763,18 +801,64 @@ class GraphDraft {
         size_t regions      = 0;
         uint64_t mutations  = 0;
         bool hasFrameLayout = false;
+        // The journal's own marks, one per record kind (see the `UndoNode`, `UndoRegions`,
+        // `UndoScalars`, `UndoTypes`, `UndoPorts` and `UndoLowLevel` records below). The
+        // equivalence log is not one of them: the store owns it (`writings.h`,
+        // `DraftWritings::ApplicationMark`), and the draft's copy of it is a copy.
+        size_t undoNodes     = 0;
+        size_t undoRegions   = 0;
+        size_t undoScalars   = 0;
+        size_t undoTypes     = 0;
+        size_t undoPorts     = 0;
+        size_t undoLowLevel  = 0;
+        /// The draft as the mark found it, when the self-check was on: `rollbackTo` compares the
+        /// draft it put back with this and reports the first class that differs.
+        std::shared_ptr<const UndoSnapshot> check;
     };
     Savepoint savepoint() const;
-    /// Drops every node, static value and frame slot the draft appended after `mark`, and puts the
-    /// draft's own write count back, so that a commit after an abandoned application sees a draft
-    /// that was not written to.
+    /// Opens a segment: the journal starts recording, and the returned mark names its start. Every
+    /// `markUndo` taken while it is open is a rollback point inside it; `endUndo` closes the
+    /// outermost one and drops the journal. The record cost is what the segment changed, not the
+    /// size of the graph, so a caller that never rolls back pays the copies of the nodes it wrote
+    /// to and nothing else.
+    Savepoint beginUndo();
+    /// A rollback point inside the segment already open. Outside one it names no journal, and a
+    /// rollback to it is the count rollback `savepoint()` always was.
+    Savepoint markUndo();
+    /// Closes one segment; the outermost one drops the journal and the recording stops.
+    void endUndo();
+    /// Puts the draft back where `mark` found it: every node, static value and frame slot it
+    /// appended after the mark goes, then the journal is replayed backwards over the nodes it
+    /// changed in place and the ones it erased, and the counters go back. A commit after a rolled
+    /// back segment sees a draft that was not written to.
     ///
     /// The **ids** are not given back: `addNode` never reuses one, and the lists that keep the ids
     /// of erased nodes (`gateIds_` and its two siblings) count on that, so the nodes go and the id
-    /// space keeps them. What the application took out of the tables does come back -- a static
-    /// value and a frame slot exist for the node that made them, and a graph published with them
-    /// would carry a constant nothing reads and a frame larger than its body needs.
+    /// space keeps them. A node the segment erased comes back **at its own id** with the body it
+    /// had -- the id was never handed out twice, so putting the old body back at it is not a
+    /// reuse, and every class and edge that names the id is right again. A rollback with no
+    /// journal (a mark taken outside a segment) restores the counts alone, as it always did.
     void rollbackTo(const Savepoint &mark);
+
+    /// How a rollback answers a class it did not put back. `Off` (a Release build's default) keeps
+    /// no copy at all; `Report` stores the class in `undoMismatch()` and stays quiet; `Abort` (a
+    /// debug build's default) also fails the invariant. The copy at a mark is the whole draft, so
+    /// only a build that is auditing a rollback pays for it: a test that walks the classes turns
+    /// `Report` on and reads them one by one, and a debug build starts in `Abort`.
+    enum class SelfCheckMode : uint8_t {
+        Off,
+        Report,
+        Abort,
+    };
+    void setUndoSelfCheck(SelfCheckMode mode) { selfCheck_ = mode; }
+    SelfCheckMode undoSelfCheck() const { return selfCheck_; }
+    /// The first class the last `rollbackTo` did not put back; empty when it put everything back
+    /// (and empty when the mark carried no copy).
+    std::optional<UndoClass> undoMismatch() const { return lastMismatch_; }
+    /// Makes one class's hook record nothing, which is what a hook that was forgotten amounts to:
+    /// the check's own test does this on purpose, one class at a time, and requires the class back.
+    void skipUndoClassForTest(UndoClass cls) { skippedClass_ = cls; }
+    void clearSkippedUndoClassForTest() { skippedClass_.reset(); }
 
     /// Whether the graph names `id` by something other than a read, so that a policy which erases a
     /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
@@ -1018,7 +1102,12 @@ class GraphDraft {
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }
-    void setInsertRegion(uint32_t region) { insertRegion_ = region; }
+    /// Which region a node is added into. A segment writes it and puts it back with everything
+    /// else the draft itself holds (`UndoScalars`), so the write goes through the hook.
+    void setInsertRegion(uint32_t region) {
+        noteOriginalScalars();
+        insertRegion_ = region;
+    }
     /// Whether a node that reads a node of a deeper control region moves into that region
     /// (inheritRegion). The front end places every node itself, so a read across the border
     /// of an arm is left for the validator to report.
@@ -1070,18 +1159,22 @@ class GraphDraft {
     void removeWithPort(gc_node_ref_t id);
     void removeClosureNode(gc_node_ref_t id);
     void setEntryNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         entry_ = id;
     }
     void setExitNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         exit_ = id;
     }
     void setOutputNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         output_ = id;
     }
     void setReturnNode(gc_node_ref_t id, GCReturnKind kind) {
+        noteOriginalScalars();
         ++mutations_;
         returnNode_ = id;
         returnKind_ = kind;
@@ -1207,6 +1300,98 @@ class GraphDraft {
     std::vector<gc_node_ref_t> brchIds_;
     std::vector<gc_node_ref_t> joinIds_;
 
+    /// One segment's undo journal: what it changed outside its own appends. The records are kept
+    /// per kind, so a rollback takes the *first* record a mark has of each kind -- the state the
+    /// mark found -- instead of replaying later records over it. Every mark bumps `journalEpoch_`,
+    /// which is what makes that first record per segment: a node written by the outer segment and
+    /// again by an inner one is recorded once with the outer epoch and once with the inner one.
+    struct UndoNode {
+        gc_node_ref_t id = kInvalidNodeRef;
+        DraftNodeHeader header{};
+        std::vector<std::byte> tail; // the payload and the five input runs, as the node had them
+        std::vector<gc_node_ref_t> users[5]; // its user lists, when the segment wrote them
+        bool usersRecorded = false;
+    };
+    struct UndoRegions {
+        std::vector<GCRegion> regions;
+        std::vector<gc_node_ref_t> regionPorts;
+    };
+    struct UndoScalars {
+        gc_node_ref_t entry      = kInvalidNodeRef;
+        gc_node_ref_t exit       = kInvalidNodeRef;
+        gc_node_ref_t output     = kInvalidNodeRef;
+        gc_node_ref_t returnNode = kInvalidNodeRef;
+        GCReturnKind returnKind  = GCReturnKind::None;
+        uint64_t mutations       = 0;
+        bool hasFrameLayout      = false;
+        uint32_t insertRegion    = 0;
+    };
+    struct UndoPorts {
+        std::vector<gc_node_ref_t> norm, with, closure;
+    };
+    /// The graph's own types, as the segment found them. `funcType_` is graph content a segment
+    /// writes: a rewrite republishes the graph under another signature (`setFuncType`), and a port
+    /// that goes takes its parameter out of the signature with it (`removeNormPort`,
+    /// `removeWithPort`). The other members are the same kind of state -- the frame layout a
+    /// rewrite retypes, the closure type, the capture names -- so one record holds them and one
+    /// class of the self-check compares them.
+    struct UndoTypes {
+        camel::core::type::FunctionType *funcType         = nullptr;
+        camel::core::type::FunctionType *declaredFuncType = nullptr;
+        camel::core::type::TupleType *closureType         = nullptr;
+        std::vector<camel::core::SymId> captureNames;
+        std::vector<camel::core::type::Type *> runtimeSlotTypes;
+        std::vector<camel::core::type::Type *> staticSlotTypes;
+    };
+    struct UndoLowLevel {
+        size_t edits = 0;
+    };
+
+    bool journalOpen() const { return journalDepth_ != 0; }
+    /// Records `id` as the segment found it, once per segment: the body and its user lists.
+    void noteOriginalNode(gc_node_ref_t id);
+    void noteOriginalRegions();
+    void noteOriginalScalars();
+    void noteOriginalTypes();
+    void noteOriginalPorts();
+    void noteOriginalLowLevel();
+    /// Puts one recorded node back at its own id: allocated again when the segment erased it, and
+    /// written over the body that stands there when it did not.
+    void restoreUndoNode(UndoNode &record);
+    /// Drops the records after `mark` and restores what they held (the journal half of
+    /// `rollbackTo`).
+    void replayJournal(const Savepoint &mark);
+    void dropJournal();
+    std::vector<UndoNode> undoNodes_;
+    std::vector<uint64_t> undoNodeEpoch_; // by node id: the epoch a node was last recorded in
+    std::vector<UndoRegions> undoRegions_;
+    std::vector<UndoScalars> undoScalars_;
+    std::vector<UndoTypes> undoTypes_;
+    std::vector<UndoPorts> undoPorts_;
+    std::vector<UndoLowLevel> undoLowLevel_;
+    uint64_t undoRegionsEpoch_  = 0;
+    uint64_t undoScalarsEpoch_  = 0;
+    uint64_t undoTypesEpoch_    = 0;
+    uint64_t undoPortsEpoch_    = 0;
+    uint64_t undoLowLevelEpoch_ = 0;
+    uint64_t journalEpoch_      = 0;
+    unsigned journalDepth_      = 0;
+    /// Set while the journal is putting itself back: a restore writes bodies, and a body write is
+    /// not an edit of the segment that is being rolled back.
+    bool undoSuspended_         = false;
+#ifdef NDEBUG
+    SelfCheckMode selfCheck_ = SelfCheckMode::Off;
+#else
+    SelfCheckMode selfCheck_ = SelfCheckMode::Abort;
+#endif
+    std::optional<UndoClass> lastMismatch_;
+    std::optional<UndoClass> skippedClass_;
+    /// True when this class's hook must record nothing: the journal is open, it is not putting
+    /// itself back, and the check's own test did not ask this class to be forgotten.
+    bool journalSkips(UndoClass cls) const {
+        return skippedClass_.has_value() && *skippedClass_ == cls;
+    }
+
     /// What the commit checks read as the second half of their tier (see `lowLevelEdits`): the
     /// existing nodes this draft changed in place, in the order the changes were first made, and a
     /// bitmap so that a node changed twice is named once.
@@ -1324,6 +1509,65 @@ gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
 uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
 
 AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref);
+
+/// One node as a savepoint found it: the body, the tail bytes the body reads and the five lists of
+/// readers that point at it. `present` is false for a node slot the draft had not handed out.
+struct UndoSnapshotNode {
+    bool present = false;
+    DraftNodeHeader header{};
+    std::vector<std::byte> tail;
+    std::array<std::vector<gc_node_ref_t>, 5> users;
+};
+
+/// A whole draft as a savepoint found it (see `takeUndoSnapshot`). The parts are the classes
+/// `UndoClass` names, field for field: a rollback that leaves any of them changed is the mismatch
+/// the self-check reports, and the class it reports is the hook that was forgotten.
+struct UndoSnapshot {
+    std::vector<UndoSnapshotNode> nodes;
+    std::vector<GCRegion> regions;
+    /// The ports of each region, by region id (`regionPortsOf`).
+    std::vector<std::vector<gc_node_ref_t>> regionPorts;
+    // Scalars: the names the graph gives its own values and the counters a commit reads.
+    gc_node_ref_t entry      = kInvalidNodeRef;
+    gc_node_ref_t exit       = kInvalidNodeRef;
+    gc_node_ref_t output     = kInvalidNodeRef;
+    gc_node_ref_t returnNode = kInvalidNodeRef;
+    GCReturnKind returnKind  = GCReturnKind::None;
+    uint64_t mutations       = 0;
+    bool hasFrameLayout      = false;
+    uint32_t insertRegion    = 0;
+    // The graph's own types.
+    camel::core::type::FunctionType *funcType         = nullptr;
+    camel::core::type::FunctionType *declaredFuncType = nullptr;
+    camel::core::type::TupleType *closureType         = nullptr;
+    std::vector<camel::core::SymId> captureNames;
+    std::vector<camel::core::type::Type *> runtimeSlotTypes;
+    std::vector<camel::core::type::Type *> staticSlotTypes;
+    // The port tables.
+    std::vector<gc_node_ref_t> normPorts;
+    std::vector<gc_node_ref_t> withPorts;
+    std::vector<gc_node_ref_t> closureNodes;
+    // The nodes this draft changed in place, as the commit checks read them.
+    std::vector<gc_node_ref_t> lowLevelEdits;
+};
+
+inline std::string_view undoClassName(UndoClass cls) {
+    switch (cls) {
+    case UndoClass::Nodes:
+        return "nodes";
+    case UndoClass::Regions:
+        return "regions";
+    case UndoClass::Scalars:
+        return "scalars";
+    case UndoClass::Ports:
+        return "ports";
+    case UndoClass::Types:
+        return "types";
+    case UndoClass::LowLevel:
+        return "low-level";
+    }
+    return "unknown";
+}
 
 /// A draft read as a graph reader, so that `camel/runtime/graph.h`'s gate walk answers for a draft
 /// too: the four methods `forwardedInputOf` and `valueBehindGates` ask for are `nodeCount`, `node`,

@@ -1085,6 +1085,9 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
 }
 
 DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) {
+    // Every in-place change of a body goes through here, and the node still stands as it was: this
+    // is where a segment's journal keeps the old body.
+    noteOriginalNode(id);
     ++mutations_;
     const size_t tailBytes =
         init.payload.size_bytes() + adjacencyBytes(
@@ -1174,6 +1177,9 @@ void GraphDraft::replaceNodeStorage(gc_node_ref_t id, DraftNode *nodePtr) {
 }
 
 void GraphDraft::removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdgeSlot slot) {
+    // A producer's list of readers is not the producer's own body: it changes when some other node
+    // is detached from it, and the journal keeps it beside the body.
+    noteOriginalNode(id);
     ++mutations_;
     if (node(id) == nullptr || id >= users_.size() || !users_[id]) {
         return;
@@ -1205,6 +1211,10 @@ void GraphDraft::removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdge
 }
 
 void GraphDraft::appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdgeSlot slot) {
+    noteOriginalNode(id);
+    // `inheritRegion` can move the reader into the region it reads from, so the reader is a node
+    // the segment changed in place as well.
+    noteOriginalNode(userId);
     ++mutations_;
     if (node(id) == nullptr) {
         return;
@@ -1245,6 +1255,10 @@ uint64_t GraphDraft::firstNodeOrigin() const {
 
 void GraphDraft::setWritings(std::vector<WritingUnion> log) {
     if (log != writings_) {
+        // The draft's copy of the equivalence log, which the encoder reads. It is a copy of the
+        // store's log and not state of its own, so the journal does not keep it and a rollback does
+        // not put it back: the store's `rollbackTo` is the one undo of the log, and the next `save`
+        // makes this copy true again (writings.h, `DraftWritings::ApplicationMark`).
         ++mutations_;
         writings_ = std::move(log);
     }
@@ -1265,6 +1279,7 @@ camel::core::sem::PermissionMask GraphDraft::nodePermissions(gc_node_ref_t id) c
 void GraphDraft::setNodePermissions(
     gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
     requireOneWriting("setNodePermissions");
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -1283,6 +1298,7 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -1301,6 +1317,7 @@ uint32_t GraphDraft::nodeName(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodeName(gc_node_ref_t id, uint32_t name) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -1313,6 +1330,7 @@ void GraphDraft::setNodeName(gc_node_ref_t id, uint32_t name) {
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -1951,6 +1969,13 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
 
 void GraphDraft::eraseNode(gc_node_ref_t id) {
     requireOneWriting("eraseNode");
+    // What an erasure takes out is the body, its place in the tables and the lists of every node
+    // that read it: all of it is recorded before the first thing goes, so a rollback can put the
+    // node back at its own id.
+    noteOriginalNode(id);
+    noteOriginalScalars();
+    noteOriginalRegions();
+    noteOriginalPorts();
     ++mutations_;
     DraftNode *draftNode = node(id);
     GUARD(
@@ -2025,15 +2050,19 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     std::erase(normPorts_, id);
     std::erase(withPorts_, id);
     std::erase(closureNodes_, id);
+    // The graph's own scalars go through the setters that record them. The journal already has
+    // this segment's record (`noteOriginalScalars` above), so these calls record nothing further;
+    // they are here because a node is dropped by exactly the writes a segment makes, and a write
+    // that went round the hook would be one the self-check has to catch (`dissolveUnorderedGates`
+    // wrote them before the erase, which is the defect that put the hooks on this path).
     if (entry_ == id)
-        entry_ = kInvalidNodeRef;
+        setEntryNode(kInvalidNodeRef);
     if (exit_ == id)
-        exit_ = kInvalidNodeRef;
+        setExitNode(kInvalidNodeRef);
     if (output_ == id)
-        output_ = kInvalidNodeRef;
+        setOutputNode(kInvalidNodeRef);
     if (returnNode_ == id) {
-        returnNode_ = kInvalidNodeRef;
-        returnKind_ = GCReturnKind::None;
+        setReturnNode(kInvalidNodeRef, GCReturnKind::None);
     }
 }
 
@@ -2087,89 +2116,6 @@ bool GraphDraft::eraseUnreadNodes(std::span<const gc_node_ref_t> nodes) {
                 pending.size()));
     }
     return true;
-}
-
-GraphDraft::Savepoint GraphDraft::savepoint() const {
-    return Savepoint{
-        .nodes          = nodesById_.size(),
-        .staticSlots    = staticSlots_.size(),
-        .frameSlots     = runtimeSlotTypes_.size(),
-        .regions        = regions_.size(),
-        .mutations      = mutations_,
-        .hasFrameLayout = hasFrameLayout_,
-    };
-}
-
-void GraphDraft::rollbackTo(const Savepoint &mark) {
-    requireOneWriting("rollbackTo");
-    // What a savepoint can take back is what was appended: nodes, the static values and the frame
-    // slots they took. A region is not one of them -- a rule's right side is spliced into regions
-    // that exist -- so a rollback asked of a draft that gained one is a caller that read the
-    // savepoint wrong, and taking the nodes back while leaving the region behind would be a draft
-    // whose tables no longer agree.
-    GUARD(
-        mark.nodes <= nodesById_.size() && mark.staticSlots <= staticSlots_.size() &&
-            mark.frameSlots <= runtimeSlotTypes_.size() && mark.regions == regions_.size(),
-        std::format(
-            "rollbackTo: the savepoint names {} node(s), {} static slot(s), {} frame slot(s) and "
-            "{} region(s), and the draft has {} / {} / {} / {}",
-            mark.nodes,
-            mark.staticSlots,
-            mark.frameSlots,
-            mark.regions,
-            nodesById_.size(),
-            staticSlots_.size(),
-            runtimeSlotTypes_.size(),
-            regions_.size()));
-    // Newest first, because a node the application built reads the ones built before it and an
-    // erasure unlinks its readers. Nothing outside the run reads any of them -- a right side
-    // appends nodes, it edits none -- so the run empties from the far end.
-    for (size_t at = nodesById_.size(); at > mark.nodes; --at) {
-        const gc_node_ref_t id = static_cast<gc_node_ref_t>(at - 1);
-        if (node(id) != nullptr) {
-            eraseNode(id);
-        }
-    }
-    // The slots come back with it. The ids do not: `addNode` hands out `nodesById_.size()` and
-    // never gives one to a second node, and the id lists that keep erased nodes (`gateIds_`,
-    // `brchIds_`, `joinIds_`) skip them rather than forget them, so the id space stays spent.
-    staticSlots_.resize(mark.staticSlots);
-    staticSlotTypes_.resize(mark.staticSlots);
-    runtimeSlotTypes_.resize(mark.frameSlots);
-    hasFrameLayout_ = mark.hasFrameLayout;
-    // The commit reads a node's own edits as the second half of its tier (`lowLevelEdits`): the ids
-    // of the nodes the run wrote to go with the nodes themselves, or a commit would answer for a
-    // node that is not in the graph it publishes.
-    std::erase_if(lowLevelEdits_, [&](gc_node_ref_t id) { return id >= mark.nodes; });
-    if (lowLevelSeen_.size() > mark.nodes) {
-        lowLevelSeen_.resize(mark.nodes);
-    }
-    // The draft is what the mark found, down to the count the commit reads as "something has been
-    // written since the last delivery" (draft_session.cpp): an application that was abandoned wrote
-    // nothing, and a commit that re-encoded the graph for it would publish a version nothing
-    // changed.
-    mutations_ = mark.mutations;
-    if (nodesById_.size() > mark.nodes) {
-        // The draft was written to and is now back where it was: `touchRefs` is what tells a reader
-        // that the shape it read is stale, and the erasures inside the loop do not all do it.
-        touchRefs();
-    }
-}
-
-void GraphDraft::noteLowLevelEdit(gc_node_ref_t id) {
-    // A named edit is the edit: what it changes in place is that edit's, and the table of
-    // docs/design/graph-editing/README.cn.md 8.1 owes the effect and order checks nothing for it.
-    if (namedEdits_ != 0 || id == kInvalidNodeRef) {
-        return;
-    }
-    if (id >= lowLevelSeen_.size()) {
-        lowLevelSeen_.resize(static_cast<size_t>(id) + 1, 0);
-    }
-    if (lowLevelSeen_[id] != 0) {
-        return;
-    }
-    lowLevelSeen_[id] = 1;
-    lowLevelEdits_.push_back(id);
 }
 
 namespace {
@@ -2419,6 +2365,9 @@ void GraphDraft::replaceUsesInList(
 }
 
 void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    noteOriginalScalars();
+    // A region's `result` is one of the tables this writes.
+    noteOriginalRegions();
     ++mutations_;
     auto replaceOne = [&](gc_node_ref_t &ref) {
         if (ref == oldId) {
@@ -2443,6 +2392,7 @@ void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t n
 }
 
 void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    noteOriginalScalars();
     ++mutations_;
     auto replaceOne = [&](gc_node_ref_t &ref) {
         if (ref == oldId) {
@@ -2459,6 +2409,7 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
             continue;
         }
         auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
+        noteOriginalNode(id);
         replaceOne(payload->join);
     }
     for (gc_node_ref_t id : joinIds_) {
@@ -2467,6 +2418,7 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
             draftNode->header.payloadBytes < sizeof(GCJoinBody)) {
             continue;
         }
+        noteOriginalNode(id);
         replaceOne(DraftNodeView::payloadAs<GCJoinBody>(draftNode)->brch);
     }
 }
@@ -2711,14 +2663,18 @@ size_t GraphDraft::dissolveUnorderedGates() {
                     }
                 }
             }
+            // The graph's own names move off the node before it goes, through the setters that record
+            // them: `eraseNode` records this segment's scalars at its first line, so a write made
+            // here first would be the one the record holds -- a rollback would then name `value`
+            // instead of the gate it put back.
             if (exit_ == id) {
-                exit_ = value;
+                setExitNode(value);
             }
             if (output_ == id) {
-                output_ = value;
+                setOutputNode(value);
             }
             if (returnNode_ == id) {
-                returnNode_ = value;
+                setReturnNode(value, returnKind_);
             }
             replaceAllValueUses(id, value);
             eraseNode(id); // its control users lose nothing: it waited on nothing

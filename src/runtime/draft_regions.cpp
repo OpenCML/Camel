@@ -31,11 +31,13 @@ void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot put a missing draft node in a region.");
     ASSERT(region == 0 || region < regions_.size(), "A node is put in a region that is not there.");
+    noteOriginalNode(id);
     draftNode->header.region = region;
 }
 
 uint32_t
 GraphDraft::addRegion(GCRegionKind kind, uint32_t parent, gc_node_ref_t owner, uint32_t index) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(!regions_.empty(), "A draft is made with its body region, so the table is not empty.");
     ASSERT(parent < regions_.size(), "A region is made in a region that is not there.");
@@ -56,6 +58,7 @@ uint32_t GraphDraft::addInlineRegion(uint32_t parent, GraphId callee, gc_node_re
 }
 
 void GraphDraft::setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join) {
+    noteOriginalNode(brch);
     ++mutations_;
     DraftNode *node = this->node(brch);
     ASSERT(node != nullptr && node->header.kind == GCNodeKind::Brch, "Not a branch node.");
@@ -63,12 +66,14 @@ void GraphDraft::setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join) {
 }
 
 void GraphDraft::setRegionResult(uint32_t id, gc_node_ref_t result) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].result = result;
 }
 
 void GraphDraft::setRegionPorts(uint32_t id, std::span<const gc_node_ref_t> ports) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     // The ports of a region go at the end of the table; the room of the old ones stays unused
@@ -79,6 +84,7 @@ void GraphDraft::setRegionPorts(uint32_t id, std::span<const gc_node_ref_t> port
 }
 
 void GraphDraft::setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].inlineOf = callee;
@@ -86,6 +92,7 @@ void GraphDraft::setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t call
 }
 
 void GraphDraft::setRegionOwner(uint32_t id, gc_node_ref_t owner, uint32_t index) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].owner = owner;
@@ -134,11 +141,15 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user, DraftEdg
         return;
     }
     if (regionWithin(readControl, readerControl)) {
-        reader->header.region = readControl;
+        // The move is a write of the node's region, so it goes through the setter that records it
+        // (`noteOriginalNode`): a node a rewrite pulled into a branch arm and then took back is a
+        // node the rollback has to put back where it stood.
+        setNodeRegion(user, readControl);
     }
 }
 
 void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
+    noteOriginalRegions();
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         GCRegion &region   = regions_[r];
         const bool control = region.kind == GCRegionKind::Arm ||
@@ -150,7 +161,7 @@ void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
         const uint32_t around = region.parent;
         for (DraftNode *held : nodesById_) {
             if (held && held->header.region == r) {
-                held->header.region = around;
+                setNodeRegion(held->header.selfId, around);
             }
         }
         for (uint32_t other = 1; other < regions_.size(); ++other) {
@@ -169,6 +180,7 @@ void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     const uint32_t around = regions_[id].parent;
+    noteOriginalRegions();
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         if (regions_[r].kind == GCRegionKind::Dead || !regionWithin(r, id) ||
             (keepRegion && r == id)) {
@@ -176,7 +188,7 @@ void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
         }
         for (DraftNode *held : nodesById_) {
             if (held && held->header.region == r) {
-                held->header.region = around;
+                setNodeRegion(held->header.selfId, around);
             }
         }
         regions_[r].kind   = GCRegionKind::Dead;
@@ -205,6 +217,7 @@ uint32_t GraphDraft::armRegionOf(gc_node_ref_t brch, size_t index) const {
 }
 
 void GraphDraft::flattenRegion(uint32_t id) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     // The regions in `id` stay, as regions of the body; every other region ends, its nodes go to
@@ -215,7 +228,7 @@ void GraphDraft::flattenRegion(uint32_t id) {
     }
     for (DraftNode *held : nodesById_) {
         if (held && !kept[held->header.region]) {
-            held->header.region = 0;
+            setNodeRegion(held->header.selfId, 0);
         }
     }
     for (uint32_t r = 1; r < regions_.size(); ++r) {
@@ -331,10 +344,13 @@ size_t GraphDraft::rehomeOrderEdges() {
 }
 
 void GraphDraft::clearRegions() {
+    // The table goes and every node comes out of its region: both halves are recorded, the table
+    // once (`noteOriginalRegions`) and each node through the setter that records it.
+    noteOriginalRegions();
     ++mutations_;
     for (DraftNode *held : nodesById_) {
         if (held) {
-            held->header.region = 0;
+            setNodeRegion(held->header.selfId, 0);
         }
     }
     regions_.clear();
@@ -343,18 +359,21 @@ void GraphDraft::clearRegions() {
 }
 
 void GraphDraft::setRegionOrigin(uint32_t id, uint32_t origin) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].origin = origin;
 }
 
 void GraphDraft::setRegionParams(uint32_t id, const camel::core::type::FunctionType *params) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].params = params;
 }
 
 void GraphDraft::setRegionAttrs(uint32_t id, uint32_t attrs) {
+    noteOriginalRegions();
     ++mutations_;
     ASSERT(id < regions_.size(), "No such region.");
     regions_[id].attrs = attrs;

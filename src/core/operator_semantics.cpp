@@ -9,6 +9,8 @@
 
 #include "camel/core/operator_semantics.h"
 
+#include "camel/core/error/diagnostics.h"
+
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -222,6 +224,13 @@ bool OperatorSemantics::external() const {
     if (resources->externalEffect) {
         return true;
     }
+    if (resources->functionOperand) {
+        // The accesses are a function operand's, so this answer cannot be narrower than "may
+        // reach outside the program" (design principles 3.3): the reader that has the value reads
+        // that value's type (`Builder::reachOfOper`, `EffectWalk::ofNodes`), which is where a
+        // `map` over a pure function is known to touch nothing.
+        return true;
+    }
     for (const ResourceAccess &access : resources->accesses) {
         if (reachesOutside(access.resource.cls)) {
             return true;
@@ -289,9 +298,21 @@ std::vector<ResourceAccess> OperatorSemantics::accessList() const {
     if (resources) {
         return resources->accesses;
     }
-    // No list: the operator writes the global resource, which every effect conflicts with
-    // (design principles 3.3). It is a reading, not a declaration: `checkResources` refuses an
-    // unknown class, so a module cannot write this one itself.
+    // No list. An operator of the built-in module must itemize its accesses (design principles
+    // 3.3; author 2026-11-19), and the load refuses one that does not (builtin.cpp,
+    // `requireDeclaredBuiltinAccesses`), so reaching here with a built-in URI is a registration
+    // mistake and not a program's error. It used to be answered with one write of the global
+    // resource: that is not a declaration (`checkResources` refuses an unknown class, so no module
+    // could write it) and the graph builder read the same operator another way -- every operand
+    // read-modify-written -- so one call was on the sync chain for one reader and not for the
+    // other. The report names the operator and the one change that settles it.
+    if (key.uri().starts_with(':')) {
+        throw camel::core::error::DiagnosticBuilder::of(
+                  camel::core::error::SemanticDiag::OperatorAccessesUndeclared)
+            .commit(key.uri());
+    }
+    // A module's operator that itemizes nothing keeps the conservative reading of design
+    // principles 3.3: third-party modules are told, not refused (the same rule purity has).
     return {globalAccess(AccessMode::Write)};
 }
 

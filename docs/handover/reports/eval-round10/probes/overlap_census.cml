@@ -1,0 +1,257 @@
+/**
+ * Census of rule overlap (scratch, not a test of the tree): for every pair of rules of
+ * `stdlib/rules.cml` whose left sides unify -- i.e. that can both match the same node -- write one
+ * witness program that contains that node, saturate it with ONE rule of the pair, saturate it with
+ * the OTHER, narrow each to its cheapest writing, and compare the two readings on a finite domain.
+ * A pair whose two readings agree on every input is a pair that overlaps in shape and agrees in
+ * value.
+ *
+ * The instrument is `saturate` + `extract` and not `run`: a saturation shares equal
+ * subexpressions, so a node whose two operands are one expression (`(x*2)+(x*2)`) really is a node
+ * with one input written twice -- which is the shape `x + x` and `x*c + x*c` match. The greedy
+ * `run` does not share them, so half the pairs of this census cannot even arise under it.
+ */
+import { Rule, saturate, extract } from rewrite
+import { flatten } from array
+import { graphs_of, nodes } from graph
+import { nodes as node_cost } from rules
+import { is_function } from types
+import tensor
+import {
+    mul_one,
+    sub_zero,
+    add_self,
+    int_add_zero,
+    int_mul_zero,
+    int_sub_self,
+    int_combine,
+    int_fold,
+    int_fold_add,
+    int_combine_one,
+    float_add_neg_zero,
+    float_combine,
+    float_fold,
+    float_double,
+    float_combine_one,
+    float_combine_one_mixed,
+    array_mul_one,
+    array_add_self,
+    array_combine,
+    array_fold,
+    array_double
+} from rules
+
+// ---- the domains: the boundaries and the special values, as the library's own case uses ----
+
+func int_values(): int[] {
+    return [0, 1, -1, 2, -2, 3, 5, -5, 1024, -1024, 9223372036854775807, (-9223372036854775807 - 1)]
+}
+
+func float_values(): float[] {
+    return [
+        0.0,
+        -0.0,
+        1.0,
+        -1.0,
+        0.5,
+        -0.5,
+        2.0,
+        -2.0,
+        0.1,
+        -0.1,
+        4503599627370496.0,
+        -4503599627370496.0,
+        1e300,
+        -1e300,
+        5e-324,
+        -5e-324,
+        float('inf'),
+        -float('inf'),
+        float('nan')
+    ]
+}
+
+func f32_arrays(): f32[][] {
+    return [
+        [],
+        [0.0],
+        [-0.0],
+        [1.0, -0.0, 2.0],
+        [-1.0, 0.0, -2.0],
+        [3.4e38, -3.4e38, 1.4e-45],
+        [0.1, -0.1, 8388608.0]
+    ]
+}
+
+// ---- the driver: one witness, two rule sets, both readings ----
+//
+// One line per pair, whatever the domains are: the node count of the witness and of the two
+// narrowed programs (evidence that the rule changed it at all), how many sources were compared,
+// how many of them read differently, the reading at the first source, and the readings of every
+// source that differs.
+
+func nodes_of::<F>(f: F): int when is_function::<F>() {
+    return len(flatten(graphs_of(f)->map<nodes>))
+}
+
+with <ra: Rule[], rb: Rule[]>
+func pair_scalar::<T>(label: string, f: (x: T) => T, values: T[]): string[] {
+    return match f->saturate<ra, rounds: 6> {
+        case error e => [`overlap ${label} A-error ${e.kind}`]
+        case ta => match ta->extract<node_cost> {
+            case error e => [`overlap ${label} A-narrow-error ${e.kind}`]
+            case ga => match f->saturate<rb, rounds: 6> {
+                case error e => [`overlap ${label} B-error ${e.kind}`]
+                case tb => match tb->extract<node_cost> {
+                    case error e => [`overlap ${label} B-narrow-error ${e.kind}`]
+                    case gb => {
+                        let d = loop n = 0 for i in 0..len(values) do
+                            match `${ga(values[i])}` == `${gb(values[i])}` {
+                                case true => n
+                                case false => n + 1
+                            }
+                        let det = loop acc = "" for i in 0..len(values) do
+                            match `${ga(values[i])}` == `${gb(values[i])}` {
+                                case true => acc
+                                case false => acc + ` DIFF[${values[i]}] A=${ga(values[i])} B=${gb(values[i])}`
+                            }
+                        return [`overlap ${label} n=${nodes_of(f)}/${nodes_of(ga)}/${nodes_of(gb)} src=${len(values)} differ=${d} at0=A:${ga(values[0])}/B:${gb(values[0])}${det}`]
+                    }
+                }
+            }
+        }
+    }
+}
+
+with <ra: Rule[], rb: Rule[]>
+func pair_array::<E>(label: string, f: (xs: E[]) => E[], values: E[][]): string[] {
+    return match f->saturate<ra, rounds: 6> {
+        case error e => [`overlap ${label} A-error ${e.kind}`]
+        case ta => match ta->extract<node_cost> {
+            case error e => [`overlap ${label} A-narrow-error ${e.kind}`]
+            case ga => match f->saturate<rb, rounds: 6> {
+                case error e => [`overlap ${label} B-error ${e.kind}`]
+                case tb => match tb->extract<node_cost> {
+                    case error e => [`overlap ${label} B-narrow-error ${e.kind}`]
+                    case gb => {
+                        let d = loop n = 0 for i in 0..len(values) do
+                            match `${ga(values[i])}` == `${gb(values[i])}` {
+                                case true => n
+                                case false => n + 1
+                            }
+                        let det = loop acc = "" for i in 0..len(values) do
+                            match `${ga(values[i])}` == `${gb(values[i])}` {
+                                case true => acc
+                                case false => acc + ` DIFF[${values[i]}] A=${ga(values[i])} B=${gb(values[i])}`
+                            }
+                        return [`overlap ${label} n=${nodes_of(f)}/${nodes_of(ga)}/${nodes_of(gb)} src=${len(values)} differ=${d} at0=A:${ga(values[0])}/B:${gb(values[0])}${det}`]
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---- the witnesses: one node shape each, named for the pair it is written for ----
+
+// mul_one x int_fold : (x * 2) * 1
+func w_mul_one_int_fold(x: int): int {
+    return (x * 2) * 1
+}
+
+// mul_one x float_fold : (x * 2.0) * 1.0
+#[reassociate, no_infs]
+func w_mul_one_float_fold(x: float): float {
+    return (x * 2.0) * 1.0
+}
+
+// sub_zero x int_sub_self : 0 - 0
+func w_sub_zero_int_sub_self(x: int): int {
+    return x + (0 - 0)
+}
+
+// add_self x int_add_zero : 0 + 0
+func w_add_self_int_add_zero(x: int): int {
+    return x + (0 + 0)
+}
+
+// add_self x int_combine : (x*2) + (x*2)
+func w_add_self_int_combine(x: int): int {
+    return (x * 2) + (x * 2)
+}
+
+// int_add_zero x int_fold_add : (x + 2) + 0
+func w_int_add_zero_int_fold_add(x: int): int {
+    return (x + 2) + 0
+}
+
+// int_add_zero x int_combine_one : (0 * 2) + 0
+func w_int_add_zero_int_combine_one(x: int): int {
+    return ((0 * 2) + 0) + x
+}
+
+// int_mul_zero x int_fold : (x * 2) * 0
+func w_int_mul_zero_int_fold(x: int): int {
+    return (x * 2) * 0
+}
+
+// add_self x float_add_neg_zero : -0.0 + -0.0
+func w_add_self_float_add_neg_zero(x: float): float {
+    return x + (-0.0 + -0.0)
+}
+
+// add_self x float_combine, add_self x float_double, float_combine x float_double : (x*2.0)+(x*2.0)
+#[reassociate]
+func w_self_combine_double(x: float): float {
+    return (x * 2.0) + (x * 2.0)
+}
+
+// float_add_neg_zero x float_combine_one : ((-0.0)*2.0) + (-0.0)
+#[reassociate]
+func w_add_neg_zero_combine_one(x: float): float {
+    return (-0.0 * 2.0) + (-0.0) + x
+}
+
+// float_add_neg_zero x float_combine_one_mixed : ((-0.0)*(-2.0)) + (-0.0)
+#[reassociate, no_infs, no_signed_zeros]
+func w_add_neg_zero_combine_one_mixed(x: float): float {
+    return (-0.0 * -2.0) + (-0.0) + x
+}
+
+// array_mul_one x array_fold : (x * 2.0) * 1.0
+#[reassociate, no_infs]
+func w_array_mul_one_fold(x: f32[]): f32[] {
+    return (x * 2.0) * 1.0
+}
+
+// array_add_self x array_combine, array_add_self x array_double, array_combine x array_double
+#[reassociate]
+func w_array_self_combine_double(x: f32[]): f32[] {
+    let t = x * 2.0
+    return t + t
+}
+
+// ---- the census ----
+
+func report(): string[] {
+    return flatten([
+        // --- the integer pairs ---
+        pair_scalar<[mul_one], [int_fold]>('mul_one|int_fold', w_mul_one_int_fold, int_values()),
+        pair_scalar<[sub_zero], [int_sub_self]>('sub_zero|int_sub_self', w_sub_zero_int_sub_self, int_values()),
+        pair_scalar<[add_self], [int_add_zero]>('add_self|int_add_zero', w_add_self_int_add_zero, int_values()),
+        pair_scalar<[add_self], [int_combine]>('add_self|int_combine', w_add_self_int_combine, int_values()),
+        pair_scalar<[int_add_zero], [int_fold_add]>('int_add_zero|int_fold_add', w_int_add_zero_int_fold_add, int_values()),
+        pair_scalar<[int_add_zero], [int_combine_one]>('int_add_zero|int_combine_one', w_int_add_zero_int_combine_one, int_values()),
+        pair_scalar<[int_mul_zero], [int_fold]>('int_mul_zero|int_fold', w_int_mul_zero_int_fold, int_values())
+    ])
+}
+
+func main(): int sync {
+    let out = report()
+    out->foreach<(line: string): void => {
+        println(line)
+    }>
+    // The census is a reading, not a test: the nonzero exit is what makes the runner print the
+    // lines above. The plan that runs this case is scratch and is not part of the tree.
+    return 1
+}

@@ -6,9 +6,17 @@ rewrite, so the five order edges of one node could be printed in two different o
 binary on the same input -- 472 lines both times, the same lines, five of them moved. Any gate that
 compares dumps byte for byte then reddened about once in ten runs.
 
-This reads `test/cases/linear/byref/var_capture_reference.cml` twenty times in twenty processes
-(each with its own heap, which is what made the order move) and asks for one hash. The file is the
-one the two orders were observed on.
+This reads `test/cases/linear/byref/captured_write_graph.cml` twenty times in twenty processes
+(each with its own heap, which is what made the order move) and asks for one hash. The file is a
+by-reference capture program whose graph carries the ORDER edges the two orders were observed on.
+
+The file this case was written against, `var_capture_reference.cml`, is a refusal program since
+`81fa0bac9` (2026-11-16): a closure may not write a `var` of the body around it
+(`SemanticDiag::ClosureAssignsCapturedName`), and `feat/linear/var_reference.plan.toml` now pins
+that refusal on it with `expect_exit = 1`. A `std::gir` dump of a refused program never runs, so
+the probe read "run 1 exited 1" and could not answer its own question. The subject is the same
+family and still compiles: `captured_write_graph.cml` is green under `std::gir` in
+`feat/linear/captured_writes.plan.toml#captured_write_graph.edges`.
 """
 import hashlib
 import subprocess
@@ -16,7 +24,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-CASE = ROOT / "test/cases/linear/byref/var_capture_reference.cml"
+CASE = ROOT / "test/cases/linear/byref/captured_write_graph.cml"
 RUNS = 20
 
 

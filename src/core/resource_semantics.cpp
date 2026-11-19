@@ -237,6 +237,15 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
         spec.result.operand == 0xFF) {
         return std::format("a result that is {} names its operand", resultAliasName(k));
     }
+    if (spec.functionOperand) {
+        // One statement of the accesses, not two: an operator that takes them from a function
+        // operand has none of its own to itemize (design principles 3.3).
+        if (!spec.accesses.empty() || spec.externalEffect) {
+            return std::string(
+                "an operator whose accesses are a function operand's itemizes none of its own, "
+                "and declares no external effect either");
+        }
+    }
     return std::nullopt;
 }
 
@@ -315,6 +324,15 @@ std::string toString(const ResourceSpec &spec) {
     if (spec.externalEffect) {
         part("external");
     }
+    if (spec.functionOperand) {
+        // The accesses are not itemized here: they are the function's that the operand carries.
+        // Said in words, because "none" would be a different statement.
+        const ResourceBinding &at = *spec.functionOperand;
+        part(std::format(
+            "accesses of the function in {} {}",
+            at.kind == ResourceBinding::Kind::Norm ? "norm" : "with",
+            at.index));
+    }
     return out;
 }
 
@@ -323,7 +341,11 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     sig.mode      = ResourceSignature::Mode::Concrete;
     sig.result    = spec.result;
     sig.allocates = spec.allocates;
-    sig.external  = spec.externalEffect;
+    // An operator whose accesses are a function operand's is one that may reach outside the
+    // program and says nothing about where: the signature a reader that has only the table can
+    // honestly publish is "an effect it does not itemize" (design principles 3.3). The reader that
+    // has the value narrows it -- that is what `functionOperand` is for.
+    sig.external  = spec.externalEffect || spec.functionOperand.has_value();
     sig.spelling  = spec.spelling;
     for (const ResourceAccess &access : spec.accesses) {
         switch (access.binding.kind) {
@@ -469,6 +491,16 @@ bool reachesOutside(ResourceClass cls) {
 }
 
 bool writesForTheRegion(const ResourceSignature &signature) {
+    // A declared external effect that itemizes nothing is the write an undeclared operator is read
+    // as, and it is a write the region owes: the operator says it reaches outside the program and
+    // says nothing about where, so there is no access to place. A write the region does not owe is
+    // a write a pass may drop, and an effect that can be dropped is not an effect -- `foreach` on a
+    // callback that prints is the case that makes this visible (its result is the null slot, so
+    // nothing else keeps the call alive).
+    if (signature.external && signature.params.empty() && signature.ambient.empty() &&
+        signature.anyOf.empty()) {
+        return true;
+    }
     // A write that reaches state outside the program, and a write of a handle: the two questions
     // design principles 3.1 asks of a region's roots. The classes come from `reachesOutside`,
     // which is also what `OperatorSemantics::external` reads, so "outside the program" is one

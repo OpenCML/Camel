@@ -136,6 +136,10 @@ camel::core::type::FunctionType *withoutNormParameter(
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
     requireOneWriting("mutablePayloadOf");
+    // A writable payload is a write of the node's body, so the node is recorded before the bytes
+    // are handed out: the caller writes through the span, and a segment that took the view and
+    // rewrote the operator, the write mask or a loop's form is a segment that changed the node.
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot get mutable payload view from a missing draft node.");
@@ -145,8 +149,9 @@ std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
     requireOneWriting("mutablePayloadOf");
-    ++mutations_;
     ASSERT(containsNode(draftNode), "Cannot get mutable payload view from a foreign draft node.");
+    noteOriginalNode(nodeId(draftNode));
+    ++mutations_;
     touchRefs();
     return DraftNodeView::payload(draftNode);
 }
@@ -352,6 +357,9 @@ uint32_t GraphDraft::funcWriteMaskOf(gc_node_ref_t id) const {
 
 void GraphDraft::setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures) {
     requireOneWriting("setFuncWriteMask");
+    // The mask is part of the FUNC node's body (`GCFuncRef::reserved`), so the node is recorded
+    // with it.
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
@@ -447,6 +455,9 @@ void GraphDraft::appendInput(
             }
         }
     }
+    // The run of inputs lives in the tail of the user, and this appends to it in place: the
+    // segment's journal keeps the body as it stood.
+    noteOriginalNode(userId);
     appendInputEntry(userId, slot, inputId);
     appendUserRef(inputId, userId, slot);
 }
@@ -457,6 +468,7 @@ bool GraphDraft::unlinkInput(
     ++mutations_;
     DraftNode *draftNode = node(userId);
     ASSERT(draftNode != nullptr, "Cannot unlink input from a missing draft node.");
+    noteOriginalNode(userId);
     const DraftEdgeSlot slot = edgeSlotOf(kind, role);
     // The first entry that names `inputId` goes; the entries after it move down.
     auto group = mutableInputs(draftNode, slot);
@@ -508,6 +520,7 @@ void GraphDraft::replaceInput(
 
 void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type) {
     requireOneWriting("setNodeDataType");
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data type on a missing draft node.");
@@ -515,6 +528,7 @@ void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type
 }
 
 void GraphDraft::setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data index on a missing draft node.");
@@ -522,6 +536,7 @@ void GraphDraft::setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex) {
 }
 
 void GraphDraft::setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set runtime flags on a missing draft node.");
@@ -529,6 +544,7 @@ void GraphDraft::setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags) {
 }
 
 void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(
@@ -539,6 +555,7 @@ void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
 }
 
 void GraphDraft::setLoopIterableInterval(gc_node_ref_t id) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(
@@ -550,6 +567,9 @@ void GraphDraft::setLoopIterableInterval(gc_node_ref_t id) {
 
 void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     requireOneWriting("rewriteNode");
+    // The node keeps its id and gets another body: the segment found the old one, so the body, its
+    // input runs and its user lists are recorded before anything is replaced.
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot rewrite a missing draft node.");
@@ -660,6 +680,10 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
 
 void GraphDraft::appendNormPort(gc_node_ref_t id) {
     requireOneWriting("appendNormPort");
+    // The port lists are a table a segment writes, so each of the six edits records the table
+    // before it changes it: the lists are one value (`UndoPorts`), written three ways (norm, with,
+    // closure) and recorded once per segment.
+    noteOriginalPorts();
     ++mutations_;
     GUARD(node(id) != nullptr, "Cannot register a missing draft node as a norm port.");
     // The two port lists are one classification, not two: a node is a normal parameter or a `with`
@@ -678,6 +702,7 @@ void GraphDraft::appendNormPort(gc_node_ref_t id) {
 
 void GraphDraft::appendWithPort(gc_node_ref_t id) {
     requireOneWriting("appendWithPort");
+    noteOriginalPorts();
     ++mutations_;
     GUARD(node(id) != nullptr, "Cannot register a missing draft node as a with port.");
     // The other half of the check above; see the comment there.
@@ -690,6 +715,7 @@ void GraphDraft::appendWithPort(gc_node_ref_t id) {
 
 void GraphDraft::appendClosureNode(gc_node_ref_t id) {
     requireOneWriting("appendClosureNode");
+    noteOriginalPorts();
     ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a closure node.");
     appendUniqueNodeRef(closureNodes_, id);
@@ -697,6 +723,7 @@ void GraphDraft::appendClosureNode(gc_node_ref_t id) {
 
 void GraphDraft::removeNormPort(gc_node_ref_t id) {
     requireOneWriting("removeNormPort");
+    noteOriginalPorts();
     ++mutations_;
     const auto it = std::find(normPorts_.begin(), normPorts_.end(), id);
     if (it == normPorts_.end()) {
@@ -725,12 +752,13 @@ void GraphDraft::removeNormPort(gc_node_ref_t id) {
     const size_t fixed =
         funcType_ != nullptr && funcType_->hasRest() ? declared - 1 : declared;
     if (port < fixed) {
-        funcType_ = withoutNormParameter(*funcType_, port);
+        setFuncType(withoutNormParameter(*funcType_, port));
     }
 }
 
 void GraphDraft::removeWithPort(gc_node_ref_t id) {
     requireOneWriting("removeWithPort");
+    noteOriginalPorts();
     ++mutations_;
     const auto it = std::find(withPorts_.begin(), withPorts_.end(), id);
     if (it == withPorts_.end()) {
@@ -757,13 +785,14 @@ void GraphDraft::removeWithPort(gc_node_ref_t id) {
         for (size_t i = 0; i < funcType_->normTypesCount(); ++i) {
             normTypes.emplace_back(funcType_->normTypeAt(i), funcType_->normIsVarAt(i));
         }
-        funcType_ = camel::core::type::FunctionType::create(
-            withTypes, normTypes, funcType_->exitType());
+        setFuncType(camel::core::type::FunctionType::create(
+            withTypes, normTypes, funcType_->exitType()));
     }
 }
 
 void GraphDraft::removeClosureNode(gc_node_ref_t id) {
     requireOneWriting("removeClosureNode");
+    noteOriginalPorts();
     ++mutations_;
     std::erase(closureNodes_, id);
 }

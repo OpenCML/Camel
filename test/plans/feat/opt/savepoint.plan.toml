@@ -1,0 +1,64 @@
+id = "opt.savepoint"
+order = 486
+tier = "fast"
+tags = ["feat", "opt", "rules", "rewrite", "draft", "savepoint"]
+
+# The other half of the savepoint. A savepoint that can take back only what was appended is no
+# savepoint for a rewrite: a rewrite replaces nodes that were already in the draft, edits their
+# bodies in place and erases the ones nothing reads any more, and none of that is an append. So the
+# draft keeps a journal for the span between a mark and the rollback to it -- the bodies, the user
+# lists and the tables an application changed in place -- and a rollback puts them back at the ids
+# they had (an id is never handed out twice, so a node that comes back is the same node).
+#
+# `test::savepoint` stages the two cases the engine could not answer before, over the rule pairs of
+# `rules_int.cml`:
+#
+#  1. a rewrite that fails partway. The rules are the file's own, with a condition that throws the
+#     second time the engine asks one -- an application has been made by then, so the draft is in
+#     the middle of a rewrite rather than before it. The fault must have been raised after the run
+#     had put nodes in, the failed run must have written nothing (the draft it leaves commits to
+#     the program it was given), and a run over that same draft must produce the program a run that
+#     never failed produces -- compared as the whole frozen graph, node by node and edge by edge.
+#
+#  2. a saturation round the writing budget cuts. The round is one segment: what it applied before
+#     the cut is reported (`appliedThisRound`, `stoppedMidRound`) and lands nothing, so a full run
+#     over the draft it leaves reaches the fixpoint of a run that was never cut.
+#
+# The cases print what they measured (`SAVEPOINT fault asked= ... slots= ...`,
+# `SAVEPOINT budget_cut cut= ... applied= ... rounds= ...`) and then `SAVEPOINT <case> ok`; a case
+# that did not raise the fault it was built on and a case that failed to hold are both a `FAIL`.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 30000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "opt.savepoint.rewrite_and_round"
+desc = "A rewrite that fails partway leaves the draft as it found it, and running it again gives the program a run that never failed gives; a saturation round the budget cuts reports where it stopped, lands nothing, and a full run over the draft it leaves reaches the same fixpoint. The program the checks ran on still prints what it printed."
+case = "../../../cases/feat/mm/writings/rules_int.cml"
+args = ["${case}", "test::savepoint", "std::nvm"]
+expect_stdout_contains = ["SAVEPOINT fault asked=", "SAVEPOINT failed_rewrite_raised ok", "SAVEPOINT failed_rewrite_wrote_nothing ok", "SAVEPOINT rerun_is_byte_identical ok", "SAVEPOINT budget_cut cut=", "SAVEPOINT budget_cut_lands_nothing ok", "56 42 42"]
+expect_output_not_contains = ["FAIL"]
+
+# The other half of the same promise, from the other side: the journal is a set of hooks, and a
+# hook nobody calls is a write no rollback sees. `test::undo_selfcheck` takes a whole copy of the
+# draft at the mark and compares the draft a rollback leaves with it, class by class, and names the
+# one that is not back. It walks the classes twice: once with the class's own hook, where the
+# answer has to be "nothing is missing", and once with that class's hook made a no-op -- what a
+# forgotten hook amounts to -- where the answer has to be that class and no other. The second walk
+# is the one that can go red, and it is why the check is not a comment: a check that answers "fine"
+# whatever the journal did proves nothing.
+#
+# `SELFCHECK class=<name> hook=run verdict=none ok` for each class (its own hook puts it back) and
+# `SELFCHECK class=<name> hook=skipped verdict=<name> ok` for the same class with its hook made a
+# no-op (the check names exactly the class it lost), then `SELFCHECK ok`. Any round that answered
+# another class, or answered none where a class was missing, prints `FAIL` and is red here.
+[[tests]]
+name = "opt.savepoint.undo_selfcheck"
+desc = "The rollback self-check: every class the journal records is written through its hook and put back, and with that hook made a no-op the check names the class it lost. The program the rounds ran over still prints what it printed."
+case = "../../../cases/feat/mm/writings/rules_int.cml"
+args = ["${case}", "test::undo_selfcheck", "std::nvm"]
+expect_stdout_contains = ["SELFCHECK clean verdict=none ok", "SELFCHECK class=nodes hook=run verdict=none ok", "SELFCHECK class=nodes hook=skipped verdict=nodes ok", "SELFCHECK class=regions hook=run verdict=none ok", "SELFCHECK class=regions hook=skipped verdict=regions ok", "SELFCHECK class=scalars hook=run verdict=none ok", "SELFCHECK class=scalars hook=skipped verdict=scalars ok", "SELFCHECK class=ports hook=run verdict=none ok", "SELFCHECK class=ports hook=skipped verdict=ports ok", "SELFCHECK class=types hook=run verdict=none ok", "SELFCHECK class=types hook=skipped verdict=types ok", "SELFCHECK class=low-level hook=run verdict=none ok", "SELFCHECK class=low-level hook=skipped verdict=low-level ok", "SELFCHECK ok", "56 42 42"]
+expect_output_not_contains = ["FAIL"]

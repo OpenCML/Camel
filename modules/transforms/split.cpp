@@ -3908,6 +3908,37 @@ SplitGraph buildSplitGraph(
                 return built;
             }
         }
+        // The statements the source's exit gate waits on. They are not data for either side of the
+        // cut, so neither walk above reaches them: the number would be right and the print the
+        // body wrote would never run. The forward half is the side that runs the primal body, so
+        // the statements come with it and its exit is a gate that waits on them, which is the
+        // shape the source had (`camel/runtime/graph.h#gateWaitsOf`; author, 2026-11-18: a cut
+        // placed a print where the result should be, because the gate's last input was read as the
+        // value). Dropping them is a wrong answer and not a refusal: a differentiated function
+        // that printed once would be silent. A statement the plumbing cannot copy -- one with a
+        // control edge, or one whose place on a chain cannot be reproduced -- is still refused by
+        // name inside the walk, never dropped.
+        std::vector<gc_node_ref_t> exitWaits;
+        for (gc_node_ref_t wait : gateWaitsOf(*function, function->exitNodeRef())) {
+            if (wait >= function->nodeCount()) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " (the exit waits on a node that is not a node of the graph)\n";
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward));
+                return built;
+            }
+            if (forward.copyOf[wait] == rt::kInvalidNodeRef && !forward.copyHalf(wait, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward)
+                                .atConstruct(built.refusedConstruct));
+                return built;
+            }
+            exitWaits.push_back(forward.copyOf[wait]);
+        }
         // The residuals: the values `residualsOf` named, in its order -- the forward half computes
         // them all (they are computed before the cut, that is what makes them residuals) and hands
         // them on inside the `lin` it builds. A parameter's value is one of them when the backward
@@ -3992,9 +4023,25 @@ SplitGraph buildSplitGraph(
             draft,
             halves.forward->exitType(),
             std::span<const gc_node_ref_t>(exitHalves.data(), exitHalves.size()));
-        draft.setExitNode(out);
-        draft.setOutputNode(out);
-        draft.setReturnNode(out, rt::GCReturnKind::Self);
+        // The exit: the pair, and -- when the body wrote statements the source's exit waited on --
+        // a gate over it that waits on the same statements, in the same order. A body that printed
+        // once prints once here too, because a call of this half calls the lift's forward side
+        // once.
+        gc_node_ref_t exit = out;
+        if (!exitWaits.empty()) {
+            std::vector<gc_node_ref_t> gateInputs;
+            gateInputs.reserve(exitWaits.size() + 1);
+            gateInputs.push_back(out);
+            gateInputs.insert(gateInputs.end(), exitWaits.begin(), exitWaits.end());
+            Type *gateType = halves.forward->exitType();
+            const gc_node_ref_t gate =
+                draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
+            draft.setNormInputs(gate, gateInputs);
+            exit = gate;
+        }
+        draft.setExitNode(exit);
+        draft.setOutputNode(exit);
+        draft.setReturnNode(exit, rt::GCReturnKind::Self);
     }
     {
         // The backward half: the tangent of every parameter in -- the residuals arrive by its

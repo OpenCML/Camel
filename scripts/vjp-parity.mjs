@@ -60,6 +60,9 @@
 //                                                difference is a failure (see `stale` below)
 //   node scripts/vjp-parity.mjs --tables         print the three tables and decide nothing
 //   node scripts/vjp-parity.mjs --json           the same as --tables, as JSON
+//   node scripts/vjp-parity.mjs --closure        the other direction of the same two files: does
+//                                                every key `transpose.cml` files have a `jvp.cml`
+//                                                law? (see "the closure" below)
 //   node scripts/vjp-parity.mjs --root DIR       read a tree other than this one (the self-test)
 //   node scripts/vjp-parity.mjs --exempt FILE    read another exemption list (the self-test)
 //
@@ -165,6 +168,7 @@ if (rootOption && rootOption.error) {
 const ROOT = path.resolve(rootOption)
 const TABLES = process.argv.includes('--tables')
 const JSON_MODE = process.argv.includes('--json')
+const CLOSURE = process.argv.includes('--closure')
 // `stale > 0` is a failure only when asked for by name: the count is reported either way, and the
 // default reading stays green so a mid-merge tree can still be read.
 const STRICT = process.argv.includes('--strict')
@@ -673,6 +677,47 @@ function readExemptions() {
 // ---- the comparison ---------------------------------------------------------------------------
 
 const library = readLibrary()
+
+// ---- the closure of the forward half over the backward half -----------------------------------
+//
+// The two rulesets are not independent: the library is `transpose(split(reinterp<jvp>(f)))`, so one
+// half writes the operators the other half then walks. A key `transpose.cml` files a law for and
+// `jvp.cml` does not is a step the composition can take in one direction only, and the refusal it
+// produces at run time names nothing (`transforms: jvp has no forward transform for this function`),
+// which is why the closure is stated here, before a user meets it.
+//
+// The unit is the same key the comparison above uses -- `head@arity`, the key the compiler derives
+// from the operator (`src/core/forward.cpp#ruleKeyOf`) -- and not the parameter-type list: a family
+// may file several laws under one key (`jvp.cml` files four for `float(x)`), and what the walk asks
+// is whether the key has a law at all. The reported operator is the key and, beside it, the backward
+// law that has no twin, so the repair names the file and the symbol to write.
+//
+// `library.rules` carries both files with the relative path each was read from, so a `--root` copy
+// is read the same way and a law appended to the copy is reported like one in the tree.
+if (CLOSURE) {
+    const BACKWARD = 'stdlib/rulesets/transpose.cml'
+    const FORWARD = 'stdlib/rulesets/jvp.cml'
+    const backward = library.rules.filter((rule) => rule.file === BACKWARD)
+    const forward = library.rules.filter((rule) => rule.file === FORWARD)
+    const forwardKeys = new Set(forward.map((rule) => rule.key))
+    const backwardKeys = new Set(backward.map((rule) => rule.key))
+    const missing = backward.filter((rule) => !forwardKeys.has(rule.key))
+    const lines = [
+        `closure: ${BACKWARD} files ${backward.length} law(s) over ${backwardKeys.size} key(s); ` +
+            `${FORWARD} files ${forward.length} law(s) over ${forwardKeys.size} key(s)`,
+    ]
+    for (const rule of missing) {
+        lines.push(`  no forward law for '${rule.key}': ${rule.file}#${rule.symbol} (${rule.left})`)
+    }
+    lines.push(
+        missing.length === 0
+            ? '  0 missing: every key the backward half files has a forward law'
+            : `  ${missing.length} missing`
+    )
+    console.log(lines.join('\n'))
+    process.exit(missing.length === 0 ? 0 : 1)
+}
+
 const engine = readEngine()
 const conversions = conversionTargets()
 const exemptions = readExemptions()

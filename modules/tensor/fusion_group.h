@@ -19,4 +19,15 @@ void registerDivideMulNegFusion();
 /// the module loads, before any graph runs.
 void registerMulNegFusion();
 
+/// Registers the kernel of the `tensor.fusion = "linear"` group: the product and the bias add of
+/// `x @ w + b`, run as the affine transform's one pass, which stores no product. `tensor::fuse`
+/// marks the pair (`passes/fuse.cpp#markGroups`); this is the kernel that runs it. Called once,
+/// when the module loads, before any graph runs.
+void registerLinearFusion();
+
+/// Registers the kernel of the `tensor.fusion = "linear_relu"` group: the same pair with the
+/// activation's own kernel at its tail. Called once, when the module loads, before any graph
+/// runs.
+void registerLinearReluFusion();
+
 } // namespace camel::tensor

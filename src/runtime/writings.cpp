@@ -529,15 +529,21 @@ void DraftWritings::build() {
     rebuild();
 }
 
-DraftWritings::ApplicationMark DraftWritings::markApplication() { return draft_.savepoint(); }
+DraftWritings::ApplicationMark DraftWritings::markApplication() {
+    return ApplicationMark{draft_.markUndo(), store_.log().size()};
+}
 
-void DraftWritings::abandonApplication(const ApplicationMark &mark) {
+DraftWritings::ApplicationMark DraftWritings::beginApplication() {
+    return ApplicationMark{draft_.beginUndo(), store_.log().size()};
+}
+
+void DraftWritings::clearIndexRows(const ApplicationMark &mark) {
     auto &ix = *index_;
     // The index rows of the nodes the application made, before the draft forgets them: `keyOf` is
     // what names the key, and `byKey` maps that key to the node, so the map entry goes only when it
     // is this node's -- two nodes of one key are one class, and a merge the application did not
     // make is not the rollback's to erase.
-    for (size_t at = mark.nodes; at < draft_.nodeSlotCount() && at < ix.keyOf.size(); ++at) {
+    for (size_t at = mark.draft.nodes; at < draft_.nodeSlotCount() && at < ix.keyOf.size(); ++at) {
         if (ix.keyOf[at].has_value()) {
             const auto found = ix.byKey.find(*ix.keyOf[at]);
             if (found != ix.byKey.end() && found->second == at) {
@@ -554,13 +560,38 @@ void DraftWritings::abandonApplication(const ApplicationMark &mark) {
             ix.written[at] = 0;
         }
     }
+}
+
+void DraftWritings::abandonApplication(const ApplicationMark &mark) {
+    clearIndexRows(mark);
     // A node the application made may already be queued for congruence (a merge of an earlier
     // application enqueues the users that read what moved); the queue takes the ids back with them.
-    std::erase_if(pending_, [&](gc_node_ref_t node) { return node >= mark.nodes; });
-    if (queued_.size() > mark.nodes) {
-        queued_.resize(mark.nodes);
+    std::erase_if(pending_, [&](gc_node_ref_t node) { return node >= mark.draft.nodes; });
+    if (queued_.size() > mark.draft.nodes) {
+        queued_.resize(mark.draft.nodes);
     }
-    draft_.rollbackTo(mark);
+    // The merges it made go first: a class that named a node the application made is a class of
+    // nothing once the node is gone. The log has one undo and it is the store's -- the draft's
+    // copy is a copy (`save` refreshes it), so rolling the draft back does not put it back.
+    store_.rollbackTo(mark.log);
+    draft_.rollbackTo(mark.draft);
+}
+
+void DraftWritings::abandonRound(const ApplicationMark &mark, size_t pendingBase) {
+    clearIndexRows(mark);
+    // The queue the round filled goes back to what it was: a merge the round made enqueued the
+    // users that read what moved, and those merges are about to be taken back.
+    while (pending_.size() > pendingBase) {
+        const gc_node_ref_t node = pending_.back();
+        pending_.pop_back();
+        if (node < queued_.size()) {
+            queued_[node] = false;
+        }
+    }
+    // The classes before the bodies: a class that named a node the round made is a class of
+    // nothing once the node is gone.
+    store_.rollbackTo(mark.log);
+    draft_.rollbackTo(mark.draft);
 }
 
 void DraftWritings::rebuild() {

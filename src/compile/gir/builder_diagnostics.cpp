@@ -205,7 +205,37 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         if (op->uri() == ":var/after") {
             return false;
         }
-        return camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
+        // A higher-order operator's accesses are the function operand's (design principles 3.3;
+        // author 2026-11-19): the same reading the Call case below makes of a value's type, at the
+        // operand the declaration names. A value that is not there, or a type that writes no
+        // clause, keeps the answer the table gives -- a `map` over a pure function is not an
+        // effect, and one over a function that prints is.
+        const auto &table = camel::core::OperatorTable::instance();
+        const auto id     = table.lookup(op->uri());
+        if (id.has_value()) {
+            if (const auto *facts = table.semantics(*id);
+                facts != nullptr && facts->resources && facts->resources->functionOperand) {
+                const auto &where = *facts->resources->functionOperand;
+                if (where.kind == sem::ResourceBinding::Kind::Norm ||
+                    where.kind == sem::ResourceBinding::Kind::With) {
+                    const auto operands = where.kind == sem::ResourceBinding::Kind::Norm
+                                              ? normInputsOf(node)
+                                              : withInputsOf(node);
+                    if (where.index < operands.size()) {
+                        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(operands[where.index]));
+                        const auto *value =
+                            type != nullptr && type->code() == TypeCode::Function
+                                ? tt::as_ptr<FunctionType>(type)
+                                : nullptr;
+                        if (const auto clause =
+                                camel::core::functionOperandClause(table, *id, value)) {
+                            return !clause->pure();
+                        }
+                    }
+                }
+            }
+        }
+        return table.hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
         // A call of a function this compiler has a body for is judged by that body first
@@ -1872,9 +1902,21 @@ void Builder::reportUnusedFallibleValues() {
             // "Ordered" here means a statement of a `sync` block: the edge that says so is a
             // sync edge, and the old control edge still carries it where one is left.
             const bool ordered = !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            // The arms of a JOIN that joins nothing that actually give a value: the written arm
+            // of an `if` without `else` and the `null` the empty arm hands over are two WITH
+            // inputs, so the number of inputs says nothing -- the `null` placeholder is a void
+            // value no arm could have written and no error can be lost in it.
+            const auto givesAValue = [&](draft_node_ref_t armId) {
+                node_handle_t armValue = draft.ref(armId);
+                if (nodeIsKind(armValue, runtime::GCNodeKind::Gate) &&
+                    !normInputsOf(armValue).empty()) {
+                    armValue = draft.ref(normInputsOf(armValue).front());
+                }
+                return !isVoidGraphExitType(nodeTypeOf(armValue));
+            };
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
                 isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id)) &&
-                draft.withInputsOf(id).size() == 1) {
+                std::ranges::count_if(draft.withInputsOf(id), givesAValue) == 1) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends. A branch with two arms is answered where its arms
                 // end instead (`ExitInUnusedBranch`, `unused_arm_exit`): both arms hand a value to

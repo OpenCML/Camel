@@ -8,6 +8,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
@@ -195,8 +196,19 @@ bool OperatorTable::withAfterNorm(std::string_view uri) const {
 
 bool OperatorTable::mayBeRecomputed(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
+    // A macro operator is not one whose call the compiler may compute ahead of time: its
+    // expansion is a graph rewrite, and `std::macro` is the pass that performs it. Asking only
+    // "pure && foldable" let a pipeline that named `std::opt` and not `std::macro` fold
+    // `with_grad(loss)<m>` into the derived function value at compile time, so the macro operator
+    // was gone before `onnx::export` could say its `run std::macro` refusal
+    // (`modules/onnx/passes/export.cpp#refuseUnexpandedMacros`) -- three `feat/modules/onnx`
+    // entries went red when the four autodiff transforms were declared pure (c038bd187,
+    // 2026-11-18). Nothing is lost: before that commit these operators were impure and
+    // `mayBeRecomputed` answered false for them, so this restores the answer the optimizer had,
+    // for the reason the table already states on `isMacro` (a call of it is what `std::macro`
+    // evaluates, operator_table.h).
     return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
-           facts->effect() == sem::Effect::Pure && facts->foldable;
+           facts->effect() == sem::Effect::Pure && facts->foldable && !facts->macro;
 }
 
 bool OperatorTable::mayBeRecomputed(std::string_view uri) const {
@@ -721,10 +733,15 @@ std::string checkSemantics(
             return "resources: " + *problem;
         }
         if (traits) {
-            if (traits->pure && (!r.accesses.empty() || r.allocates || r.externalEffect)) {
+            // A function operand is a touch as far as this rule is concerned: the operator says
+            // what it touches by naming where the accesses come from (design principles 3.3), and
+            // a static reader takes that as "an effect it does not itemize".
+            if (traits->pure &&
+                (!r.accesses.empty() || r.allocates || r.externalEffect || r.functionOperand)) {
                 return "resources: a pure operator touches no resource";
             }
-            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect) {
+            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect &&
+                !r.functionOperand) {
                 return "resources: an operator that is not pure touches, allocates or affects "
                        "something (declare it pure instead)";
             }
@@ -916,6 +933,18 @@ std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
         return std::nullopt;
     }
     return id;
+}
+
+std::optional<sem::ResourceSignature> functionOperandClause(
+    const OperatorTable &table, OperId id, const type::FunctionType *value) {
+    const sem::OperatorSemantics *facts = table.semantics(id);
+    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
+        return std::nullopt;
+    }
+    if (value == nullptr || value->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+        return std::nullopt;
+    }
+    return value->resources();
 }
 
 } // namespace camel::core
