@@ -1258,6 +1258,29 @@ class CmlPrinter {
         return camel::core::OperatorTable::instance().isPure(uri);
     }
 
+    /// Whether the one user of `ref` is a `GATE` slot the gate does not hand on. A gate answers with
+    /// its *first* ordinary input (`camel::runtime::forwardedInputOf`); the slots after it are the
+    /// statements of the region the gate closes, and the printed text of a gate is the value alone,
+    /// so a statement standing in one of those slots is written nowhere unless it is written where
+    /// it stands. `linear/runtime/order_edges_regions.cml` is the shape: the first arm's gate is
+    /// `GATE(<the value the arm leaves>, println(1), println(2))`, and the printed arm was
+    /// `sync { println(2) }` -- `println(1)` had no line, the printed program ran no first print, and
+    /// the round trip read `9 0 1 2` against the origin's `9 1 2 0 1` (design principles 3.4: a
+    /// computation that may fault, and an effect, stay where the source wrote them).
+    bool sitsInAGateSlotWithNoText(gc_node_ref_t ref) const {
+        const auto users = graph_->normOutputsOf(ref);
+        if (users.size() != 1) {
+            return false;
+        }
+        const gc_node_ref_t user           = users.front();
+        const camel::runtime::GCNode *node = graph_->node(user);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Gate) {
+            return false;
+        }
+        const auto inputs = graph_->normInputsOf(user);
+        return !inputs.empty() && inputs.front() != ref;
+    }
+
     /// Whether the only thing that reads `ref` is version plumbing: a `GATE`/`COPY` chain that ends
     /// at `:var/peek`, `:var/after` or the cell slot of a write. Those nodes print a variable name,
     /// never the value they carry, so an effect that reaches one has no other place to be written.
@@ -1331,6 +1354,15 @@ class CmlPrinter {
         default:
             return false;
         }
+    }
+
+    /// Whether this node is a control region the printed text runs as a whole where it stands: the
+    /// `JOIN` that spells an `if`/`match`, and the `LOOP`. A region's effects happen when it runs, so
+    /// its text cannot be lifted into the expression that reads its value -- `nodeEffect` has already
+    /// said the region has effects, and this says the node is the region.
+    static bool regionRunsWhereItStands(const camel::runtime::GCNode *node) {
+        return node != nullptr && (node->kind == camel::runtime::GCNodeKind::Join ||
+                                   node->kind == camel::runtime::GCNodeKind::Loop);
     }
 
     size_t valueUsers(gc_node_ref_t ref) const {
@@ -2731,7 +2763,20 @@ class CmlPrinter {
                 if (ref == tail) {
                     tailPrintedAsStatement = true;
                 }
-            } else if (users > 1) {
+            } else if (users > 1 || (ref != tail && regionRunsWhereItStands(node))) {
+                // A region whose arms or body have effects runs where the source wrote it, and its
+                // value has a name from there on. Left to the expression that reads the value, it
+                // would run where that expression runs: `linear/runtime/order_edges_regions.cml`
+                // printed `println(9)`, the loop, and then the first `if` inside the `return`, so the
+                // loop's `0 1` came out before the arm's `1 2` (design principles 3.1: a region runs
+                // as a whole with the node that owns it, and the node is where the source put it).
+                //
+                // The block's own tail is the exception, and only for the region: `return <region>`
+                // is the form the source wrote when the region is what the function answers, and a
+                // `let` of it followed by `return` of the name is that graph spelled twice
+                // (`trans/cml/arm_write.cml`: `picked_sync` printed `let cml3 = if ... else ...` and
+                // `return cml3`, and the checker's marker `return cml` -- "not the returned name" --
+                // is what said so). A region read twice keeps its name whatever it is.
                 const Expr value       = expression(ref);
                 const std::string name = freshName();
                 declared_[ref]         = name;
@@ -2754,7 +2799,11 @@ class CmlPrinter {
             //
             // The result needs no name here: the write that follows names the variable, not the
             // call's version, so the statement form is the whole of it.
-            else if (feedsVersionPlumbing(ref)) {
+            //
+            // A statement standing on a gate's waiting slot is the same shape: the gate's text is the
+            // value it forwards and nothing else, so the statement has to be written here or nowhere
+            // (`sitsInAGateSlotWithNoText`).
+            else if (feedsVersionPlumbing(ref) || sitsInAGateSlotWithNoText(ref)) {
                 branchAsStatement_     = true;
                 const std::string text = expression(ref).text;
                 branchAsStatement_     = false;
@@ -3104,7 +3153,17 @@ class CmlPrinter {
             if (inputs.empty()) {
                 return {"()", 100};
             }
-            return expression(inputs.back());
+            // A gate hands on its *first* ordinary input (`camel::runtime::forwardedInputOf`: "the
+            // ordinary input a gate forwards is a node", and `blockValueWrite` reads the exit chain
+            // as `GATE(<value>, sync <- write)`). The slots after it are what the gate waits on, and
+            // they are written where they stand (see `sitsInAGateSlotWithNoText`). Reading the last
+            // slot made an arm's value the count of its own last `println`
+            // (`linear/runtime/order_edges_regions.cml`: the arm's value is 4, the gate's last slot is
+            // `println(2)` and prints 2, which the round trip read as rc 54 against the origin's 56).
+            // A `COPY` is the graph's own copy of one value, so it has one slot and either reading
+            // answers the same node.
+            return expression(node->kind == camel::runtime::GCNodeKind::Gate ? inputs.front()
+                                                                           : inputs.back());
         }
         case camel::runtime::GCNodeKind::Cast: {
             const auto inputs = graph_->normInputsOf(ref);
