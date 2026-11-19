@@ -86,10 +86,6 @@ void DraftGraphBuilder::setFuncType(camel::core::type::FunctionType *funcType) {
 void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
     camel::core::type::FunctionType *funcType = draft().funcType();
     GUARD(funcType != nullptr, "A graph under construction has a function type.");
-    // What the signature stated is recorded before anything replaces it, and nothing reads the
-    // record yet: the readers that need the declaration ask for it in a later change, and the
-    // replacement below keeps its meaning exactly (`GraphDraft::declaredFuncType`).
-    draft().setDeclaredFuncType(funcType);
     if (auto *open = funcType->asOpen()) {
         open->setExitType(exitType);
     } else {
