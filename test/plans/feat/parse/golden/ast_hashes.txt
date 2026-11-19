@@ -556,7 +556,7 @@ db7b15c1d26c2d3d ok stdlib/std.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
 96caed600ac79393 ok stdlib/types.cml
-7535a5ecc1f47e2c ok stdlib/vjp.cml
+6eeb1f124e9b3f90 ok stdlib/vjp.cml
 fd83188beb8091dc ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
@@ -567,7 +567,7 @@ f3e1daeaada48d18 ok stdlib/signatures/autodiff.cml
 35d642977d64e5c6 no stdlib/signatures/nn.cml
 7538e65de08c615d no stdlib/signatures/tensor.cml
 40d18bc9819aa6a3 ok stdlib/signatures/tiles.cml
-d53313f57d137ac8 no stdlib/signatures/transforms.cml
+c51f0abf60dccb4c no stdlib/signatures/transforms.cml
 3ae1e21dae3605cf ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
 8e324ad300fa728e ok test/cases/compile/closed_rank_rejects_rank_zero.cml
 07ee53d6ba5c7deb ok test/cases/compile/err_lambda_tuple_arity.cml
@@ -4374,6 +4374,8 @@ f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 216257761cb074d5 ok test/cases/transforms/compositions/grad_vjp_g_zero.cml
 2673b5760b0bb445 ok test/cases/transforms/compositions/grad_vmap_f.cml
 c10050589b920401 ok test/cases/transforms/compositions/jvp_vjp_f.cml
+7a3b6f871ae4a184 ok test/cases/transforms/compositions/nested_grad_min.cml
+59bce66683644dab ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
 1e6325d17962b018 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
 de0da90b01639e54 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
 97cf5ad689355fb3 ok test/cases/transforms/compositions/vjp_single.cml
@@ -4392,6 +4394,7 @@ abb2fbd581eff852 ok test/cases/transforms/split/split_int_parameter_slot.cml
 74bcf35d26a8858f ok test/cases/transforms/split/split_linear_in_dx.cml
 99b49ec714f251df ok test/cases/transforms/split/split_loop_taped_rounds.cml
 690914cc805168db ok test/cases/transforms/split/split_loop_value_projected.cml
+4f1d5bd79bc286b2 ok test/cases/transforms/split/split_print.cml
 a298299d25135b95 ok test/cases/transforms/split/split_product_chain.cml
 586c308b050044e1 ok test/cases/transforms/split/split_struct_field_read.cml
 5dca01c8f65573fd ok test/cases/transforms/split/split_struct_port.cml

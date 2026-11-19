@@ -1,0 +1,25 @@
+// The same nest as `nested_grad_min.cml`, written through two bindings instead of one expression:
+//
+//   let inner = grad(square)
+//   let outer = grad(inner)
+//
+// It is the same wall and not a second one. `grad` is `vjp`'s, whose answer type is `GradientOf<F>`
+// -- a function whose first ordinary parameter is the weight -- so `inner` is a function with no
+// `with` parameter, and `grad(inner)` refuses at the same call with the same sentence: there is no
+// first `with` parameter to move (design principles 9.9). Written down separately because a reader
+// asking "does the nest work" writes it this way as often as the one-expression form, and the two
+// are refused by the same rule; the day a ruling makes the nest answer, both entries turn red and
+// the answer is 2.0.
+import { grad } from vjp
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+func main(): int sync {
+    let inner = grad(square)
+    let outer = grad(inner)
+    println(outer(2.0))
+    return 0
+}
