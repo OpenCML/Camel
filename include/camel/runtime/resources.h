@@ -356,7 +356,7 @@ std::string toString(const GraphFootprint &footprint);
 // commit's is the same pair's (the regions those nodes are in, and every region around them).
 //
 // Three more things the author's rework of 2026-11-18 makes part of the same commitment (the
-// question page `docs/handover/questions/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`,
+// question page `docs/handover/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`,
 // and the rework that answers it). Two of them are asked by the seal every commit already runs, and
 // are said here so that a reader of this file knows where each of the four lands:
 //

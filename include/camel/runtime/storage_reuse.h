@@ -32,7 +32,7 @@ class Program;
  * later). The criterion is "not `copied`": `in-place` and `by-count` both pass it. Read as "only
  * `in-place`", the criterion would fail every site in today's tree, including the ones that already
  * work in place, and it would fail them over a wording -- see
- * docs/handover/questions/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md.
+ * docs/handover/reviews/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md.
  *
  * A fourth word, `declared`, is neither of the two: an operator that declares it reuses an operand
  * (see below) has been given the criterion's answer by its own claim, before anything asked a
