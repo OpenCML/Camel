@@ -657,6 +657,35 @@ void Builder::layRegionWriteEdges() {
                 }
                 return false;
             };
+            // Whether the value the region hands out is the one its reader takes. An arm is read
+            // by the JOIN that closes its branch, and the JOIN takes the arm's `with` slot: a
+            // branch whose arms write one `var` puts the value that write stored in that slot
+            // instead of the arm's own result (`Builder::buildBranch`, the carried write), and then
+            // the arm's exit -- the statement the arm ends with, or the GATE the block hands its
+            // value out through -- is read by nothing. Everything below that says "it runs with the
+            // exit" is then false: the exit does not run, so nothing behind it does.
+            const auto readerTakesExit = [&draft](
+                                             uint32_t region, runtime::gc_node_ref_t exit) {
+                if (region == 0 || region >= draft.regionCount() ||
+                    draft.region(region).kind != runtime::GCRegionKind::Arm) {
+                    return true;
+                }
+                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
+                if (owner == runtime::kInvalidNodeRef || !draft.alive(owner) ||
+                    nodeKindOf(draft.ref(owner)) != runtime::GCNodeKind::Brch) {
+                    return true;
+                }
+                const runtime::gc_node_ref_t join = runtime::branchJoinOf(draft, owner);
+                if (join == runtime::kInvalidNodeRef || !draft.alive(join)) {
+                    return true;
+                }
+                const auto slots    = draft.withInputsOf(join);
+                const uint32_t slot = draft.region(region).index;
+                if (slot >= slots.size() || !draft.alive(slots[slot])) {
+                    return true;
+                }
+                return slots[slot] == exit;
+            };
             // What a region owes, per region, in node order: every statement in it that writes,
             // whatever else the statement already waits on.
             //
@@ -698,7 +727,12 @@ void Builder::layRegionWriteEdges() {
                 }
                 const uint32_t region = runtime::decidingRegionOfDraft(draft, statement);
                 const runtime::gc_node_ref_t exit = exitOf(region);
-                if (exit == runtime::kInvalidNodeRef || exit == statement) {
+                // A statement that only *reads* the exit runs whenever the exit does; when the
+                // reader takes another value the exit runs for no one, so the statement is hung
+                // here like any other.
+                const bool exitIsRead =
+                    exit != runtime::kInvalidNodeRef && readerTakesExit(region, exit);
+                if (exit == runtime::kInvalidNodeRef || (exit == statement && exitIsRead)) {
                     continue; // a write that is what the region hands out already runs with it
                 }
                 if (!exitInRegion(region, exit)) {
@@ -713,16 +747,26 @@ void Builder::layRegionWriteEdges() {
                 // (`test/ cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is the last statement of
                 // the block `case _ => sync { q(5); return 0; }`, and with it hung on the exit the
                 // block's own GATE is read, the arm runs and `q(5)` prints).
-                // A statement that reads the exit is not hung a second time: the exit is a value it
-                // reads, so a write that only *reads* it runs whenever the exit does and the GATE
-                // below leaves it out of its inputs -- an edge from it would close a cycle the
-                // graph refuses, and a second reason for it to run would say nothing new.
+                // A statement that reads the exit is not hung a second time when its own value is
+                // read: the exit is a value it reads, so it runs whenever its reader runs, and its
+                // reader is behind the exit -- an edge from it would close a cycle the graph
+                // refuses, and a second reason for it to run would say nothing new. That reading
+                // holds only while the exit runs (`exitIsRead`) and only while something takes the
+                // statement's value (`normUsersOf`): a statement nobody reads runs for no one, and
+                // then the exit is not what carries it. `arm_read`'s printed form is that shape --
+                // `{ let cml1 = t + 1; t = cml1; report('int', before, cml1); cml1 }`, where the
+                // `report` call takes the value the arm hands out and nothing takes the call: the
+                // call was left off the arm's exit and the printed program printed one line of the
+                // two the origin printed.
                 //
                 // A write into the exit is the exception, and it is the whole reason this reading
                 // is asked rather than assumed: the box a region hands out is a value the write
                 // *changes*, not one it is behind, so the box carries nothing of it
                 // (`writesTheExit` above, and `refwrite_shapes.cml`'s `r6`).
-                if (reachesBack(statement, exit) && !writesTheExit(statement, exit)) {
+                if (exitIsRead && reachesBack(statement, exit) &&
+                    !writesTheExit(statement, exit) &&
+                    (!draft.normUsersOf(statement).empty() ||
+                     !draft.withUsersOf(statement).empty())) {
                     continue;
                 }
                 chains[region].push_back(statement);
