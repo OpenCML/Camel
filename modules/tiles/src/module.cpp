@@ -883,24 +883,21 @@ class TilesModule final : public BuiltinModule {
              {"source", false},
              {"inspect", false},
              {"benchmark", false},
+             {"regions", false},
              {"available", false},
              {"device", false}});
-        // `regions` is the one report operator that is a function of the value it is handed: it
-        // reads the graph of the function value it receives and answers the region analysis as a
-        // string, and its own contract says it does neither execute the graph nor initialize CUDA
-        // (tiles/internal/regions.h, `inspectRegions`). The other reports compile the program they
-        // are given for a device and so touch the driver; this one touches no resource, and a
-        // clause that named one would be a claim its body contradicts (2026-11-20). It is not
-        // foldable either: the answer is the analysis of a graph the compiler cannot see through,
-        // which is what `readsGraphs` says, and `pure` here is the resource claim and not a promise
-        // that a call may be computed ahead of time (operator_table.h, `declareUnfoldable`).
-        core::OperatorTable::instance().set(
-            "tiles:regions", {.pure = true, .readsGraphs = true, .foldable = false});
+        // `regions` touches no resource -- its own contract says it does neither execute the graph
+        // nor initialize CUDA (tiles/internal/regions.h, `inspectRegions`) -- but the purity it
+        // would have to declare is also what `stdlib/signatures/tiles.cml` writes as `uses var
+        // driver` for it, and the two cannot both stand: making the operator pure without the
+        // resolver's spelling and a regenerated signature file leaves `--verify-ops` saying the
+        // declaration names a resource the operator does not touch (measured 2026-11-20). Until
+        // both move together it stays declared as the report operators are.
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run_compiled", "run_compiled_device", "source", "inspect", "benchmark"}) {
+             {"run_compiled", "run_compiled_device", "source", "inspect", "benchmark", "regions"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .readsGraphs = true});
