@@ -1144,9 +1144,18 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
             // `(value, pullback)`); after it, that tuple is a FILL of this graph and the callee is
             // nameable from here. Devirtualizing those calls is the difference between publishing a
             // call that names its callee and one the effect resolver has to read as "writes
-            // everything": a differentiated body's two calls sit in one region and neither writes,
-            // so leaving them unnamed costs the graph the order completeness Analysis 4.1 asks for,
-            // where naming them costs nothing. Only the calls a splice brought in are taken: a call
+            // everything", and a differentiated body's two calls both land in one region.
+            //
+            // That they do not write is a rule and not an assumption (design principles 9.9, author
+            // 2026-11-19): a reverse half only computes the transposed rules over the values its
+            // forward recorded, and its type says so -- `modules/autodiff/pullback.cpp#pureClause`
+            // publishes `pure` on every pullback and on the function value the forward hands out.
+            // So naming them costs nothing, while leaving them unnamed costs the graph the order
+            // completeness Analysis 4.1 asks for.
+            //
+            // This pass does not lean on that alone: if a pullback ever did touch a resource, the
+            // commit of this very graph would refuse the body against the clause its type declares
+            // before the reading mattered. Only the calls a splice brought in are taken: a call
             // the program wrote keeps whatever form it had, which is `std::opt::devirtualize`'s
             // business and not this pass's.
             if (config.enableInlining) {

@@ -120,9 +120,8 @@ encode :: <encoder: Encoder> (x: f32[...]) => f32[...] pure
 函数值**的类型（载 ⑦ 那一笔的做法扩到 `.fwd` / `.pb` 与闭包值），或者按 2.2 的口径让节点上的
 "值的类型"取度量后的那一份。
 
-**⇒ 这一条要动 `modules/autodiff`（本轮红线：迁移台账 144 不许涨、不许改 autodiff），我不自裁。**
-请判：是放行 `modules/autodiff` 把子图与闭包值的类型带上子句（照 `jvp.cpp#liftSignature` 的写法），
-还是先收 2.2 的"值的类型"口径、让这条红留到那一笔？
+**⇒ 这一条要动 `modules/autodiff`（当时是本轮红线），所以这一页先停在这里问；author 放行后的落地
+见 ⑦。**
 
 ## ⑥ 本轮读数（`91f708389` + 本页，`-Plan feat/modules -Jobs 8`，`feat/trans` 单独一次）
 
@@ -137,6 +136,35 @@ encode :: <encoder: Encoder> (x: f32[...]) => f32[...] pure
   （`docs/stdlib-reference.md` 最后一次由 `88f855ebb` 写过，之后 `7ba2a034b` 改了
   `stdlib/vjp.cml` 与 `stdlib/signatures/transforms.cml`）。
 - `feat/trans`：**109 / pass 108 / fail 1**（`print_and_recompile`），与本 lane 开工前一行不差。
+
+## ⑦ 已落（author 2026-11-19 答复本页后）：变换给每张图写出子句
+
+author 的答复与本页的判定一致（"不是序被拆，是变换造出来的图类型里没有效应子句"），并给了三条细则与
+一条界线："只抄被子句，不改任何判定规则"，"一处实现，不在读法里补"。落地：
+
+- `modules/autodiff/pullback.cpp#makePlanTypes`：`*.pb` 与它交出的函数值的类型写 **`pure`**
+  （`pureClause`）。依据 9.9：效应骨架整个进前向一半，反向一半只在正向记下的值上算转置规则，自己没有
+  骨架。`plan.forwardValueType` 用的是同一个 `pullbackType`，所以 `(value, pullback)` 元组里那个
+  函数值的类型也一并是 `pure`。
+- `modules/autodiff/pullback.cpp#Engine::build`：`*.fwd` 图的类型原样带上被变换函数的子句——前向体
+  就是函数自己的体多接一个聚合，形参表不变，不需要重编号。
+- `PullbackPlan::sourceClause` 按**值**存（`std::optional`）：plan 活得比读它的 draft 久（第一版按
+  指针存，`&clause` 指向 `planForClosure` 的局部量，量到 `std::bad_array_new_length` 与 OOM，已改）。
+- `src/passes/opt/inline/engine.cpp`：那句「neither writes」改成引用这条规则（9.9 与
+  `pullback.cpp#pureClause`），不再是假定；并写明它自己也有兜底——真有效应的反向体会在 commit 的
+  `effectBeyondDeclaration` 那里被拒，而不是被这条注释放过。
+
+读法一侧一行未动。逐字读数（同一次 `-Plan feat/modules -Jobs 8`）：
+
+- `feat/modules`：**2074 / pass 2059 / fail 1 / skip 7 / known 7**，唯一的红是
+  `array_sort_kernels.paths`（不是本 lane 的）。`siamese_shared_encoder.devirtualize_inline.nvm` 绿。
+- 六计划与 `feat/trans` 不差：compile 2638/2622/0 · linear 869/864/0 · opt 1620/1620/0 ·
+  parse 126/126/0 · para 104/104/0 · tools 70/70/0 · trans 109/108/1（`print_and_recompile`，开工前
+  就红）。
+
+**还没做的**：author 细则 ② 的"及转置产物"——`modules/transforms/split.cpp#split` 的
+`halves.backward`、`transpose.cpp` 的转置产物、`vmap.cpp` 的函数值仍然不写字句（本 lane 的红不需要
+它们，动了要另量 `feat/trans`、`feat/linear`）。这一条留给下一笔，写在这里免得丢。
 
 ## 附：复现
 
