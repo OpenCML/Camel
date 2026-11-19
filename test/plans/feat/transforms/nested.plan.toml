@@ -117,7 +117,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "nested.rule_writes_a_constant"
-desc = "Pins the `chooseRuleAmong` hole, not a fix. A law whose own left side writes a `<>` value describes the operator at that one configuration, and the fit compares types and counts only -- so `jvp_reshape` (`reshape<[2, 2]>(x)`, `stdlib/rulesets/jvp.cml:369`) is SELECTED for this `reshape<[2, 1, 2]>` node and its right side rewrites the tangent as `reshape<[2, 2]>(dx)`. Read together with `nested.rule_constant_agrees`, which differs from this case only in the node's configuration and is refused the same way: the two entries together are the proof that the matcher cannot tell the two configurations apart. What keeps a wrong NUMBER from reaching the user today is not the matcher but the transposition half having no rule for `reshape` (`stdlib/rulesets/transpose.cml:613`), which is why the expected reading below is that refusal -- no `==` may be pinned while the answer is unknown (design principles 9.9)."
+desc = "A reshape whose configuration is not one any law spells (`reshape<[2, 1, 2]>`) must still reach a law: `jvp_reshape` names `dims` as its second port now, so nothing states a configuration of its own. The reading is WHICH refusal fires -- the transposition half has no rule for `reshape` (`stdlib/rulesets/transpose.cml:613`), so it stops there, where a matcher refusal would mean the configuration was refused before any law ran. That is the regression a by-content comparison in `chooseRuleAmong` reintroduced on 2026-11-20 (27 red lines in `feat/compile`, with `jvp_reshape` and `jvp_permute` both refused over their own parameters). A law that DOES spell a `<>` value stays refused: `jvp_softmax` writes `<1>`, so `softmax<2>` is refused by name."
 kind = "negative"
 case = "../../../cases/transforms/nested/rule_writes_a_constant.cml"
 args = ["${case}", "${backend}"]
@@ -129,7 +129,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "nested.rule_constant_agrees"
-desc = "The control for `nested.rule_writes_a_constant`: the SAME law over a node whose configuration is the one the law wrote (`reshape<[2, 2]>(x)` on a `reshape<[2, 2]>` node), so the two cases differ in nothing but the node's configuration -- and both are refused with the same sentence. That is the reading that shows the matcher cannot tell them apart, which is the hole the other entry names. `sum(reshape<[2, 2]>(x))` is the sum of every element, so the answer would be all ones; it is not pinned because it is not reached."
+desc = "The control for `nested.rule_writes_a_constant`: the same program at `reshape<[2, 2]>`, the configuration a law used to be written for. The two cases now differ only in the node's configuration and read the same sentence, which is what a general law should do -- and it is also what a matcher that cannot read the configuration at all does, so the pair is read together with the `feat/compile` cases that tell a spelled `<1>` (`jvp_softmax`) from a named one (`jvp_reshape`'s `dims`). The answer would be all ones (`sum` of every element); it is not pinned because the transposition half stops first."
 kind = "negative"
 case = "../../../cases/transforms/nested/rule_constant_agrees.cml"
 args = ["${case}", "${backend}"]

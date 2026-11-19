@@ -1,31 +1,24 @@
-// The `chooseRuleAmong` hole, pinned where it is visible: a law whose own left side writes a `<>`
-// value describes the operator at that ONE configuration, and the fit compares types and counts only.
+// A reshape whose configuration is not one any law spells: `[2, 1, 2]` on four elements, reached
+// through `sum` and differentiated.
 //
-// The law (`stdlib/rulesets/jvp.cml:369`) is written for a rank-two reshape:
+// `jvp_reshape` used to be written for one constant (`reshape<[2, 2]>(x)`), and then a node like
+// this one was answered by a law that wrote the wrong shape into the tangent: `reshape<[8, 2, 8]>`
+// came out `reshape<[2, 2]>` and the run died with `TensorDimensionMismatch: [6] -> [2, 2]`. The law
+// is general now -- it names `dims` as its second port (`stdlib/rulesets/jvp.cml`, "It used to be
+// written for one constant") -- so no law states a configuration of its own and there is none to
+// disagree with. That is `angleargs`' face and this case does not test it.
 //
-//   reshape<[2, 2]>(x) => (dx: T[...]) => reshape<[2, 2]>(dx)
+// What this case pins is that the matcher does not stop a configuration the law does not spell,
+// which is the regression a value comparison in `chooseRuleAmong` reintroduced on 2026-11-20:
+// measured by another lane, 27 red lines in `feat/compile`, with `jvp_reshape` and `jvp_permute`
+// both refused at "writes 1 `<>` value(s) of its own" over their own `dims`/`perm` parameter.
 //
-// and the node below reshapes to a rank-three one. The counts agree (four elements each), so the
-// program is a reshape anyone can write; what does not agree is the configuration the law spelled.
-// The law is selected anyway and its right side rewrites the tangent as `reshape<[2, 2]>(dx)`.
+// The reading is WHICH refusal fires. The transposition half has no rule for `reshape` at all
+// (`stdlib/rulesets/transpose.cml:613`), so the run stops there; a matcher refusal instead would
+// mean the configuration had been refused before any law ran, which is the defect.
 //
-// Read with `rule_constant_agrees.cml`, which differs from this file only in the node's
-// configuration (`reshape<[2, 2]>`) and is refused with the same sentence: the two together are the
-// reading that shows the matcher cannot tell the two configurations apart.
-//
-// What keeps a wrong NUMBER from reaching the user today is not the matcher but the transposition
-// half having no rule for `reshape` at all (`stdlib/rulesets/transpose.cml:613`), so the run stops
-// at `transpose has no transpose for this function`. No number is pinned here, because no number is
-// reached: design principles 9.9 allows the right derivative or a refusal that names the operator,
-// and never a wrong value.
-//
-// Measured through this same hole on 2026-11-20 (`probes/06_layout.cml`, the `angleargs` lane), at a
-// configuration whose adjoint does exist: a `reshape<[8, 2, 8]>` node silently got the tangent
-// `reshape<[2, 2]>(dx)` and the run died with `TensorDimensionMismatch: [6] -> [2, 2]`.
-//
-// The rule's own half of this is naming the configuration as a parameter (`(x: T[...], dims: int[])`
-// reading `reshape<dims>`), which writes no `<>` value; that is the `angleargs` lane's, and this pair
-// of cases is here so its completion has something to turn green.
+// `rule_constant_agrees.cml` is the same program at `[2, 2]`. The two differ only in the node's
+// configuration and read the same sentence, which is what a general law should do.
 import { grad } from vjp
 import { reshape, sum } from tensor
 
