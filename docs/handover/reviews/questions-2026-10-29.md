@@ -4928,3 +4928,26 @@ compile **2638/2622/0** · linear **869/865/0**（`+1 pass −1 known` 全部来
 4. **要不要额外测**：只动文档与报告的，不跑计划；动代码的，跑六计划与当天闸门的 linux 腿，与基线逐名比。
 
 **处理只有三种**：合（价值高、能快合）；挑着合后删枝（价值在少数提交里）；直接删（价值已被吸收、或方向已改）。**红着的分支不因"落后"被硬合进 develop**——像 `lane-ssa` 这种在做中的活，留在分支上继续做，只把 develop 合进它（让它不再落后），不反过来。删枝前在本页记一行"删了什么、有用的已在哪笔"。
+
+## 负责人回报（2026-11-20 02:55）：`vjp` 的根因落在 `modules/transforms/`，transformer 那一行**进不了论文**，原因换了
+
+决策者。按你 02:10 的条件「若 `vjp` 查到根因落在 `modules/transforms/`，与 `nested-b` 合成一条」——**条件触发了**，两条已合成一条（按面切：`stdlib/rulesets/jvp.cml` 归 `vjp`，`modules/transforms/` 其余归 `nested-b`）。
+
+### 一、`stdlib/vjp.cml:135` 已经清了
+
+`50cfe4d17`「jvp: a call to a function of no parameter takes no direction, so its tangent is the zero」（+77/−1）。判据逐字：`modules/transforms/jvp.cpp` 的 lift 对「没有普通参数的被调用者」判 `liftSignature == nullptr`（`params.empty()`），留下的拒绝**不带 cause 也不带位置**（`refusedOrigin == kInvalidOriginId`），于是 `jvp_operator.cpp:184` 抛兜底句。最小复现 `func k(): float { return 3.0 }` 被 `f` 调用即复现，且一条 `REINTERP` 都没有。
+
+自测：`jvp(f)(2.0,1.0)` 标量 `6.0000/3.0000`、数组 `11.0000/3.0000`；18 个 showcase 探针逐字未变；六份计划全绿；`feat/trans 109/108/1`；`feat/modules 2074/2059/1`，唯一红在 base 上同红。
+
+### 二、transformer 那一行**仍然进不了论文**，卡点换了两处，都不是 `vjp`
+
+1. **`jvp has no forward rule for 'tensor:permute'`**（`train.cml:163:20`，带 `READING_REFUSAL {"cause":"rule","uri":"tensor:permute"}`，`REINTERP … skip=rule`）——`stdlib/rulesets/jvp.cml` 里根本没有 `permute` 的前向规则，`transpose` 侧也没有。**这一条可做**，已在补；补完可能还缺别的规则，到时会给你清单。
+2. **规则写不出调用的 `<>` 值**：`reshape<[8,2,8]>` 的切向会被写成 `reshape<[2,2]>`，`probes/06_layout.cml` 实测 `TensorDimensionMismatch: [6] -> [2, 2]`，由 `test/plans/feat/compile/rules_angle_args.plan.toml` 钉住，落在 `modules/transforms/rule_expand.cpp`。**这一条是我判为「本轮不修」的**，正在写开放题页。
+
+### 三、请你裁一句（我按默认执行）
+
+**默认建议：transformer 那一行不进论文第 6 节，正文写明它卡在上面两处、各给一条读数。** 若你要改成「只补 `permute` 规则、`<>` 那条留待 0.2.46 但正文声称能跑」，我不建议——那会把一处未修写成已修。你若 15:00 前另给方向，我改。
+
+### 四、我这两轮的失职，已改
+
+`02:35` 之前我从未向本页回报车道状态（只有你→我的单向）。现已按你的要求「每次给全表」：`a25e9c5e3` 是第一次全表，本条是第二次。你 02:10–02:30 的三条下发，我在 02:35 的回报里如实写了「尚未派工，是我的遗漏」，随后已全部派齐（`grad-callform` 08:00、`nested-b` 12:00、二阶导读数并入采集脚本）。
