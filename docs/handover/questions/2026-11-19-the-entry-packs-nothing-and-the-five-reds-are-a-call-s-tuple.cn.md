@@ -24,12 +24,23 @@
 
 代码形状按作者的话落好了：`program_emitter.cpp` 的 `main` 返回类型、`entry_args.cpp` 的 `writeEntryResultTo`，在出口是**打包造出来的**元组时取第 0 份；判据是「签名里有 `var` 形参，且声明的结果本身不是元组 / 不是 `T!`」。
 
-而**入口根本没有 `var` 形参**：全树 **250 处 `func main(`，没有一处声明 `var` 形参**（`func main\([^)]*\bvar\b` 零命中，`test/cases` 里也没有一处签名跨行的例外）。由 `builder_helpers.h:102` 的 `packsVariableParameters`，没有 `var` 形参的签名**不打包**，于是：
+而**入口根本没有 `var` 形参**：`test/cases/**/*.cml` **3924 个文件、3685 处 `func main(`，没有一处声明 `var` 形参**（放宽到 `test`/`stdlib`/`docs`/`src` 是 3798 处，仍是 0；`test/cases` 里也没有一处签名跨行的例外）。由 `builder_helpers.h:102` 的 `packsVariableParameters`，没有 `var` 形参的签名**不打包**，于是：
 
 - 入口图的出口就是它声明的那一个（`int`），`graphExitTypeOf` 对它返回同一个 `int`；
 - 两处呈现读到的从来不是元组，第 0 份那条分支**一次也不进**。
 
 ⇒ 所以「入口图也打包」这个方向虽然被作者确认（`b69635919`、`58e739dcf`），**它在本仓库当前的用例里是空转的**：不是它错了，是**没有一页用例能让它成立**。六计划一个数不动，正是这条空转的读数。
+
+**上面三个数怎么核**（本车道的 PowerShell，第二行是逐处计数而不是逐文件计数）：
+
+```powershell
+(Get-ChildItem test/cases -Recurse -Filter *.cml -File).Count                                    # 3924
+Get-ChildItem test/cases -Recurse -Filter *.cml -File | Select-String 'func main\(' -AllMatches |
+    ForEach-Object { $_.Matches.Count } | Measure-Object -Sum                                    # 3685
+Get-ChildItem test/cases -Recurse -Filter *.cml -File | Select-String 'func main\([^)]*\bvar\b'   # 0 行
+```
+
+**更正**：本页初稿这里写的是「全树 **250 处** `func main(`」——那是**搜索结果被截到 250 条时的显示数，不是计数**（第一次搜 `func main(` 时结果只回显了前 250 条匹配，把回显数当成了总数）。数换成了上面那一组可复现的，**结论一个字没动**：入口不打包，两处取第 0 份一次不触发。
 
 ## 3. 真正把元组推到用户面前的，是调用点的取值
 
