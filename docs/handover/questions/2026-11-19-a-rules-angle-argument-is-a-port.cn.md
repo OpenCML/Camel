@@ -148,12 +148,34 @@ carry the wrong `softmax<2>` tangent into the step.
 the text says where it stops, with one reading per wall.** Four things are left, in the order the
 transformer needs them:
 
-1. **`jvp_softmax`'s wrong axis.** The repair is `permute`'s and `reshape`'s repair -- name the port,
-   hand it to a function -- and it is blocked only by
-   `test/cases/compile/vjp/softmax_gradient_stops_at_split.cml`. That case's subject is "the backward
-   half of a softmax cannot be built"; the backward half still cannot be built after the repair, it
-   just says so in a later sentence. Re-read that case, then take the repair (and the same one for
-   `jvp_log_softmax` / `log_softmax_t`, both at `<0>`).
+1. **`jvp_softmax`'s wrong axis** -- answered one way, and it opens a second question. `271e02902`
+   made the fit compare the `<>` values a law's own left side *writes*, so a law that states
+   `softmax<1>` no longer answers a `softmax<2>` node, and the silent `13.5` is gone:
+
+   ```
+   READING_REFUSAL {"transform":"jvp","function":"f","cause":"rule","uri":"tensor:softmax"}
+   error…: jvp has no forward rule for `tensor:softmax` (the rule 'jvp_softmax' writes 1 `<>` value(s)
+   of its own ((int)), and this node's configuration is not that one ((float[2, 2, 3], int))).
+   ```
+
+   the same for `log_softmax<1>` (`'jvp_log_softmax' writes 1 `<>` value(s) of its own ((int))`), and
+   both `softmax_gradient_stops_at_split` and `log_softmax_gradient_stops_at_split` still pass.
+
+   **But the comparison does not yet tell a written value from a bound parameter.** A law that names
+   its configuration -- `reshape<dims>(x)`, `permute<perm>(x)`, and `vmap`'s and `jvp`'s stated
+   reductions -- writes no constant, and gets the same refusal:
+
+   ```
+   jvp has no forward rule for `tensor:reshape` (the rule 'jvp_reshape' writes 1 `<>` value(s) of its
+   own ((int[])), and this node's configuration is not that one ((float[...], int[])))
+   jvp has no forward rule for `tensor:permute` (the rule 'jvp_permute' writes 1 `<>` value(s) of its
+   own ((int[])), and this node's configuration is not that one ((float[2, 2, 3], int[])))
+   ```
+
+   which is `06_layout.cml` refused again, `permute`'s forward law dead, and 27 reds in `feat/compile`
+   (2644 / 2604 / 27 against the trunk's 2638 / 2622 / 0) and 8 in `feat/transforms`. So what this
+   question still needs is the second half of that distinction: a `<>` slot the left side **writes**
+   is compared by content, a `<>` slot the rule **binds** is matched and bound as before.
 2. **`test/plans/feat/compile/rules_angle_args.plan.toml`'s header** says the value "can only be
    *stated* by a rule, never bound from the node it matches". That is refuted by the three laws above
    and by `vmap` before them; it is a plan entry, so this lane cannot touch it. Whoever owns it should
