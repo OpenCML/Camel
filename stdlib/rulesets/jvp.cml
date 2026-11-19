@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -365,8 +365,20 @@ export rule jvp_mean::<T>(xs: T[...]) when is_float::<T>() {
 }
 
 /// `d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
-export rule jvp_reshape::<T>(x: T[...]) when is_float::<T>() {
-    reshape<[2, 2]>(x) => (dx: T[...]) => reshape<[2, 2]>(dx)
+///
+/// `dims` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+/// the right side as an ordinary value (the protocol stated over `jvp_sum`, and the one
+/// `vmap_rule_reshape` already uses). It used to be written for one constant -- `reshape<[2, 2]>` --
+/// which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` answered
+/// `reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
+/// `showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
+/// lifted at all.
+export func reshape_jvp::<T>(dx: T[...], dims: int[]): T[...] when is_float::<T>() {
+    return reshape<dims>(dx)
+}
+
+export rule jvp_reshape::<T>(x: T[...], dims: int[]) when is_float::<T>() {
+    reshape<dims>(x) => (dx: T[...]) => reshape_jvp(dx, dims)
 }
 
 /// `d(take(t, indices)) = take(dt, indices)`: which rows a take reads is the call's, not the value's,
@@ -451,6 +463,26 @@ export rule jvp_mul_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 }
 
 /// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.
+///
+/// **This law answers the wrong axis, silently.** The `1` in the left side is not matched against the
+/// call: `softmax<2>` matches this rule too, and the right side then states `softmax<1>` and
+/// `sum<1, true>` of a `[2, 2, 3]` operand. Measured on `x = 0` along `dx = 1..12` with
+/// `f = sum(softmax<2>(x) * w)`, where the answer is `26.0` and `4 * 2/3 = 2.666667`:
+///
+/// ```
+/// softmax axis 2 value=26.000000 tangent=13.500000     <- this law
+/// softmax axis 2 value=26.000000 tangent=2.666667      <- the law that names the axis
+/// ```
+///
+/// The named form is written and reverted: the axis is the operator's second port, `jvp_reshape`
+/// above binds its own port the same way, and the right side has to hand the axis to a function
+/// (`softmax<axis>` written directly in a rule's right side is refused, `the rule's right side uses
+/// a node written after it`). That function is a callee with an open-rank parameter, which is what
+/// the transposed walk refuses (`skip=parameter-shape`), so `vjp`'s backward half then stops with a
+/// **different** sentence: `test/cases/compile/vjp/softmax_gradient_stops_at_split.cml` pins today's
+/// `split does not build this function` and goes red on the repair. A wrong tangent read quietly is
+/// worse than a missing rule, so the repair is the thing to take -- once that case is re-read.
+/// `docs/handover/questions/2026-11-19-a-rules-angle-argument-is-a-port.cn.md` states the trade.
 export rule jvp_softmax::<T>(x: T[...]) when is_float::<T>() {
     softmax<1>(x) => (dx: T[...]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
 }
@@ -983,6 +1015,23 @@ export rule jvp_gelu::<T>(x: T[...]) when is_float::<T>() {
 /// (`stdlib/rulesets/transpose.cml#transpose_t`).
 export rule jvp_transpose::<T>(x: T[...]) when is_float::<T>() {
     transpose(x) => (dx: T[...]) => transpose(dx)
+}
+
+/// `d(permute<perm>(x)) = permute<perm>(dx)`: a permutation moves elements and combines none, so the
+/// tangent is the same permutation of the tangents, and one law holds for every permutation.
+///
+/// `perm` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+/// the right side as an ordinary value -- the protocol the expansion states over `jvp_sum` (a rule's
+/// parameters are the operator's ports in port order, the normal ones then the `<>` ones) and the one
+/// `vmap_rule_permute` already relies on (`stdlib/rulesets/vmap.cml`). It is written as a call to
+/// `permute_jvp` rather than as `permute<perm>(dx)`: the right side hands the value on where a call
+/// states an ordinary argument, which is the shape that needs no context argument of its own.
+export func permute_jvp::<T>(dx: T[...], perm: int[]): T[...] when is_float::<T>() {
+    return permute<perm>(dx)
+}
+
+export rule jvp_permute::<T>(x: T[...], perm: int[]) when is_float::<T>() {
+    permute<perm>(x) => (dx: T[...]) => permute_jvp(dx, perm)
 }
 
 /// `d(where(c, a, b)) = (where(c, da, db))`: the condition is a choice and not a magnitude, so it

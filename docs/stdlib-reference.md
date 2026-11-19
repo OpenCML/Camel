@@ -7732,6 +7732,47 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The extents a reduction's or a gather's adjoint spreads over
+
+Each of the three laws below is linear in its data, so its tangent is the same operation on the
+tangents -- and the adjoint of that operation gives one cotangent back to every element the
+operation consumed. That is `shape(xs)` of them, a value of the primal which the tangent does not
+carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
+that answers it (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
+that argument and nothing of the operand the cotangent comes back through. A transpose law may
+read only known operands (author, 2026-11-03 11:10 and 17:35), and `T[...]` carries no extents in
+its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
+`tensor.pick_at` is the operator it states a length to.
+
+The extents used to ride inside one integer list with the axis and the flag, on the reading that
+the transpose walk refuses an operator with a third operand (`skip=arity
+uri=tensor:mean_axis operands=3`, measured 2026-11-03). That is true of a third *tensor*: the
+stated reductions take their axis, their flag and their extents as three parameters today
+(`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
+node with five operands, and the laws read them by name. The plain axis form never needed the
+reading either: with the axis and the flag in angle brackets it carries one normal operand and two
+context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds (author's ruling,
+2026-11-05). A list would have needed a function to build it. Nothing builds a list for a
+call's arguments any more: every one of those parameters is a parameter of its own.
+
+#### `reshape_jvp`
+
+```camel
+reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
+```
+
+`d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
+
+`dims` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+the right side as an ordinary value (the protocol stated over `jvp_sum`, and the one
+`vmap_rule_reshape` already uses). It used to be written for one constant -- `reshape<[2, 2]>` --
+which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` answered
+`reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
+`showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
+lifted at all.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+
 ### The forward rule of `^` (a power)
 
 #### `pow_tangent`
@@ -7768,6 +7809,35 @@ could omit it, which is why the law below is written out rather than called.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `pow_tangent(2.0, 3.0, 0.0, 1.0)` gives `5.545177444479562`
 - Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `nan`
+
+### The forward rules of the second tranche
+
+Eight operators the engine could already differentiate and neither half of the library could. Each
+law below is one straight line whose right side names only registered operators: a *function* of
+this module on a rule's right side becomes a call in the graph the linear half has to transpose,
+and the walk refuses a call it has no transpose for (`skip=call-no-transpose`, measured on
+`pow_tangent`, which is why `jvp_pow` writes the same law out instead of calling it). The two
+`erf`-family laws are written in the engine's own grouping because the
+two legs of one `grad` are compared bit for bit; the knot each one is tied to is written where it
+sits.
+
+#### `permute_jvp`
+
+```camel
+permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
+```
+
+`d(permute<perm>(x)) = permute<perm>(dx)`: a permutation moves elements and combines none, so the
+tangent is the same permutation of the tangents, and one law holds for every permutation.
+
+`perm` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+the right side as an ordinary value -- the protocol the expansion states over `jvp_sum` (a rule's
+parameters are the operator's ports in port order, the normal ones then the `<>` ones) and the one
+`vmap_rule_permute` already relies on (`stdlib/rulesets/vmap.cml`). It is written as a call to
+`permute_jvp` rather than as `permute<perm>(dx)`: the right side hands the value on where a call
+states an ordinary argument, which is the shape that needs no context argument of its own.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
 
 <a id="rulesets.vmap"></a>
 
