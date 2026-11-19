@@ -1,0 +1,38 @@
+// The positive control for the pack fix of 2026-11-20: `GradientOf<F>` is written
+// `<...WithOf<F>> (...ParamsOf<F>) => ...`, and both packs are settled when the alias is
+// instantiated.
+//
+//   `WithOf<F>` with one member  -> ONE `with` parameter, and a call passes one angle-bracket value
+//   `WithOf<F>` with no member   -> NO `with` parameter, in the type and in the call
+//
+// The first line was refused before the fix: the rest slot was put back *beside* the member the
+// substitution had already written, so the type said one parameter, `StaticFuncTypeResolver` counted
+// the slot away and every call came out one argument short --
+//
+//     '<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)
+//
+// -- which is what stopped the second-order nest and every `grad` call in the tree. The language
+// author's ruling of 2026-11-20: an empty rest pack is a value in the body (an empty tuple) and
+// enters neither the parameter list nor the function type; a pack whose members are known is those
+// members, as ordinary parameters.
+//
+// The two types are also compared by `is_same`, so the shape is pinned and not only the call.
+import { WithOf, ParamsOf, GradientOf, is_same } from types
+
+type GradOf<F> = <...WithOf<F>> (...ParamsOf<F>) => float
+
+func main(): int sync {
+    // One member: the pack is the single `with` parameter, and the call gives one value.
+    let one: GradOf<<x: float> () => float> = <w> () => w * w
+    // No member: the pack is nothing, so the type has no `with` parameter and the call gives none.
+    let none: GradOf<() => float> = () => 5.0
+    let a = one<3.0>()
+    let b = none()
+    println('with_pack_lambda one={} none={}'->format<a, b>)
+    // The shape itself: the alias over a one-member pack is the alias over a written `<x: float>`,
+    // and the alias over an empty pack has no `with` list at all.
+    let sameOne = is_same::<GradOf<<x: float> () => float>, <w: float> () => float>()
+    let sameNone = is_same::<GradOf<() => float>, () => float>()
+    println('with_pack_lambda same_one={} same_none={}'->format<sameOne, sameNone>)
+    return 0
+}
