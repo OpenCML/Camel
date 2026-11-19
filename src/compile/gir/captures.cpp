@@ -40,6 +40,19 @@ std::string Builder::captureNameOf(node_handle_t origin, const std::string &fall
     return std::format("{}::{}", value.module->name(), value.name);
 }
 
+bool Builder::enclosesOrigin(node_handle_t origin) const {
+    if (origin == nullptr || currGraph_ == nullptr) {
+        return false;
+    }
+    for (DraftGraphBuilder *outer = currGraph_.get(); outer != nullptr;
+         outer = outer->outerGraph().get()) {
+        if (nodeGraphOf(origin) == outer) {
+            return true;
+        }
+    }
+    return false;
+}
+
 node_handle_t Builder::captureInto(
     const compile_graph_ptr_t &graph,
     node_handle_t origin,

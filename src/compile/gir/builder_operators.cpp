@@ -4917,8 +4917,14 @@ node_handle_t Builder::visitLinkNode(
             if ((writtenMask & (uint32_t{1} << k)) == 0) {
                 continue;
             }
+            // The version the call hands back is one of this graph's captures of that variable,
+            // and it exists only when the variable lives here or inside this graph: a callee
+            // reached through a value was made elsewhere and the value carries its captures. The
+            // entry stays in place (`nullptr`) so the mask keeps naming the same slots.
             value.variables.push_back(
-                captureInto(currGraph_, table->second[k].origin, table->second[k].name));
+                enclosesOrigin(table->second[k].origin)
+                    ? captureInto(currGraph_, table->second[k].origin, table->second[k].name)
+                    : nullptr);
         }
         callValues_[targetNode] = std::move(value);
     }
