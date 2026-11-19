@@ -3200,7 +3200,7 @@ node_handle_t Builder::visitLinkNode(
         // that hands its `var` parameters back -- those values beside it (`graphExitTypeOf`).
         // The statement's value is the result, the tuple's first part: the tuple itself is the
         // call's own value and what the `var` arguments' new versions are read from.
-        const node_handle_t callNode = currGraph_->addCallNode(graphExitTypeOf(factoryType));
+        const node_handle_t callNode = addCallSite(currGraph_, graphExitTypeOf(factoryType));
         linkNodes(LinkType::With, decoratorInvoke, callNode);
         // The call is written in the program: it is located where it is written, not where
         // the function's decorators left it.
@@ -4490,7 +4490,7 @@ node_handle_t Builder::visitLinkNode(
                 .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
-        node_handle_t invokeNode = currGraph_->addCallNode(graphExitTypeOf(funcType));
+        node_handle_t invokeNode = addCallSite(currGraph_, graphExitTypeOf(funcType));
         linkNodes(LinkType::With, targetNode, invokeNode);
         std::vector<camel::source::origin_id_t> callInputs;
         if (auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr) {

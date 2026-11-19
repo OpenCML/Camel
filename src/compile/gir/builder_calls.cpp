@@ -204,6 +204,13 @@ node_handle_t Builder::addCallNodeOf(const compile_graph_ptr_t &callee) {
     return call;
 }
 
+node_handle_t Builder::addCallSite(const compile_graph_ptr_t &graph, Type *exitType) {
+    // The construction and nothing else: the type is the caller's, exactly as that site stated it
+    // before this became a function (see the declaration in builder.h). The FUNC node of a direct
+    // call is the other half, and `addCallNodeOf` above was already its one place.
+    return graph->addCallNode(exitType);
+}
+
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     GUARD(
@@ -325,7 +332,7 @@ node_handle_t Builder::createFuncDataNode(
         // A direct call of a graph whose value was made before: called through a value. Its
         // value is what the callee's graph hands on, `var` parameters and all
         // (`graphExitTypeOf`).
-        auto callNode = currGraph_->addCallNode(graphExitTypeOf(graph->funcType()));
+        auto callNode = addCallSite(currGraph_, graphExitTypeOf(graph->funcType()));
         markMacroNode(callNode);
         linkNodes(LinkType::With, resultNode, callNode);
         resultNode = callNode;

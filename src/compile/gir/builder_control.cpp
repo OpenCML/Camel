@@ -3525,7 +3525,7 @@ node_handle_t Builder::buildStreamLoop(
     // One pull, where the round stands. The value of `T..` is that function value, so the call
     // reads the step signature and nothing is converted.
     const auto pullOf = [&](node_handle_t value, const GCT::node_ptr_t &at) {
-        node_handle_t call = currGraph_->addCallNode(pullType);
+        node_handle_t call = addCallSite(currGraph_, pullType);
         linkNodes(LinkType::With, value, call);
         registerNodeOrigin(context_, call, at, "gir.loop.pull");
         return call;
