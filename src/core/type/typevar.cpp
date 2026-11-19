@@ -353,10 +353,16 @@ FunctionTypeFactory rebuildFunctionType(
         return result;
     };
     for (size_t i = 0; i < func->withTypesCount(); ++i) {
-        if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
-            factory.addWithRest(paramNameOf(func, i, "__w", i));
-            continue;
-        }
+        // A pack in the `with` list (`<...WithOf<F>>`) whose members the substitution settles is
+        // those members as **fixed** parameters, and it is asked before the rest slot is put back:
+        // the pack's own position in the signature is what the `...` writes, and a call passes the
+        // members and not the pack. Written the other way round, `<...WithOf<F>>` with one member
+        // kept the rest slot as well as the member, the signature said one `with` parameter while
+        // `StaticFuncTypeResolver::resolve` counted the rest slot away, and every call of
+        // `GradientOf<F>` was refused one argument short: measured 2026-11-20,
+        // `'<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)`
+        // (language author's ruling of 2026-11-20 on `6b5b5bd9b`: an empty rest pack is a value in
+        // the body, an empty tuple, and it enters neither the parameter list nor the function type).
         if (TypeCallType::isExpand(func->withTypeAt(i))) {
             std::vector<Type *> members;
             Type *mismatch         = nullptr;
@@ -374,6 +380,10 @@ FunctionTypeFactory rebuildFunctionType(
                 }
                 continue;
             }
+        }
+        if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
+            factory.addWithRest(paramNameOf(func, i, "__w", i));
+            continue;
         }
         if (func->withIsConstasAt(i)) {
             if (dropConstas) {
@@ -393,19 +403,10 @@ FunctionTypeFactory rebuildFunctionType(
     }
     for (size_t i = 0; i < func->normTypesCount(); ++i) {
         const std::string name = paramNameOf(func, func->withTypesCount() + i, "__n", i);
-        if (func->hasRest() && i + 1 == func->normTypesCount()) {
-            factory.addRestArg(name, replaced(func->normTypeAt(i)));
-            continue;
-        }
-        if (func->normIsConstasAt(i)) {
-            if (dropConstas) {
-                // The value is known at the call: the instance has no such parameter.
-                changed = true;
-                continue;
-            }
-            factory.addConstasArg(name, replaced(func->normTypeAt(i)));
-            continue;
-        }
+        // The same reading as the `with` list above, on the ordinary parameters: `(...ParamsOf<F>)`
+        // is the members the substitution settles, and a function of none of them declares none --
+        // measured 2026-11-20, `GradientOf<F>` of a function with no ordinary parameter kept a rest
+        // slot the call never fills, and `<> (float)` was refused for it.
         if (TypeCallType::isExpand(func->normTypeAt(i))) {
             std::vector<Type *> members;
             Type *mismatch         = nullptr;
@@ -420,6 +421,19 @@ FunctionTypeFactory rebuildFunctionType(
                 }
                 continue;
             }
+        }
+        if (func->hasRest() && i + 1 == func->normTypesCount()) {
+            factory.addRestArg(name, replaced(func->normTypeAt(i)));
+            continue;
+        }
+        if (func->normIsConstasAt(i)) {
+            if (dropConstas) {
+                // The value is known at the call: the instance has no such parameter.
+                changed = true;
+                continue;
+            }
+            factory.addConstasArg(name, replaced(func->normTypeAt(i)));
+            continue;
         }
         factory.addNormArg(name, replaced(func->normTypeAt(i)), func->normIsVarAt(i));
     }

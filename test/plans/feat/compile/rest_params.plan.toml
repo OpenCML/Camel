@@ -334,3 +334,13 @@ expect_exit = 1
 expect_output_contains = ["Unresolved reference: 'rest'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "with_pack_lambda_is_a_value"
+desc = "Positive: a `with` pack that the substitution settles is the members it settled to -- one member is one `with` parameter and a call passes one angle-bracket value, no member is no `with` parameter at all. Written against the refusal of 2026-11-20, `'<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)`, which came from the rest slot being put back beside the member the instantiation had already written."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_lambda_is_a_value.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["with_pack_lambda one=9.0 none=5.0", "with_pack_lambda same_one=true same_none=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

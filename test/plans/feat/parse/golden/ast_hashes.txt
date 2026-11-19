@@ -1560,6 +1560,7 @@ accc96f14f9fd7e6 ok test/cases/compile/rest_params/rest_as_value.cml
 7b643e77239a8556 ok test/cases/compile/rest_params/with_pack_body_uses_pack.cml
 688c2322a3c00636 ok test/cases/compile/rest_params/with_pack_destructured.cml
 0ecb48709a5330e8 ok test/cases/compile/rest_params/with_pack_forwarded.cml
+3a11c85cc7dcf51c ok test/cases/compile/rest_params/with_pack_lambda_is_a_value.cml
 e6475045c49bf809 ok test/cases/compile/rest_params/with_pack_read_in_a_lambda.cml
 fad896ed9c129976 ok test/cases/compile/rest_params/with_pack_typed.cml
 354ef396a091e72b ok test/cases/compile/rest_params/with_pack_wrong_element.cml
