@@ -154,7 +154,23 @@ void Builder::settleStreamLinearity() {
         }
         return root;
     };
-    for (const auto &[port, origin] : captureOriginOf_) {
+    // The table is hashed on the handle's ADDRESS (`std::hash<DraftNodeRef>` is
+    // `hash<const void*>(draft) * 31 + id`, `runtime/node_ref.h`), and the union below is not
+    // order-independent in its CHOICE of representative -- the partition is, `roots[left] = right`
+    // is not -- so walking the table as it stands makes the answer depend on where the nodes were
+    // allocated. Sorted by the id the graph gave each port, the walk is a function of the program.
+    std::vector<std::pair<node_handle_t, node_handle_t>> capturePorts(captureOriginOf_.begin(),
+                                                                     captureOriginOf_.end());
+    std::sort(capturePorts.begin(), capturePorts.end(),
+              [](const auto &left, const auto &right) {
+                  // The node's own id, then the edit epoch it was made at: both are counts the
+                  // draft keeps, so both are a function of the program, and neither is an address.
+                  if (left.first.id != right.first.id) {
+                      return left.first.id < right.first.id;
+                  }
+                  return left.first.epoch < right.first.epoch;
+              });
+    for (const auto &[port, origin] : capturePorts) {
         const node_handle_t left  = findRoot(port);
         const node_handle_t right = findRoot(origin);
         if (left != right) {
