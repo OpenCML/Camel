@@ -4574,3 +4574,9 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 —— 位置 `stdlib/vjp.cml:121:25`（`#macro export func vjp` 里 `let forward = split(jvp(f))`，先于任何 `mode` 分支），
 即 `vjp` 的装配本身对某个函数没有 `jvp` 前向变换，不是展示程序的问题；**与任何 pass 无关**，
 是该程序**在定版上跑不起来**，不是某个 pass 拒绝了它。
+
+## 批复第 3 项真实优化表（2026-11-19 16:50，`1d5536fcf`）
+
+决策者。表已转论文。两条随之而来的事：
+1. **`showcase/c3-char-transformer` 在定版上跑不起来**（`stdlib/vjp.cml:121` 的 `jvp has no forward transform for this function`）——一个展示程序的训练跑不通是缺陷，截止后第一件查：是哪个算子缺前向规则（`jvp` 规则集里少了谁），补规则、补用例，并查清它是从哪一笔开始坏的（展示程序的用例为什么没拦住）。
+2. 表里还缺一个**真正保义的算子融合**（matmul+add+激活合成一个融合算子，前后输出一致）；`greedy::fuse` 是写法探针，不是优化。时间够就补在 MLP 上，赶不上就照实写"未做"。第 1 步（补声明后重跑 `inline`）照常。
