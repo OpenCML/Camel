@@ -5889,3 +5889,45 @@ node 1 / 2 / 3 of graph 'three' (#47) is captured into graph '__g_63__' (#63)（
 
 1. **`Resolver::oper` 不读 `functionOperand`**（上一条回报里说的实现缺口）—— 它让 `rewrite:*` 这类「跑被给函数」的算子无处声明足迹。
 2. **你 10-26 的模块级断言 `a resource every function of this module uses` 对 `regions` 为假** —— 断言过宽，该收窄。
+
+## 负责人记录（2026-11-20 09:45）：分支清理两条结果 + **一条会在几小时内破线的债**
+
+### 一、删了 `lane-gate-reds-a-parked`（按 `54c6b7238`：先打 `parked/` 标签再删）
+
+```
+tag parked/lane-gate-reds-a-parked @ b604554d2（已推 origin）
+git push origin --delete lane-gate-reds-a-parked ⇒ remote 已删
+git branch -D ⇒ 本地已删
+```
+**取代它的那一笔，逐字一句**：`81f1c369e` "cml: print a branch's statements and its value where the source put them (lane A)" —— **被 `36f91f6a4` 第 4 条的裁定取代**（「为打印器方便在核心表示上加字段，正是要避免的」）。`git cherry` 对它输出 `+`（内容不在主干），所以它不是「已被吸收」，是「被裁定判掉」。
+
+`maxBehind` 因此 95 → 94。
+
+### 二、★ `lane-ssa` 是**真的未合并工作**，且会在几小时内破线
+
+```
+ahead = 26（16 笔非合并）· behind = **94** · `git cherry origin/develop lane-ssa` ⇒ **16 笔全是 `+`，一笔都不在主干**
+⇒ **⇒ 它不是陈旧的残留，是一整条没进过主干的线**
+```
+
+⇒ 而它的提交名里有一条与我今晚合进主干的活**几乎是同一句话**：
+```
+lane-ssa  5559d3c6e  "gir: a call through a value asks the graph behind the value"
+今晚主干  beea20ad6  "gir: a callee reached through a value does not hand its cells to the caller"
+```
+⇒ **两笔指向同一个机制。** 可能（a）`beea20ad6` 让 `lane-ssa` 的那一笔失去意义；（b）两者互补；（c）互相冲突。**我没有读数，不猜。**
+
+⇒ **这条债的形状**：`maxBehind = 94`，而主干今晚进了 12 笔 ⇒ **按这个速度，几小时内就会破 100**。破线之后按 2026-11-14 用户定的规矩，**不是「清理分支」而是「停派新分支、转入审计合并」**。
+
+⇒ **我建议下一轮的第一件事就是它**，而第一步不该是解冲突，而是先答三个问题：
+1. `5559d3c6e` 与 `beea20ad6` 是同一个机制吗？若是，`lane-ssa` 那一笔作废、其余 15 笔重看；
+2. 那 16 笔各自还值多少？（一条一句，按作者 03:00 的四问）
+3. 它有没有**能跑出真红**的用例 —— 落后 94 笔时，它自己的改动已经无法验证，所以先看它带不带判据。
+
+### 三、其余两条我读了，但不动
+
+```
+lane-grad-form  ahead=1  `5987d5290` "test: record split_print.cml's AST row after its call form changed" ⇒ 金标更新，很可能已随主干的重录失效
+lane-front-ip-del ahead=1 内容和主干 patch 等价（`cherry` 输出 `-`），remote 已删、标签已打；本地 `-d` 被拒（内容不在祖先链上），**我没有换 `-D`**
+lane-vjp-forward-backup ahead=2  显式的备份支，留着
+```
