@@ -5736,3 +5736,60 @@ rule_writes_a_constant.cml:17          stdlib/rulesets/transpose.cml:613  ← b3
 ⇒ 而本线能拿出的最强证据不是单算子求导，是 `feat/showcase_s2` **10/10**，含 `train.twelve_rounds_library_curve_is_the_engine_curve`：**十二轮真实训练，库的梯度曲线与引擎的逐轮相同**。
 
 ⇒ 另开一页记录那处**类型拒绝**（`vjp` 一个写明降秩的函数停在 `ExitTypeMismatch`，`split.cpp#splitHalvesWith` 用 `exitPair->typeAt(1)` 当反向半边的声明出口）：`docs/handover/questions/2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md`。默认建议是**法则侧承担，不放宽 split 的检查**（放宽就是把拒绝换成「带声明秩的开秩值」）。
+
+## 负责人回报（2026-11-20 09:10）：S1-6 已入主干；两处**需要你裁**——一条是规则与一类算子不兼容，一条是两个正确的改动相遇
+
+### 一、S1-6 已合（`develop = 957ddb10b`）
+
+```
+beea20ad6  ⇒ 631a9f6a3..1a0b8005c   4 文件 +84/−22
+cb6ae771a  ⇒ 1a0b8005c..957ddb10b   4 文件，零冲突
+```
+判据：**Windows 80 次 0/80**（改前 39/80；单独加初值后 27/80）· Linux 80/80 · 那 21 条 FAIL 与 develop 同名单。合并说明里写死一句：**「不许与 `631a9f6a3` 的未初始化 bool 混为一谈：那是独立的一处，已单独入主干，且它没有关掉这个问题」**（它只把 39 降到 27，Fisher p≈0.066）。
+
+⇒ `ea4b422e3`（你要的「按 name+id 报两张图」）**没有单独合**：内容已随 `48156fcaa` 进树，`git diff` 之后只剩一行 `///`。**目的达到，形式不追。**
+
+### 二、★ 要裁的第一条：`checkResources` 与「拿函数当参数的算子」不兼容
+
+`tiles:run_preferred_resident` 的**真话**是「被给函数的访问 + driver」，而 `src/core/resource_semantics.cpp` 的 `checkResources` **禁止 `functionOperand` 与 `accesses`/`externalEffect` 并存**（"an operator whose accesses are a function operand's itemizes none of its own"）。
+
+⇒ 于是 **12 条红**（`tiles.{mean_grad,layout_grad,batch_matmul,mixed_matmul}.source.{nvm,fvm,jit}`）无法用一个真声明消掉。要放宽规则，必须先回答：**一个拿函数当参数的算子，它自己的资源该怎么断言？** 是「不写，让被给函数的访问决定」，还是「写，且与被给函数取并」？
+
+⇒ **我不许它放宽 `checkResources`，也不许它编一条只写 driver 的例外**（那是假断言）。请你裁。
+
+### 三、★ 要裁的第二条：两个**正确的**改动相遇，`rewrite:saturate`
+
+`opt_saturate_rhs_from_an_enclosing_region` 红：
+```
+the graph 'main' a commit was asked to edit already reached past the type its own signature declares,
+before the edit: node 9 (rewrite:saturate)
+```
+机制：`rewrite:saturate` **只 declare 了 purity，没 declareResources** ⇒ 另一条车道的「未声明就保守视为读到一切」把它的足迹算成 `Unknown`；而你 0ea4dc518 的 before-the-edit reader（`462587e7a`/`ebb384f77`）恰好把「编辑前就超出自己签名」判成内部错误 ⇒ **编译器自己产出的图被判成内部错误**。
+
+⇒ 这一条既不是那条车道做错（它的拒绝是对的），也不是你的 reader 做错（它报的确实是越界）。**需要你选**：
+1. **补 `rewrite:*`（`saturate`/`rewrite`/`run`/`why_not`/`extract`）的声明** —— 与 `tiles`/`onnx` 同一类活；
+2. **让 before-the-edit reader 对 `Unknown` 继续放过** —— 但这就等于承认「未知足迹不算越界」，与你 0ea4dc518 的意图相反。
+
+⇒ 我认为该走 1，理由是 2 会把「未知」重新变成「安全」。但这是你的判据，我不定。
+
+### 四、第三条：`tiles.cml` 里那个 `uses var driver` 是**假声明**
+
+`tiles:regions` 的 `pure=true` 做了又退回：`--verify-ops` 报
+```
+stdlib/signatures/tiles.cml:69: 'regions' (tiles:regions) declares `uses var driver` but the operator touches no such resource
+```
+⇒ 而那个 `uses var driver` 是 tiles 的 `DynamicFuncTypeResolver` **写进生成文件的**，而 `regions.h:150` 说它「without executing it or initializing CUDA」、只返回字符串 —— **它一次都不碰 driver**。
+
+⇒ **所以缺陷不在 `regions` 该不该 pure，而在 resolver 凭什么给它写 `uses var driver`。** 若那个 resolver 的判据只是「拿不准就给 driver」，那它与「编一条 driver 访问」同样不可接受。**已让车道只报读数、不改生成物**（`--write` 会改树，等主机空出来单独一次做）。
+
+### 五、`transforms` 整块不碰资源 —— 已证实 6 个里 3 个
+
+`jvp`、`split`、`first_with_as_param` 的 kernel 都只读 `f` 的图、造新图、把读数打到诊断侧，**一个资源也不碰**；三者 `#macro` 声明里本来就没有 `uses` 子句 ⇒ **pure 是声明已经写着的断言，`stdlib` 一个字没动**。`transpose`/`vmap`/`remat` 实现形状完全一样，但**没有红驱动，按纪律没动** —— 要动就是三行，你说一句就做。
+
+⇒ 这也是 42 条 `feat/opt` 红转绿的原因（`opt 1620/1620/0`），以及 `compile` 最后两条红。
+
+### 六、一条我要自己认的判据缺陷
+
+`lane-unknown-resource` 这条分支现在 **`modules` 从 0 红变成 14 红**（`2074/2046/14` vs 基线 `2074/2060/0`）。它的 `opt` 是 `1620/1620/0`（+42 绿），但**「不得有新增红条目」是硬闸，不是净账** ⇒ **我判它现在不能合**，等 第二节/第三节 两条裁定 + `regions` 的 resolver 修好。
+
+⇒ 而这一条暴露了我自己的一个盲点：**我此前只盯「目标计划变绿」，没把「其余计划不许多红一条」当成同一张表来核。** 今晚这一笔就是靠它自己报出来的。
