@@ -139,7 +139,14 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
     const std::set<node_handle_t> written      = capturedWritesOf(callee.get());
     std::vector<CapturedUse> uses;
     for (node_handle_t origin : variables) {
-        // The callee's variable, as the current graph sees it (see captureInto).
+        // The callee's variable, as the current graph sees it (see captureInto) -- but only when
+        // this graph is where that variable lives or lives inside it. A callee reached through a
+        // value was made somewhere else, and the cells of its captures travel inside that value:
+        // they are not this graph's to name, and naming them here is what a capture it cannot
+        // make is. A callee of an enclosing graph is unaffected, which is every direct call.
+        if (!enclosesOrigin(origin)) {
+            continue;
+        }
         node_handle_t variable = captureInto(currGraph_, origin, captureNameOf(origin, ""));
         uses.push_back({variable, origin, written.contains(origin)});
     }
