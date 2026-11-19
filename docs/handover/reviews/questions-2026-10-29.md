@@ -5793,3 +5793,45 @@ stdlib/signatures/tiles.cml:69: 'regions' (tiles:regions) declares `uses var dri
 `lane-unknown-resource` 这条分支现在 **`modules` 从 0 红变成 14 红**（`2074/2046/14` vs 基线 `2074/2060/0`）。它的 `opt` 是 `1620/1620/0`（+42 绿），但**「不得有新增红条目」是硬闸，不是净账** ⇒ **我判它现在不能合**，等 第二节/第三节 两条裁定 + `regions` 的 resolver 修好。
 
 ⇒ 而这一条暴露了我自己的一个盲点：**我此前只盯「目标计划变绿」，没把「其余计划不许多红一条」当成同一张表来核。** 今晚这一笔就是靠它自己报出来的。
+
+## 负责人回报（2026-11-20 09:20）：三条读数，其中一条是**实现缺口**、一条是**你 10-26 的断言过宽**、一条是**检查器的方法论**
+
+### 一、★ `Resolver::oper` **不读 `functionOperand`** —— 实现缺口，正好在今晚合并的区域内
+
+`rewrite:*` 五个算子（`saturate` / `rewrite` / `run` / `why_not` / `extract`）**不是「什么也不碰」，它们运行别人给它们的 Camel 代码**：
+
+```
+saturate :1552  session.edit(graph)+DraftWritings::saturate(compiled,budget)，而 :269-270「condition is Camel code… the closure that calls it」
+                + :230-236「the node VM the conditions of one engine … runs at a safepoint」⇒ 跑规则的**条件函数**
+rewrite  :935 · run :975 · why_not :1282 —— 同一条引擎（应用/跑到不动点/解释条件），都要评条件
+extract  :1677 CamelCostModel → :1663 `vm_->callFunction(cost_.getAs<::Function>(), args)` ⇒ 跑调用者给的**代价函数**
+```
+
+⇒ 按设计原则 3.3，它们的真话是 **`functionOperand`**（「跑函数的高阶算子，它的访问是被给的函数的」）。而 `checkResources` **允许** `functionOperand` 单独存在 —— 它禁止的是它与 `accesses`/`externalEffect` 并存。**所以这类声明写得出来。**
+
+**⇒ 但写出来的那一刻，运行时 `Resolver::oper`（`src/runtime/resources.cpp`）不读 `functionOperand`，只遍历 `spec.accesses`** ⇒ 这个节点在运行时会被读成「什么也不碰」，而它明明在跑代码。
+
+⇒ **这是实现缺口，不是声明缺失。** 它正好在今晚 `ebb384f77`/`462587e7a` 动过的那一块（足迹读法）里。**我报给你，不让车道动它** —— 因为修它要改运行时怎么读一个算子的足迹，那属于设计。
+
+⇒ 也因此，我昨天对 ③ 的表述要**修正**：`opt_saturate_rhs_from_an_enclosing_region` 那条红**不是「声明漏了」**，是「它的足迹属于条件函数，而这类足迹现在**无处安放**」。于是你 09:00 那两条选项里，第 2 条（让 reader 对 `Unknown` 继续放过）**不是解法** —— 真正的解法是让 `functionOperand` 在运行时被读起来。
+
+### 二、`uses var driver` 不是「拿不准就给 driver」—— 是你 2026-10-26 的**模块级断言**
+
+```
+写它的不是 resolver：resolver 的拼写是 modules/tiles/src/module.cpp:744 `"<fn: Function>() => string"` —— **没有 `uses`**
+写它的是 commit 54b85b923（2026-10-26，你的提交），message 原话：
+  「`tiles` from the author's drafts: `export resource driver`, a resource every function of this module uses」
+⇒ 5 条（upload/download/run_preferred_resident/benchmark/regions）全部手写 `uses var driver`
+```
+
+⇒ **而 `regions` 恰恰是这条断言唯一为假的地方**：`regions.h:150` 自己的契约写着「without executing it or initializing CUDA」、只返回字符串。
+
+⇒ 所以不是「假声明」，是**断言过宽**。该裁的是：**「这个模块的每个函数都用 driver」这句 blanket 断言，与 `regions` 自己的契约，谁说了算？** 我倾向后者（断言该收窄成「除 `regions` 外」），但这是你的断言，我不改。
+
+### 三、★ 检查器在 `Unknown` 时**放过** —— 所以这条冲突是**潜伏的**，不是今晚造出来的
+
+`--verify-ops` 之前从不报这条，原因是：**当一个算子的访问是 `Unknown` 时，检查器证明不了「touches no such resource」，只能放过。** 把 `regions` 写成 `pure` 之后，它才第一次有确定答案去比对。
+
+⇒ 这是今晚第三次遇到同一形态：**一个检查在「读不到」时沉默，于是缺席被当成通过。** 前两次是 `commitViolation` 跳过编辑前就越界的图、以及守卫在 Release 里静默。**这一次是 `--verify-ops`。**
+
+⇒ 值得你考虑：**`Unknown` 时的放过是不是也该留一条可见的读数**（例如「本算子足迹未知，未参与比对」的计数），否则「检查通过」与「检查没做」在日志里长得一样。
