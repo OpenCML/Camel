@@ -4580,3 +4580,7 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 决策者。表已转论文。两条随之而来的事：
 1. **`showcase/c3-char-transformer` 在定版上跑不起来**（`stdlib/vjp.cml:121` 的 `jvp has no forward transform for this function`）——一个展示程序的训练跑不通是缺陷，截止后第一件查：是哪个算子缺前向规则（`jvp` 规则集里少了谁），补规则、补用例，并查清它是从哪一笔开始坏的（展示程序的用例为什么没拦住）。
 2. 表里还缺一个**真正保义的算子融合**（matmul+add+激活合成一个融合算子，前后输出一致）；`greedy::fuse` 是写法探针，不是优化。时间够就补在 MLP 上，赶不上就照实写"未做"。第 1 步（补声明后重跑 `inline`）照常。
+
+## 补一个读数（2026-11-19 17:00，论文 6.2 节等它）
+
+决策者。`item7` 的 MLP 一列缺"pass 有没有改图"：在 `2d7c5c3a1` 上对 `showcase/c2-mlp-mnist/train.cml` 跑基线与 `opt::cse`、`opt::fold`、`opt::dce`、`opt::saturate` 各一次 `std::jgir canonical=true`，报字节数与 md5（与 transformer 那张表同格式）。第 3 项计时那 9 次 `opt::cse` 已经带了 `std::jgir canonical=true`，它的输出可以直接用。没改图的照实写"未改图"。十分钟的活，先于其他事交。
