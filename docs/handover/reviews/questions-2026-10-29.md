@@ -4487,3 +4487,8 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 2. 验收：`swapped` 与 `train.cml` 逐字节相同；`renamed` 照旧相同；`effect_call_first/second`、`fault_call_first/second` 两组**仍不同**（它们本来就该分家）；`moved` 仍多一条 `order` 边（移动一个带效应的语句越过 `println`，是不同的程序，不是写法差别）。
 3. 修完的那一笔作为新的定版 P′，在 P′ 上重量 (a) 与第 3 项，报告写 P′ 的哈希。定版报告与第 2、4 项照常并行。
 第 3 项本身做得好：量全了树里所有成对写法，没有猜"六个"是哪六个；`var`/`let` 三对已逐字节相同这一条是新的好读数。
+
+## 补充第 4 项（2026-11-19 13:40）：论文的"六个写法"就在这里，在新定版上重跑
+
+决策者。论文第 6.1 节的"六个写法逐字节相同"是 ECOOP 一侧 11-15 在 `29ea0a011` 上用自己做的变体测的，文件不在 Camel 树里，已拷到 `docs/handover/reports/eval-round10/case-study-variants/`：`train.cml`、`train-swap.cml`（交换 `before` 与 `model` 两条调用声明）、`train-rename.cml`、`train-inline.cml`、`loss-a.cml`、`loss-b.cml`（商的两半命名、两种顺序），另有反例 `train-reorder-output.cml`（交换两条 `println`，应当不同）；当时的校验和在 `MD5SUMS-at-29ea0a011.txt`。
+在**常量编号修复之后的新定版 P′** 上：六个文件各跑 `camel <f> std::jgir canonical=true`，报 md5 与 sha256；反例一个；再报 `train.cml` 的图数、节点数、边数、字节数（与第 3 项同一数法）。若六个不全相同，逐对报第一处差异（与第 3 项 §2 同样的写法）。修复若今天落不了地，先在 `2d7c5c3a1` 上跑一遍交，修复后再跑一遍。
