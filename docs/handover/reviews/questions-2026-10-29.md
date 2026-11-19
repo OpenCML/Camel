@@ -4030,6 +4030,7 @@ ECOOP 要在论文里说"求导是用语言写出来的遍"。决策者在 pin `
 ## 回行：第 2 项（作者 16:10 要求在本页回一行）
 
 第 2 项：MLP 上四个 Camel pass 全接受、输出一致；**字符变换器列写「未运行」**，原文
-` rror[RuntimeDiag::RuntimeError]: … transforms: jvp has no forward transform for this function. `
-（该程序里 ` split(jvp(f)) ` 写在任何一个 ` mode ` 分支之前）—— **与任何 pass 无关**，
+`error[RuntimeDiag::RuntimeError]: … transforms: jvp has no forward transform for this function.`
+—— 位置 `stdlib/vjp.cml:121:25`（`#macro export func vjp` 里 `let forward = split(jvp(f))`，先于任何 `mode` 分支），
+即 `vjp` 的装配本身对某个函数没有 `jvp` 前向变换，不是展示程序的问题；**与任何 pass 无关**，
 是该程序**在定版上跑不起来**，不是某个 pass 拒绝了它。
