@@ -72,6 +72,12 @@ int gemmThreadsUsed();
 /// tensor module's `gemm_library_threads()`.
 int gemmLibraryThreadsUsed();
 
+/// Whether `sgemmLibrary` would run the library GEMM, or the canonical kernel, for a product of
+/// these extents: `kernels/gemm.cpp#libraryPays`, asked by whoever has to know which bits a
+/// `tensor.kernel = "library"` product will have. A consumer that must reproduce those bits can
+/// only promise them when this answers false, because then the product is the canonical kernel's.
+bool libraryGemmRuns(int64_t M, int64_t N, int64_t K);
+
 /// Result shape of matmul(lhs, rhs). Throws std::invalid_argument when inner extents differ.
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs);
 

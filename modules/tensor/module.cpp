@@ -109,6 +109,10 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerTensorAttrKeys();
     camel::tensor::registerDivideMulNegFusion();
     camel::tensor::registerMulNegFusion();
+    // The affine transform's groups: `tensor::fuse` writes `tensor.fusion` on the `x @ w + b` and
+    // `relu(x @ w + b)` nodes, and these two kernels are what a back end runs them with.
+    camel::tensor::registerLinearFusion();
+    camel::tensor::registerLinearReluFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
     // `tensor:multiply`'s batching rule is a `rule` in `stdlib/rulesets/vmap.cml` whose left side
