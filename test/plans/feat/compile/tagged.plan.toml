@@ -1421,7 +1421,7 @@ timeout_ms = 12000
 # has already read the tag, so a null is the compiler's own defect and is reported as one
 # (`RuntimeDiag::NullSlotUnwrapped`, an internal error that `attempt` cannot isolate) instead of
 # being handed on as the zero slot of the payload type (the ruling of 2026-11-18, `96714f465`;
-# docs/handover/questions/2026-11-18-unwrapping-a-nullable-state-slot.cn.md).
+# docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md).
 
 [[tests]]
 name = "unwrap.null_is_an_internal_error"

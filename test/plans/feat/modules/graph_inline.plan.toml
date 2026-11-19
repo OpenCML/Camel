@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # `inline` as an operator of a transaction: the two semantics the ruling of 2026-11-18 gave
-# (`e55cd6157`; docs/handover/questions/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
+# (`e55cd6157`; docs/handover/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md
 # section 5, docs/design/graph-editing/README.cn.md 7 and 15.3).
 #
 # The readings are printed by the program itself, because the two branches are not told apart by
