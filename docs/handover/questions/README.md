@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：40 页
+## 现在在等作者：41 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -37,6 +37,7 @@
 | [`2026-11-19-the-effect-of-a-call-through-a-function-value`](2026-11-19-the-effect-of-a-call-through-a-function-value.cn.md) | 经函数值的调用，足迹取那个值的函数类型——而那个类型今天不写子句 |
 | [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 |
 | [`2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised`](2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised.cn.md) | 那 53 条在要求语言没承诺的东西 |
+| [`2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters`](2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters.cn.md) | 前端那条原地复用路径对 `var` 形参仍然可达 |
 | [`2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed`](2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed.cn.md) | 前端那条原地改写：它已经不可达，但还在 |
 | [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
 | [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
