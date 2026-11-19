@@ -5084,3 +5084,44 @@ Invalid call to 'first_with_as_param' with argument types <> ((w: float) => floa
 **E 随机调度**：先查有没有现成开关能让执行按另一个合法的拓扑序跑。没有就加一个**只在显式选项下生效**的种子：`std::nvm` 的一个选项（如 `schedule_seed=N`），在执行计划求拓扑序时，对同时就绪的节点按种子打乱次序；仍遵守全部前驱边（数据、同步、顺序、`GATE` 等待），默认行为不变。改动只在求拓扑序那一处，不在后端各写一份。案例与 e2e 各跑 100 个种子，报输出是否全部逐字节相同；改动大小随合并报。
 **F e2e 上的效应拒绝**：在 e2e 程序里给一个类型未声明效应的函数（`apply` 或某个纯函数）插入一条打印，提交应以效应检查拒绝（`PassEffectBeyondType` 一类），报原文。
 **G 提交的规模与增量**：几个规模递增的程序（案例、MLP、transformer，再加一两个更大的，展示程序里现成的优先）上测 `open` 加不改动直接 `commit` 的时间，报节点数与时间，看是否大致线性；再在 transformer 上测只改一个节点后 `commit` 的时间，与整图对比。协议同现有计时（9 次中位数与区间）。
+
+## 负责人回报（2026-11-20 04:00）：`print_and_recompile` 的病因我写错过，现在追到逐顶点级
+
+决策者。更正一条我写进本页的错误判断，并报一个已追到底的缺陷。
+
+### 一、更正：病因**不是**「JOIN 没记它是哪个 `var` 的版本」
+
+我在 `02:55` 的回报里写「printer 不能重述携带分支（JOIN 没记它是哪个 `var` 的版本）」，并建议「不把 `var` 加进 JOIN、留着这条红、等你裁」。**这条判断是错的。**
+
+实测：`feat/trans 109/108/1`，唯一红 `trans.cml.print_and_recompile`，失败点是 **`arm_read`**（不是 `linear`；`linear`/`branch`/`arm_write` 逐例全 EQUAL）。差是「结构类上左边 1 个顶点、右边 0 个」：
+
+```
+AssertionError: (…/arm_read.before.json, …/arm_read.after.json,
+ 'DIFFERENT: the two canonical documents are not equivalent
+  a structural class has 1 vertex/vertices on the left and 0 on the right
+    left:  N:g3:n1: {"id":"n1","inputs":[],"kind":"DATA","type":2,"value":{"k":"i64","v":3}}')
+```
+
+### 二、逐顶点追到底：右多一个 `DATA int 3`
+
+左 52 顶点 / 右 **53**。唯一真差：`DATA int 3` 左 1 个、右 2 个（右多 `N:g3:n11`）；`:var/get` 两边都是 3 个，JOIN/BRCH 的差异只是分配号。
+
+出处是打印件第 16 行 —— `picked` 的 else 臂值被打成**字面量 `3`**，而源码里它是 `var t` 的入口版本：
+
+```
+15|     } else {
+16|         report('int', 0, t)
+16|         3            ← 应为 t
+```
+
+原文是 `if … else { report("int",0,t) }` 后 `return t`；打印器把 if 变成值位置，else 臂取 `t` 的入口版本，于是把那个版本**折成常量**。重编译后 `3` 造了第二个 DATA 节点（原图与初始化 `var t = 3` 共享同一个），于是右多一个顶点。
+
+### 三、根因与修法边界
+
+`src/passes/trans/cml/cml.cpp:3182` 的早退规则（「读的是本 region 创建的值，就写变量名」）被 `writtenCells_.contains()` 挡住 —— **那个集合是全局的**，then 臂的 `t = cml1` 已把该 cell 记进去，于是 else 臂放弃写 `t`、退回字面量。
+
+**而想当然的修法是错的**：车道判定「进 region 存、出 region 恢复」不行，因为出了 if 之后 `t` 已是 JOIN 版本，恢复后会把 JOIN 版本写成创建值。正确判定是「写所在 region 是否为本 region 的祖先或自身」，属打印器语义，已授权按此改，判据四条（`arm_read` EQUAL 且 `linear` 仍 EQUAL · 打印件第 16 行须是 `t` · 两条 `print_then_run_*` 仍 PASS · `feat/trans 109/108/0` 且六计划不差）。
+
+### 四、请你注意的一点
+
+**这条红与「携带分支」无关，也不需要给 JOIN 加 `var`。** 我上一条建议里那个「请你裁它是否属于 0.2.45」的前提已不成立 —— 它是一个打印器里的集合作用域错误，改法明确。**我按上面四条判据推进，不再等裁定。**
