@@ -2010,7 +2010,12 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
                 at->second->transaction->edit().lowLevelEdits();
             changed.assign(edits.begin(), edits.end());
         }
-        if (const auto violation = commitViolation(*committed, *copy, made, changed, graph)) {
+        // `graph` is the version this session started from, and `program_` is the program that holds
+        // it: the reading of what the commit started from is taken there and not in `*committed`
+        // (`resources.h`, `beforeProgram`), because this commit is publishing new declarations for
+        // the callees it rewrote.
+        if (const auto violation =
+                commitViolation(*committed, *copy, made, changed, graph, program_)) {
             throw GraphCommitRefused(*violation);
         }
     }

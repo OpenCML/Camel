@@ -1560,6 +1560,7 @@ accc96f14f9fd7e6 ok test/cases/compile/rest_params/rest_as_value.cml
 7b643e77239a8556 ok test/cases/compile/rest_params/with_pack_body_uses_pack.cml
 688c2322a3c00636 ok test/cases/compile/rest_params/with_pack_destructured.cml
 0ecb48709a5330e8 ok test/cases/compile/rest_params/with_pack_forwarded.cml
+3a11c85cc7dcf51c ok test/cases/compile/rest_params/with_pack_lambda_is_a_value.cml
 e6475045c49bf809 ok test/cases/compile/rest_params/with_pack_read_in_a_lambda.cml
 fad896ed9c129976 ok test/cases/compile/rest_params/with_pack_typed.cml
 354ef396a091e72b ok test/cases/compile/rest_params/with_pack_wrong_element.cml
@@ -4386,6 +4387,14 @@ c242b16e51e89d5e ok test/cases/transforms/compositions/nested_grad_min.cml
 de0da90b01639e54 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
 97cf5ad689355fb3 ok test/cases/transforms/compositions/vjp_single.cml
 90d6e5eb1e12050e ok test/cases/transforms/compositions/vmap_grad_f.cml
+f9b731b120238a98 ok test/cases/transforms/nested/confusion.cml
+c72182e52c15bf42 ok test/cases/transforms/nested/hessian.cml
+71e03b3887f5e0b8 ok test/cases/transforms/nested/nest_cube.cml
+9c4c6bd53eff074e ok test/cases/transforms/nested/nest_lambda.cml
+cbef3230ff276a59 ok test/cases/transforms/nested/nest_named.cml
+f442c234da3252cb ok test/cases/transforms/nested/nest_square.cml
+b3d1998a599c9897 ok test/cases/transforms/nested/rule_constant_agrees.cml
+9d6f400458bc98bb ok test/cases/transforms/nested/rule_writes_a_constant.cml
 6db6922b4ff14c84 ok test/cases/transforms/remat/remat_mark.cml
 7c51747139735105 ok test/cases/transforms/remat/remat_split.cml
 3e2cb4518b5f5005 ok test/cases/transforms/split/split_backward_tangent.cml

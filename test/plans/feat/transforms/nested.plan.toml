@@ -1,0 +1,140 @@
+# 变换嵌套乙 — the readings this lane's four items are judged by
+#
+# Section 乙 of `docs/handover/plans/2026-11-18-nested-transforms.cn.md`. Each entry is one of the
+# shapes that section names, written the way the plan writes it, with the number derived by hand
+# from the derivative (no implementation was read to get it).
+#
+# The numbers:
+#   `square`: f(x)=x*x,        f'(2)=4,  f''(x)=2   -> 4 and 2
+#   `cube`:   f(x)=x^3,        f'(2)=12, f''(2)=12  -> 12 and 12
+#   `pb_again`: f=x^3, the pullback at 2 is the linear map ct |-> 12 ct, whose own slope is 12
+#   `confusion`: d/dx ( x * (d/dy (x+y) at y=1) ) at x=1 == 1 (a confused reading gives 2)
+#
+# The first run of this plan is a *measurement*: these entries are what the nest has to answer, and
+# an entry that is refused is the wall, quoted verbatim in its failure.
+
+[[tests]]
+name = "nested.nest_square"
+desc = "判据 ①/②: the smallest nest of the library's `grad` in itself, f(x)=x*x at x=2: the first derivative is 4 and the second is 2. The second derivative is the number that says whether the nest ran at all, and the first is printed beside it so a refusal that also breaks the first derivative cannot pass as a second-order wall."
+kind = "behavior"
+case = "../../../cases/transforms/nested/nest_square.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nested_square x=2.0 d1=4.0 d2=2.0"]
+# `grad(grad(square))<2.0>()`: both numbers are the target shape (a `with` parameter is the weight,
+# design principles 9.9) and both stop on the same wall as `nested.nest_named`.
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "the outer `jvp`'s lift refuses a call whose callee's code is not readable (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`, no cause, no place)"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Re-read 2026-11-20 after `c74e59759` restored `grad`'s call form. Before it, this writing stopped one step earlier, at `first_with_as_param ... there is no first one to move`, because the library's `grad` handed out a function of an ORDINARY parameter and the outer `grad` had no `with` parameter to move -- design principles 9.9's refusal. With the call form restored the inner `grad(square)` answers `<w: float>() => float`, which has a `with` parameter, so 9.9 no longer refuses here and both writings land on the same wall. That is why this entry is a `known_fail` on the number and not a negative on that sentence: the sentence it used to pin is gone."
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.nest_cube"
+desc = "判据 ①/②: the same nest for f(x)=x^3 at x=2, where both derivatives are 12. f'(2)=3x^2=12 and f''(2)=6x=12, so the two numbers agree -- which is why the square case is here too, and why a run that answers 12 twice has to be read together with it."
+kind = "behavior"
+case = "../../../cases/transforms/nested/nest_cube.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nested_cube x=2.0 d1=12.0 d2=12.0"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "same wall as `nested.nest_square` and `nested.nest_named`: the outer `jvp`'s lift refuses a call whose callee's code is not readable (`modules/transforms/jvp_operator.cpp:188`)"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Both derivatives of f(x)=x^3 at 2 are 12 (f'=3x^2, f''=6x), which is why the square case sits beside it: a run that answers 12 twice has to be read together with a case whose two numbers differ. Re-read after `c74e59759`; the note on `nested.nest_square` explains why the 9.9 negative this used to be is gone."
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.nest_named"
+desc = "判据 ①: the nest written through a NAMED function, which is the writing that goes around `first_with_as_param` -- `dcube` has a `with` parameter of its own, so the outer `grad` moves it and then has to differentiate a body whose inner transform is already a function value. f(x)=x^3 at x=2: 12 and 12. This is section 乙's item 1: the value being called has known code (the cut `stdlib/vjp.cml#grad` made when it evaluated `grad(cube)`), so the transform has to recurse into it."
+kind = "behavior"
+case = "../../../cases/transforms/nested/nest_named.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nest_named x=2.0 d1=12.0 d2=12.0"]
+# A wall, not a wish: this case wants the number. The inner `grad(cube)` runs to the end (under
+# `--trace transforms` its `first_with_as_param`, `jvp`, `split` and `transpose` all leave a reading)
+# and the OUTER `jvp` refuses with no cause and no place -- not one `REINTERP` line for it. Written up
+# in `docs/handover/questions/2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md`.
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "the outer `jvp`'s lift refuses a call whose callee's code is not readable, and the callee here is what `split` handed out: `transforms: jvp has no forward transform for this function`, raised from `modules/transforms/jvp_operator.cpp:188` with `refusedOrigin == kInvalidOriginId` (no cause, no place). Same wall as `compositions.jvp_vjp_f`'s note"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Measured 2026-11-20 with `--trace transforms` and pasted verbatim in the question page: the inner `grad(cube)` leaves `first_with_as_param function=cube ... graph=359`, `jvp function=cube__first_with_as_param ... source=ruleset rules=jvp_mul`, `split function=jvp_of_cube__first_with_as_param ... residuals=2`, and a `TRANSPOSE` line for its backward half; then `first_with_as_param function=dcube ... graph=405` succeeds and the outer `jvp` prints nothing at all. Lifting this wall needs `split` to hand out statically readable code first, which is the `grad-callform`/甲 face -- see the page for why this lane stopped there."
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.nest_lambda"
+desc = "判据 ①: the same nest with the inner transform written in the lambda's body rather than reached as a value. f(x)=x^3 at x=2, second derivative 12. The two writings differ in where the inner transform sits, and the plan keeps both because the first wall differs: a value reached as a function is the case `second_order_refused_captured.cml` pins for the engine's `grad`."
+kind = "behavior"
+case = "../../../cases/transforms/nested/nest_lambda.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nest_lambda x=2.0 d2=12.0"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "same wall as `nested.nest_named`: the outer `jvp`'s lift refuses a call whose callee's code is not readable (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`, no cause and no place)"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "The writing differs from `nested.nest_named` only in where the inner transform sits -- here it is a lambda's body rather than a value reached by name -- and the refusal is the same sentence, measured 2026-11-20 on `nvm`. Kept separate because a value reached as a function is the case `second_order_refused_captured.cml` pins for the engine's `grad`, and the two writings may part ways when the lift learns to recurse."
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.hessian"
+desc = "判据 ③ of the author's four readings: the Hessian of f(x) = x0^3 + x0*x1^2 at (2,3), one row per nested gradient. By hand the gradient is [21, 12] and the Hessian is [[12, 6], [6, 4]]. Each row is a nest -- `grad` of a function whose body already calls `grad` -- so the matrix cannot be right unless the recursion reaches the closure the inner cut answered."
+kind = "behavior"
+case = "../../../cases/transforms/nested/hessian.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["hessian g=[21.0,12.0] row0=[12.0,6.0] row1=[6.0,4.0]"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "same wall as `nested.nest_named`: every row of the matrix is a nest, so every row needs the outer `jvp`'s lift to reach a callee `split` handed out, and it refuses (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`)"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "判据 ③ of the author's four readings. Not one of the four elements is produced today, so the matrix is not partly right: the first row dies before any number is printed. The expectation stays at the values worked out by hand (g = [21, 12], H = [[12, 6], [6, 4]] at (2, 3)) rather than moving to a reading: a number moved to match a refused composition would let the case pass on nothing."
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.confusion"
+desc = "判据 ④ (unfold): the classic perturbation-confusion example, `d/dx (x * (d/dy (x+y) at y=1)) at x=1`, which is 1. The inner transform sits in the body of the function the outer one differentiates, so it is the shape the plan's 'expected unfold' names; a confused implementation reads the outer tangent as the inner one and answers 2."
+kind = "behavior"
+case = "../../../cases/transforms/nested/confusion.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["confusion x=1.0 d=1.0"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "same wall as `nested.nest_named`: the inner transform sits in the body of the function the outer one differentiates, so the outer `jvp`'s lift has to reach a callee `split` handed out, and it refuses (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`)"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "判据 ④. The expected answer is 1 and a confused implementation answers 2 (it reads the outer tangent as the inner one), which is what makes this reading worth keeping: the day the wall lifts, this is the entry that tells a correct nest from a plausible one. Today it prints nothing -- the refusal comes before the first number."
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.rule_writes_a_constant"
+desc = "A reshape whose configuration is not one any law spells (`reshape<[2, 1, 2]>`) must still reach a law: `jvp_reshape` names `dims` as its second port now, so nothing states a configuration of its own. The reading is WHICH refusal fires -- the transposition half has no rule for `reshape` (`stdlib/rulesets/transpose.cml:613`), so it stops there, where a matcher refusal would mean the configuration was refused before any law ran. That is the regression a by-content comparison in `chooseRuleAmong` reintroduced on 2026-11-20 (27 red lines in `feat/compile`, with `jvp_reshape` and `jvp_permute` both refused over their own parameters). A law that DOES spell a `<>` value stays refused: `jvp_softmax` writes `<1>`, so `softmax<2>` is refused by name."
+kind = "negative"
+case = "../../../cases/transforms/nested/rule_writes_a_constant.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.rule_constant_agrees"
+desc = "The control for `nested.rule_writes_a_constant`: the same program at `reshape<[2, 2]>`, the configuration a law used to be written for. The two cases now differ only in the node's configuration and read the same sentence, which is what a general law should do -- and it is also what a matcher that cannot read the configuration at all does, so the pair is read together with the `feat/compile` cases that tell a spelled `<1>` (`jvp_softmax`) from a named one (`jvp_reshape`'s `dims`). The answer would be all ones (`sum` of every element); it is not pinned because the transposition half stops first."
+kind = "negative"
+case = "../../../cases/transforms/nested/rule_constant_agrees.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
