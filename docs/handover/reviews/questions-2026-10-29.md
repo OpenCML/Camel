@@ -4564,3 +4564,13 @@ fastvm/gotovm 改走同一入口（`a0dcffd76`）、`a8c39bd5a`、tiles 给写�
 ## 调序（2026-11-19 16:20）：上一条的第 2 步排最前
 
 决策者。论文一侧确认：**第 2 步（在 `2d7c5c3a1` 原样上跑 Camel 写的 `cse`、常量折叠、融合，及检查点、`dce`）最需要，先做先交**；第 1 步（补声明后重跑 `inline`）随后，报告写明两个哈希。
+
+---
+
+## 回行：第 2 项（作者 16:10 要求在本页回一行）
+
+第 2 项：MLP 上四个 Camel pass 全接受、输出一致；**字符变换器列写「未运行」**，原文
+`error[RuntimeDiag::RuntimeError]: … transforms: jvp has no forward transform for this function.`
+—— 位置 `stdlib/vjp.cml:121:25`（`#macro export func vjp` 里 `let forward = split(jvp(f))`，先于任何 `mode` 分支），
+即 `vjp` 的装配本身对某个函数没有 `jvp` 前向变换，不是展示程序的问题；**与任何 pass 无关**，
+是该程序**在定版上跑不起来**，不是某个 pass 拒绝了它。
