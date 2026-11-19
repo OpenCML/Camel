@@ -447,6 +447,9 @@ void GraphDraft::appendInput(
             }
         }
     }
+    // The run of inputs lives in the tail of the user, and this appends to it in place: the
+    // segment's journal keeps the body as it stood.
+    noteOriginalNode(userId);
     appendInputEntry(userId, slot, inputId);
     appendUserRef(inputId, userId, slot);
 }
@@ -457,6 +460,7 @@ bool GraphDraft::unlinkInput(
     ++mutations_;
     DraftNode *draftNode = node(userId);
     ASSERT(draftNode != nullptr, "Cannot unlink input from a missing draft node.");
+    noteOriginalNode(userId);
     const DraftEdgeSlot slot = edgeSlotOf(kind, role);
     // The first entry that names `inputId` goes; the entries after it move down.
     auto group = mutableInputs(draftNode, slot);
@@ -508,6 +512,7 @@ void GraphDraft::replaceInput(
 
 void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type) {
     requireOneWriting("setNodeDataType");
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data type on a missing draft node.");
@@ -515,6 +520,7 @@ void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type
 }
 
 void GraphDraft::setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data index on a missing draft node.");
@@ -522,6 +528,7 @@ void GraphDraft::setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex) {
 }
 
 void GraphDraft::setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags) {
+    noteOriginalNode(id);
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set runtime flags on a missing draft node.");
