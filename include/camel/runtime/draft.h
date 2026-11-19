@@ -461,17 +461,6 @@ class GraphDraft {
     uint32_t declarationFacts() const { return declarationFacts_; }
     void setDeclarationFacts(uint32_t facts) { declarationFacts_ = facts; }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
-    /// The function type the signature *declared* -- the source, not a copy of a replacement. The graph's
-    /// `funcType` is what it hands on (the exit the packing states); this is what the declaration said, and
-    /// the packed exit type is **derived from it** (`graphExitTypeOf`) at the places that need it rather
-    /// than stored as a second truth (author, 2026-11-19: "the graph keeps the declared function type; the
-    /// packed exit type is computed from it; the packing bit goes"). **Nothing reads this yet**; the
-    /// readers that need the declaration move over in the following change, and the bit goes after them.
-    camel::core::type::FunctionType *declaredFuncType() const { return declaredFuncType_; }
-    void setDeclaredFuncType(camel::core::type::FunctionType *funcType) {
-        noteOriginalTypes();
-        declaredFuncType_ = funcType;
-    }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
     /// The frame layout: the type of each frame slot, slot 0 (reserved) included. Empty when the
@@ -1236,9 +1225,6 @@ class GraphDraft {
     std::string implKernelUri_;
     uint32_t declarationFacts_                 = 0; // see declarationFacts()
     camel::core::type::FunctionType *funcType_ = nullptr;
-    // The function type the signature declared: the source the packed exit is derived from
-    // (declaredFuncType). Kept beside `funcType_` rather than instead of it, and read by nobody yet.
-    camel::core::type::FunctionType *declaredFuncType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
     // the graph's own block (TupleType::constructFrameLayout).
@@ -1323,9 +1309,8 @@ class GraphDraft {
     /// rewrite retypes, the closure type, the capture names -- so one record holds them and one
     /// class of the self-check compares them.
     struct UndoTypes {
-        camel::core::type::FunctionType *funcType         = nullptr;
-        camel::core::type::FunctionType *declaredFuncType = nullptr;
-        camel::core::type::TupleType *closureType         = nullptr;
+        camel::core::type::FunctionType *funcType = nullptr;
+        camel::core::type::TupleType *closureType = nullptr;
         std::vector<camel::core::SymId> captureNames;
         std::vector<camel::core::type::Type *> runtimeSlotTypes;
         std::vector<camel::core::type::Type *> staticSlotTypes;
@@ -1524,9 +1509,8 @@ struct UndoSnapshot {
     bool hasFrameLayout      = false;
     uint32_t insertRegion    = 0;
     // The graph's own types.
-    camel::core::type::FunctionType *funcType         = nullptr;
-    camel::core::type::FunctionType *declaredFuncType = nullptr;
-    camel::core::type::TupleType *closureType         = nullptr;
+    camel::core::type::FunctionType *funcType = nullptr;
+    camel::core::type::TupleType *closureType = nullptr;
     std::vector<camel::core::SymId> captureNames;
     std::vector<camel::core::type::Type *> runtimeSlotTypes;
     std::vector<camel::core::type::Type *> staticSlotTypes;

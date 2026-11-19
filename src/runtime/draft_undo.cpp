@@ -135,7 +135,6 @@ bool sameRun(const T &here, const std::vector<U> &found) {
 
 bool sameTypes(const GraphDraft &draft, const UndoSnapshot &snapshot) {
     return draft.funcType() == snapshot.funcType &&
-           draft.declaredFuncType() == snapshot.declaredFuncType &&
            draft.closureType() == snapshot.closureType &&
            sameRun(draft.captureNames(), snapshot.captureNames) &&
            sameRun(draft.runtimeSlotTypes(), snapshot.runtimeSlotTypes) &&
@@ -186,9 +185,8 @@ std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft) {
     snapshot->mutations      = draft.mutations();
     snapshot->hasFrameLayout = draft.hasFrameLayout();
     snapshot->insertRegion   = draft.insertRegion();
-    snapshot->funcType         = draft.funcType();
-    snapshot->declaredFuncType = draft.declaredFuncType();
-    snapshot->closureType      = draft.closureType();
+    snapshot->funcType       = draft.funcType();
+    snapshot->closureType    = draft.closureType();
     snapshot->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     snapshot->runtimeSlotTypes.assign(
         draft.runtimeSlotTypes().begin(), draft.runtimeSlotTypes().end());
@@ -367,7 +365,6 @@ void GraphDraft::noteOriginalTypes() {
     undoTypes_.push_back(
         UndoTypes{
             .funcType           = funcType_,
-            .declaredFuncType   = declaredFuncType_,
             .closureType        = closureType_,
             .captureNames       = captureNames_,
             .runtimeSlotTypes   = runtimeSlotTypes_,
@@ -485,7 +482,6 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
     if (undoTypes_.size() > mark.undoTypes) {
         const UndoTypes &record = undoTypes_[mark.undoTypes];
         funcType_               = record.funcType;
-        declaredFuncType_       = record.declaredFuncType;
         closureType_            = record.closureType;
         captureNames_           = record.captureNames;
         runtimeSlotTypes_       = record.runtimeSlotTypes;
