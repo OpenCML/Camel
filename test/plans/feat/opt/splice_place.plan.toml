@@ -165,10 +165,12 @@ verify_script = """
 [[tests]]
 name = "perf_fib_smoke.opt_twice"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. Its cost bound is stated, not inherited: `timeout_ms / 4` was the same 5000 ms as the `cpu_budget_ms` written here, but the derived bound is judged on the wall clock where the host cannot report CPU time, and this entry's reading is the work's own CPU time (`test/tools/run-tests.mjs#TIMEOUT_MARGIN`, and the ruling of 2026-11-02 that a bound is derived from a measurement, not from a constant). The number does not move: the entry is red against 5000 ms either way until the optimizer's cost is answered (docs/handover/reviews/2026-11-19-the-0.2.45-blocker-list-by-severity.cn.md, S3-2), and it is to be re-derived from `test/tools/opt-cost/measure.mjs`'s table once it is."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "std::opt", "${backend}"]
+cpu_budget_ms = 5000
+timeout_ms = 20000
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
