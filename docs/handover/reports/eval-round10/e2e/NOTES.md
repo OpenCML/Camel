@@ -81,7 +81,7 @@ computation key.
 
 ## The commands and the raw output
 
-`capture.sh` is the run; `raw-output.txt` is its output, verbatim, 213 lines. From the worktree root:
+`capture.sh` is the run; `raw-output.txt` is its output, verbatim, 301 lines. From the worktree root:
 
     sh docs/handover/reports/eval-round10/e2e/capture.sh > docs/handover/reports/eval-round10/e2e/raw-output.txt 2>&1
 
@@ -190,22 +190,24 @@ edit of this program but a different program; the honest counter-example availab
 **The ordered splice is refused.** The specified form is a body spliced beside the print (`at` = a
 node that stands in no chain) plus `order` to put the marker after the print. `commit` refuses it,
 with the message above -- the same one the unordered splice gets, character for character. So the
-edge is written and changes nothing that the check reads. The likely mechanism, and the reason this
-is a gap rather than a mistake in the pass: a body spliced at a node that stands in no chain lands
-in a region of its own (`RegionKind::Inline`), the order edge the transaction writes crosses from
-that region into the one the print is in, and an order edge crossing out of the region it was
-written in is not one the graph keeps (`include/camel/runtime/graph.h:324`: an order edge the seal
-check refuses; `draft_inline.cpp` writes order edges only inside the region it splices into).
-`judgedRegionOf` (`src/runtime/resources.cpp:1586`) still judges both prints in the region the Inline
-one is nested in, so the effect check asks for a path between two nodes the ordering mechanism has
-no edge for.
+edge is written and changes nothing that the check reads. The body lands in a region of its own
+(`RegionKind::Inline`); the effect check looks through that region -- it judges both prints in the
+one the Inline region is nested in (`judgedRegionOf`, `src/runtime/resources.cpp:1586`) -- and asks
+for a path between them, so it asks for a path into a region the edge writer does not carry an edge
+into. The whole reading, both directions, with the commands and the dump that shows the marker
+sitting in an `Inline` region of the committed graph, is its own page:
+`docs/handover/questions/2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check.cn.md`.
 
-The mirror image is worse than the refusal, and it is why this paragraph exists: with the edge the
-other way round -- `order(t, added, before)` -- the commit is **accepted** and the marker never runs.
-The body's region runs nothing, so its write is not in the program that comes out, while the check
-had counted it as an access when the edge ordered it. A pass that commits and changes nothing is
-worse to ship than a pass that is refused, so that variant is not in `passes.cml`; the reading is
-recorded here instead.
+**The mirror image is worse than the refusal.** With the edge the other way round --
+`order(t, added, before)` -- the commit is **accepted**, the program runs, and the marker never
+prints: `passes::instrument_reversed` exits 0 with the five original lines, and `passes::report`
+counts 56 nodes against 53, so the marker's nodes are in the committed graph. `passes::dump` on that
+program shows them where they are: the closure body comes out as 14 nodes with the `# tick` string,
+the `:io/println` and the body's exit all in `RegionKind::Inline`, and the closure's own print in
+`RegionKind::Root`. A region that only records where code came from runs nothing, so the effect the
+check counted is in the graph and not in the program. That is a silent half-truth where the ordered
+form gives a refusal, and it is the worse of the two; the pass is shipped anyway, so that the page's
+reading can be reproduced.
 
 **So the edit that runs takes over the print's place.** `inline` at a statement of the block's chain
 hands that place -- and its order edges -- over to the body, which is ordering by construction: the

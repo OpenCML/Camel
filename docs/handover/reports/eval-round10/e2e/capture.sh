@@ -56,5 +56,10 @@ echo "===== the edits the commit refuses ====="
 run program.cml passes::instrument_unordered std::nvm
 run program.cml passes::instrument_ordered std::nvm
 
+echo "===== and the one it accepts and drops: the marker never runs ====="
+run program.cml passes::instrument_reversed std::nvm
+run program.cml passes::instrument_reversed passes::report std::nvm
+run program.cml passes::instrument_reversed passes::dump std::nvm
+
 echo "===== the reading the edit's choice is checked against ====="
 run program.cml passes::dump std::nvm

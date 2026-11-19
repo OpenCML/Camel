@@ -144,6 +144,94 @@ error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose con
 help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
 ### exit=1
 
+===== and the one it accepts and drops: the marker never runs =====
+### camel program.cml passes::instrument_reversed std::nvm
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument_reversed passes::report std::nvm
+e2e graphs=5 nodes=56
+e2e canonical=58ce1b9f2d44b9175092ce94e1a680278a098b1b016bcc89e61ee2805ae8aff7
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument_reversed passes::dump std::nvm
+graph 0 nodes=2 exit=1
+0 - () => int region=RegionKind::Root anchor=false free=true key=-|() => int|
+1 - int region=RegionKind::Root anchor=true free=false key=-|int|
+graph 1 nodes=4 exit=3
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - (x: int) => int region=RegionKind::Root anchor=false free=true key=-|(x: int) => int|
+2 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+3 - int region=RegionKind::Root anchor=true free=false key=-|int|,2
+graph 2 nodes=31 exit=29
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,2
+4 - int region=RegionKind::Root anchor=false free=true key=-|int|
+5 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,4
+6 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,3,5
+7 - (int, int) region=RegionKind::Root anchor=false free=true key=-|(int, int)|
+8 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+9 - int region=RegionKind::Root anchor=false free=true key=-|int|
+10 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,8,9
+11 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+12 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|
+13 - string region=RegionKind::Root anchor=false free=true key=-|string|
+14 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|,12
+15 - int region=RegionKind::LoopBody anchor=false free=false key=-|int|,14,8
+16 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,11,15
+17 - (int, int) region=RegionKind::LoopBody anchor=false free=true key=-|(int, int)|,7
+18 - (int, int) region=RegionKind::LoopBody anchor=false free=false key=-|(int, int)|,17
+19 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+20 - int region=RegionKind::Root anchor=false free=true key=-|int|
+21 :op/lt_l bool region=RegionKind::LoopCond anchor=false free=true key=:op/lt_l|bool|,19,20
+22 - int region=RegionKind::Root anchor=false free=true key=-|int|
+23 - (int, int) region=RegionKind::Root anchor=false free=false key=-|(int, int)|,0,6
+24 - int region=RegionKind::Root anchor=true free=true key=-|int|,23
+25 - string region=RegionKind::Root anchor=false free=true key=-|string|
+26 - int region=RegionKind::Root anchor=false free=false key=-|int|,14,20
+27 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,25
+28 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,27
+29 - int region=RegionKind::Root anchor=true free=false key=-|int|,24
+30 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+graph 3 nodes=5 exit=4
+0 - int region=RegionKind::Root anchor=true free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 - int region=RegionKind::Root anchor=false free=false key=-|int|,1,2
+4 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+graph 4 nodes=14 exit=13
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,0,1
+3 - int region=RegionKind::Root anchor=false free=true key=-|int|
+4 :op/add_l int region=RegionKind::Root anchor=true free=true key=:op/add_l|int|,2,3
+5 - string region=RegionKind::Root anchor=false free=true key=-|string|
+6 - string region=RegionKind::Root anchor=false free=true key=-|string|
+7 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,2,3
+8 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,5
+9 - string region=RegionKind::Inline anchor=false free=true key=-|string|
+10 :io/println string region=RegionKind::Inline anchor=false free=false key=:io/println|string|,9
+11 - string region=RegionKind::Inline anchor=false free=false key=-|string|,10
+12 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,8
+13 - int region=RegionKind::Root anchor=true free=false key=-|int|,4
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
 ===== the reading the edit's choice is checked against =====
 ### camel program.cml passes::dump std::nvm
 graph 0 nodes=2 exit=1

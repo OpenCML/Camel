@@ -194,6 +194,30 @@ export func instrument_unordered::<F>(p: F): F! sync {
     }
 }
 
+/// The same splice with the edge the other way round: the marker is said to run *before* the print.
+/// `commit` accepts it, and the marker never runs: the body's region runs nothing, so the write the
+/// check counted is not in the program that comes out. Shipped so that the reading
+/// `docs/handover/questions/2026-11-19-an-order-edge-across-an-inline-region-is-ignored-by-the-effect-check.cn.md`
+/// records can be reproduced, and for nothing else -- a pass that commits and changes nothing is not
+/// a pass.
+export func instrument_reversed::<F>(p: F): F! sync {
+    return match closure_body(p) {
+        case null => p
+        case g => match splice_point(g) {
+            case null => p
+            case at => match body_print(g) {
+                case null => p
+                case before => {
+                    let t = open(p)
+                    let added = inline(t, at, tick)
+                    order(t, added, before)
+                    commit(t)
+                }
+            }
+        }
+    }
+}
+
 /// Hands the program a rewritten closure body: the marker is emitted once per call, where the
 /// closure's own line was emitted. It stands in that line's place and not after it, because the
 /// additive form -- a body beside the existing print, ordered after it -- is refused (`NOTES.md`,
