@@ -1,0 +1,17 @@
+file	graphs	nodes	edges	regions	bytes	sha256	kinds
+examples/case-study/train.cml	5	63	93	2	29945	f3978b42249f6224	context:16,control:13,normal:53,order:1,sync:10
+examples/case-study/writings/renamed.cml	5	63	93	2	29945	f3978b42249f6224	context:16,control:13,normal:53,order:1,sync:10
+examples/case-study/writings/swapped.cml	5	63	93	2	29945	f2fa36d4f1a20af8	context:16,control:13,normal:53,order:1,sync:10
+examples/case-study/writings/moved.cml	5	63	94	2	30060	66138fb5950779fd	context:16,control:13,normal:53,order:2,sync:10
+test/cases/compile/var/step_var.cml	3	23	29	0	9183	b75fd6d66d7b3909	context:3,control:3,normal:20,sync:3
+test/cases/compile/var/step_let.cml	3	23	29	0	9183	b75fd6d66d7b3909	context:3,control:3,normal:20,sync:3
+test/cases/compile/var/loop_var.cml	3	24	23	2	9801	24eaf169d3619272	context:6,control:2,normal:13,sync:2
+test/cases/compile/var/loop_let.cml	3	24	23	2	9801	24eaf169d3619272	context:6,control:2,normal:13,sync:2
+test/cases/compile/var/arm_var.cml	3	13	13	2	5418	838e74d0cb36fdc9	context:3,control:2,normal:6,sync:2
+test/cases/compile/var/arm_let.cml	3	13	13	2	5418	838e74d0cb36fdc9	context:3,control:2,normal:6,sync:2
+test/cases/compile/chain/pure_call_first.cml	3	10	8	0	3947	ac891942c54a8cf0	context:1,control:1,normal:5,sync:1
+test/cases/compile/chain/pure_call_second.cml	3	10	8	0	3947	ac891942c54a8cf0	context:1,control:1,normal:5,sync:1
+test/cases/compile/chain/effect_call_first.cml	3	8	9	0	3677	28a4f2a28736c649	context:1,control:2,normal:3,order:1,sync:2
+test/cases/compile/chain/effect_call_second.cml	3	8	9	0	3677	27d7dea24c8391e7	context:1,control:2,normal:3,order:1,sync:2
+test/cases/compile/chain/fault_call_first.cml	3	10	10	0	4178	478f1af0ceac50e8	context:1,control:2,normal:5,sync:2
+test/cases/compile/chain/fault_call_second.cml	3	10	10	0	4178	e2e497783b43c97c	context:1,control:2,normal:5,sync:2

@@ -329,10 +329,8 @@ node_handle_t Builder::createFuncDataNode(
         resultNode = fillNode;
     }
     if (!callableAsResult) {
-        // A direct call of a graph whose value was made before: called through a value. Its
-        // value is what the callee's graph hands on, `var` parameters and all
-        // (`graphExitTypeOf`).
-        auto callNode = addCallSite(currGraph_, graphExitTypeOf(graph->funcType()));
+        // A direct call of a graph whose value was made before: called through a value.
+        auto callNode = addCallSite(currGraph_, graph->funcType()->exitType());
         markMacroNode(callNode);
         linkNodes(LinkType::With, resultNode, callNode);
         resultNode = callNode;
