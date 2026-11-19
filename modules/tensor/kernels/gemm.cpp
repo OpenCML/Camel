@@ -388,6 +388,8 @@ int gemmThreadsUsed() { return gGemmThreadsUsed.load(); }
 
 int gemmLibraryThreadsUsed() { return gGemmLibraryThreadsUsed.load(); }
 
+bool libraryGemmRuns(int64_t M, int64_t N, int64_t K) { return libraryPays(M, N, K); }
+
 Shape matmulShape(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     return planMatmul(lhs, rhs).outShape;
 }
