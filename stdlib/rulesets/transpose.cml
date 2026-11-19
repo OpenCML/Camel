@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -1065,6 +1065,37 @@ export rule gelu_t::<T>(x: T[...]) when is_float::<T>() {
 /// nothing but its cotangent.
 export rule transpose_t::<T>(x: T[...]) when is_float::<T>() {
     transpose(x) => (ct: T[...]) => transpose(ct)
+}
+
+// ---- permute ----
+//
+// `permute<perm>(x)` moves elements and combines none, so its adjoint is the **inverse**
+// permutation -- which is the list written back only when that list is its own inverse (`[1, 0, 2]`
+// is; `[2, 0, 1]` is not, and answering `perm` there would put every element in the wrong place
+// while looking like a law). `perm` is the operator's second port, so the call's own `<>` value
+// reaches this family as an ordinary value, the protocol `rulesets/jvp.cml#jvp_permute` states.
+
+/// Where `value` sits in a permutation, or the length of the list when it is not there.
+func permute_position(perm: int[], value: int): int {
+    let n  = len(perm)
+    let at = loop i = 0 while i < n && perm[i] != value do i + 1
+    return at
+}
+
+/// The permutation that undoes `perm`: the axis each axis of the permuted array came from.
+func permute_inverse(perm: int[...]): int[] {
+    let row = range(0, numel(perm), 1)->map<(i: int): int => perm[i]>
+    return range(0, len(row), 1)->map<(i: int): int => permute_position(row, i)>
+}
+
+/// `permute<perm>(x)` transposed: the inverse permutation of the cotangent.
+export func permute_cotangent::<T>(ct: T[...], perm: int[]): T[...] when is_float::<T>() {
+    return permute<permute_inverse(perm)>(ct)
+}
+
+/// The transpose of `permute<perm>`.
+export rule permute_t::<T>(x: T[...], perm: int[]) when is_float::<T>() {
+    permute<perm>(x) => (ct: T[...]) => permute_cotangent(ct, perm)
 }
 
 /// The transpose of `where`: each branch takes the cotangent where it was selected and zero
