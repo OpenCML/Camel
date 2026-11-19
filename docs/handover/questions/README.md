@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：33 页
+## 现在在等作者：35 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -20,6 +20,7 @@
 | [`2026-11-19-a-var-parameter-cannot-hand-its-value-back`](2026-11-19-a-var-parameter-cannot-hand-its-value-back.cn.md) | 一个 `var` 形参没有通道把新值交回来 |
 | [`2026-11-19-a-var-parameter-recursion-loses-its-tail-call`](2026-11-19-a-var-parameter-recursion-loses-its-tail-call.cn.md) | 一个 `var` 形参的递归调用丢了尾调用 |
 | [`2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject`](2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md) | 「调用写入、其后读到该版本」这个读法今天没有可打印的题材 |
+| [`2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made`](2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md) | 递给被调者的那个实参，得是一个「本图做出来的」值 |
 | [`2026-11-19-in-place-the-two-orders-cannot-both-hold`](2026-11-19-in-place-the-two-orders-cannot-both-hold.cn.md) | 就地更新：两条口谕不能同时成立 |
 | [`2026-11-19-order-cannot-reach-a-node-that-inline-just-made`](2026-11-19-order-cannot-reach-a-node-that-inline-just-made.cn.md) | `order` 写不到刚 `inline` 出来的节点上，而文档说它写得到 |
 | [`2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts`](2026-11-19-packing-the-entry-graph-four-steps-and-two-failed-attempts.cn.md) | 让入口图打包，并把呈现取第 0 份：方案定稿与两次失败的机制 |
@@ -33,6 +34,7 @@
 | [`2026-11-19-the-effect-of-a-call-through-a-function-value`](2026-11-19-the-effect-of-a-call-through-a-function-value.cn.md) | 经函数值的调用，足迹取那个值的函数类型——而那个类型今天不写子句 |
 | [`2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple`](2026-11-19-the-entry-packs-nothing-and-the-five-reds-are-a-call-s-tuple.cn.md) | 入口没有 `var` 形参可打包，五条红是一次调用的元组 |
 | [`2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised`](2026-11-19-the-fifty-three-ask-the-language-for-what-it-never-promised.cn.md) | 那 53 条在要求语言没承诺的东西 |
+| [`2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed`](2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed.cn.md) | 前端那条原地改写：它已经不可达，但还在 |
 | [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
 | [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
 | [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 |

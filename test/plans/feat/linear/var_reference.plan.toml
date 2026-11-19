@@ -1343,91 +1343,54 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 # cell, run the in-place operator, store it back -- with `:struct/append_arr_in_place` where the
 # path write has `:op/set_index_in_place`, neither of them copying.
 #
-# That is no longer what this program builds, and the entry below is marked `known_fail` because
-# the guarantee it pins is GONE, not because a graph shape was rewritten. `v` is a same-region
-# local `var`, so since stage S1 of the direct-SSA plan it is built as the value it was given and
-# there is no cell at all (`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`): no
-# `:var/new`, no `:var/take`, and `Builder::inPlaceRebindingOf`
-# (`src/compile/gir/builder_operators.cpp`) declines for want of a cell, so the append is the
-# copying form. The two readings, taken on this tree with the ruler that plan names for the stage
-# which owns the repair:
+# That is no longer what this program builds, and it is no longer what the guarantee is read from.
+# `v` is a same-region local `var`, so since stage S1 of the direct-SSA plan it is built as the
+# value it was given and there is no cell at all (`docs/handover/plans/
+# 2026-11-16-direct-ssa-construction.cn.md`): no `:var/new`, no `:var/take`, no
+# `:op/assn_owned`, and `Builder::inPlaceRebindingOf` (src/compile/gir/builder_operators.cpp)
+# declines for want of a cell.
+#
+# Stage S3b is where the guarantee comes back, and it comes back as the *plan's* decision and not
+# as a graph shape (the author's answer of 2026-11-18: in-place is the execution plan's reuse
+# decision, not the front end claiming a statement by its shape). The reading, on this tree:
 #
 #   camel inspect --copies test/cases/linear/byref/element_assigned_append.cml
-#     COPIES element_assigned_append.cml:11:18 append copied
-#     COPIES main updates 1 in-place 0 by-count 0 declared 0 copied 1
-#   camel inspect --copies test/cases/linear/byref/element_assigned.cml
-#     COPIES element_assigned.cml:11:8 set_index in-place
+#     COPIES element_assigned_append.cml:11:18 append in-place
 #     COPIES main updates 1 in-place 1 by-count 0 declared 0 copied 0
 #
-# So `arr[0] = 9` on a cell still updates in place and `v = v->append<4>` on a value does not.
-# The author's amendment to that plan is what closes the gap -- its stage S3b, where an SSA value
-# handed to `append`, to a path assignment or to `sgd` at its last use reuses the input's storage,
-# read with `camel inspect --copies`. S3b has not landed, and the two routes already tried are
-# recorded as refused in
-# `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md`: swapping
-# `ssaAssignmentOf` and `inPlaceRebindingOf` order, and measuring whether the count is told the
-# truth when a value is put into a container or a field capture. Neither is something this lane
-# may paper over, so the red stays and the mark below says when it expires.
+# The node still names the copying form (`:struct/append_arr`); the plan hands it the storage of
+# the value it was given -- nothing else reads that value, which is the `var`'s whole remaining
+# life -- and every back end runs the in-place form instead (`ExecPlan::operatorUriFor`). The
+# entry below therefore asks the ruler, not the dump: the shape it used to assert is the cell
+# era's and the mechanism that replaced it is a decision, so a dump assertion would pin the loss
+# of the cell rather than the guarantee. `element_assigned` keeps its `:var/take` shape (it is
+# still a cell) and reads the same verdict, which is why the pair is still the differential.
 
 [[tests]]
 name = "element_assigned_append.in_place_form"
-desc = "What this entry has always asked: that `v = v->append<4>` on a `var` array reaches the in-place rebinding -- one `:var/take` of the cell, `:struct/append_arr_in_place`, `:op/assn_owned` storing it back into that cell, with the take ordered before the store and neither the copying form `:struct/append_arr` nor a `:var/peek` in the graph. It is marked `known_fail` because the program no longer builds that at all: `v` is a same-region local, so it is a value and there is no cell to take the array out of (stage S1 of the direct-SSA plan), and the append copies. The mark comes off when S3b makes `camel inspect --copies` answer in-place for this append."
+desc = "The append `v = v->append<4>` at the value's last use runs the in-place form, read the way stage S3b says to read it: `camel inspect --copies` answers `append in-place` for it, and the plan's summary counts one in-place update and no copy. Not a graph shape, because there is no cell left to take the array out of: `v` is a same-region local `var`, so it is a value (stage S1), and the decision is the plan's (`ExecPlan::storageReuseAt`, `ExecPlan::operatorUriFor`) -- design principles 10.5, the author's answer of 2026-11-18 that in-place is the execution plan's reuse decision and not the front end claiming a statement by its shape."
 kind = "behavior"
+tool = "camel"
 case = "../../../cases/linear/byref/element_assigned_append.cml"
-args = ["${case}", "std::jgir"]
+args = ["inspect", "--copies", "${case}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const gir = JSON.parse(input.stdout)
-const graph = gir.graphs.find((g) => g.name === 'main')
-assert(graph, 'the main graph is in the dump')
-const labels = new Map(graph.nodes.map((n) => [n.id, n.label]))
-const inputEdge = (id, index) =>
-  graph.edges.find((e) => e.target === id && e.kind === 'normal' && e.targetIndex === index)
-const only = (label) => graph.nodes.filter((n) => n.label === label)
-const take = only(':var/take')
-assert(take.length === 1, `one :var/take, got ${take.length}`)
-const cell = inputEdge(take[0].id, 0)
-assert(cell && labels.get(cell.source) === ':var/new', 'take reads the variable cell itself')
-const append = only(':struct/append_arr_in_place')
-assert(append.length === 1, `one in-place append, got ${append.length}`)
-const from = inputEdge(append[0].id, 0)
-assert(from && from.source === take[0].id, 'the in-place append takes the array from :var/take')
-const store = only(':op/assn_owned')
-assert(store.length === 1, `one :op/assn_owned, got ${store.length}`)
-const into = inputEdge(store[0].id, 0)
-assert(into && labels.get(into.source) === ':var/new', 'the store writes the variable cell itself')
-const value = inputEdge(store[0].id, 1)
-assert(value && value.source === append[0].id, 'the appended array is the value it stores')
-assert(
-  graph.edges.some((e) => e.source === take[0].id && e.target === store[0].id && ['order', 'control'].includes(e.kind)),
-  'the take is ordered before the store, which is where the cell is read',
-)
-assert(only(':struct/append_arr').length === 0, 'the copying form is not in the graph')
-assert(only(':var/peek').length === 0, 'the cell is not read before the write')
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  // The row for this program's one update: named the way the program writes it, at its own place,
+  // and the verdict is the plan's -- the copying form it names is not the form it runs.
+  const rows = lines.filter((l) => /^COPIES element_assigned_append\.cml:\d+:\d+ append (in-place|by-count|declared|copied)$/.test(l))
+  assert(rows.length === 1, 'one append row: ' + lines.join(' | '))
+  assert(rows[0].endsWith(' in-place'), 'the plan chose the in-place form for the append: ' + rows[0])
+  // The counts agree with the rows: one update, decided in place, nothing copied. A reading and a
+  // number that disagree is the thing this entry exists to catch.
+  const summary = 'COPIES main updates 1 in-place 1 by-count 0 declared 0 copied 0'
+  assert(lines.includes(summary), 'the main graph counts the in-place append: ' + lines.join(' | '))
+  assert(!lines.some((l) => /^COPIES main updates .* copied [1-9]/.test(l)), 'nothing in main copies: ' + lines.join(' | '))
 }
 """
-# The mark in the shape the author's ruling of 2026-11-03 00:30 asks a mark to carry
-# (`agents/test.md`): the defect, the owner, the note, and the sentence this case prints today.
-#
-#   the defect -- `v = v->append<4>` on a same-region local `var` copies its array. The value has
-#     no cell, so `Builder::inPlaceRebindingOf` (`src/compile/gir/builder_operators.cpp`) declines
-#     and the append stays the copying form; `Builder::pathAssignmentOf` already tells the reverse
-#     case -- `arr[0] = 9` on a cell -- and it still rebinds in place.
-#   the owner  -- stage S3b (second-name counting) of
-#     `docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`. It is not a lane of its own
-#     yet, and the page named in `known_fail_reason` is why: the two routes tried so far were
-#     measured and refused, so what is missing is honest counting, not a claim order.
-#   the unhide -- when S3b lands and `camel inspect --copies
-#     test/cases/linear/byref/element_assigned_append.cml` answers `in-place` or `by-count` for
-#     the append instead of `copied`, delete every field below: the assertions above then describe
-#     this program again, and the mark would fail the run on its own (`marked known_fail ... but
-#     passes, so the mark is out of date`). Deliberately a reading and not a date.
-known_fail = true
-known_fail_owner = "stage S3b (second-name counting) of docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md -- no lane owns it yet"
-known_fail_reason = "`Builder::inPlaceRebindingOf` declines because a same-region local `var` is a value and not a cell (`src/compile/gir/builder_operators.cpp`), so `:var/take` is not in the graph and `append` copies; the repair is stage S3b of `docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`, whose two attempted routes `docs/handover/reviews/2026-11-17-who-owns-the-argument-after-a-call.cn.md` records as refused"
-known_fail_msg = "one :var/take, got 0"
-known_fail_note = "This is not an assertion that went stale, and the entry must not be rewritten to expect the copying form: the guarantee it names -- an append at the value's last use does not copy (design principles 10.5) -- is really lost for a same-region local `var`, and `feat/linear` is the only plan that says so. Rewriting it green would pin the loss; leaving it red with no expiry would make it a red nobody ends, which is the same thing with better manners. What it reads, on this tree: `inspect --copies element_assigned_append.cml` prints `COPIES element_assigned_append.cml:11:18 append copied` (main: updates 1 copied 1), while `inspect --copies element_assigned.cml` prints `COPIES element_assigned.cml:11:8 set_index in-place` (main: in-place 1). The other four entries that went red with this one -- path_assigned.allocs.{nvm,fvm,jit,prl} -- were a different defect (a store that copied its value lost the in-place mark when it was cloned, `31b14394b`) and are green now."
+timeout_ms = 30000
 
 [[tests]]
 name = "element_assigned_append"

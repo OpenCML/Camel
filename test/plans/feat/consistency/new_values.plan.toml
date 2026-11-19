@@ -319,6 +319,42 @@ expect_exit = 0
 expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 expect_output_not_contains = ["[Warn]"]
 
+# The same program read with the ruler stage S3b's criterion is stated in
+# (`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`, its 2026-11-19 amendment): every
+# `v = v->append(x)` and `xs = sort(xs)` whose value nothing else reads is handed its storage and
+# runs the in-place form, and every one whose value another name still holds copies. The six
+# in-place rows below are the first readings of the mechanism; the three copied ones are the
+# second name (`before`, `kept`) and the closure's `fs`, which must keep copying or the case above
+# would print a sorted `before`.
+[[tests]]
+name = "new_values.sort_rebinding.copies"
+desc = "`camel inspect --copies` on the rebinding program: the plan's decision for each of the nine updates in `main` -- six in place (the three appends on the value the declaration made, the two `sort(xs)` at a value nothing else reads, and the float `gs = gs->sort`) and three copied (the sort under a second name, the appends after it, and the closure's `fs`) -- and the `var` parameter's sort left to the array's own count."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  // The plan chose the in-place form where the value has no other reader, and the copying form
+  // where it has one: both counts are non-zero, which is the point of the stage. The per-row list
+  // belongs to a graph and a row line does not carry its graph's name, so the counts are read off
+  // the three summaries below rather than by walking the rows.
+  const main = 'COPIES main updates 9 in-place 6 by-count 0 declared 0 copied 3'
+  assert(lines.includes(main), 'main counts six in place and three copied: ' + lines.join(' | '))
+  // The `var` parameter is a cell, so its sort is the two-layer answer and not this decision: the
+  // plan lays no row for it and the array's own count decides (`by-count`).
+  const param = 'COPIES sorted_param updates 1 in-place 0 by-count 1 declared 0 copied 0'
+  assert(lines.includes(param), 'the var parameter stays with the array count: ' + lines.join(' | '))
+  // The closure `fs` is read after the sort, so it copies: nothing about capturing is in place.
+  const closure = 'COPIES __g_235__ updates 1 in-place 0 by-count 0 declared 0 copied 1'
+  assert(lines.includes(closure), 'the closure copies: ' + lines.join(' | '))
+}
+"""
+timeout_ms = 60000
+
 [[tests]]
 name = "new_values.sort_rebinding.graph"
 desc = "The rebinding is written with the in-place form of the operator between `:var/take` and `:op/assn_owned`, for each of the five rebindings that bind a name to a sorted array: `xs` three times, the `var` parameter, and the float `gs`. The closure's form is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort copies -- which the case prints beside the sorted one."
