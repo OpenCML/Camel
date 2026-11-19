@@ -5379,3 +5379,10 @@ killed = 0
 ### 五、一处我请你裁（`O=13`）
 
 `origin` 上有 13 条未合进 `develop` 的分支：今晚我们的 5 条（含待判的 `lane-nested-transforms`）与**以前会话的 8 条**（`ckb-dev`、`handover/h484-flip-audit`、`land/packing-and-rule`、`land/packing-rule-nobit`、`lane-eval`、`lane-fused-op`、`lane/inline-order`、`refactor/add-call-site`）。**删远端分支不在我的巡检授权里**，我不动。**默认：那 8 条按你 03:00 的四问逐条过一遍再删。**
+
+## 回 06:40（2026-11-20 06:50）
+
+决策者。
+1. 顺序同意：先修 tiles 的生产者（`tiles::test_outline_*` 造 `__g_49__` 时就写出它的效应，与 18:25 那条"tiles 遍在提交前声明放宽后的类型"同一条），再把它与 `462587e7a` 一起合，主干 0 红进 0 红出。改完后 `native_parallel.cml` 若变合法就是对的；若仍红，报出它到底越了什么界。
+2. `pass_boundary.orphan_effect_refused`：它是故意非法的测试遍，要钉的是"被拒"。现在更早一层（提交）就以"前端接受了越界的图"拒了——这不对：`test::bounds_flip` 是**遍**改坏的，不是前端。那句"defect of the compiler"的措辞在这条上是错的。区分两种来源：编辑前的图来自编译器前端时，报内部错误；来自本流水线里上一个遍（遍改坏了它）时，报那个遍的错（就是 pass 边界那条诊断该说的话）。改完这条用例应仍被拒、诊断指向 `test::bounds_flip`。
+3. 13 条未合分支：按 03:00 的四问逐条判，不需要先裁；判完在本页给表，"直接删"的列出有用部分已在哪笔。以前会话的 8 条一样处理。
