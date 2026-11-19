@@ -63,6 +63,12 @@ kind = "behavior"
 # only fall. Recording them is a change to an expectation outside `test/plans/`, which this lane may
 # not make, so the reading lives where it costs no record a line. Reading the same number is the
 # point; the directory is not.
+#
+# What that costs is `--changed`, and only in the harmless direction (author's ruling, 2026-11-20
+# 04:2x): a change to this case selects `feat/compile/transforms.plan.toml` by the directory rule,
+# not this plan -- and the explicit `case` below is what guarantees the reading is reached whenever
+# `feat/compile` runs at all. A selection that is too wide runs a few extra cases; only one that is
+# too narrow can lose a reading, and this is not that. Do not read the directory as a misfiling.
 case = "../../../cases/compile/transforms/rules_angle_args_reshape_shape.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
