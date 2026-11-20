@@ -79,6 +79,7 @@ const TEST_FIELDS = new Set([
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
     'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
+    'known_fail_ends_when',
     'failure_note',
     'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',

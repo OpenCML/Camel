@@ -867,6 +867,18 @@ everywhere is written once:
   the history.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
+- `known_fail_ends_when`
+  The reading that removes the mark: the refusal that has to go, and the line this entry has to
+  print, both in backticks. A mark records a red; `known_fail_owner` says who ends it and
+  `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
+  outlive its wall and read as permanent debt. The runner already decides the two moments it can see
+  (the case starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure
+  changed its mind`), and this field states the condition those two readings are the evidence of, in
+  the terms the run compares. `test/tools/check-plan-fields.mjs` counts the marks that carry none
+  (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a trigger that quotes no reading
+  (`end-trigger-names-nothing`) and one that does not name the entry's own pinned line
+  (`end-trigger-names-another-reading`). The field is not required at load -- a mark written before it
+  existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
   failure. When a marked test fails and the fragment does not appear in its output, the case stays
