@@ -4713,4 +4713,21 @@ S2 随后，S3 最后。
 
 **谁在等这一格**：没有别的车道在等；它也不阻塞第二格（案例迁移已经独立完成）。
 
-**ECOP 条目（1）在迁移后没有落点**（车道 `lane-case-lib`，`851ef4986`）：那条读数（在取梯度的节点加打印、由 `commit_order` 回答）原来靠的是引擎的 `autodiff:grad` **算子**；迁移后梯度是库的 **macro**，那个节点成了**闭包调用**。两个原因逐字：`edits-ecoop.cml:215:5: [Error]: Invalid argument of 'graph.inline': the callee of the call is not known in this graph: run std::defunctionalize on it first.`（`name=RuntimeDiag::InvalidArgument, code=0x04000034`）；而那句建议点名的 pass 把这些值**一律拒了** —— `DEFUNCTIONALIZE types=7 values=16 calls=0 refused=7`，其中梯度自己的类型 `'<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure'` 的理由是 `the value is read by a node that is not a call`；所以建议成环，**没有任何一步能把它变成直接调用**，而「加打印由 `commit_order` 回答」这个读法**要求**它是直接调用。两条出路都在该文件之外：**让 `grad` 交出一个直接调用**，或**让 `inline` 能割闭包调用**。**判断：这是「库的 `grad` 是 macro」的直接后果，不是选点问题** —— 选点已改成结构读法（`grad_in_update`，读程序唯一 `nn:sgd` 节点的第 2 个实参），C 类对照随之从 `exit 0`（静默、什么也没拒）变成 `exit 1`（有名字的拒）。
+## 案例搬迁的第三笔：ECOP 条目（1）在迁移后没有落点（2026-11-20 17:37，协调者记）
+
+`851ef4986` 把 `edits-ecoop.cml` 的 `is_grad`（按名找算子 `autodiff:grad`）改成 `grad_in_update`（结构读法：程序里唯一 `nn:sgd` 节点的第 2 个实参）。C 类对照两侧不同 —— 改前 exit 0 什么也不拒（静默消失）、改后 exit 1 有名字的拒绝。
+
+**而它落在「做不到 + 原因」，而两个原因都不在选点上：**
+
+```
+`graph.inline`: "the callee of the call is not known in this graph: run std::defunctionalize on it first"
+`std::defunctionalize`: `types=7 values=16 calls=0 refused=7`，梯度自己的类型
+  `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure` 的理由是
+  "the value is read by a node that is not a call"
+```
+
+⇒ 那个节点是**函数值调用的结果**（`grad(loss)<layer,y>` 返回函数、再拿 `X` 调用），`inline` 落不下去；点名的 pass 给了它机会，`defunctionalize` 又把这些值一律拒了。**「加打印、由 `commit_order` 回答」这个读法要求它是直接调用，而那个前置条件在这个程序里不成立。**
+
+**两条出路都在那个文件之外**：让 `grad` 交出一个**直接调用**，或让 `inline` 能割**闭包调用**。
+
+**⇒ 这是「库的 `grad` 是 macro」的直接后果，不是选点问题。** 论文条目（1）的读法原来靠的是引擎的 `autodiff:grad` **算子**；那个算子变成 macro 实例之后，**节点种类变了，读法的前提也变了。**
