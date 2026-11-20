@@ -81,3 +81,36 @@ CALLSHAPE ref=4 kind=Call ... slot=0 kind=Oper · slot=1 kind=Port(index=0 VALUE
 `split` 侧的偏移已撤回三次，树上干净（`f07f7e3c2`）。上游那一件（让 `jvp`/`vjp` 写位图）**不在这里开工**，
 理由：它是**另一条车道的造图侧**，且会同时改动 `jvp`/`vjp` 两处的调用构造，与 `split` 的判据改动必须一次落地、
 一起量三条基线 —— 半做会留下「位图写了一半、读者还按位置」的中间态，而那正是这一格三次红的形状。
+
+## 六、这一格走完七步之后的五行结论（2026-11-20 晚，`45369b138` 之后）
+
+1. **位置不可依赖**：`dataInputsOf` 里被调方在 **0**（`nested` 的 `split_of_jvp_of___g_361__…`）、在**末尾 2**
+   （`jvp_of_use`，`[Port, Port, Oper]`）、或**根本没有槽**（`Func`，`named=1`）三种都有；三次「按位置加偏移」
+   的尝试（签名来源 / 算术有槽 / `kind == Call`）三次都破同一对闸，已全部撤回，**不要再试第四次**。
+2. **位图存在但生产者不填；填上之后墙不动** ⇒ **不是缺记录**。`45369b138` 让 `jvp` 写 `tangentArgs`、让 `split`
+   在位图存在时改读它（三闸全绿、两条例据 PASS、读者有回退路径），而 `nested` 的拒句**一字未变**。
+3. **调用是满的** ⇒ **不是少实参**。曾读到的「`norm=4` 而 `data=3`」是拿**图的签名**比**节点的实参**两个层的数；
+   `dataInputsOf` 是「普通输入在前、`with` 在后」（`split.cpp:100-102`），末尾那个 `Oper` 是 `with` 里的被调方。
+4. **那句拒绝的数字来自图签名端口号**（`split.cpp:771-780`：`portIndex[ref]` → `parameterOfPort(funcType, index).first`），
+   与调用实参无关 ⇒ **`halfInputsOf` 那一路永远改不动它**。
+5. **那个切向入口 Port 不在值半的起点集合里**（`portOf[index] == kInvalid`）⇒ **起点划分不是根因**；它是被**一条边**
+   接进来的 ⇒ 要量读取方。
+
+## 七、第八步：读它的那个节点是谁
+
+探针读三个失败图形（`nested`，逐字）：
+
+```
+TANGENTREADERS graph=jvp_of_split_of_jvp_of_square__first_with_as_param_forward port=1
+   reader=3 kind=Func atInput=2 copiedYet=0 type=float
+   reader=3 kind=Func atInput=3 copiedYet=0 type=float
+TANGENTREADERS graph=jvp_of_split_of_jvp_of_quartic__first_with_as_param_forward port=1
+   reader=5 kind=Func atInput=3 copiedYet=0 type=float
+   reader=7 kind=Func atInput=3 copiedYet=0 type=float
+```
+
+⇒ **读者就是那个提升调用本身**（`Func`），切向入口落在它的第 2 / 3 号实参上 —— 正是
+`(v0, v1, d0, d1)` 的后半。按「它在值半里的理由」分岔，命中的是**第一支**：**它产出的东西值半要用，
+这是正常的**；缺的不是可达性，而是「值半不该把切向交出去」这一条 —— 值半要复制这个调用，就必须把它
+复制成**未提升**的调用（`v0, v1` 两个实参，答案是值而不是对），而不是照抄四个实参。
+⇒ 于是这一格的问题定在：**`split` 复制一个提升调用时，是照抄它的实参表，而不是把它还原成原调用。**
