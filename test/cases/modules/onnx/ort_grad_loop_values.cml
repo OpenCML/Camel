@@ -92,12 +92,17 @@ func main(): int sync {
     save_npy(r.7, 'native_7.npy')
     save_npy(reshape<[1]>([r.8]), 'native_8.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(
+        match export_model<out: get_env('ONNX_OUT') ?? ''>(
             (w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...], float[...], f32[...], float[...], f32[...], int) => step(w, x),
             (w, x)
-        )
-        1
+        ) {
+            case error e => sync {
+                println(e)
+                0
+            }
+            case _ => 1
+        }
     } else 0
     println(exported)
-    return 0
+    return if (get_env('ONNX_OUT') ?? '') == '' || exported == 1 then 0 else 1
 }
