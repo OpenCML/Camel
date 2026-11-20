@@ -6145,3 +6145,15 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 ⇒ 这正好撞在你定的「不往 git 历史里拉屎」上。**而它不是被要求做的 —— 是它自己在失败路径上看到的。**
 
 另修了 `docs/pypi-packaging.md` 两处过期（`wrapper-dist`/`script-files` 已不存在；无 SDK 回退不再用 `packaging.tags`）并补 §8.1 离线配方。本机 wheel 24.9 MB vs 已发 0.2.44 linux 15.0 MB：差在 `libstdc++.so.6`（本机链接解析在 conda 工具链，manylinux 里解析在 `/usr/lib` 所以不打包）—— **这不是缺陷，是容器差异，但它说明「本机 wheel 与 CI wheel 不是同一种东西」。**
+
+## 归档（2026-11-20）：`lane-ssa` 打标签作废 —— **未验证，不是被取代**
+
+`lane-ssa` 的 16 笔（tip `4d308fc72`，`parked/lane-ssa` 标签保留）**没有任何一笔的内容在主树里**：查的是特征标识符而不是 `git cherry`（后者只说 patch 不等价），`calleeValueNode`、`packingTotal`、`callHandsBackResult` 在主干各 **0 处**，只有底座 `functionValueGraphOf`（7 处）与 `graphExitTypeOf`（1 处）在。
+
+**`test=` 全 0**：16 笔里没有一条用例、没有一个 plan 条目（8 笔改 `src/`，8 笔只改 `docs/`）。所以它在**任何**基线上都不可验证，不只是落后 100 笔时不可验证。
+
+`5695e055c`（+306/−20，8 个 `src/` 文件，「the packing returns, with the declaration as its source」）跑在 `0024b76b4` 之前；此后 `typevar.cpp`（`e79de8697`）、`builder.h` 与 `captures.cpp`（`beea20ad6`）、`builder_expr.cpp` 与 `builder_linearity.cpp`（`f26529338`）都动过，所以它那 306 行的回归面**不可控**。
+
+**⇒ 措辞：未验证，不是被取代。** 它不是过时，是一条从没被量过的方向 —— 这是后人捡起它时唯一有用的线索。
+
+`5559d3c6e`（「a call through a value asks the graph behind the value」）与今晚合进主干的 `beea20ad6`（「a callee reached through a value does not hand its cells to the caller」）**不是同一机制**：前者问「这个被调方会不会把 `var` 形参交回」（退出类型 / 打包结果的投影，`callHandsBackResult` 改问 `functionValueGraphOf(calleeValueNode)`），后者问「这个图是否包住捕获的原点」（`enclosesOrigin` 之后才 `captureInto`，并保留 `nullptr` 让掩码命名同样的槽位）。同一个文件、同一族「经值调用」，但看的是两个不同的问句，因此互不覆盖。

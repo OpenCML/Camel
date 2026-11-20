@@ -1,0 +1,27 @@
+/**
+ * What an operator that runs a function the program hands it touches, read at run time: the
+ * accesses are that function's (design principles 3.3), so the `map` over `show` -- which writes
+ * `stdout` -- carries that write, and the one over `inc`, which writes no clause, carries nothing.
+ * The operator's own result stays its own: `map` answers a new array whatever the callback hands
+ * back, so the footprint says `result fresh` and not the callback's `same 0`.
+ *
+ * The pair is the point: a reader that cannot see the clause at all counts the first as touching
+ * nothing while it runs code, and a reader that gives up on the value counts both as touching
+ * everything. Both answers are wrong in opposite directions, and `test::resources` prints both.
+ */
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func show(x: int): int uses var stdout sync {
+    println(x)
+    return x
+}
+
+func main(): int uses var stdout sync {
+    let xs = [1, 2, 3]
+    let ys = xs->map<show>
+    let zs = xs->map<inc>
+    return ys[0] - zs[0] + 1
+}

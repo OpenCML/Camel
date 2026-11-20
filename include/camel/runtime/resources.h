@@ -9,7 +9,10 @@
  *
  *   resourcesOf(program, graph, node)     the accesses of one node, each with the node of the same
  * graph whose value names the resource. An OPER: its operator's declaration, or the conservative
- * reading. A FUNC, a LOOP, a CALL whose callee is known: what the graphs it runs do to resources
+ * reading; one whose declaration names a function operand
+ * (`sem::ResourceSpec::functionOperand`) has the clause of the function value that arrives there,
+ * read where a call through a value reads it. A FUNC, a LOOP, a CALL whose callee is known: what
+ * the graphs it runs do to resources
  * they receive (their footprint), mapped onto the node's inputs; a CALL through an unknown value:
  * conservative. Other nodes touch nothing. footprintOf(program, graph)           what running a
  * graph once does to resources it does not make itself: through its ports, its captures, ambient
