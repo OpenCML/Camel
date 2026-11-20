@@ -190,6 +190,14 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 /// shape, and a `shape(da)` node would be a value derived from a tangent, which the cut cannot place
 /// on either side of itself (`split does not build this function`).
 ///
+/// The sum joining the two terms is `add_stated`, with the lists `shape(matmul(a, b))` twice. Its two
+/// operands are **products**, so the shape it needs is the product's and not the broadcast of `a` and
+/// `b` -- `[2, 3]` with `[3, 4]` answers a `[2, 4]` product and a `[2, 3, 4]` broadcast -- and the
+/// product's extents are a value of the primal, computed here from `a` and `b`. Writing the product's
+/// own call again for its shape is what makes that list a value of the half that has one; a
+/// `shape(matmul_stated(da, b, ..))` would be the tangent-derived node the paragraph above refuses.
+/// The two product nodes are the same pure call and the optimizer merges them.
+///
 /// The right side is written **inline** and not as a call to a helper, and that is a condition of the
 /// law being transposable at all: the pullback walks the driven graph and turns each node around, and
 /// a `Call` is a node it can only turn around when the callee is a function it can transpose
@@ -217,7 +225,11 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 /// be written with a helper again; until then, inline is the only shape whose every node has a law.
 export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
     matmul(a, b) => (da: T[...], db: T[...]) =>
-        matmul_stated(da, b, shape(a), shape(b)) + matmul_stated(a, db, shape(a), shape(b))
+        add_stated(
+            matmul_stated(da, b, shape(a), shape(b)),
+            matmul_stated(a, db, shape(a), shape(b)),
+            shape(matmul(a, b)),
+            shape(matmul(a, b)))
 }
 
 // ---- the forward rules of the reductions and the layout ----
@@ -443,18 +455,18 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// difference is the difference of the tangents -- and the two shapes may differ, which is the same
 /// broadcast the operator itself does to the value.
 ///
-/// The tangent is the difference of the tangents and nothing else: the reverse law
-/// (`stdlib/rulesets/transpose.cml#subtract_t`) reduces each cotangent to the shape of the operand
-/// it answers for, read from the extents that operand's type states. A pair of operands whose
-/// declarations state none -- the open-rank tangents this rule itself hands on -- has no shape to
-/// reduce by, and that step stops by name rather than answering the cotangent unchanged.
+/// The tangent is `subtract_stated` with the two operands' shapes beside it, for the reason
+/// `jvp_add_tensor` states: the reverse side's operands are tangents, their types state no extents,
+/// and `stdlib/rulesets/transpose.cml#subtract_stated_t` reads the two lists the forward half
+/// computed where both operands were values. A plain `dx - dw` would hand the reverse leg nothing to
+/// reduce by.
 ///
 /// The operands are both `T[...]`. The other shape `tensor:subtract` is called with -- an array minus
 /// a number, `(T[...], T)` -- cannot be spelled here: a union in a parameter list is a syntax error
 /// (`Expected ',' or ')' before '|'`), so one key cannot hold both shapes with one rule, and this
 /// rule is the array-to-array one, which is the shape a layer norm writes.
 export rule jvp_subtract::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    subtract(x, w) => (dx: T[...], dw: T[...]) => dx - dw
+    subtract(x, w) => (dx: T[...], dw: T[...]) => subtract_stated(dx, dw, shape(x), shape(w))
 }
 
 // ---- the forward rule of the array product ----
@@ -484,9 +496,23 @@ func mul_tensor::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// Both terms state the **primal** operands' shapes, `shape(x)` and `shape(w)`, and not the tangent's:
 /// a tangent has its value's shape, and a `shape(dx)` node would be a value derived from a tangent --
 /// which the cut cannot put on either side of itself (`split does not build this function`). `shape(x)` is the same list and it is a value of the half that has one.
+///
+/// The sum joining the two products is `add_stated` and not `+`: the reverse side's operands are
+/// tangents, whose types state no extents, so the sum has to state them. Both lists are
+/// `shape(x * w)` -- the **product's** extents, which is what both terms already have -- and not
+/// `shape(x)` / `shape(w)`: a stated list describes the operand beside it, so handing the narrower
+/// primal lists would tell the kernel that the second term is `w`-shaped when it is the product's,
+/// and `x = [1, 2, 3]` with `w = [2]` answered `[18.0]` where `d/dw` is `[6.0]` (measured on the
+/// broadcast product's own case). `x * w` depends on the primal operands alone, so the list is a
+/// value of the half that has one, and the node it writes is the product the program already
+/// computed -- the same pure call, which the optimizer merges.
 export rule jvp_mul_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     mul_tensor(x, w) => (dx: T[...], dw: T[...]) =>
-        mul_stated(dx, w, shape(x), shape(w)) + mul_stated(x, dw, shape(x), shape(w))
+        add_stated(
+            mul_stated(dx, w, shape(x), shape(w)),
+            mul_stated(x, dw, shape(x), shape(w)),
+            shape(x * w),
+            shape(x * w))
 }
 
 // ---- the forward rules of `softmax` and `log_softmax` ----
@@ -758,10 +784,16 @@ export rule jvp_rsqrt::<T>(x: T[...]) when is_float::<T>() {
 /// the mask is 1, the tangent is `dx`, and the cotangents of the two legs are `ct` for `x` and `0`
 /// for `w`. `1.0 - mask` is written rather than a second `where` so the two masks cannot be read as
 /// two different comparisons; both depend on the operands alone, so both are carried, and the
-/// linear half is two `mul_tensor` and one `add`.
+/// linear half is two `mul_tensor` and one `add_stated` -- the sum of two masked tangents states
+/// `shape(maximum(x, w))`, which is what both terms already have (`jvp_mul_tensor` above records why
+/// the terms' shape and not the two primal lists are the answer).
 export rule jvp_maximum::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     maximum(x, w) => (dx: T[...], dw: T[...]) =>
-        (where(x >= w, 1.0, 0.0) * dx + (1.0 - where(x >= w, 1.0, 0.0)) * dw)
+        add_stated(
+            where(x >= w, 1.0, 0.0) * dx,
+            (1.0 - where(x >= w, 1.0, 0.0)) * dw,
+            shape(maximum(x, w)),
+            shape(maximum(x, w)))
 }
 
 /// `d(minimum(x, w)) = mask * dx + (1 - mask) * dw` with `mask = where(x <= w, 1.0, 0.0)`: the
@@ -769,7 +801,11 @@ export rule jvp_maximum::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 /// left operand again (`tensor:le`, the engine's choice).
 export rule jvp_minimum::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     minimum(x, w) => (dx: T[...], dw: T[...]) =>
-        (where(x <= w, 1.0, 0.0) * dx + (1.0 - where(x <= w, 1.0, 0.0)) * dw)
+        add_stated(
+            where(x <= w, 1.0, 0.0) * dx,
+            (1.0 - where(x <= w, 1.0, 0.0)) * dw,
+            shape(minimum(x, w)),
+            shape(minimum(x, w)))
 }
 
 /// `x / w` on two arrays: what `tensor:divide` is, and the name its rule is filed under -- the same
@@ -1223,9 +1259,17 @@ export rule jvp_min::<T>(xs: T[...]) when is_float::<T>() {
 /// step is refused where the law's parameters meet the node rather than answered wrongly. What the
 /// bias's own cotangent is (`ct`, spread over the bias) is the addition's law's answer and not a
 /// product's, which is the second reason this one waits.
+/// The sum joining the two terms is `add_stated` with `shape(linear(x, w))` twice, for the reason
+/// `jvp_matmul` states: both terms are product results, so the extents the sum states are the
+/// **product's**, not the broadcast of `x` and `w`, and the product's extents are a value of the
+/// primal, computed here from `x` and `w`.
 export rule jvp_linear::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     linear(x, w) => (dx: T[...], dw: T[...]) =>
-        matmul_stated(dx, w, shape(x), shape(w)) + matmul_stated(x, dw, shape(x), shape(w))
+        add_stated(
+            matmul_stated(dx, w, shape(x), shape(w)),
+            matmul_stated(x, dw, shape(x), shape(w)),
+            shape(linear(x, w)),
+            shape(linear(x, w)))
 }
 
 // ---- the forward rules of the operators the transpose half spells ----
@@ -1278,9 +1322,20 @@ export rule jvp_take_stated::<T>(t: T[...], indices: int[], extents: int[]) {
 
 /// `d(x * w) = dx * w + x * dw`, each term's shapes stated: the product rule `jvp_mul_tensor`
 /// writes, for the spelling that carries the two extent lists as operands.
+///
+/// The sum joining the two terms is `add_stated` and not `+`, for the reason `jvp_mul_tensor` states
+/// one operator down: the reverse side's operands are tangents, their types state no extents, so the
+/// sum's shape has to travel as an operand. The list is `shape(mul_stated(x, w, ax, aw))` and not the
+/// call's own `ax` / `aw`: those are the **operands'** extents, and the two terms are already at the
+/// product's, so handing them would state a narrower shape for a term that is the product's and
+/// broadcast it wrongly.
 export rule jvp_mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) when is_float::<T>() {
     mul_stated(x, w, ax, aw) => (dx: T[...], dw: T[...]) =>
-        mul_stated(dx, w, ax, aw) + mul_stated(x, dw, ax, aw)
+        add_stated(
+            mul_stated(dx, w, ax, aw),
+            mul_stated(x, dw, ax, aw),
+            shape(mul_stated(x, w, ax, aw)),
+            shape(mul_stated(x, w, ax, aw)))
 }
 
 /// `d(add_stated(x, w, ax, aw)) = add_stated(dx, dw, ax, aw)`: the sum's tangent is the sum of the
@@ -1301,10 +1356,17 @@ export rule jvp_subtract_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[])
     subtract_stated(x, w, ax, aw) => (dx: T[...], dw: T[...]) => subtract_stated(dx, dw, ax, aw)
 }
 
-/// `d(a · b) = da · b + a · db`, with the two extent lists the call carries.
+/// `d(a · b) = da · b + a · db`, with the two extent lists the call carries. The sum is
+/// `add_stated` for the reason `jvp_maximum` states: its two terms are both product results, so the
+/// lists it states are the **product's** extents -- a value of the primal, computed from `a` and `b`
+/// and never from the tangents the reverse side reads.
 export rule jvp_matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]) when is_float::<T>() {
     matmul_stated(a, b, sa, sb) => (da: T[...], db: T[...]) =>
-        matmul_stated(da, b, sa, sb) + matmul_stated(a, db, sa, sb)
+        add_stated(
+            matmul_stated(da, b, sa, sb),
+            matmul_stated(a, db, sa, sb),
+            shape(matmul(a, b)),
+            shape(matmul(a, b)))
 }
 
 /// `d(max<axis, keepdims>(t, extents)) = max<axis, keepdims>(dt, extents)` where the lane's largest
@@ -1329,15 +1391,15 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x + w
 }
 
-/// `d(x + w) = dx + dw`: a sum passes both tangents through, and the tangent is the sum of the
-/// tangents -- the forward reading of the backward law's reduction.
-///
-/// The sum is the plain one and not a stated spelling, for the reason `jvp_subtract` above states:
-/// the reverse law (`stdlib/rulesets/transpose.cml#add_tensor_t`) reduces each cotangent to the
-/// shape of the operand it answers for, read from the extents that operand's type states, and a
-/// pair that states none stops the step by name.
+/// `d(x + w) = dx + dw`. The tangent is `add_stated` with the two operands' shapes beside it, so the
+/// extents travel as **values** of the primal the cut carries: on the reverse side the sum's operands
+/// are tangents, `float[...]`, which state no extents, and
+/// `stdlib/rulesets/transpose.cml#add_stated_t` reads the two lists and nothing of the position it
+/// answers. That is the only form a forward rule hands an array sum -- a tangent's shape is not in
+/// its type, so a rule that wrote the plain `+` would leave the reverse leg with nothing to reduce
+/// by.
 export rule jvp_add_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    add(x, w) => (dx: T[...], dw: T[...]) => dx + dw
+    add(x, w) => (dx: T[...], dw: T[...]) => add_stated(dx, dw, shape(x), shape(w))
 }
 
 /// `log(x)`: what `math:log_d` means, and the left side `log_d_t` files in the backward half. The

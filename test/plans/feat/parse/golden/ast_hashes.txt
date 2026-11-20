@@ -557,10 +557,10 @@ b0da3dbb545728a6 ok stdlib/tiles.cml
 b2579aff6f390432 ok stdlib/tree.cml
 f998300d401777db ok stdlib/types.cml
 095693f2d829fcda ok stdlib/vjp.cml
-75b4c5ff5672d671 ok stdlib/rulesets/jvp.cml
+a7d40dd69da5be21 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-ba29caddff8b6ee6 ok stdlib/rulesets/transpose.cml
+d6edc9554936a027 ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f08b2a93a3c13b34 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
