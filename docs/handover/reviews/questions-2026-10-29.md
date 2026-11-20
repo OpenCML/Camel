@@ -6644,3 +6644,9 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 决策者。两页都按默认 A 开工：先量再定。
 - `whether-jvp-and-vjp-build-two-graphs-of-one-function`：先把两张图的边集合各打一遍、逐边对；对出差异再带读数来裁 B（同一个 `f` 只造一张）。原则上同一个函数的同一变换只应有一份图（第二份真相），所以 B 是方向，A 是它的前提。
 - `whether-the-second-with-parameter-is-the-operand-the-cut-drops`：最小用例先分离（两个 `with` 参数、体内都读），分清是第二个 `with` 参数被割掉还是切线端口那面墙的下游，再钉期望。
+
+## 答 21:29 两页（2026-11-20 21:45）
+
+决策者。
+- `what-a-lifted-graph-s-second-segment-means-in-the-next-cut`：**默认成立**。`Lift<A>` 入口的第 2 段按类型就是 `Tangent<A>`；`split` 把读它的节点放进切向半，不把切向实参拉进值半复制。按默认开工。
+- `the-tangent-argument-record-is-not-written-by-the-transform` 与 0994a28dd：**返工一处**。"第 i 个实参是切向"是被调方提升后的类型已经说了的事（`liftedShapeOf` 的读法），在调用节点上另记一份 `tangentArgs`，又在记录缺席时回落到"签名前一半"的算术，是同一事实的两份真相加一条静默回落。改为：`split` 从被调方的类型读切向位置（与 `lift.h` 同一个读者）；类型读不出时**按名字拒绝**，不回落算术。`tangentArgs` 这个字段若此后无人写、无人读，随之删除（核心不留空字段）。
