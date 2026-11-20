@@ -557,7 +557,7 @@ b0da3dbb545728a6 ok stdlib/tiles.cml
 b2579aff6f390432 ok stdlib/tree.cml
 f998300d401777db ok stdlib/types.cml
 095693f2d829fcda ok stdlib/vjp.cml
-a7d40dd69da5be21 ok stdlib/rulesets/jvp.cml
+f1104eecff923a27 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
 d6edc9554936a027 ok stdlib/rulesets/transpose.cml
@@ -1897,7 +1897,7 @@ c83e5809e618425c ok test/cases/compile/tags/rule_binding_argument.cml
 b48c1957e8778eb4 ok test/cases/compile/transforms/divide_gradient_both_legs.cml
 feb8f22b929f2572 ok test/cases/compile/transforms/erf_gradient_both_legs.cml
 189d7bd5941e4f92 ok test/cases/compile/transforms/erfc_gradient_both_legs.cml
-eeee8bb0e19180c3 ok test/cases/compile/transforms/exp_gradient_of_a_stated_shape.cml
+827b9ae1d0aee87b ok test/cases/compile/transforms/exp_gradient_of_a_stated_shape.cml
 148757570828d977 ok test/cases/compile/transforms/exp_gradient_through_the_engine.cml
 6b9e12657fded9d9 ok test/cases/compile/transforms/exp_gradient_through_the_library.cml
 4896c42ac2f6be11 ok test/cases/compile/transforms/extent_of_a_name_is_a_value_everywhere.cml
@@ -1984,14 +1984,14 @@ e6549fc9f051841a ok test/cases/compile/transforms/min_gradient_both_legs.cml
 6ec8ef0a349601c3 ok test/cases/compile/transforms/pow_gradient_through_the_engine.cml
 06dc0c4f3d2f2a6a ok test/cases/compile/transforms/pow_gradient_through_the_library.cml
 46cbaa361891fdfa ok test/cases/compile/transforms/reinterp_scalar.cml
-53376b6fde566b20 ok test/cases/compile/transforms/relu_gradient_of_a_stated_shape.cml
+effb6fa7ef193590 ok test/cases/compile/transforms/relu_gradient_of_a_stated_shape.cml
 81ea3144ee3dce68 ok test/cases/compile/transforms/relu_gradient_through_the_engine.cml
-d2a162ec73e72b3d ok test/cases/compile/transforms/relu_gradient_through_the_library.cml
+56160b4f7c4a26f7 ok test/cases/compile/transforms/relu_gradient_through_the_library.cml
 cfbafc4c297df779 ok test/cases/compile/transforms/remat_capture_is_a_constant.cml
 8ea0981064fb91f5 ok test/cases/compile/transforms/rsqrt_gradient_both_legs.cml
 43a1748ec1c21243 ok test/cases/compile/transforms/rules_angle_args_reshape_shape.cml
 eb65396fce5dc861 ok test/cases/compile/transforms/rulesets_probe_missing.cml
-513ebd0879293a89 ok test/cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml
+5dd15c2dbe91fc37 ok test/cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml
 4c7f84611a327ae6 ok test/cases/compile/transforms/sigmoid_gradient_through_the_engine.cml
 ecd10a9c0435db5d ok test/cases/compile/transforms/sigmoid_gradient_through_the_library.cml
 6a3a886741ed384e ok test/cases/compile/transforms/softmax_axis_after_layout.cml
@@ -2026,7 +2026,7 @@ cfbc875da509361e ok test/cases/compile/transforms/stop_gradient_gradient_through
 f8927e15a2107240 ok test/cases/compile/transforms/sum_axis_in_a_training_step.cml
 8cebcf24eeb63ca6 ok test/cases/compile/transforms/sum_axis_lane_derivative.cml
 8c7d270ef738e07e ok test/cases/compile/transforms/tangent_of_a_pack_keeps_every_parameter.cml
-c75538ac14b806b0 ok test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
+cd730ef1665725c0 ok test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
 edc0091c0e7595bc ok test/cases/compile/transforms/tanh_gradient_through_the_engine.cml
 9a260be256b4eff3 ok test/cases/compile/transforms/tanh_gradient_through_the_library.cml
 e8d58cf22c9e78cb ok test/cases/compile/transforms/transformer_step_gradient.cml

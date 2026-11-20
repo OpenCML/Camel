@@ -1,8 +1,9 @@
 // `tanh`'s gradient through the library, with the shape written into the type.
 //
-// The open-rank twin is `tanh_gradient_through_the_library.cml`, still refusing for the same reason as
-// its neighbours: `mul_tensor_t`'s `sum_to` reads the tangent's own shape and `float[...]` states none
-// (author, 2026-11-03 16:15). With `float[2]` stated, `shapeCarrierOf` answers and so does the walk.
+// The open-rank twin is `tanh_gradient_through_the_library.cml`, and both answer for the same reason
+// its neighbours do: a tangent's type states no extents, so the open-rank law states them beside the
+// product (`mul_stated`), and with `float[2]` stated `shapeCarrierOf` answers a law that asks for a
+// carrier. This case keeps the second reading alive.
 //
 // Hand first, on points where the slope is neither flat nor near its maximum, so the three candidate
 // laws separate: `tanh`'s slope is `1 - tanh^2(x)`,
