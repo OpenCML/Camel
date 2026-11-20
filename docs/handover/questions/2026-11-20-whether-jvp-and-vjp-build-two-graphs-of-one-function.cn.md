@@ -1,8 +1,8 @@
 # `jvp` 与 `vjp` 对同一个 `f` 各造一张图 —— 两张图的边集合是不是不一致？
 
-**状态**：开放，**按内部错误处理，不记 `known_fail`**。2026-11-20 在 `fix/compositions-repin` 上量到，
-`4d7e1e9be`（基线）与 `2f90e9f03`（重钉之后）同句，`compositions.jvp_vjp_f` 的 nvm 与 fvm 两条逐字
-相同，只差句子里的 pass 名。
+**状态**：**问句已量完（§6），造图那一半修在 `991ee512c`；用例仍红，停在 §7 的另一堵墙，不记 `known_fail`。**
+2026-11-20 在 `fix/compositions-repin` 上量到，`4d7e1e9be`（基线）与 `2f90e9f03`（重钉之后）同句，
+`compositions.jvp_vjp_f` 的 nvm 与 fvm 两条逐字相同，只差句子里的 pass 名。
 
 ## 1. 当前读数（逐字）
 
@@ -59,3 +59,44 @@ exit 1，`stdout` 是这一句，`stderr` 为空。
 条目里现在钉的 `jvp has no forward transform for this function` 是**过时**的（它标的是提升从未
 发生，而现在的读数说提升发生了、并且造出了一张违反边不变量的图）—— 但**过时不等于可以换成这一句
 内部错误**：把「可能崩」写成期望，就是本条最不该做的事。
+
+## 6. 2026-11-21 读数：不是两张图不一致，是 `jvp` 把一次**调用**写成了**函数值**
+
+本页 §4 的路 A（把两张图的边集合各打一遍）**不需要了**：那条违例句自己已经点名了节点、被调者与两个
+类型（§3 就是这句话的读法），A 只会把同一件事打得更长。顺着 §3 进 `modules/transforms/jvp.cpp` 的 walk
+就能读到原因：它判「这个 `Func` 节点是**调用**还是**函数值**」用的是**节点结果类型的种类**（是
+`Function` 就当函数值）。而 `vjp(f)` 的答案正是一个函数（`Vjp<F>`），于是这次**调用**被当成**函数值**走：
+
+1. 它的实参一根都没接 —— `if (!isValue)` 把 `setNormInputs` / `setWithInputs` 挡在外面；
+2. 节点类型被写成 `jvpSignature(callee->funcType())`，即**被调者自己的提升签名**，而它本该是**被调者交出
+   的答案**的提升 —— 逐字正是 §1 里并排的那两个类型（`(f32, f32) => …` 与 `((x: f32) => f32 pure, ()) => …`）。
+
+⇒ 根因是**判据**，不是「`jvp` 与 `vjp` 各自造了一遍」。修在 `991ee512c`（`fix/jvp-vjp-f-invariant`），三处、
+一个法则（`Lift<A => B> = Lift<A> => Lift<B>`，`modules/transforms/lift.h`）：
+
+- `isFunctionValueNode`：问**被调者自己的函数类型**，不问答案的种类 —— 答案是个函数的调用仍然是调用；
+- `Func` 节点的答案一律按 `liftedShapeOf` 提升，函数答案 ⇒ 提升后的闭包（`valueOf`），不是一对；
+- 调用穿过去的那个值是**被调者的提升自身**，由唯一一处把法则拼成节点的地方交出（`liftedValueOf`）：值被
+  原样携带时是 `jvp(v)`，walk 已经写过提升时就是那个值本身（`jvp` 的提升再提升一次就是提升的提升）；
+  那个节点的类型写**答案**（`Lift<F>`），不写算子签名 —— 图的出口交出闭包时同理，交的是提升自身。
+
+## 7. 修后它停在哪（逐字）
+
+边不变量不再被破、出口不再交出错类型的值；`jvp_vjp_f` 停在**再后面一堵墙**：`transpose` 在提升后的反向图
+上拒。runner 把 `stdout` 截在两百字符左右，这句的格式串在 `modules/transforms/transpose_operator.cpp` 的
+`TransposeRefusalCause::CallValueMissing` 一支：
+
+```
+(jvp_of___g_362__):?:?: [Error]: An error has occurred: transforms: transpose has no transpose for this
+function: the callee's transpose was built, but the parameter at position 3 reads a value this call does
+not carry. The runtime has no d…
+TRANSPOSE function=jvp_of_split_of_jvp_of_sq_backward skip=call-value-missing param=2 node=4 arg=0
+```
+
+⇒ 这就是 `2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform` 的 §七那件：`split` 复制
+一个提升调用时照抄四个实参，而不是把它还原成原调用（`v0, v1`）。那一页 §五写明它要与 `split` 的判据**一次
+落地**，所以**不在本车道**；而本页问的那件事（两张图的边集合是不是不一致）已经有答案了。
+
+**默认**：这条用例保持红、**不记 `known_fail`**（内部错误已经不存在，但把一句拒绝钉成期望仍然是给缺陷发
+豁免），`known_fail_msg` 一个字不动。修前修后 `test/plans/feat/transforms` 全目录**逐条相同**
+（71 条，pass 44 / fail 17 / known 10），`compositions` 的 pass 6 / known 6 也不动。
