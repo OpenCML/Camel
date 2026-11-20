@@ -35,7 +35,27 @@
 也就是说：规则语言里有没有（或该不该有）这样一个分支，让一条法则**按 extents 是否可读**走两条路，
 而不是「读不出就拒」。
 
-## 默认建议（写死；按它开工）
+## 已答（2026-11-20 23:09，`origin/fsh-dev = 1351b3089`，逐字）
+
+> **「Answer: no (ct, ct) fallback; jvp always hands shapes as values; one transpose law per operator」**
+
+**⇒ 三句各自排掉/指定一条路：**
+
+| 句 | 意思 |
+| --- | --- |
+| **no `(ct, ct)` fallback** | 兜底禁止（原文本来就禁） |
+| **`jvp` always hands shapes as values** | **形状拿得到 —— 问题是 `jvp` 没把它当值交出去** |
+| **one transpose law per operator** | 一个算子一条法则，不是三支 |
+
+**⇒ 所以下面那份「默认建议」是**错的**，错法很具体：**它把问题放错了层** ——
+我以为缺的是**语言能力**（在法则语言里加一个 extents 可读性分支），
+实际缺的是**生产者没交信息**（`jvp` 把形状当值交出去，extents 就读得出了）。
+**保留原文在下面，是为了让下一个人看见这个错是怎么犯的；不要照它做。**
+
+**⇒ 而这与另一条墙同形：`split` 那条也是「`jvp` 没写 `tangentArgs`」，两条都在 `transpose` 那侧暴露。
+⇒ **「墙在 `transpose`」这个读法本身是错的 —— 墙在 `jvp` 与 `transpose` 的接口上。**
+
+## 默认建议（**已被上面的答案否掉，留作记录，不要照做**）
 
 **「能」。** 三条理由：
 
