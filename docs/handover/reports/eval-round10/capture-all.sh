@@ -277,16 +277,29 @@ print("#   %-12s cmake %s" % ("", json.dumps(opt.get("cmake", {}), sort_keys=Tru
 print("#   %-12s env   %s" % ("", json.dumps(opt.get("env", {}), sort_keys=True)))
 PY
 echo "#   version    $("$CAMEL" --version 2>&1)"
-# The binary carries the sha of the sources it was linked from, inside its footprint; the reading
-# is only reproducible if this tree is those sources, so the difference is printed.
-FPSHA=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["footprint"].split("_")[-1])' "$CAMEL_HOME/build-info.json" 2>/dev/null)
+# The reading is only reproducible if this tree is the sources the binary was linked from, so the
+# difference between those sources and HEAD is printed. The sha to compare against is `revision`,
+# which the build writes as the tree it actually linked; it is NOT the sha inside the footprint name
+# (`YYMMDD_HHMMSS_<sha>`), because that name is stamped once per fingerprint and keeps the sha of the
+# build that first produced it. Comparing against the name's sha made the list below name files that
+# ARE in the binary -- on 2026-11-20 it listed twelve of them, including the case-study program, and
+# a reader could not tell an input the binary lacks from one it contains.
+FPSHA=$(python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+rev = d.get("revision") or d["footprint"].split("_")[-1]
+print(rev[:9])' "$CAMEL_HOME/build-info.json" 2>/dev/null)
 if [ -n "$FPSHA" ]; then
     CHANGED=$(git -C "$ROOT" diff --name-only "$FPSHA" HEAD 2>/dev/null)
     if [ -z "$CHANGED" ]; then
         echo "#   linked at  $FPSHA, and this tree is exactly those sources"
     else
-        echo "#   linked at  $FPSHA; the files this tree has on top of it (the binary does not include"
-        echo "#             them, so no reading below depends on them):"
+        echo "#   linked at  $FPSHA; this tree has files the binary was not built from:"
+        echo "#             What each one costs a reading differs, and the line below used to say 'no"
+        echo "#             reading depends on them', which held only while the list was the script."
+        echo "#             A file this script RUNS -- itself, a probe -- cannot change what a reading"
+        echo "#             measures: the reading is a command in this file. A file a reading READS -- a"
+        echo "#             program, a variant, the transformer's corpus -- does change it, and a run whose"
+        echo "#             list has one is a run of that program by a binary whose sources are these:"
         printf '%s\n' "$CHANGED" | sed 's/^/#               /'
     fi
 fi
