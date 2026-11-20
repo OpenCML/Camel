@@ -557,7 +557,7 @@ db7b15c1d26c2d3d ok stdlib/std.cml
 b2579aff6f390432 ok stdlib/tree.cml
 150190786e12d366 ok stdlib/types.cml
 70d6933dcc326f71 ok stdlib/vjp.cml
-3c09a0494de711d5 ok stdlib/rulesets/jvp.cml
+9538cc49354c8630 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
 16c6d5fd430af982 ok stdlib/rulesets/transpose.cml
@@ -1956,7 +1956,8 @@ af4075fd424ca648 ok test/cases/compile/transforms/jvp_rule_at_the_operand_type.c
 d227bd95f5eb3e45 ok test/cases/compile/transforms/library_grad_of_a_with_weight.cml
 aa0ddbdbc7c7861a ok test/cases/compile/transforms/linear_gradient_both_legs.cml
 5198016da6cf221c ok test/cases/compile/transforms/log_gradient_both_legs.cml
-a1a9f98e8839c1a7 ok test/cases/compile/transforms/log_softmax_gradient_stops_at_split.cml
+3f253772aa2885f0 ok test/cases/compile/transforms/log_softmax_axis_jvp.cml
+095104dab64336f3 ok test/cases/compile/transforms/log_softmax_gradient_stops_at_split.cml
 dde3e598ab2c6207 ok test/cases/compile/transforms/log_softmax_gradient_through_the_engine.cml
 b76c09e777995793 ok test/cases/compile/transforms/matmul_transpose_law.cml
 b84135c5a41ea5a7 ok test/cases/compile/transforms/matmul_transpose_rank_three.cml
@@ -1989,8 +1990,11 @@ eb65396fce5dc861 ok test/cases/compile/transforms/rulesets_probe_missing.cml
 513ebd0879293a89 ok test/cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml
 4c7f84611a327ae6 ok test/cases/compile/transforms/sigmoid_gradient_through_the_engine.cml
 ecd10a9c0435db5d ok test/cases/compile/transforms/sigmoid_gradient_through_the_library.cml
-51522d4ecb9201c7 ok test/cases/compile/transforms/softmax_gradient_stops_at_split.cml
+6a3a886741ed384e ok test/cases/compile/transforms/softmax_axis_after_layout.cml
+fcdced31ffae54cc ok test/cases/compile/transforms/softmax_axis_jvp.cml
+9434fd5499df3e29 ok test/cases/compile/transforms/softmax_gradient_stops_at_split.cml
 07386475617c8ada ok test/cases/compile/transforms/softmax_gradient_through_the_engine.cml
+ff815710a9c3cf61 ok test/cases/compile/transforms/softmax_without_its_axis.cml
 5f52915d080fb493 ok test/cases/compile/transforms/split_identity_pipeline.cml
 463acc0b99b19977 ok test/cases/compile/transforms/split_of_a_call_through_a_value.cml
 8b5c6ccabc0d8284 ok test/cases/compile/transforms/split_residuals_destructured.cml

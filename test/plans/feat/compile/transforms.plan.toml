@@ -2298,15 +2298,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
+desc = "The same function through the library's `vjp`: the forward half is built with its laws named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`), the cut builds the function (`REINTERP split function=jvp_of_total forward=406 backward=407 residuals=5`), and the transposed walk then refuses at the tangent the `softmax` law writes -- `TRANSPOSE function=rulesets.jvp::softmax_jvp<float> skip=parameter-shape uri=tensor:multiply` and `skip=call-no-transpose callee=rulesets.jvp::softmax_jvp<float>`, with stdout `transpose has no transpose for this function`. Pinned as the readings and not as an exit code, so the day the walk is answered this entry goes red and names what replaced it. **The refusal moved one layer down on 2026-11-20 and the pinned sentences moved with it**: this entry used to pin the cut refusing instead (`skip=backward construct=a node whose input was not copied`, `split does not build this function`), because the tangent was written inline and needed `y = softmax<1>(x)` -- a call carrying its axis as a context input the forward half's exit did not reach. `stdlib/rulesets/jvp.cml#jvp_softmax` reads its axis from the node now, so the tangent is one call whose inputs the cut does carry, and the refusal is the later wall rather than a relaxed expectation: the program still exits 1. That wall is the transpose half's own -- `stdlib/rulesets/transpose.cml#mul_tensor_t` needs the shape of the operand it answers for, and the callee would need a transpose of its own -- and `softmax` has no transpose rule at all, so this is not the last layer either."
 kind = "negative"
 case = "../../../cases/compile/transforms/softmax_gradient_stops_at_split.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["split does not build this function"]
-expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_softmax,jvp_mul_tensor,jvp_sum"]
-expect_output_not_contains = ["TRANSPOSE function="]
+expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own"]
+expect_stderr_contains = ["rules=jvp_softmax,jvp_mul_tensor,jvp_sum", "skip=parameter-shape uri=tensor:multiply", "skip=call-no-transpose", "callee=rulesets.jvp::softmax_jvp<float>"]
+expect_output_not_contains = ["split does not build this function", "a node whose input was not copied"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -2554,15 +2554,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "log_softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`: the forward half is built with the new rule named (`rules=jvp_log_softmax,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, with no `TRANSPOSE` line at all. This is the wall's third boundary: `softmax` refuses a context argument on a forward recomputation, while here the refused call (`sum<0, true>`) recomputes nothing -- its value is a backward-half number and only its `<>` arguments are constants. Pinned as readings, so the day the cut inlines the argument this entry goes red and names what replaced it; the default and its cost are in `docs/handover/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`."
+desc = "The same function through the library's `vjp`, on the smallest graph that can show it (one `log_softmax<0>` and one `sum`): the forward half is built with the laws named (`rules=jvp_log_softmax,jvp_sum`), the cut builds the function (`REINTERP split function=jvp_of_total forward=395 backward=396 residuals=3`), and the transposed walk then refuses at the tangent the law writes -- `TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:multiply` and `skip=call-no-transpose callee=rulesets.jvp::log_softmax_jvp<float>`, with stdout `transpose has no transpose for this function`. Pinned as readings and not as an exit code, so the day the walk is answered this entry goes red and names what replaced it. **The refusal moved one layer down on 2026-11-20 and the pinned sentences moved with it**: this entry used to pin the cut refusing (`skip=backward construct=a node whose input was not copied`, `split does not build this function`), and it recorded the wall's third boundary -- a refusal on a call that recomputed nothing, since `exp(y)` was a recomputation the cut already passes and only the inlined `sum<0, true>`'s axis was out of reach (`docs/handover/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`). That boundary is gone because the law stopped writing the call inline: `stdlib/rulesets/jvp.cml#jvp_log_softmax` reads its axis from the node and hands it to `log_softmax_jvp` as an ordinary value, whose inputs the cut does carry. Nothing was relaxed to get here -- the program still exits 1, and the new sentence is the later wall: `stdlib/rulesets/transpose.cml#mul_tensor_t` needs the shape of the operand it answers for, the callee would need a transpose of its own, and `stdlib/rulesets/transpose.cml#log_softmax_t` still states `<0>` only."
 kind = "negative"
 case = "../../../cases/compile/transforms/log_softmax_gradient_stops_at_split.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["split does not build this function"]
-expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_log_softmax,jvp_sum"]
-expect_output_not_contains = ["TRANSPOSE function="]
+expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own"]
+expect_stderr_contains = ["rules=jvp_log_softmax,jvp_sum", "skip=parameter-shape uri=tensor:multiply", "skip=call-no-transpose", "callee=rulesets.jvp::log_softmax_jvp<float>"]
+expect_output_not_contains = ["split does not build this function", "a node whose input was not copied"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

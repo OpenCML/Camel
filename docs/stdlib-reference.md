@@ -7796,6 +7796,35 @@ is handed to a function that writes the reshape, which is the arrangement `rules
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])` gives `[[1.0, 2.0], [3.0, 4.0]]`
 
+### The forward rules of `softmax` and `log_softmax`
+
+Two laws and the two tangents they write, indexed by the axis the call names.
+
+#### `softmax_jvp`
+
+```camel
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+```
+
+The tangent the rule above writes, with the axis handed over as an ordinary value: the softmax
+itself (`y`), the tangent's own sum over the axis, and the subtraction element by element. Written
+as one function and not in the rule's right side for the reason `reshape_jvp` gives.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.25, -0.25]`
+
+#### `log_softmax_jvp`
+
+```camel
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+```
+
+The tangent the rule above writes: `exp` of the recomputed `log_softmax` (`p`), the tangent's sum
+over the axis, and the product subtracted from the tangent element by element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `log_softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.5, -0.5]`
+
 ### The forward rule of `^` (a power)
 
 #### `pow_tangent`

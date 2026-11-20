@@ -1,26 +1,32 @@
-// The library's `log_softmax` gradient stops **before** the transposition, at the same sentence that
-// stops `softmax` -- and with one difference that matters: here the call the backward half reproduces
-// does not read a recomputed forward value at all in the part that is refused.
+// The library's `log_softmax` gradient stops **after** the split, on the transposition's walk, at the
+// same layer `softmax`'s does -- and it is the case that says so with the smallest possible graph: one
+// `log_softmax<0>` and one `sum`, so the only thing between the forward half and the walk is the
+// tangent the law writes.
 //
-// The forward half is built, with the new rule named:
+// The forward half is built, with the laws named:
 //
-//     REINTERP jvp function=total graph=325 ... rules=jvp_log_softmax,jvp_sum
+//     REINTERP jvp function=total graph=362 ... rules=jvp_log_softmax,jvp_sum
 //
-// and then the cut refuses, before any `TRANSPOSE` line exists:
+// the cut builds the function (`REINTERP split function=jvp_of_total forward=395 backward=396
+// residuals=3`), and then the transposed walk refuses at the tangent the law writes:
 //
-//     REINTERP split function=jvp_of_total skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit
+//     TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:multiply node=7 position=1 param=1 param-type=float[...]
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=call-no-transpose node=6 callee=rulesets.jvp::log_softmax_jvp<float>
+//     transforms: transpose has no transpose for this function: this call's callee has no transpose of its own
 //
-// The tangent `jvp_log_softmax` writes is `dx - sum<0, true>(exp(y) * dx)` with `y = log_softmax<0>(x)`.
-// `exp(y)` is an x-only recomputation -- the shape `exp` and `sigmoid` pass the cut with -- so what is
-// left in the refused node is the `sum<0, true>`: a call whose two `<>` arguments (axis `0`, `keepdims`
-// `true`) are constants and whose value is a *backward-half* number. That makes this the wall's third
-// boundary: `softmax` shows a context argument on a forward recomputation, this shows one on a call
-// that recomputes nothing, and both stop with the identical sentence.
+// **Where the refusal used to be.** Until 2026-11-20 this case pinned the cut refusing one layer
+// earlier (`skip=backward construct=a node whose input was not copied`, "split does not build this
+// function"), because the tangent `dx - sum<0, true>(exp(y) * dx)` was written inline and the `sum<0,
+// true>` carried its axis as a context input the forward half's exit did not reach -- with `exp(y)` a
+// recomputation the cut already passes, which is what made this the wall's third boundary. The law
+// reads its axis from the node now and the tangent is one call, `log_softmax_jvp(x, dx, axis)`, so that
+// boundary is gone: the refusal moved **one layer down**, from the cut to the walk, and nothing was
+// relaxed to get here -- the program still exits 1, and the new sentence is the later wall.
 //
-// The question this measures is
-// `docs/handover/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`,
-// whose default is "inline the constant argument in the backward half" -- the measurement there says the
-// axis is a `context` edge onto a `DATA` node, so the argument is a node the cut can copy.
+// That wall is the transpose half's own, two facts at once: `mul_tensor_t` needs the shape of the
+// operand it answers for (design principles 5.4 -- `float[...]` states no extents), and the callee
+// `log_softmax_jvp` would need a transpose of its own (`skip=call-no-transpose`). `log_softmax_t`
+// exists but only at `<0>` (`stdlib/rulesets/transpose.cml`), so the axis is the next thing to move.
 //
 // The number the library will have to reproduce is written out element for element in the neighbouring
 // `log_softmax_gradient_through_the_engine.cml`:
