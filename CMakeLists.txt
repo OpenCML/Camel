@@ -201,6 +201,15 @@ target_compile_options(libcamel_objects PRIVATE
     -Wno-unused-private-field
     -Wno-gnu-label-as-value # for Computed Goto
     -Wno-nan-infinity-disabled
+    # A view over a temporary is silent at run time until an element is read, and the first reader
+    # is often in another function: `split.cpp`'s gate waits were a `std::span` over the vector
+    # `gateWaitsOf` returns by value, and `.empty()` alone answered the right thing out of the
+    # span's own size. Clang reports that as `-Wdangling-gsl` by default, so this build did print
+    # it -- inside 546 other warnings that nothing fails on, which is why the defect stayed quiet.
+    # This one diagnostic is what fails now. Not the `dangling` group: it also holds
+    # `-Wreturn-stack-address`, whose one instance (`src/execute/limits.cpp:74`) returns a stack
+    # address as a `uintptr_t` on purpose, and turning that red would only buy a pragma.
+    -Werror=dangling-gsl
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
     ${CAMEL_TARGET_ARCH_FLAGS} # cmake/Options.cmake: CAMEL_TARGET_ARCH
