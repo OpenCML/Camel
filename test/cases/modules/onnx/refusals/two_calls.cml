@@ -8,8 +8,10 @@ import { export_model } from onnx
 
 func main(): int sync {
     let x = reshape<[2]>([1.0, 2.0])
-    let _ = export_model<out: 'tmp/test/onnx/refusal_a.onnx'>((t: float[...]): float[...] => t * 2.0, x)
+    let a = export_model<out: 'tmp/test/onnx/refusal_a.onnx'>((t: float[...]): float[...] => t * 2.0, x)
     println(1)
-    let _ = export_model<out: 'tmp/test/onnx/refusal_b.onnx'>((t: float[...]): float[...] => t * 3.0, x)
+    let b = export_model<out: 'tmp/test/onnx/refusal_b.onnx'>((t: float[...]): float[...] => t * 3.0, x)
+    match a { case error e => sync { println(e); 0 } case _ => 0 }
+    match b { case error e => sync { println(e); 0 } case _ => 0 }
     return 0
 }
