@@ -134,7 +134,7 @@ case = "../../../cases/transforms/nested/nest_quartic.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_output_contains = ["jvp has no forward transform for this function", "stdlib/vjp.cml:190:25"]
+expect_output_contains = ["jvp has no forward transform for this function", "stdlib/vjp.cml:185:25"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
