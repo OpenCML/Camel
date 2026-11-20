@@ -44,8 +44,17 @@
  * number never moves) and only a match that survives that reading counts. What the check no longer
  * trusts `git grep` for is content -- only for which files are tracked; a match it found is re-checked
  * against the blanked text, and a line whose only occurrence was prose is simply not a member.
- * Measured both ways on 2026-11-15: a comment naming the type in a header that does not otherwise
- * connect to it leaves the check green, and a real declaration in the same header turns it red again.
+ *
+ * **Membership is decided on the role, not on the spelling.** `files` asks which places must be
+ * touched when the type is deleted, and in this tree a helper that *receives* the draft --
+ * `int readersOf(const GraphDraft &draft, ...)`, `[](DraftWritings &, GraphDraft &) {}` -- is one of
+ * them: the parameter's type is what the file holds on to, and deleting the type edits every such
+ * line. So the ledger counts it, and a file does not leave a list because the name was hidden behind
+ * `auto`: that leaves the same parameter, the same dependency and the same edit at deletion time, and
+ * a list that paid for the hiding would be paid for twice. What a file may do instead is be *recorded*
+ * as a resident -- `--record --force`, with the reason in the commit -- or be written so that it never
+ * names the type in the first place (a local bound as `auto &draft = session.edit(graph).edit()` is
+ * the house form of a read through a session, and this tree writes it that way everywhere).
  *
  * ## What the gate says
  *
