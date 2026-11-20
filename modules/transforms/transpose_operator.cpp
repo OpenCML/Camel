@@ -5,6 +5,8 @@
 
 #include "readings.h"
 #include "transpose.h"
+
+#include "lift.h"
 #include <sstream>
 
 #include "camel/core/context/context.h"
@@ -551,22 +553,29 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
        << " transposed=" << given << " graph=" << handedBack
        << " same=" << (given == handedBack ? "yes" : "no") << '\n';
     readings() << op.str();
-    // The ports the member takes against the parameters the operator promised. A call site fills
-    // the parameters a type writes and nothing else, so a member that takes one more is refused
-    // here instead of being met by the run: both facts are in hand -- the resolver answered the
-    // promise just above, and the graph is the one just built -- and the reading one line up
-    // already spells the difference as `same=no`.
+    // The ports the member takes against the ports `Transpose<F>` promises. A call site fills the
+    // parameters a type writes and nothing else, so the two counts are a **check**: they are
+    // compared, the numbers are reported when they differ, and no site takes one of them as the
+    // count to allocate from while the other stands beside it. Both facts are in hand -- the
+    // resolver answered the promise just above, and the graph is the one just built -- and the
+    // reading one line up already spells the difference as `same=no`.
     //
-    // What the extra parameter carries is a parameter's **value**, and `transpose`'s law says a
-    // parameter of the function is a linear input whose cotangent is answered for and whose value
-    // is never passed. The body asked for the value because a cotangent
-    // of that parameter is built from it: `idx_arr_t` answers a zero array of the operand's shape,
-    // and `mean_axis_cotangent` reads `xs` for `numel`/`ones_like`. That ask is a fact of the body
-    // and not of the type, so the two sides disagree on how many parameters the transposed function
-    // has, and the run could only say so as a count (`nargs` against `normPorts`), naming neither
-    // the parameter nor the reason: on `pick(x: float[3]) = x[1]` the fast VM
-    // aborts (`expected 2, got 1`) and `std::nvm` reports a defect of the compiler instead of a
-    // fact about the program.
+    // Two things can make a member take a port the promise does not write, and the sentence names
+    // which one it is, because the repair is different:
+    //
+    //   - the signature is a lift (`GCGraph::liftedFrom`), so the member takes its **value half**
+    //     as ports before the cotangent. A type states the lift's two halves as one shape -- a
+    //     lifted signature and an ordinary two-parameter cut's backward half are the same type --
+    //     so no promise written from a type can say `lifted` and none can carry those ports. The
+    //     reader that fills them is a cut, which holds the shape; the operator does not.
+    //   - the body reads a parameter's **value**, and `transpose`'s law says a parameter of the
+    //     function is a linear input whose cotangent is answered for and whose value is never
+    //     passed. A cotangent of that parameter is built from it: `idx_arr_t` answers a zero array
+    //     of the operand's shape, and `mean_axis_cotangent` reads `xs` for `numel`/`ones_like`. That
+    //     ask is a fact of the body and not of the type, and the run could only say so as a count
+    //     (`nargs` against `normPorts`), naming neither the parameter nor the reason: on
+    //     `pick(x: float[3]) = x[1]` the fast VM aborts (`expected 2, got 1`) and `std::nvm`
+    //     reports a defect of the compiler instead of a fact about the program.
     //
     // This refusal is also what leaves `RuntimeDiag::PassInternalError`'s norm-arity text unreached
     // from `transpose`: no call of a member is built whose argument count the member's own
@@ -574,13 +583,24 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // report is kept as the internal fallback it is for every other pass -- its help is written for
     // the whole pipeline and is true there, so it is not rewritten for one operator's old wall.
     {
-        FunctionType *const promised = resolved ? *resolved : nullptr;
-        FunctionType *const member   = built.graph->funcType();
-        const size_t promisedCount   = promised != nullptr ? promised->normTypesCount() : 0;
-        const size_t memberCount     = member != nullptr ? member->normTypesCount() : 0;
+        // What the call site fills and what the member takes, compared once. The site is typed by
+        // the operator's own answer -- `Transpose<F>`, the resolver's exit type -- and a call of the
+        // member hands it the parameters that type writes and nothing else. So the count to compare
+        // is the promise's **ports**, not the operator's own argument count: the operator takes one
+        // argument (`f`) and the member it produces takes the cotangent, and reading the first as
+        // the second is a coincidence that holds only while a member has one port.
+        camel::core::type::Type *const promiseType =
+            resolved && (*resolved)->hasExitType() ? (*resolved)->exitType() : nullptr;
+        const auto *sitePromise =
+            promiseType != nullptr && promiseType->code() == TypeCode::Function
+                ? tt::as_ptr<FunctionType>(promiseType)
+                : nullptr;
+        FunctionType *const member     = built.graph->funcType();
+        const size_t promisedCount     = sitePromise != nullptr ? sitePromise->normTypesCount() : 0;
+        const size_t memberCount       = member != nullptr ? member->normTypesCount() : 0;
         // A promise with no parameter at all is not a shape this operator writes -- the cotangent
         // is always one -- so it is not a difference to read, and the count is not subtracted from.
-        if (promisedCount != 0 && memberCount > promisedCount) {
+        if (promisedCount != 0 && memberCount != promisedCount) {
             // The extra parameters stand where `transposeSignature` writes them: after the values
             // the caller passes and before the cotangent, so the promise's last parameter is the
             // first one the member adds. Their types are what the body asked for, and they are what
@@ -592,14 +612,60 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 carried += (carried.empty() ? "" : ", ") +
                            (extra != nullptr ? extra->toString() : std::string("?"));
             }
+            const std::string counts = " (ports=" + std::to_string(memberCount) +
+                                       " promised=" + std::to_string(promisedCount) + ")";
+            // What those ports are is asked of the law that says which half of a signature is a
+            // value (`lift.h#liftedParametersOf`), read with the graph's own record of having been
+            // lifted (`GCGraph::liftedFrom`) rather than guessed from the type: the lift reading
+            // and the ordinary one are one type, so a reader that read the type would be guessing.
+            const bool liftedSignature =
+                function->graph()->liftedFrom() != camel::runtime::kInvalidGraphId;
+            const LiftedParameters places =
+                function->graph()->funcType() != nullptr
+                    ? liftedParametersOf(function->graph()->funcType(), liftedSignature)
+                    : LiftedParameters{};
+            if (places.isLift && places.hasValues()) {
+                // Which of those ports the lift's value half is, named from the law's own places:
+                // the value half stands where the law says a place is a value, and that is not
+                // "everything after the promise's last parameter" -- a capture can stand beside it.
+                std::string valueHalf;
+                for (size_t at = 0; at < places.places.size(); ++at) {
+                    if (places.places[at] != LiftedPlace::Value) {
+                        continue;
+                    }
+                    const camel::core::type::Type *const place =
+                        function->graph()->funcType()->normTypeAt(at);
+                    valueHalf += (valueHalf.empty() ? "" : ", ") +
+                                 (place != nullptr ? place->toString() : std::string("?"));
+                }
+                if (valueHalf.empty()) {
+                    valueHalf = carried;
+                }
+                // The signature is a lift, so its value half is a port the member takes. That port
+                // is not a value the body reads: it is the parameter the lift put in front of its
+                // own tangent, and a type cannot state it, so no promise written from a type can
+                // carry it. What is left is the count, said as two numbers, and the reason.
+                throwRuntimeFault(
+                    RuntimeDiag::RuntimeError,
+                    "transforms: transpose has no transpose for this function: the signature is a "
+                    "lift, so the member takes its value half as a port (`" +
+                        valueHalf + "`) before the cotangent, and `Transpose<F>` promises the "
+                        "cotangent alone" +
+                        counts +
+                        ": a type states the lift's two halves as one shape, so a type cannot say "
+                        "`lifted`, and the operator's promise is written from a type. A cut holds "
+                        "the shape and fills those ports; the operator does not");
+            }
             throwRuntimeFault(
                 RuntimeDiag::RuntimeError,
                 "transforms: transpose has no transpose for this function: the body reads the "
                 "value of its `" +
                     carried + "` parameter, and the transposed function `" + given +
                     "` has no parameter for it: a parameter of the function is a linear input, so "
-                    "only its cotangent is passed. Take the cotangent through `vjp`, whose cut "
-                    "carries that value in its backward half's closure");
+                    "only its cotangent is passed" +
+                    counts +
+                    ". Take the cotangent through `vjp`, whose cut carries that value in its "
+                    "backward half's closure");
         }
     }
     const slot_t value = transposeMemberValue(function, built.program, built.graph->id());
