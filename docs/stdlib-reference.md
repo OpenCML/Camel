@@ -2684,6 +2684,48 @@ operand that is one number states no extents, and its list is empty.
 - Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
 - Example: `mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])` gives `[3.0, 8.0]`
 
+#### `add_stated`
+
+```camel
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the sum and spends nothing on the extents: the broadcast, the element type and the
+one rounding are `add`'s own. `rulesets.transpose`'s `add_stated_t` reads the two lists instead
+of the operand whose cotangent it is answering -- on the reverse side that operand is a tangent,
+and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+computes them is `rulesets.jvp`'s `jvp_add_tensor`, where both operands are values and
+`shape(...)` of each is one.
+
+Two lists and not one, for the reason `mul_stated` states: a sum broadcasts, so `[2, 2, 3] + [3]`
+has two different operand shapes and each cotangent comes back to its **own**. An operand that is
+one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `add_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[11.0, 22.0], [13.0, 24.0]]`
+
+#### `subtract_stated`
+
+```camel
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the difference through `subtract`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `subtract_stated_t` for the reason `add_stated` records: an answer that
+may not be the operand's shape is refused and not guessed, and a tangent's shape is not in its
+type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `subtract_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[-9.0, -18.0], [-7.0, -16.0]]`
+
 #### `matmul_stated`
 
 ```camel
@@ -6655,7 +6697,9 @@ into a host number) downloads it, and the reports of a run list every such trans
 What a program does by hand is small: ask whether a device is there (`available`, `device`), move
 a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
 `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
-written order against the others and is never folded, merged or dropped. The functions to look
+written order against the others and is never folded, merged or dropped -- `regions` excepted:
+it reads the graph of the function it is given and touches no resource, so it writes no `uses`
+clause and needs no place in that order (it is still never folded). The functions to look
 at are the `with` argument and the data is the example input, as for `map`:
 `inputs->inspect<fn>`.
 
@@ -6736,11 +6780,14 @@ text.
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
-the device and why the others would not.
+the device and why the others would not. It reads the graph of the function and touches no
+resource -- it neither executes the graph nor initializes CUDA -- so it writes no `uses`
+clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
+through.
 
 - Example: `regions<(a: f32, b: f32): f32 => a + b>()`
 
@@ -7795,6 +7842,36 @@ is handed to a function that writes the reshape, which is the arrangement `rules
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])` gives `[[1.0, 2.0], [3.0, 4.0]]`
+
+### The forward rules of `softmax` and `log_softmax`
+
+Two laws and the two tangents they write, indexed by the axis the call names.
+
+#### `softmax_jvp`
+
+```camel
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+```
+
+The tangent the rule above writes, with the axis handed over as an ordinary value: the softmax
+itself (`y`), the tangent's own sum over the axis, and the subtraction element by element. Written
+as one function and not in the rule's right side for the reason `reshape_jvp` gives.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.25, -0.25]`
+
+#### `log_softmax_jvp`
+
+```camel
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+```
+
+The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
+over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
+which is what makes this the forward reading and not `log_softmax_t`'s.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
 
 ### The forward rule of `^` (a power)
 

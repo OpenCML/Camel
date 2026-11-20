@@ -219,7 +219,7 @@ grad: (f: F) => GradientOf<F> when is_function::<F>()
 has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 
-**`tensor`** — import { ... } from tensor — 76 name(s)
+**`tensor`** — import { ... } from tensor — 78 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -286,6 +286,8 @@ save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
 mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
 sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
@@ -720,7 +722,7 @@ run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => De
 source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
-regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
 available: () => bool uses var driver
 device: () => string! uses var driver
 ```
@@ -817,7 +819,7 @@ mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 ```
 
-**`rulesets.jvp`** — import { ... } from rulesets.jvp — 8 name(s)
+**`rulesets.jvp`** — import { ... } from rulesets.jvp — 12 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -827,7 +829,11 @@ sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
 pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
 ```
 
 **`rulesets.vmap`** — import { ... } from rulesets.vmap — 28 name(s)

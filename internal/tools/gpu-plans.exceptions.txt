@@ -72,26 +72,78 @@
 # in the gate could notice. The reasons below were re-read on 2026-11-18 and every one of them is the
 # failure that is actually there today.
 #
-# THESE REASONS ARE NOT APPROVALS. Thirteen of them are recorded against a defect that is still open
-# and is still owed a fix; writing the real reason down does not turn any of them into "solved", and
-# none of these names may be deleted until the case is green for the reason named here.
+# THESE REASONS ARE NOT APPROVALS. All thirteen are red inside one open question -- what the outlined
+# count should be -- and recording the real reason down does not turn any of them into "solved"; none
+# of these names may be deleted until the case is green for the reason named here. Whether the count
+# or the expectation written in the case has to move is the author's decision; the block below states
+# both readings rather than assuming one of them.
 
-# One defect: `tiles::compile` publishes the body it rewrote before the type that covers it, so the
-# commit that splices the transfer nodes refuses the graph it just built. Still owed a fix (the
-# outlined count these were originally recorded for is no longer what fails).
-outlined_execution.fvm :: 0x040001B0
-outlined_execution.jit :: 0x040001B0
-outlined_execution.nvm :: 0x040001B0
-outlined_execution.prl :: 0x040001B0
-outlined_resident_execution.fvm :: 0x040001B0
-outlined_resident_execution.jit :: 0x040001B0
-outlined_resident_execution.nvm :: 0x040001B0
-outlined_resident_execution.prl :: 0x040001B0
-preferred_resident_execution.fvm :: 0x040001B0
-preferred_resident_execution.jit :: 0x040001B0
-preferred_resident_execution.nvm :: 0x040001B0
-preferred_resident_execution.prl :: 0x040001B0
-resident_graph_transfers :: 0x040001B0
+# ONE NAME NOW CARRIES A DIFFERENT REASON THAN THE OTHER TWELVE (2026-11-20).
+#
+# `0x040001B0` (`RuntimeDiag::PassEffectBeyondType`) is no longer the failure of any of the thirteen.
+# It was the failure on 2026-11-18, when this column was re-read, and three commits have removed it
+# since: `7a70b5fad` brings the type over a device body up to what the body does, `a004545c4` declares
+# the type a tiles body needs at the commit rather than after it, and `d27b55d94` gives the device
+# outline the flag that says the code it cuts is code it means to execute. That last one moved the
+# device pass from 5 regions to 12; the resident passes still report 5. Tonight's gate reading
+# confirms the removal: not one of the thirteen prints a diagnostic code, so the evidence line carries
+# the thirteenth's own assertion and, for the twelve, the two sides of an exact-output comparison (the
+# shape described below). What they are red for now is the outlined count -- the failure these names
+# were first recorded for.
+#
+# `resident_graph_transfers` therefore carries the reason its failure actually prints: its case
+# asserts `prefix == "TILES_OUTLINED 10"` and the pass it drives prints 5.
+#
+# THE OTHER TWELVE CARRY A SECOND SHAPE, `exact-output-diff:<expected>-><actual>` (2026-11-20). Their
+# failure is a plan-level exact-output comparison, which prints neither a diagnostic code nor an
+# assertion, so `0x040001B0` was never something a reading could check them against and the gate said
+# so on every run ("the recorded reason could not be checked"). The pair is read from the failing
+# test's own `meta.json`, which holds the assertion's own sentence, `expected "...", got "..."`, and
+# the first line of each side is kept, normalized and cut to 24 characters -- the outlined count is
+# what moves there. The value is written with an ASCII arrow and not an arrow character: it travels
+# back to PowerShell and is compared byte for byte, and a byte an encoding rewrites would make every
+# one of these read as news for good.
+#
+# WHAT THIS SHAPE DOES NOT SEE, said here rather than found later: it compares the FIRST LINE of each
+# side. A case whose count is finally right and whose remaining difference is further down reads
+# `...-10->...-10` -- a shape that says "the first line agrees" and is visibly not a claim of
+# identity -- and a second change further down still reads `...-10->...-10`. So this watches the count
+# and not every byte. That is not a defect: it is a wide check made narrow enough to see what it can
+# actually see, and a narrow check has to say how far it looks, or the next reader takes it for a
+# check on the whole output. It is worth having because it is the count that is in question; it is not
+# a substitute for the plan-level comparison, which is what fails the case either way.
+#
+# **A RECORD THAT CANNOT CHANGE IS NOT A RECORD.** This shape earns its place because it moves: let
+# the device pass report 5 again and `outlined_execution.*` reads
+# `exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5`, which is not what is written here, and the
+# ratchet says "another reason". A bare `-`, standing for "the reason cannot be read", would never
+# move, so those twelve would leave the ratchet's view for good without one line of the file changing.
+# The names are still red and still owe the same answer: what this changes is that their reason is now
+# compared, not that anything about them was repaired.
+#
+# WHAT `TILES_OUTLINED 10` IS, AND WHY IT IS NOT TOUCHED HERE. Ten is not the count of either
+# configuration as the tree stands: the device pass reports 12 and the resident passes report 5, the
+# second of those on a device and with the device hidden alike, and `feat/modules/tiles` records 5 for
+# this same case under the neighbouring preferred-resident pass (device hidden) and is green. So the
+# expectation of 10 is stale in the cases themselves -- and correcting it is the author's decision
+# rather than a line in this file, because it is the decision that would make these names stop being
+# red. The two readings are side by side in
+# docs/handover/questions/2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md
+# and the question is open there. A reason recorded below does not answer it; this file says so rather
+# than let a green gate read as an answer.
+outlined_execution.fvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-12
+outlined_execution.jit :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-12
+outlined_execution.nvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-12
+outlined_execution.prl :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-12
+outlined_resident_execution.fvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+outlined_resident_execution.jit :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+outlined_resident_execution.nvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+outlined_resident_execution.prl :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+preferred_resident_execution.fvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+preferred_resident_execution.jit :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+preferred_resident_execution.nvm :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+preferred_resident_execution.prl :: exact-output-diff:TILES-OUTLINED-10->TILES-OUTLINED-5
+resident_graph_transfers :: TILES-OUTLINED-5
 
 # Nothing is listed as unclassified any more: the two bit-preservation names were fixed on
 # 2026-11-19 by asking the device for the bits it can promise (see the ruling above).

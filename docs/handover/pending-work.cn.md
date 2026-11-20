@@ -155,6 +155,16 @@ test/tools/writing-freedom.mjs
 1. `closeChainOver` 交不出去时**仍然静默**——裁定第 2 条要它失败，那是跨 pass 的契约变更（`placeLostStatements` 还在 fold 里），另开车道；
 2. `collapseNonEscapingVariableReads` 删「没人用的 read」仍直接 `eraseNode`——**同一类判据的第二个、也是最自然的调用者**。
 
+### 补记（2026-11-20）：调用点这一侧钉不住，且原因已量清
+
+上面第 2 条已由 `a01c41447` 改成走 `GraphDraft::eraseUnreadNodes`（判据未放宽：仍是 normal / `with` / control / sync 四类使用者全空）。**但这一侧的保证不能由任何端到端用例覆盖**，三条原因都已量过：
+
+1. **拒绝侧不可达**：调用点自己的「无读者」判据（四类使用者全空）**严格窄于**接口的读者判据（normal 与 `with`），所以「还有读者的 read」根本不会被提交给接口；
+2. **唯一可达的拒绝条件是 `namesNode`**（入口、出口、返回值、端口、捕获、区域结果、控制区域端口），而语料里没有任何 `:var/get` 是命名节点——把接口改成「拒绝即中止」后跑 `feat/compile` 2652 例与 `feat/compile/var` 41 例，**零触发**；
+3. **删除本身对外不可观测**：两份宿主二进制（删 / 完全不删）在 7 个程序（语料里会走到这处的 4 个，加为这次测量写的 3 个）、以及上述 2693 例上，`std::gir` 的 `:var/get` 计数与 `std::stats` 的 `GRAPH_STATS` nodes / edges / bytes **逐字相同**。原因是没人读、图也不点名的节点不在「从出口可达」的集合里，而 `std::gir`、`std::stats` 与执行都以那个集合为准；这处删除维护的是 draft 内部一致（源码注释：否则写者的 order edge 会指向图不留的节点）。
+
+所以这一侧的保证由**接口级用例**覆盖：`test/plans/feat/runtime/draft_erase_unread.plan.toml`（`test::draft_erase_unread` 在 pass 里自建 draft 图，直接向 `eraseUnreadNodes` 要「拒绝即整组一个节点都不动」，并在同一次运行里跑接受侧作对照）。**它的反验是把接口改成一律接受 ⇒ 该例变红**，不是「完全不删 ⇒ 该例变红」——后者对拒绝侧在逻辑上不可能：**拒绝与「根本没问」的可观测状态相同**。
+
 ## 9. 我写错了一个前提：`ClosureCaptureEscapes` 不是「另一条有效规则」（2026-11-16 裁定）
 
 我在问答页里写下「两条规则都对，是优先级问题」，并据此建议「改载体、不让 D1 让位」。**决策者推翻了这个前提**：

@@ -1502,6 +1502,25 @@ else
                 gpu_why=`$(grep -ohE 'AssertionError: .*' "`$gpu_dir/output.txt" "`$gpu_dir/stdout.txt" "`$gpu_dir/stderr.txt" 2>/dev/null | head -n 1 |
                     sed -e 's/^AssertionError: *//' -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-40)
             fi
+            # A plan-level exact-output assertion prints neither a code nor an assertion, so the two
+            # sides of its comparison are read from the test's own record: `meta.json` carries
+            # `expect_stdout_exact differs: ... expected "...", got "..."` JSON-escaped onto one line.
+            # Only the FIRST line of each side is kept -- that is where an outlined count moves, and a
+            # window from the middle of a long output names nothing -- and the pair is the reason, so a
+            # red that starts differing elsewhere is news. The arrow is `->` and not a character: this
+            # string travels back to PowerShell (see the local side's `-evidence` parse) and is
+            # compared byte for byte, so a byte an encoding may rewrite would turn every one of these
+            # into "recorded for another reason" for good, which is silent rather than loud.
+            if [ -z "`$gpu_why" ]; then
+                gpu_diff=`$(grep -o 'differs: .*' "`$gpu_dir/meta.json" 2>/dev/null | head -n 1)
+                gpu_exp=`$(printf '%s' "`$gpu_diff" | sed -nE 's/.*expected \\"([^\\]*).*/\1/p' |
+                    sed -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-24)
+                gpu_act=`$(printf '%s' "`$gpu_diff" | sed -nE 's/.*got \\"([^\\]*).*/\1/p' |
+                    sed -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-24)
+                if [ -n "`$gpu_exp" ] && [ -n "`$gpu_act" ]; then
+                    gpu_why="exact-output-diff:`$gpu_exp->`$gpu_act"
+                fi
+            fi
             [ -z "`$gpu_why" ] && gpu_why=-
             gpu_evidence="`$gpu_evidence`$gpu_case|`$gpu_why;"
         done

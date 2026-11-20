@@ -1,0 +1,54 @@
+/**
+ * The `attention` block's layout chain, differentiated: `reshape<[8, 2, 8]>` then `permute<[1, 0, 2]>`
+ * then `softmax<2>`, with the axis at the node.
+ *
+ * This is the chain that stopped the block from being lifted at all. `reshape` and `permute` bound
+ * their own `<>` values already, so the tangent reached `softmax<2>` -- and `jvp_softmax` wrote
+ * `<1>`, so the fit refused the node by name:
+ *
+ *     REINTERP jvp function=mix skip=rule uri=tensor:softmax reason=the rule 'jvp_softmax' writes
+ *     1 `<>` value(s) of its own ((int)), and this node's configuration is not that one
+ *     ((float[2, 8, 8], int))
+ *
+ * The two laws in front of it are what makes the refusal this case's own subject rather than a
+ * bystander's: the operand `softmax` sees is `float[2, 8, 8]`, which only the `[8, 2, 8]` reshape and
+ * the `[1, 0, 2]` permutation produce. So the laws were binding the call's own angle all along, and
+ * the run stopped at the one that was not.
+ *
+ * The numbers are derived by hand, not read off a run. The operand is all zeros, so every softmax is
+ * `1/8` -- exactly, a lane of eight summing to 8 -- and the weight is `w[m][r][k] = 64m + 8r + k + 1`
+ * (the flat value `i + 1` of a `[2, 8, 8]` built in row-major order):
+ *
+ *   f = sum(w * y) = 8256 / 8 = 1032.0                      (sum of 1..128 is 128 * 129 / 2 = 8256)
+ *
+ * The tangent is `x[m][r][k] = 8r + 8m + k`, whose lane sum over `k` is `8 * (8r + 8m) + 28`, so
+ * `t = (8r + 8m + k - (8r + 8m + 3.5)) / 8 = (k - 3.5) / 8`: the offsets the reshape and the
+ * permutation leave in the lane cancel, which is what makes this a reading about the axis and not
+ * about the layout.
+ *
+ *   f' = sum(w * t) = (1/8) * sum over k of (k - 3.5) * sum over (m, r) of (64m + 8r + k + 1)
+ *      = (1/8) * sum over k of (k - 3.5) * (960 + 16 * (k + 1))
+ *      = (1/8) * 16 * 42 = 84.0                             (the 960 term sums to zero over k)
+ *
+ * `sum over k of (k - 3.5) * (k + 1)` is `140 - 70 - 28 = 42`. The two numbers are the reading: the
+ * lift either answers `1032.0` and `84.0` or it does not run.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { permute, reshape, softmax, sum } from tensor
+
+func mix(a: float[...], w: float[...]): float {
+    let b = reshape<[8, 2, 8]>(a)
+    let c = permute<[1, 0, 2]>(b)
+    return sum(softmax<2>(c) * w)
+}
+
+func main(): int sync {
+    let xs = reshape<[8, 16]>([0.0 for i in 0..128] as float[])
+    let dxs = reshape<[8, 16]>([float(i) for i in 0..128] as float[])
+    let ws = reshape<[2, 8, 8]>([float(i + 1) for i in 0..128] as float[])
+    let dws = reshape<[2, 8, 8]>([0.0 for i in 0..128] as float[])
+    let (value, tangent) = jvp(mix)(xs, ws, dxs, dws)
+    'rules_angle_args softmax-after-layout value={} tangent={}'->format<value, tangent>->println
+    return 0
+}

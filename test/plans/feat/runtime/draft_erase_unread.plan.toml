@@ -1,0 +1,36 @@
+id = "runtime.draft_erase_unread"
+order = 383
+tier = "fast"
+tags = ["feat", "runtime", "graph", "draft", "witness"]
+desc = "The permission `GraphDraft::eraseUnreadNodes` asks: a set that a node outside it still reads is refused whole and left as it was found, while a set nothing outside reads is accepted and gone."
+# `test::draft_erase_unread` builds the graphs itself and asks the interface, because no program
+# reaches the refusal and no program can see the erase. A caller's own "no reader" test is narrower
+# than the interface's -- it also excludes control and sync users -- so a read that still has a
+# reader is never offered at all; and a node nobody reads and the graph does not name lies outside
+# the set every reader walks from the exit, so `std::gir` and `std::stats` print the same document
+# with and without the erasure. Measured on two host builds (erase / no erase) over 7 programs --
+# the four in the corpus that reach the sweep, plus three written for the measurement -- and both
+# plans: identical `var/get` counts and identical `GRAPH_STATS`.
+#
+# So this plan pins the half a program cannot: it is the reverse verification that makes the
+# permission a checked fact. With `GraphDraft::eraseUnreadNodes` made to answer `true` without
+# asking (`src/runtime/draft.cpp`), `refused=1` and the two `alive_` readings on the first line stop
+# matching and this case goes red; with the erase removed, the accept lines stop matching. The two
+# sides are printed in one run so that neither can pass on an interface that does only one of them.
+[[tests]]
+name = "runtime.draft_erase_unread.a_set_read_from_outside_is_refused_whole"
+desc = "Two nodes, one of which a third node outside the set reads: the set is refused and both nodes survive with their reader recorded. A node nothing reads is then accepted and gone, and a two-node set whose second node reads the first is accepted whole, so the refusal is a refusal and not an interface that erases nothing."
+kind = "behavior"
+case = "../../../cases/runtime/draft_erase_unread/refusal_keeps_the_set.cml"
+args = ["${case}", "test::draft_erase_unread"]
+expect_exit = 0
+# The refusal line is the case: `alive_copy=1 alive_middle=1` is "the set did not move", and
+# `readers_middle=1` is that the reader which caused the refusal is still recorded. The two accept
+# lines are the control that keeps the refusal from being satisfied by an interface that never
+# erases anything.
+expect_stdout_matches = ['\[ERASE_UNREAD\] refused=1 alive_copy=1 alive_middle=1 readers_middle=1', '\[ERASE_UNREAD\] accepted_alone=1 alive_outside=0', '\[ERASE_UNREAD\] accepted_closed_set=1 alive_head=0 alive_tail=0', '\[ERASE_UNREAD\] ok']
+# The pass says MISSING when it could not ask either question as the interface says. That is the
+# defect coming back in the other direction, and it is red.
+expect_stdout_not_contains = ["[ERASE_UNREAD] MISSING"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

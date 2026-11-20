@@ -90,6 +90,69 @@ expect_stdout_contains = ["rules_angle_args softmax value=1.5 tangent=-0.25"]
 timeout_ms = 30000
 
 [[tests]]
+name = "rules_angle_args.softmax_without_its_axis"
+desc = "`softmax(t, axis?: int)` defaults the axis to `-1`, so `softmax(x)` carries one port where `softmax<2>(x)` carries two, and a law's parameters are the operator's ports. This program writes the spelling with the axis omitted and is refused before the first number: the reading is WHICH refusal, because a law that answered the default would be answering a configuration the graph does not state (design principles 9.9). Measured on both sides of the change that named the axis (2026-11-20): the law that wrote `softmax<1>` refused this program at the value it had written (`writes 1 `<>` value(s) of its own`), and the law that names the axis refuses it at the port count. Neither answered it, so naming the axis cost this spelling nothing; the negative on the first sentence is what says so."
+kind = "negative"
+case = "../../../cases/compile/transforms/softmax_without_its_axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["jvp has no forward rule for `tensor:softmax`", "the rule takes (float[...], int), and the operator has (float[...])"]
+expect_output_not_contains = ["writes 1 `<>` value(s) of its own"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.softmax_axes"
+desc = "`jvp` of `f(x) = sum(softmax<axis>(x) * W)` on `x = float[2, 2, 2]` of zeros along `dx = W = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]`, once for each of the three axes: `value=18.0 axis0=16.0 axis1=4.0 axis2=1.0`, derived by hand in the case's own header as `(1/4) * sum over pairs of (dx_e - dx_p)^2`. `jvp_softmax` wrote `<1>` in its own left side, so it answered the middle axis of this operand and refused the other two by name; the law names the axis as its last parameter now, which is `jvp_reshape`'s and `jvp_permute`'s shape. Three axes, one law: an implementation that writes a constant answers one of the three and a correct one answers all."
+kind = "behavior"
+case = "../../../cases/compile/transforms/softmax_axis_jvp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args softmax-axes value=18.0 axis0=16.0 axis1=4.0 axis2=1.0"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.log_softmax_axes"
+desc = "The same three axes for `log_softmax`: `axis0=32.0 axis1=8.0 axis2=2.0`, each twice the softmax's, derived by hand in the case's own header (`(1/2) * sum over pairs of (dx_e - dx_p)^2`, since the log softmax tangent scales by `exp(y) = 1/2` and not by `y`). `jvp_log_softmax` wrote `<0>`, so it answered the first axis of a rank-1 input and refused the rest by name; it names the axis now. The value is not pinned -- it is `-log(2) * 36` and not a binary fraction -- so the three tangents are the whole reading."
+kind = "behavior"
+case = "../../../cases/compile/transforms/log_softmax_axis_jvp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args log-softmax-axes axis0=32.0 axis1=8.0 axis2=2.0"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.log_softmax_non_uniform_lane"
+desc = "The case that says which formula the forward `log_softmax` law is, on the one input where the two candidates disagree. `dy_i = dx_i - sum<axis,true>(p * dx)_i` with `p = exp(y)` is the jacobian `I - 1 pᵀ`; the transposition's shape `dx_i - p_i * sum<axis,true>(dx)` is `I - p 1ᵀ` and belongs to `stdlib/rulesets/transpose.cml#log_softmax_t`. They are equal when and only when every `p_j` is equal, so a constant lane -- `rules_angle_args.log_softmax_axes`, whose `x` is all zeros -- is blind to the difference and cannot tell a wrong law from a right one. Here `x = [1, 2, 3]` and `dx = [1, 1, 1]`: with `p` summing to 1 the forward reading answers `1 - 1 = 0` at every position, and the transposition's reading answers `1 - 3p = [0.7299082804888587, 0.2658145868356071, -0.9957228673244654]` -- the numbers `log_softmax_gradient_through_the_engine.cml` records, because its `d` is the reverse direction's answer for a cotangent of ones. The reading is two booleans and not digits (`zeros=true misread=false` forward, `zeros=false misread=true` for the transposition's shape) so that no machine-epsilon value is pinned: `sum(abs(tangent))` is `6e-16` one way and `1.9914` the other."
+kind = "behavior"
+case = "../../../cases/compile/transforms/log_softmax_jvp_on_a_non_uniform_lane.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["log_softmax non-uniform zeros=true misread=false"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules_angle_args.softmax_after_layout"
+desc = "The `attention` block's chain differentiated end to end: `reshape<[8, 2, 8]>` then `permute<[1, 0, 2]>` then `softmax<2>`, on `x = float[8, 16]` of zeros along `dx = [0..127]` with the weight `w = [1..128]` of shape `float[2, 8, 8]`. Values `1032.0` and `84.0`, both derived by hand in the case's own header. This is the reading the tree could not take: the two laws in front of the softmax bound the call's own angle (`float[2, 8, 8]` is the shape only that reshape and that permutation produce), and `jvp_softmax` wrote `<1>`, so the lift refused the third node -- `REINTERP jvp function=mix skip=rule uri=tensor:softmax`. Pinned as the numbers and as the absence of a refusal, so the day the lift is refused again this entry goes red and prints the sentence."
+kind = "behavior"
+case = "../../../cases/compile/transforms/softmax_axis_after_layout.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["rules_angle_args softmax-after-layout value=1032.0 tangent=84.0"]
+expect_stderr_contains = ["REINTERP jvp function=mix"]
+expect_output_not_contains = ["skip=rule", "READING_REFUSAL"]
+timeout_ms = 30000
+
+[[tests]]
 name = "rules_angle_args.mean_axis_transpose"
 desc = "`transpose` of `f(x) = sum(mean<0, false>(x) * [1, 2, 3])` at ct = 1.0, with `x: float[2, 3]`: every position of `xs` that fed lane k gets w[k] / 2, so the answer is read element by element as `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]` -- not as its sum, which is 6.0 and which the wrong law `(ct) => ct` also reaches with `[1.0, 2.0, 3.0]` (author, 2026-11-03 15:15). The parameter's shape is in the type because the transposed function is handed the cotangent and nothing else, and the lane length the law reads comes from there: 6 positions over 3 lanes is 2 (author, 2026-11-03 16:15)."
 kind = "behavior"

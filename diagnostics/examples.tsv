@@ -131,7 +131,7 @@ SemanticDiag::GenericTypeArgumentGrows	test/cases/compile/generics/err_deep.cml
 SemanticDiag::HandleTypeNotNominal	test/cases/effects/err_handle_not_nominal.cml
 SemanticDiag::IdentifierPatternNeedsNullableOrErrorType	test/cases/compile/not_supported/pattern_identifier.cml
 SemanticDiag::IfWithoutElseAsValue	test/cases/consistency/if_without_else/as_value_let.cml
-SemanticDiag::IgnoredSideEffect	test/cases/compile/diag_json/warnings_visible.cml
+SemanticDiag::IgnoredSideEffect	test/cases/effects/callback_write_ignored.cml
 SemanticDiag::ImmutablePassedToVarParam	test/cases/linear/byref/let_to_var_param.cml
 SemanticDiag::ImplKernelForeign	test/cases/compile/native/impl_foreign.cml
 SemanticDiag::ImplKernelNotBodyless	test/cases/compile/native/impl_kernel_has_body.cml

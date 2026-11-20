@@ -335,11 +335,13 @@ expect_output_not_contains = ["[Warn]"]
 # (`camel inspect --copies`, the same reading `array_sort_kernels.plan.toml#array_sort_kernels.paths`
 # takes), and the entry keeps its name for the same reason that one keeps its own.
 #
-# The five rebindings that bind a name to a sorted array are the old value's last use, so their
+# The four rebindings that bind a name to a sorted array are the old value's last use, so their
 # update is in place -- `in-place` (proved) or `by-count` (the array's own count decides at run
-# time), never `copied`. The closure's `fs->sort` is not one of them: it reads `fs` and returns the
-# sorted array without binding it back, so `fs` still holds the unsorted array and the sort may copy
-# -- which the case prints beside the sorted one, and `new_values.sort_rebinding` above pins.
+# time), never `copied`. The first `xs = xs->sort` is not one of the four: `before` still holds that
+# value there, so that line is `before`'s last use of it and not the old value's. The closure's
+# `fs->sort` is not one either: it reads `fs` and returns the sorted array without binding it back,
+# so `fs` still holds the unsorted array and the sort may copy -- which the case prints beside the
+# sorted one, and `new_values.sort_rebinding` above pins.
 #
 # What it reads on `91f708389`, and the red this entry is owned for (S3b): `COPIES main updates 9
 # in-place 0 by-count 0 declared 0 copied 9`, with the four `sort_kernel` rows of `main` each
@@ -386,7 +388,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "new_values.sort_rebinding.graph"
-desc = "The plan's verdict on each of the five rebindings that bind a name to a sorted array (`xs` three times, the `var` parameter, the float `gs`), read through `camel inspect --copies`: each is one row at its own place in the case, the row names the sort, and its verdict is `in-place` or `by-count` -- a rebinding at the old value's last use reuses its storage (design principles 10.5) -- never `copied`. The closure's `fs->sort` is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort may copy."
+desc = "The plan's verdict on each of the four rebindings that bind a name to a sorted array (`xs` twice, the `var` parameter, the float `gs`), read through `camel inspect --copies`: each is one row at its own place in the case, the row names the sort, and its verdict is `in-place` or `by-count` -- a rebinding at the old value's last use reuses its storage (design principles 10.5) -- never `copied`. The first `xs = xs->sort` (`sort_rebinding.cml:36:14`) is not one of the four: `before` still holds that value there, so it is `before`'s last use of it and the update must copy -- the `.copies` entry below already expects it to, and the case's output depends on it. The closure's `fs->sort` is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort may copy."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["inspect", "--copies", "${case}"]
@@ -406,10 +408,10 @@ verify_script = """
     assert(tally, `main's tally is not in the reading: ${JSON.stringify(lines)}`)
     const reading = `${rows.size} row(s), ${tally}`
     const verdicts = ['in-place', 'by-count', 'declared', 'copied']
-    // The five rebindings, at the place the case writes each of them.
+    // The four rebindings, at the place the case writes each of them. `sort_rebinding.cml:36:14`
+    // is deliberately absent: `before` still holds that value there, so the update must copy.
     const rebindings = [
         ['sort_rebinding.cml:26:12', 'sorted_param: v = v->sort'],
-        ['sort_rebinding.cml:36:14', 'main: xs = xs->sort'],
         ['sort_rebinding.cml:39:10', 'main: xs = sort(xs)'],
         ['sort_rebinding.cml:42:10', 'main: xs = sort(xs)'],
         ['sort_rebinding.cml:57:14', 'main: gs = gs->sort'],

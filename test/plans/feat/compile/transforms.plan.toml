@@ -2298,15 +2298,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
+desc = "The same function through the library's `vjp`: the forward half is built with its laws named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`), the cut builds the function (`REINTERP split function=jvp_of_total forward=406 backward=407 residuals=5`), and the transposed walk then refuses at the tangent the `softmax` law writes -- `TRANSPOSE function=rulesets.jvp::softmax_jvp<float> skip=parameter-shape uri=tensor:multiply` and `skip=call-no-transpose callee=rulesets.jvp::softmax_jvp<float>`, with stdout `transpose has no transpose for this function`. Pinned as the readings and not as an exit code, so the day the walk is answered this entry goes red and names what replaced it. **The refusal moved one layer down on 2026-11-20 and the pinned sentences moved with it**: this entry used to pin the cut refusing instead (`skip=backward construct=a node whose input was not copied`, `split does not build this function`), because the tangent was written inline and needed `y = softmax<1>(x)` -- a call carrying its axis as a context input the forward half's exit did not reach. `stdlib/rulesets/jvp.cml#jvp_softmax` reads its axis from the node now, so the tangent is one call whose inputs the cut does carry, and the refusal is the later wall rather than a relaxed expectation: the program still exits 1. That wall is the transpose half's own -- `stdlib/rulesets/transpose.cml#mul_tensor_t` needs the shape of the operand it answers for, and the callee would need a transpose of its own -- and `softmax` has no transpose rule at all, so this is not the last layer either."
 kind = "negative"
 case = "../../../cases/compile/transforms/softmax_gradient_stops_at_split.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["split does not build this function"]
-expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_softmax,jvp_mul_tensor,jvp_sum"]
-expect_output_not_contains = ["TRANSPOSE function="]
+expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own"]
+expect_stderr_contains = ["rules=jvp_softmax,jvp_mul_tensor,jvp_sum", "skip=parameter-shape uri=tensor:multiply", "skip=call-no-transpose", "callee=rulesets.jvp::softmax_jvp<float>"]
+expect_output_not_contains = ["split does not build this function", "a node whose input was not copied"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -2554,15 +2554,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "log_softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`: the forward half is built with the new rule named (`rules=jvp_log_softmax,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, with no `TRANSPOSE` line at all. This is the wall's third boundary: `softmax` refuses a context argument on a forward recomputation, while here the refused call (`sum<0, true>`) recomputes nothing -- its value is a backward-half number and only its `<>` arguments are constants. Pinned as readings, so the day the cut inlines the argument this entry goes red and names what replaced it; the default and its cost are in `docs/handover/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`."
+desc = "The same function through the library's `vjp`, on the smallest graph that can show it (one `log_softmax<0>` and one `sum`): the forward half is built with the laws named (`rules=jvp_log_softmax,jvp_sum`), the cut builds the function (`REINTERP split function=jvp_of_total forward=395 backward=396 residuals=3`), and the transposed walk then refuses at the tangent the law writes -- `TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:sum_axis` and `skip=call-no-transpose callee=rulesets.jvp::log_softmax_jvp<float>`, with stdout `transpose has no transpose for this function`. Pinned as readings and not as an exit code, so the day the walk is answered this entry goes red and names what replaced it. **The refusal moved one layer down on 2026-11-20 and the pinned sentences moved with it**: this entry used to pin the cut refusing (`skip=backward construct=a node whose input was not copied`, `split does not build this function`), and it recorded the wall's third boundary -- a refusal on a call that recomputed nothing, since `exp(y)` was a recomputation the cut already passes and only the inlined `sum<0, true>`'s axis was out of reach (`docs/handover/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`). That boundary is gone because the law stopped writing the call inline: `stdlib/rulesets/jvp.cml#jvp_log_softmax` reads its axis from the node and hands it to `log_softmax_jvp` as an ordinary value, whose inputs the cut does carry. Nothing was relaxed to get here -- the program still exits 1, and the new sentence is the later wall: `stdlib/rulesets/transpose.cml#mul_tensor_t` needs the shape of the operand it answers for, the callee would need a transpose of its own, and `stdlib/rulesets/transpose.cml#log_softmax_t` still states `<0>` only. **The stop moved out one node on 2026-11-20 and the pinned `uri` moved with it**: `1a0ac4144` moved the product inside the sum (`dx - sum<axis, true>(exp(y) * dx)`), so the walk meets the enclosing `sum<axis, true>` before the `multiply` and the refusal is `uri=tensor:sum_axis` -- one node further out, the same graph, the same exit code and the same wall. This is a change of *which node* refuses and not a relaxation of the reading: the old `uri=tensor:multiply` is pinned as a negative assertion beside the positive one, so a walk that steps back onto the multiply turns this entry red instead of passing quietly."
 kind = "negative"
 case = "../../../cases/compile/transforms/log_softmax_gradient_stops_at_split.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["split does not build this function"]
-expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_log_softmax,jvp_sum"]
-expect_output_not_contains = ["TRANSPOSE function="]
+expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own"]
+expect_stderr_contains = ["rules=jvp_log_softmax,jvp_sum", "skip=parameter-shape uri=tensor:sum_axis", "skip=call-no-transpose", "callee=rulesets.jvp::log_softmax_jvp<float>"]
+expect_output_not_contains = ["split does not build this function", "a node whose input was not copied", "skip=parameter-shape uri=tensor:multiply"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -3318,6 +3318,63 @@ args = ["--trace", "transforms", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["subtract ct=1.0 da=[1.0, 1.0, 1.0] db=[-1.0, -1.0, -1.0]", "transpose subtract max_abs_diff=0.000000000000e+00"]
 expect_stderr_contains = ["rhs=dtod_t,sum_from_type_t,subtract_t"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The cotangent of an operand a **sum** broadcast, through the library's own transpose law. `x + b`
+# and `x - b` broadcast (`float[2, 3]` with `float[3]`), and a law that answered `ct` for the smaller
+# operand put a `[2, 3]` value under a `float[3]` type: exit 0, no diagnostic, a wrong number under a
+# right type. The two entries below are the repair read twice -- the numbers through the law, and the
+# transform's own check with a law that is wrong on purpose.
+[[tests]]
+name = "broadcast_add_subtract_gradient"
+desc = "`x + b` and `x - b` with `x: float[2, 3]` and `b: float[3]`, read through the library's `transpose` at a **weight** cotangent: the four readings the repair is for. `ct = [[1, 2, 3], [4, 5, 6]]` gives `dL/db = [5, 7, 9]` for the sum -- `[1+4, 2+5, 3+6]`, the two rows summed lane by lane -- and `[-5, -7, -9]` for the difference; `ct` all ones gives `[2, 2, 2]` and `[-2, -2, -2]`. **`numel` is printed beside each answer because the defect was a shape**: `add_tensor_t` answered `(ct, ct)` and `subtract_t` `(ct, -ct)`, so `b`'s cotangent arrived as the whole `[[1, 2, 3], [4, 5, 6]]` tensor (`numel=6`, and `[[-1, -2, -3], [-4, -5, -6]]` for the difference) under a static type that said `float[3]`; an entry green on the digits and red on `numel` would be that defect wearing the right numbers. The weighted numbers are distinct in every position on purpose -- a law that answered one lane for all of them (`[5, 5, 5]`), reduced the wrong axis (`[6, 15]`), or answered at the cotangent's own shape matches none of them. `dL/dx` is the control in the same program: it was right before the repair (the cotangent as it arrived) and must stay right after it, so a repair that reduced *both* sides of the sum moves that line and not the others. `transpose` is called directly and not through `vjp` because this entry is the law's own reading, with nothing else of the library's in the graph."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_add_subtract_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["add weighted dL/db numel=3 dL/db=[5.0, 7.0, 9.0]", "add weighted dL/dx=[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]", "add plain dL/db numel=3 dL/db=[2.0, 2.0, 2.0]", "sub weighted dL/db numel=3 dL/db=[-5.0, -7.0, -9.0]", "sub weighted dL/dx=[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]", "sub plain dL/db numel=3 dL/db=[-2.0, -2.0, -2.0]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same broadcast, one layer in: the law above reads a difference the **program** wrote, and this
+# one reads the difference a forward **rule** wrote -- `jvp_subtract`'s tangent, which is a
+# `subtract_stated(dx, dw, shape(x), shape(w))` because on the reverse side the position a cotangent
+# is answered for is a tangent and a tangent's type states no extents. It is the shape
+# `showcase_s2`'s three entries walk (a `matmul` product's tangent subtracted from a stated target),
+# reduced to the one operator, and its two readings are the numbers and their length.
+[[tests]]
+name = "broadcast_difference_through_vjp"
+desc = "`vjp` of `step(w: float[2]) = sum((m - w) * (m - w))` on `m = [[1, 2], [3, 4]]` at `w = [0.5, 1.0]`: the loss `16.5` and the cotangent `[-6.0, -8.0]`, `numel 2`. The difference broadcasts -- `float[2, 2]` with `float[2]` -- so `dL/dw` is the **sum of what `w` fed** and not the `[2, 2]` cotangent it arrived on, and every one of the four numbers below separates a wrong answer from the right one: the unreduced cotangent is `[-1, -2, -5, -6]` (`numel=4`), the reduction along the wrong axis is `[-6, -6]` or `[-8, -8]`, and the digit that would come from reading the cotangent as a scalar is neither. `numel` is printed beside the array because the failure this entry guards is a **shape**: the law that answered before `subtract_stated_t` existed answered the whole `[2, 2]` cotangent under a static type that said `float[2]`, which is a wrong number with exit 0 and no diagnostic (measured 2026-11-20). The engine's leg is the second reading and is taken through its own pullback, so the two halves of the transform are held against each other and not only against the arithmetic; the `rhs=` line is pinned because the claim is that the law which answered is the stated one, and a run that answered through another law would be a different program. What it does not claim is that any other broadcast reduction is right: this is one operator's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_difference_through_vjp.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["broadcast difference vjp value=16.5 dL/dw numel=2 dL/dw=[-6.0, -8.0]", "broadcast difference engine value=16.5 dL/dw numel=2 dL/dw=[-6.0, -8.0]", "broadcast difference max_abs_diff library_vs_engine w=0.000000000000e+00"]
+expect_stderr_contains = ["rhs=sum_stated_t,add_tensor_t,mul_stated_t,subtract_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The positive control for the transform's own check -- the second half of the same ruling, and the
+# half that is not about broadcasting at all: **a law written for the wrong shape** is refused as it
+# is expanded, by name. The law here is wrong on purpose and lives in the case's own directory (a
+# module's imports are looked for there first), so this entry does not depend on the library being
+# wrong: the day the library regresses, this entry stays green and the one above goes red, and the
+# day the check is removed or narrowed, this one goes red while the library stays right.
+[[tests]]
+name = "transpose_refuses_a_law_that_answers_the_wrong_shape"
+desc = "A `rulesets/transpose.cml` beside the case shadows the standard library's and declares one law, the array add's, with the two answers **swapped** (`(w, x)`). `x: float[2, 3]`, `w: float[3]`, so the answer for `x` is a copy of `w` and its type is `float[3]`: the transform compares what the law answered with the type of the operand it answered for, and refuses -- `transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type`, exit 1. Three things are claimed and they are different: the refusal happens **at the transformation** (no number is computed), it names **the law** and not the function or the operator (the law is the edit), and it carries **both spellings** (a reader compares them and knows which side moved). It is a `negative` entry and not a `known_fail`: the program is refused because a law is wrong, which is the behaviour the language wants (design principles 9.9: give the correct derivative or refuse by name). What it deliberately does **not** claim is that every wrong law is caught here: the old `(ct, ct)` was not, because `ct`'s port is `T[...]` (open rank) and an answer that states no shape fits every operand shape -- that half is the run's, and `broadcast_add_subtract_gradient` above is its control."
+kind = "negative"
+case = "../../../cases/compile/transforms/law_answer_shape/transpose_refuses_a_law_that_answers_the_wrong_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

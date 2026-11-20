@@ -18,6 +18,18 @@
             "description": "Use a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels. On by default: without a findable CBLAS the builtin GEMM is the library path and the build is unchanged",
             "default": "ON",
             "type": "bool"
+        },
+        {
+            "name": "CAMEL_ENABLE_PYTHON_BINDINGS",
+            "description": "Build the CPython extension camel._camel (bindings/python), independent of CAMEL_ENABLE_PYTHON which embeds Python in Camel",
+            "default": "ON",
+            "type": "bool"
+        },
+        {
+            "name": "CAMEL_PACKAGE_MINIMAL",
+            "description": "Build the subset an anonymous source package ships: no tiles/onnx/nn/ckpt, no Python embedding (python/pyplot) and no Python host binding. The numeric core (tensor, random, autodiff, transforms) and rewrite/verify stay",
+            "default": "OFF",
+            "type": "bool"
         }
     ]
 }

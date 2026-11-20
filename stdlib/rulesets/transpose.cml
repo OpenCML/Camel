@@ -26,7 +26,7 @@
  * `node scripts/stdlib-reference.mjs --write`.
  */
 
-import { is_float } from types
+import { is_float, is_same } from types
 import {
     add_cotangent,
     add_cotangent_c,
@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, add_stated, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -182,17 +182,78 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x + w
 }
 
-/// The transpose of `x + w` on two arrays: each operand's cotangent is `ct`. A sum is its own
-/// adjoint, which is what the engine's own `addVjp` says too (`modules/tensor/ops/elementwise_ops.cpp`:
-/// both operands accumulate `dy`).
+/// The transpose of `x + w` when the two operands are **one type**: a sum whose two sides are one
+/// shape is its own adjoint, and each cotangent is `ct`.
 ///
-/// It is here because the array product's law is unreachable without it: the product rule's right
-/// side is `dx * w + x * dw`, so the linear graph a product's pullback walks holds an array add, and
-/// the walk refused there -- `TRANSPOSE ... skip=rule uri=tensor:add reason=unbound` -- before this
-/// rule existed. Filed under the call `add(x, w)` for the same reason `mul_tensor` is: the key is
-/// the operator's own name, and `+` at two operands is `:op/add_d`'s.
+/// Two laws answer this operator, and they are two statements because `+` on two arrays is two
+/// operations: an add whose two operands are one shape -- the sum of two terms that meet at a value,
+/// which is what a cotangent merge and every `jvp` right side written `dx * w + x * dw` hands it --
+/// and an add that **broadcasts** (design principles 5.4), whose cotangents are not one shape.
+///
+/// This law is the first of the two and its condition is a fact about the types and nothing else:
+/// `x` and `w` share one type parameter, so a pair of different types -- `float[2, 3]` with
+/// `float[3]`, the shapes that make a broadcast -- does not instantiate it at all and the law below
+/// answers instead. Every pair whose types are one is answered here, whether that type states its
+/// extents (`float[2, 3]` with `float[2, 3]`) or states none (`float[...]` with `float[...]`): two
+/// operands of one type need no reduction, and where a type states no extents there is no shape to
+/// reduce by, so the answer is the cotangent itself.
+///
+/// It is not decoration that this law exists: the library's reverse leg is built out of it. A
+/// product's own `jvp` right side is `dx * w + x * dw`, so every product's pullback walks an array
+/// add of two open-rank values, and a value's k cotangents are summed by one too (`split`'s join).
+/// With a single law that always reduced, those steps refused by name
+/// (`skip=law-reads-a-value uri=tensor:add`) on nine entries of
+/// `test/plans/feat/compile/transforms.plan.toml` (measured 2026-11-20).
 export rule add_tensor_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     add(x, w) => (ct: T[...]) => (ct, ct)
+}
+
+/// The transpose of `x + w` when the two operands are **different types**, which is the pair a
+/// broadcast makes: each answer is `ct` **reduced to that operand's own shape**.
+///
+/// `x + w` on two arrays broadcasts, so one operand can be smaller than the sum and its cotangent is
+/// the sum of what it fed: for `x: float[2, 3]` and `w: float[3]`, `dL/dw` is a `float[3]` and the
+/// answer is `sum_to(ct, shape(w))`, three numbers and not the whole `[2, 3]` tensor. The law above
+/// used to be the only one and it answered `(ct, ct)` here too, so the reading `w` got was a
+/// `[2, 3]` value under a static type that said `[3]` -- a wrong number with exit 0 and no
+/// diagnostic (measured 2026-11-20: `[[1, 2, 3], [4, 5, 6]]` where the answer is `[5, 7, 9]`).
+///
+/// The two laws are told apart by the **types** and not by a branch in the walk: `!is_same::<X, W>()`
+/// is a predicate over the law's own type parameters (`stdlib/types.cml`), and a key that holds two
+/// laws which cannot both instantiate at one tuple is the language's own overloading, the same way a
+/// `when` clause tells two kernels of one name apart. What it must **not** do is fall back to the
+/// cotangent itself when it cannot read a shape: a pair of different types whose declarations state
+/// no extents (`float[...]` with `float[3]`) stops the step by name
+/// (`skip=law-reads-a-value`, `position=0`), because an answer that may not be the operand's shape
+/// is refused and not guessed.
+///
+/// The extents are `shape(x)` / `shape(w)` for the reason `mul_tensor_t` below records: they are the
+/// extents the operand's declaration states, answered by the rule layer out of the law's own port
+/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`). The head names one type parameter per
+/// operand for a reason it shares with that law: written as one `T` for both, the instance is made
+/// at the element type and its ports state no extents at all, so `shape(..)` would have nothing to
+/// read.
+export rule add_tensor_broadcast_t::<T, X, W>(x: X, w: W)
+when is_float::<T>() && !is_same::<X, W>() {
+    add(x, w) => (ct: T[...]) => (sum_to(ct, shape(x)), sum_to(ct, shape(w)))
+}
+
+/// The transpose of `add_stated(x, w, ax, aw)`: `ct` for `x` reduced to `ax`, and `ct` for `w`
+/// reduced to `aw` -- `add_tensor_broadcast_t`'s two answers with the two shapes **handed over**.
+///
+/// This is the law the library's own reverse leg walks: `jvp_add_tensor` writes its tangent as
+/// `add_stated(dx, dw, shape(x), shape(w))`, so every array sum produced by a forward rule is a
+/// stated one, and the shape of the position this law answers for is a tangent's -- a `float[...]`,
+/// which states no extents (design principles 5.4) and has no value on this side. The two lists are
+/// values of the primal the forward half computed (`stdlib/rulesets/jvp.cml#jvp_add_tensor`, where
+/// both operands are values), so the reduction reads them and nothing of the position it answers.
+///
+/// Two lists and not one, for the reason `mul_stated_t` below records: a sum broadcasts, so the two
+/// cotangents come back to two different shapes. The pair whose types are one type is answered by
+/// `add_tensor_t` above when the program wrote `x + w` itself; both laws stay, because a hand-written
+/// sum is still a sum and the stated spelling is what a forward half writes.
+export rule add_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
+    add_stated(x, w, ax, aw) => (ct: T[...]) => (sum_to(ct, ax), sum_to(ct, aw))
 }
 
 /// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
@@ -354,12 +415,46 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x - w
 }
 
-/// The transpose of `x - w` on two arrays: `ct` for `x`, `-ct` for `w`. It is the mirror of
-/// `add_tensor_t` above and the adjoint of `jvp_subtract` (`stdlib/rulesets/jvp.cml`), and it is here
-/// because a loss written `pred - target` -- the one line every training step has -- puts this
-/// operator in the backward graph between the product's law and the sum's.
+/// The transpose of `x - w` when the two operands are **one type**: `ct` for `x`, `-ct` for `w`.
+/// The mirror of `add_tensor_t` above, and the same two laws for the same two operations: a
+/// difference of two values of one shape, whose adjoint is the pair with the sign flipped, and a
+/// difference that broadcasts, which is the law below.
 export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     subtract(x, w) => (ct: T[...]) => (ct, -ct)
+}
+
+/// The transpose of `x - w` when the two operands are **different types**: `ct` for `x` and `-ct`
+/// for `w`, **each reduced to its own operand's shape** (`sum_to`, exactly as the add's broadcast
+/// law above). It is the adjoint of `jvp_subtract` (`stdlib/rulesets/jvp.cml`), and it is here
+/// because a loss written `pred - target` -- the one line every training step has -- puts this
+/// operator in the backward graph between the product's law and the sum's.
+///
+/// The two reductions are the same defect this operator had as an add: `x - w` broadcasts, so the
+/// operand that was spread over the larger one gets the sum of the cotangents it fed, and answering
+/// `-ct` at the result's shape put a `[2, 3]` tensor under a `float[3]` type (measured 2026-11-20:
+/// `[[-1, -2, -3], [-4, -5, -6]]` where the answer is `[-5, -7, -9]`). The extents are the
+/// operands' own, and a declaration that states none stops the step by name -- `add_tensor_t`
+/// records why, and why the head names one type parameter per operand.
+export rule subtract_broadcast_t::<T, X, W>(x: X, w: W)
+when is_float::<T>() && !is_same::<X, W>() {
+    subtract(x, w) => (ct: T[...]) => (sum_to(ct, shape(x)), sum_to(-ct, shape(w)))
+}
+
+/// The transpose of `subtract_stated(x, w, ax, aw)`: `ct` for `x` reduced to `ax`, and `-ct` for
+/// `w` reduced to `aw` -- the mirror of `add_stated_t` above, and the law the training step's
+/// `pred - target` is turned round by.
+///
+/// The reason is that law's, one operator on: `jvp_subtract` writes its tangent as
+/// `subtract_stated(dx, dw, shape(x), shape(w))`, because the position this law answers for is a
+/// tangent on the reverse side, and a tangent's type states no extents. The two shapes are values of
+/// the primal, computed where both operands are values, and this law reads them instead of reading
+/// the position it answers for.
+///
+/// This is the shape that must not fall back to `-ct` unanswered: a difference broadcasts, so the
+/// operand that was spread over the larger one gets the sum of the cotangents it fed
+/// (`subtract_broadcast_t` above records the measurement that rule was written for).
+export rule subtract_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
+    subtract_stated(x, w, ax, aw) => (ct: T[...]) => (sum_to(ct, ax), sum_to(-ct, aw))
 }
 
 // ---- the transpose rule of the matrix product ----

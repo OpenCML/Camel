@@ -77,6 +77,13 @@ class TensorExecutor : public Executor {
 /// broadcast of the two, a matrix product's is neither), so the only type a declaration can write
 /// is `T[..]` and that is the honest one. The declared result is what a program sees; the walk
 /// reads the lists and never the result's extents.
+///
+/// `add_stated` and `subtract_stated` are the same shape as `mul_stated` for the same reason: the sum
+/// of two arrays broadcasts, so its result's extents are a function of the two lists and `T[..]` is
+/// the only type a declaration can write. They exist because a forward rule's **tangent** is where
+/// the problem bites -- `jvp_add_tensor` and `jvp_subtract` write them, and on the reverse side the
+/// position a cotangent is answered for is a tangent, whose type states no extents
+/// (`stdlib/rulesets/jvp.cml#jvp_subtract` and `stdlib/rulesets/transpose.cml#subtract_stated_t`).
 constexpr std::string_view kDeclaredOperators[] = {
     "broadcast_like", "dim",
     "pick_at",        "gemm_backend",
@@ -89,6 +96,7 @@ constexpr std::string_view kDeclaredOperators[] = {
     "shape",          "sum_axis_stated",
     "sum_stated",     "sum_to",
     "take_stated",    "show",
+    "add_stated",     "subtract_stated",
     "to_bytes",
 };
 
