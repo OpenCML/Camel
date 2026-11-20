@@ -885,8 +885,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // write to that cell, tracked where it happens).
     //
     // A write that produced a version of its own has that data edge already: the read takes the
-    // version, and the control input this helper used to stand in for it is gone with it
-    // (Builder::valueVersionOf).
+    // version, so no control input stands in for it here (Builder::valueVersionOf).
     if (valueVersionOf(variable) != nullptr) {
         return;
     }
@@ -2814,9 +2813,9 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const size_t names    = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
-        // declaration, and not as an element read past the end -- a name too few used to drop the
-        // remaining elements in silence, and a name too many reported an index the source never
-        // wrote.
+        // declaration, and not as an element read past the end -- a name too few would drop the
+        // remaining elements in silence, and a name too many would report an index the source
+        // never wrote.
         // One answer per declaration: every name of it carries the count, and the first reports.
         if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
             diags_->of(SemanticDiag::TupleUnpackingCountMismatch).atOrigin(gct->origin()).commit();
@@ -2868,8 +2867,8 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         // A composite that is none of the three above has no element to read: a function value is
         // the case that reaches here, and it is not a corner -- `split` answers the forward half,
         // so `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type
-        // whose members are parameters, not elements (`(float, float) => float`). This used to be a
-        // `runtime_error`, which the driver reports as a defect of the compiler; a program that
+        // whose members are parameters, not elements (`(float, float) => float`). A `runtime_error`
+        // would be reported by the driver as a defect of the compiler; a program that
         // asks a function for its element is a program with a mistake in it, and it is told which
         // type it asked (the split ABI in test/cases/transforms reaches
         // it).

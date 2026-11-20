@@ -91,7 +91,7 @@ inline constexpr OperId kNoOper = 0;
 
 /// The operators the core recognises by identity, with their ids fixed at compile time. The
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
-/// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
+/// `body->oper == oper::VarGet` asks the question by operator id, not by comparing the uri.
 ///
 /// Besides the variables, the list holds the operators the compiler emits itself, as the
 /// lowering of a construct (`__enum_make__`, `__throw__`, `__set_index__`): the builder refers
@@ -488,7 +488,7 @@ class OperatorTable {
     /// The types `uri` converts between, or nullopt when it is not a declared conversion.
     std::optional<ConversionTypes> conversionTypesOf(std::string_view uri) const;
 
-    /// True when the operator is a declared conversion. The question `find("to")` used to answer.
+    /// True when the operator is a declared conversion (the question `find("to")` answers).
     bool isConversion(std::string_view uri) const { return conversionTypesOf(uri).has_value(); }
 
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------

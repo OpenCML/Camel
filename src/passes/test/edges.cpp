@@ -901,8 +901,8 @@ std::string spelledEdges(const GCGraph &graph) {
 // commit delivers is the draft's own answer to whether it still is the graph it was decoded from;
 // the order and sync edges are the graph's own arrays beside the node columns, not ports and not
 // entries of a node, and a comparison that reads everything but those two arrays answered "the same
-// graph" for an edit that wrote an edge -- which is what a commit used to decide delivery by, and
-// then released the copy it had encoded and handed back the graph the edit never reached. The edit
+// graph" for an edit that wrote an edge -- which is what a commit would decide delivery by, and
+// then release the copy it had encoded and hand back the graph the edit never reached. The edit
 // here is written between two statements the graph already has, so no node is added, removed or
 // changed and the edge is the whole difference; `reused` is the object identity of the graph, so a
 // commit that threw the copy away shows as `reused=1` with the edge missing, and one that kept it

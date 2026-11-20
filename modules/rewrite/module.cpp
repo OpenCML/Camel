@@ -2979,8 +2979,8 @@ bool agree(
 //
 // The method needs the reference, so it applies to the element types the reference reads; a rule
 // whose fragment the reference cannot evaluate falls back to the element type's own comparison,
-// which is what it got before this change (a `reassociate` rule outside the fragment is not newly
-// refuted for the check's own limitation).
+// so a `reassociate` rule outside the fragment is not
+// refuted for the check's own limitation.
 
 /// Whether the element type is one the higher-precision reference can evaluate: the values
 /// `tensorOfSample` reads and the operators of the reference's fragment are declared for.
@@ -2989,10 +2989,10 @@ bool realComparable(TypeCode code) {
 }
 
 /// Whether two real values are the same number under the rule's numeric contract: the comparison
-/// the element type's own results used to get (`agreeFloat`), applied to the values the reference
+/// the element type's own results get (`agreeFloat`), applied to the values the reference
 /// computed. The contract stays the rule's -- a rule whose own syntax rounds (`c1 + c2` folded in
 /// the element type is one rounding the permission covers) may differ by that rounding -- but the
-/// cancellation that inflates two element-type results is no longer in the comparison at all.
+/// cancellation that inflates two element-type results is not in the comparison at all.
 bool refScalarsAgree(
     long double x, long double y, bool single, const camel::core::sem::RewriteErrorBound &bound,
     double scale) {
@@ -3498,8 +3498,7 @@ void checkOneRule(
     std::set<int64_t> axesSeen;
     if (!bound.checkable) {
         // `nondeterministic` has no numeric contract: there is nothing to compare against, so
-        // nothing was examined. The verdict stays `sampled` -- the three words are closed and the
-        // fourth the check used to write is gone -- but the reason is written in its own column and
+        // nothing was examined. The verdict stays `sampled` -- the three words are closed -- but the reason is written in its own column and
         // is never left out, so a reader cannot take this `sampled` for one that sampled.
         addRow(kVerdictSampled, "none", "no numeric bound", "");
         return;

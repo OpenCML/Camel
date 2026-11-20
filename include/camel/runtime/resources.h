@@ -506,7 +506,7 @@ void reportCommitViolation(
 /// build (`NDEBUG`) does not ask, a debug build asks, and a test asks through
 /// `setCommitChecksEnabled` -- and the two paths read one cell so they cannot drift.
 ///
-/// This cell is the pass boundary's answer and no longer the commit's: the commit checks are asked
+/// This cell is the pass boundary's answer and not the commit's: the commit checks are asked
 /// by what the draft added (`commitAddsAccess`), in every build. A cell
 /// that decided both would be one setting with two meanings, because the tier of the commit is a
 /// fact about the draft and not a build's answer.

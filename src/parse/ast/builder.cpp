@@ -3117,7 +3117,7 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
     ENTER("MatchCase");
     // `case a | b => body` enters the body when any of its patterns matches. A branch has one
     // value per arm, so the case becomes one arm per pattern, each with its own copy of the
-    // body (only the first pattern used to be read). An alternative that is the wildcard
+    // body (not only the first pattern is read). An alternative that is the wildcard
     // matches everything: the whole case is then the wildcard arm.
     std::vector<node_ptr_t> patterns;
     for (const auto patternContext : context->all<cst::Pattern>()) {
@@ -3499,7 +3499,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
         for (const auto matchCase : context->all<cst::MatchCase>()) {
             if (wildcardSeen) {
                 // The branch takes its last arm when no value matches, and `case _` always
-                // matches: a case written after it is never taken (it used to be entered in
+                // matches: a case written after it is never taken (it is not entered in
                 // the wildcard's place).
                 diags_->of(SemanticDiag::MatchCaseAfterWildcard)
                     .at(rangeOf(matchCase->firstToken(), matchCase->lastToken()))
@@ -3596,7 +3596,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
 
     default:
         // Every kind `visitExpr` sends here has a case above. `try`/`catch`/`finally` are not
-        // part of the language (design principles 3.9) and are not tokens any more, so the
+        // part of the language (design principles 3.9) and are not tokens, so the
         // parser never builds a node for them.
         throw std::runtime_error("Invalid control expression");
     }
@@ -5038,7 +5038,7 @@ Value Builder::visitLiteral(cst::Literal context) {
     } else if (context->tok(TK::String) || context->tok(TK::FString)) {
         // The text of a string constant, as a pattern takes it (`case 'x'`). The formatted
         // strings of an expression go to visitFStringData (visitLiteralData), and the pattern
-        // production no longer takes one, so what arrives here is a plain string.
+        // production does not take one, so what arrives here is a plain string.
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
     } else if (context->tok(TK::RawString)) {

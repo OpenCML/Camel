@@ -269,8 +269,8 @@ GenerationalAllocatorWithGC &autoSpace() {
 
 // The three spaces below hold what the program is made of, so they grow with it: segment by
 // segment, up to a limit that only guards against a compiler that never stops allocating (see
-// alloc/growable.h). The first segment of each is as large as the whole space used to be, so a
-// program that fitted before sees one segment and the same addresses-never-move contract.
+// alloc/growable.h). The first segment of each is as large as a whole fixed-size space would be, so a
+// program that fits in one segment sees the same addresses-never-move contract.
 
 namespace {
 

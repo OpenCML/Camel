@@ -1762,8 +1762,8 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     }
     // A `with` parameter is not a reason to refuse: both halves declare it as a port of their own
     // (`addWithPorts`), so the captured value enters each half the way the lifted body read it. It
-    // used to be refused here with "a captured value has no port to enter them by", a reason that
-    // stopped being true once the closure had capture ports of its own -- and a `jvp` that lifts a
+    // is not refused with "a captured value has no port to enter them by": the closure has
+    // capture ports of its own -- and a `jvp` that lifts a
     // weight, which is what design principles 9.9's `vjp = transpose(split(jvp(f)))` needs, can
     // only be cut if `split` takes such a function.
     const size_t count = function->normTypesCount();
@@ -3543,7 +3543,7 @@ SplitGraph buildSplitGraph(
             // The condition that selects among the arms. A ref that is not a node of this
             // graph is in no region -- 0 stands for "the body, and so in none of the arms
             // this loop walks" -- and the region query is not asked about it, because it
-            // would no longer answer the body for a node that is not there.
+            // would not answer the body for a node that is not there.
             const uint32_t conditionRegion =
                 function->containsNodeRef(condition) ? function->nodeRegion(condition) : 0;
             for (uint32_t region = 1; region < function->regionCount(); ++region) {
@@ -3655,7 +3655,7 @@ SplitGraph buildSplitGraph(
     } break;
     case ExitShape::Loop: {
         // **Defensive, and unreachable.** Two shapes answer `ExitShape::Loop`, and neither reaches
-        // this cell any more: a LOOP node whose type is the lifted pair is cut above, before
+        // this cell: a LOOP node whose type is the lifted pair is cut above, before
         // `residualsOf` (its residuals are the tape the cut makes, so they do not exist yet when
         // the switch is entered); and a Join that no branch names is a graph `jvp` does not build,
         // so no program in the language makes one (measured: no plan pins `skip=loop`, because no
@@ -3680,8 +3680,7 @@ SplitGraph buildSplitGraph(
         return refusal;
     }
     case ExitShape::NotAPair: {
-        // **Reachable from `.cml`**, and the cell used to say the opposite ("defensive, and
-        // unreachable"), which was wrong twice over. `split`'s own type refuses a plain function
+        // **Reachable from `.cml`**, not defensive. `split`'s own type refuses a plain function
         // before this function runs -- `Invalid call to 'split' with argument types <> ((x: float)
         // => float pure)` -- so a graph built by hand is one way in; a lifted graph is the other,
         // and it is the way a program takes. The shape: the exit node is the *application* whose

@@ -675,7 +675,7 @@ Rules buildRules() {
         false,
     };
     // `array:sort_*` and the rest of the module's kernels are below, one rule per declaration
-    // (the `array:sort_d` line this used to be is now one of the four the loop writes).
+    // (`array:sort_d` is one of the four the loop writes).
     // `array:argsort_bf` and `array:argsort_f6` (src/builtin/operators/array.cpp): the positions
     // of the elements in the order `min` and `max` use, ties where they stand -- the order
     // `array:sort_d` states, read as positions instead of values (rt::halfArgsort). The element
@@ -1711,7 +1711,7 @@ Rules buildRules() {
     // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule
     // builds that array: `rt::filledArray<T>(shape, fill, op, site)`, every element the fill.
     //
-    // This is not a bridged call any more. The bridge was right for the tensors whose value is a
+    // This is not a bridged call. A bridge was right for the tensors whose value is a
     // runtime object -- a handle, `rt::Foreign` -- but a tensor the program only reads as elements
     // is data, and data no runtime has to make. The one thing the runtime still answers here is the
     // shape's own refusal: a negative extent is a fault, and `filledArray` raises it with the

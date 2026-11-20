@@ -536,7 +536,7 @@ void registerBuiltinOperatorTraits() {
         "enum/field",
         "enum/make",
         "enum/tag",
-        // The two function-valued operators the compiler no longer builds: `:macro/cmp` answers
+        // The two function-valued operators the compiler does not build: `:macro/cmp` answers
         // the null slot and `:struct/copy_arr` is the private copy a loop state starts from (its
         // `copyWithRoom` allocates a new array and leaves the argument as it was). Neither touches
         // a resource, so both are declared here, where the empty list is the declaration
@@ -711,9 +711,9 @@ void registerBuiltinOperatorTraits() {
         // An operator outside kAccessFree has an effect and does not itemize it here: it declares
         // that much and `declareBuiltinOperatorResources` says what it really touches (the
         // variable operators, the console, the profiler). An operator left out of both lists is
-        // refused by the load below, not read as writing the global resource: the two readers that
-        // used to disagree about such an operator (the builder read-modify-wrote every operand,
-        // the declaration's readers saw one write of the global resource) are what this file now
+        // refused by the load below, not read as writing the global resource: two readers that
+        // could disagree about such an operator (the builder read-modify-writing every operand,
+        // the declaration's readers seeing one write of the global resource) are what this file
         // makes impossible instead of deciding differently. What keeps a node that must keep
         // running is its own declaration -- a run the program can observe is an effect the region
         // owes (design principles 3.4), not a resource guessed for it.

@@ -129,7 +129,7 @@ compile_graph_ptr_t Builder::functionValueGraphOf(node_handle_t node) const {
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
     if (boundWithArgs_.contains(node)) {
         // `f<w>` as a value is a partial application (design principles 4.4). The binding
-        // used to be dropped here, without a word. It is located at `f<w>` itself, not at the
+        // is reported here, not dropped without a word. It is located at `f<w>` itself, not at the
         // statement the binding is written in (1.6).
         const auto withIt        = boundWithOrigin_.find(node);
         const GCT::node_ptr_t at = withIt != boundWithOrigin_.end() ? withIt->second : origin;
@@ -1679,7 +1679,7 @@ void Builder::bindArguments(
         filled[i]  = true;
     }
     inputs = std::move(ordered);
-    // The call now reads its arguments by the declaration's parameter order, and the types are
+    // The call reads its arguments by the declaration's parameter order, and the types are
     // built from the nodes in that order by the caller, once every deferred argument has been
     // built. Nothing here fills a type list: the two would diverge.
 }

@@ -768,7 +768,7 @@ bool nothingElseReadsIt(
 /// (docs/design/arrays-memory/README.cn.md 4.3.1). The update node takes its array from
 /// `:var/take` of a cell; the plan walks the graph in execution order carrying, per cell, whether
 /// the value the cell holds is one this variable's own update made and nothing has read since
-/// (the runtime fact the cell used to carry as a mark, now decided once, here):
+/// (a fact decided once, here, not carried by the cell as a run-time mark):
 ///
 ///   * a cell that escapes, or that holds a value of unknown origin, proves nothing: the update
 ///     asks the array itself at run time (StorageReuse::ByArrayCount);
@@ -1592,12 +1592,12 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // operator kind and the node's own execution for the others). So the edge that makes a node
         // read the value is also what makes the row run after that read.
         //
-        // The rule used to be different: a row due at a node that is not an operator moved forward
-        // to the next operator of the same control region, and "later is the safe direction". That
-        // is only true in one linear order. The plan has no edge between a position and the next
+        // A row due at a node that is not an operator is not moved forward to the next operator
+        // of the same control region on the grounds that "later is the safe direction": that is
+        // only true in one linear order. The plan has no edge between a position and the next
         // position, so a parallel back end (taskflow only connects what the graph connects) may run
-        // the receiving operator before the use it was moved from, and the reference comes back
-        // while a reader is still live.
+        // the receiving operator before the use it was moved from, and the reference would come
+        // back while a reader is still live.
         // The same argument is why the holds are taken at the node that made the value and not at
         // the first position that writes one of its rows: only the producing node has an edge to
         // every reader, so only there is the hold taken before all of them.
@@ -1939,7 +1939,7 @@ void applyRefEntriesOfOpenLoops(camel::core::context::Frame *frame) noexcept {
             continue;
         }
         applyRefEntriesForLoopExit(plan, frame, loop.position);
-        // The loop is no longer one the run is inside: the rows above are the ones its exit owed,
+        // The loop is not one the run is inside now: the rows above are the ones its exit owed,
         // and a second call on this frame -- one back end's fault path is reached from another's
         // -- must not take them again (a second give-back would release a box the run still holds).
         // The value is the one `loopTest` writes when its test stops the loop, and this frame is on

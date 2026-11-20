@@ -2216,7 +2216,7 @@ node_handle_t Builder::visitAssignNode(const GCT::node_ptr_t &gct) {
         }
     }
     // What is left is a store: the cell the target is, and the value written into it. The call is
-    // the one the write used to be spelled as -- a call of the group that writes its first
+    // the one the write is spelled as -- a call of the group that writes its first
     // argument -- and its form says which store this is.
     const GCT::AssignmentForm form  = gct->assignmentForm();
     GCT::node_ptr_t store           = tree_->makeLink(2);
@@ -2837,8 +2837,8 @@ node_handle_t Builder::visitLinkNode(
     // An argument that is still a name without a single function value (several overloads, or
     // an operator whose signature is not one function type). Where the callee has one known
     // signature and its parameter there is a function type, the overload with exactly that
-    // type is the argument. Anywhere else the name has no value: it used to be passed on as
-    // a value of type void, which ended in "No matching function ... <void>" or, when the
+    // type is the argument. Anywhere else the name has no value: passing it on as
+    // a value of type void would end in "No matching function ... <void>" or, when the
     // callee takes anything (`println(println)`), in an internal error about a live DREF.
     {
         FunctionType *knownCalleeType = nullptr;
@@ -4640,11 +4640,11 @@ node_handle_t Builder::visitLinkNode(
             // here
             // -- before the write path below decides how to remember the argument, and before the
             // shape check -- because the specific reason must answer for a position where the
-            // generic one could also apply. `let k = 0; k = 5` used to be answered with
-            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), and
+            // generic one could also apply. `let k = 0; k = 5` is answered with
+            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), not with
             // `AssignmentTargetNotVariable`
-            // ("the target must be a variable") replaced it when the write path stopped asking this
-            // question; a diagnostic that does not say what to change is not the one to keep.
+            // ("the target must be a variable"): a diagnostic that does not say what to change is
+            // not the one to keep.
             if (const auto immutable = immutableNameOf(arg.expr)) {
                 diags_->of(SemanticDiag::ImmutablePassedToVarParam)
                     .atOrigin(arg.expr->origin())
@@ -4738,7 +4738,7 @@ node_handle_t Builder::visitLinkNode(
                 // A `var` handed to another graph is read before the callee writes it, and what
                 // that read takes is the version the variable's nearest write made, not the cell
                 // the first write made: the port carries that version as a data edge, and the
-                // control input the writer used to stand in for it is gone with it
+                // control input the writer would stand in for it is not needed
                 // (a capture of a cell is linked the same way, Builder::captureValueOf;
                 // Builder::valueVersionOf says what a version is). The version is the cell the
                 // write stored into -- `:op/assn` gives that cell back as its own value -- so the
@@ -4807,7 +4807,7 @@ node_handle_t Builder::visitLinkNode(
         if (arg.readsVersion) {
             // The port carries the nearest write's version, and that data edge is what runs the
             // write this read uses and orders the call after it (design principles 3.5, F3): the
-            // control input the writer used to stand in for it is not written.
+            // control input is not written for the writer.
             continue;
         }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {

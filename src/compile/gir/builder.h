@@ -1252,7 +1252,7 @@ class Builder {
     std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
     /// The `Data` behind a static data node, when the builder made the node from one. A
     /// compile-time value handed on from node to node (a `constas` value passed to another
-    /// `constas`, the `n` of a `static for`) has no `Data` of its own any more: it was encoded
+    /// `constas`, the `n` of a `static for`) has no `Data` of its own: it is encoded
     /// into a slot when its node was made, and the value is read back from here. A member read of
     /// a value that is already known (`tags.width.w`, over the tags the third name of `fields T`
     /// gives) carries the field's value here too: the read keeps its node, and what it reads is
@@ -3118,8 +3118,8 @@ class Builder {
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
         const GCT::node_ptr_t &gct);
     /// The interval `a..b` of two integers as the array `int[]`. The form it is written in is
-    /// `a..b` and nothing else: the two-parameter `range(a, b)` it used to be the same operation
-    /// as is gone (design principles 4.2).
+    /// `a..b` and nothing else: there is no two-parameter `range(a, b)` as the same operation
+    /// (design principles 4.2).
     node_handle_t intervalValue(node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);

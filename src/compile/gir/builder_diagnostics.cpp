@@ -1968,8 +1968,8 @@ void Builder::reportUnusedFallibleValues() {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends. A branch with two arms is answered where its arms
                 // end instead (`ExitInUnusedBranch`, `unused_arm_exit`): both arms hand a value to
-                // a JOIN that joins nothing, and the JOIN is a statement of the region now that a
-                // write reaches the exit, so `ordered` alone no longer tells the two shapes apart.
+                // a JOIN that joins nothing, and the JOIN is a statement of the region when a
+                // write reaches the exit, so `ordered` alone does not tell the two shapes apart.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
                     node_handle_t value = draft.ref(armId);
                     if (nodeIsKind(value, runtime::GCNodeKind::Gate) &&
@@ -2745,7 +2745,7 @@ namespace {
 /// Why an array literal cannot be an array type that states one dimension: the length it writes.
 /// This decides nothing -- `arrayLiteralFitsShape` already decided, and the elements are each
 /// reported by whoever builds the value -- it says which side is what, because a rank-one length
-/// that does not match used to arrive here as the fallback sentence "the value cannot become that
+/// that does not match would otherwise get the fallback sentence "the value cannot become that
 /// type", which names neither the length nor the side that wrote it, for a literal whose elements
 /// all fit.
 std::string arrayLengthReason(const data_ptr_t &data, Type *type) {

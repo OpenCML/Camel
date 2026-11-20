@@ -878,7 +878,7 @@ int runCommand(int argc, char *argv[]) {
                << "\n]" << endl;
         } else {
             // Not a diagnostic: a state this version does not build. The text of the exception is
-            // printed with it (it used to be printed bare: a line reading `bad any_cast`), and the
+            // printed with it (never bare, as in a line reading `bad any_cast`), and the
             // program is not blamed, and the text never asks the reader to send it.
             os << "camel: internal error: " << e.what()
                << "\nThis is a defect of the compiler, not an error of the program. No shape the "

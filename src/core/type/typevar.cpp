@@ -1078,8 +1078,8 @@ bool matchParameterList(
 /// not enter either -- and when the actual is already an array, whose own element the array arm
 /// below pairs with.
 ///
-/// One judgement for both walkers: `bindTypeVars` and `unifyTypeVars` used to answer "the codes
-/// differ, so nothing binds" separately, and that is exactly the answer design principles 5.4
+/// One judgement for both walkers: `bindTypeVars` and `unifyTypeVars` do not each answer "the codes
+/// differ, so nothing binds" -- exactly the answer design principles 5.4
 /// overrules for `T[..]`. `rankZeroType()` is where the shape is decided, so the binding and
 /// `ArrayType::assignableFrom` (array.cpp, the membership check that follows) ask one place.
 Type *rankZeroBindTarget(Type *pattern, Type *actual) {

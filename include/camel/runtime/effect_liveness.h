@@ -10,7 +10,7 @@
  * the pass that prints the answer for a plan to pin (`KeepInspectTestPass`).
  *
  * The gate's bypass test, the splice that moves a statement into a chain and the walk that reports
- * a dropped effect are **not** among them, although this header used to say so: each of them asks
+ * a dropped effect are **not** among them: each of them asks
  * whether a node carries a **wait**, which is a structural fact and never a credential -- a GATE
  * with a wait is `HasNoCredential` here, and that is the right answer to a different question.
  * Three callers read the wait from three different places (control inputs; control or sync inputs;

@@ -4,7 +4,7 @@
 /*
  * The execution plan of a graph version (docs/design/graph-store 4.6).
  *
- * What every back end needs to run a graph and used to compute for itself: the order its live
+ * What every back end needs to run a graph and would otherwise compute for itself: the order its live
  * nodes run in, where each arm of a branch starts, the callee and the argument slots of each
  * direct call, which calls are in tail position. It is computed once, the first time a back end
  * asks (GCGraph::execPlan), from the frozen graph alone, and kept with the graph version: a
@@ -497,7 +497,7 @@ class ExecPlan {
     /// `nodeAtPc` is keyed by the graph's own pc numbering as the compiler emitted it, and the
     /// optimizer moves those keys with the instructions, in the same call that moves the origin
     /// table (`BytecodeOptimizer::optimize`), so a pc an interpreter holds in hand finds the row of
-    /// the instruction it is pointing at and never the row of one that used to be there.
+    /// the instruction it is pointing at and never the row of one that was there before the move.
     /// `entryPc` is where that numbering starts in the image the run executes, so an image pc can
     /// be brought back to a key of `nodeAtPc`.
     struct CountedSites {

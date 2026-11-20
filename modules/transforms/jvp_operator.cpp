@@ -177,7 +177,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     // The reading is part of the interface (jvp.h): a graph the caller cannot name yet is a graph
     // nobody can check. It goes to the diagnostic side (`readings.h`), not to the program's output:
-    // the same walk that explains a refusal used to land among the numbers the program printed.
+    // the walk that explains a refusal must not land among the numbers the program prints.
     const JvpGraph built = buildJvpGraph(
         ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.graph == nullptr) {
@@ -245,8 +245,8 @@ void printJvpCallReading(
 
 // The two steps of `vjp` (stdlib/vjp.cml) have rules of their own -- `split` in
 // modules/transforms/split_operator.cpp and `transpose` in modules/transforms/transpose_operator.cpp
-// -- so the stand-ins that answered "this step is not bound for this function" are gone with them:
-// a step either has a rule or says it has none, and it no longer has a shape without one.
+// -- so there are no stand-ins that answer "this step is not bound for this function":
+// a step either has a rule or says it has none, and it has no shape without one.
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9

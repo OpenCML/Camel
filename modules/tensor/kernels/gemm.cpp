@@ -215,8 +215,8 @@ void noteGemmLibraryThreads(int threads) {
 /**
  * The library GEMM's own pool: one thread, for the duration of one matmul and after it.
  *
- * The library used to take the run's whole budget when the product was the whole work (one call,
- * as the large 2-D products of a training step are). That made a second pool beside the tensor
+ * Letting the library take the run's whole budget when the product is the whole work (one call,
+ * as the large 2-D products of a training step are) would make a second pool beside the tensor
  * pool, and on a loaded host the two pools compete for the same cores: the curve in
  * `docs/technical/25_tensor_stack_and_onnx_export.md` has the uncapped library losing to the
  * canonical kernel from four threads up, while one library thread beats the canonical

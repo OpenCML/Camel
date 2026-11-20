@@ -569,7 +569,7 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // fact about the program.
     //
     // This refusal is also what leaves `RuntimeDiag::PassInternalError`'s norm-arity text unreached
-    // from `transpose`: no call of a member is built any more whose argument count the member's own
+    // from `transpose`: no call of a member is built whose argument count the member's own
     // ports do not fit, because the operator stops where the two counts are known. The pass-level
     // report is kept as the internal fallback it is for every other pass -- its help is written for
     // the whole pipeline and is true there, so it is not rewritten for one operator's old wall.

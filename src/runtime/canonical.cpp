@@ -138,8 +138,8 @@ class CanonicalWalk {
         // A node whose region the walk holds no record of -- a control region a publish left
         // `Dead`, which is what a graph built from a *subset* of a draft's nodes gets
         // (`planDraftPayload`) -- is a member of the same section and arranged the same way. It
-        // used to be placed here in NodeId order, and NodeId order is the order the nodes were
-        // created in, which is the spelling: a reading that only looked right because no program
+        // is not placed here in NodeId order: that is the order the nodes were
+        // created in, which is the spelling, a reading that would only look right because no program
         // in this repository reaches it today. The outside nodes are one group because a dead
         // region is not a structure the walk can order by.
         {

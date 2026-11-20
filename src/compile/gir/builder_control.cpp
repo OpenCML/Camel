@@ -2003,7 +2003,7 @@ node_handle_t Builder::buildBranch(
                 joinType      = valueType;
                 mergeVariable = variable;
                 // The branch is this variable's write from here on: a read written after it takes
-                // the join, and the `sync` block that used to order such a read is not needed.
+                // the join, so no `sync` block is needed to order such a read.
                 carriedVersions_[variable] = joinNode;
             }
         }
@@ -2539,12 +2539,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // A `for` over an array of any rank is the core's, and no module takes part in it: `t[i]`
     // takes the i-th along the first dimension (design principles 5.4), so the round of a rank-1
     // array is its element and the round of a higher-rank one is the row one dimension shorter
-    // (ArrayType::firstDimensionElement). The tensor module used to declare `__iter__` for a
-    // numeric array (`tensor:iter`, sub-arrays along the first dimension), and asking it here
-    // made the iterable position an OPER node: that is what hid a constant array's row count
+    // (ArrayType::firstDimensionElement). The tensor module declares no `__iter__` for a
+    // numeric array (`tensor:iter`, sub-arrays along the first dimension): asking it here
+    // would make the iterable position an OPER node, which would hide a constant array's row count
     // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). Design principles 5.4
-    // states it once, in the core, for every array; the module's `iter` went with the P4 alias
-    // (one thing, one spelling).
+    // states it once, in the core, for every array (one thing, one spelling).
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.

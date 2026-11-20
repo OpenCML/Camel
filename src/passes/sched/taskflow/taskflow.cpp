@@ -2329,7 +2329,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     try {
         return invoke(camel::profile::profiledOperator(uri, *opFunc), withView, normView);
     } catch (const RuntimeFault &fault) {
-        // Reported at the operator, as on the other back ends (it used to be the start of
+        // Reported at the operator, as on the other back ends (not at the start of
         // the enclosing graph).
         raiseFault(fault, graph, nodeRef);
     }

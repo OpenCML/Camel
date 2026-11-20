@@ -195,7 +195,7 @@ Type *tangentElementType(Type *type) {
 
 /// The place a refusal is about is carried by the diagnostic's own position and by its related
 /// locations, never by the message: a reader's tool reads the fields, and the same place written
-/// twice in one line is what this helper used to add.
+/// twice in one line would be redundant.
 std::string whereIs(uint64_t) { return {}; }
 
 /// A variable (`var`) is a cell; the graph passes the cell, not its content.

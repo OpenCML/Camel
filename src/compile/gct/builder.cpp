@@ -1133,7 +1133,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             if (refs.size() == 1) {
                 res = nRefNode;
             } else {
-                // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                // `let a, b = 1, 2` binds every name, not only the last one.
                 *res << nRefNode;
             }
         }
@@ -2310,9 +2310,9 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     if (dataNodes->size() > 0) {
         // Case 1: Single data node
         if (dataNodes->size() == 1) {
-            // Lowered once. It used to be lowered twice and the first result dropped: every
-            // `return` nested in the returned expression doubled the work (2^n lowerings at
-            // depth n) and repeated the diagnostics of the expression.
+            // Lowered once: lowering twice and dropping the first result would double the
+            // work at every `return` nested in the returned expression (2^n lowerings at
+            // depth n) and repeat the diagnostics of the expression.
             *exitNode << visitData(dataNodes->front());
         } else {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
@@ -3314,12 +3314,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // is handed on as one call of the compiler's own name for it, which the GIR builder
         // resolves (Builder::buildComposition).
         //
-        // It used to be handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
-        // src/builtin/operators/macro.cpp), whose resolver took two functions and answered with
-        // the exit type of the right one. That path could not build a composition at all — a
-        // value of a function type is a graph, and no built-in executor has one — and it had no
+        // It is not handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
+        // src/builtin/operators/macro.cpp), whose resolver takes two functions and answers with
+        // the exit type of the right one. That path cannot build a composition at all — a
+        // value of a function type is a graph, and no built-in executor has one — and it has no
         // reading for two integers. The operator and its executor stay registered; the compiler
-        // no longer has a user for them.
+        // has no user for them.
         node_ptr_t opNode  = tree_->makeDRef(std::string(camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
@@ -4240,8 +4240,8 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
-        // Exact arithmetic. A literal that an int cannot hold used to wrap around
-        // (`9223372036854775808` was the smallest int, as was `1e400`). The value is read by
+        // Exact arithmetic. A literal that an int cannot hold does not wrap around
+        // (as `9223372036854775808` or `1e400` would). The value is read by
         // the same whole-number-token rule an entry argument is (camel/utils/number_text.h):
         // one grammar, one parser for the two places a number is written as text.
         int64_t value = 0;
@@ -4803,7 +4803,7 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         }
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
-    // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
+    // declared type is not refused as "dynamic type casting" (`var acc: V = p`
     // with `p: V`); converting a value to its own type does nothing (design principles 5.1).
     node_ptr_t castNode = tree_->makeCast(type, true);
     *castNode << value;
@@ -4817,11 +4817,11 @@ namespace {
 /// as constants (`f32[2, 2]`, `f32[3]`). Those are the positions a literal is one array of
 /// (design principles 5.1, 5.4); a shape with a dimension left open keeps the ordinary build.
 ///
-/// A rank of one is a shape too. It used to be left out here, and that was the whole difference
-/// between `let v: float[3] = [1.0, 2.0, 3.0]` (which built the literal into the stated shape)
-/// and `[1.0, 2.0, 3.0] as float[3]` (which did not: the ordinary build made a `float[]`, and the
-/// `as` path then refused it on `castSafety` with "the value cannot become that type" -- a value
-/// that fits, refused by the one position that could not build it). Nothing about the literal's
+/// A rank of one is a shape too. Leaving it out would be the whole difference
+/// between `let v: float[3] = [1.0, 2.0, 3.0]` (which builds the literal into the stated shape)
+/// and `[1.0, 2.0, 3.0] as float[3]` (which would not: the ordinary build makes a `float[]`, and
+/// the `as` path then refuses it on `castSafety` with "the value cannot become that type" -- a
+/// value that fits, refused by the one position that could not build it). Nothing about the literal's
 /// own rank decides this: the position's shape does, and `[a, b, c]` in a `f32[3]` position is
 /// that shape however it is spelled. The length it writes is checked here, in the same place a
 /// rank-two literal's is, so a mismatch names the extent instead of falling to a conversion that
@@ -5435,7 +5435,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
         const string &name    = namedPair->ref().ident();
         if (!fieldNames.insert(name).second) {
-            // As in a struct type. The later value used to be dropped, silently.
+            // As in a struct type. The later value is not dropped silently.
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
             throw BuildAbortException();
         }
@@ -6041,8 +6041,8 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
-    // no declaration shape left that the machine cannot read: the refusal this place used to hold
-    // -- "a local read after a `yield`" -- is gone with the shape it named.
+    // no declaration shape that the machine cannot read, so this place has no refusal for
+    // "a local read after a `yield`".
     Type *exit = funcType->exitType();
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
         // The head is what is wrong: a body that yields hands out a stream, and this head writes
@@ -8468,7 +8468,7 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         return ExtentForm::constant(parsed.value);
     }
     case AST::DataType::ConstAs:
-        // `constas` is no longer written in a shape; the token is a syntax error there.
+        // `constas` is not written in a shape; the token is a syntax error there.
         return report();
     case AST::DataType::Ref: {
         const Reference &ref = ast->loadAs<AST::RefDataLoad>()->ref();

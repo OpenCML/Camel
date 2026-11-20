@@ -1664,7 +1664,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 init.withInputs = std::span<const gc_node_ref_t>{};
                 draft.rewriteNode(id, init);
                 ++rewroteValues;
-                // The static function under a closure is not a value any more: the closure packed
+                // The static function under a closure is not a value: the closure packed
                 // it into a tag. It is dropped rather than left holding a type it no longer has.
                 if (isClosure) {
                     const auto norms = graph->normInputsOf(ref);

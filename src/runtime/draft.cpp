@@ -1606,10 +1606,10 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // GATE check). A successor that waits on something else and never waited on this node is left
     // alone: its wait is the block's chain, and this node was not part of it.
     //
-    // The first case is what the two-case reading adds. The test used to be "no wait of its own",
+    // The first case is what the two-case reading adds. The test is not "no wait of its own",
     // which answers the same question only while a successor has one wait or none. A successor can
-    // have two -- the inlined body's completion *and* the call whose gate is going -- and then the
-    // old test left it alone and the wait the erased gate carried went to nobody. That is the
+    // have two -- the inlined body's completion *and* the call whose gate is going -- and then that
+    // test would leave it alone and the wait the erased gate carried would go to nobody. That is the
     // splice: the gate standing for the call carries the statement written before the call, the
     // statement written after it waits on the body's tail, and `1 -> 13 -> 15` lost its `1 -> 15`.
     // The effect then stood on nothing while the graph still passed every other check.

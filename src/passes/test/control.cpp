@@ -300,7 +300,7 @@ void syncChainOrdering() {
             "a gate that waits only on the sync chain does not carry the order");
     }
     // A node that carries no order of its own: the walk reaches what ordered it through the chain
-    // it stands in, not only through the control edge it used to be written as.
+    // it stands in, not only through a control edge written for it.
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();

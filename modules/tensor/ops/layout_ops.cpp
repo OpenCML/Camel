@@ -524,8 +524,8 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
     // mask that says which bounds the program wrote. Both bounds are written here, so the mask is
     // 3 (`src/compile/gct/builder.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`
     // over the start and the end) and the step is the constant 1. The adjoint slices dy out with
-    // the one core operator, the same node the subscript builds, so concat's adjoint no longer
-    // means a slice of the module's own.
+    // the one core operator, the same node the subscript builds, so concat's adjoint does not
+    // mean a slice of the module's own.
     if (lhsTensor) {
         b.accumulateGradient(
             lhs,
@@ -674,8 +674,8 @@ std::optional<Type *> elementAtInfer(const InferContext &ctx) {
 // The stated take's adjoint, `take_stated(t, indices, extents)`.
 //
 // It is `take`'s adjoint: `tensor:take_grad(t, indices, dy)` takes the array's shape from `t` and
-// the row count from the indices. The extents are read nowhere here, and since the indices became
-// a parameter of their own the slice that used to cut them out of a packed list is gone -- the node
+// the row count from the indices. The extents are read nowhere here, and the indices are
+// a parameter of their own, not cut out of a packed list -- the node
 // this rule walks to `take_grad` is the caller's own `indices`. That is the one difference from
 // the library's law for this operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which
 // builds the zeros from the extents because a transpose law reads only known operands and the

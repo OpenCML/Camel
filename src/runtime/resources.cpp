@@ -2097,7 +2097,7 @@ namespace {
 
 /// The one cell the pass boundary reads (`commitChecksEnabled` below). It is not in the header: the
 /// question is a build's answer, and a header that held it would offer a second copy of it to every
-/// translation unit, which is exactly what the two paths must not have. The commit checks no longer
+/// translation unit, which is exactly what the two paths must not have. The commit checks do not
 /// read it: their tier is what the draft added (`commitAddsAccess`), which is a fact about the
 /// draft, and a build that decided it would be a second answer to that fact.
 std::atomic<bool> commitChecksCell =

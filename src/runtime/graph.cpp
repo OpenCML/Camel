@@ -814,7 +814,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // control input, and the ones that have carry the sync edge instead.
             // The wait a GATE carries is either a block's chain or an edge of its own, and this
             // refuses a gate with neither. It is a structural reading, and it is written where it
-            // is read: `EffectLivenessFacts` no longer carries it (camel/runtime/effect_liveness.h
+            // is read: `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h
             // says why -- four call sites filled that field in three spellings, and none of them
             // was the liveness answer).
             const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();

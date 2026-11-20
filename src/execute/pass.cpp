@@ -767,7 +767,7 @@ const std::map<std::string, std::string> passAliases = {
     {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
     {"std::type::identity", "std::identitytype"},
-    // `std::cxx` used to be a shorthand of the C++ exporter, `std::cpp`. It is not one any more:
+    // `std::cxx` is not a shorthand of the C++ exporter, `std::cpp`:
     // `cxx` is the namespace the C++ optimization passes are named under (`std::cxx::opt`,
     // `std::cxx::fold`), and leaving the shorthand in place would answer `std::cxx` with a
     // translation pass while a reader who learned the namespace from docs/cli.md means the
@@ -1029,7 +1029,7 @@ namespace {
 /// The pass a written name resolves to: the core's table first, then the aliases the loaded
 /// modules registered. The core's table has one entry, `std::opt` -- the default pipeline's name,
 /// which is a choice rather than a spelling of another pass -- so no sub-pass of the optimizer is
-/// reachable under an old name any more; a module's short aliases (`registerPassAlias`) are the
+/// reachable under an old name; a module's short aliases (`registerPassAlias`) are the
 /// rest of what this answers.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
@@ -1042,7 +1042,7 @@ std::string resolveAlias(const std::string &name) {
 }
 
 /// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (removed the variable that used to gate
+/// pipeline, so naming one is the whole switch (no variable gates
 /// them).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
 #define TEST_PASS(K, T)                                                                            \
@@ -1362,7 +1362,7 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
 }
 
 /// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (removed the variable that used to gate
+/// pipeline, so naming one is the whole switch (no variable gates
 /// them).
 std::optional<FoundPass> findTestPass(const std::string &name) {
     if (name == "test::params") {
@@ -2474,7 +2474,7 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
 /// One half of the last case is not seen here. A port naming a node that does not exist at all is
 /// refused earlier, by the commit that would have to write it down
 /// (`RuntimeGraphDraftSession::validateDraftPorts`): the graph version cannot be encoded around a
-/// reference to nothing, and the encoder used to read through it and crash before this function
+/// reference to nothing, and the encoder would read through it and crash before this function
 /// ever ran. What reaches this function is a graph that exists, so it covers the node that is dead
 /// (erased, still referenced) and the node that has no type.
 ///
@@ -2824,7 +2824,7 @@ bool passBoundaryViolation(
         }
             // A reading of the effect-containment summary, on the run's tracing channel
             // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
-            // The text is unchanged, down to the newline the log used to add.
+            // The text is that of a log line, down to the trailing newline.
             camel::core::trace(camel::core::TraceArea::Effects)
                 << std::format(
                        "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
@@ -2996,8 +2996,8 @@ PassRunResult applyRegisteredPass(
         } else {
             // A pass is `(f: F) => F!` (design principles 9.1): the value it ends with instead of a
             // program IS its answer, and handing it to the caller is how that answer travels. With
-            // no caller there is nobody to hand it to, and this line used to drop it -- the run
-            // went on as if the pass had succeeded. Nothing reaches this branch today (both call
+            // no caller there is nobody to hand it to, and dropping it would let the run
+            // go on as if the pass had succeeded. Nothing reaches this branch today (both call
             // sites pass `this`), and the branch is here so that a future one cannot be silent.
             if (ctx) {
                 ctx->rtmDiags()

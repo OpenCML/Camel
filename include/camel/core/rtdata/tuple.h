@@ -377,7 +377,7 @@ class Tuple : public rtdata::Object {
         // diagnostic question. The check below is in the shipped build, not only in a debug one: a
         // release that trusts the same static type has the same bug.
         //
-        // The walk is bounded by the value's own count, not by `codes`: residuals are no longer a
+        // The walk is bounded by the value's own count, not by `codes`: residuals are not a
         // tuple, so a type and a value cannot disagree here.
         const size_t members = size();
         GUARD(
