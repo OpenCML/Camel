@@ -6223,3 +6223,160 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 2. **身份痕迹那一轴不在仓库里做**：仓库保留真名，匿名化（改名、去作者与地址、去过程痕迹）由决策者在出包时一次做，你这边不用填替换值。仓库要做的只有已派的那件"代码注释里的过程痕迹删干净"（23:30 第一节），它在 P\* 之后一次扫完。
 3. 被裁模块的 `.cml` 仍在 `stdlib/`：出包时由决策者按模块集删掉；`collect-out` 按模块集过滤 `.cml` 是好的后续，不急。
 `gpu-plans` 那条与本件无关，照发版一侧的分级走。
+
+## 负责人上报（2026-11-20 11:35）：★ **你 `d979e61e8` 第 2 条的根因不成立 —— 按它修会修错地方**
+
+这条不是反对裁定，是**读数**。你说「二阶导的根因是 `jvp` 的 `calleeIdOf` 不认 `FunctionClosure`」。而那条车道按你的话去改之前先量了，量出**六条读数**，其中第一条就否掉了这个根因。
+
+### 一、闭包的代码**今天就已经能读**
+
+```
+`jvp(lin)`，而 `lin` 正是那个 `FILL(FunctionClosure)` 值 ⇒ **成功**：
+`REINTERP jvp function=split_of_jvp_of_quartic_backward graph=344 liftedFrom=343 type=(float, float) => (float, float) … callees=1 rules=-`
+读数 `y=16.0  lin=32.0  pair=32.0  slope=32.0`
+（还顺带 lift 了 `autodiff::mul_tangent<float>`，graph=345 rules=jvp_mul,jvp_add）
+```
+
+⇒ 而原因很直接：**`liftFuncValue`（`jvp.cpp:1036`）只对 `Func` 节点跑，Fill 节点从不问 `calleeIdOf`。** 所以 `calleeIdOf` 认不认 `FunctionClosure`，在二阶这条路上**根本不被问到**。
+
+### 二、真正的墙是**类型**，而语言自己已经说了
+
+```
+函数、以及含函数的元组**没有切平面**（`src/core/tangent_space.cpp:55-74,123`）
+而 `split` 前向一半交出的答案正是 `(float, (float) => float)`
+⇒ 语言的诊断逐字：
+`Invalid call to 'jvp' with argument types <> ((float) => (float, (float) => float pure) pure):
+ 'jvp' takes a function whose result has a tangent space, and this one's result is a
+ '(float, (float) => float pure)', which has none: the lifted signature answers the pair (value, tangent).`
+```
+
+### 三、两处死点，各自死在**不同**的地方
+
+```
+`nest_named`  ⇒ callee 的**出口是闭包** ⇒ `liftSignature` 拒，**走 walk 之前就死**
+              `jvp signature=null function=vjp::grad<<x: float> () => float pure> exitType=<__pack_0_0: float> () => float`
+`grad(grad(quartic))` ⇒ walk 停在被捕获 `forward` 的 CALL ⇒ `node=2 kind=8 type=(float, (float) => float)`
+```
+⇒ **所以不是「一处识别」，是两处不同位置的拒绝，而共同的根都是「那对类型里带了函数」。**
+
+### 四、前向那一半仍是好的
+
+```
+`jvp(jvp(quartic))` x=2 种子 1 ⇒ `y=16.0  t0=32.0  t1=48.0`（`f''=48` 对）
+`grad(grad(quartic))` 在 x=1/2/3 **全部 exit 1**
+```
+
+### 五、我建议的改裁定（要你一句）
+
+**`Jvp<F>` 从「(value, tangent) 那对」改成「一个提升后的闭包」**，并把外层 `transforms:transpose` 算子（graph 415 的 n5）在 `jvp` 里的规则一并补上 —— `transpose` 一侧同样要认出提升后的闭包。
+
+⇒ 理由是硬的：**「函数没有切平面」是原则 9.9 与 `stdlib/signatures/transforms.cml:13-27` 的法则级裁定**。若坚持「(value, tangent)」，那么 `split` 的前向一半就不该交出带函数的类型 —— **那要么改签名、要么改 `split`，两者都比「改识别处」大**。
+
+⇒ **我把这条写成问题页，默认建议写死为上面那句**，一页一问、在 `docs/handover/questions/`。**而你若维持原裁定，我就按原裁定派，但那条车道会再撞同一堵墙一次 —— 那是我该提前说清的代价。**
+
+### 六、一条我自己的教训
+
+这条裁定的根因是**我**上一轮上报时给的（我把「`calleeIdOf` 不认 `FunctionClosure`」当成结论写了上去，而它其实是上一条车道**读码得出**的推断，不是实测）。**而这次是这条车道先量后改，才把那句推断推翻。** 我上一份回报里那句话，是我的错。
+
+## 负责人上报（2026-11-20 12:00）：两条法则的写法把「一个具体情况」当成了「那个算子」
+
+审计车道在两支未合分支里捞出两条读数，都在主干上复量过。两条指向**同一类**缺陷，与今天 `add_tensor_t` 那条同属一类。
+
+### 一、`jvp_softmax` / `jvp_log_softmax` 写死单轴
+
+```
+`log_softmax<1>` 在主干上**被拒**（nvm 与 fvm 逐字相同）：
+transforms: jvp has no forward rule for `tensor:log_softmax` (the rule 'jvp_log_softmax'
+writes 1 `<>` value(s) of its own ((int)), and this node's configuration is not that one
+((float[...], int))).  (name=RuntimeDiag::RuntimeError, code=0x04000000)
+```
+⇒ **注意这是第三种答案**：分支记的静默错值（`-23.070858`，手算 `4.0`）**已经不在了** —— 匹配器现在比对 `<>`，写死的 `log_softmax<0>` 不再答 `<1>` 的调用。**但它也不是「已修、现在给 4.0」**：轴 1 上前向**无律**，程序被拒。
+
+**⇒ 而梗在这里：`jvp_reshape`/`jvp_permute` 早已把轴做成参数（`dims`/`perm`），`jvp_softmax`/`jvp_log_softmax` 还写死单轴（`<1>`/`<0>`）。同一文件里两种写法并存。**
+
+### 二、后果：`attention` 的混合不能整段提升
+
+```
+`reshape<[8, 2, 8]>` → `permute<[1, 0, 2]>` → `softmax<2>`
+REINTERP jvp function=mix skip=rule uri=tensor:softmax reason=the rule 'jvp_softmax' writes
+1 `<>` value(s) of its own ((int)), and this node's configuration is not that one ((float[2, 8, 8], int))
+READING_REFUSAL {"transform":"jvp","function":"mix","cause":"rule","uri":"tensor:softmax"}
+```
+⇒ **`permute` 确实在名单里、且把调用的角度绑进去了**（拒绝里那个 `float[2, 8, 8]` 只有在 `reshape` 再 `permute` 之后才会出现）——**走法是被 `softmax<2>` 挡住的**。
+⇒ 所以主干上 `attention` 的混合**不能整段提升**，与分支记的 `mix value=2.000000` **相反**（那是旧基线的形状）。
+
+### 三、这一类缺陷的名字
+
+今天三条（`add_tensor_t`、`subtract_t`、`jvp_softmax`/`jvp_log_softmax`）是**同一个错法**：
+
+> **法则的写法把「一个具体情况」当成了「那个算子」。**
+
+```
+`add_tensor_t` 的 `(ct, ct)` 把「同形状加法」当成了「加法」
+`jvp_softmax` 的 `<1>` 把「沿最后一轴」当成了「softmax」
+⇒ **⇒ 而两处都**不响**：一处答错的形状、一处拒**
+⇒ **⇒ 而 `jvp_reshape`/`jvp_permute` 的做法是对的样本 —— 把变化的那部分**做成参数**，而不是复制法则**
+```
+
+### 四、我建议的处置（要你裁）
+
+1. **`jvp_softmax`/`jvp_log_softmax` 把轴做成参数**，照 `jvp_reshape`/`jvp_permute` 的写法。这一条**不需要新机制**，只是把既有的正确样本推广过去。
+2. **一条一般判据**：新写的法则若在名字后面跟上特定配置（`<1>`、`<0>`），它就该把那个配置做成参数。**这条可以查**（法则名带尖括号 ⇒ 必有参数），比「记得别写死」硬。
+3. **`attention` 的整段提升**作为这条修完的验收：`reshape` → `permute` → `softmax<2>` 那条链应当绿。
+
+⇒ 而**它现在与 `(b)`（pullback 类型核对）是同一根**：`(b)` 拦「答案与操作数形状不符」，这条拦「法则只答一个配置」。**两条都是「法则的适用范围被写小了」。**
+
+### 五、附：一条检查该改
+
+`frontend.ast_snapshot` 失败时**不点名**，只报 `1 not in the snapshot yet`，而 `frontend.plan.toml` 的 `expect_stdout_contains` 就是 `files read as recorded, 0 not in the snapshot yet`。
+⇒ 今晚它**两次**都是靠人肉集合差才定位的（`cf6ccbf25` 三行、`c6f37779c` 一行）。**⇒ 建议让它点名**：「`X` not in the snapshot yet: `<path>`」。
+
+## 负责人上报（2026-11-20 12:15）：一条标签名承载两种事实，等于没有标签
+
+今晚清理三条老分支时发现一件比清理本身重要的事。
+
+### 一、事实
+
+```
+`parked/lane-front-ip-del` **在删除之前就已经存在**，指向 `cfc5f74ea` —— 也就是那条分支的 tip
+⇒ 也就是说：**有人早给它挂过「已停靠」的标签，而分支一直还在**
+⇒ 今晚这次 `-D` 才让那条记录**第一次与事实对齐**
+```
+
+### 二、所以 `parked/` 这个名现在是二义的
+
+```
+`parked/lane-ssa`（今晚建的）：**已删**，本地与远端都没有，内容是「未验证、不是被取代」
+`parked/lane-front-ip-del`（早于今晚）：**还在**，标签指向一个活着的分支
+⇒ **⇒ 同一个前缀，两种含义：『我们不再做它了』与『它已被删、内容在别处』**
+⇒ **⇒ 而一个二义的记录比没有记录更坏：读的人会按其中一种理解行事，而它可能正是另一种**
+```
+
+### 三、我建议的处置（要你裁）
+
+1. **拆成两个前缀**：`parked/` 只表示「不再做它，分支可能还在」，`consumed/`（或 `retired/`）表示「内容已在别处、分支已删」。**含义单一是标签唯一的价值。**
+2. **或者**：`parked/` 的 message 必须写三件 —— **为什么停 / 谁消费它 / 它还在不在**。今晚那四个 `annotated` 标签做到了前两件（第三条隐含在「分支已无」里），而早先那个轻量标签**一件都没写**。
+3. **一条可查的判据**：**标签存在而其目标分支仍存在 ⇒ 该标签的 message 必须写「仍在使用」或「待删」**。这条可以查（`git for-each-ref refs/tags/parked/*` 逐个对 `refs/heads/*` 取交集）。**比「记得写清楚」硬。**
+
+### 四、这件事的另一半：`-d` 的拒绝种类我漏了一类
+
+今晚我给清理车道的规矩是「被拒就报拒绝种类（**内容不在 develop / 被工作树占用**）再动，不换 `-D`」。而实际出现的拒绝是**第三种**：
+
+```
+`-d` 判的是**提交的祖先关系**，不是**内容**
+⇒ `lane-front-ip-del` 的内容已随 `848f151a7` 进树（patch-id 相同 `8ab61fc647d1`、页面 blob `ec7ed1357` 逐字节一致、`git diff` 空），但它那笔提交**不是** `origin/develop` 的祖先 ⇒ `-d` 说 `not fully merged`
+⇒ **⇒ 所以「被拒就报，不换 `-D`」防的是「被拒之后滥用 `-D`」，不是「永远不用 `-D`」**
+⇒ **⇒ 正确形态是：报拒绝种类 + 说明这个种类在这里为什么不适用 + 拿授权**
+```
+
+**⇒ 我建议把这条写进 `agents/branching.md`** 的「`-d` 和 `-D` 都不会告诉你它用的是哪个基准」那句旁边 —— 因为它是那句话的**操作后果**，而今晚是第一次真正撞上。
+
+### 五、读数（`origin/develop = b3c20efcd`）
+
+```
+clean-ip-del      → 删（内容已在树）
+grad-form         → 删（落后版本，内容已在树）；远端 `origin/lane-grad-form` 一并删（停在分叉点 `c74e59759`，0 笔领先，未丢提交）
+vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已陈丢弃）
+⇒ `maxBehind` **101 → 43**（`lane-win-s1-6`）· `U` **10 → 7**（lane 口径）
+```
+⇒ 三个 tip 仍可达、**只经标签可达**（`archive/` 三条 + `parked/` 一条，均 annotated）。**⇒ 删除没有丢掉任何提交，只是把它们从 `refs/heads` 挪到 `refs/tags`。**
