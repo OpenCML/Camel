@@ -6165,3 +6165,53 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 2. **二阶导的根因（`jvp` 的 `calleeIdOf` 不认 `FunctionClosure`）：按计划乙第 1、2 条修。** `split` 已交出"静态代码 + 残差"的闭包；外层 `jvp` 遇到 `FILL(FunctionClosure)`：对它的静态源函数做前向变换，捕获的值照常提升（数值的切向随之传入），得到提升后的闭包。`transpose` 一侧同理认它。修在 `jvp`/`transpose` 识别被调者的那一处，不另加特例。验收照旧。前向 `jvp(jvp)` 已通（`t1 = 48`）是好读数，一并进采集。
 3. **"源码包准备"做成了 PyPI 发布轮子，不是我要的东西。** 23:30、23:50 那五件指的是**给 ECOOP 的匿名源码包**的准备：过程痕迹盘点与清理脚本、裁剪依赖图、CMake 选项（关掉被裁部分后照常构建）、最小文档、`REPRODUCE.md`。这条车道现在改做这五件。它顺手补的 `.gitignore` 两行留着。
 4. 轮子那边的两问不在今天的路径上：发布用的构建由 CI 出，固定 `x86-64-v3`（原则 9.10）；主机上车道的构建保持 `native`，不为此改 `camel-remote.ps1`。版本号与发布说明是发版一侧拟、负责人定，不在这条车道。
+
+## 负责人回报（2026-11-20 11:20）：ECOOP 匿名源码包五件已交付；另三件要你裁
+
+你 `d979e61e8` 第 3 条纠正了我的派工（我把它做成了 PyPI 轮子）。那条车道已改做你要的五件，并交付。它四笔：`a1554cea9`（模块集）、`c3d13da71`（痕迹脚本）、`4412f9cdb`（两文档），轮子侧只留 `2f9066163`（`.gitignore` 两行）与 `498afe5b4`（探针+文档三处过期修正，标了「不是这次要交的东西」）。
+
+### 一、① 过程痕迹盘点（先表，后脚本）
+
+在主机一棵「构建+测试+打包过」的树上实测（`--table` 直接生成，不是手写）：**7 条、431.0 MB** —— `build-tree` 4 条 302.8 MB（`build/` `out/` `dist/` `CMakeUserPresets.json`）、`caches` 1 条 124.7 MB（`editors/vscode/node_modules`）、`test-scratch` 2 条 3.5 MB（`test/results/`、`tmp/`），其余四类（`binaries`/`tool-state`/`editor-residue`/`package-staging`）**在这条树上是 0，逐类点名而不是省略**。
+
+`scripts/source-package.mjs`（无 git、无网络、无依赖）：`--table` / `--clean` / `--clean --dry-run` / `--root`；有痕迹 exit 1。**正反两读**：同一提交的全新 clone = **0 条 exit 0**；种子副本上 `--clean` 恰好删掉种进去的 4 条（8000 → 7998 文件），删完再扫 = 0。
+⇒ 它自己写了一句话，我认为是这个交付里最要紧的：**「`git archive` 本身不带未跟踪文件，所以这个脚本是**证明**而不是机制。」** 它没有把工具误当成保证。
+
+### 二、②③ 裁剪与关掉后照常构建（实测）
+
+`CAMEL_PACKAGE_MINIMAL=ON` ＝ 去掉 `tiles/onnx/nn/ckpt` 与两个方向的 Python；另加 `CAMEL_ENABLE_PYTHON_BINDINGS` 单独开关；模块集是 `CMakeLists.txt` 一张表 + `CAMEL_MODULE_LINKS_*` 对手写依赖，**选漏了在 configure 就失败并点名两个模块**。默认两个开关都是老行为。
+
+```
+全量构建        730/730
+裁剪后从零构建  583/583  buildExit=0（`rm -rf build out` 之后）
+最终默认配置    smoke 151/151  buildExit=0
+```
+裁剪后 `out/latest/stdlib` **22 个 `.cmo`（不是 28）**、`libs` 只剩 `libcamel.so`、安装 **63 MB**（全量 68 MB）。跑通 `hello.cml`、`fib10_pipeline.cml std::fvm`（`Fibonacci(10) = 55`）、`merge_sort.cml`、`hello.cml std::gir`。
+
+**不能单独关 `tensor`** —— `random` 链接它，且它被 5 个 stdlib 文件 import；裁 tensor 会带走 random。`verify` 不产 target（是 `rewrite` 的源码清单），关 `rewrite` 它就没意义了。这两条是它读出来的、不是猜的。
+
+### 三、④⑤ 文档
+
+`docs/build-minimal.{en,cn}.md`（七样工具与版本、Conan profile 三处必须项、`node scripts/build.js` 四步含为什么先 `--generate`、裁剪子集与 22/28、63/68 MB）+ `REPRODUCE.md`（archive → 运行，逐条命令带真实输出）。**两份里每一条命令与每一行输出都在主机上对着本提交跑过。**
+
+### 四、★ 三件要你裁
+
+**1）身份痕迹是另一条轴 —— 这一遍没做，而它比「非源码痕迹」难**
+```
+`pyproject.toml` 的作者、版权行、文档里的仓库 URL 都是**被跟踪的源码**，删了会坏构建
+⇒ 本表只覆盖「非源码」⇒ **⇒ 匿名评审要处理这一轴，而它需要一个决定：匿名到什么程度、用哪一套替换值**
+⇒ **⇒ 我不自己填。**
+```
+
+**2）被裁模块的 `.cml` 仍在 `stdlib/` 里（只少了 `.cmo`）**
+```
+所以 `import tiles` 报的是 `SemanticDiag::NativeTypeNotProvided … the module 'tiles' registered no type of that name`
+⇒ **⇒ 少模块是**有名字的诊断**，不是崩溃 —— 但「模块没注册这个类型」听起来像缺类型，不像缺模块**
+⇒ 要变成后者得让 `collect-out` 按模块集过滤 `.cml`。**这是下一步，不是缺陷。**
+```
+
+**3）`gpu-plans` 的 `resident_graph_transfers` 仍「RED FOR ANOTHER REASON」**（记录 `0x040001B0`，现在红在 `TILES-OUTLINED-5`）—— 基线就有、report-only；今晚**三次独立观测**（`member-init`、合并位、这条）都是同一格，我按「同一件事的三次观测」处理，不当三个缺陷。
+
+### 五、而第 1、2 条裁定已开工
+
+`lane-unbroadcast`（(a) `sum_to` + (b) 类型核对与形状断言，**含 (b) 的正控制：一条故意写错的探针法则必须报出法则名**）与 `lane-jvp-closure`（`grad(grad(x⁴))` 在 `x=2` 给 `48`、`x=3` 给 `108`，两个点防碰巧）都在跑。
