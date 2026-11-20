@@ -964,7 +964,13 @@ struct Half {
             // wrote. Carrying the effect skeleton across the cut is a tier of its own -- until it
             // exists, this is a refusal and not a silent wrong answer (a cut that read the gate's
             // last input as the value would place a print where the result should be).
-            const std::span<const gc_node_ref_t> waits = gateWaitsOf(*source, ref);
+            //
+            // The answer is named and held here, not viewed: `gateWaitsOf` answers with a vector by
+            // value (`camel/runtime/graph.h`), so a `std::span` over it would be a view of a
+            // temporary destroyed at the end of the declaration -- `.empty()` alone would still read
+            // the span's own size and say nothing, and the first reader of an element would read
+            // freed memory.
+            const std::vector<gc_node_ref_t> waits = gateWaitsOf(*source, ref);
             if (!waits.empty()) {
                 return refuseAt(
                     refusal,
