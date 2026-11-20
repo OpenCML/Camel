@@ -169,7 +169,10 @@ d = json.load(open(sys.argv[1]))
 sys.stdout.write(str(sum(len(g.get("nodes", [])) for g in d["graphs"])))' "$1" 2>/dev/null || printf '?'
 }
 
-# One pass, nine fresh processes, and the median of the pass window itself.
+# One pass, nine fresh processes, and the median of the pass window itself -- with the smallest and
+# the largest of the nine beside each median, because a median alone under load hides exactly the
+# spread the paper's "before and after" columns are read against. The range is not a judgement; it
+# is what lets a reader judge.
 #
 # The reading is the `pass` phase's own entry from --time-phases (`name=pass`, `detail=<the pass as
 # the pipeline spelled it>`), so the terminator pass and the printing of the document are not in it.
@@ -238,9 +241,9 @@ if not wall:
           % (tag, word, (" (" + ", ".join(failed) + ")") if failed else "",
              said[0] if said else "(it printed nothing)"))
 else:
-    print("%-20s n=%d of 9  median_wall_ms=%8.2f [%8.2f, %8.2f]  median_cpu_ms=%8.2f  %s%s"
+    print("%-20s n=%d of 9  median_wall_ms=%8.2f [%8.2f, %8.2f]  median_cpu_ms=%8.2f [%8.2f, %8.2f]  %s%s"
           % (tag, len(wall), statistics.median(wall), min(wall), max(wall),
-             statistics.median(cpu), note,
+             statistics.median(cpu), min(cpu), max(cpu), note,
              ("  failed: " + ", ".join(failed)) if failed else ""))
 PY
 }
@@ -713,21 +716,33 @@ echo "# What is owed here, in the author's own words (review page of 2026-11-20 
 echo "# derivative of \`x*x\` at 2, of \`x^3\` at 2, and a Hessian example, each on std::nvm, std::fvm,"
 echo "# std::jit and std::tf, with whether the four agree. The first derivative of the two losses above"
 echo "# is what section [8] compares; a second derivative needs \`grad(grad(f))\`, and the outer \`grad\`"
-echo "# is refused on every build in develop today: it needs \`split\` to hand out static code, which is"
-echo "# the product of another lane. So the block is PENDING -- to be taken once 925c38791 (the head of"
-echo "# item5-red-925c38791, unmerged) is in develop -- and the line below is the check of that"
-echo "# condition, not a reading of the derivative."
-PDEP=925c38791
-if ! git -C "$ROOT" cat-file -e "$PDEP^{commit}" 2>/dev/null; then
-    echo "#   wait state: $PDEP is not in this checkout at all (a lane's own commits do not travel to the"
-    echo "#   host), so even the wait cannot be resolved here; re-take this block on the tree that holds"
-    echo "#   it. The block stays owed either way."
-elif git -C "$ROOT" merge-base --is-ancestor "$PDEP" HEAD 2>/dev/null; then
-    echo "#   wait state: $PDEP IS an ancestor of this tree now, so this block can be taken -- and this"
-    echo "#   run did not take it. That is the reading: the product arrived and the block is still owed."
+echo "# is refused on every build in develop today."
+echo "# PENDING: to be taken after lane-jvp-closure lands in develop. That is the lane that lands the"
+echo "# \`liftedShapeOf\` rule in modules/transforms/jvp.cpp, and the rule is what the outer \`grad\` needs"
+echo "# -- not a branch's head sha, which is why the two readings below are printed and the rule is the"
+echo "# one that decides: a sha can be an ancestor of HEAD while the rule is still absent, and a"
+echo "# placeholder that only watched a sha would then read as 'the product arrived' when it had not."
+RULE_FILE=modules/transforms/jvp.cpp
+RULE_NAME=liftedShapeOf
+PB=lane-jvp-closure
+if git -C "$ROOT" grep -q "$RULE_NAME" HEAD -- "$RULE_FILE" 2>/dev/null; then
+    echo "#   wait state: the rule $RULE_NAME IS in $RULE_FILE of this tree, so this block can be taken"
+    echo "#   -- and this run did not take it. That is the reading: the product arrived and the block is"
+    echo "#   still owed."
 else
-    echo "#   wait state: $PDEP resolves here and is NOT an ancestor of HEAD, so the block is owed"
+    echo "#   wait state: the rule $RULE_NAME is NOT in $RULE_FILE of this tree, so the block is owed"
     echo "#   exactly as this line says. Nothing in this run stands in for it."
+fi
+if ! git -C "$ROOT" rev-parse --verify --quiet "$PB^{commit}" > /dev/null 2>&1; then
+    echo "#   the lane $PB is not in this checkout (a lane's own commits do not travel to the host), so"
+    echo "#   its head cannot be read here; re-take this block on the tree that holds it."
+elif git -C "$ROOT" merge-base --is-ancestor "$PB" HEAD 2>/dev/null; then
+    echo "#   the lane $PB resolves at $(git -C "$ROOT" rev-parse --short=9 "$PB") and its head IS an"
+    echo "#   ancestor of HEAD. That does not make the block takeable: the rule above decides, and a lane"
+    echo "#   whose head is already merged has landed the commits it had, not the one this waits for."
+else
+    echo "#   the lane $PB resolves at $(git -C "$ROOT" rev-parse --short=9 "$PB") and its head is NOT"
+    echo "#   an ancestor of HEAD, so the block is owed both ways."
 fi
 echo
 
