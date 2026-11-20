@@ -1219,21 +1219,17 @@ void emitDraftPayload(
 
     // A GATE forwards its **first** norm input: FastVM reads the producer, NodeVM reads the gate's
     // slot, so the slot must be the input's. The inputs after the first are the reads the gate takes
-    // and are not what it hands on (design principles 3.1).
+    // and are not what it hands on (design principles 3.1), and the walk to the forwarding value is
+    // the one walk (`camel/runtime/draft.h#ungated`).
     // Rewrites that rebind a
     // gate's input (inlining binds parameter gates to the caller's arguments) leave a stale slot, so
     // it is derived here. The owner of this rule is the encoder -- the payload plan in this file --
     // not the draft's writers: it is the place that decides what the frozen graph holds, which is
     // where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
-        for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
-            const DraftNodeHeader *h = draft.header(id);
-            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-                return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
-            }
-            id = draft.normInputsOf(id).front();
-        }
-        return static_cast<gc_slot_idx_t>(0);
+        const gc_node_ref_t value = ungated(draft, id);
+        const DraftNodeHeader *h  = value == kInvalidNodeRef ? nullptr : draft.header(value);
+        return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
     };
 
     for (const PlannedDraftNode &planned : plan.nodes) {

@@ -48,17 +48,9 @@ bool isPlainScalar(type::Type *t) {
 /// The value of `ref` when it is a constant: a static DATA node, also behind GATEs. An object
 /// (an int array) counts only when every user of the DATA node is a pure operator.
 ///
-/// A GATE forwards the value it is given as its first normal input (design principles 3.1);
-/// the inputs after it are the reads of a region's writes, which are
-/// not the value and may well be nodes of another type.
+/// The gates in between are walked by the one walk (`camel/runtime/graph.h#valueBehindGates`).
 std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
-    for (gc_cnt_t hops = 0; hops < graph.nodeCount(); ++hops) {
-        const GCNode *n = graph.node(ref);
-        if (n->kind != GCNodeKind::Gate || graph.normInputsOf(ref).empty()) {
-            break;
-        }
-        ref = graph.normInputsOf(ref).front();
-    }
+    ref             = valueBehindGates(graph, ref);
     const GCNode *n = graph.node(ref);
     if (n->kind != GCNodeKind::Data || n->dataIndex >= 0 || n->dataType() == nullptr) {
         return std::nullopt;
