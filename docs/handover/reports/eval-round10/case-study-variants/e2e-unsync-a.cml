@@ -1,0 +1,28 @@
+// Item A's sixth rewrite, first form: the sync is dropped from the closure's body, which is the block\n// whose print is the only effect inside it. Same five lines are the question: the sync block is the\n// write's ordering, so the document may move even though the output does not.
+
+func apply(f: (x: int) => int, x: int): int sync {
+    return f(x)
+}
+
+func run(n: int, base: int): int sync {
+    let label = 'step'
+    let twice = base * 2
+    let thrice = base * 3
+    let f = (x: int): int => {
+        let weight = base + 1
+        let value = weight + x
+        '{} {} -> {}'->format<label, x, weight + x>->println
+        return value
+    }
+    let (_, total) = loop i = 0, total = twice + thrice while i < n do sync {
+        (i + 1, total + apply(f, i))
+    }
+    let tail = apply(f, n)
+    'total {} tail {}'->format<total, tail>->println
+    return total
+}
+
+func main(): int sync {
+    let _ = run(3, 10)
+    return 0
+}

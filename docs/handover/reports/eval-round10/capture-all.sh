@@ -8,19 +8,25 @@
 #
 # What it is NOT: a new measurement definition. Every block below is the command that produced the
 # number in the report named at its head; nothing here changes an argument to make a number look
-# better, and no file under src/, no expected value and no pass is touched. The nine blocks are the
-# nine readings the dispatch of 2026-11-20 01:10 lists, in that order:
+# better, and no file under src/, no expected value and no pass is touched. The blocks are the nine
+# readings the dispatch of 2026-11-20 01:10 lists, in that order, plus the five the capture lanes
+# were handed afterwards. A lane reading sits inside the block it extends, marked with its letter:
 #
 #   [1] the six writings of the case-study program, in the library's `grad` form, and the counterexample
+#       [A] then the six rewrites of the e2e program, each against the program's own canonical hash
 #   [2] the scale of train.cml: graphs, nodes, edges, regions, bytes
 #   [3] the three backends' output on the training program, and that they agree byte for byte
 #   [4] the rows of tab:lang: the two prints in `main`, the print in `loss`, the deleted prints,
 #       and `break_rate` (the edge-type check refusing the wrong value in the learning-rate slot)
+#       [B] then the three graph checks -- exit, acyclic, scoped -- which layer refuses each, verbatim
 #   [5] the optimization table on the MLP and on the char-transformer
 #   [6] the fusion: the strict writings reading, then loss-a and loss-b fused
 #   [7] commit and normalization time (the one floating section, see its head)
-#   [8] the two derivative graphs, loss-a against loss-b
+#   [8] loss-a against loss-b: the two documents, what the derivative graph is NOT, and the numbering
+#       once `std::opt` has run (read that head: this is the numbering-stability reading)
 #   [9] the e2e lane, which is e2e/capture.sh run unchanged, so the two never drift apart
+#   [10] [C] `std::prl` on the case and on the e2e program, 200 runs each, and what is compared
+#   [11] [E] the scheduling seed: the switch does not exist, and where the random actually lives
 #
 # Run it from anywhere; it moves to the worktree root itself:
 #
@@ -206,6 +212,60 @@ for f in train-rename train-swap train-inline loss-a loss-b train-reorder-output
     printf '%-22s %s\n' "$f" "$(first_diff "$SCRATCH/train.json" "$SCRATCH/$f.json")"
 done
 echo
+echo "# --- [A] the six rewrites of the e2e program: each one's canonical hash against the program's ---"
+echo "# A hash is only comparable beside its definition, so it is written here:"
+echo "#   canonical hash = sha256 of the bytes \`camel <program> std::jgir canonical=true\` writes to"
+echo "#                    stdout (the pass prints the document; canonical=true fixes its key order,"
+echo "#                    which docs/cli.md's pass-parameter table says makes two runs compare byte"
+echo "#                    for byte). There is no --hash option: this is the document's own digest."
+echo "#   the second reading = the \`e2e canonical=<sha256>\` line \`passes::report\` prints, which is a"
+echo "#                    digest the pass computes over its own canonical node text. Two independent"
+echo "#                    digests, so a row that agrees in both is not one tool agreeing with itself."
+echo "# The program is e2e/program.cml as the tree ships it. Each rewrite changes only how the same"
+echo "# program is written, and must print the same five lines; the rewrites are in $VARIANTS:"
+echo "#   lift     the closure's body lifted into a named declaration, the lambda calls it"
+echo "#   direct   the call through a known function value made a direct call (\`let ap = apply\`)"
+echo "#   merge    a copy of a function declared, and the copy called"
+echo "#   drop     a dead pure statement added -- text that produces no node"
+echo "#   unreach  a function nobody calls -- text that produces no node, but does it produce a graph?"
+echo "#   unsync-a the \`sync\` dropped from the closure's body"
+echo "#   unsync-b the \`sync\` dropped from \`apply\`"
+echo "# Seven rows and not six: this program writes \`sync\` twice, and removing it in one place and in"
+echo "# the other are two different edits. The dispatch's six names count the intent, not the placement."
+echo
+doc "e2e-program" "$E2E/program.cml" std::jgir canonical=true
+for f in lift direct merge drop unreach unsync-a unsync-b; do
+    doc "e2e-$f" "$VARIANTS/e2e-$f.cml" std::jgir canonical=true
+done
+echo "# the seven against the program's own document (both digests are on each doc= line above)"
+for f in lift direct merge drop unreach unsync-a unsync-b; do
+    printf '%-22s %s\n' "$f" "$(first_diff "$SCRATCH/e2e-program.json" "$SCRATCH/e2e-$f.json")"
+done
+echo
+echo "# the second reading: what \`passes::report\` hashes, on the same eight programs"
+echo "# (\`passes\` is found beside the program, so the package root is $E2E for all of them)"
+for f in program lift direct merge drop unreach unsync-a unsync-b; do
+    prog="$E2E/program.cml"
+    if [ "$f" != program ]; then prog="$VARIANTS/e2e-$f.cml"; fi
+    out="$SCRATCH/e2e-report-$f.txt"
+    echo "### CAMEL_PACKAGES=$E2E camel $prog passes::instrument passes::report std::nvm"
+    CAMEL_PACKAGES="$ROOT/$E2E" "$CAMEL" "$prog" passes::instrument passes::report std::nvm > "$out" 2>&1
+    st=$?
+    echo "### exit=$st"
+    sed -n 's/^\(e2e graphs=.*\|e2e canonical=.*\)$/'"$f"' \1/p' "$out"
+done
+echo
+echo "# the other half of every row: a rewrite that changes no meaning must not move the output"
+runkept "e2e-run-program" "$E2E/program.cml"
+for f in lift direct merge drop unreach unsync-a unsync-b; do
+    runkept "e2e-run-$f" "$VARIANTS/e2e-$f.cml"
+done
+for f in lift direct merge drop unreach unsync-a unsync-b; do
+    printf '%-22s %s\n' "$f" "$(first_diff "$SCRATCH/e2e-run-program.masked" "$SCRATCH/e2e-run-$f.masked")"
+done
+echo "# Read the two halves together: a rewrite whose document is the program's document AND whose"
+echo "# output is the program's output is a rewrite that changed nothing this program can observe."
+echo
 
 # ---------------------------------------------------------------------------------------------
 banner 2 "the scale of train.cml"
@@ -278,6 +338,48 @@ echo
 for p in eco::print_unordered eco::print_ordered eco::print_appended eco::print_appended_reversed eco::print_prepended eco::loss_print eco::drop_print eco::break_rate; do
     runp "$SCRATCH" "$SCRATCH/train.cml" "$p" std::nvm
 done
+echo
+echo "# --- [B] the three graph checks: exit, acyclic, scoped -- which layer refuses each, verbatim ---"
+echo "# The three are the first three of the six a commit asks (docs/design/graph-editing/README.cn.md"
+echo "# 8.1). A bad edit meets two layers before a graph changes: the operator's own step check, which"
+echo "# runs where the edit is made, and the commit, which is the seal in src/runtime/graph.cpp. Every"
+echo "# row below names the layer that answered, because 'refused' without the layer is not a reading."
+echo "# The programs are the repo's own commit-check fixtures -- the same two files the repo's test::"
+echo "# passes use -- so a reader can put the two readings side by side and see the same text twice."
+echo
+cp "$VARIANTS/edits-bad.cml" "$SCRATCH/bad.cml"
+cp "$VARIANTS/edits-bad-scope.cml" "$SCRATCH/bad2.cml"
+cp test/cases/opt/commit_checks/identity_at_exit.cml test/cases/opt/commit_checks/sibling_arm.cml "$SCRATCH/"
+cp test/cases/opt/commit_checks/loop_body_read.cml test/cases/opt/commit_checks/fold_function_type.cml "$SCRATCH/"
+echo "#   move_exit     replace(exit, a node an arm computes)     expected: the step check, an anchor"
+echo "#   self_read     replace(a value, the exit that reads it)  expected: the step check, a cycle"
+echo "#   cross_region  replace(the exit's value, an arm's node)  expected: the commit, the exit region"
+echo "#   cross_arm     replace(an arm's body-read value, another arm's node)  expected: the commit,"
+echo "#                 the branch-arm invariant -- the exit is untouched, so the exit rule cannot be"
+echo "#                 the one that answers"
+echo
+for p in bad::move_exit bad::self_read bad::cross_region; do
+    runp "$SCRATCH" "$SCRATCH/identity_at_exit.cml" "$p" std::nvm
+done
+runp "$SCRATCH" "$SCRATCH/sibling_arm.cml" bad2::cross_arm std::nvm
+echo "# The commit's own reading of the two rows this op set cannot hand it, quoted from the repo's"
+echo "# fixtures. These are the fixtures' drafts and not edits made above; the layer is the reading,"
+echo "# and leaving the row out would make the layer look absent:"
+run "$SCRATCH/fold_function_type.cml" test::commit_cycle std::nvm
+run "$SCRATCH/sibling_arm.cml" test::commit_sibling_arm std::nvm
+run "$SCRATCH/loop_body_read.cml" test::commit_loop_body_read std::nvm
+run "$SCRATCH/identity_at_exit.cml" test::commit_exit_region std::nvm
+echo "# The two rows this op set cannot construct, written as the reason and not as a dropped row:"
+echo "#   a pure exit violation -- the only edit that would put the exit inside an arm is naming the"
+echo "#     exit in replace, and the step check refuses that because an exit anchors its graph. The"
+echo "#     other route (make the exit READ an arm's value) does reach the commit and its exit text, but"
+echo "#     it also makes the body read what the arm wrote, so it is not a pure exit violation."
+echo "#   a cycle at the commit -- the step check refuses every cycle these ops can close ('the"
+echo "#     replacement is the node itself or is computed from it'), so the commit never sees one; the"
+echo "#     commit's cycle text is the test::commit_cycle row above."
+echo "# The accepted twins are in the same two fixtures (a copy that reads a value of its own arm, and"
+echo "# one of its own region, is published), so a refusal here is about the read, not about editing."
+echo
 
 # ---------------------------------------------------------------------------------------------
 banner 5 "the optimization table: the MLP and the char-transformer"
@@ -412,13 +514,21 @@ timing commit commit_only::touch
 echo "#   /proc/loadavg $(cat /proc/loadavg)"
 
 # ---------------------------------------------------------------------------------------------
-banner 8 "the two derivative graphs: loss-a against loss-b"
-echo "# The two losses are two writings of one loss, and the derivative is a library transform that"
-echo "# runs at compile time, so the derivative graph is a graph of the canonical document -- the"
-echo "# comparison of the two documents is the comparison of the two derivative graphs. The node"
-echo "# counts per graph are printed so the size of the derivative graph is visible, and the"
-echo "# signatures are printed because they are the only content of a canonical document that says"
-echo "# what a graph is."
+banner 8 "loss-a against loss-b: the two documents, what is NOT in them, and the numbering"
+echo "# READ THIS FIRST. This section used to say the derivative graph is a graph of the canonical"
+echo "# document ('the derivative is a library transform that runs at compile time, so the derivative"
+echo "# graph is a graph of the canonical document'). On this build it is not:"
+echo "#   std::stats on loss-a prints graphs=5, nodes=57, and the five graphs carry [2,17,14,8,16] nodes;"
+echo "#   the document holds ONE autodiff:grad@1.0 node (in step's graph) whose result is called"
+echo "#   indirectly (\"call\":\"indirect\"), and no graph of the derivative. The derivative is built by"
+echo "#   modules/autodiff's GradResolver after the program's graphs exist, and never enters the"
+echo "#   canonical form."
+echo "# So this section is two readings and nothing more, and neither of them is a comparison of two"
+echo "# derivative graphs -- that reading has no entry point today:"
+echo "#   (1) the two losses' PROGRAM documents, and"
+echo "#   (2) the numbering once std::opt has run."
+echo "# The question page that records this is docs/handover/questions/"
+echo "# 2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document.cn.md"
 echo
 python3 - "$SCRATCH/loss-a.json" "$SCRATCH/loss-b.json" <<'PY'
 import json
@@ -431,8 +541,61 @@ for path in sys.argv[1:]:
         print("  g%d id=%-4s nodes=%-3d regions=%-2d signature=%s"
               % (i, g.get("id"), len(g.get("nodes", [])), len(g.get("regions", [])), g.get("signature")))
 PY
+echo "# and the derivative's own node, counted where it actually is"
+python3 - "$SCRATCH/loss-a.json" <<'PY'
+import json
+import sys
+
+d = json.load(open(sys.argv[1]))
+grads, indirect = [], 0
+for i, g in enumerate(d["graphs"]):
+    for n in g.get("nodes", []):
+        p = n.get("payload", {})
+        if str(p.get("op", "")).startswith("autodiff:grad"):
+            grads.append((i, n.get("id"), p.get("op")))
+        if p.get("call") == "indirect":
+            indirect += 1
+print("graphs=%d nodes=%d grad_nodes=%d indirect_calls=%d"
+      % (len(d["graphs"]), sum(len(g.get("nodes", [])) for g in d["graphs"]), len(grads), indirect))
+for i, nid, op in grads:
+    print("  g%d %s %s" % (i, nid, op))
+PY
 echo "# the two documents against each other"
 printf 'loss-a against loss-b  %s\n' "$(first_diff "$SCRATCH/loss-a.json" "$SCRATCH/loss-b.json")"
+echo
+echo "# (2) the numbering after std::opt. The reading is a triple and the three lines are read"
+echo "# together or not at all: equal per-graph node counts with unequal bytes means the two graphs are"
+echo "# ISOMORPHIC and the difference is the numbering; 'bytes differ' alone cannot tell that from a"
+echo "# graph that really differs, and those are different findings."
+for f in loss-a loss-b; do
+    doc "opt-$f" "$VARIANTS/$f.cml" std::opt std::jgir canonical=true
+done
+python3 - "$SCRATCH/opt-loss-a.json" "$SCRATCH/opt-loss-b.json" <<'PY'
+import hashlib
+import json
+import sys
+
+
+def shape(path):
+    raw = open(path, "rb").read()
+    d = json.loads(raw)
+    return ([len(g.get("nodes", [])) for g in d["graphs"]],
+            len(raw),
+            hashlib.sha256(raw).hexdigest(),
+            [g.get("signature") for g in d["graphs"]])
+
+
+a, b = shape(sys.argv[1]), shape(sys.argv[2])
+print("loss-a after opt  graphs=%d per_graph=%s bytes=%d sha256=%s" % (len(a[0]), a[0], a[1], a[2]))
+print("loss-b after opt  graphs=%d per_graph=%s bytes=%d sha256=%s" % (len(b[0]), b[0], b[1], b[2]))
+print("per_graph_node_counts_equal = %s" % (a[0] == b[0]))
+print("same_bytes = %s" % (a[2] == b[2]))
+print("same_signatures = %s" % (a[3] == b[3]))
+PY
+printf 'loss-a after opt against loss-b after opt  %s\n' "$(first_diff "$SCRATCH/opt-loss-a.json" "$SCRATCH/opt-loss-b.json")"
+echo "# std::opt is deterministic, so the difference above is the two writings and not the run:"
+doc "opt-loss-a-again" "$VARIANTS/loss-a.cml" std::opt std::jgir canonical=true
+printf 'loss-a after opt, twice  %s\n' "$(first_diff "$SCRATCH/opt-loss-a.json" "$SCRATCH/opt-loss-a-again.json")"
 echo
 
 # ---------------------------------------------------------------------------------------------
@@ -451,6 +614,120 @@ echo "#                        of each line (before \`3fd76e564\` it was accepte
 echo
 sh "$E2E/capture.sh" 2>&1
 echo "### e2e capture.sh exit=$?"
+echo
+
+# ---------------------------------------------------------------------------------------------
+banner 10 "[C] std::prl: 200 runs of the case and of the e2e program, and what is compared"
+echo "# The question is whether the scheduler's parallel execution is observable in the output. The"
+echo "# comparison is over RAW BYTES: nothing is masked. Neither program prints a time, a path or a"
+echo "# pid, so there is nothing to mask -- and a mask here would hide the very thing asked about, so"
+echo "# this section says that instead of masking quietly. The count per group is 200, and the number"
+echo "# that actually ran is printed on each summary line: a count is a copy of the loop's own value,"
+echo "# not a claim about how long the loop ran."
+echo "# Three groups: the case alone; the e2e program alone; the e2e program through its two passes"
+echo "# (instrument then report), because a run whose passes walk the graph is the run in which work"
+echo "# could be ordered differently."
+echo
+runs200() {
+    tag=$1
+    pkg=$2
+    shift 2
+    if [ -n "$pkg" ]; then
+        echo "### $RUNS runs, a fresh process each: CAMEL_PACKAGES=$pkg $CAMEL $*"
+    else
+        echo "### $RUNS runs, a fresh process each: $CAMEL $*"
+    fi
+    i=1
+    while [ "$i" -le "$RUNS" ]; do
+        if [ -n "$pkg" ]; then
+            CAMEL_PACKAGES="$pkg" "$CAMEL" "$@" > "$SCRATCH/$tag-$i.out" 2> "$SCRATCH/$tag-$i.err"
+        else
+            "$CAMEL" "$@" > "$SCRATCH/$tag-$i.out" 2> "$SCRATCH/$tag-$i.err"
+        fi
+        echo "$?" > "$SCRATCH/$tag-$i.rc"
+        i=$((i + 1))
+    done
+    python3 - "$tag" "$SCRATCH" "$RUNS" <<'PY'
+import collections
+import hashlib
+import sys
+
+tag, scratch, runs = sys.argv[1], sys.argv[2], int(sys.argv[3])
+
+
+def digest(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()
+
+
+def size(path):
+    return len(open(path, "rb").read())
+
+
+outs, errs, rcs = collections.Counter(), collections.Counter(), collections.Counter()
+bytes_of = {}
+for i in range(1, runs + 1):
+    o = digest("%s/%s-%d.out" % (scratch, tag, i))
+    outs[o] += 1
+    bytes_of[o] = size("%s/%s-%d.out" % (scratch, tag, i))
+    errs[digest("%s/%s-%d.err" % (scratch, tag, i))] += 1
+    rcs[open("%s/%s-%d.rc" % (scratch, tag, i)).read().strip()] += 1
+for label, counter in (("stdout", outs), ("stderr", errs), ("exit", rcs)):
+    for value, n in sorted(counter.items()):
+        if label == "stdout":
+            print("%-22s stdout sha256=%s bytes=%d runs=%d" % (tag, value, bytes_of[value], n))
+        elif label == "stderr":
+            print("%-22s stderr sha256=%s runs=%d" % (tag, value, n))
+        else:
+            print("%-22s exit   code=%s runs=%d" % (tag, value, n))
+print("%-22s runs=%d distinct_stdout=%d distinct_stderr=%d distinct_exit=%d => %s"
+      % (tag, runs, len(outs), len(errs), len(rcs),
+         "byte-identical" if len(outs) == 1 and len(errs) == 1 and len(rcs) == 1 else "NOT identical"))
+PY
+    echo
+}
+
+RUNS=200
+runs200 case-prl "" "$CASE" std::prl
+runs200 e2e-prl "" "$E2E/program.cml" std::prl
+runs200 e2e-prl-passes "$ROOT/$E2E" "$E2E/program.cml" passes::instrument passes::report std::prl
+echo "# The three groups must not agree with each other: they are different programs (the case prints"
+echo "# three loss lines, the e2e prints five step/total lines, the third adds the pass's own two)."
+echo "# That is the control for 'identical within a group' not being 'everything prints the same':"
+printf 'case against e2e (must differ)             %s\n' "$(first_diff "$SCRATCH/case-prl-1.out" "$SCRATCH/e2e-prl-1.out")"
+printf 'e2e against e2e+passes (must differ)       %s\n' "$(first_diff "$SCRATCH/e2e-prl-1.out" "$SCRATCH/e2e-prl-passes-1.out")"
+echo
+
+# ---------------------------------------------------------------------------------------------
+banner 11 "[E] the scheduling seed: the switch does not exist, and where the random actually lives"
+echo "# One of the five readings has no row, and this section says so with the searches that would have"
+echo "# found a switch. Three sentences in this order: what was searched; the hits and why none of them"
+echo "# is a seed; where the random actually lives."
+echo
+echo "# 1. what was searched"
+echo "### git grep -rn 'seed' -- src/passes/sched/ src/passes/sched/fastvm include/camel/passes/sched/"
+git -C "$ROOT" grep -rn 'seed' -- src/passes/sched/ src/passes/sched/fastvm include/camel/passes/sched/ 2>/dev/null || echo "(no hit)"
+echo "### git grep -n 'seed' -- docs/cli.md"
+git -C "$ROOT" grep -n 'seed' -- docs/cli.md 2>/dev/null || echo "(no hit)"
+echo "### $CAMEL --help | grep -iE 'seed|thread'   (the option table itself)"
+"$CAMEL" --help 2>&1 | grep -iE 'seed|thread' || echo "(no --seed and no --threads on this line)"
+echo
+echo "# 2. the hits, each excluded: both are JIT comments about a register, not about scheduling."
+echo "#    src/passes/sched/fastvm/jit/mir/mir_builder.h:684   'The entry wrapper seeds ...'"
+echo "#    src/passes/sched/fastvm/jit/mir/mir_encode.cpp:571  'r13 is seeded once by the SysV entry"
+echo "#                                                         wrapper'"
+echo "#    Neither is a value a caller can set: r13 is the register the wrapper restores jitCtx from."
+echo "#    The only 'seed' a program can pass is its own argument -- the transformer's --arg seed=1 in"
+echo "#    section [5] seeds that program's data, not the scheduler."
+echo
+echo "# 3. where the random actually lives"
+echo "### git grep -n 'mt19937\|random_device' -- include/camel/utils/random.h"
+git -C "$ROOT" grep -n 'mt19937\|random_device' -- include/camel/utils/random.h 2>/dev/null || echo "(no hit)"
+echo
+echo "# => a 100-seed sweep cannot be run: there is no --seed option, the only scheduler knobs are the"
+echo "#    thread count (-t/--threads) and CAMEL_TF_LINEAR / FANOUT_ALL / BYTECODE, and none of them is a"
+echo "#    seed. origin/lane-determinism is fully merged (0 commits ahead of develop) and carries no"
+echo "#    switch either. This is a reason and not a gap: no row was dropped to make the section short,"
+echo "#    and the 200 runs of [10] are not offered as a substitute for the seeds that section asked for."
 echo
 
 echo "===== capture-all: the end ====="
