@@ -1987,6 +1987,15 @@ void Builder::collapseNonEscapingVariableReads() {
         }
         byCell[info.cell].push_back({read, info.source});
     }
+    // `variableReadSource_` is hashed on the handle's address, so each cell's reads arrive here in
+    // the allocator's order, and the fold below hands them to the graph in it. Sorted by the name
+    // the program gives each read (its graph, then its id -- `walksBefore`, builder_helpers.h), the
+    // stretches are the program's; the cell's own order is what the walk outside asks about.
+    for (auto &[cell, reads] : byCell) {
+        std::sort(reads.begin(), reads.end(), [](const auto &left, const auto &right) {
+            return walksBefore(left.first, right.first);
+        });
+    }
     // Every exit of this fold is counted, because three times now a condition was written,
     // compiled,
     // and had no effect -- each time found by guessing at readings. The counts go to stderr when
@@ -2015,7 +2024,16 @@ void Builder::collapseNonEscapingVariableReads() {
         }
     };
     static FoldCountsReport foldCountsReport_;
-    for (auto &[cell, reads] : byCell) {
+    // The cells by the name the program gives them, not the order their hashes fall in: the fold
+    // builds one node after another and the graph numbers its nodes in creation order.
+    std::vector<node_handle_t> folded;
+    folded.reserve(byCell.size());
+    for (const auto &entry : byCell) {
+        folded.push_back(entry.first);
+    }
+    std::sort(folded.begin(), folded.end(), walksBefore);
+    for (const node_handle_t cell : folded) {
+        std::vector<std::pair<node_handle_t, node_handle_t>> &reads = byCell.at(cell);
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
         // is shared with a closure: both keep their cell. A `var` that only a write put in
         // `escapingVariables_` is not the same thing: the assignment is the write, it does not
@@ -2319,20 +2337,15 @@ void Builder::dropCarriedVariableUnits() {
     // Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
     // `hash<const void*>(draft) * 31 + id` (`runtime/node_ref.h`) -- so walking them walks the
     // allocator's order, and the units dropped further down are created in that order. Two runs of
-    // one program then number the nodes of this body differently (node numbers differed between runs, close to uniform).
-    // A graph numbers its nodes in
-    // creation order, so the table is sorted by the id the graph already gave the node, which is a
-    // function of the program and not of where the node happens to live.
-    const auto byNodeId = [](node_handle_t left, node_handle_t right) {
-        // The node's own id, then the edit epoch it was made at: both are counts the draft keeps,
-        // so both are a function of the program, and neither is an address. Ids are per graph and
-        // a capture table can hold handles from two of them, which is what the epoch separates.
-        if (left.id != right.id) {
-            return left.id < right.id;
-        }
-        return left.epoch < right.epoch;
-    };
-    std::sort(cells.begin(), cells.end(), byNodeId);
+// Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
+    // `hash<const void*>(draft) * 31 + id` (`runtime/node_ref.h`) -- so walking them walks the
+    // allocator's order, and the units dropped further down are created in that order. Two runs of
+    // one program then number the nodes of this body differently. A graph numbers its nodes in
+    // creation order, so the table is sorted by a name the program gives the node: the graph it
+    // belongs to, then the id that graph gave it (`walksBefore`, builder_helpers.h). The id alone
+    // does not answer it -- it names a node inside one graph, and these tables hold handles of more
+    // than one, so two cells with the same id would then keep the order their hashes fell in.
+    std::sort(cells.begin(), cells.end(), walksBefore);
     const size_t carriedCount = cells.size();
     for (const node_handle_t cell : valueCapturedCells_) {
         if (draft.isNamedBy(cell)) {
@@ -2342,7 +2355,7 @@ void Builder::dropCarriedVariableUnits() {
     // `valueCapturedCells_` is the same kind of table. Its cells follow the carried ones -- the two
     // questions are asked in that order and the order is kept -- and each stretch is sorted inside
     // itself.
-    std::sort(cells.begin() + static_cast<std::ptrdiff_t>(carriedCount), cells.end(), byNodeId);
+    std::sort(cells.begin() + static_cast<std::ptrdiff_t>(carriedCount), cells.end(), walksBefore);
     for (const node_handle_t cell : cells) {
         // A cell this graph no longer holds has no unit left to drop, and asking it for its kind
         // is a read of a header the erasure took away: `carriedVersions_` and the capture table

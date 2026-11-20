@@ -1,0 +1,48 @@
+id = "compile.capture_order"
+order = 346
+tier = "fast"
+tags = ["feat", "compile", "gir", "determinism"]
+desc = "Two writings of one program that differ only in the order two `var` declarations are written give one byte-identical `std::jgir canonical=true` document. The tables this reads are the compile-time ones keyed by `runtime::DraftNodeRef`, whose hash is an address (`include/camel/runtime/node_ref.h`): `Builder::captureOriginOf_` and `Builder::machinePortOrigin_` are unioned to answer whether two handles are one value, and `builder_expr.cpp#dropCarriedVariableUnits` builds the units of `Builder::carriedVersions_` and `Builder::valueCapturedCells_` in the order it collected them -- so an unsorted walk numbers the nodes of one body by where the allocator put them, and one program gets as many graphs as it has runs."
+
+# The insertion order of those tables is the order the source declares its cells and builds its
+# closures in, so the two readings are a program and the same program with two `var` declarations
+# swapped -- a real input difference, not an instrument: nothing in the compiler exists only for this
+# reading, and no environment variable decides which order it sees. The script also translates one
+# file three times: three processes fill those tables in three different orders for the same input,
+# and the version 1 display document, which records every node's position, is compared as bytes with
+# nothing taken out. The two writings are then compared through `std::jgir canonical=true`, which
+# records no line, column or file name -- which is what makes a byte comparison of two writings of
+# one program possible at all, since the version 1 document's positions ARE the input difference. It
+# refuses (exit 2) a program that does not translate, so a refusal cannot be read as two documents
+# that agree.
+#
+# --- what this case does NOT prove, measured rather than assumed (2026-11-20) --------------
+# It is a regression guard, not a proof that the walk's key is load-bearing. Three readings were
+# taken on this host and all three came back green, so this program does not separate an ordered walk
+# from an unordered one:
+#   1. the key left as `f26529338` wrote it, `(id, epoch)`             -> one document
+#   2. the key cut to `left.epoch < right.epoch`, the node dropped     -> one document
+#   3. the sorts of `dropCarriedVariableUnits` deleted outright, i.e. the pre-`f26529338` walk
+#                                                                      -> one document, three runs
+# The third is the one that matters: `f26529338` exists because that walk was measured to number one
+# body differently from run to run ("node 1/2/3 differ between runs, close to uniform", wins1), and
+# on this host it does not -- a fresh process here lays the same nodes at the same addresses, so the
+# address order and the program order coincide for these tables and nothing of this shape can see
+# the difference. A case that does has to be found by a reading, not by writing a program and hoping;
+# until one is, this entry pins that the two writings agree and says no more than that.
+#
+# The program is still written to exercise the tables: two `var`s made in one order or the other, two
+# closures capturing both, a branch carrying one of them -- the cells `carriedVersions_` and
+# `valueCapturedCells_` hold, which are the ones whose collection order the fold walks.
+
+[[tests]]
+name = "compile.capture_order.two_insertion_orders"
+desc = "The two writings translate to one document and three translations of one file do too: every sha256 the script prints agrees and the script says so. It is a regression guard, not proof of the key -- see the readings above, all three of which came back green on this host."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-capture-order.mjs"
+args = ["${case}", "--reading", "test/results/capture_order.reading.txt"]
+expect_exit = 0
+expect_stdout_contains = ["the two insertion orders write one document"]
+normalizers = ["normalize_newlines", "strip_ansi"]
+timeout_ms = 120000
