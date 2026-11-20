@@ -135,8 +135,8 @@ slot_t __dtos__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __stos__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
 // `string(x)` for a value of any type the overloads above do not take (bool, array, tuple,
-// struct, function, ...): the text `println` writes for it. The slot used to be read as a
-// string whatever its type, so `string(true)` dereferenced the bool.
+// struct, function, ...): the text `println` writes for it. The slot is not read as a
+// string whatever its type: `string(true)` would dereference the bool.
 slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // An integer is written here, without a stream: `printSlot` writes the same decimal text for
     // it (`std::to_string` and `os <<` agree on a whole number), and the stream costs a heap

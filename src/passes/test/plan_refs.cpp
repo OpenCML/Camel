@@ -37,8 +37,7 @@
  * the graph's marked positions have at least one. A position with `gives 0` is an answer: an
  * operator over integers packs nothing to give back. What the line is for is a position that *does*
  * carry a row -- a `foreach` whose closure names a `state::Ref` -- because that is a counted
- * reference a back end can be caught being short by
- * (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
+ * reference a back end can be caught being short.
  *
  * `produced` is the number of values the plan counts (ports, constants and nodes that only forward
  * a value are not among them), `copies` the references beyond each value's own, `give-backs` the
@@ -102,7 +101,7 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         // The copies of each value, read from the holds the plan takes for it: the plan has one
         // column of the holds (`refHoldsAt`, by the position that takes them) and the entries are
         // the same schedule as rows, so a value's copies are the `Retain` rows that name it. One
-        // table of the holds, one answer (author review 2026-11-16, item 7).
+        // table of the holds, one answer.
         std::unordered_map<gc_node_ref_t, size_t> copiesOf;
         for (const ExecPlan::RefEntry &entry : plan.refEntries) {
             if (entry.kind == ExecPlan::RefEntryKind::Retain) {
@@ -126,8 +125,8 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
             }
             // The same schedule keyed the way an instruction is: what a back end emitted at this
             // position would do, one count for the holds taken and one for the ones given back.
-            // `refHoldsAt` is the plan's only column of the holds (author review 2026-11-16, item
-            // 7), so what is printed here is what a back end reads.
+            // `refHoldsAt` is the plan's only column of the holds,
+            // so what is printed here is what a back end reads.
             const uint32_t taken = i < plan.refHoldsAt.size() ? plan.refHoldsAt[i] : 0;
             const uint32_t given = i < plan.refGiveBackAt.size() ? plan.refGiveBackAt[i] : 0;
             if (taken != 0 || given != 0) {
@@ -171,8 +170,8 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         // Every marked operator of this graph, and how many references the plan says come back at
         // its position. A marked operator calls its function once per element, and a value an
         // element captures is held and given back at the operator's position like any other value's
-        // (a `foreach` whose closure names a `state::Ref` is the shape the readings of 2026-11-16
-        // were taken on). A position with `gives 0` is an answer and not a gap -- an operator over
+        // (a `foreach` whose closure names a `state::Ref` is such a shape).
+        // A position with `gives 0` is an answer and not a gap -- an operator over
         // integers holds nothing to give back -- so the counts are printed rather than argued
         // about, and `scripts/check-plan-refs.mjs` reads them over every case the tree has.
         size_t marked         = 0;

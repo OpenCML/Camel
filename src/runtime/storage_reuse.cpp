@@ -32,7 +32,7 @@ namespace {
 /// operator's declaration has no decision to record. So it is the tool's word and lives here, beside
 /// the two words that are not the plan's either (an in-place form the plan decided nothing about,
 /// and the copying form a plan decision cannot describe); keeping it in the core enum made a
-/// member nobody could write look like a fourth decision (author review 2026-11-17, item 11).
+/// member nobody could write look like a fourth decision.
 enum class CopyVerdict : uint8_t {
     InPlace,  // the plan proved it and hands the storage over (StorageReuse::Input)
     ByCount,  // asks the array's own count at run time (StorageReuse::ByArrayCount, or no decision)
@@ -70,7 +70,7 @@ CopyVerdict verdictOfDecision(StorageReuse decision) {
 }
 
 /// The name the program writes for an update, read off the operator table and never derived from the
-/// URI's spelling (author review 2026-11-17, item 11: the reading used to strip the suffixes
+/// URI's spelling (a reading that strips the suffixes
 /// `_in_place`, `_owned` and `_arr`, which is a second spelling of the connection the table already
 /// declares). Two declarations answer it, both written where the operator is registered:
 ///
@@ -79,7 +79,7 @@ CopyVerdict verdictOfDecision(StorageReuse decision) {
 ///     so `append` is a fact of that declaration and not of the URI's tail; `array:sort_i` answers
 ///     `sort_i` the same way; and the loop-state append states its own shape
 ///     (`declareCallForm(":struct/append_arr_owned", ...)`) because a program writes `xs->append<v>`
-///     for it -- which is why this reading no longer carries a URI constant for that form;
+///     for it -- which is why this reading carries no URI constant for that form;
 ///   * for a form a program cannot write, the operator the form stands for (`plainForm`), whose own
 ///     call shape is then the name: the program wrote the plain call, and the verdict is the form's.
 std::string updateName(const camel::core::OperatorTable &table, std::string_view uri) {
@@ -185,8 +185,8 @@ void dumpStorageReuse(
             const bool copyingForm =
                 !plain.has_value() && !loopStateAppend && table.inPlaceForm(uri).has_value();
             // The fourth shape: an operator that declares it reuses an operand
-            // (`OperatorTable::declareReusesOperand`). `nn:sgd` is the one the direct-SSA plan's
-            // S3b names -- `sgd(params, g, lr)` answers a parameter tree whose storage is the one
+            // (`OperatorTable::declareReusesOperand`). `nn:sgd`is one:
+            // `sgd(params, g, lr)` answers a parameter tree whose storage is the one
             // it was handed, and `nn:adam` answers the tree and the state it was handed the same
             // way -- and no in-place form can say it: the value is a *tree* the operator walks
             // leaf by leaf, not the one array `setInPlaceForm` names. The declaration is the
@@ -213,14 +213,14 @@ void dumpStorageReuse(
             // an operator that declared it reuses an operand: the plan has no cell to read a
             // decision for a tree it never sees as one value, so `decided` is `None` for both. The
             // copying form allocates by construction, which is `copied` -- unless the plan handed it
-            // the value it was given (stage S3b: nothing else reads that value, so the node runs the
+            // the value it was given ( nothing else reads that value, so the node runs the
             // in-place form the operator declares, `ExecPlan::operatorUriFor`), and then the answer
             // is the plan's own decision and this row is where it is read.
             // `declared` is the fourth answer and it is not the third: `by-count` is measured (the
             // leaf's count answered), `declared` is only claimed (the operator says it reuses, and
             // whether this run allocated cannot be told from here). Printing one word for both
             // would put a promise and a measurement in the same column, and the column is the one
-            // the S3b criterion is read with.
+            // the plan's decisions are read with.
             CopyVerdict read = verdictOfDecision(decided);
             if (copyingForm) {
                 read = decided == StorageReuse::Input || decided == StorageReuse::ByArrayCount

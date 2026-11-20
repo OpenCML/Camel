@@ -470,8 +470,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /**
      * The templates of the generic rules this context has compiled, and the instances made from
      * them: one table per context, indexed by the id a rule value keeps (`ruleId - 1`), so that a
-     * rule value holds an id rather than a pointer and an instance is made once (the rule of
-     * 2026-10-23 on `generic-rule-instantiation`). Opaque here: the table's type belongs to
+     * rule value holds an id rather than a pointer and an instance is made once. Opaque here: the table's type belongs to
      * camel/compile/gir/rule_templates.h, which creates it on first use.
      */
     std::shared_ptr<void> &genericRuleTemplates() { return genericRuleTemplates_; }

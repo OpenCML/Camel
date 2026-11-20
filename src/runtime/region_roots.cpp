@@ -5,8 +5,8 @@
  * Which region decides whether a node runs (camel/runtime/region_roots.h). The frozen-graph half;
  * the draft half is the templates in the header, so neither file names a draft's type.
  *
- * What a region owes its writes is no longer answered here: it is an edge laid when the graph is
- * built (`Builder::layRegionWriteEdges`, the author's spec of 2026-11-17, `3e4c0929c`).
+ * What a region owes its writes is not answered here: it is an edge laid when the graph is
+ * built (`Builder::layRegionWriteEdges`).
  */
 
 #include "camel/runtime/region_roots.h"

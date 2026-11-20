@@ -201,10 +201,8 @@ bool OperatorTable::mayBeRecomputed(OperId id) const {
     // "pure && foldable" let a pipeline that named `std::opt` and not `std::macro` fold
     // `with_grad(loss)<m>` into the derived function value at compile time, so the macro operator
     // was gone before `onnx::export` could say its `run std::macro` refusal
-    // (`modules/onnx/passes/export.cpp#refuseUnexpandedMacros`) -- three `feat/modules/onnx`
-    // entries went red when the four autodiff transforms were declared pure (c038bd187,
-    // 2026-11-18). Nothing is lost: before that commit these operators were impure and
-    // `mayBeRecomputed` answered false for them, so this restores the answer the optimizer had,
+    // (`modules/onnx/passes/export.cpp#refuseUnexpandedMacros`). A macro operator stays outside
+    // the foldable set even when it is declared pure, which is the answer `mayBeRecomputed` gives for it,
     // for the reason the table already states on `isMacro` (a call of it is what `std::macro`
     // evaluates, operator_table.h).
     return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&

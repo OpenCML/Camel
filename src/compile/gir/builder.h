@@ -97,8 +97,7 @@ class Builder {
         const RuleWithArguments &with, compile_graph_ptr_t &lhs, compile_graph_ptr_t &rhs,
         compile_graph_ptr_t &when, std::string &why);
 
-    /// What the condition of a generic rule says about one type tuple, at compile time (
-    /// of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`: `check`
+    /// What the condition of a generic rule says about one type tuple, at compile time (`check`
     /// enumerates the instances of a generic rule over the registered types that its condition
     /// admits). The condition's type-level part alone is asked -- the type arguments of its
     /// predicate calls are bound to the tuple -- so nothing is instantiated and nothing is
@@ -731,8 +730,8 @@ class Builder {
     /// function and a decorated block (there the write has to land in the cell). Handing the name
     /// to a call is NOT one of them: a `var` parameter is passed in by value and passed back by
     /// value (3.5, 192), and where the closure stands at that call's argument position its last use
-    /// is the call, so 3.5 (198) reports nothing and the program is legal -- the author's ruling of
-    /// 2026-11-16. Decided once per cell (`captureByValueOf_`): every capture of one cell has to
+    /// is the call, so 3.5 (198) reports nothing and the program is legal.
+    /// Decided once per cell (`captureByValueOf_`): every capture of one cell has to
     /// answer the same.
     bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin);
     /// The answer `captureByValue` records for a cell, worked out once: whether a capture of it is
@@ -756,7 +755,7 @@ class Builder {
     void requireCapturedNameWritable(
         node_handle_t cell, const std::string &name, bool throughCall,
         camel::source::origin_id_t at);
-    /// Whether `value` is what the `var` name `name` stands for now (stage S1's value, not a cell):
+    /// Whether `value` is what the `var` name `name` stands for now (a value, not a cell):
     /// the one question the capture asks of a name it captures, so that the rule of design
     /// principles 3.5 (198) holds for a name that has no cell to be keyed by.
     bool isSsaValue(node_handle_t value, const std::string &name) const;
@@ -923,8 +922,8 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
-    /// A `var` whose declaration is built as a value and not as a cell
-    /// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1): the name is
+    /// A `var` whose declaration is built as a value and not as a cell:
+    /// the name is
     /// bound to the value in `nodeScope_`, an assignment rebinds the declaration
     /// (`ssaAssignmentOf`), and no cell is made, so nothing reads or writes one. The environment is
     /// the plan's one table -- a declaration is the unit, a region holds its declarations, and the
@@ -935,12 +934,12 @@ class Builder {
     /// body, a loop's body. A `var` declared in it may be SSA when the scan of that body says so.
     std::vector<const GCT::Node *> regionBodies_;
     /// What the scan says about one declaration, in the two shapes a declaration of a value has:
-    /// `asValue` -- the answer every `var` was given before 2026-11-18, a value when every use stays
+    /// `asValue` -- a value when every use stays
     /// in a region that carries one; and `asHandle` -- the answer a `var` whose value is a counted
     /// handle takes, which a use that only reads the name across a closure's body does not rule out.
     /// A handle is a value (design principles 3.3, 3.5): a closure that reads the name captures the
-    /// handle itself, and the cell it used to share is what the author's answer of 2026-11-18 names
-    /// (`9d29939c4`: "a cell holding a Ref is a holder, and the cell should go"). A write across
+    /// handle itself, and no cell is shared.
+    /// A write across
     /// such a region, a `var` parameter's write-back and an in-place update of a place keep the
     /// cell, in both answers: a write needs somewhere to land that a captured value cannot give.
     struct SsaAnswer {
@@ -1025,8 +1024,8 @@ class Builder {
     // this set, and the straight-line definition that decides the loop case is written there.
     std::unordered_set<node_handle_t> writeOnlyEscaping_;
     /// The value a branch carries for a `var` its arms wrote: the cell, and the JOIN the branch's
-    /// value is. A write inside an arm is the branch's result (design principles 3.5, the ruling of
-    /// 2026-11-15), so a read written after the branch takes that join and no `:var/get` is made.
+    /// value is. A write inside an arm is the branch's result (design principles 3.5),
+    /// so a read written after the branch takes that join and no `:var/get` is made.
     /// It is recorded here rather than inferred from the JOIN's kind: a branch that carries a value
     /// of its own is a join too, and it is no version of any variable. A later straight-line write
     /// of the same variable replaces it (recordWrite).
@@ -1039,7 +1038,7 @@ class Builder {
     /// this round (a read after that write takes it, as it takes a straight-line write's value).
     std::unordered_map<node_handle_t, node_handle_t> loopStatePorts_;
     std::unordered_map<node_handle_t, node_handle_t> loopStateWrites_;
-    /// The `var`s the loop being built carries as values rather than as cells (stage S3) are the
+    /// The `var`s the loop being built carries as values rather than as cells are the
     /// SSA environment's: the body's region binds the name to a port and `SsaEnv::Entry::port`
     /// holds it, so a write of the name there is the round's next state and nothing about the head
     /// is written on the side. The head's phi is that port: its two sources are the value the name
@@ -1052,7 +1051,7 @@ class Builder {
     /// value is `value`. Does nothing when no loop head carries the name -- a write of a `var` that
     /// is not loop state, of a name a closure captured, or of a name the enclosing loop keeps as a
     /// cell. Called from every place that rebinds the name, so that a write inside an arm of the
-    /// body (S2's join) or inside a loop body of the body (S3's own head) reaches the head too.
+    /// body (a join) or inside a loop body of the body (its own head) reaches the head too.
     void noteLoopStateWrite(const std::string &name, node_handle_t value);
     /// `ASSIGN(Plain, DREF <name>, value)` where `<name>` is one of those ports: the value
     /// written is the loop's next state for that `var`, so the statement makes no store and the
@@ -1182,7 +1181,7 @@ class Builder {
         std::unordered_map<node_handle_t, Touched> touched;
         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
         /// The `var` declarations the arm built as values, and the value each ended with, in the
-        /// order they were first written there: what the branch's JOIN carries (stage S2, one per
+        /// order they were first written there: what the branch's JOIN carries (one per
         /// join). The record is the arm's, because the arm is the region that wrote them; its type
         /// and the question the JOIN asks of it are the SSA environment's (`SsaEnv::ArmWrites`).
         SsaEnv::ArmWrites writes;
@@ -1253,7 +1252,7 @@ class Builder {
     std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
     /// The `Data` behind a static data node, when the builder made the node from one. A
     /// compile-time value handed on from node to node (a `constas` value passed to another
-    /// `constas`, the `n` of a `static for`) has no `Data` of its own any more: it was encoded
+    /// `constas`, the `n` of a `static for`) has no `Data` of its own: it is encoded
     /// into a slot when its node was made, and the value is read back from here. A member read of
     /// a value that is already known (`tags.width.w`, over the tags the third name of `fields T`
     /// gives) carries the field's value here too: the read keeps its node, and what it reads is
@@ -1650,7 +1649,7 @@ class Builder {
     /// table, so a transform that asks "which of this key's laws answers these operands" could not
     /// see a law written `jvp_float_from_int(x: int)` at all: the index named it and the table did
     /// not hold it (`the rule is named in the index but its templates are not registered`,
-    /// `modules/transforms/jvp.cpp`). That is what the author's ruling of 2026-11-03 12:10 asks for
+    /// `modules/transforms/jvp.cpp`). That is what the design asks for
     /// -- two laws of one key told apart by their parameter types instead of by `when` -- so a law
     /// that names a type has to be reachable.
     ///
@@ -2036,7 +2035,7 @@ class Builder {
     /// a case -- so it is read with nothing but the type arguments of the instance and the names
     /// the case's pattern bound. This is also what `typeCaseGuardEvaluator` calls: the type layer
     /// asks for the answer while it selects a case, and this reads the Camel predicate that
-    /// answers it (design principles 5.5, ruling of 2026-11-14).
+    /// answers it (design principles 5.5).
     WhenResult evaluateCaseGuard(
         const camel::core::type::TypeCaseGuard &guard,
         const camel::core::type::type_bindings_t &bindings);
@@ -2360,13 +2359,10 @@ class Builder {
     // states it today -- the declared exit type at five of them, `pullType` (itself the exit type of
     // the step it calls) at the loop's pull. Unifying the construction is what gives a later rule
     // one place to stand; which of those answers a site asks for is a different change and this one
-    // does not make it (author `3a580d29a`: unify first as a pure refactor, then apply the rule in
-    // that one place). The derivation the rule will ask for lives on the lane that built the
-    // packing (`graphExitTypeOf`, `5695e055c`) and is not taken here: on this tree it answers a
-    // tuple for a signature that states a `var` parameter, while a call on this tree still hands a
-    // bare value, so taking it at all five sites was measured to move `compile` and `linear` and to
-    // kill cases. The FUNC node of a direct call is the other half and was already one place:
-    // `addCallNodeOf` above.
+    // does not make it. The derivation the rule will ask for (`graphExitTypeOf`) is not taken here:
+    // it answers a tuple for a signature that states a `var` parameter, while a call still hands a
+    // bare value, so taking it at all five sites would break cases. The FUNC node of a direct call is
+    // the other half and is already one place: `addCallNodeOf` above.
     node_handle_t addCallSite(const compile_graph_ptr_t &graph, Type *exitType);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
@@ -2651,8 +2647,8 @@ class Builder {
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
     // state-only, a call of a function whose clause names a resource or whose exit depends on one,
-    // a branch with such an arm. A `var` parameter is not one (design principles 3.1 and 3.5, the
-    // ruling of 2026-11-15): what it writes is handed back where the call stands. An assignment is
+    // a branch with such an arm. A `var` parameter is not one (design principles 3.1 and 3.5):
+    // what it writes is handed back where the call stands. An assignment is
     // that shape and is declared state-only, for the same reason.
     bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
     // Whether a call built as `node` is a statement of the `sync` block it is written in: the chain
@@ -2676,7 +2672,7 @@ class Builder {
     // Once the body of `graph` is built: records whether its exit depends on an effect, and
     // reports a value nobody uses (a write to a `var` that no read takes, a `fail` on a line of
     // its own). A statement that does not run is not reported at all: what a region writes is a
-    // root of that region, so a call, a loop and a block run with it (the ruling of 2026-11-17).
+    // root of that region, so a call, a loop and a block run with it.
     // With `report` false it only records whether the exit depends on an effect.
     void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
     // Once every body of the program is built: settles which graphs are effectful (a callee
@@ -2684,17 +2680,17 @@ class Builder {
     void settleEffectfulGraphs();
     // Once the bodies' inferred resources have been measured: connects every write a region owes --
     // an operator whose declaration writes outside the program or to a handle -- and every branch
-    // written as a statement, by a sync edge to the exit of the region it is written in (the
-    // author's spec of 2026-11-17, `3e4c0929c`: "a write reaches its region's exit by a sync edge
-    // laid when the graph is built"), in the order the statements are written, and only for a
+    // written as a statement, by a sync edge to the exit of the region it is written in
+    // (a write reaches its region's exit by a sync edge
+    // laid when the graph is built), in the order the statements are written, and only for a
     // region that runs. This is the half of 3.1 the graph can carry; "does this region run, and
     // which arm does this statement belong to" is the region's roots
     // (camel/runtime/region_roots.h).
     void layRegionWriteEdges();
     // Whether `node` of `graph` is a write the region that runs it owes, in the one sense the edge
     // below and the region's roots share: an operator whose declaration writes outside the program
-    // or to a handle (`writesForTheRegion`). A write to a `var` is not one of them (the ruling of
-    // 2026-11-15), and neither is a call, a branch or a loop: what a *statement* runs is asked by
+    // or to a handle (`writesForTheRegion`). A write to a `var` is not one of them,
+    // and neither is a call, a branch or a loop: what a *statement* runs is asked by
     // the region's roots (camel/runtime/region_roots.h), and an edge would run it instead.
     bool writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const;
     // One body's measurement as it is being walked: what it has been found to reach so far, which
@@ -2851,8 +2847,8 @@ class Builder {
       private:
         camel::core::type::ResourceConflictSink previous_;
     };
-    // Then holds every reference in the module to the content rule of `Ref<T>` (the author's
-    // ruling of 2026-11-14): a reference may hold any type but one that holds a reference, because
+    // Then holds every reference in the module to the content rule of `Ref<T>`:
+    // a reference may hold any type but one that holds a reference, because
     // the boxes are reclaimed by counting the handles that point at them. The walk goes one layer
     // into what `T` holds -- a field, an element, a variant's payload, what a function takes or
     // returns, and the values a closure captured -- and the report is a RefContentHoldsRef at the
@@ -3122,8 +3118,8 @@ class Builder {
         node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
         const GCT::node_ptr_t &gct);
     /// The interval `a..b` of two integers as the array `int[]`. The form it is written in is
-    /// `a..b` and nothing else: the two-parameter `range(a, b)` it used to be the same operation
-    /// as is gone (design principles 4.2).
+    /// `a..b` and nothing else: there is no two-parameter `range(a, b)` as the same operation
+    /// (design principles 4.2).
     node_handle_t intervalValue(node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
@@ -3649,7 +3645,7 @@ class Builder {
     /// The last statement of the block visitExecNode finished most recently, and its node.
     std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
     /// A `fail` written in a block with statements after it, and those statements (design
-    /// principles 3.9; the author's ruling of 2026-10-26): a `fail` never returns, so where it is
+    /// principles 3.9): a `fail` never returns, so where it is
     /// executed nothing after it in the block is reached. Whether it is executed is decided when
     /// the body is complete, not where the block is built: a `fail` whose value nothing wants
     /// does not run, and the statements after it are reached then (FailNotExecuted and the walk

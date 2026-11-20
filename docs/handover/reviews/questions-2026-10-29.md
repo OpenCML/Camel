@@ -4671,4 +4671,70 @@ S2 随后，S3 最后。
 
 `5559d3c6e`（「a call through a value asks the graph behind the value」）与今晚合进主干的 `beea20ad6`（「a callee reached through a value does not hand its cells to the caller」）**不是同一机制**：前者问「这个被调方会不会把 `var` 形参交回」（退出类型 / 打包结果的投影，`callHandsBackResult` 改问 `functionValueGraphOf(calleeValueNode)`），后者问「这个图是否包住捕获的原点」（`enclosesOrigin` 之后才 `captureInto`，并保留 `nullptr` 让掩码命名同样的槽位）。同一个文件、同一族「经值调用」，但看的是两个不同的问句，因此互不覆盖。
 
-**2026-11-20 · lane-jvp-closure**：提交 `2da9735da`（一处实现 `liftedOperatorType` 共享 / 值半交 `jvp(lin)` / 提升对两腿补出或拒 / 期望未改）；读数 nested 3/3/4 · split 30/30 · compile/transforms 201/13；墙从「提升图带洞」退到「值半读 port 1 = 参数 0 的切向」，其 user 是 `kind=10` Func（切向被内层闭包捕获），`portOf[1]` invalid 而体在读它 ⇒ 下一笔按「值半声明与提升签名相同的端口」这一默认开工。
+## 八格的分支名与当前一步（2026-11-20 16:40，协调者回报，回应 `192e359b1`）
+
+`develop` = `d8ceb1d3b`。八格里**代码三格**的分支与当前一步如下；采集四格已全部进主干（`2ad0cf7af` · `156a70612`+`90cf5885e` · `070128473`+`d7fce1bb3`），不再列。
+
+### 第一格：二阶导按类型提升 —— 分支 `origin/lane-jvp-closure` = `6608c7bff`（ahead 2，两页）；树里 `lift.h`/`jvp.cpp`/`split.cpp` **未提交**
+
+**已立的三层，逐层都已裁：**① `Lift<A ⇒ B> = Lift<A> ⇒ Lift<B>` 的右边 `Lift<A>` 在箭头左边 ⇒ 方向是**参数**，故 `Lift<F'>` 是**族**；② 割点逐分量、`split.h` 自述「沿 pair 割，不沿位置」⇒ **类型可算**；③ `split` 手里只有 `jvp(F)`，`R` 不在 ⇒ 需 `liftDecodeOf`（`Lift` 的逆），**当前一步就是它在 `lift.h` 里落地**。
+
+**读数（当前二进制）**：`feat/transforms/split` 30/30/0 ＝基线 · `feat/compile/transforms` fail 0 / known 13 ＝基线 · `feat/transforms/nested` pass 3 / fail 3 / known 4。3 条 fail 是「拒绝没了、用例还钉着拒绝」（进展形态）；4 条 known 是**另一道墙**：`nested.plan.toml:65` 逐字 `refusedOrigin == kInvalidOriginId`、`:67` 实测「the outer `jvp` prints nothing at all」⇒ 提升一步都没走进去。
+
+**两页**：`2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md`（含撤回痕迹）、`2026-11-20-why-the-split-point-is-type-computable.cn.md`（§3 标题即「撤回」）。
+
+### 第二格：案例改用库 `grad` —— 分支 `origin/lane-case-lib` = `c46471cdf`（三提交，13 文件 +302/−110），**已推，待合**
+
+`train.cml` 的 `grad` 改 `from vjp`，调用写法 `grad(loss)<layer, y>(X)` **一字未动**。四后端 `loss before: 3.7500 / loss after: 0.0000 / [[1.9999925], [-0.99998784]]`，**与引擎版逐字同**。
+
+**`break_rate` 仍被拒**，原文 `graph 'main' node 13 (10): passes a Linear as ordinary argument 3 of 'train', which takes a float`，**连节点号都和迁移前一样**，只有位置 `24:1`→`27:1` ⇒ 拒它的层是 `commit`（`src/runtime/graph_edges.cpp`，契约 §4.2 第 2 条），与 `grad` 是引擎的还是库的无关。
+
+**六计划**（迁移提交 `217156abb`）：compile 2662/2646/0/known 16 · linear 869/865/0/skip 2/known 2 · opt 1621/1621/0 · parse 126/126/0 · para 104/104/0 · tools 71/70/**fail 1**。
+
+**那 1 红已按授权收掉（`c46471cdf`）**：`tools` **71/71/0**（干净树 `c46471cdf`，`[provenance] tip c46471cdf5a02a8c05fd9b49e4fd00ff63fd2ae3`），`parse` 126/126/0 复核。**①「把工具打印改短」不可行**：打印在 `src/runtime/storage_reuse.cpp:259` 的一句 `os << "COPIES " << graph->name()`，而图名就是**实例名**（`src/compile/gir/builder_generics.cpp:2476` 的 `instanceName` ＝ 符号 + 类型实参，设计原则 10.2 明写「带着声明它的模块显示」）——短化会把同一个 macro 的两个实例打成同一行，读数就不可归属；且那是 `src/`。**②改的是判形状的口径，不是断言要的东西**：12 曾经对（每个图名都是一个词：程序自己的图、`__root__`、无名图拿到的 `__g_<n>__`），迁移后 `grad` 那一张是 macro 实例，于是按尾部十个词判形状；「每行是 update 行 / 图摘要 / no-plan、摘要数加总等于行数」一字未动。
+
+**三件要你点的**：(a) 已收（见上）。(b) `f32[...]`→`f32[?, ?]` **不是装饰**：不改则不构建，原文 `The transpose of '…backward' needs the shape of the parameter at position 2, and the type 'f32[...]' does not state it`；改的是类型标注，`grad(loss)<layer, y>(X)` 的写法没动。(c) `writings/*.cml` 三个仍 import 引擎 `grad`，`case-study-variants/edits-ecoop.cml#break_rate` 同一套全程序计数，**要不要按同口径重钉，等裁**。
+
+### 第三格：transformer 在库 `grad` 下跑通 —— **不通，而卡点不在 softmax**
+
+`compile` 里 `transformer_step_gradient_stops_at_split.nvm` **PASS**（negative 如旧），程序面卡点 `stdlib/vjp.cml:134:19 … transforms: split does not build this function`；REINTERP 原文 `REINTERP split function=jvp_of_loss_plain skip=forward construct=a node whose input was not copied why=an operand of the node is not reachable from the half's exit`。**`rules=…,jvp_softmax,…` 已在 REINTERP 里 ⇒ softmax 那关过了。**
+
+`showcase/c3-char-transformer/train.cml:178:34 … transforms: jvp has no forward rule for 'tensor:layer_norm'` —— **`jvp` 根本没有这条法则**，比 `split` 更早一步。
+
+**⇒ 所以第一格与第三格同源**：两者都要 `split` 那条割的法则先落地。**第一格不是第三格的前置工作，它们撞的是同一处。**
+
+#### 第三格为什么停在这里（停手决定，2026-11-20 16:51，车道 `lane-case-lib` 写下）
+
+**这一格停手，不是放弃，是「再试一次也是同一个读数」。** 三次读数指向同一处：`transformer_step_gradient_stops_at_split.nvm` PASS（negative 如旧）、REINTERP 的 `split … skip=forward construct=a node whose input was not copied why=an operand of the node is not reachable from the half's exit`、程序面的 `stdlib/vjp.cml:134:19 … transforms: split does not build this function`。**`rules=…,jvp_softmax,…` 在 REINTERP 里出现过 ⇒ softmax 那关已经过了**，作者说的「`softmax` 法则已合」确实生效，只是它不是这条路上剩下的那道墙。
+
+**恢复条件写在这里，免得下一轮重新推一遍**：等 `origin/lane-jvp-closure` 的割点法则（`liftDecodeOf`，`Lift` 的逆）落地之后，**与本格一次复验**，不要再单独试。届时预期有两种形态，都要按当时的读数写，不许照抄今天的：① `transformer_step_gradient_stops_at_split.cml` 的拒绝消失 ⇒ 那条 entry 会变成「用例还钉着一个已经没了的拒绝」，是进展形态，要重钉成它实际打印的东西；② 拒绝还在但换了一处 ⇒ 新位置进这一节，旧句子记成「已过时」而不是删掉。
+
+**另记，别和上面混成一条**：`showcase/c3-char-transformer/train.cml:178:34 … transforms: jvp has no forward rule for 'tensor:layer_norm'` 是**更早的、和 `split` 无关的另一道墙** —— `jvp` 根本没有 `layer_norm` 的法则，小模型靠 `mean<-1, true>` 手写层归一才绕过它。**所以第三格就算 `split` 通了，c3 大模型仍然停在这里**；两件事分开验、分开报。
+
+**谁在等这一格**：没有别的车道在等；它也不阻塞第二格（案例迁移已经独立完成）。
+
+## 案例搬迁的第三笔：ECOP 条目（1）的落点是 `step` 的纯节点，不在梯度调用上（2026-11-20 17:37 记，17:49 按作者 `e4c2e646b` 改写）
+
+**先留一次我自己的错，因为它有形态**：17:37 我在这一节写过「条目（1）在迁移后**没有落点**」，并据此写了「两条出路都在那个文件之外（让 `grad` 交出直接调用 / 让 `inline` 能割闭包调用）」。**那两句基于错误前提，已删。**
+
+**错在哪里：**我依据的是两个 pass 的拒句 —— `graph.inline` 的 `the callee of the call is not known in this graph: run std::defunctionalize on it first`，与 `std::defunctionalize` 的 `types=7 values=16 calls=0 refused=7`（梯度自己的类型 `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure`，理由 `the value is read by a node that is not a call`）。**这两句都是真的，而它们只覆盖「我试的那两条路」** —— 我把「我试过的路都不通」读成了「没有路」。
+
+**作者裁定（`e4c2e646b`）**：「ECOOP item 1 lands at **a pure node of `step`**, not at the gradient call」。**落点就在同一个文件里现成的 `step_print` 上，用的是 `is_update`。**
+
+**`step` 的八个节点（`std::jgir`，g35）**：`PORT layer` · `PORT X` · `DATA Function(graph=loss)` · `FUNC vjp::grad<…>` · `PORT y` · `CALL → { weight: f32[?, ?] }` · `PORT rate` · **`OPER nn:sgd → Linear`**。**纯节点 = `nn:sgd`，全图唯一。**
+
+**③ 的落实（`cbf3b935b`）**：`grad_in_update` 与 `step_print_at_grad` 都删了 —— 前者指向 n5 那个 CALL（类型是结构不是函数值，而那个地方无法内联），改成读纯节点之后又与 `step_print` 完全重复，留一个只能回 `graph.inline` 拒句的导出 rewrite 是陷阱。两句拒句逐字留成 `is_inputs` 上方的注释，`step_print` 的注释写明「这就是条目（1）的落点（作者 `e4c2e646b`）」。
+
+**C 类对照：条目（1）两边都有落点，迁移改的是拒信的名字**（同一 rewrite、同一内联点，两个只差 `grad` 来源的程序）：
+
+```
+引擎的 autodiff:grad  →  PassEffectBeyondType
+   "committed a graph that reaches past the effect its own type declares: node 10 of graph 'step' (:io/println)"
+库的 grad             →  PassEffectOrder，配对为「梯度的调用与这个打印」
+```
+
+而 `loss_print`（`loss` 里的 `tensor:sum`）迁移后仍是 `PassEffectBeyondType` —— **这条对照没变。**
+
+**⇒ 所以「库的 `grad` 是 macro」改变的是「调用语句由什么构成」，于是改变的是**拒信的名字**，不是「有没有落点」。**
+
+**2026-11-20 · lane-jvp-closure**：提交 `2da9735da`（一处实现 `liftedOperatorType` 共享 / 值半交 `jvp(lin)` / 提升对两腿补出或拒 / 期望未改）；读数 nested 3/3/4 · split 30/30 · compile/transforms 201/13；墙从「提升图带洞」退到「值半读 port 1 = 参数 0 的切向」，其 user 是 `kind=10 Func` 且 `type=float` ⇒ **那是一次调用**（`Func` 的 `dataType` 是它的答案类型），`ẋ` 是被调方的**参数**、由**调用方**传进去；缺陷是值半没有它要传出去的那个实参的端口。`portOf[1]` invalid 而体在读它 ⇒ 下一笔改在 `splitHalvesWith` 的签名侧（读数见 `2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md`）。

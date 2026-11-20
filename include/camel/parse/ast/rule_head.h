@@ -73,8 +73,8 @@ struct RuleHead {
     // for the same operands and cannot be told apart, while two whose lists differ are two laws of
     // two shapes -- `T[]`'s `t[0]` is the element and `T[..]`'s `t[0]` is the open-rank array
     // (design principles 5.4) -- and the engine picks between them by the operand's own type. The
-    // author's ruling of 2026-11-03 11:10: a key holds one rule per parameter-type list, which is
-    // *not* the same question as whether two `when` clauses read alike.
+    // A key holds one rule per parameter-type list, which is *not* the same question as whether
+    // two `when` clauses read alike.
     std::string parameterTypes;
     uint32_t arity = 0; // how many operands the head takes: 2 for `a + b`, 1 for `-a`
     // The rule's tokens in its module's buffer, for a diagnostic about the rule itself.

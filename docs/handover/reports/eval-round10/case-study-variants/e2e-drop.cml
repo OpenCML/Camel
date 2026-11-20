@@ -1,0 +1,30 @@
+// Item A's fourth rewrite: one dead pure statement added inside `run`. It produces no node at
+// all, so the canonical document must not move -- and the five lines must not move either.
+
+func apply(f: (x: int) => int, x: int): int sync {
+    return f(x)
+}
+
+func run(n: int, base: int): int sync {
+    let label = 'step'
+    let twice = base * 2
+    let thrice = base * 3
+    let dead = base * 7
+    let f = (x: int): int => sync {
+        let weight = base + 1
+        let value = weight + x
+        '{} {} -> {}'->format<label, x, weight + x>->println
+        return value
+    }
+    let (_, total) = loop i = 0, total = twice + thrice while i < n do sync {
+        (i + 1, total + apply(f, i))
+    }
+    let tail = apply(f, n)
+    'total {} tail {}'->format<total, tail>->println
+    return total
+}
+
+func main(): int sync {
+    let _ = run(3, 10)
+    return 0
+}

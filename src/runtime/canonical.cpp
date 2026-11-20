@@ -138,8 +138,8 @@ class CanonicalWalk {
         // A node whose region the walk holds no record of -- a control region a publish left
         // `Dead`, which is what a graph built from a *subset* of a draft's nodes gets
         // (`planDraftPayload`) -- is a member of the same section and arranged the same way. It
-        // used to be placed here in NodeId order, and NodeId order is the order the nodes were
-        // created in, which is the spelling: a reading that only looked right because no program
+        // is not placed here in NodeId order: that is the order the nodes were
+        // created in, which is the spelling, a reading that would only look right because no program
         // in this repository reaches it today. The outside nodes are one group because a dead
         // region is not a structure the walk can order by.
         {
@@ -264,12 +264,12 @@ class CanonicalWalk {
         active_[ref] = true;
         // A region's exit GATE reads the value the region hands out first and the writes it keeps
         // alive after it (`Builder::layRegionWriteEdges`, design principles 3.1). Nothing joins
-        // those writes to one another -- the author's ruling of 2026-11-17 is written as "这些写之间
-        // 不加边" -- so their place in the GATE's list is the order the source wrote them in, which is
+        // those writes to one another, so
+        // their place in the GATE's list is the order the source wrote them in, which is
         // spelling, and they are a tie group arranged like the capture table below. Without this the
         // list decides the numbering: two writings that swap `println(x)` and a write to a file
-        // numbered the two in the order they were written, and the criterion of `fd75209cc` ("交换
-        // 两行的书写次序，输出相同") read two documents instead of one
+        // numbered the two in the order they were written, and the two writings, whose output is the same, read as
+        // two documents instead of one
         // (`test/cases/trans/same_graph_writings.py`).
         const std::span<const gc_node_ref_t> norms = graph_.normInputsOf(ref);
         const GCNode *numbered                         = graph_.node(ref);

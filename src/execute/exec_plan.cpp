@@ -111,8 +111,7 @@ namespace {
 
 /// The value behind the GATEs that order it after statements is `camel::runtime::valueBehindGates`:
 /// the first ordinary input, then the first context input, then nothing (camel/runtime/graph.h).
-/// This file used to carry its own copy of that walk with a 64-step guard; the guard is gone with
-/// it, because a graph is acyclic (daily review 2026-11-18, item 5).
+/// The walk has no step guard, because a graph is acyclic.
 using camel::runtime::valueBehindGates;
 
 /// Whether the value of `node` is read only by the node at `reader` (one reference, the reader's):
@@ -672,8 +671,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses);
 ///
 /// This is deliberately narrower than "the graph says nothing else reads it": the day a value read
 /// out of a container is counted for the second name, the clause comes off and the two cases above
-/// keep their readings because the *count* then says so at run time
-/// (`docs/handover/questions/2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md`).
+/// keep their readings because the *count* then says so at run time.
 bool valueMadeHere(const GCGraph &graph, const camel::core::OperatorTable &table, gc_node_ref_t value) {
     const GCNode *node = graph.node(value);
     if (node == nullptr) {
@@ -699,10 +697,9 @@ bool valueMadeHere(const GCGraph &graph, const camel::core::OperatorTable &table
 /// old value's last use a "returns a new value" operation happens in place, and that is a
 /// guarantee, not an optimisation).
 ///
-/// It is the caller's half of the author's ruling of 2026-11-17 (docs/handover/reviews/
-/// 2026-11-17-who-owns-the-argument-after-a-call.cn.md, `9699824aa`): "value semantics; the
+/// It is the caller's half of value semantics: the
 /// argument binding is a holder, handed on at the caller's last use and added otherwise, so reuse
-/// in place happens only at count one". A value nothing else reads is handed on -- the count stays
+/// in place happens only at count one. A value nothing else reads is handed on -- the count stays
 /// what it was, one -- and the update writes in its storage. Where this answers false the count is
 /// the one that decides, at run time, inside the form itself.
 ///
@@ -771,7 +768,7 @@ bool nothingElseReadsIt(
 /// (docs/design/arrays-memory/README.cn.md 4.3.1). The update node takes its array from
 /// `:var/take` of a cell; the plan walks the graph in execution order carrying, per cell, whether
 /// the value the cell holds is one this variable's own update made and nothing has read since
-/// (the runtime fact the cell used to carry as a mark, now decided once, here):
+/// (a fact decided once, here, not carried by the cell as a run-time mark):
 ///
 ///   * a cell that escapes, or that holds a value of unknown origin, proves nothing: the update
 ///     asks the array itself at run time (StorageReuse::ByArrayCount);
@@ -787,7 +784,7 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
     const size_t count = plan.topo.size();
     plan.storageReuseAt.assign(count, StorageReuse::None);
     // The uses of every value first: this walk and the references that come back read one answer
-    // (the author's ruling of 2026-11-15 -- the last use is computed here, not written twice).
+    // ( the last use is computed here, not written twice).
     ValueUses valueUses;
     planValueUses(graph, plan, valueUses);
     const auto &table      = camel::core::OperatorTable::instance();
@@ -949,14 +946,13 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                 }
             } else if (table.inPlaceForm(uri).has_value()) {
                 // The *copying* form of an operator that has an in-place one. A same-region local
-                // `var` is a value and not a cell since stage S1 of the direct-SSA construction
-                // plan, so this is where `v = v->append(x)`, `xs = xs->sort` and `xs[i] = v` on a
+                // `var` is a value and not a cell,
+                // so this is where `v = v->append(x)`, `xs = xs->sort` and `xs[i] = v` on a
                 // value reach the plan now: the expression the program wrote is the copying form,
                 // and the builder's rewriting it into the in-place one
                 // (`Builder::inPlaceRebindingOf`) has nowhere to write.
                 //
-                // What decides is not the shape of the statement -- that is the unit era's rule,
-                // and the author's answer of 2026-11-18 retired it: the decision is the plan's, and
+                // What decides is not the shape of the statement: the decision is the plan's, and
                 // the plan asks two things of the value the update is given: that this graph
                 // *made* it (`valueMadeHere` -- a value read out of a container is that
                 // container's, and the container's second name is not counted anywhere), and that
@@ -1000,8 +996,8 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 ///
 /// The three graph kinds are the fact themselves (a program cannot name a JOIN, a GATE or a port),
 /// and the operator is asked for its declaration (`OperatorTable::handsOnOperandValue`):
-/// there used to be a list of operator names here beside a table of the same names in the operator
-/// table, and the two could say different things (author review 2026-11-17, section 2.8).
+/// one list of the names, not a second one beside the operator table's, so the two cannot say
+/// different things.
 ///
 /// `:enum/field` declares it because of what the operator does with the field: `__enum_field__`
 /// returns the slot the variant holds (src/builtin/operators/enum.cpp) and takes no reference for
@@ -1021,8 +1017,8 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 ///
 /// The other half is not this predicate's: the read hands on a counted value, so the value it hands
 /// on is a further holder of the box and the plan takes a reference for it at the read
-/// (`takesTheReferenceForItsValue`, and the author's ruling of 2026-11-18 in the header, "the
-/// references that come back"). Carrying and holding are two answers: which value a use belongs to,
+/// (`takesTheReferenceForItsValue`).
+/// Carrying and holding are two answers: which value a use belongs to,
 /// and how many references the box has.
 ///
 /// A row of a higher-rank array is NOT one of these, and its declaration says so
@@ -1174,8 +1170,8 @@ bool passesWhatItReadsOn(
 /// The data predecessors of `at` whose values it reads **as values**: all of them, except for a
 /// region's exit `GATE`, whose first normal input is the value it forwards and whose normal inputs
 /// after it are the reads it takes of the region's writes (`Builder::layRegionWriteEdges`, design
-/// principles 3.1, the author's ruling of 2026-11-17: "第一个输入是区域交出的值，其余输入是区域里按
-/// 效应推断会写外部资源或句柄的节点"). The gate *waits* on those writes -- that wait is the whole
+/// principles 3.1).
+/// The gate *waits* on those writes -- that wait is the whole
 /// of what makes them live, and it is what `liveNodesOf` reads -- and hands nothing of theirs on,
 /// so it neither carries their value (`carried`) nor holds a reference to it (`usesAt`).
 ///
@@ -1219,8 +1215,8 @@ std::vector<gc_node_ref_t> dataPredecessorsReadAsValues(const GCGraph &graph, gc
 /// to be walked for: a JOIN's uses belong to the arms' values, because the JOIN hands on one of
 /// them, and only that arm's value is the one whose reference comes back.
 ///
-/// It is called from planStorageReuse, as the author's ruling of 2026-11-15 requires ("the last use
-/// is computed by it, not written a second time"): the two walks read the same edges
+/// It is called from planStorageReuse, so that the last use
+/// is computed once, not written a second time: the two walks read the same edges
 /// (executionPredecessorsOf, the one shared answer to "whose value runs first"), so they are one
 /// walk with two tables rather than two walks that must agree.
 void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
@@ -1364,8 +1360,8 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 /// held from outside that repetition: a loop's round runs its range again, and this value's
 /// production is not in the range that repeats here.
 ///
-/// The count is one last use on the execution order (design principles 10.5; the author's ruling of
-/// 2026-11-15: the analysis is the plan's, once, and every back end follows it), and the execution
+/// The count is one last use on the execution order (design principles 10.5:
+/// the analysis is the plan's, once, and every back end follows it), and the execution
 /// order of a loop is not linear -- its round's range [begin, position] is run again. That changes
 /// nothing for a value the round itself makes: its holds and its give-backs are both inside the
 /// range, so they balance per round. It changes everything for a value the range reads from
@@ -1380,18 +1376,17 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 /// moment is the LOOP node's own position -- every other position the round runs is run again, and
 /// the LOOP node is not an operator, so the count is not applied there by a back end. It is applied
 /// there by the loop itself: `loopEnd` (camel/execute/loop_frame.h) hands the rows laid at the LOOP
-/// node's position to `applyRefEntriesForLoopExit` when the loop leaves (author review 2026-11-16,
-/// item 6, the give-back at the loop's exit). This function names that loop -- the outermost one
+/// node's position to `applyRefEntriesForLoopExit` when the loop leaves.
+///  This function names that loop -- the outermost one
 /// whose round runs the use and does not make the value, because that is the last round the value
 /// must live through -- and `nullopt` when the use is not inside such a loop.
 ///
-/// What the note left in `ad44fca33` said would still leak, measured on this tree: nothing. That
-/// note said "a value a CALL or a FILL makes whose hold would have to be taken inside a loop's
-/// round is still kept: there is no position before the loop that writes a row of it". The position
-/// is the loop's own now (the paragraph above), so the shape it named is closed:
+/// A value a CALL or a FILL makes, whose hold has to be taken inside a loop's round, has a position
+/// before the loop that writes a row of it: the position is the loop's own (the paragraph above),
+/// so the shape is closed:
 /// `test/probe/refleak/call_box_loop_outer.cml` makes a box by a call *before* a loop, reads it on
 /// every round and by nothing after, and reads `created=1 released=1 live=0` on nvm, fvm, jit and
-/// prl (author review 2026-11-17, item 10; `call_box.cml` covers the call *inside* a round,
+/// prl (`call_box.cml` covers the call *inside* a round,
 /// `released=10 live=0`).
 ///
 /// What this function cannot answer, and what it leaves to the representation: a value a *round*
@@ -1404,7 +1399,7 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
 /// trades the double release for a leak of every round's box. Both are the same missing fact -- a
 /// row naming "the value this node made last round" -- and a row is a node reference, so answering
 /// it is a per-round version of the value in the representation, not a change to this function.
-/// Measured and recorded here so the next lane measures nothing twice; the probe asserts the right
+/// The probe asserts the right
 /// numbers and stays red until it is answered there.
 std::optional<uint32_t> loopRepeatingOver(const ExecPlan &plan, size_t produced, size_t at) {
     std::optional<uint32_t> exit;
@@ -1428,8 +1423,7 @@ camel::core::type::TypeCode countedHandleCode();
 
 /// Whether a value of this type code is one the count owns (`state::Ref`). Defined once, beside
 /// `countedHandleCode`, and asked by the plan below and by the run at the rows: it was written at
-/// each of those three sites and one of the three would have changed first (author review
-/// 2026-11-17, item 9).
+/// each of those three sites and one of the three would have changed first.
 bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 
 /// Whether the value the node makes is a *further holder* of an object an operand already holds:
@@ -1437,9 +1431,8 @@ bool isCountedHandle(camel::core::type::TypeCode code) noexcept;
 /// the number of holders (design principles 10.5), so such a value has a reference of its own, and
 /// the plan is where it is taken -- the operator does not take it.
 ///
-/// The author's ruling of 2026-11-18 (`812afad5c`), answering the question this lane's predecessor
-/// raised in `docs/handover/reviews/questions-2026-11-17-two-rulings.cn.md`: "an element read of
-/// a counted value is a further holder, so the plan retains there and the run-time skip goes". Read
+/// An element read of
+/// a counted value is a further holder, so the plan retains there and the run-time skip is gone. Read
 /// out of an array, a counted element is one holder (the array holds it) plus one (the value the
 /// read hands on), so the plan takes a hold at the read and gives it back where that value is last
 /// read.
@@ -1599,12 +1592,12 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // operator kind and the node's own execution for the others). So the edge that makes a node
         // read the value is also what makes the row run after that read.
         //
-        // The rule used to be different: a row due at a node that is not an operator moved forward
-        // to the next operator of the same control region, and "later is the safe direction". That
-        // is only true in one linear order. The plan has no edge between a position and the next
+        // A row due at a node that is not an operator is not moved forward to the next operator
+        // of the same control region on the grounds that "later is the safe direction": that is
+        // only true in one linear order. The plan has no edge between a position and the next
         // position, so a parallel back end (taskflow only connects what the graph connects) may run
-        // the receiving operator before the use it was moved from, and the reference comes back
-        // while a reader is still live (author review 2026-11-17, the rework of this function).
+        // the receiving operator before the use it was moved from, and the reference would come
+        // back while a reader is still live.
         // The same argument is why the holds are taken at the node that made the value and not at
         // the first position that writes one of its rows: only the producing node has an edge to
         // every reader, so only there is the hold taken before all of them.
@@ -1666,8 +1659,8 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // Every row is written now -- there is no position that cannot take one -- so this is
         // `uses - 1` again, and a loop's exits are counted one each because each of them gives one
         // back. A further holder adds one: the hold the operator did not take is the plan's, and it
-        // is what `2746e4025` was missing -- with no hold at the read, the release the array's own
-        // hold is made of took the box to zero while the value the read handed on still named it.
+        // is what makes the read safe: with no hold at the read, the release the array's own
+        // hold is made of would take the box to zero while the value the read handed on still named it.
         copies = static_cast<uint32_t>(held + (kept ? 1u : 0u) + (takesIt ? 1u : 0u)) - 1u;
         for (uint32_t take = 0; take < copies; ++take) {
             holds[idx].push_back(value);
@@ -1807,7 +1800,7 @@ camel::core::type::TypeCode countedHandleCode() {
 /// back end runs them (`valueIsCounted`), and the run, which applies a row only where the slot is
 /// one (`applyRefEntriesAtPosition`). It was written three times in this file -- as
 /// `TypeCode::Ref || countedHandleCode()` at each site -- and one of the three would have changed
-/// first (author review 2026-11-17, item 9).
+/// first.
 ///
 /// The `counted` flag this asks about has exactly one declaration, and it is not here: the module
 /// that owns the type declares it on the descriptor (`ForeignResourceDescriptor::counted`,
@@ -1824,7 +1817,7 @@ bool isCountedHandle(camel::core::type::TypeCode code) noexcept {
 /// it has rows to run. The kind of node that makes it is not part of the answer: a CALL and a FILL
 /// make a value as an operator does, and every back end runs their position's rows where it runs
 /// the node (camel/execute/operator_call.h, `runNode`; exec_plan.cpp, `planRefRows`). The question
-/// this must *not* ask is the producing node's kind -- that was the leak of 2026-11-16: the rows of
+/// this must *not* ask is the producing node's kind -- that was a leak: the rows of
 /// a box a call made were in the table, the balance read them, `found` counted the box, and no back
 /// end ever applied them.
 ///
@@ -1946,7 +1939,7 @@ void applyRefEntriesOfOpenLoops(camel::core::context::Frame *frame) noexcept {
             continue;
         }
         applyRefEntriesForLoopExit(plan, frame, loop.position);
-        // The loop is no longer one the run is inside: the rows above are the ones its exit owed,
+        // The loop is not one the run is inside now: the rows above are the ones its exit owed,
         // and a second call on this frame -- one back end's fault path is reached from another's
         // -- must not take them again (a second give-back would release a box the run still holds).
         // The value is the one `loopTest` writes when its test stops the loop, and this frame is on
@@ -2009,7 +2002,7 @@ std::string ExecPlan::operatorUriFor(gc_node_ref_t ref) const {
     //     not be reused, and then the plain (copying) form runs instead.
     //   * the *copying* form of the same operator runs the in-place form only where the plan
     //     handed it the value it was given -- the decision is a proof that the value has no other
-    //     reader (stage S3b; `planStorageReuse`). With no decision (StorageReuse::None) it runs
+    //     reader ( `planStorageReuse`). With no decision (StorageReuse::None) it runs
     //     the URI it names and allocates, which is the safe answer and what the reading calls
     //     `copied`: swapping on "not Copy" would make every undecided append and sort write in
     //     place, and the reading would still say `copied` -- the two would disagree about the same
@@ -2135,8 +2128,8 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     plan->directCallArgOffsets[count]  = static_cast<uint32_t>(plan->directCallArgSlots.size());
     plan->branchArmEntryOffsets[count] = static_cast<uint32_t>(plan->branchArmEntries.size());
     buildLoopTables(graph, *plan);
-    // The storage plan and the references that come back are one walk now (the author's ruling of
-    // 2026-11-15: the last use is computed by the storage walk, not written twice), so the second
+    // The storage plan and the references that come back are one walk
+    // (the last use is computed by the storage walk, not written twice), so the second
     // table is filled from inside the first and has no call of its own here.
     planStorageReuse(graph, *plan);
 

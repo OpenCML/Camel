@@ -15,9 +15,8 @@
 
 namespace {
 // The `[DBG-W]` and `[DBG-FOLD]` lines of the fold are one reading of the run's tracing channel,
-// `--trace fold` (`include/camel/core/trace.h`). It was `CAMEL_LOG_DEBUG`, an environment switch,
-// until the author's ruling of 2026-11-16: the environment is not where a run's settings come from
-// (design principles 9.3), and one kind of reading has one way to ask for it.
+// `--trace fold` (`include/camel/core/trace.h`). The environment is not where a run's settings
+// come from (design principles 9.3), and one kind of reading has one way to ask for it.
 namespace folddebug {
 inline std::ostream &out() { return camel::core::trace(camel::core::TraceArea::Fold); }
 } // namespace folddebug
@@ -506,15 +505,14 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     //
     // A `var` whose every read and every write lies in the region that declares it is built as a
     // value: the name is bound to the value, an assignment rebinds it, and no cell is made
-    // (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1: same-region local
+    // ( same-region local
     // `var`s). The decision is the scan's, taken once, before this body was built, so it is the
     // same for every build of the body and does not depend on how the body is built.
     //
     // A `var` whose value is a counted handle is a value in one more shape: a closure that only
     // reads the name captures the handle itself and the cell is not there to be shared. A cell
-    // holding a handle is the shape the author answered on 2026-11-18 (`9d29939c4`: "a cell holding
-    // a Ref is a holder, and the cell should go"): the plan gave the cell's hold no row and the run
-    // found no handle to count, so a box behind such a cell was released while the name still held
+    // holding a handle would have no row for its hold in the plan and the run would find no handle
+    // to count, so a box behind such a cell is released while the name still holds
     // it -- `state::get` of a disposed handle. A handle is a value and a name of one needs no cell
     // (design principles 3.5), so the cell goes rather than being taught to hold.
     Type *heldValue = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
@@ -605,7 +603,7 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     // not synchronised does not move a read past a write written below it.
     //
     // This is where the rule is written and it is the whole of it (docs/design/effects/edges.cn.md
-    // 5.6, the author's 2026-11-03 ruling): for one cell, a write is ordered after every read since
+    // 5.6): for one cell, a write is ordered after every read since
     // the write before it. A chain place is not the carrier of that order -- a read is not a
     // statement of the chain, and the pure node a read stands beside may leave the chain -- so the
     // order is written here, once, by the write. Rewrites and inlining keep the edge: it is an
@@ -821,7 +819,7 @@ node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
 
 node_handle_t Builder::valueVersionOf(node_handle_t variable) {
     // A branch whose arms wrote the variable carries the write as its own value (design principles
-    // 3.5, the ruling of 2026-11-15: `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else
+    // 3.5: `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else
     // 2`). That join is recorded when the branch is built, because a JOIN that carries a value is
     // not by itself a write of this variable -- the value of `let r = if c then ...` is a join too,
     // and it is no version of anything. A later write of the same variable on a straight line
@@ -887,8 +885,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // write to that cell, tracked where it happens).
     //
     // A write that produced a version of its own has that data edge already: the read takes the
-    // version, and the control input this helper used to stand in for it is gone with it
-    // (Builder::valueVersionOf).
+    // version, so no control input stands in for it here (Builder::valueVersionOf).
     if (valueVersionOf(variable) != nullptr) {
         return;
     }
@@ -1355,7 +1352,7 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     // A name used as a value that is a tag. A tag keeps the name it is written with and does not
-    // enter the value namespace (design principles 6.2, the author's ruling of 2026-10-30), so a
+    // enter the value namespace (design principles 6.2), so a
     // tag and a value of one name may coexist and the tag is reached only through `#`. Saying that
     // beats telling the writer to check that a name the program declares is declared.
     if (tagNamed(name).has_value()) {
@@ -1547,8 +1544,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     if (valueTypeOf(sourceType)->code() == TypeCode::Never) {
         // A value of `never` never exists (design principles 3.9): the position takes the node as
         // it stands, because there is nothing to convert -- and nothing that could fail to be
-        // what the position asks for. A tagged position is no exception (the author's ruling of
-        // 2026-10-26 on `never-argument-scope`): `never` is the bottom type and enters any
+        // what the position asks for. A tagged position is no exception:
+        // `never` is the bottom type and enters any
         // expected position without a conversion, tag or no tag, so a CAST is not built for it
         // here either.
         LEAVE("CAST");
@@ -1692,8 +1689,7 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
     const auto op = group->resolve({}, {nodeTypeOf(input)}, statics);
     if (!op.has_value()) {
         // ASSERT is an empty statement under NDEBUG, so the line below dereferenced an empty
-        // optional and this was a 139 -- the second one tonight that a sentence would have
-        // prevented (the first was Variant::updateRefs). The reading says which operand and what
+        // optional and this was a segfault. The reading says which operand and what
         // node it is: a variable operator needs a version that carries a value, and `void` is not
         // one.
         throw std::runtime_error(
@@ -1746,7 +1742,7 @@ Builder::secondNameOfCarriedName(const GCT::node_ptr_t &initializer, node_handle
     }
     // A carried state reaches the body as one of two things: a port that stands for a cell
     // (`loopStatePorts_`, the cell form) or a name the body's scope declares as the port itself
-    // (`SsaEnv::declarePort`, the value form stage S3 built).
+    // (`SsaEnv::declarePort`, the value form).
     const auto bound = nodeAt(moduleLevelName(initializer->name()));
     const bool carried = (bound.has_value() && loopStatePorts_.contains(bound.value())) ||
                          ssa_.portOf(nodeScope_, initializer->name()) != nullptr;
@@ -1829,7 +1825,7 @@ node_handle_t Builder::readVariableThrough(node_handle_t variable, camel::core::
     node_handle_t version = valueVersionOf(variable);
     if (version != nullptr) {
         // A version that carries the variable's value rather than its cell -- a branch whose arms
-        // wrote it, so the JOIN is the write (design principles 3.5, the ruling of 2026-11-15) --
+        // wrote it, so the JOIN is the write (design principles 3.5) --
         // is the read itself: there is nothing to take out of a cell, and `:var/get` would be an
         // operator on a node that holds no cell. The data edge from the write is the whole tie the
         // read needs, so it is the node the read stands for and the write's place orders whoever
@@ -1899,7 +1895,7 @@ node_handle_t Builder::readVariableThrough(node_handle_t variable, camel::core::
         linkNodes(LinkType::Order, lastIndirectCall_, value);
     }
     if (synced_) {
-        // A read is not a statement of the sync block's chain (the ruling this tree carries): it
+        // A read is not a statement of the sync block's chain: it
         // takes its place from the version it reads, so the link the chain would write here is not
         // written at all.
         syncedReads_.push_back(value);
@@ -2323,8 +2319,8 @@ void Builder::dropCarriedVariableUnits() {
     // Both tables below are hashed on the handle's ADDRESS -- `std::hash<DraftNodeRef>` is
     // `hash<const void*>(draft) * 31 + id` (`runtime/node_ref.h`) -- so walking them walks the
     // allocator's order, and the units dropped further down are created in that order. Two runs of
-    // one program then number the nodes of this body differently (the reading `wins1` measured on
-    // 2026-11-20: "node 1/2/3 differ between runs, close to uniform"). A graph numbers its nodes in
+    // one program then number the nodes of this body differently (node numbers differed between runs, close to uniform).
+    // A graph numbers its nodes in
     // creation order, so the table is sorted by the id the graph already gave the node, which is a
     // function of the program and not of where the node happens to live.
     const auto byNodeId = [](node_handle_t left, node_handle_t right) {
@@ -2817,9 +2813,9 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const size_t names    = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
-        // declaration, and not as an element read past the end -- a name too few used to drop the
-        // remaining elements in silence, and a name too many reported an index the source never
-        // wrote.
+        // declaration, and not as an element read past the end -- a name too few would drop the
+        // remaining elements in silence, and a name too many would report an index the source
+        // never wrote.
         // One answer per declaration: every name of it carries the count, and the first reports.
         if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
             diags_->of(SemanticDiag::TupleUnpackingCountMismatch).atOrigin(gct->origin()).commit();
@@ -2871,10 +2867,10 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         // A composite that is none of the three above has no element to read: a function value is
         // the case that reaches here, and it is not a corner -- `split` answers the forward half,
         // so `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type
-        // whose members are parameters, not elements (`(float, float) => float`). This used to be a
-        // `runtime_error`, which the driver reports as a defect of the compiler; a program that
+        // whose members are parameters, not elements (`(float, float) => float`). A `runtime_error`
+        // would be reported by the driver as a defect of the compiler; a program that
         // asks a function for its element is a program with a mistake in it, and it is told which
-        // type it asked (2026-11-02, the split ABI: sixteen cases in test/cases/transforms reached
+        // type it asked (the split ABI in test/cases/transforms reaches
         // it).
         diags_->of(SemanticDiag::TypeNotIndexable)
             .atOrigin(gct->origin())
@@ -2939,7 +2935,7 @@ std::string Builder::bindTemporary(node_handle_t node) {
 
 // ---------------------------------------------------------------------------------------------
 // The value environment of a `var` built as SSA
-// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1). A `var` whose every
+//  A `var` whose every
 // read and every write lies in the region that
 // declares it is built as a value: the name is bound to the value in `nodeScope_`, and an
 // assignment rebinds it (`ssaAssignmentOf`). Nothing reads or writes a cell, so nothing counts
@@ -2949,8 +2945,8 @@ std::string Builder::bindTemporary(node_handle_t node) {
 namespace {
 /// Whether a node opens a region of the graph: an `if`/`match` arm, a loop's body, a closure's
 /// body, a block that carries tags, a static loop. A `var` read or written across one of them is
-/// carried into it -- a join's φ or a loop head's port -- which is what stages S2 and S3 add; until
-/// they do, such a name keeps its cell.
+/// carried into it -- a join's φ or a loop head's port -- and where there is neither, such a name
+/// keeps its cell.
 bool opensRegion(GCT::NodeKind kind) {
     switch (kind) {
     case GCT::NodeKind::CASE:
@@ -2970,7 +2966,7 @@ bool opensRegion(GCT::NodeKind kind) {
 }
 
 /// What a region does with a `var` that is read and written from outside it: an arm hands the value
-/// to the branch's JOIN (stage S2), a loop body hands it to the loop head's port (stage S3), and
+/// to the branch's JOIN, a loop body hands it to the loop head's port, and
 /// every other region -- a closure's body, a block of its own, a static loop's body, a loop's
 /// condition -- has nowhere to put it, so a name used across one of those keeps its cell.
 enum class SsaRegion : uint8_t { Other, Arm, LoopBody };
@@ -3021,8 +3017,8 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
         SsaAnswer &answer = eligible[decl];
         if (declaredIn[decl] != depth) {
             // Across a region the value has to be carried into it. The regions that carry one are
-            // the arm of a statement branch, whose JOIN carries it (stage S2), and a loop body,
-            // whose head carries it (stage S3); every region between the declaration and the use
+            // the arm of a statement branch, whose JOIN carries it, and a loop body,
+            // whose head carries it; every region between the declaration and the use
             // has to be one of those, one inside the other, and nothing else. A closure body, a
             // block of its own, a static loop's body and a loop's condition have nowhere to put the
             // value, so a name used across one of them keeps its cell.
@@ -3037,7 +3033,7 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
                     carried = false;
                     // A read of a handle across such a region is not a use that has to be carried:
                     // the closure captures the value, which is what a handle is (design principles
-                    // 3.5, and the author's answer `9d29939c4`). A write is: it has to land
+                    // 3.5). A write is: it has to land
                     // somewhere the closure and the body share, and a value is not such a place.
                     if (written) {
                         carriedAsAHandle = false;
@@ -3084,8 +3080,8 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
             // the arm's depth and a use of it in an enclosing block is across a region.
             const bool region  = node != body && opensRegion(node->type());
             const size_t inner = declares ? depth : (region ? depth + 1 : depth);
-            // The arms of a statement branch are a depth whose writes are carried (S2), and a loop
-            // body is another (S3). A branch whose value is used fills the join's only value slot
+            // The arms of a statement branch are a depth whose writes are carried, and a loop
+            // body is another. A branch whose value is used fills the join's only value slot
             // with its own value, so its arms are not carried -- the red line, settled before any
             // carry is written.
             const bool statementBranch = statement && (node->type() == GCT::NodeKind::CASE ||
@@ -3097,7 +3093,7 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
                 // A loop node is a region of the walk like its body is: what the head carries is
                 // read in the body and in the loop's own initial values, and the head hands it out
                 // after the loop. Its condition is a region of its own inside it and carries
-                // nothing (S3's boundary: a name used in a loop's condition keeps its cell).
+                // nothing ( a name used in a loop's condition keeps its cell).
                 const bool carries = loopBody || node->type() == GCT::NodeKind::LOOP;
                 regions.push_back(
                     OpenRegion{
@@ -3150,7 +3146,7 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
             const bool isCall = node->type() == GCT::NodeKind::LINK ||
                                 node->type() == GCT::NodeKind::WITH ||
                                 node->type() == GCT::NodeKind::TAPP;
-            // A `var` an in-place operator rewrites keeps its cell (S1's scope, ahead of S3b): the
+            // A `var` an in-place operator rewrites keeps its cell: the
             // update takes the value's storage and hands it back by rebinding the name, which needs
             // a cell to write. Two shapes, both read off the GCT node: the plain write of a place
             // (`v[i] = e`, `v.f = e`) and the write of a call over the variable itself.
@@ -3189,10 +3185,10 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
                 // printed `[0, 1, 25, 3]` where the program says `[0, 1, 25, 2]`. Keeping the cell
                 // is not "putting it back where it was"; it is a change of semantics. So the name
                 // stays a value and its update is copied (`--copies` says so at
-                // `element_assigned_append`); making that append in-place again is S3b's work.
+                // `element_assigned_append`).
             }
             for (size_t i = 0; i < node->size(); ++i) {
-                // A loop's body is the region its head carries values around (S3): the walk says
+                // A loop's body is the region its head carries values around: the walk says
                 // so for that child and for nothing else -- a loop's condition, initial values and
                 // sequence stand where the loop is written.
                 const bool childLoopBody =
@@ -3219,7 +3215,7 @@ std::unordered_map<const GCT::Node *, Builder::SsaAnswer> Builder::scanBodyForSs
     walk(body, 0, nullptr, 0, false, false, false);
     // A branch that writes two declarations carries neither: its JOIN has one value slot. The
     // census over the corpus found that shape only in a generator's carried state, which a capture
-    // keeps a cell anyway; if a plain branch ever writes two names, S2 has to grow the tuple form.
+    // keeps a cell anyway; if a plain branch ever writes two names, the join has to grow the tuple form.
     for (const auto &[depth, names] : branchWrites) {
         if (names.size() >= 2) {
             for (const GCT::Node *decl : names) {
@@ -3486,7 +3482,7 @@ bool Builder::argumentMayWriteBack(
 bool Builder::ssaDeclarationIsEligible(
     const GCT::node_ptr_t &decl, const std::string &name, bool aHandle) {
     // A module's top level is not a region of a body: its `var`s are cells every function of the
-    // module reaches, and they stay cells until stage S5. A declaration the scan never saw is not
+    // module reaches, and they stay cells. A declaration the scan never saw is not
     // one of the body's own, and is answered as a cell.
     if (regionBodies_.empty() || currGraph_ == rootGraph_ || decl == nullptr) {
         return false;

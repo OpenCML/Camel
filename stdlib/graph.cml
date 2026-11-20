@@ -231,7 +231,7 @@ export func tags(n: Node): string
 export func declaration_tags(g: Graph): Tag[]
 
 /// The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
-/// not declared any more.
+/// not declared.
 /// @example-fragment t is a tag read from a declaration
 /// @example tag_name(t)    // 'jvp'
 export func tag_name(t: Tag): string

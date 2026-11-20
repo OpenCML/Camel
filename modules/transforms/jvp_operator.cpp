@@ -7,8 +7,8 @@
  * This is the wiring `camel::autodiff`'s `grad` has, copied rather than shared: a type resolver,
  * a kernel and the two registrations. What is *not* copied is the work: the kernel calls
  * `buildJvpGraph` (jvp.cpp), which is the one place that knows what `reinterp<jvp>(f)` is, and
- * answers with the function value naming the graph it built -- the author's ruling (a824031aa)
- * that the transform produces a new function and leaves `f` untouched.
+ * answers with the function value naming the graph it built -- the transform produces a new function
+ * and leaves `f` untouched.
  */
 
 #include "jvp_operator.h"
@@ -149,11 +149,10 @@ class JvpResolver final : public FuncTypeResolver {
 
     /// The law, not one instance of it. What `jvp(f)` is for a given `f` is `jvpSignature`'s answer
     /// (`modules/transforms/jvp.cpp`), and the declaration the module publishes says the same thing
-    /// in prose (`stdlib/signatures/transforms.cml`, `Jvp<F>`). This string used to write one
-    /// instance -- `(f: (float) => float) => (float, float) => (float, float)` -- which stopped
-    /// being true as soon as any parameter that is not a `float` was accepted, and a diagnostic that
-    /// states a false type is worse than one that states the rule (author, A2 of 2026-11-03: the type
-    /// follows the declaration, and the declaration is the only source).
+    /// in prose (`stdlib/signatures/transforms.cml`, `Jvp<F>`). A single instance such as `(f: (float) => float) => (float, float) => (float, float)` would
+    /// stop being true as soon as any parameter that is not a `float` was accepted, and a diagnostic
+    /// that states a false type is worse than one that states the rule (the type follows the
+    /// declaration, and the declaration is the only source).
     std::string signature() const override {
         return "(f: (...) => any) => (the parameters and their tangents) => (value, tangent)";
     }
@@ -178,7 +177,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     // The reading is part of the interface (jvp.h): a graph the caller cannot name yet is a graph
     // nobody can check. It goes to the diagnostic side (`readings.h`), not to the program's output:
-    // the same walk that explains a refusal used to land among the numbers the program printed.
+    // the walk that explains a refusal must not land among the numbers the program prints.
     const JvpGraph built = buildJvpGraph(
         ctx.shared_from_this(), function->program(), function->graph(), readings());
     if (built.graph == nullptr) {
@@ -194,7 +193,7 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         // reader at the call site, guessing which operator in `f` it was.
         //
         // A named construct is refused with the sentence the language would write for it, not with
-        // "this transform does not reinterpret it yet" (author, 2026-11-04 04:20): the constructs
+        // "this transform does not reinterpret it yet": the constructs
         // that reach here are outside the rule -- a loop whose element has a tangent, a call whose
         // callee takes nothing but its `with` values -- and the rule plus the reading is the whole
         // answer, so nothing is promised for later.
@@ -246,8 +245,8 @@ void printJvpCallReading(
 
 // The two steps of `vjp` (stdlib/vjp.cml) have rules of their own -- `split` in
 // modules/transforms/split_operator.cpp and `transpose` in modules/transforms/transpose_operator.cpp
-// -- so the stand-ins that answered "this step is not bound for this function" are gone with them:
-// a step either has a rule or says it has none, and it no longer has a shape without one.
+// -- so there are no stand-ins that answer "this step is not bound for this function":
+// a step either has a rule or says it has none, and it has no shape without one.
 const std::vector<oper_group_ptr_t> &operatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         // One rule: `jvp` takes a function and gives its forward transform (design principles 9.9
@@ -283,8 +282,7 @@ void registerOperatorMetadata() {
     // parameters. Neither has a Camel declaration that could say so -- the result of `jvp` is the
     // forward transform of `f`, the result of `transpose` its reverse transform, and no signature
     // writes either type -- so the call shape is recorded here, where the operator is declared,
-    // rather than in a signature invented to make the printer pass (P1-13: an operator with no
-    // compilable declaration).
+    // rather than in a signature invented to make the printer pass.
     camel::core::OperatorTable::instance().declareCallForm(
         "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0, .declaredByModule = true});
     camel::core::OperatorTable::instance().declareCallForm(

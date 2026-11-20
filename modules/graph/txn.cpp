@@ -483,11 +483,10 @@ bool regionIsLookedThrough(camel::runtime::GCRegionKind kind) {
 
 /// The node that stands for `ref` in the region `common`, walking out of the regions it is in.
 ///
-/// The commit asks order completeness per region, and "a node of an arm or of a part of a loop is
+/// The commit asks order completeness per region, and a node of an arm or of a part of a loop is
 /// judged where its owner stands: the owner stands in the region around it for everything under
-/// it" (docs/handover/plans/2026-11-18-commit-checks-and-spelling.cn.md 乙第 1 条). So one end of
-/// an order edge that lies deeper is lifted to that owner, step by step, until it reaches the
-/// region the two ends share.
+/// it. So one end of an order edge that lies deeper is lifted to that owner, step by step, until it
+/// reaches the region the two ends share.
 ///
 /// A region that is looked through has no owner to lift to, and the pure `GATE` standing at its
 /// boundary is no node of its own either: a gate orders the value it reads and runs nothing
@@ -530,8 +529,8 @@ gc_node_ref_t representativeIn(
 /// changes nothing and is not a refusal, because the promise the caller asks for holds.
 ///
 /// Two ends in one region are the edge they name. Two ends in different regions are lifted to the
-/// nodes that stand for them in the region they share (the ruling of 2026-11-20): the commit reads
-/// access by region, so the edge is written between the pair that region sees, and `order` speaks
+/// nodes that stand for them in the region they share: the commit reads access
+/// by region, so the edge is written between the pair that region sees, and `order` speaks
 /// the same words the check does.
 slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
     static const char *site = "graph.order";
@@ -605,7 +604,7 @@ gc_node_ref_t exitOfRegion(const camel::runtime::GraphDraft &draft, uint32_t reg
 
 /// Hangs the code a splice brought on the exit `GATE` of the region it landed in, so that the region
 /// that runs the code waits for what it writes (design principles 3.1: "每个区域的出口是 `GATE`，
-/// 第一个普通输入是区域的值，其余是区域的写"; the ruling of 2026-11-20 on `inline` at a pure node).
+/// 第一个普通输入是区域的值，其余是区域的写").
 ///
 /// A body spliced at a node that holds no place in its block's chain lands in an `Inline` region
 /// beside it, and nothing in the block reads that region: the body's value has no user, so nothing
@@ -661,10 +660,8 @@ size_t hangSplicedStatements(
 }
 
 /// `inline(t, at, fn)`: the body of the function value `fn` spliced into the region `at` is in,
-/// answering the node that holds the body's value. `at` decides the place as well -- the ruling of
-/// 2026-11-18 (`e55cd6157`) recorded at
-/// docs/handover/reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md, and
-/// docs/design/graph-editing/README.cn.md 7 and 15.3:
+/// answering the node that holds the body's value. `at` decides the place as well
+/// (docs/design/graph-editing/README.cn.md 7 and 15.3):
 ///
 /// * `at` is the call `fn` is made at -- the shape `replace(call, inline(call, ...))` expands in
 ///   place: the body is spliced where the call stood, takes over its place in the block's chain

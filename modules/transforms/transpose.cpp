@@ -174,8 +174,7 @@ Type *cotangentPortOf(
 /// The question itself is not this file's: it is `rule_expand.cpp#chooseRuleAmong`, which `jvp`,
 /// `vmap` and this transform all ask. What is this family's own is the instance tuple the ports are
 /// read from -- the rule at `float`, which is what `expandRuleByName` instantiates
-/// (`rule_expand.cpp`, whose `{Float64()}` is a standing defect recorded in
-/// `docs/handover/reviews/questions-2026-10-29.md`, not this function's) -- and the words a refusal
+/// (`rule_expand.cpp`; its `{Float64()}` is a standing defect that is not this function's) -- and the words a refusal
 /// is written with. A choice made on ports is only a choice between *shapes*: two laws of one key
 /// that differ in their element type alone are told apart by the instance the expansion makes, not
 /// here.
@@ -225,9 +224,8 @@ RuleChoice chooseTransposedRule(
     RuleChoiceWords words{"law", "operands"};
     // What is *not* a mismatch here is a rank: 5.4 says `T[..]` includes rank 0, a rank-zero array
     // being the element itself, so a port written `T[..]` takes a `float` and one law covers both
-    // shapes `tensor:multiply` is called with. The clause this family used to keep -- an array port
-    // refusing a non-array operand -- was deleted with the author's 2026-11-03 12:10 ruling, and
-    // the array-and-scalar product has a law of its own now (`mul_tensor_t`, `lane-mulsc`).
+    // shapes `tensor:multiply` is called with. There is no clause refusing a non-array operand for an array port, and
+    // the array-and-scalar product has a law of its own (`mul_tensor_t`).
     //
     // The instance the ports are read from is made at the operands' own types and not at one
     // `float`: a law is judged at the types the expansion will build it at, and a law that takes
@@ -254,10 +252,10 @@ RuleChoice chooseTransposedRule(
         // it then has are that type's ports (`it takes 1 type parameter(s), and it was asked for 3`
         // is what one-per-port answers it).
         //
-        // That one type is the step's own, and it was `Float64()` here until 2026-11-04: a narrow
-        // float step then fell back to a `float` instance, whose ports take no `f32` operand, so
-        // the choice refused by shape and the walk stopped -- measured, `vjp` of `(x: f32) => x
-        // + 1.5` read `skip=rule-shape uri=:op/add_f reason=the rule takes (float, float), and the
+        // That one type is the step's own: were it `Float64()`, a narrow
+        // float step would fall back to a `float` instance, whose ports take no `f32` operand, so
+        // the choice would refuse by shape and the walk would stop -- `vjp` of `(x: f32) => x
+        // + 1.5` would read `skip=rule-shape uri=:op/add_f reason=the rule takes (float, float), and the
         // operator has (f32, f32)`. The cotangent's element type is the step's own: an `f32`
         // cotangent's element is `f32`, a `float` cotangent's is `float`, and the operands of a
         // step are the types that cotangent is a cotangent of.
@@ -353,13 +351,13 @@ operandRanksText(const camel::runtime::GCGraph *function, std::span<const gc_nod
 /// Whether a law's answer and the operand it answers for state shapes that cannot both be right,
 /// and -- when they cannot -- the sentence that names both spellings.
 ///
-/// This is the check the author's 2026-11-20 ruling puts at the transposition itself, and the class
+/// This is the check made at the transposition itself, and the class
 /// it covers is not the broadcast: it is **a law written for the wrong shape**. A rule's right side
 /// answers one component per port, in the order its left side writes them, and the index files a law
 /// under its operator's head and that head's operand count and reads no operand types -- so nothing
 /// ties a component's shape to the shape of the operand whose cotangent it claims to be.
 /// `add_tensor_t` answered `ct` for a `float[3]` operand of a `float[2, 3]` sum: a `[2, 3]` tensor
-/// under a static type that said `[3]`, exit 0 and no diagnostic (measured 2026-11-20).
+/// under a static type that said `[3]`, exit 0 and no diagnostic.
 /// `subtract_t` answered the same shape negated, and `where_t` answers both branches at the
 /// condition's shape.
 ///
@@ -451,9 +449,7 @@ std::optional<std::string> statedShapeDisagreement(const Type *answer, const Typ
 /// What is *not* a mismatch is a rank. Design principles 5.4 says `T[..]` includes rank 0, that a
 /// rank-zero array is the element itself, the same value and the same type. So a port written
 /// `T[..]` takes a `float`, one law covers both shapes `tensor:multiply` is called with (two
-/// arrays, and an array and a number), and the author ruled exactly that on 2026-11-03 12:10 -- the
-/// clause this file used to keep (`sameOperandShape`, which refused a non-array operand for an
-/// array-written port) was deleted with that ruling. A rank a law does not serve is a body that
+/// arrays, and an array and a number). A rank a law does not serve is a body that
 /// will not instantiate, which is a different fact and has its own word (`RuleRanks`,
 /// `rule-ranks`).
 ///
@@ -471,10 +467,10 @@ std::optional<std::string> statedShapeDisagreement(const Type *answer, const Typ
 /// entry (5.4: the element of a rank-zero array type is the type itself, so this is the operand's
 /// own type for a number and `float` for a `float` array).
 ///
-/// That one type was `Float64()` here until 2026-11-04, which is why an `f32` step had no instance
-/// whose ports take an `f32` operand and the walk refused by shape. Neither is it the first entry
+/// Were it `Float64()`, an `f32` step would have no instance
+/// whose ports take an `f32` operand and the walk would refuse by shape. Neither is it the first entry
 /// as it stands: handing an array in as `T` gives a law that writes `T[..]` a port of `T[..][..]`,
-/// and five array gradients then ran out of memory (measured). The tuple is decided here once, so
+/// and array gradients would run out of memory. The tuple is decided here once, so
 /// the shape test, the choice and the expansion cannot disagree about which instance is under
 /// discussion.
 std::vector<Type *> lawInstanceTypes(
@@ -616,12 +612,12 @@ std::string addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref
 /// Why this transform has no cotangent for a result of type `result`, in the words the call site's
 /// diagnosis uses; empty when it has one.
 ///
-/// **The law and its refusal are one function on purpose.** They used to be two: a `bool` gate here
-/// and a paragraph of prose in `transpose_operator.cpp` that spelled the gate's rule a second time,
-/// which is how "the result has no cotangent" came to be said about a pair that has one. A
-/// judgement and its message drift apart exactly when they are written twice.
+/// **The law and its refusal are one function on purpose.** A `bool` gate here and a paragraph of
+/// prose in `transpose_operator.cpp` spelling the gate's rule a second time would let "the result has
+/// no cotangent" be said about a pair that has one. A judgement and its message drift apart
+/// exactly when they are written twice.
 ///
-/// The law, as the author rules it (`f6ee4f5d0`, and design principles 9.9): **every result type
+/// The law (design principles 9.9): **every result type
 /// whose tangent space this file can add is accepted** -- a tuple or a struct when every member is,
 /// an array when its space registers an array addition (`:tangent/add_arr`, `tensor:add`), a float
 /// of any width when its space registers that width's addition (`:op/add_d`, `:op/add_f`). The
@@ -726,8 +722,7 @@ std::string resultCotangentRefusal(const Type *result) {
 /// a
 /// `()` parameter both have no tangent space, but an `int` is a value the caller still passes and
 /// answers nothing, while `()` is a place with nothing to pass and an empty member of the answer
-/// (`Tangent<int>` is `()` -- author, 2026-11-03: `()` is what the half **answers**, not what it
-/// takes). Reading them as one thing either puts a port where nobody can fill it or drops a member
+/// (`Tangent<int>` is `()`: `()` is what the half **answers**, not what it takes). Reading them as one thing either puts a port where nobody can fill it or drops a member
 /// the declaration promised.
 bool isUnitType(const Type *type) {
     if (type == nullptr || type->code() != camel::core::type::TypeCode::Tuple) {
@@ -761,7 +756,7 @@ FunctionType *transposeSignature(
     if (!hasResultCotangent(function->exitType())) {
         return nullptr;
     }
-    // The law, as the author rules it (2026-11-02 11:30): `transpose(g)` treats **every parameter
+    // The law: `transpose(g)` treats **every parameter
     // of `g` as a linear input** and answers `(y-bar) => (one cotangent per parameter)`. So no
     // parameter of `g` that takes a cotangent is a value its caller passes, and a body that only
     // reads such parameters gives a transposed function that takes the cotangent of the result and
@@ -770,8 +765,7 @@ FunctionType *transposeSignature(
     // call site still fills, and so is a value the body reads from outside; which parameters those
     // are is a fact of the body, read below from the function rather than from its type.
     //
-    // The declaration in `stdlib/types.cml#Transpose` is the contract (author, 2026-11-03,
-    // `origin/fsh-dev` `6eceaa89d`): a declaration is what the builder makes, and no declaration is
+    // The declaration in `stdlib/types.cml#Transpose` is the contract: a declaration is what the builder makes, and no declaration is
     // approximate. That the two do not agree today is a missing capability of the type-bundle
     // splice
     // -- multiplicity is lost, and the exact shape needs an operation saying which parameters stand
@@ -805,17 +799,15 @@ FunctionType *transposeSignature(
         // otherwise, and the loop below refuses that place by name), and a place it is not is a
         // value the call site fills, of whatever type that value has.
         //
-        // This used to demand `Type::Float64()` of **every** parameter, on the grounds that the
-        // form began as a rule kernel's (`mul_tangent`'s four numbers) and "a function of plain
-        // numbers" is what a kernel is. That is the record's shape, not the shape's: a rule's right
+        // Demanding `Type::Float64()` of **every** parameter would be the record's shape, not the
+        // shape's: a rule's right
         // side is linear in its tangents and its values keep their own types, so a parameter that
         // is not a number is a value and not a reason to refuse. The array element's law is the one
         // that shows it -- `index_into(xs: float[], i: int)` answers a cotangent for the array and
         // reads the index, and its member signature `(int, float[], float) => (float[],)` is that
         // shape, built and run by the type-based reading since before this form existed. Keeping
         // the `float` demand while the record named only a trailing run hid the difference, because
-        // the record was empty for that call; once the record names positions it is not (measured
-        // 2026-11-04: `grad_array_no_int` and eight others read `TRANSPOSE
+        // the record was empty for that call; once the record names positions it is not (`grad_array_no_int` and others would read `TRANSPOSE
         // function=rulesets.jvp::index_into<float> skip=signature`).
         if (participates.size() != count) {
             return nullptr;
@@ -979,7 +971,7 @@ camel::core::type::ArrayType *intArrayTypeOf() {
 /// `transposeSignature` gives the transposed function the cotangent and no parameter, so a law that
 /// spreads a cotangent over a parameter's positions has the type and not the argument. What the
 /// type says is the shape, and the shape is what a transposition needs: the adjoint of a linear map
-/// is a function of the cotangent and of the domain's shape (author, 2026-11-03 16:15).
+/// is a function of the cotangent and of the domain's shape.
 ///
 /// The shape is not read off any value: it is asked of the language, `extent_of::<A>()`, whose one
 /// spelling is `camel::core::type::statedExtentsOf` -- the same rule the builtin's resolver answers
@@ -987,8 +979,7 @@ camel::core::type::ArrayType *intArrayTypeOf() {
 /// writes `extent_of::<float[2, 3]>()` read one fact the same way. What this writes into the graph
 /// is that answer, the `int[]` itself: a law of the reduction family (`sum_from_type_t` and its
 /// neighbours) is handed the extents and builds what it needs from them, so no array stands in for
-/// the operand and no element of one can be read by mistake (author, 2026-11-03 17:55: no zero
-/// carrier).
+/// the operand and no element of one can be read by mistake.
 ///
 /// Nothing when the type states no shape: then the caller refuses by name instead of inventing one.
 /// The extents a type's shape states, or nothing when the type leaves one of them open.
@@ -1002,11 +993,10 @@ camel::core::type::ArrayType *intArrayTypeOf() {
 /// The value a law's right side is handed for a parameter a cotangent is answered for: **nothing**.
 ///
 /// `transposeSignature` gives the transposed function the cotangent and no parameter, so a law that
-/// reads the parameter has the type and not the argument. A zero of the parameter's type used to
-/// stand in for it here, on the reading that what a transposition needs of the domain is its
-/// **shape** (author, 2026-11-03 16:15). The reading was right and the value was not: every element
-/// of what it handed over was zero, so a law that read an *element* was answered a number that is
-/// not the argument. Deleted 2026-11-05 (`lane-capturectx`). What a law needs of the position it
+/// reads the parameter has the type and not the argument. A zero of the parameter's type must not stand in for it: what a
+/// transposition needs of the domain is its **shape**, and every element of such a zero would be
+/// zero, so a law that read an *element* would be answered a number that is not the argument.
+/// What a law needs of the position it
 /// answers is now one of two things, and neither is a value of this walk's making: a **shape**
 /// answered from the port's type where the law reads it through `tensor:shape`
 /// (`modules/transforms/rule_expand.cpp#answerTheShapeOf`), or the **extents handed over as
@@ -1041,7 +1031,7 @@ gc_node_ref_t statedExtentsNodeOf(camel::runtime::GraphDraft &draft, Type *type)
 /// value of the parameter. What a law asks an operand for is its extents, and they arrive either as
 /// the node's own `*_stated` operand or as `rule_expand.cpp#answerTheShapeOf`'s answer;
 /// `shapeFromTypeOf`, which built `tensor:zeros` of the type's extents and handed it to a law that
-/// read the operand, was deleted on 2026-11-05 for the reason `#shapeCarrierOf`'s note gives.
+/// read the operand, is not used, for the reason `#shapeCarrierOf`'s note gives.
 
 /// The parameter whose **declaration** leaves `value`'s shape open, or nothing.
 ///
@@ -1114,11 +1104,10 @@ std::optional<size_t> unstatedParameterBehind(
 ///
 /// `shapeFrom` is the value the shape is read from, and it has to be a node of **this** graph: a
 /// ref of the source graph written into a node of the new one reads whatever node sits at that
-/// index, which is how a zero array came to be built from a number (`autodiff: a zero tangent array
-/// needs an array with a tangent`). `kInvalidNodeRef` builds no shape at all any more: it used to
-/// take the type's stated extents (`shapeCarrierOf`) and that is the zero value deleted on
-/// 2026-11-05, so the refusal below is the answer when the caller has no value to read the shape
-/// from.
+/// index, which would build a zero array from a number (`autodiff: a zero tangent array
+/// needs an array with a tangent`). `kInvalidNodeRef` builds no shape at all: the type's stated
+/// extents (`shapeCarrierOf`) are not a value to read, so the refusal below is the answer when the
+/// caller has no value to read the shape from.
 ///
 /// An invalid ref for a space the registry does not know, or one with neither a zero constant nor a
 /// `zerosLikeUri`: a cotangent that has no zero cannot be accumulated, and the caller refuses by
@@ -1142,7 +1131,7 @@ zeroOfSpaceOf(camel::runtime::GraphDraft &draft, Type *space, gc_node_ref_t shap
     if (shapeFrom == rt::kInvalidNodeRef) {
         // No value of this walk's to read the shape from, and no zero built in its place: a zero
         // array answered a law's `shape(...)` read with a value that was not the argument, and the
-        // answer to "no shape" is the refusal, not an invented array (deleted 2026-11-05).
+        // answer to "no shape" is the refusal, not an invented array.
         return rt::kInvalidNodeRef;
     }
     const gc_node_ref_t zeros = draft.addOperNode(space, nullptr, registered->zerosLikeUri.c_str());
@@ -1181,8 +1170,8 @@ struct TransposeState {
     /// asking is legitimate there and the walk must keep asking -- refusing at the step would break
     /// every `index_into` over an array whose extent only the caller knows. Whether the ask is
     /// fatal is a fact about the whole member, and `buildTransposeGraph` decides it once the ports
-    /// are known (author, 2026-11-03 16:15: the shape has to be in the type or derivable from `ct`
-    /// and known values -- and a value the caller carries *is* one).
+    /// are known: the shape has to be in the type or derivable from `ct`
+    /// and known values -- and a value the caller carries *is* one.
     bool shapeWanted = false;
     /// The parameter the ask was about, and the name and type its declaration writes, for the
     /// sentence: the repair is that spelling. Recorded where the ask is made, because that is the
@@ -1210,7 +1199,7 @@ struct PairCall {
 /// The order the backward walk visits a graph's nodes in: a node after every node that reads it, so
 /// that the cotangent it answers has been handed over before the node is asked.
 ///
-/// It used to be the node ids, descending, on the promise the walk's comment stated -- ids are
+/// The node ids, descending, would rest on the promise that ids are
 /// creation order, so a node only reads ids below its own. That promise holds for the graph the
 /// front end built and does *not* survive a rewrite: `GraphDraft::addNode` numbers by position and
 /// a frozen graph keeps the ids of the version it came from (`GCNodeKind::Dead` is the record a
@@ -1227,8 +1216,7 @@ struct PairCall {
 /// a tie rule of its own, was a way for the two readings to drift apart for no reason; a walk that
 /// needs a node before its readers needs the forward order reversed, and that is what it asks for.
 /// On a graph the front end built the two agree id for id (the forward order is the id order, so
-/// reversing it is the descending sweep this walk used to do), which is why nothing a plan pins
-/// moved when it was written this way.
+/// reversing it is the descending sweep).
 std::vector<gc_node_ref_t> cotangentWalkOrder(const camel::runtime::GCGraph *function) {
     return camel::transforms::reverseDependencyOrderOf(*function);
 }
@@ -1236,7 +1224,7 @@ std::vector<gc_node_ref_t> cotangentWalkOrder(const camel::runtime::GCGraph *fun
 /// Transposes a call of a callee that answers the pair (value, tangent) **by the content of that
 /// callee**, at whichever path the call stands on -- the straight-line body and an arm both call
 /// this, so the two cannot drift apart, and nothing here reads a record of where the callee came
-/// from (author, 2026-11-03 16:55: a record of the graph a lift was taken from is the
+/// from (a record of the graph a lift was taken from is the
 /// counter-example -- a transformation's result must depend on the content of its input graph, and
 /// on nothing else).
 ///
@@ -1327,8 +1315,7 @@ bool buildTransposeMember(
         std::vector<size_t> found;
         (void)buildTransposeMember(probe, function, probeMember, probeLog, participates, &found);
         // `found` is what this half needs and is recorded on the state; nothing prints it. A
-        // probe line here was left by the `8194d89fd` experiment and made every reading carry a
-        // line no cause asked for.
+        // probe line here would make every reading carry a line no cause asked for.
         state.calleeNeeds[function] = found;
         // The ask is the probe's, so the fact it was a parameter's *shape* is the probe's too: the
         // member being built here answers those parameters from the capture ports `found` names and
@@ -1361,7 +1348,7 @@ bool buildTransposeMember(
     const size_t paramCount = function->funcType()->normTypesCount();
     // Whether parameter `at` is one the transposition answers for. An empty set means every
     // parameter is: that is the ordinary transposition, where a parameter is a linear input and
-    // nothing the caller passes (author, 2026-11-02 11:30). Only a parameter that cannot hold a
+    // nothing the caller passes. Only a parameter that cannot hold a
     // cotangent -- an integer, a `bool` -- stays outside it and is read as a value. A set that is
     // not empty belongs to a call site, and its flags are read as written.
     const bool partial        = !participates.empty();
@@ -1396,10 +1383,9 @@ bool buildTransposeMember(
         portOfParameter[at] = portParameter.size();
         portParameter.push_back(at);
     }
-    // Nothing records "this member wants a value" any more (2026-11-04). The channel that used to
-    // record it -- a parameter's index per member, handed to the call site so it could forward the
-    // value from the closure -- is gone with the read that filled it by position: a rule that needs
-    // a value beside the cotangent reads it as an **operand of the call it expands**
+    // Nothing records "this member wants a value": there is no channel for a parameter's index per
+    // member, handed to the call site so it could forward the value from the closure; a rule that
+    // needs a value beside the cotangent reads it as an **operand of the call it expands**
     // (`pick_at(dxs, [i, len(xs)])` states the length), so the value travels in the call and the
     // member stands on no capture of its own. `needs` is therefore empty for every member built
     // here; the parameter stays because the call site and `transposeSignature` are written from it.
@@ -1414,7 +1400,7 @@ bool buildTransposeMember(
         // where the values the graph reads come from -- a residual tuple or the parameters
         // themselves.
         //
-        // A fourth shape is the one `split` hands out now (author, 2026-11-02 08:30): the linear
+        // A fourth shape is the one `split` hands out now: the linear
         // half is the backward graph, closed over the residuals the cut carried, so its parameters
         // are the tangents and the values it cannot compute are **capture ports** of its own graph
         // (`function->closureNodes()`, one per residual, in slot order -- the same list the kernel
@@ -1428,8 +1414,7 @@ bool buildTransposeMember(
                                           function->funcType()->normTypeAt(0)) != nullptr;
         std::vector<gc_node_ref_t> paramPorts;
         // A parameter a cotangent is answered for is **not** a port of the new graph: it is what
-        // the answer is about, and the caller has no value for it to pass (author, 2026-11-02
-        // 11:30). What the transposed graph cannot get from the caller it gets from the closure the
+        // the answer is about, and the caller has no value for it to pass. What the transposed graph cannot get from the caller it gets from the closure the
         // transposed function carries -- the values the cut captured -- and a body that needs a
         // fixed value is written with that value captured, which is the caller's spelling and no
         // business of this port list. So the parameters of an ordinary transposition take no ports
@@ -1534,7 +1519,7 @@ bool buildTransposeMember(
                 const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
         // A closure member is forwarded to the member the transposed graph carries, and nothing
-        // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
+        // about where it came from is asked. A member the cut wrote and
         // a member a caller closed by hand are the same shape -- a port the function is handed --
         // so both answer the same way, and a transposition does not need to know which parameter a
         // member was the value of.
@@ -1658,8 +1643,8 @@ bool buildTransposeMember(
         // tangent space has to spell an `addUri` for a tuple or a struct, and `addUriOfSpace`
         // answering nothing for one is not "an aggregate has no addition" -- it is "a single
         // operator cannot answer for it". Answering a refusal here would be a judgement about the
-        // registry mistaken for a judgement about the type (author, 2026-11-04: the aggregate's
-        // addition is derived from its type; refuse only a type that truly has no tangent space).
+        // registry mistaken for a judgement about the type: the aggregate's
+        // addition is derived from its type, and only a type that truly has no tangent space is refused.
         //
         // A place whose member has no tangent space (`int`, `bool`) carries the unit: the value's
         // tangent there is `()` and there is one of them, so summing two answers it -- and the walk
@@ -1737,7 +1722,7 @@ bool buildTransposeMember(
         };
         // The zero of a value's cotangent that this member holds **no value for**: the shape has to
         // come out of the type, because the transposed function is handed the cotangent and nothing
-        // else (author's ruling of 2026-11-02 11:30) and the operator that builds a numeric zero
+        // else and the operator that builds a numeric zero
         // (`tensor:zeros_like`, the space's `zerosLikeUri`) reads its operand's shape.
         //
         // A type whose extents are all stated has a zero that can be written down while the graph
@@ -1775,7 +1760,7 @@ bool buildTransposeMember(
                     // An extent the type does not state: the zero is the forward argument's, and
                     // the witness arrives as one of the cut's residuals. This must not answer an
                     // empty array instead -- an unwitnessed zero is wrong at every length but 0
-                    // (author, 2026-11-18: the empty array is withdrawn) -- so a missing witness is
+                    // -- so a missing witness is
                     // a loud refusal, never a quiet wrong width.
                     return rt::kInvalidNodeRef;
                 }
@@ -1824,7 +1809,7 @@ bool buildTransposeMember(
         // The type a value's cotangent lives in, read from the value's type: the same question
         // `jvp` asks of a parameter (`camel/core/tangent_space.h`), asked here of a loop's state
         // and of a value that escaped it. A `float[]` state pulls back an array; a number pulls
-        // back a number. Nothing in this file decides that by hand any more -- the port, the tuple
+        // back a number. Nothing in this file decides that by hand -- the port, the tuple
         // member and the component read all ask here.
         //
         // There is **no fallback**: a ref that is not in the source graph, or a value whose type
@@ -1971,9 +1956,9 @@ bool buildTransposeMember(
             }
             // A closure member is a **known value** -- a capture a caller closed over, a residual
             // the cut carried -- and not a linear input of the transposition. The answer is one
-            // cotangent per parameter the caller differentiates (`Transpose<F>`, 2026-11-02 11:30),
+            // cotangent per parameter the caller differentiates (`Transpose<F>`),
             // and a member is not one of them: it is a constant of this differentiation, like a
-            // `with` port, and no cotangent has a slot to land in (author, 2026-11-03 19:55). Asked
+            // `with` port, and no cotangent has a slot to land in. Asked
             // before the sets below, because a member is neither a parameter nor an answer for one.
             if (closurePortOf.find(target) != closurePortOf.end()) {
                 return false;
@@ -2101,9 +2086,7 @@ bool buildTransposeMember(
                 return;
             }
             // The sum itself is `accumulate`'s, the one function this file's comment says every
-            // accumulation goes through -- and until this commit this site was the exception: it
-            // spelled the addition itself, which is how the aggregate case stayed refused while the
-            // comment claimed otherwise.
+            // accumulation goes through.
             const gc_node_ref_t summed = accumulate(addType, cotangent[ref], node);
             if (summed == rt::kInvalidNodeRef) {
                 return;
@@ -2185,10 +2168,9 @@ bool buildTransposeMember(
             // three cannot disagree about which instance is under discussion.
             //
             // The expansion falls back to a single `float` instance on its own when the tuple it is
-            // handed has none, and at an `f32` step that `float` instance is a lie: measured on
-            // 2026-11-04, `transpose_of_autodiff::mul_tangent<f32>` passed `a f32 as ordinary
-            // argument 0 of autodiff::add_cotangent<float>, which takes a float`, and the scheduler
-            // stopped on the edge invariants. Handing it the step's own element type is what keeps
+            // handed has none, and at an `f32` step that `float` instance is a lie: `transpose_of_autodiff::mul_tangent<f32>` would pass `a f32
+            // as ordinary argument 0 of autodiff::add_cotangent<float>, which takes a float`, and the
+            // scheduler would stop on the edge invariants. Handing it the step's own element type is what keeps
             // the right side in the width the cotangent is in. A law with no instance at either
             // tuple is expanded at the ports' own types, and the expansion says what it could not
             // build in its own words.
@@ -2198,8 +2180,7 @@ bool buildTransposeMember(
             // a statement about the type alone: the slot of a `T[..]` position holds the rank-zero
             // array that *is* the element. Without it the body has no rank to read, and where the
             // body asks `numel(ct)` a number is read as a pointer -- a SIGSEGV inside the numel
-            // kernel (`docs/handover/reviews/
-            // 2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md`). The conversion is made
+            // kernel. The conversion is made
             // wherever a value's type goes from `T` to `T[..]` (`Builder::coerceTo`, whose reason
             // is stated in `ArrayType::castSlotFrom`: the run gets a value with a rank to read),
             // and a call argument is the one entrance that is not such a position (it asks the same
@@ -2223,16 +2204,14 @@ bool buildTransposeMember(
                     draft.setNormInputs(handed, std::span<const gc_node_ref_t>(source));
                 }
             }
-            // **The port's declared type against the type of the value really handed** (author,
-            // 2026-11-04). A law is filed under its operator's head and its operand count and the
+            // **The port's declared type against the type of the value really handed.** A law is filed under its operator's head and its operand count and the
             // index reads no operand types, so nothing ties the port the law writes for its
             // cotangent to the shape this step has: `mul_tangent`'s law says `(ct: T[..])` and a
             // `float` step hands it the number it was transposed at. The two agree here when the
             // cast above made them one type -- the rank-zero cotangent read as the open-rank array
             // it is.
             //
-            // **A disagreement is a compiler defect, not a language rule** (the author's second
-            // ruling on the item, 2026-11-04). Measured: no program reaches the refusal below. The
+            // **A disagreement is a compiler defect, not a language rule** . No program reaches the refusal below. The
             // cotangent a program can hand a transposed function is `Tangent<ResultOf<F>>`, which
             // is the type the declaration states, so a port that disagrees with it is a law whose
             // writing and whose own instancing came apart inside the compiler -- the walk has no
@@ -2244,7 +2223,7 @@ bool buildTransposeMember(
             //
             // What the comparison covers is a difference of the **same kind**: two arrays whose
             // element types differ (`float[3]` and `f32[3]`), or two numbers of different codes
-            // (the measured `f32` step handed to a `float` law, 2026-11-04). A difference across
+            // (an `f32` step handed to a `float` law). A difference across
             // kinds is not a disagreement at all: a number handed to an array port is the rank-zero
             // case the cast above answers (design principles 5.4), an array handed to a number port
             // is what the law's own instancing answers from the operands' types, and a `Ref` is a
@@ -2252,9 +2231,7 @@ bool buildTransposeMember(
             // comparison that also covered the cross-kind cases finds `mean_axis`'s law on shapes
             // that answer correct numbers, and under correctness > an explicit refusal > a wrong
             // number > a crash, turning a right number into a refusal is a step *down*, so the
-            // comparison stays inside one kind. The cases that separates and the host it was read
-            // on are in `docs/handover/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`,
-            // section 3.
+            // comparison stays inside one kind.
             const bool portIsArray =
                 port != nullptr && port->code() == camel::core::type::TypeCode::Array;
             const bool handedIsArray =
@@ -2298,7 +2275,7 @@ bool buildTransposeMember(
             if (expanded == rt::kInvalidNodeRef && unbound != std::numeric_limits<size_t>::max()) {
                 unboundSlot = unbound;
             }
-            // **The law's right side, against the operand it answers for** (author, 2026-11-20).
+            // **The law's right side, against the operand it answers for.**
             // The question is asked here, on the node the expansion built, because this is the one
             // place that holds both: the type the law's body really answered with (the draft's own
             // record of that node, not a guess from the law's text) and the type of the operand at
@@ -2420,10 +2397,10 @@ bool buildTransposeMember(
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                             // Neither a port nor a closure slot hands this parameter in. **Nothing
-                            // is written here on the parameter's behalf any more**: a zero array of
-                            // the parameter's type used to stand in for its value, which is how a
-                            // law that reads an operand's value was answered a number that is not
-                            // the argument (deleted 2026-11-05, `#shapeCarrierOf`'s note). What a
+                            // is written here on the parameter's behalf**: a zero array of
+                            // the parameter's type must not stand in for its value, which would answer a law that
+                            // reads an operand's value with a number that is not
+                            // the argument (`#shapeCarrierOf`'s note). What a
                             // law reads off the type alone -- a shape -- is answered where the law
                             // is expanded
                             // (`rule_expand.cpp#answerTheShapeOf`), and what it needs as a value
@@ -2854,11 +2831,8 @@ bool buildTransposeMember(
                             // element, or of the tuple a parameter carries -- which is where a
                             // `split` half's per-round values are read from. Nothing else is read
                             // here: an `Accs` the forward walk cannot copy is a value this member
-                            // has no other way to reach, and the arm stops by name (author's ruling
-                            // of 2026-11-03, `origin/fsh-dev = ad7e716b0`: the legacy path that
-                            // answered it from `paramPorts` is dropped -- it named a parameter as
-                            // the holder of a value nobody had established it held, the same claim
-                            // the loop's unread-state case stopped making on 2026-11-03).
+                            // has no other way to reach, and the arm stops by name (answering it from `paramPorts` would name
+                            // a parameter as the holder of a value nobody had established it held).
                             return forward(value);
                         }
                         if (sourced->kind == rt::GCNodeKind::Oper) {
@@ -2914,7 +2888,7 @@ bool buildTransposeMember(
                     // Which argument each member of the callee's answer is the cotangent of, as a
                     // position among the call's normal inputs; and which arguments are values the
                     // member reads. Both follow from the same predicate the member's signature was
-                    // built from (author, 2026-11-02 11:30): an answered parameter is passed no
+                    // built from: an answered parameter is passed no
                     // value and answers one cotangent, and the two lists are the parameters'
                     // places.
                     std::vector<size_t> answerAt;
@@ -2967,8 +2941,7 @@ bool buildTransposeMember(
                         // on. The straight-line body applies the same rule through the same
                         // function
                         // (`transposePairCall`), so the two paths cannot answer differently;
-                        // nothing here reads a record of where the callee came from (author,
-                        // 2026-11-03 16:55). A hand-written graph of the same content is the same
+                        // nothing here reads a record of where the callee came from. A hand-written graph of the same content is the same
                         // function and is answered the same way -- that is the point, not an
                         // accident.
                         PairCall pairCall;
@@ -3318,7 +3291,7 @@ bool buildTransposeMember(
                         // failure is the walk failing to reach a value, which is a different edit.
                         // Naming the first as the second is how the builder's "no matching
                         // function" sentence reached a reader as though the transform had nothing
-                        // to say (measured 2026-11-03 on `matmul_t`).
+                        // to say.
                         std::optional<size_t> unstated;
                         if (!noInstance && unboundSlot.has_value() &&
                             *unboundSlot < inputs.size()) {
@@ -3411,7 +3384,7 @@ bool buildTransposeMember(
                 // The answer is assembled below, one member per parameter the transposition answers
                 // for. A parameter's cotangent is a member of that tuple and never the exit itself
                 // -- so even a function of one parameter answers a one-long tuple, which is the
-                // shape the law states for every arity (author, 2026-11-02 11:30).
+                // shape the law states for every arity.
                 //
                 // A parameter the body reads **one member at a time** (`q.0` by place, `qq.a` by
                 // name) never gets a cotangent of its own anywhere else: the `Accs` case below
@@ -3420,7 +3393,7 @@ bool buildTransposeMember(
                 // The adjoint of reading a parameter by member **is** the parameter's cotangent,
                 // assembled member by member -- `Tangent<(float, float)>` is the tuple of the
                 // members' tangents and `Tangent<Point>` the struct of them, in the declaration's
-                // order (design principles 9.9) -- so this case is that join (author, 2026-11-04: a
+                // order (design principles 9.9) -- so this case is that join (a
                 // member read accumulates onto the parameter).
                 //
                 // Before the join the answer tuple of a **tuple** parameter held an empty
@@ -3522,9 +3495,9 @@ bool buildTransposeMember(
                     // two uses is their sum (`f(q) = q.0 * 2.0 + g(q)`). That sum is the
                     // aggregate's addition, which is its members' addition one place at a time --
                     // derived from the type, not registered (design principles 9.9) -- so this is a
-                    // sum and not a refusal (author, 2026-11-04: the aggregate's addition is
-                    // derived from its type; the earlier refusal here judged the registry's
-                    // completeness and called it the type's ability).
+                    // sum and not a refusal (the aggregate's addition is
+                    // derived from its type; refusing would judge the registry's completeness and call it the
+                    // type's ability).
                     const gc_node_ref_t summed = accumulate(joinSpace.space, whole, joined);
                     if (summed == rt::kInvalidNodeRef) {
                         refuse(TransposeRefusalCause::Component);
@@ -3545,10 +3518,9 @@ bool buildTransposeMember(
             case rt::GCNodeKind::Accs: {
                 // Reading one member of a tuple or of a struct. The cotangent of the aggregate is a
                 // value of the same shape: this place is what arrived here, and the other places
-                // are zero. Filling them is the whole point -- this case used to drop the
-                // cotangent, on the reading that a member of the residuals is a known value, and
-                // that reading is why a tuple had no cotangent at all and every function returning
-                // one refused.
+                // are zero. Filling them is the whole point -- dropping the
+                // cotangent, on the reading that a member of the residuals is a known value, would leave a
+                // tuple with no cotangent at all and every function returning one refused.
                 //
                 // **Which place.** A tuple read by place names its member by number
                 // (`GCAccsKind::TupleIndex`); a struct read by name names it by the field's symbol
@@ -3669,7 +3641,7 @@ bool buildTransposeMember(
                 if (found == memberCotangents.end()) {
                     // The cotangent arrived **at the construction itself**, and the transpose of a
                     // tuple construction is the member-wise projection: member `i` of the cotangent
-                    // goes to operand `i` (design principles 9.9; author `f6ee4f5d0`, `3ef068b95`).
+                    // goes to operand `i` (design principles 9.9).
                     // Before this, the whole-cotangent case `break`ed and the contribution was
                     // dropped -- the answer stayed at the zero its slot was initialised with, which
                     // is indistinguishable from a lawful zero.
@@ -3682,9 +3654,8 @@ bool buildTransposeMember(
                     // states both in its type: the count is `tree::arity`'s and member `i` is
                     // `tree::childType(wholeType, i)`, taken at a place by an `Accs`
                     // (`GCAccsKind::TupleIndex`/`StructKey`). An array states neither that way --
-                    // `tree::arity` answers nothing for it, and answered a count read out of
-                    // another object's bytes (`f32[3]` as 131961841501032) before the ruling
-                    // `a2cc57100` -- so its count is the extent the type states (`statedExtentsOf`,
+                    // `tree::arity` answers nothing for it, and would answer a count read out of
+                    // another object's bytes (`f32[3]` as 131961841501032) -- so its count is the extent the type states (`statedExtentsOf`,
                     // rank one) and its member is the element the array's own index operator,
                     // `:op/idx_arr`, takes. **A member by place and an element by index are two
                     // different reads and not one spelled twice**: the `Accs` names a slot of an
@@ -3695,7 +3666,7 @@ bool buildTransposeMember(
                     const auto parts          = function->withInputsOf(ref);
                     const gc_node_ref_t whole = cotangent[ref];
                     Type *const wholeType     = cotangentTypeOf(ref);
-                    // **The arity ruling lands here** (`a2cc57100`): one name answers the count,
+                    // **The arity rule lands here**: one name answers the count,
                     // and a type the question does not apply to gets no answer rather than a number
                     // read out of its bytes. "No member count" is not "zero members" -- the branch
                     // below asks the type what extent it states instead, and a type that states
@@ -3975,7 +3946,7 @@ bool buildTransposeMember(
                 // The arms answer one cotangent each, and the join is theirs to merge. The
                 // transposed function's answer is one cotangent per parameter the transposition
                 // answers for, so the join's single value is wrapped in the one-slot tuple the
-                // signature promises -- the shape every arity has (author, 2026-11-02 11:30). The
+                // signature promises -- the shape every arity has. The
                 // member type is the one the join was typed with above: asking the source graph for
                 // it by a *draft* ref would read whatever source node sits at that index, which is
                 // a different value.
@@ -4024,8 +3995,8 @@ bool buildTransposeMember(
                     // The where of this refusal, recorded for the sentence as well as the log: the
                     // step is this node, its operator is this uri, and the lookup answered this
                     // word. The site has all three -- the log has printed them since the walk
-                    // existed -- and until now the sentence a reader was handed dropped them and
-                    // said only that *a* step had no rule.
+                    // existed -- and the sentence a reader is handed
+                    // says which step had no rule.
                     state.refusal.node   = ref;
                     state.refusal.uri    = std::string(uri);
                     state.refusal.lookup = reason;
@@ -4036,12 +4007,9 @@ bool buildTransposeMember(
                 // An operator is walked at whatever operands it has, and the *law* says which of
                 // them are positions a cotangent is answered for: `mean_axis(xs, axis, keepdims)`
                 // has three ports, the law names all three, and the last two answer nothing because
-                // `int` and `bool` have no tangent space (`tangentSpace.h`). The count that stood
-                // here -- `normOperands.size() != 2 && != 1`, which refused every three-operand
-                // step before the law was looked up -- was written by `a64136b6a`, when the walk
-                // knew unary and binary primitives and nothing else, and `439d800be` gave the walk
-                // the node's port list in the same change that wrote `mean_axis_t`. It refused a
-                // shape the law already described.
+                // `int` and `bool` have no tangent space (`tangentSpace.h`). A count check such as
+                // `normOperands.size() != 2 && != 1` would refuse every three-operand step before the law is
+                // looked up, and refuse a shape the law already describes.
                 //
                 // What it was protecting against is a law whose right side reads a **forward value
                 // the call site cannot hand it** -- an intermediate node's, or a parameter's whose
@@ -4423,7 +4391,7 @@ bool buildTransposeMember(
                 // *numbers*, the last one first -- and a round reads its own element out of the
                 // sequence with `:op/idx_arr`, the operator `xs[i]` is built from (`index_into` in
                 // `src/core/forward.cpp`); the reverse pass in `modules/autodiff/pullback.cpp`
-                // reads its tape the same way. The element is no longer a value the two loops
+                // reads its tape the same way. The element is not a value the two loops
                 // share: it is a function of the round number, which is what makes the pairing
                 // right rather than merely reversed.
                 const bool iterates = camel::core::loopHasIterable(function->loopKindOf(ref));
@@ -4808,8 +4776,8 @@ bool buildTransposeMember(
                     // The zero is the zero of the state's own cotangent space, which is the type
                     // the port above was made at -- an `f32` state's seed is an `f32` zero, built
                     // by that space's own zero and not by a `float` constant. A space whose zero is
-                    // built from a value's shape has no shape here (the carrier that used to supply
-                    // one is gone, 2026-11-05), so the type writes the zero the declaration itself
+                    // built from a value's shape has no shape here (there is no carrier to supply
+                    // one), so the type writes the zero the declaration itself
                     // states.
                     gc_node_ref_t seed =
                         slot == rt::kInvalidNodeRef
@@ -4882,8 +4850,8 @@ bool buildTransposeMember(
                     // and it is the transposed function's whole answer **when the value the state
                     // starts from is a parameter** -- the hand-written loop `thrice(x) = loop s = x
                     // for i in 0..3` is the shape, and there one cotangent, in the one-slot tuple
-                    // the signature promises, is exactly right (author, 2026-11-02 11:30; handing
-                    // the scalar out unwrapped is what took the process down when the graph was
+                    // the signature promises, is exactly right (handing
+                    // the scalar out unwrapped would take the process down when the graph is
                     // called).
                     //
                     // A state that starts at anything else answers no parameter, and the loop's
@@ -4894,9 +4862,8 @@ bool buildTransposeMember(
                     // a value no parameter is -- `h(x) = loop s = 0.0 for i in [1,2,3,4] do s
                     // + 2.0` answered `1.0` for a derivative of `0.0` -- so the loop is not the
                     // answer. The reference answers zero instead, which is the same reading the
-                    // straight-line case took on 48bfa6778 ("a parameter the body never reads
-                    // answers a zero cotangent, not a refusal", author's ruling of 2026-11-03,
-                    // `origin/fsh-dev = ad7e716b0`, fourth of four): the parameter is not read, so
+                    // straight-line case takes ("a parameter the body never reads
+                    // answers a zero cotangent, not a refusal"): the parameter is not read, so
                     // it has no influence, so its cotangent is zero. The answer is therefore built
                     // from the parameters the walk reached, the way every other transposition
                     // builds it, and a parameter nothing delivered to keeps the zero the tail
@@ -4915,11 +4882,11 @@ bool buildTransposeMember(
                     } else {
                         // Nothing reaches that value, so nothing the loop did can reach a
                         // parameter, so the loop answers the zero of its cotangent space: the same
-                        // reading the straight-line case took on 48bfa6778 ("a parameter the body
+                        // reading the straight-line case takes ("a parameter the body
                         // never reads answers a zero cotangent, not a refusal"), read for a loop. A
                         // member carries its closure whatever its answer reads -- a zero answer is
-                        // a constant and the closure is still filled -- so there is no refusal here
-                        // (author, 2026-11-03, `origin/fsh-dev = 3ab482ab2`). The test is no longer
+                        // a constant and the closure is still filled -- so there is no refusal here.
+                        // The test is not
                         // whether the member carries a closure (`closureOf`), which would refuse
                         // the half `vjp` hands out: that half carries the loop's tape and is
                         // exactly the shape the zero is for.
@@ -4928,11 +4895,11 @@ bool buildTransposeMember(
                         // is built by the walk below exactly as every other transposition builds
                         // it: one value per parameter the walk reached, each read from that
                         // parameter's own cotangent slot, wrapped in the tuple the signature
-                        // promises (`(float,)` for one parameter; author, 2026-11-02 11:30). A
-                        // constant written here instead took the *loop's* cotangent type for the
+                        // promises (`(float,)` for one parameter). A
+                        // constant written here instead would take the *loop's* cotangent type for the
                         // answer's: the slot holds the answer's type, so the value has to be the
                         // answer's too -- a bare scalar in a slot or a tuple on its way into a
-                        // tuple is what took the process down on 843d38025, and the loop's
+                        // tuple is what would take the process down, and the loop's
                         // cotangent type is not even a question this graph can answer (the ref is a
                         // node of the draft, the types belong to the source).
                     }
@@ -4969,15 +4936,13 @@ bool buildTransposeMember(
                     //
                     // The **operands** are not asked for the callee at all, and one reading of that
                     // question is why: a FUNC node's first *argument* is read as its callee as soon
-                    // as that argument is a call itself. Measured 2026-11-04 on `split`'s backward
-                    // half, whose call of `lin` takes the tangent cell `mul_tangent(..)` as its one
-                    // argument, and was read as a call of `mul_tangent` with five parameters and
-                    // four arguments
-                    // (`skip=call-no-transpose ... params=4`); measured again on `h(g(x), 1.0)`,
-                    // where `h` is a closure the body assembled and the walk transposed `g` -- the
-                    // callee of the first *argument* -- then wrote the transposed CALL with no
-                    // `with` input, which `GCGraph` refuses to run (`Runtime graph 'transpose_of_f'
-                    // has CALL node 2 without callee input`). A callee that names no graph is
+                    // as that argument is a call itself. For `split`'s backward
+                    // half, whose call of `lin` takes the tangent cell `mul_tangent(..)` as its one argument, that
+                    // reads as a call of `mul_tangent` with five parameters and four arguments
+                    // (`skip=call-no-transpose ... params=4`); for `h(g(x), 1.0)`, where `h` is a closure the body
+                    // assembled, the walk would transpose `g` -- the callee of the first *argument* -- and write the
+                    // transposed CALL with no `with` input, which `GCGraph` refuses to run (`Runtime graph
+                    // 'transpose_of_f' has CALL node 2 without callee input`). A callee that names no graph is
                     // refused below, by name, which is the reading a reader can act on.
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
@@ -4985,13 +4950,12 @@ bool buildTransposeMember(
                         // as a callee" (`staticFunctionGraphOf`). A FUNC node is a call written by
                         // name, and its value is that call's *answer*: for `mk(x)(2.0)` the `with`
                         // input is the FUNC node `mk(x)`, and asking `calleeIdOf` answered `mk` --
-                        // this call's callee read as its argument's callee (measured 2026-11-04,
+                        // this call's callee read as its argument's callee (as in
                         // `TRANSPOSE function=mk skip=signature` and `callee=mk`). The value names
                         // a graph when it *is* one: a DATA node holding a function, and nothing
                         // else. Everything else is handled by its content below -- a Port is a
                         // value this graph receives, and its transpose is `transpose(v)`; a call's
-                        // answer is a value too, and its transpose is the same `transpose(v)`
-                        // (author, 2026-11-04 04:20: 调用一个函数值，转置成调用 `transpose(v)`).
+                        // answer is a value too, and its transpose is the same `transpose(v)`.
                         const auto named  = function->staticFunctionGraphOf(captured.front());
                         GraphId fromValue = named.graph;
                         namedReason       = named.reason;
@@ -5032,8 +4996,7 @@ bool buildTransposeMember(
                     // graph. Transposing it is the same rule as transposing a graph, one level
                     // down: the transposition of `v` is `transpose(v)` -- the operator, written
                     // once in the transposed graph -- and the call is that result applied to the
-                    // cotangent. No node reads a closure cell, and nothing is recomputed (author,
-                    // 2026-11-03 17:55).
+                    // cotangent. No node reads a closure cell, and nothing is recomputed.
                     const auto capturedValues = function->withInputsOf(ref);
                     const gc_node_ref_t carrier =
                         capturedValues.empty()
@@ -5046,13 +5009,12 @@ bool buildTransposeMember(
                     // member takes the same closure, so nothing has to be recomputed.
                     //
                     // A value the body **computes** is not one of these, and no reading of the call
-                    // changes that (author, 2026-11-04 04:20: 调用一个函数值，转置成调用
-                    // `transpose(v)`, 按内容处理 -- and that is what this branch does for the value
-                    // it can carry; the case measured is `f(x) = mk(x)(2.0)`). `transpose(v)` needs
-                    // `v`, and the transposed function is handed **only the cotangent** (2026-11-03
-                    // 16:15, the declaration in `stdlib/types.cml#Transpose`): a member that
+                    // changes that (a call of a function value transposes into a call of `transpose(v)`, handled
+                    // by content -- and that is what this branch does for the value it can carry; the case here is
+                    // `f(x) = mk(x)(2.0)`). `transpose(v)` needs `v`, and the transposed function is handed **only
+                    // the cotangent** (the declaration in `stdlib/types.cml#Transpose`): a member that
                     // recomputed `mk(x)` would need `x`, a parameter that carries no port of its
-                    // own -- and a member that took `v` as a value port is what the same ruling
+                    // own -- and a member that took `v` as a value port is what that declaration
                     // refuses. So the call is refused where the value stands, by the reason
                     // `staticFunctionGraphOf` gave in front of it: the callee's graph is not named
                     // in this graph (`not-a-data-node`), and the reading says so instead of naming
@@ -5145,8 +5107,7 @@ bool buildTransposeMember(
                                    carrierNode2 != nullptr ? static_cast<int>(carrierNode2->kind)
                                                            : -1);
                     };
-                    // **Not linear in the parameter this call was built from** (author,
-                    // 2026-11-04). A bare `transpose(f)` reads every parameter of `f` as a linear
+                    // **Not linear in the parameter this call was built from.** A bare `transpose(f)` reads every parameter of `f` as a linear
                     // input, and a call whose **callee the body made out of a parameter** is not
                     // one: `f(x) = mk(x)(2.0)` applies a function `x` produced, so the call is a
                     // second-order use of `x` and `f` is not linear in it. That is the language's
@@ -5273,7 +5234,7 @@ bool buildTransposeMember(
                 // call into a call of that transposition -- through the same function, so a
                 // straight-line body and an arm cannot answer the same shape differently. A
                 // hand-written graph of the same content is answered here exactly as a lifted one
-                // is (author, 2026-11-03 16:55).
+                // is.
                 if (tangentMask == 0 && answersAPair(callee)) {
                     // The cotangent this call's **tangent component** carries. The pair is read a
                     // component at a time, so the cotangent is the tuple's slot 1 -- the slot the
@@ -5366,8 +5327,8 @@ bool buildTransposeMember(
                 // parameter stands before a value.
                 const size_t memberValues = calleeType->normTypesCount() - 1;
                 // Which of the two shapes a value this call cannot hand over is. The call site has
-                // one diagnostic for both, and until 2026-11-03 one word as well, so a refusal that
-                // meant the second read like the first and looked fixed:
+                // one diagnostic for both, but they must not share a word, or a refusal that meant the second
+                // would read like the first and look fixed:
                 //
                 // - the value is the **parameter's own**, and this call does not carry it (the
                 // shape
@@ -5555,8 +5516,7 @@ bool buildTransposeMember(
         if (result == rt::kInvalidNodeRef) {
             // The answer is one cotangent per parameter the transposition answers for, in the order
             // the parameters stand -- a tuple for every function, a one-long one for a function of
-            // one parameter, because the law states one shape for every arity (author, 2026-11-02
-            // 11:30). This is the only way the answer is built: no exit is a bare cotangent, so the
+            // one parameter, because the law states one shape for every arity. This is the only way the answer is built: no exit is a bare cotangent, so the
             // type the signature promised and the tuple this builds cannot come apart.
             //
             // A parameter no cotangent reached is answered with a zero. A parameter the graph never
@@ -5613,7 +5573,7 @@ bool buildTransposeMember(
                                         : camel::core::tangentSpaceOf(portType);
                 if (hasCotangent[ports[port]]) {
                     // Answered, and answered with a *node*: a port the walk marked and then left
-                    // empty is the one shape that used to reach the encoder as a node with no
+                    // empty is the one shape that would reach the encoder as a node with no
                     // input, and a signal there says nothing about which parameter it was. The
                     // `Port` case above is what joins a tuple's slots back into a cotangent; this
                     // line is the check that no other reader of the slot table leaves a hole for
@@ -5626,9 +5586,8 @@ bool buildTransposeMember(
                     }
                     parts.push_back(cotangent[ports[port]]);
 #ifndef NDEBUG
-                    // **The pullback's own exit, asserted** (author, 2026-11-20, the second half of
-                    // the same ruling): every law was checked as it ran (`LawAnswerShape`), and this
-                    // is the net under that check at the one place the answer leaves the graph.
+                    // **The pullback's own exit, asserted.** Every law was checked as it ran
+                    // (`LawAnswerShape`), and this is the net under that check at the one place the answer leaves the graph.
                     // The two facts are the same two, read from the assembled member instead of
                     // from the law: the node that lands in slot `at` and the cotangent space the
                     // signature promised for that parameter. They must state the same shape; where
@@ -5686,7 +5645,7 @@ bool buildTransposeMember(
                     // last block of residualsOf). The tail is the only channel, and it is read here
                     // and nowhere else: this channel carries one fact -- the forward value of
                     // parameter `at`, as the shape witness of a zero -- and it is not a law's read
-                    // of a value (the use that made the old channel a defect in 2026-11-04).
+                    // of a value.
                     //
                     // The count is derived, not carried: a linear half's parameters are the
                     // tangents of the graph it was cut from, so the appended tail has exactly one
@@ -5714,9 +5673,7 @@ bool buildTransposeMember(
                     // and for an open dimension (or for `T[..]`, which states none) an array with 0
                     // elements there: the zero of that type is empty, because it has no element to
                     // be anything else. A later reader that needs the parameter's own shape meets
-                    // an empty array and says so, instead of meeting a number of the wrong extent
-                    // (`docs/handover/reviews/
-                    // 2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`).
+                    // an empty array and says so, instead of meeting a number of the wrong extent.
                     zero = zeroOfType(portType, space.space);
                 }
                 if (zero == rt::kInvalidNodeRef) {
@@ -5965,7 +5922,7 @@ TransposeGraph buildTransposeGraph(
             // Which repair the reader is owed depends on *what* the extra port carries: a value a
             // law reads that no type states (a capture the operator's type cannot name) or the
             // shape of a parameter whose declaration leaves it open. The second has a declaration
-            // to edit and a rule behind it (author, 2026-11-03 16:15), so it is refused with the
+            // to edit and a rule behind it, so it is refused with the
             // diagnostic that says so; the first keeps the sentence about the closure.
             TransposeRefusal refusal;
             refusal.graph = function->name();

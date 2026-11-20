@@ -75,7 +75,7 @@ bool typesCanAgree(
                 // The variable is bound to itself: two signatures that write the same variable
                 // name in two parameters of one kind (`k::<T>(a: T, b: T)` twice) equate it with
                 // itself here, and following that binding again asks the same question forever
-                // (such a pair used to run the compiler out of stack). The binding already
+                // (such a pair would run the compiler out of stack). The binding already
                 // answers this question, and the answer is yes.
                 return true;
             }
@@ -237,9 +237,9 @@ bool signaturesCanAgree(FunctionType *left, FunctionType *right) {
 
 void Builder::reportImportNameConflicts() {
     // Two imports by name that bring functions of the same name and the same parameter types
-    // (design principles 10.2): the call used to take the function of the import written
-    // first, silently. Functions of different parameter types form a set of overloads, as
-    // before; whether that stays is undecided.
+    // (design principles 10.2): the call must not silently take the function of the import
+    // written first. Functions of different parameter types form a set of overloads; whether
+    // that stays is undecided.
     if (!module_) {
         return;
     }
@@ -769,7 +769,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         // module's own group, kept here and not in the program's export table. It is still an
         // operator of the module, so it is registered as a private entity: `inspect --ops` lists
         // it marked private and the reference checker verifies its signature and its purity
-        // against this registration, which is what a kernel nobody exported used to escape.
+        // against this registration, so a kernel nobody exported does not escape them.
         const bool isExported = exported.contains(group.name);
         if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
             // The rules of the prelude join the built-in group of their name, which every module

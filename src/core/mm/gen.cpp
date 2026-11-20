@@ -951,7 +951,7 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
     }
     // Reentrancy is a programming error, not a state to carry on from: nothing that runs inside a
     // collection allocates through this allocator, and a collection only starts at a safepoint, so
-    // this means a caller collected from inside one. Returning here (as this used to) skipped a
+    // this means a caller collected from inside one. Returning here silently would skip a
     // requested collection without saying so (C24, MG/R8).
     ASSERT(!inGC_, "A minor collection was started while one was already running.");
     if (inGC_) {

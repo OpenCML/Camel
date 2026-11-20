@@ -64,8 +64,7 @@ class TensorExecutor : public Executor {
 /// so they follow from a *value*, and the only type a declaration could write is `T[..]`. That
 /// type is a claim the value can contradict: the answer is the element itself when the reduction
 /// leaves rank 0 (design principles 5.4), and a cotangent typed array over a value that has no
-/// rank is read as a pointer (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`, and
-/// docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its
+/// rank is read as a pointer (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`). Its
 /// signature is computed, and it is recorded in `stdlib/signatures/tensor.cml`.
 ///
 /// `sum_stated` and `take_stated` stay declared: neither can answer an element. A stated sum is

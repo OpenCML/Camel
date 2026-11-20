@@ -58,8 +58,8 @@ class SsaEnv {
         /// The type the cell would have held, so a later write enters it as a store into that cell
         /// did. A loop's port carries the state's type instead (the type it started from).
         Type *type = nullptr;
-        /// The port of a loop body's region, when a loop head carries this declaration as a value
-        /// (stage S3): a write inside the body is the round's next state, recorded against it. Set
+        /// The port of a loop body's region, when a loop head carries this declaration as a value:
+        /// a write inside the body is the round's next state, recorded against it. Set
         /// on the body's own declaration of the name, so a write inside the body finds the
         /// innermost head and a write after the loop finds the enclosing one. This is which head
         /// carries the declaration, not what it holds: it stays put while the value moves.
@@ -130,7 +130,7 @@ class SsaEnv {
     std::vector<node_handle_t> portsInScope(const node_scope_ptr_t &from) const;
 
     /// A write of `name`: the declaration's value becomes `value`, and `arm` -- the arm whose build
-    /// is innermost, if there is one -- remembers that it wrote it (`stage S2`). The value is moved
+    /// is innermost, if there is one -- remembers that it wrote it. The value is moved
     /// in one place, the region's own binding of the name, which is what every read of it takes.
     void rebind(
         const node_scope_ptr_t &from, const std::string &name, node_handle_t value,

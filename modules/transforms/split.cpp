@@ -157,11 +157,9 @@ RegionWalk walkRegion(const rt::GCGraph *graph, uint32_t regionId) {
 /// The node a value is read through with the gates that only forward it stripped (the same walk
 /// `buildVmapGraph` takes to the exit): a gate consumes what it carries and produces that value.
 ///
-/// The walk itself is `camel/runtime/graph.h#valueBehindGates`, and it reads the gate's **first** input: since
-/// `0780a83bd` a gate is `GATE(value, writes...)`, so the walk that took the last input read the
-/// last *write* as the value in any body that printed something (author, 2026-11-18: "`ungated` 剥
-/// `GATE` 时取的是 `norm.back()` -- 最后一个输入，在有写的函数里那就是最后那次写，不是值"). The
-/// reading is one function in one header so `split`, `transpose` and `vmap` cannot disagree.
+/// The walk itself is `camel/runtime/graph.h#valueBehindGates`, and it reads the gate's **first** input: a gate is
+/// `GATE(value, writes...)`, so a walk that took the last input would read the last *write* as the
+/// value in any body that printed something. The reading is one function in one header so `split`, `transpose` and `vmap` cannot disagree.
 gc_node_ref_t ungated(const rt::GCGraph *graph, gc_node_ref_t ref) {
     return valueBehindGates(*graph, ref);
 }
@@ -199,8 +197,7 @@ gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_no
 /// lifted type is the lifted function itself, and a value of `(f: F) => Lift<F>` -- the type of the
 /// `jvp(v)` node a lift writes for a call through a value (`jvp.cpp#jvpOperatorType`) -- is the
 /// operator whose **answer** is that lifted function. Both answers come from types; nothing is read
-/// about which graph the value is, because that is not known until the program runs (author,
-/// 2026-11-05: 提升时还不知道这个值是哪张图，只有运行时才知道).
+/// about which graph the value is, because that is not known until the program runs.
 camel::core::type::FunctionType *liftedSignatureOf(const camel::core::type::Type *type) {
     auto *self = const_cast<camel::core::type::FunctionType *>(
         tt::as_ptr<camel::core::type::FunctionType>(const_cast<camel::core::type::Type *>(type)));
@@ -242,7 +239,7 @@ camel::core::type::FunctionType *callValueSignatureOf(const rt::GCGraph &graph, 
 }
 
 /// `Lift<T>`, read from types: the lifted parameter list is the original's, values first, and then
-/// one tangent slot per parameter in the same order (`jvpSignature`, author 2026-11-03), so the
+/// one tangent slot per parameter in the same order (`jvpSignature`), so the
 /// value ports are simply the first half. A slot for a parameter with no tangent space (`n: int`)
 /// is `()` and stands in the tangent half where its value stands in the value half -- the two
 /// halves keep their places position by position, which is the whole reason the slot exists.
@@ -323,8 +320,7 @@ bool answersAPairByValueAt(const rt::GCGraph &graph, gc_node_ref_t ref) {
 /// graph it names, or, for a call through a value, by the value's signature
 /// (`answersAPairByValueAt`). This is the one thing the cut needs to know about a callee, and it is
 /// a question about **content**, not about where the graph came from: a call to such a callee is
-/// answered, on the value half, by `split`'s forward half of that callee (author, 2026-11-03
-/// 17:55).
+/// answered, on the value half, by `split`'s forward half of that callee.
 bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
     if (ref >= graph.nodeCount() || graph.node(ref) == nullptr) {
         return false;
@@ -350,7 +346,7 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
 /// is dropped here, by the callee's own signature -- the same list, read from the same place
 /// (`parameterOfPort`), so a call site and the graph it calls number their ports alike.
 ///
-/// Handing it on was one argument too many, and the run time says so by name (measured 2026-11-04):
+/// Handing it on was one argument too many, and the run time says so by name:
 /// `Runtime indirect call norm-arity mismatch: caller graph 'split_of_jvp_of_g_backward' node 6 has
 /// 2 args, target graph 'split_of_jvp_of_widen_backward' has 1 norm ports`, on a callee
 /// `widen(n: int, x: float)` whose lifted list is `(int, float, (), float)`.
@@ -433,8 +429,7 @@ struct Half {
     /// roads the other maps name: it is read through a closure node of the source, and the half
     /// receives it out of the function value's closure tuple, which the operator copies over
     /// (`split_operator.cpp`, `splitKernel`: `f`'s tuple goes to the forward half unchanged).
-    /// Author, 2026-11-04 02:50, on a closure port: forward it into the member's own port, and the
-    /// call site fills it as it always did.
+    /// A closure port is forwarded into the member's own port, and the call site fills it as usual.
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
     std::vector<gc_node_ref_t> copyOf;
     std::vector<char> seen;
@@ -442,7 +437,7 @@ struct Half {
     bool tangent = false;
     /// The backward half's residual captures: one closure port per residual, in the order
     /// `residualsOf` numbered them. A residual travels in the closure tuple of the `lin` the
-    /// forward half builds (author, 2026-11-02 08:30), not in a parameter of this half -- which is
+    /// forward half builds, not in a parameter of this half -- which is
     /// what keeps this half an ordinary function type and the residual count out of every
     /// signature.
     std::vector<gc_node_ref_t> closurePorts;
@@ -519,7 +514,7 @@ struct Half {
         // ordinary parameters of the lifted signature, they stand at the end of the data list
         // (`dataInputsOf`), and the forward half still passes them on. A half that takes
         // the value ports and not these places the last value it did take in the `with` slot, which
-        // is a call the runtime refuses by name (measured 2026-11-04: `FUNC node 2 passing 0
+        // is a call the runtime refuses by name (for example `FUNC node 2 passing 0
         // arguments and 1 'with' arguments to 'weighted', which takes 1 and 1`).
         for (gc_node_ref_t input : source->withInputsOf(ref)) {
             values.push_back(input);
@@ -587,8 +582,7 @@ struct Half {
     /// context ones as its `with` inputs. `halfInputsOf` is `dataInputsOf`, which is the ordinary
     /// inputs followed by the context ones (`dataInputsOf` above), so a copy that hands that one
     /// list to `setNormInputs` passes the call's `with` argument as an ordinary one -- and a call
-    /// the graph names is checked against what the callee declares at run time. Measured 2026-11-04
-    /// on the composition `vjp((ww) => weighted<ww>(2.0))(3.0)`: `Runtime graph
+    /// the graph names is checked against what the callee declares at run time. For example, on the composition `vjp((ww) => weighted<ww>(2.0))(3.0)`: `Runtime graph
     /// 'split_of_jvp_of___g_247___forward' has FUNC node 2 passing 1 arguments and 0 'with'
     /// arguments to 'weighted', which takes 1 and 1`.
     void placeCallArguments(
@@ -780,19 +774,17 @@ struct Half {
         // half itself computes from them. A parameter's value is one of the former whenever the
         // tangent half reads it: `residualsOf` asks the tangent side's own walk what it reads, not
         // which parameter index a port belongs to, and it keeps a parameter's value port on the
-        // same terms it keeps a computed value (2026-11-02 00:30: the rule does not split by type;
-        // 2026-11-03 15:15: 后一半要读的东西都是残差). That is also why the refusal is not
+        // same terms it keeps a computed value (the rule does not split by type: everything the
+        // later half reads is a residual). That is also why the refusal is not
         // reachable today: a parameter value the backward half reads is in the residual list before
         // this walk runs, so `makeCopy` answers it from the tuple (`crossesCut`, above) and never
         // arrives here.
         //
         // It is kept, deliberately, and not replaced by an assertion: 对 > 明确拒绝 > 错数 > 崩 is
         // the order, and an assertion here would turn a refusal into the worst of the four. Its
-        // being unreachable in the shapes this lane measured is a reading and not a proof --
-        // measured 2026-11-04: no case in the tree pins this message, and this lane could not
-        // construct a shape that still reaches it; another lane instrumented the same site on other
-        // shapes and saw zero entries. Zero entries and unreachable are two different conclusions,
-        // and this project has already paid once tonight for treating them as one. If it is ever
+        // being unreachable in the shapes tried is a reading and not a proof: no case in the tree pins
+        // this message, and no shape found so far reaches it. Zero entries and unreachable are two
+        // different conclusions, and counting must not stand in for proving. If it is ever
         // *proved* unreachable for every input, delete this refusal and demote the invariant above
         // to a comment -- do not delete it on the strength of a count. Never delete it while it is
         // the only refusal standing between this walk and a half that reads a value nothing
@@ -845,16 +837,15 @@ struct Half {
         }
         case rt::GCNodeKind::Gate: {
             // A gate forwards its **first** input; every input after it is a statement the gate
-            // waits on (`camel/runtime/graph.h`, author `0780a83bd`). The value is what a reader of the gate
-            // reads, and it is what this half copies.
+            // waits on (`camel/runtime/graph.h`). The value is what a reader of the gate reads, and it is
+            // what this half copies.
             //
             // The waits are refused here rather than dropped: a half that copied the value and left
             // the waits behind would stop the body's prints from running at all, and one that
             // copied the waits without their place on a chain would run them at a point nobody
             // wrote. Carrying the effect skeleton across the cut is a tier of its own -- until it
-            // exists, this is a refusal and not a silent wrong answer (author, 2026-11-18: a cut
-            // placed a print where the result should be, because the gate's last input was read as
-            // the value).
+            // exists, this is a refusal and not a silent wrong answer (a cut that read the gate's last input as the
+            // value would place a print where the result should be).
             const std::span<const gc_node_ref_t> waits = gateWaitsOf(*source, ref);
             if (!waits.empty()) {
                 return refuseAt(
@@ -887,8 +878,8 @@ struct Half {
             // A call through a value whose **signature answers the pair** is the other shape: the
             // value is a lifted function (it came from `jvp(v)`), so the value half cannot call it
             // -- it takes the tangents too -- and the call it places is `split(v)`, the forward
-            // half of whatever cut that value turns out to have (author, 2026-11-05: split
-            // 对通过函数值的调用 同样处理：前一半调用 `split(v)`，后一半的余切交给它返回的 `lin`).
+            // half of whatever cut that value turns out to have: the forward half
+            // calls `split(v)`, and the backward half hands the cotangent to the `lin` it returns.
             // Which graph `v` is is asked at run time by the operator, never read here. The answer
             // is `(result, lin)`, and the tangent the source read is the second half's call of that
             // `lin` (`residualsOf` carries it as the call's linear half).
@@ -966,8 +957,7 @@ struct Half {
                 // the value half answers the call with **`split`'s forward half of that callee**:
                 // the same values in, `(result, lin)` out. `lin` is the callee's own linear half,
                 // closed over whatever its body reads, so the call site never sees those values --
-                // `residualsOf` names `lin` itself for the backward half to call (author,
-                // 2026-11-03 17:55).
+                // `residualsOf` names `lin` itself for the backward half to call.
                 const rt::GCGraph *calleeGraph = calleeOf(ref);
                 CutMember nested;
                 if (calleeCuts != nullptr && calleeGraph != nullptr) {
@@ -1024,7 +1014,7 @@ struct Half {
             // 1 is the linear half -- a function value, not the source's tangent. On the backward
             // half a read of component 1 is **the call of that linear half**: one indirect call, on
             // the tangents the source call passed, and the call site never sees what the callee's
-            // body reads (author, 2026-11-03 17:55).
+            // body reads.
             const auto *body                       = source->nodeBodyAs<rt::GCAccsBody>(ref);
             const std::vector<gc_node_ref_t> reads = dataInputsOf(source, ref);
             if (body == nullptr || reads.empty()) {
@@ -1041,8 +1031,8 @@ struct Half {
             // (`addAccsNode(type, key)` and `addAccsNode(type, index)`), and the copy says
             // whichever one the source said: a keyed read copied as a place would name another
             // member, and on a `Struct` it would index the value as if it were a `Tuple` -- `idx <
-            // t->size()`, "Tuple index out of bounds" in `nodevm.cpp` (measured 2026-11-04 on
-            // `split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`, while the copy dropped the key).
+            // t->size()`, "Tuple index out of bounds" in `nodevm.cpp` (as in
+            // `split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)` when the copy drops the key).
             //
             // The name needs no place in either half's port list. A struct is a port like any other
             // -- `Tangent<Point>` is the struct of the members' tangents (design principles 9.9),
@@ -1232,8 +1222,8 @@ void addResidualCaptures(Draft &draft, const std::vector<Residual> &residuals, H
 /// A FILL of the `FunctionClosure` kind -- the kind a rule's right side already builds for its
 /// closure (`rule_expand.cpp` reads one back): the static input is a function value naming the
 /// backward graph, whose closure layout is the one this build read from that graph, and the `with`
-/// inputs are the residual values in slot order. This is what "the kernel builds `lin` once it has
-/// the graph" means (author, 2026-11-02 08:30): the values do not exist before the forward half
+/// inputs are the residual values in slot order. The kernel builds `lin` once it has
+/// the graph: the values do not exist before the forward half
 /// runs, so `lin` is built where they do, and what it captures is stated by no signature.
 ///
 /// Here because *two* builds write this shape, not one: the cut hands `lin` out of the forward
@@ -1306,7 +1296,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     }
     // The `with` ports of the lifted graph: a value the call supplies, read by the body through a
     // port of its own. A `with` port the tangent side reads crosses the cut like any other value it
-    // reads -- 后一半要读的东西都是残差，`with` 值也在内 (author, 2026-11-03 15:15) -- so it is a
+    // reads -- everything the later half reads is a residual, `with` values included -- so it is a
     // residual, and the backward half reads it out of `lin`'s closure instead of taking a `with`
     // list of its own. Asking it here, and not only through the walk below, is what makes the
     // answer independent of whether the result side happens to read the same weight: a weight only
@@ -1333,7 +1323,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     std::vector<char> visited(nodeCount, 0);
     std::vector<gc_node_ref_t> found;
     // The calls whose **linear half** crosses the cut, in the order the walk named them: the call
-    // site does not see the residuals of the callee's body (author, 2026-11-03 17:55), it sees
+    // site does not see the residuals of the callee's body, it sees
     // `lin_g`.
     std::vector<gc_node_ref_t> linearHalves;
     {
@@ -1420,7 +1410,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // the second half's arguments rather than values that cross. Walking into those is
                 // what made a parameter's tangent arrive as the parameter's value: the second half
                 // then read its own argument out of the closure, and `twice(c + y)` was transposed
-                // as `3*(c+y)` instead of `3*(dc+dy)` (measured 2026-11-04).
+                // as `3*(c+y)` instead of `3*(dc+dy)`.
                 std::vector<gc_node_ref_t> onward;
                 const GraphId lateCalleeId    = lifted.calleeIdOf(ref);
                 const rt::GCGraph *lateCallee = program != nullptr && rt::isValid(lateCalleeId)
@@ -1474,8 +1464,8 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // backward half would read the seed's slot where it should read its own port: for
                 // `f(x) = 2.0 * x`, `g(x) = f(x) * x`, `g`'s lin came out `mul_tangent(y, x,
                 // lin_f(x), x)` -- the value in the tangent's place, a constant function of its
-                // argument, 36.0 for every `dx`, and `grad(g)` answered 0.0 without a word
-                // (measured 2026-11-04). The port branch below is the one that states what a port
+                // argument, 36.0 for every `dx`, and `grad(g)` answered 0.0 without a word.
+                // The port branch below is the one that states what a port
                 // contributes: the value port of its own parameter, which is the only thing the
                 // forward half can hand over.
                 const GraphId calleeId         = lifted.calleeIdOf(ref);
@@ -1495,7 +1485,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // keeps a `with` list. Keep the weight on the boundary and the composition
                 // `vjp((ww) => f<ww>(..))(w)` stops one step past the exit, in the backward walk's
                 // words, `the backward half reads the value of parameter 0, and it is not one of
-                // the values the cut carries` (measured 2026-11-04). Anything the tangent half
+                // the values the cut carries`. Anything the tangent half
                 // reads *beyond* these values is a residual the cut carries, decided by what the
                 // callee reads (`residualsOf` above), never by where a parameter stands.
                 const size_t withArguments = lifted.withInputsOf(ref).size();
@@ -1534,7 +1524,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 const size_t valuePort = parameterOfPort(lifted.funcType(), index).first;
                 // A parameter the tangent side reads crosses too: the residual set is what the
                 // backward half actually reads, whether the forward half computed it or it is a
-                // parameter itself. The ruling of 2026-11-02 00:30: the rule does not split by
+                // parameter itself. The rule does not split by
                 // type.
                 if (valuePort < ports.size() && ports[valuePort] < nodeCount &&
                     std::find(found.begin(), found.end(), ports[valuePort]) == found.end()) {
@@ -1618,18 +1608,18 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     // the reading below prints it), and the slots of the parameters stay their own.
     {
     // The value of **every** parameter crosses the cut, not only the ones the tangent half reads
-    // (author, 2026-11-18 17:50: "转置需要某个输入形状的零、而它的余切没人读时，前向就把这个输入的
-    // 形状（或它本身）作为残差捕获进 pb"). The transposed half builds that zero with the space's
+    // (when a transposition needs the zero of an input's shape and no one reads its
+    // cotangent, the forward half captures that input, or its shape, as a residual). The transposed half builds that zero with the space's
     // `zeros_like`, which reads its operand's shape, and an open length is nowhere in the type --
-    // the value is the only witness there is. Until this, `transpose` stood in for the missing
+    // the value is the only witness there is. Without it, `transpose` would stand in for the missing
     // witness with the zero the *type* states, an empty array for an open extent, and an
     // unwitnessed zero is wrong at every length but 0.
     //
-    // **Added to the parameters' own prefix**, in port order: the ordering block below is what writes that invariant
-    // down (a parameter's value stands in the prefix, a computed value after it), so a parameter the
-    // tangent half did not read belongs there too -- appending it at the end put a parameter after a
-    // computed value and `stop_gradient`'s library path read the wrong slot and answered
-    // `dL/dx=0.0` (measured 2026-11-18). The ordering below puts a parameter's value in the prefix,
+    // **Added to the parameters' own prefix**, in port order: the ordering block below writes that
+    // invariant down (a parameter's value stands in the prefix, a computed value after it), so a parameter the
+    // tangent half did not read belongs there too -- appending it at the end would put a parameter after a
+    // computed value, and `stop_gradient`'s library path would read the wrong slot and answer
+    // `dL/dx=0.0`. The ordering below puts a parameter's value in the prefix,
     // so the values added here are in the prefix in port order and nothing the walk numbered is
     // displaced by more than the count of parameters it did not reach. The transposed half reads
     // them by counting its own parameters (`transpose.cpp`, the zero of an unread parameter -- one
@@ -1814,8 +1804,8 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     }
     // A `with` parameter is not a reason to refuse: both halves declare it as a port of their own
     // (`addWithPorts`), so the captured value enters each half the way the lifted body read it. It
-    // used to be refused here with "a captured value has no port to enter them by", a reason that
-    // stopped being true once the closure had capture ports of its own -- and a `jvp` that lifts a
+    // is not refused with "a captured value has no port to enter them by": the closure has
+    // capture ports of its own -- and a `jvp` that lifts a
     // weight, which is what design principles 9.9's `vjp = transpose(split(jvp(f)))` needs, can
     // only be cut if `split` takes such a function.
     const size_t count = function->normTypesCount();
@@ -1909,8 +1899,7 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     // The residuals: the values the backward half reads, in program order. Which values those are
     // is a property of the *graph*, so the graph answers it (`residualsOf`), and the tuple it names
     // is `lin`'s
-    // **closure** -- the values travel with the function value, not in a parameter of it (author,
-    // 2026-11-02 08:30: the residuals are the backward half's capture ports). A caller with no
+    // **closure** -- the values travel with the function value, not in a parameter of it (the residuals are the backward half's capture ports). A caller with no
     // graph (the operator resolver, which sees types only) names none, and then the closure is
     // empty: a signature has no reading to name, and the count a reading states comes from the
     // graph
@@ -1927,7 +1916,7 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     param_vec_t forwardParams;
     param_vec_t tangentParams;
     // The two halves are the two halves of the list: the values are ports `0 .. n`, the tangents
-    // are `n .. 2n` (`jvpSignature`, author 2026-11-03). The forward half takes the values in the
+    // are `n .. 2n` (`jvpSignature`). The forward half takes the values in the
     // parameters' order and the backward half the tangent that stands in the same place -- which is
     // what makes a `()` slot for a parameter with no tangent space mean something rather than
     // swallow its neighbour's tangent.
@@ -1957,8 +1946,8 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         }
     }
 
-    // The lift's `with` parameters, on the **forward** half only (author, 2026-11-03 15:15: 带
-    // `with` 的函数，pullback 带不带 `with` 列表——不带，闭包捕获). The forward half reads a weight
+    // The lift's `with` parameters, on the **forward** half only: the pullback of a function with `with` ports
+    // takes no `with` list, it captures them in its closure. The forward half reads a weight
     // to compute the value, and a weight is a value the call supplies, so its signature declares
     // the list and `addWithPorts` gives it one port per member. The backward half does not: what it
     // reads after the cut is a residual by the one rule -- 后一半要读的东西都是残差，进 `lin`
@@ -1998,10 +1987,9 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
     halves.forward         = FunctionType::create(withParams, forwardParams, forwardExit)
                                  ->withResources(function->resources());
     halves.closure         = closure;
-    // What the call `split(f)` answers: the forward half (author, 2026-11-02 05:10 "`split`
-    // 的前半交出
-    // `(y, lin)`"). There is no second component to hand out: `lin` does not exist until the
-    // residuals do, so the forward half is the one that makes it.
+    // What the call `split(f)` answers: the forward half, which hands out `(y, lin)`. There is no second
+    // component to hand out: `lin` does not exist until the residuals do, so the forward half is
+    // the one that makes it.
     halves.pair = halves.forward;
     return halves;
 }
@@ -2037,7 +2025,7 @@ template <typename Draft>
 /// One arm of a branch, cut on its own region: the arm's region is made in the half's draft, the
 /// half's walk copies the arm's body *into that region* -- the same `copyHalf` the straight-line
 /// body uses -- and the value the arm hands the Join comes back. The unit here is a **region**, not
-/// an arm-shaped copy of the whole branch (P1-14 of the review): that is what lets the arm of a
+/// an arm-shaped copy of the whole branch: that is what lets the arm of a
 /// nested branch enter this function too, one region at a time, instead of an arm's body being
 /// copied whole.
 bool cutArm(
@@ -2129,7 +2117,7 @@ bool buildHalfBranch(
 //   * the **forward half** runs the loop the program wrote -- the state alone -- and gives the node
 //     one collection slot: one tuple per round, holding the values the backward half reads from
 //     that round. The tape is the loop's value component 1, and it crosses the cut inside `lin`'s
-//     closure like every other residual (author, 2026-11-02: residuals ride in the closure).
+//     closure like every other residual.
 //   * the **backward half** is a loop that *iterates the tape*: one round per round the forward
 //     half ran, the round's element being that round's residuals. Its state is the tangent; its
 //     body is the tangent half of the lifted body with each read of a forward value replaced by the
@@ -2172,8 +2160,7 @@ struct LoopCut {
     std::vector<gc_node_ref_t> tape;
     /// What the backward half reads from outside the loop: the invariants that cross the cut, then
     /// the values it reads *above* the loop -- the ones computed from the loop's own result, marked
-    /// `afterLoop` (author, 2026-11-03 11:10:
-    /// 凡是由前一半循环的输出算出来的残差，在循环建好之后再取). One list because both cross the cut
+    /// `afterLoop`. One list because both cross the cut
     /// the same way, one closure member each; the flag says where the forward half takes the value,
     /// before the loop or after it.
     std::vector<Residual> outside;
@@ -2191,8 +2178,8 @@ struct LoopCut {
     Type *stateTangentType = nullptr;
     Type *elementType      = nullptr;
     /// The exit as the program wrote it, when the pair the exit answers with is not the loop cell's
-    /// own value but a chain above it: the loop is then *inside* the chain the exit reads (measured
-    /// 2026-11-03: `g(s) = (loop x = s ...)[0]` -- the exit is a tuple fill whose two members are
+    /// own value but a chain above it: the loop is then *inside* the chain the exit reads (for example
+    /// `g(s) = (loop x = s ...)[0]` -- the exit is a tuple fill whose two members are
     /// `idx_arr` of the loop's component 0 and component 1). These are the tops of those two
     /// chains, and each half computes its own above the loop it made. `kInvalidNodeRef` on both
     /// when the exit is the cell itself, which is the shape `jvp` gives a loop a function returns
@@ -2257,7 +2244,7 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
     cut.loop = loop;
     cut.body = rt::loopBodyOf(*function, loop);
     // The iterable form does not decide whether a loop can be cut: `jvp` lifts both forms
-    // (measured 2026-11-03: an interval loop lifts and answers 16/16). Only the element type
+    // . Only the element type
     // differs, and it is read from the tail's own form.
     if (cut.body.collectionCount != 0) {
         return refuse(
@@ -2413,8 +2400,7 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
         }
         invariants.push_back(ref);
     }
-    // **A parameter's own value is a residual when the second half reads it** (author, 2026-11-03
-    // 00:50 ①, reworked 03:10). The branch cut carries every value parameter -- its arms may read
+    // **A parameter's own value is a residual when the second half reads it.** The branch cut carries every value parameter -- its arms may read
     // any of them -- and the loop carries the ones its second half actually reads, which is a fact
     // of the walk rather than of the signature: `int_escape`'s half reads `x` through `3.0*x`, the
     // truncation and `float(...)` even though the round computes none of those, and a signature
@@ -2479,8 +2465,7 @@ bool readLoopCut(const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &
         }
         cut.outside.push_back(one);
     }
-    // **A residual computed from the loop's own result is taken after the loop** (author,
-    // 2026-11-03 11:10: 凡是由前一半循环的输出算出来的残差，在循环建好之后再取). `jvp_idx_arr`
+    // **A residual computed from the loop's own result is taken after the loop**. `jvp_idx_arr`
     // states the length of the array it reads (`pick_at(dxs, i, len(xs))`) instead of letting the
     // transposed rule read a linear operand, so the tangent side of an escape reads `len(xs)` where
     // `xs` is the loop's *value*: a node above the cell, which exists only once the forward half's
@@ -3247,7 +3232,7 @@ SplitGraph cutBranchGraph(
 /// instead of a chain of tests: the exit is the pair itself (a straight-line body), a Join a branch
 /// names (the condition picks an arm), a Join no branch names (a loop), or something that is not
 /// the pair at all. The three that can be cut are cells of the same entry because the cut that will
-/// handle them is one traversal over regions -- P1-14 of the review -- and a shape that is refused
+/// handle them is one traversal over regions and a shape that is refused
 /// is a cell too, so that its refusal stays named instead of becoming a fall-through.
 enum class ExitShape { Straight, Branch, Loop, NotAPair };
 
@@ -3261,7 +3246,7 @@ enum class ExitShape { Straight, Branch, Loop, NotAPair };
 /// may read *both*, and that is not the same fact as reading one. `jvp_idx_arr` states the length
 /// of the array it reads (`pick_at(dxs, i, len(xs))`) so that the transposed rule never reads a
 /// linear operand, and the tangent side of an escape therefore reads `len(xs)` off the loop's
-/// **value** while the tangent itself comes from the loop's **tangent** (measured 2026-11-04 on
+/// **value** while the tangent itself comes from the loop's **tangent** (as in
 /// `vjp_loop.rounds_are_undone_in_reverse`: the tangent root is `pick_at(35, 0, len(34))`, 34
 /// reading component 0 and 35 component 1). One answer for "which component" cannot
 /// hold that, and refusing it made the exit unreadable.
@@ -3354,7 +3339,7 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
             // (`g(s) = (loop x = s ...)[0]`) answers the pair by projecting one component on each
             // side. The cut then enters the loop through its cell all the same -- the cell is one
             // node inside the chain the exit reads, not the exit -- and the two chains are what
-            // each half computes after the loop. Measured 2026-11-03
+            // each half computes after the loop. For example
             // (`vjp_loop.rounds_are_undone_in_reverse`): exit 37 = fill[36, 30, 31], 30 =
             // idx_arr(26, 29), 26 = tuple-index 0 of loop 25.
             const std::span<const gc_node_ref_t> halves = function->withInputsOf(exit);
@@ -3364,8 +3349,7 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
             // tangent, the tangent chain the cell's tangent. A value-side read *on the tangent
             // chain* is allowed and is not the tangent half answering the value: it is a value
             // computed from the loop's result (the length `jvp_idx_arr` states), which crosses the
-            // cut as a residual taken after the loop (author, 2026-11-03 11:10:
-            // 凡是由前一半循环的输出算出来的残差，在循环建好之后再取). The converse is not: a value
+            // cut as a residual taken after the loop. The converse is not: a value
             // that read the tangent would need a tangent the forward half does not have.
             const bool valueIsTheValue = value.ok && value.loop == tangent.loop &&
                                          value.tangentProjections.empty() &&
@@ -3459,7 +3443,7 @@ bool answersAPair(const rt::GCGraph *callee, std::string *why) {
 /// the declared type -- the same list `jvpSignature` writes for the lifted graph, minus nothing: a
 /// `with` value is not a component of a pair, so it is not halved.
 ///
-/// Only the forward half declares it (author, 2026-11-03 15:15). The backward half reads a `with`
+/// Only the forward half declares it. The backward half reads a `with`
 /// value it needs out of `lin`'s closure, where `residualsOf` put it as a residual, so it has no
 /// port of its own to give it and no list to state; `lin` being an ordinary function of the
 /// tangents is what keeps the pullback's type free of the `with` list.
@@ -3495,15 +3479,15 @@ bool addWithPorts(Half &half, const rt::GCGraph *function) {
 /// is a port of the source graph (`GCGraph::closureNodes`) that is neither a parameter nor a `with`
 /// parameter: the lifted body reads it, and a half that declared no port for it would refuse that
 /// read with "the port is not a parameter of the graph" -- which is what the tensor-`with` shape
-/// did until this function existed (measured 2026-11-04: `vjp((ww) => dot<ww>(x))(w)`, where `x` is
+/// did before this function handled captures (for example `vjp((ww) => dot<ww>(x))(w)`, where `x` is
 /// a capture of the lambda and `w` is `dot`'s `with` parameter; the cut of `jvp_of_dot` was fine
 /// and the cut of the lambda was refused).
 ///
 /// The half declares them in the source's order and takes the source's closure type, which is the
 /// layout the operator hands over: `splitKernel` creates the forward function value with `f`'s own
 /// tuple and copies every slot into it, so the ports this declares read the caller's values and the
-/// call site fills them the way it always filled a closure. That is the author's shape for a
-/// closure port (2026-11-04 02:50: 转发成成员自己的端口、调用点照常填), and it is the same thing
+/// call site fills them the way it always filled a closure. That is the shape for a
+/// closure port (forwarded into the member's own port, filled by the call site as usual), and it is the same thing
 /// the `with` list does one road up -- the difference is only where the value travels: a `with`
 /// value is an argument of the call, a capture is a member of the function value.
 ///
@@ -3573,8 +3557,7 @@ SplitGraph buildSplitGraph(
     }
     // **The closure is the residuals, and nothing else.** A parameter's own value the backward half
     // reads is one of them -- `residualsOf` numbers it, and the member carries the parameter number
-    // it is the value of (author, 2026-11-03 03:10: 后一半读到的参数原是残差，由 residualsOf
-    // 编号进闭包). There is no tail of parameter types after the residuals any more: what a member
+    // it is the value of. There is no tail of parameter types after the residuals: what a member
     // is the value of is its identity, and a reader that had to count places after the residuals
     // was counting a layout two sides had to agree on.
     Type *residualsType      = TupleType::create(residualTypes);
@@ -3607,16 +3590,15 @@ SplitGraph buildSplitGraph(
     if (exitShapeOf(function, exit, loopCut) == ExitShape::Loop) {
         return cutLoopGraph(context, program, function, os, loopCut);
     }
-    // One entry, three cells (P1-14, code review 2026-11-01). What used to be a chain of `if`s --
-    // "is it a tuple fill? then straight line; else is it a Join? then branch; else loop; else not
-    // a pair" -- is one question about the *shape* of the exit, asked once, and one `switch` over
-    // the four answers. The shapes it separates, and why they are cells of one entry rather than
+    // One entry, three cells. Instead of a chain of `if`s -- "is it a tuple fill? then straight
+    // line; else is it a Join? then branch; else loop; else not a pair" -- the *shape* of the exit
+    // is one question, asked once, answered by one `switch` over the four answers. The shapes it separates, and why they are cells of one entry rather than
     // three roads:
     //
     // - The pair does not have to be a tuple fill. A branch answers with its Join, and `jvp` gives
     //   that Join the lifted type, so the exit of `jvp(branch body)` is a Join whose slots hold the
     //   pair: one arm writes (value, tangent) into it and the other writes its own. There is a pair
-    //   to cut in that graph all the same -- the author's rule for it is design 4.2: the condition
+    //   to cut in that graph all the same -- the rule for it is design 4.2: the condition
     //   itself is a residual, and the backward half picks the same arm by evaluating that
     //   condition. What `split` cannot do yet is step *inside* an arm: an arm is a region, not a
     //   data input, so `Half`'s walk (which follows `dataInputsOf`) does not reach it. Saying that
@@ -3627,8 +3609,8 @@ SplitGraph buildSplitGraph(
     //   dispatched above, before `residualsOf` reads a residual tuple the graph does not have
     //   (cutLoopGraph).
     // - Every cell *starts* at the same place (the exit's shape) and will end at the same place (a
-    //   cut that recurses by region); they are written as cells so that the recursion of P1-14's
-    //   next step is a change of one cell's body, not the invention of a second entry.
+    //   cut that recurses by region); they are written as cells so that a recursion by region
+    //   is a change of one cell's body, not the invention of a second entry.
     switch (exitShapeOf(function, exit, loopCut)) {
     case ExitShape::Straight:
         // The exit is the pair itself: the cut is the straight-line body, and the two `copyHalf`
@@ -3659,18 +3641,14 @@ SplitGraph buildSplitGraph(
             // the tangent is what the backward half keeps, and it is read off the Fill's with
             // inputs, never guessed from the arm's shape.
             //
-            // No probe draft is made here. This used to clone the whole graph into a draft,
-            // mint a Join in it and drop the lot, once per branch cut, only to learn how many
-            // members an arm has and which values they read from outside it -- numbers the
-            // source graph answers directly (P1-11, code review 2026-11-01). What the reading
-            // prints is unchanged where a plan pins it; the fields that only the clone could
-            // report (`probeRegion`, `probeMembers`, `probeJoin`, `conditionCopied`) are gone,
-            // and `from=[...]` now names source nodes as it always meant to.
+            // No probe draft is made here: how many members an arm has and which values they
+            // read from outside it are numbers the source graph answers directly, and `from=[...]` names
+            // source nodes.
             Type *pairType = exitNode->dataType();
             // The condition that selects among the arms. A ref that is not a node of this
             // graph is in no region -- 0 stands for "the body, and so in none of the arms
             // this loop walks" -- and the region query is not asked about it, because it
-            // would no longer answer the body for a node that is not there.
+            // would not answer the body for a node that is not there.
             const uint32_t conditionRegion =
                 function->containsNodeRef(condition) ? function->nodeRegion(condition) : 0;
             for (uint32_t region = 1; region < function->regionCount(); ++region) {
@@ -3782,7 +3760,7 @@ SplitGraph buildSplitGraph(
     } break;
     case ExitShape::Loop: {
         // **Defensive, and unreachable.** Two shapes answer `ExitShape::Loop`, and neither reaches
-        // this cell any more: a LOOP node whose type is the lifted pair is cut above, before
+        // this cell: a LOOP node whose type is the lifted pair is cut above, before
         // `residualsOf` (its residuals are the tape the cut makes, so they do not exist yet when
         // the switch is entered); and a Join that no branch names is a graph `jvp` does not build,
         // so no program in the language makes one (measured: no plan pins `skip=loop`, because no
@@ -3807,12 +3785,11 @@ SplitGraph buildSplitGraph(
         return refusal;
     }
     case ExitShape::NotAPair: {
-        // **Reachable from `.cml`**, and the cell used to say the opposite ("defensive, and
-        // unreachable"), which was wrong twice over. `split`'s own type refuses a plain function
+        // **Reachable from `.cml`**, not defensive. `split`'s own type refuses a plain function
         // before this function runs -- `Invalid call to 'split' with argument types <> ((x: float)
         // => float pure)` -- so a graph built by hand is one way in; a lifted graph is the other,
         // and it is the way a program takes. The shape: the exit node is the *application* whose
-        // lifted copy is the pair (measured with a temporary probe line, 2026-11-03: `kind=10`
+        // lifted copy is the pair (`kind=10`
         // -- `GCNodeKind::Func` -- with two `with` inputs and two ordinary ones, and the copy's
         // type `(float, float)`), so the pair is a callee's answer and not the two-member tuple
         // `Fill` this graph writes itself. That is what a differentiated lambda ending in a call
@@ -3823,9 +3800,7 @@ SplitGraph buildSplitGraph(
         //
         // So this is a wall to name, not a state to defend: the three routes through it -- write
         // the pair into a `Fill` in the lowering, teach this switch the call's-pair shape, or work
-        // around it in the library -- are weighed in
-        // `docs/handover/reviews/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`,
-        // which takes the first: an exit's shape is the lowering's product, while this switch is
+        // around it in the library -- and the first is taken: an exit's shape is the lowering's product, while this switch is
         // the semantic invariant, and a criterion naming more shapes is harder to state than a
         // product that writes the one shape.
         SplitGraph refusal;
@@ -3837,9 +3812,9 @@ SplitGraph buildSplitGraph(
             "a lifted function answers with the pair (result, tangent); here the pair is a call's "
             "result -- the differentiated lambda ends in a call to a `with`-parameterised function "
             "-- and not the two-member tuple fill this cut takes its two halves from, so there is "
-            "no pair to cut. This shape is not accepted: "
-            "`docs/handover/reviews/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-"
-            "split-cut.cn.md` weighs the three routes through it");
+            "no pair to cut. This shape is not accepted: an exit's shape is the lowering's "
+            "product, while this cut is the semantic invariant, and a criterion naming more "
+            "shapes is harder to state than a product that writes the one shape");
         os << "REINTERP split function=" << function->name()
            << " skip=" << refusalCauseName(RefusalCause::Exit) << " (" << refusal.refusedWhy
            << ")\n";
@@ -3872,7 +3847,7 @@ SplitGraph buildSplitGraph(
     // what a body that calls itself needs: the entry for this graph is in the table already, and a
     // self-call names the graph this very build is writing. The table lives only for the length of
     // one transform call: it is not part of any graph and nothing in the core knows about it
-    // (author, 2026-11-03 17:55, the same shape `jvp` uses for its own recursion).
+    // (the same shape `jvp` uses for its own recursion).
     std::unordered_map<const rt::GCGraph *, CutMember> calleeCuts;
     // **The programs whose graphs this build stands on.** A nested build's two halves are graphs
     // its own program owns, so adopting that program brings them. One entry per direct callee cut,
@@ -3941,7 +3916,7 @@ SplitGraph buildSplitGraph(
             // program holds. The graphs of the second callee's cut are in that program as well, and
             // as **taken** graphs rather than added ones -- `Program::adoptMissing` carries `added
             // ∪ taken`
-            // (`Program::bindTaken`, 2026-11-04), so adopting the nested program hands on the whole
+            // (`Program::bindTaken`), so adopting the nested program hands on the whole
             // chain however deep it goes. That is why one entry per direct callee cut is enough
             // here, and why `SplitGraph` carries no transitive list: `adoptMissing` is what makes a
             // call to a grandchild's half resolve (`runtimeTarget != nullptr`, "a direct call names
@@ -4017,9 +3992,7 @@ SplitGraph buildSplitGraph(
         // cut, so neither walk above reaches them: the number would be right and the print the
         // body wrote would never run. The forward half is the side that runs the primal body, so
         // the statements come with it and its exit is a gate that waits on them, which is the
-        // shape the source had (`camel/runtime/graph.h#gateWaitsOf`; author, 2026-11-18: a cut
-        // placed a print where the result should be, because the gate's last input was read as the
-        // value). Dropping them is a wrong answer and not a refusal: a differentiated function
+        // shape the source had (`camel/runtime/graph.h#gateWaitsOf`). Dropping them is a wrong answer and not a refusal: a differentiated function
         // that printed once would be silent. A statement the plumbing cannot copy -- one with a
         // control edge, or one whose place on a chain cannot be reproduced -- is still refused by
         // name inside the walk, never dropped.
@@ -4151,7 +4124,7 @@ SplitGraph buildSplitGraph(
     {
         // The backward half: the tangent of every parameter in -- the residuals arrive by its
         // closure ports, a `with` value among them -- and the tangent out. No `with` list is
-        // declared here (author, 2026-11-03 15:15), so there are no `with` ports to make either: a
+        // declared here, so there are no `with` ports to make either: a
         // read of one is a read of the closure port `addResidualCaptures` gave it.
         auto &draft = group.transaction(backwardId).edit();
         draft.setFuncType(halves.backward);

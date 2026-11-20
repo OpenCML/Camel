@@ -128,8 +128,8 @@ struct ModuleSearchPathOptions {
 ///
 /// The variable is the one way a user says which installation to run, and it is a switch of the
 /// environment that *is* a switch of behaviour (design principles: a switch becomes an option, and
-/// an illegal value is an error). It used to be taken as given: a path that does not exist, or a
-/// directory that is not an installation, silently produced a run whose module roots point nowhere,
+/// an illegal value is an error). Taking it as given would let a path that does not exist, or a
+/// directory that is not an installation, silently produce a run whose module roots point nowhere,
 /// and every import failed with "not found" long after anything mentioned `CAMEL_HOME`. The
 /// directory must exist and hold at least one of the directories an installation has (`bin`,
 /// `stdlib`, `libs`, `include`); the message names the variable and the path, so the run that
@@ -162,7 +162,7 @@ inline std::string camelHomeProblem() {
 /// it is set (and valid: see camelHomeProblem), else the directory above the running executable
 /// when that is an installation's `bin`.
 ///
-/// Neither fallback is the current directory any more: when the executable's directory cannot be
+/// Neither fallback is the current directory: when the executable's directory cannot be
 /// read there is nothing to derive an installation from, and a run in whatever directory the shell
 /// happened to be in would silently take that directory for the installation root. It throws
 /// instead, and the caller reports the message.

@@ -79,10 +79,9 @@ enum class RuntimeDiag : uint32_t {
     // or the calling convention of this use, or an operator the graph the scope calls brings that has
     // none. Both are one refusal of one promise, found by the pass `tiles::compile` while it runs; the
     // pass is `(f: F) => F!` (design principles 9.1), so the failure is the error value
-    // `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives
-    // (docs/handover/stdlib/error-kinds.md). It is not a diagnostic: what a scope can run is only
-    // known once the pass has looked at the graph, and the report is then the one an error value
-    // nobody handled gets.
+    // `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives.
+    // It is not a diagnostic: what a scope can run is only known once the pass has looked at the
+    // graph, and the report is then the one an error value nobody handled gets.
     // The same promise refused while the program runs, because the pass deferred the shape to the
     // actual arguments and the device turns them down: the operator that asked for the device program
     // of a graph a `#gpu` scope covers (`run_compiled`, `run_preferred_resident`) reports it instead
@@ -109,11 +108,10 @@ enum class RuntimeDiag : uint32_t {
     // The unwrap of a `T?` a program cannot write, in the one place it refuses: `:op/tag_unwrap`
     // (`src/builtin/operators/tagged.cpp`), which the compiler places where it has already read the
     // tag. A null there is a defect of what the compiler emitted and not a state the program made,
-    // which is the ruling of 2026-11-18 (`96714f465`: "the slot unwrap checks and reports an internal
-    // error"): it does not return the zero slot, because a zero slot is a value of the right shape and
-    // the reader could not tell the two apart (the reasoning is the question page
-    // `docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`). No other fault in
-    // this table is of that kind, so the code says so in its own words and it is never isolated by
+    // so the slot unwrap checks and reports an internal error: it does not return the zero slot,
+    // because a zero slot is a value of the right shape and the reader could not tell the two apart.
+    // No other fault in this table is of that kind, so the code says so in its own words and it is
+    // never isolated by
     // `attempt` (`isIsolatableFault`: a defect of the compiler is not a fault of the program).
     NullSlotUnwrapped = 0x0001B2,
     // Warnings (severity bits = Warn).
@@ -138,7 +136,7 @@ enum class RuntimeDiag : uint32_t {
     // nothing further leaves every count at zero, so `std::opt` used to report that round as its fixed
     // point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
     // left of the budget -- so that round reports here instead, one diagnostic for "the pass stopped at a
-    // bound, not at the end of its work" the two bounds share (the ruling of 2026-11-20).
+    // bound, not at the end of its work" the two bounds share.
     OptimizationStoppedShort = 0x100019,
 };
 

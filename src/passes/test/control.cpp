@@ -86,8 +86,7 @@ void mandatoryDataPaths() {
     // where the block's chain ends (docs/design/effects/edges.cn.md 5.3) is where the wait lives.
     // A hand-built graph like this one, with no sync predecessor, is what the runtime refuses at
     // commit ("GATE node without a wait", src/runtime/graph.cpp) -- which is why nothing the builder
-    // makes reaches it. Measured: the rescue that used to put the edge back never fired once across
-    // the fast corpus (docs/handover/reports/opt-ctrl-inventory.md, item 7).
+    // makes reaches it.
     check(
         reduceControlDependencies(*owner) == 1 && draft.ctrlInputsOf(gate).empty(),
         "a covered control edge on a GATE survived the reduction");
@@ -301,7 +300,7 @@ void syncChainOrdering() {
             "a gate that waits only on the sync chain does not carry the order");
     }
     // A node that carries no order of its own: the walk reaches what ordered it through the chain
-    // it stands in, not only through the control edge it used to be written as.
+    // it stands in, not only through a control edge written for it.
     {
         auto owner = camel::runtime::GraphTransaction::open(static_cast<camel::runtime::GraphId>(1));
         auto &draft = owner->edit();
