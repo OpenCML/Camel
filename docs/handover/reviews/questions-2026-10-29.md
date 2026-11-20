@@ -6047,3 +6047,57 @@ transformer_step_gradient_stops_at_split  负例：库的反向腿被拒 `split 
 ### 五、`lane-ssa` 已按作者口径处置
 
 `parked/lane-ssa` @ `4d308fc72`，本地与远端都删了，记录写的是**「未验证，不是被取代」** —— 16 笔内容确实不在主树（`calleeValueNode`/`packingTotal`/`callHandsBackResult` 各 0 处），**`test=` 全 0**，且 `5695e055c`(+306/−20, 8 src 文件) 跑在 `0024b76b4` 之前而此后五个文件都动过 ⇒ 回归面不可控。`5559d3c6e` 与 `beea20ad6` 不是同一机制（一个问退出类型的投影、一个问捕获单元）。
+
+## 负责人回报（2026-11-20 10:45）：**second order** —— 前向通，反向被挡，而挡住它的不是新机制
+
+你两次点名 `second order` 没有可见车道。这是那条车道的读数。它**没写一行代码**，因为判据在反向那一半被拒，而拒的原因值得你先看一眼。
+
+### 一、前向：二阶**已经成立**
+
+```
+`jvp(jvp(quartic))`，f = x⁴，x=2 ⇒ exit 0
+   y=16.0  d1=32.0  t0=32.0  t1=48.0
+⇒ `t1 = f''(2) = 48` 正确；`t0` 仍是 `f'(2)=32`，**两层没有混淆**
+```
+⇒ 前向没有 `split`，所以它证的只是「既有形状走两遍」的**前向那一半**。但它确实通了。
+
+### 二、反向：二阶在**内层第一阶**就被挡住，而不是二阶本身
+
+```
+`grad(grad(quartic))<2.0>()` ⇒ exit 1
+   `(vjp)stdlib/vjp.cml:190:25: [Error]: … transforms: jvp has no forward transform for this function.`
+```
+`--trace transforms` 显示**内层全绿**：
+```
+first_with_as_param graph=411 → REINTERP jvp graph=412 → split forward=413 backward=414
+→ TRANSPOSE function=split_of_jvp_of_quartic__first_with_as_param_backward graph=380
+```
+而**外层一行 `REINTERP` 都没有**（`refusedOrigin == kInvalidOriginId`）。
+
+### 三、根因：`lift` 只认 `Func` 节点，而一阶交出的是 `FunctionClosure`
+
+```
+一阶的两半已经是静态的：`split.cpp:1202 buildLinearClosure` 走 `FILL(FunctionClosure)`，静态源是 `Function(backwardId)` + 该次调用的残差
+⇒ **⇒ 所以二阶的图只能来自「外层 `jvp` 去 lift 那个导数函数」**
+⇒ **⇒ 而 `jvp` 的 `calleeIdOf` 只认 `Func` 节点，`FunctionClosure` 在 `jvp.cpp`/`jvp_operator.cpp`/`transpose*.cpp` 里出现 **0 次****
+⇒ **⇒ 于是空拒：「no forward transform for this function」，而那个 function 其实是一个 closure 值**
+```
+
+⇒ 这一条与 `transformer` 那条是**同一个形状的两个面**：那次是 `split` 切不动一个有着不可达操作数的图，这次是 `jvp` lift 不认一个已经静态化了的闭包。**两次都不是「缺法则」——法则都在。缺的是「谁来消费这个形状」。**
+
+### 四、另两条读数（都是**响的**拒绝，不是静默错值）
+
+```
+`grad(lane)<xs>()`（写降秩 `sum<0,false>`）⇒ `Function of type '(float[2]) => (float[2,2],)' cannot be called with argument types: <> (float)`
+   ⇒ 这是 `grad` 拿标量 `1.0` 当种子（`vjp.cml:194`）撞上张量余切 —— 与那条降秩签名的页是同一处
+`grad(total)<xs>()`（softmax 形）⇒ `split does not build this function (… an operand of the node is not reachable from the half's exit)`
+   ⇒ `READING_REFUSAL {"transform":"split","cause":"backward","construct":"a node whose input was not copied"}`
+```
+
+### 五、我建议的处置（要你裁）
+
+1. **让 `jvp` 的 `calleeIdOf` 认 `FunctionClosure`**（一阶交出的导数函数就是一个闭包；不认它，二阶反向永远进不去）。这是「谁来消费这个形状」的问题，不是法则问题。
+2. **`grad` 的种子 `1.0` 与张量余切**：`grad` 只对返回标量的函数有意义 —— 这条要么在类型上写明、要么让 `grad` 接受一个种子。**我不建议改 `vjp.cml:194`**，因为那是「`grad` 是 `vjp` 的一个特例」这句话的落地。
+3. **`split` 那条 not-reachable**：与 `transformer` 的负例同一个缺陷，一处在等你的裁定。
+
+⇒ **我不建议为二阶新开一条车道**：它现在卡在一条**单点**上（`calleeIdOf` 不认 closure），而那一点修好后，`jvp(jvp)` 那一半已经是绿的，剩下的只是把 `grad(grad)` 接上。
