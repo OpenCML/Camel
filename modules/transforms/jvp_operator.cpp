@@ -270,7 +270,7 @@ void registerOperatorMetadata() {
     // prints goes to the diagnostic side, not to the program's output (jvp_operator.cpp,
     // `readings()`). So the resource claim it makes is the pure one -- an operator that is not pure
     // and itemizes nothing is refused by the table, and the only clause that would name something
-    // here would be an invented access (2026-11-20).
+    // here would be an invented access.
     //
     // Pure is not foldable: the call does something the compiler cannot see from the arguments
     // alone, which is why it is not recomputable either (`foldable` false, `mayBeRecomputed`). The

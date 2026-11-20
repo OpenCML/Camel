@@ -64,15 +64,14 @@ namespace {
 ///
 /// The question is `tangentSpaceOf`'s (design principles 9.9: what a value's tangent is belongs to
 /// its type), and the answer is the value's own type -- so `jvp` of an `f32` function is pairs of
-/// `f32`, not of `float`. Writing `Type::Float64()` here would put one member of the floating
-/// family down as if it were the family: the rule instance would come out as `mul_tangent<float>`
-/// around `f32` values and the pass would give up on broken edges. Asking a second question as
-/// well -- *is the value a floating scalar* -- would answer no for a tuple and for an array. A tuple and an array of floats are
-/// `Self` too, so that second question would be this transform's own policy written as if it were
-/// the type's: it would keep a loop whose state is an aggregate from being lifted at all
-/// (`skip=body`), a value the language takes and the derivative of which `tangentSpaceOf` has
-/// already named. One question is asked here, and what a *reader* of a pair can do with an aggregate pair is the reader's question, asked
-/// where the pair is read -- not a second gate at the door.
+/// `f32`, not of `float`. One member of the floating family written down as if it were the family
+/// is the mistake this avoids: the rule instance comes out as `mul_tangent<float>` around `f32`
+/// values and the pass gives up on the edge. A second question -- *is the value a floating
+/// scalar* -- is that mistake in another form: a tuple and an array of floats are `Self` too, so
+/// asking it keeps a loop whose state is an aggregate from being lifted at all (`skip=body`), a
+/// value the language takes and the derivative of which `tangentSpaceOf` has already named. So one
+/// question is asked here, and what a *reader* of a pair can do with an aggregate pair is the
+/// reader's question, asked where the pair is read -- not a second gate at the door.
 camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
     if (type == nullptr) {
         return nullptr;
@@ -114,7 +113,7 @@ camel::core::type::Type *emptyTupleType() { return camel::core::type::TupleType:
 /// by type, so a type the registry answers for is not this transform's to re-list).
 ///
 /// A value a *program* computed is not one, even when it happens to be `0.0`. The distinction is
-/// that a structural zero is known before anything runs, because a
+/// what "structural" means: a structural zero is known before anything runs, because a
 /// constant has no tangent, and that is what lets the rule expansion drop the term it multiplies
 /// (`rule_expand.cpp#expandRuleRightSide`) instead of computing it and multiplying by zero.
 bool isStructuralZeroTangent(
@@ -182,7 +181,7 @@ gc_node_ref_t buildRuleTangent(
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
     // made of (`rule_types.h` answers that question for both transforms; writing
-    // `Type::Float64()` here would be wrong), and a rule whose condition does not hold there
+    // `Type::Float64()` here was the review's P1-9), and a rule whose condition does not hold there
     // is skipped rather than applied. The last refusal is reported, so a caller that tried
     // everything says the closest thing to why.
     const auto candidates = camel::core::forwardRulesOf(std::string(uri));
@@ -256,9 +255,9 @@ gc_node_ref_t buildRuleTangent(
 /// A value with no tangent space -- the `n` of `xs[n]` -- keeps a *slot* in the tangent half as
 /// `()`, for the reason a parameter does: the halves line up position by position, so a reader that
 /// walks them together never has to know which values were left out. The empty slot is a place a
-/// cotangent could be written with nothing to write in it, which is why an earlier reading of this
-/// function gave such a parameter no slot at all; that made the halves two lists of different
-/// lengths and left the pairing to arithmetic. The slot is the rule.
+/// cotangent could be written with nothing to write in it. Giving such a parameter no slot at all
+/// is the alternative, and it is refused: that makes the halves two lists of different lengths and
+/// leaves the pairing to arithmetic. The slot is the rule.
 FunctionType *liftSignature(FunctionType *function) {
     if (function == nullptr) {
         return nullptr;
@@ -750,7 +749,7 @@ bool liftGraph(
         // stated has a zero that can be written down while the graph is built -- `0.0` for a
         // `float`, an array of zeros for `float[2, 2]` -- and `zeroConstantFor` above writes it, as
         // it already does for a constant. A type that leaves an extent open (`float[]`, `f32[..]`,
-        // which is how a parameter tree is written) has no such zero: the length is the
+        // which is how S2's own parameter tree is written) has no such zero: the length is the
         // *value's*, and the value is a port that has not been run yet. Only then is the zero made
         // where the value is, and by the operator the type's tangent space already names
         // (`TangentSpace::zerosLikeUri`, include/camel/core/derivative.h; the arrays' is
@@ -806,7 +805,7 @@ bool liftGraph(
         valuePorts.reserve(valueTypes.size());
         tangentPorts.reserve(valueTypes.size());
         // The value half first, in the list's order, and then the tangent half in the same order:
-        // the lifted signature is `(..values, ..their tangents)` , so the ports
+        // the lifted signature is `(..values, ..their tangents)`, so the ports
         // of the graph line up with the declared type by position -- port k is the k-th value, port
         // n + k is its tangent. A caller copies its arguments into these in order, so the order
         // here *is* the interface.
@@ -875,11 +874,11 @@ bool liftGraph(
         // The values the body *captures* from where it was written, which are not `with` parameters
         // and were the one kind of port this lift left out. A capture is a port of the graph
         // (`GraphRead::closureNodesOf`, which is `GCGraph::closureNodes`) but not one of its `with`
-        // ports, so a cell the walk never made is a hole: the lifted copy read nothing where the
-        // value stood, and the refusal it produced named the whole body (`skip=body`) rather than
-        // the capture: `(t: float[]) => k * t[0]` refuses for a captured
-        // `float` exactly as it does for a captured `float[]`, so the type of the captured value is
-        // never the question and `pairTypeOf` is not the gate.
+        // ports, so a cell the walk never made is a hole: the lifted copy reads nothing where the
+        // value stood, and the refusal that produces names the whole body (`skip=body`) rather than
+        // the capture. `(t: float[]) => k * t[0]` shows it: a captured `float` refuses exactly as a
+        // captured `float[]` does, so the type of the captured value is never the question and
+        // `pairTypeOf` is never the gate.
         //
         // The copy declares them in the source's order, which is the closure tuple's order, and
         // takes the source's closure type; the function value this transform answers already
@@ -941,7 +940,7 @@ bool liftGraph(
         // projects one member of such a tuple does not need the tuple: the member is a node already
         // (the loop's half, the body's own value), so the projection answers that node instead of
         // indexing a fill nobody else may read. Without this, `(loop t = (x,
-        // x) ...).1` would reach both of the loop's components through the fill it built, which is
+        // x) ...).1` reaches both of the loop's components through the fill it built, which is
         // exactly what `split` cannot cut. A slot the payload does not list (it takes the
         // template's constant) is left out and its projection is copied as the projection it is.
         std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> membersOfFill;
@@ -1214,9 +1213,14 @@ bool liftGraph(
             // tangent are `(value, zero)`, the same reading design principles 9.9 gives a captured
             // value.
             //
-            // Lifting such a callee (`liftSignature` answers `nullptr` for it) would ask for a forward rule
-            // for every operator of a body that carries no derivative at all, which is the wrong
-            // question to ask of it.
+            // Refusing it here would be refusing it one step later and with no cause:
+            // `liftSignature` answers `nullptr` for a function of no parameter (`params.empty()`,
+            // spelled in words by `jvpOperatorSignature`), `liftGraph` returns an empty refusal, and
+            // `vjp` reports `jvp has no forward transform for this function` with no `REINTERP` line
+            // and no place -- which is what `showcase/c3-char-transformer/train.cml` hits first, at
+            // `causal_mask()`, a `range`/`map` body answering a constant mask. Lifting such a
+            // callee would also ask for a forward rule for every operator of a body that carries no
+            // derivative at all, which is the wrong question to ask of it.
             //
             // Not covered here, deliberately: the same node read as a **function value** (a `Func`
             // node of function type). A value is carried and not called, so a value whose forward
@@ -1559,8 +1563,8 @@ bool liftGraph(
                 // The *template* is the node's own Norm input, copied: a FILL takes every slot its
                 // payload does not list from that template, so the template has to have the tuple's
                 // arity and hold the same constants. `(x, 0.0)` lists one member and takes the
-                // second slot from the template; a template of one field
-                // would make the fill read field 1 of a one-field tuple (measured: `fa`, "Tuple
+                // second slot from the template; a template of one field, as this walk used to
+                // make, makes the fill read field 1 of a one-field tuple (measured: `fa`, "Tuple
                 // field out of range: field 1 of a tuple with 1 fields").
                 //
                 // The tangent is the Fill of the components' tangents: the tangent of a tuple is
@@ -1765,8 +1769,8 @@ bool liftGraph(
                 // A member of a tuple this transform filled is that member's own node, not a
                 // projection of the tuple: the fill exists so a reader of the *whole* tuple sees
                 // what the program sees, and a reader of one member has no business reading every
-                // member (and, for a lifted loop's value tuple, reaching the loop's other component
-                // `(loop t = (x, x) ...).1`).
+                // member (and, for a lifted loop's value tuple, reaching the loop's other component,
+                // as `(loop t = (x, x) ...).1` would).
                 const auto memberHalf = [&](gc_node_ref_t from) -> gc_node_ref_t {
                     const auto at = tupleIndexed ? membersOfFill.find(from) : membersOfFill.end();
                     if (at == membersOfFill.end() || body->value >= at->second.size()) {
@@ -1938,12 +1942,12 @@ bool liftGraph(
                 // The arguments, in the order the lifted callee declares them: **every value
                 // first**
                 // -- the ordinary parameters -- and **their tangents after them**, in the same
-                // order. A call that pushed each value with its tangent as it walked the inputs
-                // passed
+                // order. A call that pushes each value with its tangent as it walks the inputs
+                // passes
                 // `(v1, d1, v2, d2)` to a callee whose list is `(v1, v2, d1, d2)`: right for one
                 // parameter by accident, and refused for two (`split` reads the seam at `count / 2`
-                // and found a tangent where it wanted a value, e.g.
-                // `vjp((rr) => mulxy(rr, 2.0))(3.0)`: "the value half reads the tangent of
+                // and finds a tangent where it wanted a value, as in
+                // `vjp((rr) => mulxy(rr, 2.0))(3.0)`, "the value half reads the tangent of
                 // parameter 0, which the forward half does not take").
                 //
                 // The value half's length is the callee's own answer, not this graph's guess: it is
@@ -2049,15 +2053,15 @@ bool liftGraph(
                 // A `Call` node is a call **through a value**: the callee is a value the body reads
                 // (its first `with` input -- `nodevm.cpp#NodeVM::call` reads
                 // `withInputs().front()`), and which graph that value stands for is a question only
-                // the run time answers (the lift does not know
-                // which graph the value is).
+                // the run time answers: at lift time the value's graph is not known yet, and only the run
+                // time knows it.
                 //
                 // So the lift writes **a call of `jvp(v)`** and lets that answer the question where
                 // the program runs: the node is the operator's own, typed `(f: F) => Jvp<F>` by the
                 // same law a program's `jvp(v)` is typed by, and the call of its answer goes
                 // through a `Call` node exactly as the source's call did. This is the shape
-                // `transpose` writes for the same node (a call of a function value transposes into a call
-                // of `transpose(v)`), and it is one rule: the lift never
+                // `transpose` writes for the same node -- a call through a function value becomes a call
+                // of `transpose(v)` -- and it is one rule: the lift never
                 // reads which graph `v` is, so a value the body made, a captured one, a `with` one
                 // and a parameter are all just `v`. A closure's members stay in `v` as the known
                 // values the value carries -- `jvp(v)` keeps `f`'s closure
@@ -2440,7 +2444,7 @@ bool liftGraph(
                 // the node passes a value to is `nullopt`, and a port its `<>` configuration fills
                 // is the value in this graph's static area. Without this a law written for
                 // `reshape<[2, 2]>` answers a `reshape<[8, 2, 8]>` node and its right side writes
-                // `[2, 2]` into the tangent.
+                // `[2, 2]` into the tangent, as `probes/06_layout.cml` does.
                 std::vector<std::optional<slot_t>> portValues;
                 {
                     const std::span<const slot_t> staticSlots = function.staticSlots();
@@ -2710,7 +2714,7 @@ bool liftGraph(
                     // writes as the zero of its space) and wrong for one that carries a tangent,
                     // where the element's tangent is the array's element: `jvp(f)` of
                     // `f(xs) = loop s = 0.0 for e in xs do s + e` at `xs = [1.0, 2.0]` with
-                    // `dxs = [1.0, 1.0]` answered the value 3.0 and the tangent 0.0, where the sum
+                    // `dxs = [1.0, 1.0]` answers the value 3.0 and the tangent 0.0, where the sum
                     // of the tangents is 2.0. The transform has
                     // no place to put that tangent, so it says so instead of answering the zero of
                     // the space: a loop over a value with a tangent is refused, and a loop over a
@@ -2774,7 +2778,7 @@ bool liftGraph(
         // operands), so the value is the copy of the exit itself -- and a Gate only forwards, so it
         // is followed to what it carries.
         // valueBehindGates is the walk (camel/runtime/graph.h): the value a gate carries is its
-        // first ordinary input, not back() -- the last wait -- for both kinds.
+        // first ordinary input, and this used to take back() -- the last wait -- for both kinds.
         const gc_node_ref_t oldValue = valueBehindGates(function, function.exitNodeRef());
         if (oldValue >= function.nodeCount() || !copied[oldValue]) {
             os << "REINTERP jvp function=" << name
@@ -2807,14 +2811,14 @@ bool liftGraph(
             noteRefusal(RefusalReading("jvp", name, RefusalCause::Tangent));
             return fail(refusal);
         }
-        // Route B: a
-        // lifted graph always ends in a two-member tuple `Fill`, so `split` keeps its one cuttable
-        // shape and its criterion is not widened by a second one.
+        // Route B: a lifted graph always ends in a two-member tuple `Fill`, so `split` keeps
+        // its one cuttable shape and its criterion is not widened by a second one.
         //
         // `alreadyLifted` above says the exit's copy *is* the pair -- but not why. When an
         // application answered it, the pair is a callee's answer and not a `Fill` this graph
-        // writes, and that is the shape `split` refuses (`ExitShape::NotAPair`: the exit node is the application itself, `kind=GCNodeKind::Func`, two `with`
-        // inputs and two ordinary ones, its lifted copy's type `(float, float)`). Hydrating it is
+        // writes, and that is the shape `split` refuses (`ExitShape::NotAPair`): the exit node is
+        // the application itself, `kind=GCNodeKind::Func`, two `with` inputs and two ordinary ones,
+        // its lifted copy's type `(float, float)`. Hydrating it is
         // writing the two halves this graph already holds into the shape: `valueOf`/`tangentOf` are
         // the projections of the call's pair, made where the call was lifted. Both members are
         // written, so neither half is a hole a reader has to resolve through the callee.
@@ -2860,10 +2864,9 @@ bool liftGraph(
                                                         : valueTypeOf(oldValue));
             const gc_node_ref_t gate =
                 draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
-            // The waits are the gate's **trailing ordinary inputs** (a gate's trailing input is a wait
-            // rather than a use), so the lifted gate carries the
-            // same list after the pair it forwards -- not a sync edge, which is the shape the
-            // producer stopped writing. A wait that was not copied is not re-added: the lift copies
+            // The waits are the gate's **trailing ordinary inputs** -- a gate's trailing input is a
+            // wait rather than a use -- so the lifted gate carries the same list after the pair it
+            // forwards, as ordinary inputs and not as sync edges. A wait that was not copied is not re-added: the lift copies
             // every node of the body, so this is a wait outside it and naming it here would move a
             // statement from another graph.
             std::vector<gc_node_ref_t> gateInputs;

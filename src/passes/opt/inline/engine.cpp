@@ -1146,8 +1146,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
             // call that names its callee and one the effect resolver has to read as "writes
             // everything", and a differentiated body's two calls both land in one region.
             //
-            // That they do not write is a rule and not an assumption (design principles 9.9):
-            // a reverse half only computes the transposed rules over the values its
+            // That they do not write is a rule and not an assumption (design principles 9.9): a
+            // reverse half only computes the transposed rules over the values its
             // forward recorded, and its type says so -- `modules/autodiff/pullback.cpp#pureClause`
             // publishes `pure` on every pullback and on the function value the forward hands out.
             // So naming them costs nothing, while leaving them unnamed costs the graph the order
@@ -1392,8 +1392,8 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     // count its rounds share, so `growth_budget` bounds the work of the pass, and each pass that
     // runs the engine on its own (`std::opt::inline`, `::devirtualize`, `::specialize`) keeps one
     // and clears it where its run starts, so a run spends the budget the pipeline gave it and the
-    // next one does not start on what the last one left. A run given none would count into a
-    // local and start over with no trace: the bound it enforced would be one only that call could see,
+    // next one does not start on what the last one left. A run given none used to count into a
+    // local and start over with no trace: the bound it enforced was one only that call could see,
     // which is a budget in name.
     GUARD(
         config.growthSpentNodes != nullptr,
@@ -1429,10 +1429,10 @@ const camel::runtime::Program *applyOptimizeRewritePass(
             break;
         }
         // The boundary check every optimization step ends with, asked here as the other steps ask
-        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp): the engine's own steps
-        // -- devirtualize, specialize, inline -- are checked too: a splice
-        // that dropped an effect or moved one past another on the same resource is found at the step
-        // that broke it and not one step later in the output of the whole pipeline. Asked
+        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp): without it the
+        // engine's own steps -- devirtualize, specialize, inline -- go unchecked, and a splice
+        // that drops an effect or moves one past another on the same resource would be found only
+        // by comparing the output of the whole pipeline, one step after the one that broke it. Asked
         // per session and on the whole program the session returned, for the reason the sibling
         // site gives: a rewrite's edges are not the only ones it moves, so the graph is judged once
         // it is written, not predicted from the node pair the rewrite named. A refusal records the
@@ -1459,8 +1459,8 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         // else: a local would be made and destroyed with this call, so every run would start from
         // zero, `runs` could never pass 1, and `settle_runs` (32 by default) would never be
         // reached -- the run that never settles would look like one that always does. A caller
-        // that runs the engine therefore has to give it the count it keeps across its runs; an
-        // engine-private count for such a caller would be the same silence.
+        // that runs the engine therefore has to give it the count it keeps across its runs; the
+        // engine used to keep one of its own for such a caller, which is the same silence.
         GUARD(
             config.settleStreak != nullptr,
             std::format(

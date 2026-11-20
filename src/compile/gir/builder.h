@@ -2748,10 +2748,32 @@ class Builder {
     bool placeCalleeCapture(
         BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         const compile_graph_ptr_t &callee, size_t position, draft_node_ref_t value) const;
+    // One signature read onto one node's operands: `sig` is the clause, `calleeWithCount` how many
+    // `with` parameters it numbers, `isCall` whether the callee travels in a `with` input of this
+    // node (a call through a value) or is the node itself (a direct call), and `withArgBase` where
+    // the callee's `with` parameters land among this node's `with` inputs -- the shared
+    // `core::functionValueWithBase`, not carried apart here.
     bool readCalleeSignature(
         BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
-        draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const;
+        size_t withArgBase, draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const;
+    /// The function value standing at one of a node's operands, and what its type says: the builder's
+    /// one operand lookup (`functionValueAt`).
+    struct FunctionValueAt {
+        camel::core::FunctionValueClause site;
+        compile_graph_ptr_t body;
+    };
+    /// The function value at the operand the binding names, found where the graph stores it: the
+    /// `Norm`/`With` input at that index (a call's callee is its `With` 0), and the type it carries.
+    /// `nullopt` when the operand holds no value, or one that is not a function. `site` is
+    /// `core::functionValueClauseAt`'s answer about that type -- the clause (absent: the type writes
+    /// none, keep the conservative reading), the base its `with` parameters land at, how many there
+    /// are -- and `body` is the graph behind the value when the program names one statically. The
+    /// builder's half of `runtime::clauseOfOperand`/`clauseOfCall`, so the ordering, the effect
+    /// summary and the footprint answer alike about one type.
+    std::optional<FunctionValueAt> functionValueAt(
+        const runtime::GraphTransaction &transaction, draft_node_ref_t node,
+        const camel::core::sem::ResourceBinding &where) const;
     /// How the function operand of a higher-order operator was read (`readFunctionOperandReach`).
     enum class OperandReach : uint8_t {
         Placed,      // the clause was read onto the operands it names
