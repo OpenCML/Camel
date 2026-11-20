@@ -47,6 +47,11 @@ profile.json.gz
 pypi/camel-lang/bin/
 pypi/camel-lang/stdlib/
 pypi/camel-lang/wrapper-dist/
+# The wheel's staging copy of out/<tag>/ and the interop bundle's set-aside directory
+# (scripts/pypi-rollup.js). A failed rollup deletes neither, so a full install's worth of binaries
+# can be sitting inside a packaged directory, where `git add -A` would take them.
+pypi/camel-lang/src/camel/.cmlenv/
+pypi/camel-lang/python.stash/
 pypi/camel-lang/src/camel_lang.egg-info
 *.egg-info/
 
