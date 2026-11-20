@@ -170,19 +170,24 @@ func is_update(n: Node): bool {
     }
 }
 
-/// The node whose value the training step's update takes as its gradient: the second argument of the
-/// program's one `nn:sgd` node. It is read through the update rather than by an operator's name, and
-/// that is the whole point: the gradient is the library's `grad` macro now, a macro is a call, and a
-/// call node runs no operator with a name of its own -- the engine's `autodiff:grad`, which this used
-/// to look for by name, is not in the program at all. A name-based reading finds nothing and answers
-/// "nothing to do", which is exit 0 and no refusal: silence is the one answer that looks like success.
-func grad_in_update::<F>(p: F): Node? when is_function::<F>() {
-    let u = one_node(all_nodes(p)->filter<(n: Node): bool => is_update(n)>)
-    return match u {
-        case null => null
-        case node => if len(inputs(node)) < 2 then null else inputs(node)[1]
-    }
-}
+// ---- the reading that has no landing place, and why it is kept as a note ----
+//
+// This file carried `step_print_at_grad` too: the same print spliced at the node that *takes* the
+// gradient, which is the second argument of the `nn:sgd` node -- the result of calling the function
+// `grad(loss)<layer, y>` returns. That splice cannot be made on a program whose gradient is the
+// library's `grad`: the node is a call of a function value, `graph.inline` answers `the callee of the
+// call is not known in this graph: run std::defunctionalize on it first` (RuntimeDiag::InvalidArgument,
+// at this file's `spliced_at`), and the pass it names refuses the values involved instead of
+// defunctionalizing them -- `DEFUNCTIONALIZE types=7 values=16 calls=0 refused=7`, and for the
+// gradient's own type `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure` the reason is `the
+// value is read by a node that is not a call`.
+//
+// The author's answer of 2026-11-20 (`e4c2e646b`, "ECOOP item 1 lands at a pure node of step, not at
+// the gradient call") says where item (1) does land: at a **pure** node of `step`. `step` has exactly
+// one, `nn:sgd` (`step`'s graph: two ports, the loss as a function value, the `vjp::grad` instance, the
+// call, three more ports, and the update), and `step_print` below splices there and is refused with
+// `PassEffectOrder` -- which is the paper's reading. So the gradient node was the wrong place twice
+// over: nothing can be spliced at it, and item (1) never wanted it.
 
 /// The training inputs of the entry function: the program's only constant of type `f32[4, 2]`, and it
 /// stands in no chain.
@@ -326,21 +331,19 @@ export func print_prepended::<F>(p: F): F! sync {
 /// reading is not the one the paper predicted: `commit` refuses, but with `RuntimeDiag::PassEffectOrder`
 /// -- the pair it names is the call of the gradient value and the print. `loss_print` below is the same
 /// edit on a graph whose body is operations alone, and that one is refused by `PassEffectBeyondType`.
+///
+/// This is where the ECOOP paper's item (1) lands: the author's answer of 2026-11-20 (`e4c2e646b`, "item
+/// 1 lands at a pure node of step, not at the gradient call") names a pure node of `step`, and `step`
+/// has exactly one -- this one, `nn:sgd`. Both programs refuse the splice, and the refusal's *name* is
+/// what the move changed: on the program whose gradient is the engine's operator the same splice is
+/// refused by `PassEffectBeyondType` ("committed a graph that reaches past the effect its own type
+/// declares: node 10 of graph 'step' (:io/println)"), and on the program whose gradient is the
+/// library's macro it is refused by `PassEffectOrder`, whose pair is the call of the gradient value and
+/// the print. Same edit, same place, two diagnoses -- the one thing about item (1) the move did change,
+/// and it changed it by changing what a call statement is made of. What the move does not leave is a
+/// place for splicing *at* the gradient instead; see the note above `is_inputs`.
 export func step_print::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_update(n))
-    return match at {
-        case null => p
-        case a => spliced_at(p, a)
-    }
-}
-
-/// The same print in `step`, spliced at the node that takes the gradient instead. That node is read by
-/// a call statement, so the splice changes a node in place as well as making one (`changed` is not
-/// empty), and the reading is a different one: it is `commit_order` that answers, not `commit_effect`.
-/// The node is named through the update it feeds (`grad_in_update`), not by the operator it runs: the
-/// gradient is a macro call now, and the operator this looked for by name no longer exists.
-export func step_print_at_grad::<F>(p: F): F! sync {
-    let at = grad_in_update(p)
     return match at {
         case null => p
         case a => spliced_at(p, a)
