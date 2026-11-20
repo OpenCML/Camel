@@ -817,7 +817,7 @@ mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 ```
 
-**`rulesets.jvp`** — import { ... } from rulesets.jvp — 8 name(s)
+**`rulesets.jvp`** — import { ... } from rulesets.jvp — 12 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -827,7 +827,11 @@ sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
 pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
 ```
 
 **`rulesets.vmap`** — import { ... } from rulesets.vmap — 28 name(s)
