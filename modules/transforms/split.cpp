@@ -5,6 +5,8 @@
 #include "camel/runtime/graph.h"
 
 #include "refusal_readings.h"
+#include "lift.h"
+#include "jvp.h"
 
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/base.h"
@@ -1044,18 +1046,58 @@ struct Half {
             if (const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
                 call != rt::kInvalidNodeRef) {
                 if (!tangent) {
-                    // The value half's copy of that call answers `(result, lin)`: its component 1
-                    // is a function, not the tangent the source asked for.
-                    return refuseAt(
-                        refusal,
-                        source,
-                        ref,
-                        "a tangent of a call",
-                        "the value half computes the value of the call, and the tangent of a call "
-                        "is "
-                        "computed after the cut -- its component 1 here is the linear half, which "
-                        "is "
-                        "a function and not a tangent");
+                    // The value half's copy of that call answers `(result, lin)`, and the source's
+                    // read of component 1 is a read of the **lifted** linear half -- `Lift<lin>`,
+                    // which is what `jvp(lin)` denotes (`Lift<A => B> = Lift<A> => Lift<B>`, the
+                    // author's ruling of 2026-11-20 16:00: the direction is a parameter of the
+                    // lifted function, so the second order is fed twice and never captured).
+                    //
+                    // That this is the value the source asked for is measured, not assumed: the type
+                    // the source's read has and `jvpSignature` of the linear half are the **same
+                    // type object** (measured 2026-11-20, `equal=yes` by pointer, on
+                    // `(float, float) => (float, float) pure`). Where they differ, the read asks for
+                    // something that is no component's lift, and it is refused below by name.
+                    FunctionType *calleeType = nullptr;
+                    if (source->node(call) != nullptr &&
+                        source->node(call)->kind == rt::GCNodeKind::Call) {
+                        calleeType = callValueSignatureOf(*source, call);
+                    } else if (const rt::GCGraph *callee = calleeGraphOf(*source, program, call);
+                               callee != nullptr) {
+                        calleeType = callee->funcType();
+                    }
+                    const SplitHalves halves = splitHalvesWith(calleeType, nullptr);
+                    FunctionType *linType   = halves.backward;
+                    FunctionType *liftedType =
+                        linType != nullptr && linType->code() == TypeCode::Function
+                            ? jvpSignature(linType)
+                            : nullptr;
+                    if (liftedType == nullptr || node->dataType() != liftedType) {
+                        return refuseAt(
+                            refusal,
+                            source,
+                            ref,
+                            "a tangent of a call",
+                            "the value half hands the call's linear half on lifted, and this read is "
+                            "not that lifted type: the linear half of this call lifts to `" +
+                                (liftedType != nullptr ? liftedType->toString()
+                                                       : std::string("no type")) +
+                                "`, while the read asks for `" +
+                                (node->dataType() != nullptr ? node->dataType()->toString()
+                                                             : std::string("no type")) +
+                                "`");
+                    }
+                    // `lin` is the value half's own component 1 of the copied call -- the read of a
+                    // value the copy already answers, not a second call to anything -- and the value
+                    // handed on is `jvp` of it, typed by the one spelling of that operator's
+                    // signature (`liftedOperatorType`).
+                    const gc_node_ref_t callCopy = inputs.front();
+                    const gc_node_ref_t lin      = draft.addAccsNode(linType, 1);
+                    draft.setNormInputs(lin, std::span<const gc_node_ref_t>(&callCopy, size_t(1)));
+                    const gc_node_ref_t lifted =
+                        draft.addOperNode(liftedOperatorType(linType), nullptr, "transforms:jvp");
+                    draft.setNormInputs(lifted, std::span<const gc_node_ref_t>(&lin, size_t(1)));
+                    copyOf[ref] = lifted;
+                    return true;
                 }
                 const auto index = residualIndexOf->find(call);
                 if (index == residualIndexOf->end()) {
@@ -1773,21 +1815,84 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
                      "equal length";
         return halves;
     }
-    if (!function->hasExitType() || function->exitType()->code() != TypeCode::Tuple) {
+    if (!function->hasExitType()) {
         halves.why = "`split` takes a lifted function, whose result is the pair (result, tangent)";
         return halves;
     }
-    const auto *exitPair = tt::as_ptr<TupleType>(function->exitType());
-    if (exitPair->size() != 2) {
-        halves.why = "`split` takes a lifted function, whose result is the pair (result, tangent); "
-                     "this one answers " +
-                     std::to_string(exitPair->size()) + " values";
-        return halves;
-    }
-    Type *result  = exitPair->typeAt(0);
-    Type *tangent = exitPair->typeAt(1);
-    if (result == nullptr || tangent == nullptr) {
-        halves.why = "the pair a lifted function answers with has a component without a type";
+    // Where the cut is made is `Lift<exit>`'s shape (`liftedShapeOf`, lift.h), and it has two forms:
+    //
+    //   - `Lift<R>` is the pair `(R, Tangent<R>)` -- the ordinary case, cut along the two members;
+    //   - `Lift<R>` is a tuple of member lifts -- a result that holds a function. It is cut **by
+    //     component**, which is what `split.h`'s own sentence says the cut is ("along the pair, not
+    //     along a position"): a member with a tangent space gives its value to the forward half and
+    //     its tangent to the backward half, a function member gives the lifted function to the
+    //     forward half and nothing to the backward half (a function has no tangent). `LiftedMember`
+    //     reads each member back (`lift.h`), so this asks the law and never guesses at a two-tuple.
+    //
+    // Both forms end in the same two types -- the forward half's answer value `result` and the
+    // backward half's answer `tangent` -- so everything below this point is one code path.
+    const LiftedShape liftedExit = liftedShapeOf(function->exitType());
+    Type *result                 = nullptr;
+    Type *tangent                = nullptr;
+    if (liftedExit.pair) {
+        if (function->exitType()->code() != TypeCode::Tuple) {
+            halves.why = "`split` takes a lifted function, whose result is the pair (result, tangent)";
+            return halves;
+        }
+        const auto *exitPair = tt::as_ptr<TupleType>(function->exitType());
+        if (exitPair->size() != 2) {
+            halves.why = "`split` takes a lifted function, whose result is the pair (result, "
+                         "tangent); this one answers " +
+                         std::to_string(exitPair->size()) + " values";
+            return halves;
+        }
+        result  = exitPair->typeAt(0);
+        tangent = exitPair->typeAt(1);
+        if (result == nullptr || tangent == nullptr) {
+            halves.why = "the pair a lifted function answers with has a component without a type";
+            return halves;
+        }
+    } else if (liftedExit.type != nullptr) {
+        const auto *lifted = tt::as_ptr<TupleType>(function->exitType());
+        std::vector<Type *> forwardMembers;
+        std::vector<Type *> tangentMembers;
+        forwardMembers.reserve(lifted->size());
+        tangentMembers.reserve(lifted->size());
+        for (size_t index = 0; index < lifted->size(); ++index) {
+            const LiftedMember member =
+                liftedMemberOf(const_cast<Type *>(lifted->typeAt(index)));
+            if (member.forward == nullptr) {
+                halves.why = "`split` takes a lifted function whose result lifts by component, and "
+                             "member " +
+                             std::to_string(index) + " of that result is not a form `Lift` writes: "
+                             "it is neither a `(value, tangent)` pair nor a lifted function";
+                return halves;
+            }
+            forwardMembers.push_back(member.forward);
+            if (member.value) {
+                tangentMembers.push_back(member.tangent);
+            }
+        }
+        // The forward half answers one member per component; the backward half takes the cotangent
+        // of what the forward half answers, which is one member per **value** component -- a
+        // function component takes no cotangent, the same rule `transpose` already applies to a
+        // closure member (author, 2026-11-03 19:55).
+        result = forwardMembers.size() == 1 ? forwardMembers.front()
+                                            : TupleType::create(std::move(forwardMembers));
+        if (tangentMembers.empty()) {
+            tangent = TupleType::create(std::vector<Type *>{});
+        } else {
+            tangent = tangentMembers.size() == 1 ? tangentMembers.front()
+                                                 : TupleType::create(std::move(tangentMembers));
+        }
+        if (result == nullptr || tangent == nullptr) {
+            halves.why = "the component-wise answer of a lifted function has a member without a type";
+            return halves;
+        }
+    } else {
+        halves.why = "`split` takes a lifted function, whose result lifts member by member; this "
+                     "one's result is a `" +
+                     function->exitType()->toString() + "`, which `Lift` does not answer for";
         return halves;
     }
 

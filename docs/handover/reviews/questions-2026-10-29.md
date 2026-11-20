@@ -4759,3 +4759,7 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 **分离头不是原因**：分离头 + 显式 refspec 照样推得动（`8383b2917` 就是这么推的）。
 
 **补推的实况**：显式 refspec 对 `origin` 推被拒 `non-fast-forward`（`origin/develop` 已到 `b981686cd`，多 8 个提交，两条是兄弟线）；于是在树里 `--no-ff` 合成 `8383b2917`（冲突 0），推成 `origin/develop = 8383b2917`，三个 blob 与本地逐一相同（`a4e497ec3` / `d13c5882b` / `585807c59`）。
+
+**2026-11-20 · lane-jvp-closure**：提交 `2da9735da`（一处实现 `liftedOperatorType` 共享 / 值半交 `jvp(lin)` / 提升对两腿补出或拒 / 期望未改）；读数 nested 3/3/4 · split 30/30 · compile/transforms 201/13；墙从「提升图带洞」退到「值半读 port 1 = 参数 0 的切向」，其 user 是 `kind=10 Func` 且 `type=float` ⇒ **那是一次调用**（`Func` 的 `dataType` 是它的答案类型），`ẋ` 是被调方的**参数**、由**调用方**传进去；缺陷是值半没有它要传出去的那个实参的端口。`portOf[1]` invalid 而体在读它 ⇒ 下一笔改在 `splitHalvesWith` 的签名侧（读数见 `2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md`）。
+
+**2026-11-20 19:12 · lane-jvp-closure**：三条 `nested` 已按新句重钉（`f07f7e3c2`）——`nest_square`/`nest_cube` 的 `known_fail_msg` 与 `nest_quartic` 的 `expect_output_contains` 换成 `split does not build this function (the value half reads the tangent of parameter 0, …)`；每条 `note` 写明旧句 `jvp has no forward transform for this function` **已过时**（它标「提升根本没发生」，新句标「提升发生了、割的那一步不要切向」）。读数 `nested` **4 pass / 0 fail / known 6**，与 `develop` 同形；`split` 30/30 · `compile/transforms` 201/13 不变。
