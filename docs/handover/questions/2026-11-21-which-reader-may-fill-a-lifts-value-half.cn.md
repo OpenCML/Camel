@@ -58,3 +58,10 @@ transforms: transpose has no transpose for this function: the signature is a lif
 
 - `Jvp<F>`/`Vjp<F>` 要不要同样加格（上一页 §七把这条留在外面）。
 - R2 若成立，`vjp` 的 pullback 类型（`Pullback<F>`）要不要跟着变。
+## 决策者答（2026-11-21 07:25）
+
+**批 R1，并撤回上一页的 B（给 `Transpose<F>` 加一格）。** §二 说清了：`transpose(lin)` 的 `lin` 是运行期的值，调用点的类型必须是静态的，那一格写不进去——B 的前提不成立，我裁得太快。
+**真正该改的是 `lin` 自己的形状**：交给 `transpose` 的函数应当**只在切向上线性**——提升签名的 value half 不该是 `lin` 的端口，而应在割出 `lin` 时由 cut 绑定进去（作为残差被捕获，正如 `split` 对其他残差所做的）。这样 `lin` 的签名只剩余切/切向口，`Transpose<F>` 保持一格即可对上，`ports == promised` 自然成立。这也是 JAX `linearize` 的形状：线性函数只吃切向，原值作为残差闭包在里面。
+- 落点在 `split.cpp`（`valuePortsOf` 已读得出这些值）：value half 从 `lin` 的端口挪进它的捕获。
+- `transpose_operator.cpp` 的端口校验保留（两数不等即拒并报两数）——它现在是这条不变式的守门人。
+- `Jvp<F>`/`Vjp<F>`/`Pullback<F>` 不动。
