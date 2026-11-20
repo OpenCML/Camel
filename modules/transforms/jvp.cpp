@@ -1058,15 +1058,17 @@ bool liftGraph(
                 // value, and its members were built by this same function.
                 return copyOf[ref];
             }
-            // A function's lifted self: `jvp(v)`, typed by the same law (`liftedOperatorType`
-            // answers
-            // `(f: F) => Jvp<F>` and `Jvp<F>` is `liftSignature(F)`, which is `Lift<F>`).
-            camel::core::type::FunctionType *operatorType =
-                liftedOperatorType(tt::as_ptr<FunctionType>(type));
-            if (operatorType == nullptr) {
+            // A function's lifted self: the operator applied to `v`. Its type is the **answer** the
+            // operator hands on, `Lift<F>` (`shape.type`), and not the operator's own signature
+            // `(f: F) => Lift<F>`: `jvp::<F>(f: F): Jvp<F>` is a declaration whose result is what a
+            // reader of this node reads, and a graph that hands this value on declares `Lift<F>`
+            // too (`split`'s value half, a lifted graph whose exit is a closure). The signature is
+            // `liftedOperatorType`'s, and it types the operator *before* it is applied -- a
+            // different node from this one.
+            if (shape.type == nullptr) {
                 return rt::kInvalidNodeRef;
             }
-            const gc_node_ref_t made = draft.addOperNode(operatorType, nullptr, "transforms:jvp");
+            const gc_node_ref_t made = draft.addOperNode(shape.type, nullptr, "transforms:jvp");
             const gc_node_ref_t operand = copyOf[ref];
             draft.setNormInputs(made, std::span<const gc_node_ref_t>(&operand, 1));
             return made;
@@ -1193,6 +1195,28 @@ bool liftGraph(
         // walk copies them as values (the `Func` case): such a call has no lifted graph to call,
         // and its tangent is the zero of its own type.
         std::unordered_set<gc_node_ref_t> constantCalls;
+        // A `Func` node names its callee graph and is one of two things: the call itself (the type
+        // is the **answer**, `callValueTypeOf`) or a function **value** (the type is the callee's
+        // own function type -- what `addFuncNode(callee, funcType())` writes for a value). The two
+        // are told apart by the node's type against the callee's, and **not** by "the value is a
+        // function": a call whose answer is itself a function -- `vjp(f)` answers the pullback --
+        // has a function-typed value and is still a call. Reading the answer's kind alone wrote
+        // that call as a value: its arguments were never wired, and the node was typed with the
+        // callee's lifted *signature* instead of the answer the callee hands on, which is a call
+        // node the edge invariants refuse (measured 2026-11-21, `jvp_vjp_f`: `Runtime graph
+        // 'jvp_of___g_359__' breaks its edge invariants`, node 4 calling
+        // `jvp_of_vjp::vjp<(x: f32) => f32 pure>`).
+        auto isFunctionValueNode = [&](gc_node_ref_t ref, const camel::runtime::GCGraph &graph) {
+            const NodeFace *candidate = function.node(ref);
+            if (candidate == nullptr || candidate->dataType() == nullptr ||
+                candidate->dataType()->code() != camel::core::type::TypeCode::Function) {
+                return false;
+            }
+            FunctionType *own = graph.funcType();
+            return own != nullptr &&
+                   (candidate->dataType() == own ||
+                    const_cast<Type *>(candidate->dataType())->equals(own));
+        };
         auto liftFuncValue = [&](gc_node_ref_t ref) -> bool {
             const GraphId calleeId = function.calleeIdOf(ref);
             if (!rt::isValid(calleeId)) {
@@ -1224,10 +1248,7 @@ bool liftGraph(
             // Not covered here, deliberately: the same node read as a **function value** (a `Func`
             // node of function type). A value is carried and not called, so a value whose forward
             // transform nobody can name stays a refusal, which is what `vjp`'s own reading says.
-            const NodeFace *calledNode = function.node(ref);
-            const bool isFunctionValue =
-                calledNode != nullptr && calledNode->dataType() != nullptr &&
-                calledNode->dataType()->code() == camel::core::type::TypeCode::Function;
+            const bool isFunctionValue = isFunctionValueNode(ref, *callee);
             const FunctionType *calledType = callee->funcType();
             if (!isFunctionValue && calledType != nullptr && calledType->normTypesCount() == 0) {
                 constantCalls.insert(ref);
@@ -1913,9 +1934,10 @@ bool liftGraph(
                 if (callee == nullptr) {
                     return fail(refusal);
                 }
-                const bool isValue =
-                    node->dataType() != nullptr &&
-                    node->dataType()->code() == camel::core::type::TypeCode::Function;
+                // Which of the two this node is: a call, or a function value
+                // (`isFunctionValueNode`, above -- the node's type against the callee's, not the
+                // answer's kind).
+                const bool isValue = isFunctionValueNode(ref, *callee);
                 // A **call** is filled in against the callee's own lifted signature -- the one its
                 // lift declared (`liftSignature`) -- so that signature is what says how long the
                 // value half is. A function **value** keeps the declared `Jvp<F>`: a value is
@@ -2011,15 +2033,23 @@ bool liftGraph(
                     arguments.insert(arguments.end(), values.begin(), values.end());
                     arguments.insert(arguments.end(), tangents.begin(), tangents.end());
                 }
-                TupleType *resultPair = pairOf(node->dataType());
-                if (!isValue && resultPair == nullptr) {
-                    // A call whose answer this transform carries no pair for: the lifted callee
-                    // would answer one, so the call cannot be copied either. Refused, not guessed.
+                // The answer's shape is `Lift<call's value>`, read from the one law
+                // (`liftedShapeOf`) and not from `pairOf` here: a pair-shaped answer is carried as
+                // the walk's two halves, and an answer that lifts by component -- a call whose
+                // answer is the function `vjp(f)` hands back -- **is** the lifted value and has no
+                // tangent half of its own. `pairOf` answers null for the second shape, and asking
+                // it alone refused a call the law carries.
+                const LiftedShape answer =
+                    isValue ? LiftedShape{} : liftedShapeOf(const_cast<Type *>(node->dataType()));
+                if (!isValue && answer.type == nullptr) {
+                    // A call whose answer this transform carries no lifted shape for: the lifted
+                    // callee would answer one, so the call cannot be copied either. Refused, not
+                    // guessed.
                     return fail(refusal);
                 }
                 camel::core::type::Type *valueType =
                     isValue ? static_cast<camel::core::type::Type *>(calleeSignature)
-                            : static_cast<camel::core::type::Type *>(resultPair);
+                            : answer.type;
                 // Which of this call's arguments are tangents, written onto the call itself: the
                 // list a lifted callee takes is "every value first, and their tangents after them",
                 // so the second run of `tangents.size()` positions is the tangent half. A reader
@@ -2052,13 +2082,22 @@ bool liftGraph(
                 }
                 copyOf[ref] = made;
                 if (!isValue) {
-                    const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
-                    draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
-                    const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
-                    draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
-                    valueOf[ref]   = half;
-                    tangentOf[ref] = halfTangent;
-                    pairIsTheCopy.insert(ref);
+                    if (answer.pair) {
+                        const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
+                        draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
+                        const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
+                        draft.setNormInputs(
+                            halfTangent,
+                            std::span<const gc_node_ref_t>(&made, 1));
+                        valueOf[ref]   = half;
+                        tangentOf[ref] = halfTangent;
+                        pairIsTheCopy.insert(ref);
+                    } else {
+                        // The answer carries the function component as its lifted self, and a
+                        // value component as its own pair: the call *is* the value, exactly as a
+                        // call through a value writes it (`Call`, below).
+                        valueOf[ref] = made;
+                    }
                 }
                 copied[ref] = true;
                 ++copiedKinds;
@@ -2116,17 +2155,19 @@ bool liftGraph(
                 if (liftedType == nullptr) {
                     return fail(refusal);
                 }
-                const gc_node_ref_t carrier = valueOf[calleeValue] != rt::kInvalidNodeRef
-                                                  ? valueOf[calleeValue]
-                                                  : copyOf[calleeValue];
-                if (carrier == rt::kInvalidNodeRef) {
+                // The value the call goes through is the callee value's **lifted self**
+                // (`liftedValueOf`, the one place the law is turned into a node): `jvp(v)` where the
+                // value was carried as it is -- a parameter, a constant, a `with` value, a closure --
+                // because which graph `v` names is a question only the run time answers; and the
+                // value itself where the walk already wrote its lift (an answer that lifts to its
+                // lifted self, a member projection of one), where `jvp(v)` would lift the lift. The
+                // call is that function at the lifted arguments either way -- `Lift<A => B>` applied
+                // to `Lift<a>` -- and the two shapes differ only in where the lifted function came
+                // from.
+                const gc_node_ref_t liftedValue = liftedValueOf(calleeValue, calleeType);
+                if (liftedValue == rt::kInvalidNodeRef) {
                     return fail(refusal);
                 }
-                const gc_node_ref_t liftedValue =
-                    draft.addOperNode(jvpType, nullptr, "transforms:jvp");
-                draft.setNormInputs(
-                    liftedValue,
-                    std::span<const gc_node_ref_t>(&carrier, size_t(1)));
                 // The value half's length is the lifted signature's own answer, not a count read
                 // here: a call whose arguments do not fill exactly one value per slot is refused
                 // rather than written one place off.
@@ -2185,6 +2226,8 @@ bool liftGraph(
                     draft.setNormInputs(made, arguments);
                 }
                 std::vector<gc_node_ref_t> callWith;
+                // The first `with` input is the callee value (`NodeVM::call` reads
+                // `withInputs().front()`): the callee value's lifted self, from either route above.
                 callWith.reserve(1 + carries.size());
                 callWith.push_back(liftedValue);
                 callWith.insert(callWith.end(), carries.begin(), carries.end());
@@ -2858,9 +2901,23 @@ bool liftGraph(
         const gc_node_ref_t exitValue = !alreadyLifted && valueOf[oldValue] != rt::kInvalidNodeRef
                                             ? valueOf[oldValue]
                                             : chainValue;
+        // A body whose exit *is* the lifted value hands that value on -- but "the lifted value" is
+        // `Lift<exit type>` and not "the copy". For a tuple that lifts by component the copy is
+        // what the walk built member by member, whose function member is that member's lifted self;
+        // for an exit whose type **is** a function the copy is the closure the body wrote, unlifted,
+        // and the law's answer is that function's lifted self (`liftedValueOf`: `jvp(v)`). Handing
+        // the closure on as it is is a graph whose exit is not what it declares (measured
+        // 2026-11-21: `The value the graph 'jvp_of_vjp::vjp<(x: f32) => f32 pure>' hands on has type
+        // '(xs_0: f32) => (f32, (ct: f32) => (f32,)) uses ', and the graph declares
+        // '(f32, f32) => ((f32, f32), (f32, f32) => ((f32,), (f32,)))'`).
+        const gc_node_ref_t exitLiftedValue =
+            exitIsLiftedValue ? liftedValueOf(oldValue, valueTypeOf(oldValue)) : rt::kInvalidNodeRef;
+        if (exitIsLiftedValue && exitLiftedValue == rt::kInvalidNodeRef) {
+            return fail(refusal);
+        }
         const gc_node_ref_t out =
             exitIsLiftedValue
-                ? chainValue
+                ? exitLiftedValue
                 : (hydrateExitPair
                        ? liftedPair(valueTypeOf(oldValue), valueOf[oldValue], tangentOf[oldValue])
                        : (alreadyLifted
