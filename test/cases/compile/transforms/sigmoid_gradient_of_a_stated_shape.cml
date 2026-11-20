@@ -1,8 +1,9 @@
 // `sigmoid`'s gradient through the library, with the shape written into the type.
 //
-// The open-rank twin is `sigmoid_gradient_through_the_library.cml`, which still refuses: the product
-// law reads the tangent's own shape for `sum_to`, and `float[...]` states no extents -- `shapeCarrierOf`
-// answers a stated type (author, 2026-11-03 16:15). `float[2]` is stated, so this answers.
+// The open-rank twin is `sigmoid_gradient_through_the_library.cml`, and both answer: a tangent's type
+// states no extents, so the open-rank program states them beside the product (`mul_stated`), and
+// `shapeCarrierOf` answers the stated type `float[2]` here. Both readings stay -- one pins the call
+// that carries the extents, the other a declaration that carries them.
 //
 // Hand first, and the input is chosen so a wrong law cannot hide: `sigmoid`'s slope is `s(x)(1-s(x))`,
 // which is small where `|x|` is large, so two points near zero would make every candidate law look the
