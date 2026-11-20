@@ -296,6 +296,9 @@ function(add_camel_module)
     -Wall -Wextra
     -Wno-unused-parameter
     -Wno-unused-private-field
+    # See CMakeLists.txt: the defect that started this was in a module object (split.cpp), so the
+    # diagnostic has to fail here too and not only in the core library.
+    -Werror=dangling-gsl
   )
 
   if(WIN32)
