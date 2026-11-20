@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：59 页
+## 现在在等作者：62 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -67,7 +67,10 @@
 | [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ |
 | [`2026-11-20-when-a-ruling-read-a-success-line-as-the-failure`](2026-11-20-when-a-ruling-read-a-success-line-as-the-failure.cn.md) | 当一条裁定把成功行读成了失败原因？ |
 | [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 |
+| [`2026-11-20-whether-splits-forward-half-takes-a-tangent-port`](2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md) | `split` 割「结果含函数」的图时，前向半要不要收切向端口 |
+| [`2026-11-20-whether-the-value-half-takes-tangent-ports`](2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md) | 值半要不要收一个切向端口 —— 割「提升过的函数」时的那条缝 |
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
+| [`2026-11-20-why-the-split-point-is-type-computable`](2026-11-20-why-the-split-point-is-type-computable.cn.md) | （A）不必要：割点对「结果含函数」也是**类型可算**的 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 
