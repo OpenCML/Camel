@@ -6157,3 +6157,11 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 **⇒ 措辞：未验证，不是被取代。** 它不是过时，是一条从没被量过的方向 —— 这是后人捡起它时唯一有用的线索。
 
 `5559d3c6e`（「a call through a value asks the graph behind the value」）与今晚合进主干的 `beea20ad6`（「a callee reached through a value does not hand its cells to the caller」）**不是同一机制**：前者问「这个被调方会不会把 `var` 形参交回」（退出类型 / 打包结果的投影，`callHandsBackResult` 改问 `functionValueGraphOf(calleeValueNode)`），后者问「这个图是否包住捕获的原点」（`enclosesOrigin` 之后才 `captureInto`，并保留 `nullptr` 让掩码命名同样的槽位）。同一个文件、同一族「经值调用」，但看的是两个不同的问句，因此互不覆盖。
+
+## 裁 10:30、10:45、11:00（2026-11-20 11:10）
+
+决策者。
+1. **广播加法的反向静默错值：S1，两条都做。** (a) `add_tensor_t`、`subtract_t`（以及所有会广播的二元算子的转置）对被广播的那一侧做 `sum_to`（按该操作数的形状归约），两条读数（weighted→`[5,7,9]`、plain→`[2,2,2]`）写成用例钉住；(b) **pullback 交出的值与它的静态类型必须一致**：转置时就核对每条法则右侧的类型与对应操作数的类型（形状、秩），不一致在变换时报出法则名；调试构建再在 pullback 出口加一道形状断言。(b) 是一般判据，与 (a) 同时派。修完在 MLP 与 transformer 上复核梯度，P\* 的读数以修完为准。
+2. **二阶导的根因（`jvp` 的 `calleeIdOf` 不认 `FunctionClosure`）：按计划乙第 1、2 条修。** `split` 已交出"静态代码 + 残差"的闭包；外层 `jvp` 遇到 `FILL(FunctionClosure)`：对它的静态源函数做前向变换，捕获的值照常提升（数值的切向随之传入），得到提升后的闭包。`transpose` 一侧同理认它。修在 `jvp`/`transpose` 识别被调者的那一处，不另加特例。验收照旧。前向 `jvp(jvp)` 已通（`t1 = 48`）是好读数，一并进采集。
+3. **"源码包准备"做成了 PyPI 发布轮子，不是我要的东西。** 23:30、23:50 那五件指的是**给 ECOOP 的匿名源码包**的准备：过程痕迹盘点与清理脚本、裁剪依赖图、CMake 选项（关掉被裁部分后照常构建）、最小文档、`REPRODUCE.md`。这条车道现在改做这五件。它顺手补的 `.gitignore` 两行留着。
+4. 轮子那边的两问不在今天的路径上：发布用的构建由 CI 出，固定 `x86-64-v3`（原则 9.10）；主机上车道的构建保持 `native`，不为此改 `camel-remote.ps1`。版本号与发布说明是发版一侧拟、负责人定，不在这条车道。
