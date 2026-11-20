@@ -1,0 +1,29 @@
+{
+  "comment": "The baseline of the autodiff migration ledger: the case paths that passed, as the run that recorded it read them. `--ledger-check` compares names, and one direction is red -- a case listed here that no longer passes. A case that starts passing is progress and is put here by `--record`, which refuses to drop a name without `--force`, because a fall is the defect this list exists to find and the diff has to show it. There is no count here: a count says how many fell, a list says which one. `recordedFrom` says which tree and binary the run was and is never compared. Record it with node scripts/autodiff-migration-ledger.mjs --record.",
+  "recordedFrom": "tree 0c3040933 (dirty: 5 file(s)) / out/latest/bin/camel built 2026-11-20T16:20:17.899Z",
+  "passing": [
+    "test/cases/modules/autodiff/err_vjp_annotation.cml",
+    "test/cases/modules/autodiff/grad_function_value_branch.cml",
+    "test/cases/modules/autodiff/grad_function_value_container.cml",
+    "test/cases/modules/autodiff/grad_function_value_parameter.cml",
+    "test/cases/modules/autodiff/grad_function_value_passed.cml",
+    "test/cases/modules/autodiff/grad_function_value_recursion.cml",
+    "test/cases/modules/autodiff/grad_function_value_static_branch.cml",
+    "test/cases/modules/autodiff/has_aux_library_plain.cml",
+    "test/cases/modules/autodiff/has_aux_vjp_named.cml",
+    "test/cases/modules/autodiff/has_aux_vjp_pair.cml",
+    "test/cases/modules/autodiff/jax_batching.cml",
+    "test/cases/modules/autodiff/jax_vmap.cml",
+    "test/cases/modules/autodiff/jax_vmap_tensor.cml",
+    "test/cases/modules/autodiff/rules_angle_args_mean_transpose.cml",
+    "test/cases/modules/autodiff/rules_angle_args_reshape.cml",
+    "test/cases/modules/autodiff/rules_angle_args_softmax.cml",
+    "test/cases/modules/autodiff/transform_rules.cml",
+    "test/cases/modules/autodiff/transpose_needs_parameter_shape.cml",
+    "test/cases/modules/autodiff/var_tensor_read_after_call.cml",
+    "test/cases/modules/autodiff/var_tensor_read_after_write.cml",
+    "test/cases/modules/autodiff/var_tensor_read_in_callee.cml",
+    "test/cases/modules/autodiff/with_grad_matches_grad.cml",
+    "test/cases/modules/autodiff/with_grad_old_name.cml"
+  ]
+}
