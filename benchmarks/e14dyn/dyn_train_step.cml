@@ -66,11 +66,25 @@ func main(): int sync {
     let out = get_env('ONNX_OUT') ?? ''
     if out != '' then {
         if (get_env('DYN') ?? '') == '1' then {
-            let _ = (if useMean then export_model<out: out, dynamic_axes: [0]>(step_mean, (m, x))
+            let r = (if useMean then export_model<out: out, dynamic_axes: [0]>(step_mean, (m, x))
             else export_model<out: out, dynamic_axes: [0]>(step_summean, (m, x)))
+            return match r {
+                case error e => sync {
+                    println(e)
+                    return 1
+                }
+                case _ => 0
+            }
         } else {
-            let _ = (if useMean then export_model<out: out>(step_mean, (m, x))
+            let r = (if useMean then export_model<out: out>(step_mean, (m, x))
             else export_model<out: out>(step_summean, (m, x)))
+            return match r {
+                case error e => sync {
+                    println(e)
+                    return 1
+                }
+                case _ => 0
+            }
         }
     }
     return 0
