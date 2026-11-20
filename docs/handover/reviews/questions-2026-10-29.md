@@ -4713,21 +4713,26 @@ S2 随后，S3 最后。
 
 **谁在等这一格**：没有别的车道在等；它也不阻塞第二格（案例迁移已经独立完成）。
 
-## 案例搬迁的第三笔：ECOP 条目（1）在迁移后没有落点（2026-11-20 17:37，协调者记）
+## 案例搬迁的第三笔：ECOP 条目（1）的落点是 `step` 的纯节点，不在梯度调用上（2026-11-20 17:37 记，17:49 按作者 `e4c2e646b` 改写）
 
-`851ef4986` 把 `edits-ecoop.cml` 的 `is_grad`（按名找算子 `autodiff:grad`）改成 `grad_in_update`（结构读法：程序里唯一 `nn:sgd` 节点的第 2 个实参）。C 类对照两侧不同 —— 改前 exit 0 什么也不拒（静默消失）、改后 exit 1 有名字的拒绝。
+**先留一次我自己的错，因为它有形态**：17:37 我在这一节写过「条目（1）在迁移后**没有落点**」，并据此写了「两条出路都在那个文件之外（让 `grad` 交出直接调用 / 让 `inline` 能割闭包调用）」。**那两句基于错误前提，已删。**
 
-**而它落在「做不到 + 原因」，而两个原因都不在选点上：**
+**错在哪里：**我依据的是两个 pass 的拒句 —— `graph.inline` 的 `the callee of the call is not known in this graph: run std::defunctionalize on it first`，与 `std::defunctionalize` 的 `types=7 values=16 calls=0 refused=7`（梯度自己的类型 `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure`，理由 `the value is read by a node that is not a call`）。**这两句都是真的，而它们只覆盖「我试的那两条路」** —— 我把「我试过的路都不通」读成了「没有路」。
+
+**作者裁定（`e4c2e646b`）**：「ECOOP item 1 lands at **a pure node of `step`**, not at the gradient call」。**落点就在同一个文件里现成的 `step_print` 上，用的是 `is_update`。**
+
+**`step` 的八个节点（`std::jgir`，g35）**：`PORT layer` · `PORT X` · `DATA Function(graph=loss)` · `FUNC vjp::grad<…>` · `PORT y` · `CALL → { weight: f32[?, ?] }` · `PORT rate` · **`OPER nn:sgd → Linear`**。**纯节点 = `nn:sgd`，全图唯一。**
+
+**③ 的落实（`cbf3b935b`）**：`grad_in_update` 与 `step_print_at_grad` 都删了 —— 前者指向 n5 那个 CALL（类型是结构不是函数值，而那个地方无法内联），改成读纯节点之后又与 `step_print` 完全重复，留一个只能回 `graph.inline` 拒句的导出 rewrite 是陷阱。两句拒句逐字留成 `is_inputs` 上方的注释，`step_print` 的注释写明「这就是条目（1）的落点（作者 `e4c2e646b`）」。
+
+**C 类对照：条目（1）两边都有落点，迁移改的是拒信的名字**（同一 rewrite、同一内联点，两个只差 `grad` 来源的程序）：
 
 ```
-`graph.inline`: "the callee of the call is not known in this graph: run std::defunctionalize on it first"
-`std::defunctionalize`: `types=7 values=16 calls=0 refused=7`，梯度自己的类型
-  `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure` 的理由是
-  "the value is read by a node that is not a call"
+引擎的 autodiff:grad  →  PassEffectBeyondType
+   "committed a graph that reaches past the effect its own type declares: node 10 of graph 'step' (:io/println)"
+库的 grad             →  PassEffectOrder，配对为「梯度的调用与这个打印」
 ```
 
-⇒ 那个节点是**函数值调用的结果**（`grad(loss)<layer,y>` 返回函数、再拿 `X` 调用），`inline` 落不下去；点名的 pass 给了它机会，`defunctionalize` 又把这些值一律拒了。**「加打印、由 `commit_order` 回答」这个读法要求它是直接调用，而那个前置条件在这个程序里不成立。**
+而 `loss_print`（`loss` 里的 `tensor:sum`）迁移后仍是 `PassEffectBeyondType` —— **这条对照没变。**
 
-**两条出路都在那个文件之外**：让 `grad` 交出一个**直接调用**，或让 `inline` 能割**闭包调用**。
-
-**⇒ 这是「库的 `grad` 是 macro」的直接后果，不是选点问题。** 论文条目（1）的读法原来靠的是引擎的 `autodiff:grad` **算子**；那个算子变成 macro 实例之后，**节点种类变了，读法的前提也变了。**
+**⇒ 所以「库的 `grad` 是 macro」改变的是「调用语句由什么构成」，于是改变的是**拒信的名字**，不是「有没有落点」。**
