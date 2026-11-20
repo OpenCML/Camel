@@ -1965,8 +1965,17 @@ void Builder::collapseNonEscapingVariableReads() {
                 unused.push_back(read);
             }
         }
+        // The deletion goes through the edit interface: `eraseUnreadNodes` asks the permission and
+        // hands the place the node held in its block's chain to the statement written after it
+        // (`closeChainOver`, `spliceOrderEdgesOver`), so this builder erases by no second path.
+        // Which reads may go is the membership test above, and it stays here: a read with no user
+        // of any kind, sequencing edges included. A node the graph names (`namesNode`) keeps
+        // itself, and then the read keeps its record too.
         for (const node_handle_t read : unused) {
-            graphDraft.eraseNode(nodeIdOf(read));
+            const draft_node_ref_t only[1] = {nodeIdOf(read)};
+            if (!graphDraft.eraseUnreadNodes(only)) {
+                continue;
+            }
             variableReadSource_.erase(read);
         }
     }
