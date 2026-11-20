@@ -115,6 +115,11 @@ function(target_libcamel_tool_options target)
     -Wno-nested-anon-types
     -Wno-unused-private-field
     -Wno-language-extension-token
+    # See CMakeLists.txt: a designated initializer that names only the fields it differs from is
+    # the idiom here, and the omitted fields are value-initialized by the language.
+    -Wno-missing-designated-field-initializers
+    # See CMakeLists.txt: a view over a temporary fails the build, not the warning list.
+    -Werror=dangling-gsl
   )
   target_include_directories(${target} PRIVATE
     ${CMAKE_SOURCE_DIR}/include

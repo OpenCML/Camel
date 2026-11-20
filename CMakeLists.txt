@@ -201,6 +201,28 @@ target_compile_options(libcamel_objects PRIVATE
     -Wno-unused-private-field
     -Wno-gnu-label-as-value # for Computed Goto
     -Wno-nan-infinity-disabled
+    # The largest class this build printed, and noise: 412 of the 547 warnings were this one, and
+    # every one of them a designated initializer that names only the fields it differs from -- the
+    # tagged unions that set `.kind` and one member (`Value{.kind = ValueKind::Int, .integer = v}`),
+    # the specs that declare what they are about and take the rest from their defaults
+    # (`ResourceSpec{.accesses = ..., .result = ...}`). Clang reports it with no flag of ours (on by
+    # default since clang 19), and it is not the `-Wextra` diagnostic `-Wmissing-field-initializers`
+    # (55, and staying on): that one is a braced list that names no field, where a field inserted in
+    # the middle silently takes the next one's value. The field omitted here is value-initialized by
+    # the language, which is what the writer meant; a real omission would show up as a default, so
+    # the cost of this line is that adding a member to one of those structs reaches no initializer
+    # that does not name it. The other choice is measured: with this class on, the 412 sit in front
+    # of the 135 that are not this pattern, which is why nothing read either number.
+    -Wno-missing-designated-field-initializers
+    # A view over a temporary is silent at run time until an element is read, and the first reader
+    # is often in another function: `split.cpp`'s gate waits were a `std::span` over the vector
+    # `gateWaitsOf` returns by value, and `.empty()` alone answered the right thing out of the
+    # span's own size. Clang reports that as `-Wdangling-gsl` by default, so this build did print
+    # it -- inside 546 other warnings that nothing fails on, which is why the defect stayed quiet.
+    # This one diagnostic is what fails now. Not the `dangling` group: it also holds
+    # `-Wreturn-stack-address`, whose one instance (`src/execute/limits.cpp:74`) returns a stack
+    # address as a `uintptr_t` on purpose, and turning that red would only buy a pragma.
+    -Werror=dangling-gsl
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
     ${CAMEL_TARGET_ARCH_FLAGS} # cmake/Options.cmake: CAMEL_TARGET_ARCH
