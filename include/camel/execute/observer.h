@@ -121,7 +121,7 @@ class ActivationScope {
     ActivationScope &operator=(const ActivationScope &) = delete;
 
   private:
-    ExecutionObserver *observer_;
+    ExecutionObserver *observer_ = nullptr;
 };
 
 } // namespace camel::execute

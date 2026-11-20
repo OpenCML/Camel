@@ -54,7 +54,7 @@ class DiagnosticBuilder {
   private:
     friend class Diagnostics; // Allow Diagnostics to access private members.
 
-    Diagnostics *diagnostics_;
+    Diagnostics *diagnostics_ = nullptr;
     SourceRange range_{};
     Severity severity_ = Severity::Error;
 
