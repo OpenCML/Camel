@@ -1,8 +1,9 @@
 // The other half of `rule_writes_a_constant`, and the case that keeps that guard honest: the same
 // law, the same operator, and a node whose configuration IS the one the law wrote --
-// `jvp_reshape`'s left side is `reshape<[2, 2]>(x)` (`stdlib/rulesets/jvp.cml:369`) and this node is
-// a `reshape<[2, 2]>`, so the two arrays are equal and the law must still be chosen. A matcher that
-// refused every law writing a `<>` value would pass the negative case and silence the whole family.
+// `jvp_reshape`'s left side is `reshape<[2, 2]>(x)` (`stdlib/rulesets/jvp.cml#jvp_reshape`) and this
+// node is a `reshape<[2, 2]>`, so the two arrays are equal and the law must still be chosen. A matcher
+// that refused every law writing a `<>` value would pass the negative case and silence the whole
+// family.
 //
 // The evidence is *which* refusal fires. Today this stops at
 //
@@ -11,8 +12,9 @@
 //
 // -- the TRANSPOSE half, not the jvp half. `jvp` accepted the law, which is what this entry exists to
 // prove; the wall behind it is a different one, written down in the transposition's own ruleset
-// (`stdlib/rulesets/transpose.cml:613`): "`reshape` and `softmax` still have no rule here, ... and a
-// rule cannot" carry a `<>` value through its right side. That is the same limitation `angleargs`
+// (`stdlib/rulesets/transpose.cml`, the section on the three operations that state their extents):
+// "`reshape` and `softmax` still have no rule here, ... and a rule cannot" carry a `<>` value through
+// its right side. That is the same limitation `angleargs`
 // met from the rule side, and it is why no end-to-end positive case for this guard can exist today:
 // the one law in the tree that writes a `<>` value is the one whose adjoint has no rule at all.
 import { grad } from vjp

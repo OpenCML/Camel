@@ -82,7 +82,7 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     struct RestoreSync {
         bool &synced;
         node_handle_t &last;
-        bool outerSynced;
+        bool outerSynced = false;
         node_handle_t outerLast;
         ~RestoreSync() {
             synced = outerSynced;

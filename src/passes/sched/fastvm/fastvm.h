@@ -176,8 +176,8 @@ struct CodeLease {
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
   public:
     struct CallResult {
-        slot_t result;
-        ctx::Frame *rootFrame;
+        slot_t result = {};
+        ctx::Frame *rootFrame = nullptr;
         // Not null when the activation ended in a tail call of compiled code instead of
         // returning: `rootFrame` is then the frame prepared for that code (this entry point of
         // it), and running it yields the result. The interpreter hands the call back rather

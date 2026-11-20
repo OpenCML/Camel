@@ -10,7 +10,7 @@
 
 struct FormatItem {
     std::string token;
-    int *target;
+    int *target = nullptr;
 };
 
 bool myStrptime(const std::string &datetime, const std::string &format, std::tm &out_tm) {

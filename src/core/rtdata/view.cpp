@@ -30,7 +30,7 @@ template <typename T, typename Data> struct ViewCell {
 };
 
 template <typename T, typename Data, size_t N> struct ViewRing {
-    std::array<ViewCell<T, Data>, N> cells;
+    std::array<ViewCell<T, Data>, N> cells = {};
     size_t next = 0;
 
     ViewCell<T, Data> &acquire() {
