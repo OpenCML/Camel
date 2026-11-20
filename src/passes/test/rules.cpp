@@ -229,7 +229,7 @@ SavepointTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         size_t slots   = 0;
         size_t erased  = 0;
     };
-    const auto runFaulty = [&](DraftWritings &writings, GraphDraft &draft) {
+    const auto runFaulty = [&](DraftWritings &writings, auto &draft) {
         Fault fault;
         const size_t before        = draft.nodeSlotCount();
         const size_t liveBefore    = draft.nodeCount();
@@ -257,19 +257,19 @@ SavepointTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         return fault;
     };
     const auto pristine =
-        shapeAfter(context_, program, target, [](DraftWritings &, GraphDraft &) {});
+        shapeAfter(context_, program, target, [](DraftWritings &, auto &) {});
     Fault failedFault;
     const auto failed =
-        shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &draft) {
+        shapeAfter(context_, program, target, [&](DraftWritings &writings, auto &draft) {
             failedFault = runFaulty(writings, draft);
         });
     const auto clean =
-        shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &) {
+        shapeAfter(context_, program, target, [&](DraftWritings &writings, auto &) {
             writings.rewrite(oneWay);
         });
     Fault rerunFault;
     const auto rerun =
-        shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &draft) {
+        shapeAfter(context_, program, target, [&](DraftWritings &writings, auto &draft) {
             rerunFault = runFaulty(writings, draft);
             // A caller that knows nothing was written runs the rewrite again over the same draft.
             writings.rewrite(oneWay);
@@ -289,7 +289,7 @@ SavepointTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     size_t cutApplied  = 0;
     size_t cutRounds   = 0;
     const auto resumed =
-        shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &) {
+        shapeAfter(context_, program, target, [&](DraftWritings &writings, auto &) {
             writings.build();
             Budget budget;
             budget.newWritings = 1;
@@ -304,7 +304,7 @@ SavepointTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             writings.extract(*findCostModel("nodes"), context_.get());
         });
     const auto never =
-        shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &) {
+        shapeAfter(context_, program, target, [&](DraftWritings &writings, auto &) {
             writings.build();
             writings.saturate(both);
             writings.extract(*findCostModel("nodes"), context_.get());
