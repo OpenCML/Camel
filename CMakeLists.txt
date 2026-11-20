@@ -291,8 +291,10 @@ set(CAMEL_MODULE_LINKS_nn "tensor")
 set(CAMEL_MODULE_LINKS_ckpt "tensor")
 set(CAMEL_MODULE_LINKS_random "tensor")
 set(CAMEL_MODULE_LINKS_rewrite "graph")
-# What a minimal package leaves out: the GPU back end, the deployment exporter, the NN and
-# checkpoint libraries built on tensor, and the two Python directions (in/bindings above).
+# What a minimal package leaves out: the GPU back end, the deployment exporter, and the checkpoint
+# library built on tensor, plus the two Python directions (in/bindings above). Three of the four
+# tensor-dependent candidates go; the neural-network module `nn` stays, because the case study and
+# the MLP/transformer training steps import it for `sgd` and `save_params`.
 set(CAMEL_MINIMAL_DROPS tiles onnx ckpt)
 
 if(CAMEL_PACKAGE_MINIMAL)

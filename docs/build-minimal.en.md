@@ -81,9 +81,12 @@ exporter. Write a `.camel-opts.json` in the root of the tree:
 ```
 
 and run `node scripts/build.js` again (delete `build/` first to configure from scratch). That leaves
-out the four modules `tiles`, `onnx`, `nn`, `ckpt` and both directions of Python support (the
-`python`/`pyplot` embedding and the `bindings/python` extension). The result: 22 `.cmo` in `stdlib`
-instead of 28, `out/latest` at 63 MB instead of 68 MB, and only `libcamel.so` in `out/latest/libs`.
+out the three modules `tiles`, `onnx`, `ckpt` and both directions of Python support (the
+`python`/`pyplot` embedding and the `bindings/python` extension). The result: 23 `.cmo` in `stdlib`
+instead of 28, `out/latest` at 64 MB instead of 68 MB, and only `libcamel.so` in `out/latest/libs`.
+`nn` is not one of them: it is one of the four modules built on `tensor`, and it stays so that the
+case study and the MLP/transformer training steps keep their `sgd` and `save_params`; its own
+`.cmo` accounts for the 436,960 bytes added.
 
 `tensor`, `random`, `autodiff` and `transforms` stay on purpose: they are what the graph and the
 automatic differentiation are demonstrated with. `random` links `tensor`, so dropping `tensor` would

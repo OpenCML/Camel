@@ -27,7 +27,7 @@
         },
         {
             "name": "CAMEL_PACKAGE_MINIMAL",
-            "description": "Build the subset an anonymous source package ships: no tiles/onnx/nn/ckpt, no Python embedding (python/pyplot) and no Python host binding. The numeric core (tensor, random, autodiff, transforms) and rewrite/verify stay",
+            "description": "Build the subset an anonymous source package ships: no tiles/onnx/ckpt, no Python embedding (python/pyplot) and no Python host binding. The numeric core (tensor, random, autodiff, transforms) and rewrite/verify stay, and so does nn, which the case study and the training steps import",
             "default": "OFF",
             "type": "bool"
         }

@@ -105,14 +105,15 @@ reds on a machine without a device; that plan set is report-only and is not one 
 
 ## 4. The trimmed subset
 
-The archive can be built without the GPU back end, the ONNX exporter, the NN and checkpoint
-libraries, and the Python support on either side:
+The archive can be built without the GPU back end, the ONNX exporter, the checkpoint library, and
+the Python support on either side. `nn` stays: it is one of the four modules built on `tensor`, and
+the case study and the MLP/transformer training steps import it for `sgd` and `save_params`:
 
 ```bash
 printf '%s\n' '{ "CAMEL_PACKAGE_MINIMAL": "ON" }' > .camel-opts.json
 rm -rf build out
 node scripts/build.js
-ls out/latest/stdlib/*.cmo | wc -l          # 22, not 28
+ls out/latest/stdlib/*.cmo | wc -l          # 23, not 28
 ls out/latest/libs                          # libcamel.so only
 out/latest/bin/camel hello.cml              # Hello, <your user name>!
 out/latest/bin/camel test/cases/smoke/core/fib10_pipeline.cml std::fvm
