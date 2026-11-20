@@ -74,7 +74,9 @@ func main(): int sync {
     let dxs = [[1.0, 2.0, 0.0], [1.0, 1.0, -2.0]] as float[2, 3]
     let dgamma = [0.5, -1.0, 2.0] as float[3]
     let dbeta = [0.25, 0.0, -0.5] as float[3]
-    let (value, tangent) = jvp(normed)(xs, dxs, gamma, dgamma, beta, dbeta)
+    // The lifted signature is `(..values, ..their tangents)` (`modules/transforms/jvp.cpp`), so
+    // the three values come first and the three tangents after them.
+    let (value, tangent) = jvp(normed)(xs, gamma, beta, dxs, dgamma, dbeta)
     'layer_norm jvp value={} tangent={}'->format<value, tangent>->println
     return 0
 }
