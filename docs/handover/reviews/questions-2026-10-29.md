@@ -4670,3 +4670,5 @@ S2 随后，S3 最后。
 **⇒ 措辞：未验证，不是被取代。** 它不是过时，是一条从没被量过的方向 —— 这是后人捡起它时唯一有用的线索。
 
 `5559d3c6e`（「a call through a value asks the graph behind the value」）与今晚合进主干的 `beea20ad6`（「a callee reached through a value does not hand its cells to the caller」）**不是同一机制**：前者问「这个被调方会不会把 `var` 形参交回」（退出类型 / 打包结果的投影，`callHandsBackResult` 改问 `functionValueGraphOf(calleeValueNode)`），后者问「这个图是否包住捕获的原点」（`enclosesOrigin` 之后才 `captureInto`，并保留 `nullptr` 让掩码命名同样的槽位）。同一个文件、同一族「经值调用」，但看的是两个不同的问句，因此互不覆盖。
+
+**2026-11-20 · lane-jvp-closure**：提交 `2da9735da`（一处实现 `liftedOperatorType` 共享 / 值半交 `jvp(lin)` / 提升对两腿补出或拒 / 期望未改）；读数 nested 3/3/4 · split 30/30 · compile/transforms 201/13；墙从「提升图带洞」退到「值半读 port 1 = 参数 0 的切向」，其 user 是 `kind=10` Func（切向被内层闭包捕获），`portOf[1]` invalid 而体在读它 ⇒ 下一笔按「值半声明与提升签名相同的端口」这一默认开工。
