@@ -83,6 +83,11 @@ class TensorExecutor : public Executor {
 /// the problem bites -- `jvp_add_tensor` and `jvp_subtract` write them, and on the reverse side the
 /// position a cotangent is answered for is a tangent, whose type states no extents
 /// (`stdlib/rulesets/jvp.cml#jvp_subtract` and `stdlib/rulesets/transpose.cml#subtract_stated_t`).
+///
+/// `div_stated` is the fourth of that family and the one a **division** needs: `jvp_sqrt`, `jvp_log`
+/// and `jvp_divide` write their tangent as a quotient, and the quotient's transpose law has to reduce
+/// each cotangent to its own operand's shape, which on the reverse side is a tangent's and therefore
+/// not in a type (`stdlib/rulesets/jvp.cml#jvp_divide`, `stdlib/rulesets/transpose.cml#div_stated_t`).
 constexpr std::string_view kDeclaredOperators[] = {
     "broadcast_like", "dim",
     "pick_at",        "gemm_backend",
@@ -96,7 +101,7 @@ constexpr std::string_view kDeclaredOperators[] = {
     "sum_stated",     "sum_to",
     "take_stated",    "show",
     "add_stated",     "subtract_stated",
-    "to_bytes",
+    "div_stated",     "to_bytes",
 };
 
 bool isScalarConversion(std::string_view name) {
