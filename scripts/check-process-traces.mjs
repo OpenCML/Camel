@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Comments say what the code does and why; they do not record how the project got there.
 // This check refuses the traces that are unambiguous: a path into the handover pages, a dated
 // ruling, a role name, a host name or a local path, and a calendar date written into a comment.
