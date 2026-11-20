@@ -547,7 +547,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 db7b15c1d26c2d3d ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
 1df6aaef0265dfcb ok stdlib/stream.cml
-95098d3e31cd398d ok stdlib/tensor.cml
+f7f0891360ac5588 ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
 7412e62e8d9372be ok stdlib/test_support.cml
 3c4d85f022206889 ok stdlib/this.cml
@@ -557,10 +557,10 @@ db7b15c1d26c2d3d ok stdlib/std.cml
 b2579aff6f390432 ok stdlib/tree.cml
 150190786e12d366 ok stdlib/types.cml
 70d6933dcc326f71 ok stdlib/vjp.cml
-38b2f857de64a1fa ok stdlib/rulesets/jvp.cml
+9b94b878f4644669 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-2cd34cf2eb58742a ok stdlib/rulesets/transpose.cml
+4e7331e6fdc7e7f0 ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f3e1daeaada48d18 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
@@ -1886,6 +1886,7 @@ c83e5809e618425c ok test/cases/compile/tags/rule_binding_argument.cml
 144a3bd47457e3a3 ok test/cases/compile/transforms/a_refusal_keeps_stdout_to_the_program.cml
 2f54f6872e24738e ok test/cases/compile/transforms/abs_gradient_both_legs.cml
 63caf8a574438540 ok test/cases/compile/transforms/broadcast_add_subtract_gradient.cml
+9d2337a0d8a70b2d ok test/cases/compile/transforms/broadcast_difference_through_vjp.cml
 70f63d93b3b0e4e9 ok test/cases/compile/transforms/broadcast_product_gradient_of_a_stated_shape.cml
 97af166dbb55d9e8 ok test/cases/compile/transforms/broadcast_product_gradient_of_an_open_rank.cml
 8adf6235831a6000 ok test/cases/compile/transforms/broadcast_product_gradient_through_the_engine.cml
