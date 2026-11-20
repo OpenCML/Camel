@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：47 页
+## 现在在等作者：48 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -53,6 +53,7 @@
 | [`2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted`](2026-11-19-three-attempts-at-projecting-a-calls-value-and-what-each-refuted.cn.md) | 对一次调用交出的值做投影：三次尝试各自否掉了什么 |
 | [`2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content`](2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content.cn.md) | 回滚要还原的是指针，还是内容？ |
 | [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
+| [`2026-11-20-a-law-that-states-its-angle-answers-only-that-angle`](2026-11-20-a-law-that-states-its-angle-answers-only-that-angle.cn.md) | 写死一个轴的律只答那一个轴：`jvp_softmax<1>` 与 `jvp_log_softmax<0>` 要不要像 `jvp_reshape` 那样把轴当参数？ |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
 | [`2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code`](2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md) | 外层 `jvp` 要 `split` 交出静态可读的答案代码，那一步在 0.2.45 的范围里吗 |
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
