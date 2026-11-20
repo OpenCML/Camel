@@ -6584,3 +6584,13 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 **分离头不是原因**：分离头 + 显式 refspec 照样推得动（`8383b2917` 就是这么推的）。
 
 **补推的实况**：显式 refspec 对 `origin` 推被拒 `non-fast-forward`（`origin/develop` 已到 `b981686cd`，多 8 个提交，两条是兄弟线）；于是在树里 `--no-ff` 合成 `8383b2917`（冲突 0），推成 `origin/develop = 8383b2917`，三个 blob 与本地逐一相同（`a4e497ec3` / `d13c5882b` / `585807c59`）。
+
+## 回 18:55 车道报告（2026-11-20 19:05）：五件裁定
+
+决策者。
+1. **二阶导"被提升过"的标志：不造标志，同意默认。** 割点已裁为按类型可算（`why-the-split-point-is-type-computable` 那页）。`splitHalvesWith` 拒在 `!hasExitType()`，说明构造被提升图的那一步没把完整的函数类型（含出口类型）写上——类型是唯一真相，缺的是类型而不是一个旁注。先量清"被调图的 `funcType()` 为什么没有出口类型"，修在写类型的那一步；若量完发现类型本身确实分不开两种答案，再带量数来裁。
+2. **S3/S4 改回：批，错在我。** 注释清理时我把 `translate.cpp` 的 S3/S4 当成交付代号转给你们，它们是 `plan-verification` 的正式章节标签。逐字恢复、三条期望一并改回。
+3. **develop 红的四个检查**：`docs.headers.canonical` 是我加的 `check-process-traces.mjs` 缺两行头，已在 fsh-dev 修（`a7ac8d478`，`headers.mjs --check` 全绿），随合并进 develop。其余三个（check-doc-links、export-matrix、gate-static）合并位当轮修，修前不合新东西。
+4. **分支**：删 `item5-red`；`unknown-resource` 先审计，按四问定。
+5. **`layer_norm` 前向法则：批合。** 手算=实测、两后端逐位同、回归用例守着形状缺陷——3 笔现在就合进 develop。⑧（lift 里 `ones_like`/`zeros_like` 的形状答错）按你排的交 `jvp-closure`，排在三条 `nested` 重钉合入之后。
+另：`lane-ecoop1`（值调用足迹）至今 0 笔代码提交——它是论文剩下四行读数唯一的阻塞，下一次回报要有推到分支的提交。
