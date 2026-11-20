@@ -4658,3 +4658,15 @@ S2 随后，S3 最后。
 - **S3 `std::opt` 四个后端一起慢约 30%**：不上调上限。先量出慢在哪——嫌疑是今天起 Release 也会问的提交检查（按编辑分档后，C++ 遍的底层编辑查全部六项）。若是，修法是让检查本身便宜（只查波及区域、同一遍内不重复问），不是改回不问；量完报每项检查的耗时占比。
 - **S3 `resource_names` 12→14**：是 `fca7f686c`/`7f7fc4eab` 新声明的 `tensor:`、`tiles:` 资源，声明是对的，按此更新期望。
 - 18:25 那条"闸门进日常"照旧：每天至少跑一次 linux 腿，合并条件含"闸门无新增红"。
+
+## 归档（2026-11-20）：`lane-ssa` 打标签作废 —— **未验证，不是被取代**
+
+`lane-ssa` 的 16 笔（tip `4d308fc72`，`parked/lane-ssa` 标签保留）**没有任何一笔的内容在主树里**：查的是特征标识符而不是 `git cherry`（后者只说 patch 不等价），`calleeValueNode`、`packingTotal`、`callHandsBackResult` 在主干各 **0 处**，只有底座 `functionValueGraphOf`（7 处）与 `graphExitTypeOf`（1 处）在。
+
+**`test=` 全 0**：16 笔里没有一条用例、没有一个 plan 条目（8 笔改 `src/`，8 笔只改 `docs/`）。所以它在**任何**基线上都不可验证，不只是落后 100 笔时不可验证。
+
+`5695e055c`（+306/−20，8 个 `src/` 文件，「the packing returns, with the declaration as its source」）跑在 `0024b76b4` 之前；此后 `typevar.cpp`（`e79de8697`）、`builder.h` 与 `captures.cpp`（`beea20ad6`）、`builder_expr.cpp` 与 `builder_linearity.cpp`（`f26529338`）都动过，所以它那 306 行的回归面**不可控**。
+
+**⇒ 措辞：未验证，不是被取代。** 它不是过时，是一条从没被量过的方向 —— 这是后人捡起它时唯一有用的线索。
+
+`5559d3c6e`（「a call through a value asks the graph behind the value」）与今晚合进主干的 `beea20ad6`（「a callee reached through a value does not hand its cells to the caller」）**不是同一机制**：前者问「这个被调方会不会把 `var` 形参交回」（退出类型 / 打包结果的投影，`callHandsBackResult` 改问 `functionValueGraphOf(calleeValueNode)`），后者问「这个图是否包住捕获的原点」（`enclosesOrigin` 之后才 `captureInto`，并保留 `nullptr` 让掩码命名同样的槽位）。同一个文件、同一族「经值调用」，但看的是两个不同的问句，因此互不覆盖。

@@ -2021,6 +2021,8 @@ f8927e15a2107240 ok test/cases/compile/transforms/sum_axis_in_a_training_step.cm
 c75538ac14b806b0 ok test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
 edc0091c0e7595bc ok test/cases/compile/transforms/tanh_gradient_through_the_engine.cml
 9a260be256b4eff3 ok test/cases/compile/transforms/tanh_gradient_through_the_library.cml
+e8d58cf22c9e78cb ok test/cases/compile/transforms/transformer_step_gradient.cml
+09b3c9c680eaf092 ok test/cases/compile/transforms/transformer_step_gradient_stops_at_split.cml
 6e09e74641fc7168 ok test/cases/compile/transforms/transpose_after_algebra.cml
 c3c058350e49dff8 ok test/cases/compile/transforms/transpose_array_literal_member_projection.cml
 21ca087e657880ab ok test/cases/compile/transforms/transpose_array_literal_open_extent_refuses.cml
@@ -4382,7 +4384,7 @@ f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 6a481d92bb98169f ok test/cases/transforms/compositions/hessian_of_a_quadratic.cml
 c10050589b920401 ok test/cases/transforms/compositions/jvp_vjp_f.cml
 c242b16e51e89d5e ok test/cases/transforms/compositions/nested_grad_min.cml
-179439355e0723b7 ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
+54ff95f28a3edd26 ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
 1e6325d17962b018 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
 de0da90b01639e54 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
 97cf5ad689355fb3 ok test/cases/transforms/compositions/vjp_single.cml
@@ -4393,8 +4395,8 @@ c72182e52c15bf42 ok test/cases/transforms/nested/hessian.cml
 9c4c6bd53eff074e ok test/cases/transforms/nested/nest_lambda.cml
 cbef3230ff276a59 ok test/cases/transforms/nested/nest_named.cml
 f442c234da3252cb ok test/cases/transforms/nested/nest_square.cml
-b3d1998a599c9897 ok test/cases/transforms/nested/rule_constant_agrees.cml
-9d6f400458bc98bb ok test/cases/transforms/nested/rule_writes_a_constant.cml
+76483a2c16d4eec9 ok test/cases/transforms/nested/rule_constant_agrees.cml
+bd2fb877c79b7e41 ok test/cases/transforms/nested/rule_writes_a_constant.cml
 6db6922b4ff14c84 ok test/cases/transforms/remat/remat_mark.cml
 7c51747139735105 ok test/cases/transforms/remat/remat_split.cml
 3e2cb4518b5f5005 ok test/cases/transforms/split/split_backward_tangent.cml

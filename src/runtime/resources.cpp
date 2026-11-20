@@ -266,6 +266,14 @@ class Resolver {
     NodeResources call(const GCGraph &graph, gc_node_ref_t ref) const;
     NodeResources loop(const GCGraph &graph, gc_node_ref_t ref) const;
 
+    /// The resources of an operator that runs a function the program hands it
+    /// (`sem::ResourceSpec::functionOperand`): the clause of the function value that arrives in the
+    /// operand the declaration names. Never "touches nothing" -- an unreadable value keeps the
+    /// conservative answer, because the operator runs code this graph does not hold.
+    NodeResources
+    fromFunctionOperand(const GCGraph &graph, gc_node_ref_t ref, const sem::ResourceSpec &spec,
+                        const sem::OperatorSemantics *facts) const;
+
     /// The footprint `fp` of a graph run by node `ref`, with each binding resolved to an input
     /// of the node by `bind` (kInvalidNodeRef: the resource cannot be told).
     template <typename Bind>
@@ -273,9 +281,12 @@ class Resolver {
 
     /// The resources of a call whose callee's type publishes a Concrete signature (design
     /// effects plan 2.3): each use binds to the call's argument by the callee's numbering.
+    /// `withArgBase` is where that numbering's `with` parameters start among this node's `with`
+    /// inputs: after the callee for a call through a value, after the function operand for an
+    /// operator that runs one, and at 0 for an operator's own `with` arguments as written.
     NodeResources fromSignature(
         const sem::ResourceSignature &signature, size_t withCount, const GCGraph &graph,
-        gc_node_ref_t ref) const;
+        gc_node_ref_t ref, size_t withArgBase) const;
 
     // program-holder-exempt: borrow-or-foreign-type -- the resolver reads the program its
     // caller holds for the query.
@@ -436,7 +447,8 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
                 callee->funcType()->resources(),
                 callee->funcType()->withTypesCount(),
                 graph,
-                ref);
+                ref,
+                /*withArgBase=*/0);
         }
         const auto with = graph.withInputsOf(ref);
         // A direct call hands its callee's captures in as `with` inputs after the declared `with`
@@ -495,6 +507,13 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
     r.result    = spec.result;
     r.allocates = spec.allocates;
     r.external  = spec.externalEffect;
+    if (spec.functionOperand) {
+        // An operator that runs a function the program hands it has that function's accesses and
+        // none of its own (design principles 3.3; `checkResources` refuses the two together), so
+        // this node's footprint is read off the value the declaration names. Reading the spec's
+        // empty access list here is what made such a node "touches nothing" while it ran code.
+        return fromFunctionOperand(graph, ref, spec, s);
+    }
     for (const sem::ResourceAccess &access : spec.accesses) {
         NodeAccess a{.resource = access.resource, .mode = access.mode, .region = access.region};
         a.unordered = access.unordered;
@@ -517,6 +536,78 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
         }
         r.accesses.push_back(a);
     }
+    return r;
+}
+
+NodeResources Resolver::fromFunctionOperand(
+    const GCGraph &graph, gc_node_ref_t ref, const sem::ResourceSpec &spec,
+    const sem::OperatorSemantics *facts) const {
+    const sem::ResourceBinding &where = *spec.functionOperand;
+    // What the operator runs is the value in the operand the declaration names, or nothing this
+    // reading can see: an absent operand, a value that is not a function, and a type that writes
+    // no clause (`Generic`) are the same answer as an unreadable callee gets in `call`.
+    const core::type::FunctionType *type = nullptr;
+    if (where.kind == sem::ResourceBinding::Kind::Norm ||
+        where.kind == sem::ResourceBinding::Kind::With) {
+        const auto operands = where.kind == sem::ResourceBinding::Kind::Norm
+                                  ? graph.normInputsOf(ref)
+                                  : graph.withInputsOf(ref);
+        if (size_t(where.index) < operands.size()) {
+            type = functionTypeOfValue(graph, valueBehindGates(graph, operands[where.index]));
+        }
+    }
+    NodeResources r;
+    if (type == nullptr || type->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+        r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
+        r.result   = ResultAlias{.kind = ResultAlias::Kind::Unknown};
+        r.external = true;
+        r.declared = false;
+        return r;
+    }
+    // The clause is read where a call through a value reads it, and its parameters are placed on
+    // the operand the call would pass: the function value stands where a callee stands, so the
+    // clause's `with` parameters start one past it. An operator that takes the function as an
+    // ordinary operand, or one whose shape (`ElementCalls`) makes the callback's parameters
+    // something other than the node's operands, cannot place them -- and a use that cannot be
+    // placed is "some resource of its class", the reading `fromSignature` gives a capture, never a
+    // dropped one.
+    const bool folds = facts != nullptr && facts->elementCalls &&
+                       facts->elementCalls->shape == sem::ElementShape::Fold;
+    const sem::ResourceSignature &signature = type->resources();
+    if (where.kind == sem::ResourceBinding::Kind::With && !folds) {
+        r = fromSignature(signature, type->withTypesCount(), graph, ref, size_t(where.index) + 1);
+    } else {
+        r.result    = signature.result;
+        r.allocates = signature.allocates;
+        r.external  = signature.external;
+        for (const auto &use : signature.params) {
+            r.accesses.push_back(
+                NodeAccess{
+                    .resource = {.cls = use.cls, .name = use.name},
+                    .mode     = use.mode,
+                    .anyValue = true,
+                });
+        }
+        for (const auto &use : signature.ambient) {
+            r.accesses.push_back(
+                NodeAccess{
+                    .resource  = {.cls = ResourceClass::Ambient, .name = use.name},
+                    .mode      = use.mode,
+                    .unordered = use.unordered,
+                });
+        }
+        for (ResourceClass cls : signature.anyOf) {
+            r.accesses.push_back(NodeAccess{.resource = {.cls = cls}, .anyValue = true});
+        }
+        for ([[maybe_unused]] uint8_t capture : signature.captures) {
+            r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
+        }
+        r.declared = false;
+    }
+    // What the operator gives back is the operator's: `map` answers a new array even through a
+    // callback that hands its argument back, so the function's result alias is not this node's.
+    r.result    = spec.result;
+    r.allocates = spec.allocates;
     return r;
 }
 
@@ -563,7 +654,8 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
                 type != nullptr &&
                 type->resources().mode == sem::ResourceSignature::Mode::Concrete &&
                 type->resources().captures.empty()) {
-                return fromSignature(type->resources(), type->withTypesCount(), graph, ref);
+                return fromSignature(
+                    type->resources(), type->withTypesCount(), graph, ref, /*withArgBase=*/1);
             }
         }
         // No clause to read: anything may happen.
@@ -588,7 +680,8 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
             callee->funcType()->resources(),
             callee->funcType()->withTypesCount(),
             graph,
-            ref);
+            ref,
+            /*withArgBase=*/1);
     }
     return fromFootprint(footprint_(callee), norm.size(), [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
         switch (b.kind) {
@@ -607,10 +700,9 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
 
 NodeResources Resolver::fromSignature(
     const sem::ResourceSignature &signature, size_t withCount, const GCGraph &graph,
-    gc_node_ref_t ref) const {
+    gc_node_ref_t ref, size_t withArgBase) const {
     const auto norm   = graph.normInputsOf(ref);
     const auto with   = graph.withInputsOf(ref);
-    const bool isCall = graph.node(ref)->kind == GCNodeKind::Call;
     NodeResources r;
     r.result    = signature.result;
     r.allocates = signature.allocates;
@@ -620,7 +712,7 @@ NodeResources Resolver::fromSignature(
     // the parameter.
     const auto argument = [&](uint8_t index) -> gc_node_ref_t {
         if (index < withCount) {
-            const size_t at = isCall ? size_t(index) + 1 : size_t(index);
+            const size_t at = size_t(index) + withArgBase;
             return at < with.size() ? with[at] : kInvalidNodeRef;
         }
         const size_t at = size_t(index) - withCount;

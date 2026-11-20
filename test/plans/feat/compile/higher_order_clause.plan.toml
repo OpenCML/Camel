@@ -9,8 +9,34 @@ tags = ["feat", "compile", "effects", "hof"]
 # (`sem::ResourceSpec::functionOperand`) and every reader takes the clause from that value's type:
 # the builder's ordering (`Builder::reachOfOper`, `Builder::isEffectNode`), the node-role registry
 # and the effect summary (`EffectWalk::ofNodes`), all through
-# `camel::core::functionOperandClause`. Before that, the declaration said "external, itemizes
-# nothing" and every `map` was an effect, whatever the callback.
+# `camel::core::functionOperandClause`. The runtime's resource footprint reads the same clause one
+# step further down, in `Resolver::oper` (src/runtime/resources.cpp): it binds the clause's
+# parameters where a call through a value binds them, so the `map` node carries the callback's
+# write and a body holding it is not measured as touching nothing. Before that, the declaration said
+# "external, itemizes nothing" and every `map` was an effect, whatever the callback.
+[[tests]]
+name = "map.runtime_footprint"
+desc = "The runtime's resource footprint reads the same clause: the `map` over a callback that writes `stdout` carries that write, the one over a callback that writes nothing carries nothing, and neither is read as touching nothing."
+case = "../../../cases/effects/hof_callback_effect_footprint.cml"
+kind = "behavior"
+args = ["${case}", "test::resources"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout
+    const nodes = out.split('\n').filter((l) => l.includes(':mark/map_arr:'))
+    assert(nodes.length === 1,
+        `expected one map node to touch something, got ${nodes.length}: ${nodes.join(' | ')}`)
+    assert(/^RESOURCES node main \d+ :mark\/map_arr: rmw ambient stdout; external$/.test(nodes[0]),
+        `the map over a printing callback does not carry its write: ${nodes[0]}`)
+    const footprint = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint main '))
+    assert(footprint.length === 1, `expected one footprint line for main, got: ${footprint.join(' | ')}`)
+    assert(/rmw ambient stdout/.test(footprint[0]) && /result fresh/.test(footprint[0]),
+        `main's footprint does not carry the callback's write, or claims the callback's result: ${footprint[0]}`)
+}
+"""
+
 [[tests]]
 name = "map.pure_callback"
 desc = "`map` over a function that writes no clause is not an effect: the node carries no `effect` role and the dump lists no such role at all."
