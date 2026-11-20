@@ -443,22 +443,18 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// difference is the difference of the tangents -- and the two shapes may differ, which is the same
 /// broadcast the operator itself does to the value.
 ///
-/// The tangent is `subtract_stated` and not `-`, for the reason `jvp_mul_tensor` states for its two
-/// products: the reverse law has to reduce each cotangent to the shape of the operand it answers,
-/// and on the reverse side that operand is a **tangent** -- `float[...]`, which states no extents
-/// (design principles 5.4) -- so the shape must travel as a known operand. Here both operands are
-/// values, so `shape(...)` of each is a value of the primal the cut carries, and
-/// `stdlib/rulesets/transpose.cml#subtract_stated_t` reads the two lists and nothing of the position
-/// it answers. Both lists are the **primal** operands' shapes and not the tangents', for the same
-/// reason: a `shape(dx)` node would be a value derived from a tangent, which the cut cannot put on
-/// either side of itself.
+/// The tangent is the difference of the tangents and nothing else: the reverse law
+/// (`stdlib/rulesets/transpose.cml#subtract_t`) reduces each cotangent to the shape of the operand
+/// it answers for, read from the extents that operand's type states. A pair of operands whose
+/// declarations state none -- the open-rank tangents this rule itself hands on -- has no shape to
+/// reduce by, and that step stops by name rather than answering the cotangent unchanged.
 ///
 /// The operands are both `T[...]`. The other shape `tensor:subtract` is called with -- an array minus
 /// a number, `(T[...], T)` -- cannot be spelled here: a union in a parameter list is a syntax error
 /// (`Expected ',' or ')' before '|'`), so one key cannot hold both shapes with one rule, and this
 /// rule is the array-to-array one, which is the shape a layer norm writes.
 export rule jvp_subtract::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    subtract(x, w) => (dx: T[...], dw: T[...]) => subtract_stated(dx, dw, shape(x), shape(w))
+    subtract(x, w) => (dx: T[...], dw: T[...]) => dx - dw
 }
 
 // ---- the forward rule of the array product ----
@@ -1333,16 +1329,15 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x + w
 }
 
-/// `d(x + w) = dx + dw`: a sum passes both tangents through, the forward reading of the backward
-/// law's `(ct, ct)`.
+/// `d(x + w) = dx + dw`: a sum passes both tangents through, and the tangent is the sum of the
+/// tangents -- the forward reading of the backward law's reduction.
 ///
-/// The tangent is `add_stated` with the two operands' shapes beside it, and not `+`, for the reason
-/// its mirror `jvp_subtract` above states: the reverse law reduces each cotangent to the shape of
-/// the operand it answers, that operand is a tangent on the reverse side, and a tangent's type
-/// states no extents. `stdlib/rulesets/transpose.cml#add_stated_t` reads the two lists, so the
-/// shapes travel as known operands of the value half instead of being guessed.
+/// The sum is the plain one and not a stated spelling, for the reason `jvp_subtract` above states:
+/// the reverse law (`stdlib/rulesets/transpose.cml#add_tensor_t`) reduces each cotangent to the
+/// shape of the operand it answers for, read from the extents that operand's type states, and a
+/// pair that states none stops the step by name.
 export rule jvp_add_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    add(x, w) => (dx: T[...], dw: T[...]) => add_stated(dx, dw, shape(x), shape(w))
+    add(x, w) => (dx: T[...], dw: T[...]) => dx + dw
 }
 
 /// `log(x)`: what `math:log_d` means, and the left side `log_d_t` files in the backward half. The
