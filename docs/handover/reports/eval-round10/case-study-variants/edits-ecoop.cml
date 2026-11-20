@@ -170,12 +170,17 @@ func is_update(n: Node): bool {
     }
 }
 
-/// Whether the node runs the gradient of the loss the training step takes: `step` has one, and no
-/// other graph of the program has any, so this names the graph without reading how it is written.
-func is_grad(n: Node): bool {
-    return match op(n) {
-        case null => false
-        case o => op_name(o) == 'autodiff:grad'
+/// The node whose value the training step's update takes as its gradient: the second argument of the
+/// program's one `nn:sgd` node. It is read through the update rather than by an operator's name, and
+/// that is the whole point: the gradient is the library's `grad` macro now, a macro is a call, and a
+/// call node runs no operator with a name of its own -- the engine's `autodiff:grad`, which this used
+/// to look for by name, is not in the program at all. A name-based reading finds nothing and answers
+/// "nothing to do", which is exit 0 and no refusal: silence is the one answer that looks like success.
+func grad_in_update::<F>(p: F): Node? when is_function::<F>() {
+    let u = one_node(all_nodes(p)->filter<(n: Node): bool => is_update(n)>)
+    return match u {
+        case null => null
+        case node => if len(inputs(node)) < 2 then null else inputs(node)[1]
     }
 }
 
@@ -332,8 +337,10 @@ export func step_print::<F>(p: F): F! sync {
 /// The same print in `step`, spliced at the node that takes the gradient instead. That node is read by
 /// a call statement, so the splice changes a node in place as well as making one (`changed` is not
 /// empty), and the reading is a different one: it is `commit_order` that answers, not `commit_effect`.
+/// The node is named through the update it feeds (`grad_in_update`), not by the operator it runs: the
+/// gradient is a macro call now, and the operator this looked for by name no longer exists.
 export func step_print_at_grad::<F>(p: F): F! sync {
-    let at = only(p, (n: Node): bool => is_grad(n))
+    let at = grad_in_update(p)
     return match at {
         case null => p
         case a => spliced_at(p, a)
