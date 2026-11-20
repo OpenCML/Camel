@@ -2310,6 +2310,70 @@ expect_output_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A whole transformer step, not one operator of it: two heads of self attention (sequence 2, hidden
+# 4, so every head is `float[2, 2]`), `softmax<1>` over the keys, a layer norm written out of
+# `mean<-1, true>`, `sqrt` and a `*`, a residual, and one FFN -- `sum(y * T)` with `T` =
+# `[[1, 2, 4, 8], [1, 3, 5, 7]]`, which is what makes the numbers tell one weight from another.
+# The engine answers it, and the numbers below were derived a second time outside this repository
+# (float64, the same arithmetic, then checked against a central difference) and agree digit for
+# digit -- one element of `dL/dwq1` in the last place, 4e-16, and nothing else.
+#
+# Why each number is here and not an aggregate: `dL/db2 = [2.0, 5.0, 9.0, 15.0]` is the loss's own
+# cotangent summed down the batch element by element, and a law that broadcast one scalar over the
+# tensor would answer four equal numbers; `dL/db1 = [8.75, 6.0, 5.25, 11.0]` passes through the
+# layer norm, so a `mean<-1, true>` cotangent that forgot to divide by the row length, or that
+# summed the wrong axis, moves three of the four and not the first; `dL/dw2`'s row 0 is
+# `[4.38858824941554, 9.903549154057314, 18.680725652888395, 33.98233334009809]`, increasing along
+# the row as `T` does; and `dL/dwq1` reaches the weights through `softmax<1>`, so a `softmax`
+# pullback that answered `ct` or `ct * y` instead of `y * (ct - sum(ct * y))` moves all eight of its
+# elements. Every element is distinct from its neighbours on purpose.
+#
+# The second leg is the library's forward transform, seeded one direction at a time (a ones seed at
+# one element of a cotangent), and it answers `dL/db2[0] = 2.0` and `dL/dwq1[0][0] =
+# 2.6228809748826416` -- the engine's digits. The library's reverse transform does not build this
+# program: `transformer_step_gradient_stops_at_split` is that reading, and it is a different defect
+# (the cut), not this one.
+[[tests]]
+name = "transformer_step_gradient"
+desc = "One training step of a small transformer through the engine: `loss = 165.23036383453388`, `dL/db2 = [2.0, 5.0, 9.0, 15.0]`, `dL/db1 = [8.75, 6.0, 5.25, 11.0]`, `dL/dw2` with row 0 `[4.38858824941554, 9.903549154057314, 18.680725652888395, 33.98233334009809]`, and `dL/dwq1 = [[2.6228809748826416, -2.760927341981728], [1.3498587252198266, -1.4209039212840278], [2.8596244930894805, -3.0101310453573475], [1.3083234416734186, -1.3771825701825458]]`. The model is two heads of self attention (sequence 2, hidden 4, one `float[2, 2]` score matrix per head, `softmax<1>` over the keys), a layer norm built from `mean<-1, true>` and `sqrt` with no `eps` (an array-and-number add has no rule, so the model has none), a residual, and one FFN. The numbers are hand-derived outside the repository in float64 and agree here digit for digit except one element of `dL/dwq1` in its last place. The forward transform answers two of them by a route the engine does not take (`2.0` and `2.6228809748826416`). The reverse transform is refused on this body -- see `transformer_step_gradient_stops_at_split` -- so this entry pins the engine's side, which is the number the library will have to reproduce."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transformer_step_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["transformer step engine loss=165.23036383453388", "transformer step engine dL/db2=[2.0, 5.0, 9.0, 15.0]", "transformer step engine dL/db1=[8.75, 6.0, 5.25, 11.0]", "transformer step engine dL/dw2=[[4.38858824941554, 9.903549154057314, 18.680725652888395, 33.98233334009809], [1.9439192425555119, 4.379464831663211, 8.267303316774235, 15.059727593891907], [3.238849588840009, 8.386073108055626, 14.863772285735646, 24.002422780344464], [4.67971314135844, 9.83089421806433, 19.190320500781212, 36.96623719552007]]", "transformer step engine dL/dwq1=[[2.6228809748826416, -2.760927341981728], [1.3498587252198266, -1.4209039212840278], [2.8596244930894805, -3.0101310453573475], [1.3083234416734186, -1.3771825701825458]]", "transformer step library dL/db2[0]=2.0", "transformer step library dL/dwq1[0][0]=2.6228809748826416"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same step through the library's reverse transform, which does not build it. What this entry
+# is for, in one sentence: **the lift is complete and the cut is what refuses** -- every operator of
+# the body has a forward law (`rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,
+# jvp_mean_axis,jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum`), the lifted graph is built
+# whole (`nodes=254`) -- and `split` then stops in the **forward** half with
+# `construct=a node whose input was not copied`. So the missing thing on this program is the knife,
+# not a law. And it is a second, independent defect that past the knife there is no `softmax_t`
+# either: `stdlib/rulesets/transpose.cml` has none (its own comment at the `reshape`/`softmax`
+# paragraph says so), so answering the cut would still leave this program with no `softmax`
+# cotangent. Neither fix answers the other, and this entry names both so a run that is green for one
+# of them is not read as green for the step.
+#
+# The `function=` field is the lifted name of the spelling used here (the parameters on the ordinary
+# list). The same body with the parameters in one `with` value, read through `grad`, stops at the
+# same `skip=forward construct=a node whose input was not copied uri=- why=an operand of the node is
+# not reachable from the half's exit`; the refusal is neither the struct's nor a spelling's.
+[[tests]]
+name = "transformer_step_gradient_stops_at_split"
+desc = "The transformer step of the entry above, asked of the library's `vjp`: the forward half is built with every rule named (`rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,jvp_mean_axis,jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum`, `nodes=254`), and then `split` refuses -- `skip=forward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, `READING_REFUSAL {...\"cause\":\"forward\",\"construct\":\"a node whose input was not copied\"}`, `(name=RuntimeDiag::RuntimeError, code=0x04000000)`. Two separate defects are named here and neither answers the other: the cut does not build this body at all, and past the cut `stdlib/rulesets/transpose.cml` still has no `softmax_t`, so the `softmax<1>` cotangent has no law to be asked for. So `softmax` is not one rule away, and the cut is not the softmax's: the same refusal is answered by the same body with its parameters in one `with` value read through `grad`. Pinned as readings, so the day the cut is answered this entry goes red and names what replaced it."
+kind = "negative"
+case = "../../../cases/compile/transforms/transformer_step_gradient_stops_at_split.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["split does not build this function"]
+expect_stderr_contains = ["skip=forward construct=a node whose input was not copied", "rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,jvp_mean_axis,jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
 # The mean's tangent takes its length from the operand (`stdlib/rulesets/jvp.cml#jvp_mean_axis`,
 # author 2026-11-03 16:15), and the tangent it builds keeps the *operand's* shape while the reduced
 # output's tangent is the reduced one. The two shapes broadcast only when the reduced axis is the

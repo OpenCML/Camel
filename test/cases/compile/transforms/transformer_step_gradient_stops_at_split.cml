@@ -1,0 +1,85 @@
+// The same transformer step's gradient asked of the library's reverse transform, which does not
+// build it: the cut refuses, in the forward half, before any cotangent is asked for.
+//
+// The model is `transformer_step_gradient.cml`'s, digit for digit -- two heads of self attention
+// (sequence 2, hidden 4), softmax over the keys, a layer norm written from `mean<-1, true>`, a
+// residual and one FFN -- and the engine answers its gradient (that file pins the numbers). What
+// this file records is the other side of the reading, and it is not a missing law:
+//
+//     REINTERP jvp function=loss_plain ... nodes=58 kinds=58/3 exit=Tuple{chain,tangent}
+//         tangent=computed source=ruleset
+//         rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,jvp_mean_axis,
+//               jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum
+//     REINTERP jvp built graph=362 nodes=254 exit=253 regions=1 function=loss_plain
+//     REINTERP split function=jvp_of_loss_plain skip=forward
+//         construct=a node whose input was not copied uri=-
+//         why=an operand of the node is not reachable from the half's exit
+//     READING_REFUSAL {"transform":"split","function":"jvp_of_loss_plain","cause":"forward",
+//                      "construct":"a node whose input was not copied"}
+//
+// and the program's own answer is
+//
+//     stdlib/vjp.cml:134:19: [Error]: An error has occurred: transforms: split does not build this
+//     function (an operand of the node is not reachable from the half's exit). The runtime has no
+//     diagnostic of its own for this fault: every fault falls back to this code, so the message is
+//     all there is. (name=RuntimeDiag::RuntimeError, code=0x04000000)
+//
+// So the lift is complete -- every operator of the body has a forward law, softmax included -- and
+// the wall is the cut itself, not a law this program is missing. Two defects, and neither answers
+// the other: the knife cannot carry what the softmax tangent reads, and past the knife
+// `stdlib/rulesets/transpose.cml` still has no `softmax_t`, so answering the cut would leave this
+// program without a `softmax` cotangent all the same. A run that is green for one of the two is not
+// a run this step is green in. The reverse transform is what a training step uses (`grad` is
+// `split(jvp(first_with_as_param(f)))`), so until both are answered this step has no gradient on
+// the library's side at all; it is not that the two sides disagree on the numbers.
+//
+// Two spellings of the same loss were measured, and both stop in the same place with the same
+// sentence: the parameters on the ordinary list (this file) and the parameters in one `with` value
+// (`transformer_step_gradient.cml`'s declaration read through `grad`). The refusal is not the
+// struct's, and it is not a spelling's.
+//
+//     camel test/cases/compile/transforms/transformer_step_gradient_stops_at_split.cml
+import { matmul, mean, relu, softmax, sqrt, sum, transpose } from tensor
+import rulesets.jvp
+import { vjp } from vjp
+
+func loss_plain(wq1: float[4, 2], wk1: float[4, 2], wv1: float[4, 2],
+                wq2: float[4, 2], wk2: float[4, 2], wv2: float[4, 2],
+                wo1: float[2, 4], wo2: float[2, 4], g: float[4],
+                w1: float[4, 4], b1: float[4], w2: float[4, 4], b2: float[4]): float {
+    let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
+    let s1 = ((x @ wq1) @ transpose(x @ wk1)) / 2.0
+    let s2 = ((x @ wq2) @ transpose(x @ wk2)) / 2.0
+    let a1 = softmax<1>(s1)
+    let a2 = softmax<1>(s2)
+    let o1 = a1 @ (x @ wv1)
+    let o2 = a2 @ (x @ wv2)
+    let z = x + o1 @ wo1 + o2 @ wo2
+    let mu = mean<-1, true>(z)
+    let c = z - mu
+    let n = c / sqrt(mean<-1, true>(c * c))
+    let ln = n * g
+    let h = relu(ln @ w1 + b1)
+    return sum((ln + (h @ w2 + b2)) * [[1.0, 2.0, 4.0, 8.0], [1.0, 3.0, 5.0, 7.0]] as float[2, 4])
+}
+
+func main(): int sync {
+    let wq1 = [[0.25, 0.0], [0.0, 0.25], [-0.25, 0.5], [0.5, -0.25]] as float[4, 2]
+    let wk1 = [[0.5, -0.25], [0.25, 0.0], [0.0, -0.25], [-0.25, 0.5]] as float[4, 2]
+    let wv1 = [[0.0, 0.5], [0.25, -0.25], [-0.5, 0.0], [0.25, 0.75]] as float[4, 2]
+    let wq2 = [[-0.5, 0.5], [0.0, 0.25], [0.25, 0.0], [0.75, -0.25]] as float[4, 2]
+    let wk2 = [[0.25, 0.75], [-0.5, 0.0], [0.0, 0.5], [0.25, -0.25]] as float[4, 2]
+    let wv2 = [[0.75, 0.0], [0.25, 0.5], [-0.5, 0.25], [0.0, -0.25]] as float[4, 2]
+    let wo1 = [[0.25, 0.5, 0.0, -0.25], [0.5, 0.25, -0.25, 0.0]] as float[2, 4]
+    let wo2 = [[0.0, -0.25, 0.75, 0.25], [0.25, 0.0, 0.25, -0.5]] as float[2, 4]
+    let g = [1.0, 2.0, 3.0, 4.0] as float[4]
+    let w1 = [[0.25, 0.5, 0.0, 0.25], [0.0, 0.25, 0.5, 0.25], [0.5, 0.0, 0.25, 0.25], [0.25, 0.25, 0.0, 0.5]] as float[4, 4]
+    let b1 = [1.0, 1.5, 2.0, 2.5] as float[4]
+    let w2 = [[0.25, 0.0, 0.5, 0.25], [0.5, 0.25, 0.0, 0.25], [0.25, 0.5, 0.25, 0.0], [0.0, 0.25, 0.25, 0.5]] as float[4, 4]
+    let b2 = [1.0, 2.0, 3.0, 4.0] as float[4]
+
+    let (value, pullback) = vjp(loss_plain)(wq1, wk1, wv1, wq2, wk2, wv2, wo1, wo2, g, w1, b1, w2, b2)
+    let cotangents = pullback(1.0)
+    `transformer step library loss={} dL/db1={}`->format<value, cotangents.11>->println
+    return 0
+}

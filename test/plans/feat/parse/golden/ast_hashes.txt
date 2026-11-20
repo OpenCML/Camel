@@ -2021,6 +2021,8 @@ f8927e15a2107240 ok test/cases/compile/transforms/sum_axis_in_a_training_step.cm
 c75538ac14b806b0 ok test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
 edc0091c0e7595bc ok test/cases/compile/transforms/tanh_gradient_through_the_engine.cml
 9a260be256b4eff3 ok test/cases/compile/transforms/tanh_gradient_through_the_library.cml
+e8d58cf22c9e78cb ok test/cases/compile/transforms/transformer_step_gradient.cml
+09b3c9c680eaf092 ok test/cases/compile/transforms/transformer_step_gradient_stops_at_split.cml
 6e09e74641fc7168 ok test/cases/compile/transforms/transpose_after_algebra.cml
 c3c058350e49dff8 ok test/cases/compile/transforms/transpose_array_literal_member_projection.cml
 21ca087e657880ab ok test/cases/compile/transforms/transpose_array_literal_open_extent_refuses.cml
