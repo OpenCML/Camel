@@ -217,6 +217,18 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                "`; a law's port disagreeing with the value the walk hands it is a compiler defect "
                "and "
                "not the program's fault";
+    case TransposeRefusalCause::LawAnswerShape:
+        // The law, and the two spellings a reader compares: the type the law's right side answered
+        // with and the type of the operand whose cotangent it claims to be (author, 2026-11-20). The
+        // law's name comes first because the law is the edit; the operand's type second because it
+        // is what the program wrote and the law did not. Neither is "an internal error": a law
+        // written for a wider shape than its operator is called with is a mistake in the library,
+        // and the transposition is where it becomes visible.
+        return "the law " +
+               (refusal.rule.empty() ? std::string("the index filed") : "`" + refusal.rule + "`") +
+               " answers a `" + refusal.answerType + "` for an operand of type `" +
+               refusal.answeredOperandType +
+               "`, and a cotangent of a value has that value's own type";
     case TransposeRefusalCause::CalleeBuiltFromAParameter:
         // **The language's rule, and the parameter it is about** (author, 2026-11-04). `transpose`
         // answers the map a linear function is; a call whose callee the body *built* out of a

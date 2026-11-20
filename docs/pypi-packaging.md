@@ -8,7 +8,7 @@
 
 | 路径 / 脚本 | 作用 |
 |-------------|------|
-| `pypi/camel-lang/` | setuptools 包根目录：`pyproject.toml`、`src/camel/`（打包时写入 `.cmlenv` 与 `wrapper-dist/`） |
+| `pypi/camel-lang/` | setuptools 包根目录：`pyproject.toml`、`src/camel/`（打包时把 `out/<tag>/` 整树拷成 `src/camel/.cmlenv/`，打完删掉） |
 | `scripts/pypi-rollup.js` | 编排：默认按**当前 `python`** 匹配一个 SDK 构建；可选 `CAMEL_PYPI_ALL_SDKS=1` 按目录循环；收集 `out/<tag>/`、打 wheel、写入 `dist/pypi/` |
 | `scripts/build.js` | 被 rollup 以「单 SDK 模式」调用；被 `npm run build` 以「普通模式」调用 |
 | `scripts/sync-python-sdks.js` | 将官方 Python 目录树同步到 `modules/python/sdks/python3xx/`（gitignored） |
@@ -80,7 +80,8 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
 **无 SDK 时的回退**（例如 CI 仅有 `actions/setup-python`、未同步 `sdks/`）：
 
 - rollup 只跑 **一轮** `build()`（不删 `build/`、不设 `CAMEL_PYPI_SINGLE_SDK_MM`）；
-- wheel 的 `cp` / `abi` / `platform` 全部由 **`packaging.tags`** 对 **PATH 上的 `python`** 解析。
+- `cp` / `abi` 是决定里的两个常量（`cp310` + `abi3`，只有本体那只 `py3` + `none`），**`platform`** 取自构建机的
+  `sysconfig.get_platform()`（不再是 `packaging.tags.sys_tags()` 的第一项，见第 2.2 节第 5 条）。
 
 ---
 
@@ -93,9 +94,10 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - `collect-out` 在 `build.js` 末尾以 `Release` 执行，更新 **`out/latest/`**（或 `CAMEL_PYPI_TAG` 指定 tag）。
 
 2. **组装 wheel 内容**（`packageWheelBundle`）  
-   - 将 `out/<tag>/` **整树**复制到 `pypi/camel-lang/src/camel/.cmlenv/`。  
-   - 在 `wrapper-dist/` 生成启动脚本（Windows：每个 `bin` 下 `.exe` 对应一个 `.cmd`；Unix：对应 shell 包装）。  
-   - 临时改写 `pyproject.toml` 中的 `script-files`，指向上述 wrapper。
+   - 将 `out/<tag>/` **整树**复制到 `pypi/camel-lang/src/camel/.cmlenv/`（打完再删）。  
+   - 删掉 `bin/` 里测试专用工具（`camel-parsecheck`）与 `.o/.a/.obj/.d/.pdb`：它们不是发布物。  
+   - 检查 `[project.scripts]` 声明的每条命令都在 `.cmlenv/bin/` 里有对应可执行文件——**没有 wrapper-dist，也不改
+     `pyproject.toml`**：入口是 `src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
 
 3. **构建与改标签**（同一份 packaging 打两遍，内容差一个 `.cmlenv/python/`）  
    - 使用该 SDK 的 **`python`**（或回退时的 `python`）执行：  
@@ -109,7 +111,8 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - 将两只 `*.whl` **复制到** `dist/pypi/`。  
    - 末尾跑 `scripts/check_wheel_tags.py --ruling dist/pypi/*.whl`：确认两只形态齐全、名字与内容一致（0.2.31 那种错误的标签在
      出 wheel 的这一步就失败，而不是等到索引拒收）。
-   - 删除 `pypi/camel-lang` 下临时 `dist/`、`build/`、`.cmlenv`、`wrapper-dist`、`*.egg-info`，并恢复 `pyproject.toml`。
+   - 删除 `pypi/camel-lang` 下临时 `dist/`、`build/`、`.cmlenv`、`*.egg-info`（这三条路径都在 `.gitignore` 里：
+     一次失败的 rollup 会把 `out/` 的副本留在 `src/camel/.cmlenv/`，它不许进历史）。
 
 **整次 rollup 开始前**：会删除 `dist/pypi/` 下所有已有 `*.whl`，保证本次产物集合干净、可预期。
 
@@ -210,6 +213,25 @@ npm run pypi:rollup
 
 # 只查已有 wheel 的标签：两只形态是否齐全、名字与内容是否一致
 python3 scripts/check_wheel_tags.py --ruling dist/pypi/*.whl
+
+# 只查内容：wheel 里的文件与 out/<tag>/、stdlib/、include/ 逐条对齐（缺一个就失败，并把清单逐行打印出来）
+python3 scripts/check_wheel_contents.py --out out/latest dist/pypi/*.whl
 ```
+
+### 8.1 离线 dry-run（主机拿不到包索引时）
+
+wheel 的内容本来就来自 `out/<tag>/`，所以已经构建过的树可以只做打包这一半；`PIP_NO_INDEX=1` 让
+rollup 里那句 `pip install build packaging` 立刻失败、走 `pip wheel --no-build-isolation` 的回退，
+全过程不碰索引（也没有 `auditwheel`，所以 Linux 那两只停在 `linux_x86_64`，`--repair-pending` 是这一步的预期状态）：
+
+```sh
+export PIP_NO_INDEX=1 CAMEL_PYPI_SKIP_BUILD=1
+export CAMEL_PYPI_PYTHON=$HOME/camel-eval/venv-bench/bin/python   # 3.10 + setuptools 84；系统 python3 是 59.6，读不了 PEP 639 的 license
+npm run pypi:rollup
+python3 scripts/check_wheel_contents.py --out out/latest dist/pypi/*.whl
+```
+
+`CAMEL_PYPI_PYTHON` 必须指一个 setuptools >= 77 的解释器：`pyproject.toml` 的 `license` 是 PEP 639 的 SPDX 字符串，
+65.5.1 会在 `metadata-generation-failed` 上停住，而这一步在原生构建之后——错误看起来像打包坏了。
 
 更通用的构建约定见 [`AGENTS.md`](../AGENTS.md)；CMake 可选开关（如 `CAMEL_ENABLE_PYTHON`、`CAMEL_SKIP_PYTHON`）见 [`build-options.cn.md`](build-options.cn.md)；Python 运行时收集与 `collect-out` 行为见 [`cpp_export_build.md`](cpp_export_build.md) 第 6 节。
