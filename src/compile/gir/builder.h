@@ -1058,13 +1058,28 @@ class Builder {
     /// call of the assignment operator is not built at all. Null for everything else.
     node_handle_t loopStateAssignmentOf(const GCT::node_ptr_t &gct);
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
-    // callee's capture table that says which variables it writes, and, per call, the variable
-    // each version is of and the access node of each part made so far. Part 0 is the return
+    // callee's capture table that says which variables it writes, and, per call, the versions of
+    // those this graph holds and the access node of each part made so far. Part 0 is the return
     // value, which only a call that writes something has; `parts[0]` is null for one that does
     // not, and such a call's value stays the node itself.
     std::unordered_map<node_handle_t, uint32_t> callWriteMasks_;
     struct CallValue {
-        std::vector<node_handle_t> variables;
+        /// One version the call hands back: the variable it is of, as this graph holds it, and the
+        /// position of that version in the call's value (0 for the first one the callee writes). A
+        /// written capture whose cell belongs to a graph this one does not enclose has a position
+        /// like any other -- the mask numbers the slots -- and no version here: nothing stands in
+        /// for it, so a read of that variable finds no version rather than an empty one.
+        struct Version {
+            node_handle_t variable;
+            /// Which of the versions this is: the count of set bits before it in the mask, which is
+            /// the order they are handed on in (callValueTypeOf).
+            uint32_t position = 0;
+        };
+        std::vector<Version> versions;
+        /// How many versions the call hands back: the numbers set in its mask. Counted from the
+        /// mask and not from `versions`, because the mask is the record of the slots and a slot this
+        /// graph cannot fill is one of them (GCFuncRef::reserved packs the value from it).
+        uint32_t versionCount = 0;
         std::vector<node_handle_t> parts;
         bool hasReturn = true;
     };
@@ -2637,7 +2652,8 @@ class Builder {
     camel::core::type::Type *
     callValueTypeOf(const compile_graph_ptr_t &callee, uint32_t written) const;
     // The access node of part `part` of the value a call hands on: part 0 is the callee's
-    // return value, part k the version of the k-th variable the call writes (CallValue).
+    // return value, then the versions in the order the mask numbers them, each reached from the
+    // entry `CallValue::versions` that says which variable it is of.
     node_handle_t callValuePartOf(node_handle_t call, uint32_t part);
     // The node a read of `variable` takes its value from: the value the last write produced, or
     // the access node of the part of a call that wrote it; nullptr when the write produced no

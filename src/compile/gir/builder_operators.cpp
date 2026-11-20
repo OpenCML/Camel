@@ -4912,14 +4912,20 @@ node_handle_t Builder::visitLinkNode(
             if ((writtenMask & (uint32_t{1} << k)) == 0) {
                 continue;
             }
-            // The version the call hands back is one of this graph's captures of that variable,
-            // and it exists only when the variable lives here or inside this graph: a callee
-            // reached through a value was made elsewhere and the value carries its captures. The
-            // entry stays in place (`nullptr`) so the mask keeps naming the same slots.
-            value.variables.push_back(
-                enclosesOrigin(table->second[k].origin)
-                    ? captureInto(currGraph_, table->second[k].origin, table->second[k].name)
-                    : nullptr);
+            // The slot this version sits in: the set bits of the mask, in the callee's capture
+            // order, are the versions in the order the call's value hands them on, after the return
+            // value when it has one (callValueTypeOf).
+            const uint32_t position = value.versionCount++;
+            // The version the call hands back is this graph's capture of that variable, and it
+            // exists only when the variable lives here or inside this graph: a callee reached
+            // through a value was made elsewhere and the value carries its captures. The mask keeps
+            // naming the slot -- the positions are counted over it, and the run time packs the value
+            // from it -- and this graph has no entry for a version it cannot make.
+            if (!enclosesOrigin(table->second[k].origin)) {
+                continue;
+            }
+            value.versions.push_back(
+                {captureInto(currGraph_, table->second[k].origin, table->second[k].name), position});
         }
         callValues_[targetNode] = std::move(value);
     }
