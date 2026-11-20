@@ -135,8 +135,14 @@ struct Residual {
 /// Program order: parameters by their index, then computed values by their node. The answer is empty
 /// when the graph is not a lifted graph (the exit is not the pair), which is when there is nothing
 /// to cut.
+///
+/// `why`, when given, is set only by a walk that **cannot answer**: a call the backward half
+/// computes after the cut whose callee's type does not state which of its arguments are values. The
+/// answer is then empty *because the walk stopped*, not because there is nothing to cut, so a caller
+/// that can say so refuses by name rather than reading the empty list as "no residuals".
 std::vector<Residual> residualsOf(
-    const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr);
+    const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr,
+    std::string *why = nullptr);
 
 /// Whether this graph answers the pair (value, tangent) that `split` cuts -- **by its content**, not by
 /// any record of where it came from. Two questions, both of them, because either one alone names a
