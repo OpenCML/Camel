@@ -176,6 +176,37 @@ inline StaticFunction *createStaticFunction(
         staticFunctionAllocator(ownerGraph));
 }
 
+/// The order two nodes of a compile-time table are walked in, when that walk decides what the body
+/// builds: the graph the node belongs to first, then the node's own id.
+///
+/// `operator<` on a handle is not this order. The handle's `std::hash` and its ordering both reach
+/// the draft through a pointer (`include/camel/runtime/node_ref.h#DraftNodeRef`), so a table of them
+/// walked as it stands walks the allocator's order, and the compiled graph then depends on where the
+/// nodes happened to land. The node's id alone is not this order either: an id names a node **inside
+/// one graph**, and these tables hold nodes of several, so an id-first key orders two graphs' nodes
+/// by their numbering and interleaves them -- two entries whose ids are equal are then separated
+/// only by whatever their hash happened to be, which is the same defect one level down. The graph's
+/// identity is the draft's `epoch`, the number the draft was made with and that no other draft is
+/// ever given (`node_ref.h`), so `(epoch, id)` is one name per node and a total order over the whole
+/// table.
+inline bool walksBefore(const node_handle_t &left, const node_handle_t &right) {
+    if (left.epoch != right.epoch) {
+        return left.epoch < right.epoch;
+    }
+    return left.id < right.id;
+}
+
+/// The same order for the tables keyed by the graph itself: a graph's identity is the epoch of the
+/// draft it builds (`GraphDraft::epoch`), never the address of its builder.
+inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuilder *right) {
+    if (left == nullptr || right == nullptr) {
+        return left != nullptr;
+    }
+    const uint64_t leftEpoch  = left->transaction().graph().epoch();
+    const uint64_t rightEpoch = right->transaction().graph().epoch();
+    return leftEpoch < rightEpoch;
+}
+
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
 inline std::optional<slot_t> staticValueOf(node_handle_t node) {
     if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
