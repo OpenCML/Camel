@@ -2223,6 +2223,41 @@ void Builder::attachLoopParts(
     attachRegionStatement(loopNode, parts, gct, loopNode, loopNode, "The loop", "its body writes");
 }
 
+node_handle_t Builder::attachVisibleLoopState(
+    node_handle_t loopNode, const std::vector<Type *> &states, uint32_t firstState,
+    const GCT::node_ptr_t &gct) {
+    // One state is its own value; several are a tuple, and the FILL reads the components the
+    // program's states are.
+    const size_t count  = states.size();
+    node_handle_t value = nullptr;
+    if (count == 1) {
+        value = currGraph_->addAccsNode(states.front(), firstState);
+        linkNodes(LinkType::Norm, loopNode, value);
+    } else {
+        Type *valueType = static_cast<Type *>(TupleType::create(states));
+        std::vector<size_t> slots(count);
+        std::iota(slots.begin(), slots.end(), size_t{0});
+        value = currGraph_->addFillNode(
+            valueType,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty =
+            camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
+        // Two steps, because the two halves are not the same side: writing the static value is an
+        // edit, and reading the node it produced is a view.
+        const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, valueType);
+        node_handle_t source = currGraph_->view().ref(emptyNode);
+        linkNodes(LinkType::Norm, source, value);
+        for (size_t j = 0; j < count; ++j) {
+            node_handle_t component =
+                currGraph_->addAccsNode(states[j], static_cast<uint32_t>(firstState + j));
+            linkNodes(LinkType::Norm, loopNode, component);
+            linkNodes(LinkType::With, component, value);
+        }
+    }
+    registerNodeOrigin(context_, value, gct, "gir.loop.value");
+    return value;
+}
+
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -3323,38 +3358,12 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
 
     // The program sees the states its head declares: not the collection slots beside them, and not
     // the `var`s the body wrote, which are the loop's own state and no value of the program's (a
-    // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`). One state is
-    // its own value; several are a tuple, whose FILL reads the state components and leaves the
-    // rest to autodiff and the exporter.
-    std::vector<Type *> visibleStateTypes(stateTypes.begin(), stateTypes.begin() + declaredStates);
-    Type *visibleStateType  = declaredStates == 1
-                                  ? stateTypes.front()
-                                  : static_cast<Type *>(TupleType::create(visibleStateTypes));
+    // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`).
     node_handle_t loopValue = loopNode;
     if (!collected.empty() || !carried.empty()) {
-        if (declaredStates == 1) {
-            loopValue = currGraph_->addAccsNode(visibleStateType, 0);
-            linkNodes(LinkType::Norm, loopNode, loopValue);
-            registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-        } else {
-            std::vector<size_t> slots(declaredStates);
-            std::iota(slots.begin(), slots.end(), size_t{0});
-            loopValue = currGraph_->addFillNode(
-                visibleStateType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-            const slot_t empty = camel::core::rtdata::toSlot(
-                ::Tuple::create(declaredStates, camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->view().ref(
-                currGraph_->edit().materializeStaticValue(empty, visibleStateType));
-            linkNodes(LinkType::Norm, source, loopValue);
-            for (size_t j = 0; j < declaredStates; ++j) {
-                node_handle_t component =
-                    currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                linkNodes(LinkType::Norm, loopNode, component);
-                linkNodes(LinkType::With, component, loopValue);
-            }
-            registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-        }
+        const std::vector<Type *> visible(
+            stateTypes.begin(), stateTypes.begin() + declaredStates);
+        loopValue = attachVisibleLoopState(loopNode, visible, 0, gct);
     }
     // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
     // state the loop hands out: the ACCS of the loop's value, which is what the `let` writing's
@@ -3709,35 +3718,8 @@ node_handle_t Builder::buildStreamLoop(
     }
     attachLoopParts(loopNode, bodyPart, condPart, gct);
 
-    // The program sees the state it wrote, not the stream and the flag beside it: one state is
-    // its own value, several are a tuple of them.
-    node_handle_t loopValue = nullptr;
-    if (k == 1) {
-        loopValue = currGraph_->addAccsNode(stateTypes.front(), 2);
-        linkNodes(LinkType::Norm, loopNode, loopValue);
-        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-    } else {
-        std::vector<size_t> slots(k);
-        std::iota(slots.begin(), slots.end(), size_t{0});
-        loopValue = currGraph_->addFillNode(
-            stateType,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-        const slot_t empty =
-            camel::core::rtdata::toSlot(::Tuple::create(k, camel::core::mm::autoSpace()));
-        // Two steps, because the two halves are not the same side: writing the static value is an
-        // edit, and reading the node it produced is a view.
-        const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, stateType);
-        node_handle_t source = currGraph_->view().ref(emptyNode);
-        linkNodes(LinkType::Norm, source, loopValue);
-        for (size_t j = 0; j < k; ++j) {
-            node_handle_t component =
-                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j + 2));
-            linkNodes(LinkType::Norm, loopNode, component);
-            linkNodes(LinkType::With, component, loopValue);
-        }
-        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-    }
-    return loopValue;
+    // The program sees the state it wrote, not the stream and the flag beside it.
+    return attachVisibleLoopState(loopNode, stateTypes, 2, gct);
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
