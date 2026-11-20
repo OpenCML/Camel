@@ -649,30 +649,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
 gc_node_ref_t resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, gc_node_ref_t ref) {
     GUARD(graph != nullptr, "Runtime forwarded-value resolution requires a graph.");
 
-    gc_node_ref_t currentIndex = ref;
-    while (currentIndex != camel::runtime::kInvalidNodeRef) {
-        const auto *current = graph->node(currentIndex);
-        GUARD(current != nullptr, "Runtime forwarded-value chain resolved to null.");
-        if (current->kind != camel::runtime::GCNodeKind::Gate) {
-            return currentIndex;
-        }
-        // The value a GATE hands on is its **first** normal input (design principles 3.1):
-        // The inputs after the first are the reads the region's writes are held
-        // by; reading the last one here is what made a body returning `x + 1` hand on the value of
-        // its last write instead (`test/cases/compile/diag_json/dropped_effects_forward.cml`).
-        const auto normInputs = graph->normInputsOf(currentIndex);
-        if (!normInputs.empty()) {
-            currentIndex = normInputs.front();
-            continue;
-        }
-        const auto withInputs = graph->withInputsOf(currentIndex);
-        if (!withInputs.empty()) {
-            currentIndex = withInputs.front();
-            continue;
-        }
-        return camel::runtime::kInvalidNodeRef;
-    }
-    return camel::runtime::kInvalidNodeRef;
+    // The walk is `camel/runtime/graph.h#valueBehindGates`: a gate hands on its **first** ordinary
+    // input (design principles 3.1) and the inputs after it are the reads the region's writes are
+    // held by. Reading the inputs again here is what made a body returning `x + 1` hand on the value
+    // of its last write instead (`test/cases/compile/diag_json/dropped_effects_forward.cml`), and a
+    // second copy of the reading is what drifts from the one every other walker of a graph asks
+    // (`resolveRuntimeTailValueRef` beside this one asks it already).
+    return camel::runtime::valueBehindGates(*graph, ref);
 }
 
 gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {

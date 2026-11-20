@@ -658,21 +658,29 @@ export rule jvp_layer_norm::<T>(x: T[...], gamma: T[...], beta: T[...]) when is_
 /// forward and the reverse reading of the boundary cannot drift apart. The input `0.0` is not
 /// positive, and both say the slope there is zero.
 ///
-/// The mask is written `where(x > 0, 1, 0) * dx` and not `where(x > 0, dx, 0)`, which is the same
-/// number: the mask depends on `x` alone, so `split` computes it in the forward half and carries it
-/// as a residual, and the *linear* half is one `mul_tensor` -- a two-operand primitive with a
-/// transpose rule of its own. The three-operand form puts `where` itself in the linear half, and the
+/// The mask is written `mul_stated(where(x > 0, 1, 0), dx, ...)` and not `where(x > 0, dx, 0)`, which
+/// is the same number: the mask depends on `x` alone, so `split` computes it in the forward half and
+/// carries it
+/// as a residual, and the *linear* half is one `mul_stated` -- the product with the two operands'
+/// extents stated beside it. The lists are load-bearing rather than polite: the right operand is the
+/// tangent, whose type states no extents (design principles 5.4), so `mul_tensor`'s reverse law
+/// cannot read the shape of the position it is answering for and the walk stops there
+/// (`skip=parameter-shape uri=tensor:multiply`). Both lists are `shape(x)`, which is also `dx`'s:
+/// a tangent lives in its own space -- the arrangement `jvp_erf` below records for the same reason.
+/// The three-operand form puts `where` itself in the linear half, and the
 /// walk refuses any node with three normal operands before it looks a rule up (`skip=arity
 /// uri=tensor:where operands=3`). A helper named here would be the other
 /// wall -- a call in the linear half has no transpose of its own (`skip=call-no-transpose`), which
 /// is why `jvp_pow` below writes its law out in place.
 export rule jvp_relu::<T>(x: T[...]) when is_float::<T>() {
-    relu(x) => (dx: T[...]) => (where(x > 0.0, 1.0, 0.0) * dx)
+    relu(x) => (dx: T[...]) => mul_stated(where(x > 0.0, 1.0, 0.0), dx, shape(x), shape(x))
 }
 
 /// `d(exp(x)) = exp(x) * dx`: the value the operator already produced multiplies the tangent. No
 /// helper, and nothing but registered operators on the right, so the linear half of a program that
-/// uses it is one `mul_tensor` the walk already has a law for.
+/// uses it is one `mul_stated` -- the product with `shape(x)` stated twice, for the reason
+/// `jvp_relu` above records: the second operand is a tangent, and a tangent's type states no
+/// extents.
 ///
 /// This rule is the smallest tangent that **recomputes a forward value**: `exp(x)` is written again
 /// on the right, and the cut has to carry it to the backward half as a residue. Whether it may is
@@ -680,7 +688,7 @@ export rule jvp_relu::<T>(x: T[...]) when is_float::<T>() {
 /// `split` carries when a tangent recomputes a value -- `softmax` stopped there, `relu`'s mask did not, and the two differ only in what the
 /// recomputed call carries. So this rule is a measurement as much as a law.
 export rule jvp_exp::<T>(x: T[...]) when is_float::<T>() {
-    exp(x) => (dx: T[...]) => exp(x) * dx
+    exp(x) => (dx: T[...]) => mul_stated(exp(x), dx, shape(x), shape(x))
 }
 
 /// `d(sigmoid(x)) = y * (1 - y) * dx` with `y = sigmoid(x)`: the slope is the output times its own
@@ -688,21 +696,35 @@ export rule jvp_exp::<T>(x: T[...]) when is_float::<T>() {
 /// right side is one recomputed x-only value multiplied by the tangent -- the shape `jvp_exp`
 /// (`stdlib/rulesets/jvp.cml`) measured the cut carrying, and no helper: a helper named here becomes
 /// a call in the linear half, and a call with no transpose of its own stops the backward walk
-/// (`skip=call-no-transpose`).
+/// (`skip=call-no-transpose`). Both products are `mul_stated` with `shape(x)` twice, for the reason
+/// `jvp_relu` above records, and the slope's own product comes first so the chain keeps the engine's
+/// order (`s * (1 - s)` then `* dx`).
 ///
 /// The engine's `sigmoidVjp` (`modules/tensor/ops/elementwise_ops.cpp`) scales its cotangent by
 /// `y * (1 - y)` read off the output it already holds; this rule and `sigmoid_t`
 /// (`stdlib/rulesets/transpose.cml`) recompute that `y` from `x`, which is the same number, and both
 /// halves say so the same way.
 export rule jvp_sigmoid::<T>(x: T[...]) when is_float::<T>() {
-    sigmoid(x) => (dx: T[...]) => (sigmoid(x) * (1.0 - sigmoid(x)) * dx)
+    sigmoid(x) => (dx: T[...]) =>
+        mul_stated(
+            mul_stated(sigmoid(x), 1.0 - sigmoid(x), shape(x), shape(x)),
+            dx,
+            shape(x),
+            shape(x))
 }
 
 /// `d(tanh(x)) = (1 - y * y) * dx` with `y = tanh(x)`: the slope is one minus the output squared, the
 /// engine's own law (`tanhVjp`, `modules/tensor/ops/elementwise_ops.cpp`), written the same way here so
-/// the two algorithms differ only in who builds the graph.
+/// the two algorithms differ only in who builds the graph. Both products are `mul_stated` with
+/// `shape(x)` twice, for the reason `jvp_relu` above records: `y * y` is squared first and the
+/// tangent is the second product's right operand, which is the engine's order.
 export rule jvp_tanh::<T>(x: T[...]) when is_float::<T>() {
-    tanh(x) => (dx: T[...]) => (1.0 - tanh(x) * tanh(x)) * dx
+    tanh(x) => (dx: T[...]) =>
+        mul_stated(
+            1.0 - mul_stated(tanh(x), tanh(x), shape(x), shape(x)),
+            dx,
+            shape(x),
+            shape(x))
 }
 
 // ---- the forward rules of the eight basic elementwise operators ----
@@ -719,8 +741,9 @@ export rule jvp_tanh::<T>(x: T[...]) when is_float::<T>() {
 // branch). So the sign of `abs` and the selection of `maximum`/`minimum` are written as a **mask**,
 // `where(cond, 1.0, -1.0)`, and never as `if` or as a three-operand `where` over the tangents: the
 // mask depends on the operands alone, so `split` computes it in the forward half and carries it,
-// and the linear half stays one `mul_tensor` the walk already has a law for (`jvp_relu` above is the
-// same shape, and its note measures the alternative: `skip=arity uri=tensor:where operands=3`).
+// and the linear half stays one `mul_stated` with the extents stated beside it -- the reason
+// `jvp_relu` above records, whose note also measures the alternative
+// (`skip=arity uri=tensor:where operands=3`).
 //
 // The masks are the engine's masks, not merely correct ones. `abs` has no derivative at `0`, so a
 // law has to choose a side there: the engine's `absVjp` asks `tensor:ge` (`x >= 0`), so `0.0` keeps
@@ -752,9 +775,10 @@ export rule jvp_neg_tensor::<T>(x: T[...]) when is_float::<T>() {
 /// The zero is the one input the maths leaves open and the law does not: `0.0` is not negative, and
 /// the engine's `absVjp` says so with `tensor:ge`, so the right side is `>=` and not `>`. The two
 /// legs of a `grad` are compared bit for bit, and this is the lane where two defensible laws
-/// disagree.
+/// disagree. The product is `mul_stated` with `shape(x)` twice, for the reason `jvp_relu` above
+/// records: the right operand is the tangent, whose type states no extents.
 export rule jvp_abs::<T>(x: T[...]) when is_float::<T>() {
-    abs(x) => (dx: T[...]) => (where(x >= 0.0, 1.0, -1.0) * dx)
+    abs(x) => (dx: T[...]) => mul_stated(where(x >= 0.0, 1.0, -1.0), dx, shape(x), shape(x))
 }
 
 /// `d(sqrt(x)) = dx * 0.5 / sqrt(x)`: the slope is one over twice the root, and the root is
@@ -774,8 +798,23 @@ export rule jvp_log::<T>(x: T[...]) when is_float::<T>() {
 /// `d(rsqrt(x)) = -0.5 * y * (y * y) * dx` with `y = rsqrt(x)`, which is the engine's grouping
 /// (`rsqrtVjp`: `cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube`). `y` is recomputed from
 /// the operand like `sqrt`'s.
+///
+/// Three products, and each is `mul_stated` with `shape(x)` twice for the reason `jvp_relu` above
+/// records: the chain is reached with the tangent on the reverse side, and a tangent's type states
+/// no extents. The constant is `full(shape(x), -0.5)` and not the bare `-0.5`, for the reason
+/// `jvp_erf` below records -- `mul_stated` takes an array in each operand slot, and a constant array
+/// multiplies every lane by the same number, so the bits are still `ct * -0.5`'s own.
 export rule jvp_rsqrt::<T>(x: T[...]) when is_float::<T>() {
-    rsqrt(x) => (dx: T[...]) => (dx * (-0.5)) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))
+    rsqrt(x) => (dx: T[...]) =>
+        mul_stated(
+            mul_stated(dx, full(shape(x), -0.5), shape(x), shape(x)),
+            mul_stated(
+                rsqrt(x),
+                mul_stated(rsqrt(x), rsqrt(x), shape(x), shape(x)),
+                shape(x),
+                shape(x)),
+            shape(x),
+            shape(x))
 }
 
 /// `d(maximum(x, w)) = mask * dx + (1 - mask) * dw` with `mask = where(x >= w, 1.0, 0.0)`.
@@ -784,26 +823,34 @@ export rule jvp_rsqrt::<T>(x: T[...]) when is_float::<T>() {
 /// the mask is 1, the tangent is `dx`, and the cotangents of the two legs are `ct` for `x` and `0`
 /// for `w`. `1.0 - mask` is written rather than a second `where` so the two masks cannot be read as
 /// two different comparisons; both depend on the operands alone, so both are carried, and the
-/// linear half is two `mul_tensor` and one `add_stated` -- the sum of two masked tangents states
+/// linear half is two `mul_stated` and one `add_stated` -- the sum of two masked tangents states
 /// `shape(maximum(x, w))`, which is what both terms already have (`jvp_mul_tensor` above records why
 /// the terms' shape and not the two primal lists are the answer).
+///
+/// Each product states **its own two operands'** extents and not the two primals': the mask's shape
+/// is the broadcast's, `shape(maximum(x, w))`, while the tangent beside it is `dx`'s own space --
+/// `shape(x)` for the first product and `shape(w)` for the second. Stating `shape(x)` and `shape(w)`
+/// once for both products is the plausible wrong fix: the two lists are what each cotangent is
+/// reduced to, so a `dw` reduced to `x`'s shape answers the wrong number the day the two operands
+/// broadcast differently, and nothing about the numbers says so before that day.
 export rule jvp_maximum::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     maximum(x, w) => (dx: T[...], dw: T[...]) =>
         add_stated(
-            where(x >= w, 1.0, 0.0) * dx,
-            (1.0 - where(x >= w, 1.0, 0.0)) * dw,
+            mul_stated(where(x >= w, 1.0, 0.0), dx, shape(maximum(x, w)), shape(x)),
+            mul_stated(1.0 - where(x >= w, 1.0, 0.0), dw, shape(maximum(x, w)), shape(w)),
             shape(maximum(x, w)),
             shape(maximum(x, w)))
 }
 
 /// `d(minimum(x, w)) = mask * dx + (1 - mask) * dw` with `mask = where(x <= w, 1.0, 0.0)`: the
 /// mirror of `jvp_maximum`, and its own rule because the comparison is the law. A tie goes to the
-/// left operand again (`tensor:le`, the engine's choice).
+/// left operand again (`tensor:le`, the engine's choice). Each product is `mul_stated` with its own
+/// two operands' extents, exactly as `jvp_maximum` records.
 export rule jvp_minimum::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     minimum(x, w) => (dx: T[...], dw: T[...]) =>
         add_stated(
-            where(x <= w, 1.0, 0.0) * dx,
-            (1.0 - where(x <= w, 1.0, 0.0)) * dw,
+            mul_stated(where(x <= w, 1.0, 0.0), dx, shape(minimum(x, w)), shape(x)),
+            mul_stated(1.0 - where(x <= w, 1.0, 0.0), dw, shape(minimum(x, w)), shape(w)),
             shape(minimum(x, w)),
             shape(minimum(x, w)))
 }
