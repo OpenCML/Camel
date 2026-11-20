@@ -890,6 +890,17 @@ everywhere is written once:
   existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
   migration. A mark without this field is therefore still legal; one that carries it is the only kind
   that can say its reason moved.
+- **A mark names either the sentence it fails with or the reading that ends it**, and the author's
+  ruling of 2026-11-21 02:20 chose the second shape for a case whose target is a number and whose
+  wall is being built: a sentence quoted from a refused run follows the implementation, so a pin on
+  it has to be re-typed every time the wall moves, which records the wall's progress as the case's
+  debt. `known_fail_ends_when` states the line the entry has to print instead, and no wall moves
+  that. `known_fail` needs one of the two -- the plan is refused at load when it has neither, with
+  the same `checkKnownFailMark` (`test/tools/run-tests.mjs`) -- and the trade is worth stating where
+  a reader weighs it: the sentence is the only field the run *compares*, so a mark that states its
+  ending reading accepts any failure as the expected one until the numbers arrive, and a different
+  defect can wear that mark's name in the meantime. The owner and the reason are required either
+  way, and the reason keeps naming the wall as it stands today.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a

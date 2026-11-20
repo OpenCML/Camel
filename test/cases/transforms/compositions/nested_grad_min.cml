@@ -17,17 +17,22 @@
 // composition twice: `grad(f)` answers a function of a `with` value, and `grad` differentiates a
 // function's first `with` parameter (design principles 9.9). That writing typechecks and builds.
 //
-// The reading is one wall further on, and it is the transform layer's, not the call form's:
+// The nest builds and both layers lift, so the wall is past them now. It has moved twice since this
+// file was written, so it is recorded with its date instead of being relied on -- read 2026-11-21 on
+// `b74edf66c`, `std::nvm`:
 //
-//   stdlib/vjp.cml:182: [Error]: An error has occurred: transforms: jvp has no forward transform
-//   for this function
+//   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
+//   callee's transpose was built, but the parameter at position 3 reads a value this call does not
+//   carry.
 //
-// `jvp` is asked to lift what the inner `grad` answered, and that answer is a function value
-// computed at run time (the body of `grad` calls `split(jvp(f))<...ws>(...xs)`), which `jvp` lifts
-// only when the callee is evident. `vmap(jvp(pullback))` in `compositions.plan.toml` met the same
-// sentence on 2026-11-05 and pins it there. Nothing about the call form is in the way any more.
+// Before that it was `split does not build this function (the value half reads the tangent of
+// parameter 0, which the forward half does not take)` (`2a2cf31a8` removed it), and before that
+// `jvp has no forward transform for this function` (`2da9735da` gave the lift the law that lifts the
+// answer type). Neither sentence is pinned any more, here or in the plan: the entry is a
+// `known_fail` on the number, because a sentence quoted from a refused run follows the implementation
+// while the number does not.
 //
-// The number stays pinned and not merely the exit: 2.0, not 4.0 -- the answer of a nest that read
+// The number is the point and not merely the exit: 2.0, not 4.0 -- the answer of a nest that read
 // the first derivative twice without differentiating it -- and not 0.0, which is what a second pass
 // through a cut that had lost the first one answers.
 import { grad } from vjp
