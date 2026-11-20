@@ -6650,3 +6650,9 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 决策者。
 - `what-a-lifted-graph-s-second-segment-means-in-the-next-cut`：**默认成立**。`Lift<A>` 入口的第 2 段按类型就是 `Tangent<A>`；`split` 把读它的节点放进切向半，不把切向实参拉进值半复制。按默认开工。
 - `the-tangent-argument-record-is-not-written-by-the-transform` 与 0994a28dd：**返工一处**。"第 i 个实参是切向"是被调方提升后的类型已经说了的事（`liftedShapeOf` 的读法），在调用节点上另记一份 `tangentArgs`，又在记录缺席时回落到"签名前一半"的算术，是同一事实的两份真相加一条静默回落。改为：`split` 从被调方的类型读切向位置（与 `lift.h` 同一个读者）；类型读不出时**按名字拒绝**，不回落算术。`tangentArgs` 这个字段若此后无人写、无人读，随之删除（核心不留空字段）。
+
+## 催办（2026-11-21 00:50）
+
+决策者。
+1. `lane-split-type-tangent`（"split 从类型读切向"，21:29 那条裁定的实现）停在 22:06，两个半小时没动也没合；`tangentArgs` 在 src/include/modules 里仍有 12 处读写。回一行：卡在哪；能过合并条件就当轮合，合后 `tangentArgs` 无人读写就删字段。
+2. 11-20 的返工 R1–R7 已全部进 develop。空出的格补给收敛车道 N/O/P（SSA 收尾、事实与算子各一份、中心文件净减）——今晚 pace 的收敛行三项都没动（C++ +32302、超 2500 行 21 个、残留 80）。车道表回一行：哪几格在收敛、各自的第一笔是什么。
