@@ -3430,3 +3430,30 @@ expect_output_contains = ["TRANSPOSE function=sum_of_scaled graph="]
 expect_stdout_not_contains = ["TRANSPOSE function="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# ---- the forward rule of `layer_norm` ----
+#
+# `layer_norm` normalizes each lane over the trailing block `gamma` covers, and no operator the
+# library declares reduces over a block of axes (`mean_axis` and the stated forms beside it take
+# one), so this law cannot be the operator applied to the tangents the way a reduction's is. It is
+# written with `layer_norm_grad` -- the operator the reverse half already emits -- with a neutral
+# gain: `J = inv * (I - e eT / n - xhat xhatT / n)` is symmetric, so `layer_norm_grad(x, 1, dx, 0)`
+# answers `J dx`, the forward half, from the same kernel the backward half reads.
+#
+# The numbers are derived by hand in the case's own header, and three laws it separates from this
+# one are named there: a tangent that dropped the `xhat xhatT / n` term of `J`, one that took a
+# mean over the whole tensor rather than the lane, and one that wrote the eps as a constant. The
+# case is width three on purpose -- at width two `J` is the zero matrix and the case would pin the
+# `dgamma` and `dbeta` terms and nothing about the input's derivative.
+[[tests]]
+name = "layer_norm.jvp_reads_the_lane_and_the_jacobian"
+desc = "`jvp` of `layer_norm(x, gamma, beta)` over `x = [[-3, 0, 3], [2, 5, 8]]` with `gamma = [1, 2, -1]`, `beta = [0.5, -0.5, 1]`, along `dx = [[1, 2, 0], [1, 1, -2]]`, `dgamma = [0.5, -1, 2]`, `dbeta = [0.25, 0, -0.5]`. gamma's three elements are the trailing block, so there are two lanes of width three and every mean is taken over a lane; the first lane sits 3 either side of 0 and the second 3 either side of 5, so `var = 6` on both, `k = 1/sqrt(6 + 1e-5) = 0.4082479502573796` and `xhat = (-3k, 0, 3k)` on both. The tangent is `gamma * (J dx) + dgamma * xhat + dbeta` with `J = inv * (I - e eT / 3 - xhat xhatT / 3)` rank one, and reads `(-0.5664955603087009, 0.8164959005147592, 2.153612016879025)` on the first lane and `(-0.5664948798965844, 0.8164959005147592, 2.1536126972911416)` on the second, against the value `(-0.7247438507721387, -0.5, -0.22474385077213865)` on both. The case's header derives every figure and names what each one separates: the `xhat xhatT` term (`0` against `-0.20412363492263155` at lane 0), the lane's mean (against the whole tensor's 2.5), and the eps the two calls inherit. This is the law the `tensor:layer_norm` wall in `showcase/c3-char-transformer/train.cml` was waiting for."
+kind = "behavior"
+case = "../../../cases/compile/transforms/layer_norm_jvp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["layer_norm jvp value=[[-0.7247438507721387, -0.5, -0.22474385077213865], [-0.7247438507721387, -0.5, -0.22474385077213865]] tangent=[[-0.5664955603087009, 0.8164959005147592, 2.153612016879025], [-0.5664948798965844, 0.8164959005147592, 2.1536126972911416]]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

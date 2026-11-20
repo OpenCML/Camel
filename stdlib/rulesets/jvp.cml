@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, add_stated, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, add_stated, erf, erfc, exp, full, gelu, layer_norm, layer_norm_grad, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, ones_like, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -548,6 +548,87 @@ export rule jvp_log_softmax::<T>(x: T[...], axis: int) when is_float::<T>() {
 /// @example log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)    // [0.7310585786300049, -0.2689414213699951]
 export func log_softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_float::<T>() {
     return dx - sum<axis, true>(exp(log_softmax<axis>(x)) * dx)
+}
+
+// ---- the forward rule of `layer_norm` ----
+//
+// `layer_norm` normalizes each lane of `gamma`'s element count -- the trailing block `gamma` and
+// `beta` cover -- so its tangent is not the operator applied to the tangents, and it is not an
+// arithmetic this ruleset can write either: the lane is a block of axes and every reduction the
+// library declares (`mean_axis`, `sum_axis`, the stated forms beside them) takes **one** axis. A
+// law written over `mean<axis>` would answer one rank and call that the operator, which is the
+// defect `jvp_reshape` records one section up.
+//
+// So the tangent is written as the normalization's own derivative, which the library already holds
+// once: `layer_norm_grad`, the operator the reverse half's rule emits. Two facts make that legal
+// and they are the whole of this law:
+//
+//   * `y = gamma * xhat + beta` with `xhat = (x - mean) * inv`, so, per element,
+//     `d(y) = gamma * (J dx) + dgamma * xhat + dbeta`, and the last two terms are the element-wise
+//     products written in `layer_norm_tangent` below;
+//   * `J = inv * (I - e eT / n - xhat xhatT / n)` is **symmetric** -- every term of it is -- and
+//     `layer_norm_grad(x, g, dy, 0)` answers `J (g * dy)`. With `g` replaced by ones it therefore
+//     answers `J dx` exactly, which is the forward half, from the same kernel the reverse half
+//     reads. `dgamma` and `dbeta` need nothing of that kind: they multiply `xhat` and `1`.
+//
+// `xhat` is the forward call with a neutral gain rather than the call's own `gamma` and `beta`,
+// because the call's output is not bound on a rule's right side (`softmax_jvp` recomputes its
+// `y` for the same reason) and `gamma` and `beta` are what it must *not* carry: this factor is
+// the normalized value alone.
+//
+// `eps` is the operator's fourth parameter and this law does not write it. The law names the three
+// ports `layer_norm(x, gamma, beta)` carries, both of its calls inherit the declaration's own
+// default, and no constant of the operator's appears anywhere here -- which is the point: a law
+// that wrote `1e-5` would be a second writing of the declaration and could drift from it. A call
+// that *states* the eps (`layer_norm(x, gamma, beta, eps)`) is a four-port node, and a law names
+// the ports it names, so that spelling is refused at the port count rather than answered with a
+// default it does not carry. That refusal is what keeps this law safe: a three-port law that also
+// matched a four-port node would answer it with `1e-5` while the node stated another eps, which is
+// a wrong number and not a missing one. `jvp_softmax` above records the same trade from the other
+// side, where the spelling that leaves the axis out is the one refused; the difference is that
+// `softmax`'s axis is a `<>` port, so a law there *can* answer a node that states no axis, while
+// `layer_norm`'s eps is a data operand, so a node that states none has one port fewer and no law
+// of three ports can describe a node of four. One arity per operator is also what
+// `scripts/vjp-parity.mjs` requires when it reads the two derivative tables against each other
+// ("`the rulesets file 'layer_norm' at 3 and 4 operand(s)`"), so a second law for the eps
+// spelling would be a second writing of this key and not a second reading of it.
+//
+// What this does not make work is `grad` of a function that holds a `layer_norm`: the linear half
+// of this law holds `layer_norm_grad` with five operands and no transpose of its own, so the
+// reverse walk stops there and names it. That is the `split` wall, and it is not this law's.
+
+/// The three terms of `d(layer_norm)`, from the normalized value `xhat` and the input's tangent
+/// already through the normalization's jacobian (`jx = J dx`).
+/// @example layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])    // [1.0, 2.0]
+export func layer_norm_tangent::<T>(gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]): T[...] when is_float::<T>() {
+    return gamma * jx + dgamma * xhat + dbeta
+}
+
+/// A tensor of `t`'s shape and element type filled with `v`: the neutral gain is this at `1.0` and
+/// the zero bias this at `0.0`. `zeros_like` carries the shape *and* the element type, so both
+/// operands of the neutral `layer_norm` below are built the same way and cannot answer different
+/// shapes; `full(shape(t), v)` would answer `float` and refuse a 32-bit lane.
+///
+/// The inline spelling this replaces, `layer_norm(x, ones_like(gamma), zeros_like(beta))`, answered
+/// `Array shape mismatch in 'layer_norm': layer_norm: gamma and beta must share the normalized
+/// trailing shape` at run time, on nvm and fvm, for a function whose three parameters are all
+/// `float[...]` -- the shape the showcase's own `block` has. The same `ones_like`/`zeros_like` pair
+/// on the same two arrays is right outside a lift, and the same law is exact for parameters whose
+/// extents are declared, so the reading to keep is: which of the two spellings the lift answers
+/// correctly is what the case in `test/cases/compile/transforms/layer_norm_jvp.cml` holds, and the
+/// isolation of that difference is written up in the lane's report rather than guessed at here.
+export func layer_norm_neutral::<T>(t: T[...], v: float): T[...] when is_float::<T>() {
+    return zeros_like(t) + v
+}
+
+export rule jvp_layer_norm::<T>(x: T[...], gamma: T[...], beta: T[...]) when is_float::<T>() {
+    layer_norm(x, gamma, beta) => (dx: T[...], dgamma: T[...], dbeta: T[...]) =>
+        layer_norm_tangent(
+            gamma,
+            dgamma,
+            dbeta,
+            layer_norm(x, layer_norm_neutral(gamma, 1.0), layer_norm_neutral(beta, 0.0)),
+            layer_norm_grad(x, layer_norm_neutral(gamma, 1.0), dx, 0))
 }
 
 /// `d(relu(x)) = dx` where `x > 0`, and zero where it is not: the tangent is the mask multiplied by
