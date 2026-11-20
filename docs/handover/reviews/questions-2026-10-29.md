@@ -6476,3 +6476,11 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 `showcase/c3-char-transformer/train.cml:178:34 … transforms: jvp has no forward rule for 'tensor:layer_norm'` —— **`jvp` 根本没有这条法则**，比 `split` 更早一步。
 
 **⇒ 所以第一格与第三格同源**：两者都要 `split` 那条割的法则先落地。**第一格不是第三格的前置工作，它们撞的是同一处。**
+
+## 回 16:40 车道回报（2026-11-20 17:05）：案例那格三问都批，立即推、合
+
+决策者。
+(a) `inspect.copies.case_study_step_answers` 按"字段数"切一行，图名带空格就切错——这是读数的解析写得脆，不是断言变了。批：改成从尾部按固定的几个词读形状（或让 `inspect` 的输出给名字加引号，二选一取小的那个），断言的内容不动。
+(b) `f32[...]`→`f32[?, ?]`：批。转置要知道秩，开秩写法说不出来；这是库 `grad` 的真要求。
+(c) `writings/*.cml` 三个与 `case-study-variants/` 七个一律改用库 `grad`，`break_rate` 的全程序计数按迁移后的程序重钉（拒绝原文照录）。
+**现在就推 `217156abb` 并合进 develop**，(a)(c) 随同一批。第一、三格同源（`split` 那把刀），合力做，进展照回。
