@@ -882,10 +882,17 @@ class TilesModule final : public BuiltinModule {
              {"download", false},
              {"source", false},
              {"inspect", false},
-             {"regions", false},
              {"benchmark", false},
+             {"regions", false},
              {"available", false},
              {"device", false}});
+        // `regions` touches no resource -- its own contract says it does neither execute the graph
+        // nor initialize CUDA (tiles/internal/regions.h, `inspectRegions`) -- but the purity it
+        // would have to declare is also what `stdlib/signatures/tiles.cml` writes as `uses var
+        // driver` for it, and the two cannot both stand: making the operator pure without the
+        // resolver's spelling and a regenerated signature file leaves `--verify-ops` saying the
+        // declaration names a resource the operator does not touch (measured 2026-11-20). Until
+        // both move together it stays declared as the report operators are.
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
@@ -941,6 +948,16 @@ class TilesModule final : public BuiltinModule {
                     {"inspect", externalAmbient("tiles:driver", AccessMode::Read)},
                     {"available", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
                     {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                    // `retain_preferred` keeps a value where the run prefers to compute it: with a
+                    // device it uploads (`retainPreferredKernel` falls through to `uploadKernel`,
+                    // which is the `upload` entry above -- the driver read-modify-written and a
+                    // device value made), and without one it answers the host value. The union of
+                    // the two paths is what it may do, which is what a clause states.
+                    {"retain_preferred",
+                     ResourceSpec{
+                         .accesses       = {driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
                 });
         }
         // The driver asks this before the first graph runs; the selection is the run's, and this

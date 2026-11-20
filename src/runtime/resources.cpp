@@ -1306,14 +1306,38 @@ std::string accessUseText(const sem::ResourceAccess &access) {
     return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
 }
 
+/// What a footprint does beyond a declaration, and whether any of it is a reading the analysis
+/// cannot name: the accesses the declaration does not cover, one line each, and the one flag both
+/// callers need to answer with a diagnostic that names a node (`unnamed`).
+struct BeyondCoverage {
+    std::vector<std::string> beyond;
+    /// A reading of unknown class the declaration does not promise: refused rather than counted
+    /// (the ruling of 2026-11-20), and the one line of `beyond` a node has to be found for.
+    bool unnamed = false;
+};
+
 /// The accesses of `footprint` that `declared` does not cover, each judged by `covers` alone: one
 /// access is beyond the declaration when a source that is that access by itself is not covered.
-std::vector<std::string> beyondCoverage(
+///
+/// A reading of unknown class is judged like any other and refused when the clause does not
+/// promise it. It used to be counted and passed -- "a possibility is not an access" -- but a clause
+/// that cannot name what the body reaches proves nothing about it, and a body that may reach past
+/// its own promise is what the check is for (the ruling of 2026-11-20). A declaration that does
+/// promise it (`any unknown`, which a widened signature can carry) still covers it: the refusal is
+/// the clause's answer applied to the reading, not an unconditional one.
+///
+/// Two readings stay counted and passed, for their own reasons: a cell of a variable (mutability
+/// is declared where the variable is, design effects plan 5.1), and a class the footprint names
+/// but a clause cannot spell (`any object`, `any handle`: the analysis knows the class, and design
+/// principles 3.3 models "may reach any one of them" deliberately -- refusing those is an item of
+/// its own).
+BeyondCoverage beyondCoverage(
     const sem::ResourceSignature &declared, const GraphFootprint &footprint, size_t withCount,
     EffectContainmentReport *report) {
-    std::vector<std::string> beyond;
-    // The classes the footprint cannot name, counted rather than judged: a possibility is not an
-    // access, and a count that grows is how a checker that stops looking is made to say so.
+    BeyondCoverage answer;
+    std::vector<std::string> &beyond = answer.beyond;
+    // The classes the footprint cannot name, counted one by one: a count that grows is how a
+    // checker that stops looking is made to say so, and the unknown one now also refuses.
     if (report != nullptr) {
         for (ResourceClass cls : footprint.anyOf) {
             switch (cls) {
@@ -1335,22 +1359,34 @@ std::vector<std::string> beyondCoverage(
             }
         }
     }
+    for (ResourceClass cls : footprint.anyOf) {
+        if (cls != ResourceClass::Unknown) {
+            continue; // a class the analysis can name is the reading design 3.3 keeps conservative
+        }
+        GraphFootprint single;
+        single.anyOf.push_back(cls);
+        if (!sem::covers(declared, signatureOfFootprint(single, withCount))) {
+            answer.unnamed = true;
+            beyond.push_back(std::format("any {}", sem::resourceClassName(cls)));
+        }
+    }
     for (const sem::ResourceAccess &access : footprint.accesses) {
-        // What a type can state: an external resource, or a handle a parameter names. A cell of a
-        // variable is not in a `uses` clause (design effects plan 5.1: mutability is declared where
-        // the variable is), and an access of unknown class is the analysis saying it cannot tell;
-        // neither is something the callee is known to do past its promise.
-        if (access.resource.cls == ResourceClass::Variable ||
-            access.resource.cls == ResourceClass::Unknown) {
+        // A cell of a variable is not in a `uses` clause (design effects plan 5.1: mutability is
+        // declared where the variable is), so it is counted and passed.
+        if (access.resource.cls == ResourceClass::Variable) {
             if (report != nullptr) {
-                ++(access.resource.cls == ResourceClass::Variable ? report->variableCell
-                                                                 : report->anyUnknown);
+                ++report->variableCell;
             }
             continue;
+        }
+        const bool unnamed = access.resource.cls == ResourceClass::Unknown;
+        if (unnamed && report != nullptr) {
+            ++report->anyUnknown;
         }
         GraphFootprint single;
         single.accesses.push_back(access);
         if (!sem::covers(declared, signatureOfFootprint(single, withCount))) {
+            answer.unnamed = answer.unnamed || unnamed;
             beyond.push_back(accessUseText(access));
         }
     }
@@ -1361,7 +1397,84 @@ std::vector<std::string> beyondCoverage(
     }
     std::sort(beyond.begin(), beyond.end());
     beyond.erase(std::unique(beyond.begin(), beyond.end()), beyond.end());
-    return beyond;
+    return answer;
+}
+
+/// Why the analysis cannot name what `ref` reaches, in one clause: a refusal names the node, and
+/// this is the half that says why the resource is not one a `uses` clause can state.
+std::string unnamedReasonOf(const Program &program, const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return "the node cannot be read";
+    }
+    if (node->kind == GCNodeKind::Oper) {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        if (body == nullptr) {
+            return "its operator declares nothing, so what it reaches is read conservatively";
+        }
+        if (core::OperatorTable::instance().semantics(body->oper) == nullptr) {
+            return std::format(
+                "'{}' declares no resources, so every resource its operands may name is read "
+                "conservatively: the operator's declaration is where one would be named",
+                body->uri());
+        }
+        return "its declaration names no resource the analysis can read";
+    }
+    if (node->kind == GCNodeKind::Func || node->kind == GCNodeKind::Call) {
+        const auto with = graph.withInputsOf(ref);
+        const core::type::FunctionType *type =
+            with.empty() ? nullptr : functionTypeOfValue(graph, valueBehindGates(graph, with[0]));
+        if (type == nullptr) {
+            return "the function value it runs has no function type, so no clause says what it "
+                   "reaches";
+        }
+        const sem::ResourceSignature &clause = type->resources();
+        if (clause.mode == sem::ResourceSignature::Mode::Generic) {
+            return "the function value it runs publishes no resource clause (its type promises "
+                   "nothing), so nothing says what it reaches";
+        }
+        const GCGraph *callee = program.calleeOf(graph, ref);
+        if (callee == nullptr) {
+            return "the body behind the function value it runs is not one the graph names, so "
+                   "nothing says what it reaches";
+        }
+        return std::format(
+            "the body of '{}' it runs reaches a resource no clause there names, and this call "
+            "carries that reading up with it",
+            callee->name());
+    }
+    return "the analysis cannot name the resource it reaches";
+}
+
+/// Where the analysis first fails to name what a body reaches: the node, and why.
+struct UnnamedReading {
+    gc_node_ref_t node = kInvalidNodeRef;
+    std::string why;
+};
+
+/// The first node of `graph` (by node order) whose own accesses reach a resource of unknown class,
+/// with the reason -- the node a refusal names. Its own walk, because the two readers that ask
+/// (the call site and the commit) hold their footprints differently; the fixpoint is cached, so a
+/// second walk of a graph already measured costs one lookup.
+std::optional<UnnamedReading> firstUnnamedReading(const Program &program, const GCGraph &graph) {
+    FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
+    Resolver resolver(program, [&walk](const GCGraph *callee) { return walk.run(callee); });
+    for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        if (graph.node(ref) == nullptr) {
+            continue;
+        }
+        const NodeResources resources = resolver.node(graph, ref);
+        const bool reaches = std::any_of(
+            resources.accesses.begin(),
+            resources.accesses.end(),
+            [](const NodeAccess &access) {
+                return access.resource.cls == ResourceClass::Unknown;
+            });
+        if (reaches) {
+            return UnnamedReading{.node = ref, .why = unnamedReasonOf(program, graph, ref)};
+        }
+    }
+    return std::nullopt;
 }
 
 /// The declared clause of a call site and the graph it runs, or nullopt when the site declares
@@ -1431,16 +1544,29 @@ effectContainmentViolation(const Program &program, const GCGraph &graph, EffectC
             continue; // a type that promises nothing covers everything (sem::covers)
         }
         const GraphFootprint footprint = footprintOf(program, site.callee);
-        std::vector<std::string> beyond =
+        const BeyondCoverage coverage =
             beyondCoverage(*site.declared, footprint, site.withCount, report);
-        if (beyond.empty()) {
+        if (coverage.beyond.empty()) {
             continue;
         }
-        return EffectContainment{
+        EffectContainment violation{
             .call     = ref,
             .declared = sem::toString(*site.declared),
-            .beyond   = std::move(beyond),
+            .beyond   = coverage.beyond,
         };
+        // A reading of unknown class is refused rather than counted, and the refusal names the
+        // node of the body that makes it -- the call site above says which promise is broken, not
+        // where. `firstUnnamedReading` answers `nullopt` only when the unknown came from nowhere
+        // this body holds, which cannot happen (a callee's `anyOf` is carried on the node that
+        // runs it); a refusal without the node would still be a refusal, so it is kept.
+        if (coverage.unnamed) {
+            if (const auto unnamed = firstUnnamedReading(program, *site.callee)) {
+                violation.body       = site.callee;
+                violation.unnamed    = unnamed->node;
+                violation.unnamedWhy = unnamed->why;
+            }
+        }
+        return violation;
     }
     return std::nullopt;
 }
@@ -1610,8 +1736,10 @@ enum class EffectReader : uint8_t {
 
 /// Analysis 4.1, effect containment, read over the whole body of `graph`: what the nodes' operator
 /// declarations make it reach (principle 3.3, resolved bottom-up) must stay inside the clause the
-/// graph's own type declares. What a type cannot spell -- a cell of a variable, a class the
-/// analysis cannot name -- is passed over, which is the line the call-site check draws too.
+/// graph's own type declares. A reading the analysis cannot name (class Unknown) is refused like
+/// any other access the clause does not cover, and the diagnostic names the node and the reason; a
+/// cell of a variable is still passed over (its mutability is declared where the variable is), which
+/// is the line the call-site check draws too.
 ///
 /// `reader` changes only the closing sentence: who is being told, and so whether the reach is
 /// something the commit is about to do or something the compiler already handed over.
@@ -1627,8 +1755,9 @@ std::optional<CommitViolation> effectBeyondDeclaration(
         return std::nullopt; // a type that promises nothing covers everything
     }
     const GraphFootprint body = walk.run(&graph);
-    const std::vector<std::string> beyond =
+    const BeyondCoverage coverage =
         beyondCoverage(declared, body, type->withTypesCount(), nullptr);
+    const std::vector<std::string> &beyond = coverage.beyond;
     if (beyond.empty()) {
         return std::nullopt;
     }
@@ -1652,10 +1781,33 @@ std::optional<CommitViolation> effectBeyondDeclaration(
             continue;
         }
         const NodeResources resources = table.of(ref);
+        // A reading of unknown class first, at the node that makes it: no clause spells it, so it
+        // has no access text for the loop below to match, and it is the one beyond the check
+        // refuses for what the analysis cannot say rather than for what it said.
+        const auto unknown = std::find_if(
+            resources.accesses.begin(), resources.accesses.end(), [](const NodeAccess &access) {
+                return access.resource.cls == ResourceClass::Unknown;
+            });
+        if (coverage.unnamed && unknown != resources.accesses.end()) {
+            return CommitViolation{
+                .check  = CommitCheck::Effect,
+                .graph  = &graph,
+                .first  = ref,
+                .origin = graph.nodeOrigin(ref),
+                .text   = std::format(
+                    "{}, in a graph whose type declares {}, makes an access no clause can name "
+                    "({}): {} -- the commit would publish a body that reaches past its own "
+                    "declared effect",
+                    namedNode(program, graph, ref),
+                    declaredText,
+                    nodeAccessText(*unknown),
+                    unnamedReasonOf(program, graph, ref)),
+            };
+        }
         for (const NodeAccess &access : resources.accesses) {
             if (access.resource.cls == ResourceClass::Variable ||
                 access.resource.cls == ResourceClass::Unknown) {
-                continue; // a type cannot spell it, so it does not promise against it
+                continue; // a type cannot spell either, and each is answered above or passed over
             }
             if (std::find(beyond.begin(), beyond.end(), nodeAccessText(access)) == beyond.end()) {
                 continue;

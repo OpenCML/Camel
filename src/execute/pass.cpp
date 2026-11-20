@@ -2720,7 +2720,10 @@ std::string describeNodeOf(
 }
 
 /// The one-line text the effect-containment diagnostic carries: the call site, the type it
-/// declares as the declaration spells it, and every access the type does not cover.
+/// declares as the declaration spells it, every access the type does not cover and -- when the
+/// footprint reaches a resource no clause can name -- the node inside the body that makes that
+/// reading and why it cannot be named (the ruling of 2026-11-20: an access the check cannot name is
+/// refused, so the diagnostic has to say which node and why).
 std::string effectContainmentText(
     const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
     const camel::runtime::EffectContainment &violation) {
@@ -2728,11 +2731,18 @@ std::string effectContainmentText(
     for (const std::string &access : violation.beyond) {
         beyond += (beyond.empty() ? "" : ", ") + access;
     }
-    return std::format(
-        "{} declares {}; the graph it runs touches {}",
+    std::string text = std::format(
+        "{} declares {}{}",
         describeNodeOf(program, graph, violation.call),
         violation.declared.empty() ? std::string("nothing") : violation.declared,
-        beyond);
+        beyond.empty() ? std::string() : std::format("; the graph it runs touches {}", beyond));
+    if (violation.body != nullptr && violation.unnamed != camel::runtime::kInvalidNodeRef) {
+        text += std::format(
+            "; no clause can name what {} reaches: {}",
+            describeNodeOf(program, *violation.body, violation.unnamed),
+            violation.unnamedWhy);
+    }
+    return text;
 }
 
 /// Every generic pass, including a registered nested pass, checks operator ports, entry/exit
@@ -2802,7 +2812,10 @@ bool passBoundaryViolation(
         // Analysis 4.1, effect containment: at each call site the footprint of the function value
         // called must not exceed what the type at the call site declares. The message names the
         // call node and the accesses beyond its type, because those two are what a reader has to
-        // look at: the type is the promise a caller relies on.
+        // look at: the type is the promise a caller relies on. When the footprint reaches a
+        // resource no clause can name, the message names the node inside the body that makes that
+        // reading too, and says why it cannot be named: that reading is refused rather than
+        // counted (the ruling of 2026-11-20), so the node is what the reader has to go and fix.
         //
         // The check also says what it declined to judge. That reading is a diagnostic line on the
         // `Pass` scope and not an environment switch, because a count decides only how much is
@@ -2812,7 +2825,9 @@ bool passBoundaryViolation(
         // fine" is told apart from "I refused to look": a decline is the analysis saying it cannot
         // name the resource, and a number that only ever grows is how that shows up. A run that
         // does not ask pays nothing for it, because the arguments are not formatted unless the line
-        // is emitted.
+        // is emitted. The `any unknown` component is the one that is no longer a decline -- it
+        // refuses -- and it is still printed so that a refused run's summary says how many such
+        // readings the refusal was about.
         camel::runtime::EffectContainmentReport report;
         const camel::runtime::GCGraph *refused = nullptr;
         std::optional<camel::runtime::EffectContainment> violation;
