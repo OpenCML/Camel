@@ -34,9 +34,17 @@ func noisy(x: f32[...]): f32[...] {
 }
 
 func export_step(m: Mlp, x: f32[...]): void! sync {
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
-    println('exported step')
-    return null
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
+    return match r {
+        case error e => sync {
+            println(e)
+            return e
+        }
+        case _ => sync {
+            println('exported step')
+            return null
+        }
+    }
 }
 
 /// `noisy` has an effect, so the export is refused and the error value it gives

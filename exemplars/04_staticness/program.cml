@@ -44,21 +44,45 @@ func settle(t: f32[...]): f32[...] {
 }
 
 func export_static(x: f32[...]): void! sync {
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(forward, x)
-    println('exported forward')
-    return null
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(forward, x)
+    return match r {
+        case error e => sync {
+            println(e)
+            return e
+        }
+        case _ => sync {
+            println('exported forward')
+            return null
+        }
+    }
 }
 
 func export_dynamic(x: f32[...]): void! sync {
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(shrink, x)
-    println('exported shrink')
-    return null
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(shrink, x)
+    return match r {
+        case error e => sync {
+            println(e)
+            return e
+        }
+        case _ => sync {
+            println('exported shrink')
+            return null
+        }
+    }
 }
 
 func export_linear(x: f32[...]): void! sync {
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(pile, x)
-    println('exported pile')
-    return null
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(pile, x)
+    return match r {
+        case error e => sync {
+            println(e)
+            return e
+        }
+        case _ => sync {
+            println('exported pile')
+            return null
+        }
+    }
 }
 
 /// `settle` is refused, and its refusal is this function's result: nothing

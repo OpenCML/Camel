@@ -213,9 +213,6 @@ npm run pypi:rollup
 
 # 只查已有 wheel 的标签：两只形态是否齐全、名字与内容是否一致
 python3 scripts/check_wheel_tags.py --ruling dist/pypi/*.whl
-
-# 只查内容：wheel 里的文件与 out/<tag>/、stdlib/、include/ 逐条对齐（缺一个就失败，并把清单逐行打印出来）
-python3 scripts/check_wheel_contents.py --out out/latest dist/pypi/*.whl
 ```
 
 ### 8.1 离线 dry-run（主机拿不到包索引时）
@@ -228,7 +225,6 @@ rollup 里那句 `pip install build packaging` 立刻失败、走 `pip wheel --n
 export PIP_NO_INDEX=1 CAMEL_PYPI_SKIP_BUILD=1
 export CAMEL_PYPI_PYTHON=$HOME/camel-eval/venv-bench/bin/python   # 3.10 + setuptools 84；系统 python3 是 59.6，读不了 PEP 639 的 license
 npm run pypi:rollup
-python3 scripts/check_wheel_contents.py --out out/latest dist/pypi/*.whl
 ```
 
 `CAMEL_PYPI_PYTHON` 必须指一个 setuptools >= 77 的解释器：`pyproject.toml` 的 `license` 是 PEP 639 的 SPDX 字符串，
