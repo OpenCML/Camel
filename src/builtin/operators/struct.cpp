@@ -82,7 +82,7 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // a call only when the type argument states every extent (`resolveForCall`), and every accepted
 // call is settled from that same `statedExtentsOf` before a node is made (`valueFromTypeArgs`, from
 // `Builder::visitLinkNode` and `Builder::functionValueOf`), so no path builds an OPER node of this
-// operator for a run to execute. The kernel that used to stand here answered every such run with
+// operator for a run to execute. A kernel here would answer every such run with
 // `RuntimeDiag::PassInternalError` -- a compiler's defect reported as the program's fault -- and
 // nothing could reach it.
 
@@ -224,8 +224,8 @@ std::shared_ptr<camel::core::type::FuncTypeResolver> extentOfResolver() {
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // Two or more arrays (the resolver refuses fewer); the result type is an array of tuples
-    // with one element per array. With three arrays the tuples used to be built with two
-    // elements under a type of three: the third array was dropped and reading `.2` read
+    // with one element per array. With three arrays the tuples are built with three
+    // elements, matching the type: dropping the third array would make `.2` read
     // past the tuple.
     const size_t arity = norm.size();
     std::vector<Array *> arrays;
@@ -499,7 +499,7 @@ void scatterSliceGradient(
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]` and `slice(t, axis, a, b, s)`: one slice node,
 // whichever of the two spellings wrote it (design principles 5.4). The six words are the value,
 // the axis, the two bounds, the step and the mask that says which of the bounds the program wrote;
-// the argument count no longer tells the two spellings apart.
+// the argument count does not tell the two spellings apart.
 //
 // The slice holds for any rank and along any axis: the elements are the positions the range takes
 // along the axis named, with every other coordinate left as it is. A step-1 slice of the first
@@ -594,7 +594,7 @@ slot_t __len_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 // `a == b` of two `Bytes`: the same bytes in the same order. `!=` is the negation of this one
-// (builder_operators.cpp), so it has no kernel of its own any more.
+// (builder_operators.cpp), so it has no kernel of its own.
 slot_t __eq_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;

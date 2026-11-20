@@ -112,7 +112,7 @@ enum class GCNodeKind : uint8_t {
     Func = 10,
     Oper = 11,
     // 12 was the SYNC node, deleted: a statement's place in its `sync` block is a sync edge, and
-    // the node it used to need is not part of the model (docs/design/effects/edges.cn.md 5.3).
+    // the node it would need is not part of the model (docs/design/effects/edges.cn.md 5.3).
     Gate = 13,
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
@@ -290,9 +290,9 @@ uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
 /// lifetime cannot be judged here, because a member is a frame slot the payload names
 /// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary
 /// inputs
-/// -- an aggregate with two members has one input. The four guards that used to live here (a root,
-/// a member with readers, a reader of the last member, droppable) all judged "member = input",
-/// which that reading disproves; keeping them would let the next reader believe this was covered.
+/// -- an aggregate with two members has one input. Guards on a root,
+/// a member with readers, a reader of the last member, or droppable would all judge "member = input",
+/// which that reading disproves; they would let the next reader believe this was covered.
 enum class AggregateTailVerdict : uint8_t {
     NotAnAggregate,  // not an aggregate, or too few members to have a last one
     MappingMismatch, // the member count and the input count disagree: member i is not input i

@@ -334,7 +334,7 @@ struct FrozenGraphView {
     /// Whether a value the write leaves is read by a reader the program can still see. A reader the
     /// live set does not reach -- a closure definition nothing calls -- reads a value nobody will
     /// ever look at; counting it is what kept a dead write alive, and it is why a graph whose only
-    /// last reader was dropped used to be refused by its own credential check with "has effect node
+    /// last reader was dropped would be refused by its own credential check with "has effect node
     /// N with neither a read of its value nor a place in its chain". The criterion, in one line: a
     /// write may be called dead when it is no root and every node that reads it lies outside this
     /// set. The set is asked here, once per view, from `camel::runtime::liveNodesOf` -- the same walk

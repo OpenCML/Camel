@@ -121,8 +121,8 @@ export func pick_at::<T>(t: T[...], position: int, length: int): T when is_numer
 // The extents travel in one list because that is the list the reverse law wants whole: the axis and
 // the flag decide which extents are lanes and the extents decide where each lane's cotangent goes, so
 // one argument holds the three facts the adjoint reads and the value spends on nothing. (The number
-// of ordinary ports is not the constraint it once was: the walk used to refuse a third position before
-// looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
+// of ordinary ports is not a constraint: the walk does not refuse a third position before
+// looking for a law, and `TransposeRefusalCause` has no such cause -- the two extrema below take
 // a third port, their tie selection, which no extent list could carry.)
 
 /// The sum of every element, with the operand's extents stated: `sum(t)`, and `extents` is `shape(t)`.
@@ -369,8 +369,8 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 // a declaration's result is a type, not a function of two values. Written here as a declaration
 // the name answered `T[...]`, which is a result that states no extent at all; the operator's own
 // inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
-// `support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` now reads a
-// `float[3]` where it used to read a `float[...]`.
+// `support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` reads a
+// `float[3]`, not a `float[...]`.
 //
 // The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
 // takes them as parameters of its own, so a call that leaves them to the run states no rank, and its

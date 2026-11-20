@@ -10,7 +10,7 @@
  * optional axis that defaults to the last one.
  *
  * `max(t)` / `min(t)` / `argmax(t)` / `argmin(t)` are the whole-tensor forms of the four reductions
- * that used to have only the axis form (design principles 7.3 names them under one name; 7.7 gives
+ * that otherwise have only the axis form (design principles 7.3 names them under one name; 7.7 gives
  * them the readings below). They answer an element (max/min) or the position counted in row-major
  * order (argmax/argmin, an int64), and a tensor with no element is `InvalidArgument` -- an extremum
  * has no identity, unlike `sum`, whose identity is 0 (7.7).
@@ -332,8 +332,8 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// because the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent
 /// call -- pass `shape(xs)`, whose extents are the primal's and therefore a value; refusing would
 /// turn a legal program away for a shape its own operand has. Measured on that tree: both sites
-/// report the extents as a value, and the reverse walk used to
-/// stop on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed
+/// report the extents as a value, and without the repair the reverse walk
+/// stops on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed
 /// from this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0
 /// answer under an array type has no conversion to make. The repair is not here and not in the walk
 /// -- a slot whose type already claims a rank has nothing to convert -- but in the law that reads
@@ -710,7 +710,7 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
 // The adjoint is `mean_axis`'s: spread the cotangent back over the lane (`tensor:expand_axis`) and
 // divide by the lane's length (`tensor:dim`). The axis and the flag are operands this rule is
 // handed, so they reach `expand_axis` as they were stated -- the flag as a real `bool`, which is
-// what the parameter's type says it is, and no longer an integer read out of a list and compared
+// what the parameter's type says it is, and not an integer read out of a list and compared
 // against zero. A slot read at the wrong width answers a lane count of nonsense, which is the one
 // way this rule could be wrong silently; a typed parameter cannot be read at the wrong width.
 //

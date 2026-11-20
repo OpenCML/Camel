@@ -120,8 +120,8 @@ leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
 /// `reshape<[2, 1, 2]>` are assignable to one another, so a type comparison lets the law through and
 /// its right side then writes `[2, 2]` into the tangent of a rank-three reshape. A law written for
 /// one configuration therefore answers only the node that carries that configuration, which is the
-/// defect this closes: `reshape<[8, 2, 8]>` used to match the law written for `[2, 2]` and the run
-/// died with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
+/// defect this closes: `reshape<[8, 2, 8]>` would match the law written for `[2, 2]` and the run
+/// would die with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
 ///
 /// A law that writes **no** `<>` value is not asked about the node's configuration here: what such a
 /// law says about it is nothing, and `namesTheNode` already settles how many ports it must name.
@@ -961,7 +961,7 @@ gc_node_ref_t expandRuleRightSide(
         }
         answeredAsShape.emplace(capture, true);
         if (!keep.empty()) {
-            // Not part of the answer any more: the call that read it answers with the shape, so the
+            // Not part of the answer: the call that read it answers with the shape, so the
             // value is neither asked for nor copied.
             keep[capture] = false;
         }

@@ -581,7 +581,7 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
             .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
             .externalEffect = true});
     // `:macro/cmp` is pure and declared in the pure list of `registerBuiltinOperatorTraits`: its
-    // executor answers the null slot and the compiler makes no node of it any more
+    // executor answers the null slot and the compiler makes no node of it
     // (src/compile/gct/builder.cpp, `ReservedDataOp::Comp`), and the two operands are function
     // values it never calls.
     // The operators that run a function the program hands them (`map`, `filter`, `foreach` and the

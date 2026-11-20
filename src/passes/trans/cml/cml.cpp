@@ -289,8 +289,8 @@ constexpr int kIntervalPrecedence = 85;
 /// this printer's opinion (`src/parse/syntax/parser_expr.cpp`, `negExpr`): "looser than `->` and
 /// than `^`, tighter than the other binary operators ... `-x ^ 2` is `-(x ^ 2)`, `-a * b` is
 /// `(-a) * b`". So it sits between `*` and `^` of `precedenceOf`: a prefix as the base of a power
-/// takes the parentheses (`(-x) ^ 2`), as the left operand of `*` it does not (`-a * b`). The
-/// value 70 that used to stand here put the prefix above `^`, so `(-x) ^ 2` printed as `-x ^ 2`,
+/// takes the parentheses (`(-x) ^ 2`), as the left operand of `*` it does not (`-a * b`). A
+/// value of 70 would put the prefix above `^`, so `(-x) ^ 2` printed as `-x ^ 2`,
 /// which parses as `-(x ^ 2)` (the A7 case `parse/rulings/power`: 9 printed as -9).
 constexpr int kPrefixPrecedence = 55;
 
@@ -4154,7 +4154,7 @@ class CmlPrinter {
         std::string text    = name;
         const auto withArgs = graph_->withInputsOf(ref);
         if (!withArgs.empty()) {
-            // The one configuration this printer used to write was the format of a print:
+            // The one configuration this printer writes is the format of a print:
             // `print<'{}-{}'>`, `println<'{:.2f}'>` -- a string the call holds and the source
             // writes in `<>`. A declared operator that states a `with` parameter of its own (`shl`
             // is `with <count: int>`, written `1->shl<4>`) holds a value there, and a value the

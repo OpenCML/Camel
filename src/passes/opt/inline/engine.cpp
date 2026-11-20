@@ -1392,8 +1392,8 @@ const camel::runtime::Program *applyOptimizeRewritePass(
     // count its rounds share, so `growth_budget` bounds the work of the pass, and each pass that
     // runs the engine on its own (`std::opt::inline`, `::devirtualize`, `::specialize`) keeps one
     // and clears it where its run starts, so a run spends the budget the pipeline gave it and the
-    // next one does not start on what the last one left. A run given none used to count into a
-    // local and start over with no trace: the bound it enforced was one only that call could see,
+    // next one does not start on what the last one left. A run given none would count into a
+    // local and start over with no trace: the bound it enforced would be one only that call could see,
     // which is a budget in name.
     GUARD(
         config.growthSpentNodes != nullptr,
@@ -1459,8 +1459,8 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         // else: a local would be made and destroyed with this call, so every run would start from
         // zero, `runs` could never pass 1, and `settle_runs` (32 by default) would never be
         // reached -- the run that never settles would look like one that always does. A caller
-        // that runs the engine therefore has to give it the count it keeps across its runs; the
-        // engine used to keep one of its own for such a caller, which is the same silence.
+        // that runs the engine therefore has to give it the count it keeps across its runs; an
+        // engine-private count for such a caller would be the same silence.
         GUARD(
             config.settleStreak != nullptr,
             std::format(

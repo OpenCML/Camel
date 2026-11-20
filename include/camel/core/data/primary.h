@@ -318,8 +318,8 @@ template <typename T> data_ptr_t PrimaryData<T>::convertTo(type::Type *type) {
         if (from == type::TypeCode::Int32 && to == type::TypeCode::Int64) {
             return std::make_shared<LongData>(static_cast<int64_t>(data_));
         } else if (from == type::TypeCode::Int64 && to == type::TypeCode::Int32) {
-            // A literal an i32 cannot hold is not converted (it used to be cut to 32 bits:
-            // `let b: i32 = 3000000000` was -1294967296). The caller reports it.
+            // A literal an i32 cannot hold is not converted (cutting it to 32 bits would turn
+            // `let b: i32 = 3000000000` into -1294967296). The caller reports it.
             if (!primaryFitsType(data_, to)) {
                 return nullptr;
             }

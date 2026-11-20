@@ -4391,7 +4391,7 @@ bool buildTransposeMember(
                 // *numbers*, the last one first -- and a round reads its own element out of the
                 // sequence with `:op/idx_arr`, the operator `xs[i]` is built from (`index_into` in
                 // `src/core/forward.cpp`); the reverse pass in `modules/autodiff/pullback.cpp`
-                // reads its tape the same way. The element is no longer a value the two loops
+                // reads its tape the same way. The element is not a value the two loops
                 // share: it is a function of the round number, which is what makes the pairing
                 // right rather than merely reversed.
                 const bool iterates = camel::core::loopHasIterable(function->loopKindOf(ref));

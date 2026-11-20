@@ -770,7 +770,7 @@ void FunctionEmitter::lowerCall(
     std::vector<std::string> args;
     // The type each argument fills, in the order a direct call lists them: the normal ports' types,
     // then the `with` ports' -- the ports, and not the callee's declared parameter list
-    // (`funcType()`), because those two disagree exactly where this writer used to be wrong.
+    // (`funcType()`), because those two disagree exactly where a writer using the declared list would be wrong.
     //
     // A specialization that binds a value erases the formal from the copy and drops the argument
     // from the call, and the copy's declared parameter list keeps the erased position: it is

@@ -174,8 +174,8 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// **A nest of this `grad` is this composition twice, and it is read one wall further on.** `grad(f)`
 /// answers a function that still takes its weight as a `with` value, so `grad(grad(f))` finds a first
 /// `with` parameter to differentiate and the second derivative is the same step again:
-/// `grad(grad(square))<2.0>()` typechecks and builds, where it used to be refused by
-/// `first_with_as_param` ("this function has no `with` parameter: there is no first one to move").
+/// `grad(grad(square))<2.0>()` typechecks and builds, with no refusal from
+/// `first_with_as_param` ("this function has no `with` parameter: there is no first one to move") for it.
 /// What it does not do yet is answer 2.0: the value the outer `jvp` is asked to lift is what the inner
 /// `grad` answered, a function computed at run time, and `jvp` lifts a callee only when it is evident
 /// -- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The

@@ -383,8 +383,8 @@ export rule jvp_mean::<T>(xs: T[...]) when is_float::<T>() {
 ///
 /// `dims` is the operator's second port, and this law names it, so the call's own `<>` value reaches
 /// the right side as an ordinary value (the protocol stated over `jvp_sum`, and the one
-/// `vmap_rule_reshape` already uses). It used to be written for one constant -- `reshape<[2, 2]>` --
-/// which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` answered
+/// `vmap_rule_reshape` already uses). It is not written for one constant -- `reshape<[2, 2]>` --
+/// which would put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` would answer
 /// `reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
 /// `showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
 /// lifted at all.
@@ -504,13 +504,13 @@ export rule jvp_mul_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
 /// `reshape_jvp` records: a `<>` position written in a rule's right side asks the closure for a
 /// compile-time value it does not carry.
 ///
-/// The law used to write `<1>` in its own left side, which made it answer one axis. Since the fit
-/// compares the `<>` value a law writes against the node's configuration it answered no other axis
-/// at all: `softmax<2>` was refused by name (`the rule 'jvp_softmax' writes 1 `<>` value(s) of its
+/// The law does not write `<1>` in its own left side, which would make it answer one axis. Since the fit
+/// compares the `<>` value a law writes against the node's configuration it would answer no other axis
+/// at all: `softmax<2>` would be refused by name (`the rule 'jvp_softmax' writes 1 `<>` value(s) of its
 /// own, and this node's configuration is not that one`), and the `attention` block's
 /// `reshape<[8, 2, 8]>` -> `permute<[1, 0, 2]>` -> `softmax<2>` chain could not be lifted
 /// (`rules_angle_args.softmax_after_layout` is that chain). A law that reads its angle from the node
-/// answers every node, which is what `jvp_reshape` and `jvp_permute` already did.
+/// answers every node, which is what `jvp_reshape` and `jvp_permute` do.
 export rule jvp_softmax::<T>(x: T[...], axis: int) when is_float::<T>() {
     softmax<axis>(x) => (dx: T[...]) => softmax_jvp(x, dx, axis)
 }
@@ -537,7 +537,7 @@ export func softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_f
 /// answers `1 - 3p = [0.7299082804888587, 0.2658145868356071, -0.9957228673244654]`).
 ///
 /// The axis is the operator's second port and this law names it, exactly as `jvp_softmax` above
-/// does; it used to write `<0>`, so it answered the first axis of a rank-1 input and nothing else.
+/// does; it does not write `<0>`, which would answer the first axis of a rank-1 input and nothing else.
 export rule jvp_log_softmax::<T>(x: T[...], axis: int) when is_float::<T>() {
     log_softmax<axis>(x) => (dx: T[...]) => log_softmax_jvp(x, dx, axis)
 }
@@ -741,7 +741,7 @@ func index_into::<T>(x: T[], i: int): T {
 /// `T[]` carries no length in its type (design principles 5.4).
 ///
 /// The left side stays `index_into` -- `:op/idx_arr` at two operands, the operator's own spelling --
-/// and only the linear half is written with the length. The two sides of one rule no longer say the
+/// and only the linear half is written with the length. The two sides of one rule do not say the
 /// same thing, which is the point: the primal reads an element, the tangent reads an element of the
 /// tangent *and* carries the fact the reverse reading needs.
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`

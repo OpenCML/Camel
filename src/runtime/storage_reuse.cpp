@@ -79,7 +79,7 @@ CopyVerdict verdictOfDecision(StorageReuse decision) {
 ///     so `append` is a fact of that declaration and not of the URI's tail; `array:sort_i` answers
 ///     `sort_i` the same way; and the loop-state append states its own shape
 ///     (`declareCallForm(":struct/append_arr_owned", ...)`) because a program writes `xs->append<v>`
-///     for it -- which is why this reading no longer carries a URI constant for that form;
+///     for it -- which is why this reading carries no URI constant for that form;
 ///   * for a form a program cannot write, the operator the form stands for (`plainForm`), whose own
 ///     call shape is then the name: the program wrote the plain call, and the verdict is the form's.
 std::string updateName(const camel::core::OperatorTable &table, std::string_view uri) {

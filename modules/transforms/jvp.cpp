@@ -1396,8 +1396,8 @@ bool liftGraph(
                 // The *template* is the node's own Norm input, copied: a FILL takes every slot its
                 // payload does not list from that template, so the template has to have the tuple's
                 // arity and hold the same constants. `(x, 0.0)` lists one member and takes the
-                // second slot from the template; a template of one field, as this walk used to
-                // make, makes the fill read field 1 of a one-field tuple (measured: `fa`, "Tuple
+                // second slot from the template; a template of one field
+                // would make the fill read field 1 of a one-field tuple (measured: `fa`, "Tuple
                 // field out of range: field 1 of a tuple with 1 fields").
                 //
                 // The tangent is the Fill of the components' tangents: the tangent of a tuple is
@@ -2524,7 +2524,7 @@ bool liftGraph(
         // operands), so the value is the copy of the exit itself -- and a Gate only forwards, so it
         // is followed to what it carries.
         // valueBehindGates is the walk (camel/runtime/graph.h): the value a gate carries is its
-        // first ordinary input, and this used to take back() -- the last wait -- for both kinds.
+        // first ordinary input, not back() -- the last wait -- for both kinds.
         const gc_node_ref_t oldValue = valueBehindGates(function, function.exitNodeRef());
         if (oldValue >= function.nodeCount() || !copied[oldValue]) {
             os << "REINTERP jvp function=" << name

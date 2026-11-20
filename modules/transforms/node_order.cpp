@@ -71,7 +71,7 @@ std::vector<gc_node_ref_t> dependencyOrderOf(const GCGraph &graph) {
 
     // Ready nodes, smallest place first: on a graph whose ids are a topological order this walk
     // reproduces the id order exactly (the smallest id still waiting is always the next one), so a
-    // body the front end built is read in the order it used to be.
+    // body the front end built is read in its id order.
     std::priority_queue<gc_node_ref_t, std::vector<gc_node_ref_t>, std::greater<>> ready;
     for (gc_node_ref_t ref = 0; ref < places; ++ref) {
         if (isNode(ref) && waiting[ref] == 0) {

@@ -1125,9 +1125,9 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // exist before the edges are laid. The measurement reads no edge of this kind --
         // `footprintOf` walks bodies and callee signatures -- so the two may stand in this order.
         measureInferredResources();
-        // The edges themselves, once: what a write owes its region is no longer derived by each
+        // The edges themselves, once: what a write owes its region is not derived by each
         // walk that asks what runs (the warning's, the liveness of a graph, the encode, the
-        // execution order) -- they follow these edges, and the derivation is gone.
+        // execution order) -- they follow these edges.
         layRegionWriteEdges();
         settleEffectfulGraphs();
         // A stream is read once on each execution path (design principles 5.4), which is a property

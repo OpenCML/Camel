@@ -648,7 +648,7 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     // The input lists are read back from the rebuilt node, not from `init`: a caller that
     // snapshots the node and changes some lists (snapshotNodeInit) passes spans that view the
     // node's own tail block, which rebuildNode has just laid out anew (in place when it fits).
-    // With one norm input fewer, the span that used to cover the control inputs covers other
+    // With one norm input fewer, the span that covered the control inputs before the rebuild covers other
     // entries, and the control inputs were left without their user reference: a call
     // specialized and then inlined in one session (std::opt) lost the control edge from the
     // statement before it, and that statement's effects never ran.

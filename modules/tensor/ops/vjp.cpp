@@ -275,7 +275,7 @@ void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradi
         // `sum_to` takes the target extents themselves (a leading-axis reduction, and the
         // length is the caller's), so the operand's shape is an operand of the reduction -- computed
         // by `tensor:shape` -- and not the operand's own value. The value would have been read for
-        // its shape and nothing else, which is the move this operator no longer makes.
+        // its shape and nothing else, which is the move this operator does not make.
         const vjp_node_t shape = builder.addOper(
             shapeListType(builder, operand),
             "tensor:shape",

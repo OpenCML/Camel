@@ -77,8 +77,8 @@ BreakLoopRangeTestPass::apply(const camel::runtime::Program *program, std::ostre
             }
             // The wait the loop itself carries: an order edge into the LOOP node, which the layout
             // now visits before the loop's first round (computeExecutionOrder). 210b42cc9 fixed
-            // that; putting the wait back after the loop's piece is the order that used to come out
-            // of it, and it is the order this pass asks the tables about.
+            // that; putting the wait back after the loop's piece is the order that came out
+            // of it before that fix, and it is the order this pass asks the tables about.
             const gc_node_ref_t loopRef = plan->topo[li];
             const auto orderPreds       = graph->orderPredsOf(loopRef);
             if (orderPreds.empty()) {
