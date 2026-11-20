@@ -6330,3 +6330,53 @@ READING_REFUSAL {"transform":"jvp","function":"mix","cause":"rule","uri":"tensor
 
 `frontend.ast_snapshot` 失败时**不点名**，只报 `1 not in the snapshot yet`，而 `frontend.plan.toml` 的 `expect_stdout_contains` 就是 `files read as recorded, 0 not in the snapshot yet`。
 ⇒ 今晚它**两次**都是靠人肉集合差才定位的（`cf6ccbf25` 三行、`c6f37779c` 一行）。**⇒ 建议让它点名**：「`X` not in the snapshot yet: `<path>`」。
+
+## 负责人上报（2026-11-20 12:15）：一条标签名承载两种事实，等于没有标签
+
+今晚清理三条老分支时发现一件比清理本身重要的事。
+
+### 一、事实
+
+```
+`parked/lane-front-ip-del` **在删除之前就已经存在**，指向 `cfc5f74ea` —— 也就是那条分支的 tip
+⇒ 也就是说：**有人早给它挂过「已停靠」的标签，而分支一直还在**
+⇒ 今晚这次 `-D` 才让那条记录**第一次与事实对齐**
+```
+
+### 二、所以 `parked/` 这个名现在是二义的
+
+```
+`parked/lane-ssa`（今晚建的）：**已删**，本地与远端都没有，内容是「未验证、不是被取代」
+`parked/lane-front-ip-del`（早于今晚）：**还在**，标签指向一个活着的分支
+⇒ **⇒ 同一个前缀，两种含义：『我们不再做它了』与『它已被删、内容在别处』**
+⇒ **⇒ 而一个二义的记录比没有记录更坏：读的人会按其中一种理解行事，而它可能正是另一种**
+```
+
+### 三、我建议的处置（要你裁）
+
+1. **拆成两个前缀**：`parked/` 只表示「不再做它，分支可能还在」，`consumed/`（或 `retired/`）表示「内容已在别处、分支已删」。**含义单一是标签唯一的价值。**
+2. **或者**：`parked/` 的 message 必须写三件 —— **为什么停 / 谁消费它 / 它还在不在**。今晚那四个 `annotated` 标签做到了前两件（第三条隐含在「分支已无」里），而早先那个轻量标签**一件都没写**。
+3. **一条可查的判据**：**标签存在而其目标分支仍存在 ⇒ 该标签的 message 必须写「仍在使用」或「待删」**。这条可以查（`git for-each-ref refs/tags/parked/*` 逐个对 `refs/heads/*` 取交集）。**比「记得写清楚」硬。**
+
+### 四、这件事的另一半：`-d` 的拒绝种类我漏了一类
+
+今晚我给清理车道的规矩是「被拒就报拒绝种类（**内容不在 develop / 被工作树占用**）再动，不换 `-D`」。而实际出现的拒绝是**第三种**：
+
+```
+`-d` 判的是**提交的祖先关系**，不是**内容**
+⇒ `lane-front-ip-del` 的内容已随 `848f151a7` 进树（patch-id 相同 `8ab61fc647d1`、页面 blob `ec7ed1357` 逐字节一致、`git diff` 空），但它那笔提交**不是** `origin/develop` 的祖先 ⇒ `-d` 说 `not fully merged`
+⇒ **⇒ 所以「被拒就报，不换 `-D`」防的是「被拒之后滥用 `-D`」，不是「永远不用 `-D`」**
+⇒ **⇒ 正确形态是：报拒绝种类 + 说明这个种类在这里为什么不适用 + 拿授权**
+```
+
+**⇒ 我建议把这条写进 `agents/branching.md`** 的「`-d` 和 `-D` 都不会告诉你它用的是哪个基准」那句旁边 —— 因为它是那句话的**操作后果**，而今晚是第一次真正撞上。
+
+### 五、读数（`origin/develop = b3c20efcd`）
+
+```
+clean-ip-del      → 删（内容已在树）
+grad-form         → 删（落后版本，内容已在树）；远端 `origin/lane-grad-form` 一并删（停在分叉点 `c74e59759`，0 笔领先，未丢提交）
+vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已陈丢弃）
+⇒ `maxBehind` **101 → 43**（`lane-win-s1-6`）· `U` **10 → 7**（lane 口径）
+```
+⇒ 三个 tip 仍可达、**只经标签可达**（`archive/` 三条 + `parked/` 一条，均 annotated）。**⇒ 删除没有丢掉任何提交，只是把它们从 `refs/heads` 挪到 `refs/tags`。**
