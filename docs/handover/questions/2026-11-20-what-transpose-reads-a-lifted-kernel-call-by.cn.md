@@ -99,3 +99,46 @@ feat/{compile,opt,transforms} 4357 : 4314 / 17 / 26
   不是修好 `split`，是 `transpose` 那一格（或 A 的重钉）。
 - **「割的后一半不碰二阶的核」**：错。后一半抄的是源图出口的**切向**那一侧，而二阶的切向里
   就写着 `jvp(mul_tangent)`；它不是被割出来的，是被**抄**过去的。
+
+## 7. §5 那个「先量什么」的答案：被调方那一侧已经对了，缺的是**外层提升图**的端口
+
+`compositions.jvp_vjp_f` 现在停在（`std::nvm`，`--trace transforms`，逐字）：
+
+```
+TRANSPOSE function=jvp_of_split_of_jvp_of_sq_backward skip=call-value-missing param=2 node=4 arg=0
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: transpose has no transpose for
+this function: the callee's transpose was built, but the parameter at position 3 reads a value this
+call does not carry.
+```
+
+把 `transpose` 正在转置的那张图和那个调用的节点打出来（节点号、种类、类型、普通实参、切向位图）：
+
+```
+jvp_of_split_of_jvp_of_sq_backward graph=381 nodes=9 exit=8 type=(f32, f32) => (f32, f32)
+  n0 kind=Port f32   n1 kind=Port f32   n2 kind=Port f32   n3 kind=Data f32
+  n4 kind=Func (f32, f32) tan=0xF0 norm=[2 2 0 0 3 3 1 1]
+  n5/n6 kind=Accs f32 of n4     n8 kind=Fill (f32, f32) with=[5 6]
+```
+
+⇒ 四件事，一件一件说：
+
+1. **位图现在是有的**（`tan=0xF0`：第 4..7 个实参是切向），所以 §3 那条「两条来路都不合用」对
+   这个调用**不再成立**：`transpose` 读位图，只向调用要前四个**值**实参。
+2. **被调方的提升成员是对的**：`TRANSPOSE function=jvp_of_autodiff::mul_tangent<f32> type=(f32, f32,
+   f32, f32, (f32, f32)) => (f32, f32, f32, f32)` —— 四个值 + 一个余切，正是 §5 要量到的那个答案。
+   所以 B 在**被调方**这一侧不需要再改。
+3. **挡住的是外层那张图自己的端口**：`param=2` 取到的实参是 `n0`，它是图 381 的**参数 0**（`dx`，
+   另一半是它的切向）——被调方要它当值用。而 `transpose` 给图 381 建的成员**一个值端口都没有**：
+   `participates` 空 ⇒ 凡有切空间的参数都算「答了」（`buildTransposeMember` 的
+   `participatesOf`，签名由 `transposeSignature` 写），而「参与位不占端口」（同一函数里
+   `portOfParam` 的填充：`if (participatesOf(i)) continue;`）⇒ `portOfParam[0]` 是无效 ⇒
+   `forward(n0)` 空 ⇒ `call-value-missing`。
+4. ⇒ **缺的不是「哪个实参是切向」这条记录，是「一个自己也提升了签名里，哪些端口是值」**：
+   `(f32, f32) => (f32, f32)` 按 `split.cpp#valuePortsOf` 读出来值端口是 `{0}`，切向端口是 `{1}`；
+   若外层成员的 `participates` 也这样读（值端口占端口、切向端口答余切），`dx` 就有端口可转发。
+
+⇒ 于是 B 的形状要再收一句：**不是只在被调方的成员上读 `valuePortsOf`，而是对「签名本身是一个
+`Lift`」的图，转置它自己时也按 `valuePortsOf` 划参与位**；只改被调方那一侧，这张图的 `dx` 仍然
+没有端口。这一条按红线（`transpose.cpp` 不由本车道改）留给下一格裁定。读数不动：`feat/transforms`
+的 `split`+`nested`+`compositions` 三个计划 `66 / 39 pass / 0 fail / 27 known`，
+`smoke`+`feat/compile`+`feat/opt` `4296 / 4291 pass / 0 fail / 5 known`。
