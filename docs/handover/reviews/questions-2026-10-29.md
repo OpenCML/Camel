@@ -6388,3 +6388,25 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 - `split` 前向交出的 `(float, (float) => float)` 由此有了提升形状：`(float, float)` 与 `Lift<(float) => float>`。`transpose` 一侧同样认提升后的函数分量。
 - 一处实现（`Jvp<F>`/`liftSignature` 的结果类型计算），不在两个死点各加一处。验收照旧：`grad(grad(quartic))` 在 x=1/2/3、`x·x`、`x³`、Hessian，四后端一致。
 这条最急，单开或并入 `lane-jvp-closure`，进展每一步回本页。
+
+## ECOOP 剩余清单（2026-11-20 16:15，负责人：终版构建由负责人自己选，决策者只发指令）
+
+决策者。核对 develop 后，ECOOP 还差下面这些。终版构建由负责人选定；选定之前把能合的都合进 develop，选定后在它上面跑一次 `capture-all.sh`。按优先级：
+**一、代码（必须先进 develop）**
+1. **二阶导**：变换结果按类型提升（16:00 那条）。验收 `grad(grad(quartic))` x=1/2/3、`x·x`→2.0、`x³`→12、Hessian，四后端一致。
+2. **案例改用库 `grad`**：`examples/case-study/train.cml` 现在仍 `import { grad } from autodiff`（引擎）。改为库 `grad`，写法 `grad(loss)<layer, y>(X)` 不变；`edits.cml#break_rate` 改选 `sgd` 的学习率实参，仍被拒（03:45 那条）。`case-study-variants/` 的七个文件同样改。
+3. **transformer 训练步在库 `grad` 下跑通**（`softmax` 法则已合，复核是否已通；不通报卡点）。
+4. **源码包的裁剪集补回 `nn`**：`CMakeLists.txt:296` 仍是 `CAMEL_MINIMAL_DROPS tiles onnx nn ckpt`，去掉 `nn`，从零构建一次，跑案例、MLP、transformer 训练步各一次报结果。
+**二、`capture-all.sh` 补齐**（它自 01:02 起没改过，下面这些都还没进去）
+5. 二阶导一节（上面第 1 条的读数，四后端）。
+6. 优化表：每个 pass 前后节点数与耗时（9 次中位数）；各程序区域按种类计数（`LoopBody` 是否 > 0）；同组 pass 跑在案例 `train.cml` 整个程序上；transformer 一栏报前后输出是否逐字节相同。
+7. tab:lang：在 `main` 三条打印之后真正追加一行并 `order` 到后面（应收、输出四行）；不排序版（应拒）；反向排序版（应收、新行在前）；`break_rate`（应拒，原文）。
+8. e2e：插桩改回"`inline` 再 `order`"的三版读数（`8061352f6` 已有，并入采集）；F：给未声明效应的函数插打印，应以效应检查拒，原文。
+9. C：案例与 e2e 在 `prl` 上各跑 200 次，输出是否全同。
+10. A：Lift/Direct/Merge、Drop/Unreach/Unsync 六种改写的规范哈希是否与原程序相同（不同报第一处差异）。
+11. B：只违反 Exit/Acyclic/Scoped 的坏编辑，各被哪一层拒、原文（造不出来写原因）。
+12. D：有现成绕过提交的入口就做，没有就写"无入口，跳过"。
+13. E：随机调度种子（`lane-determinism` 若已有开关就用），案例与 e2e 各 100 个种子，输出是否全同。
+14. G：提交耗时随规模（案例、MLP、transformer，再加一两个更大的）与 transformer 上只改一个节点的提交耗时。
+15. 两张导数图比较：`loss-a`、`loss-b` 求导后的规范形是否相同。
+每做完一项合进 develop 并在本页回一行；做不到的写"做不到 + 原因"。
