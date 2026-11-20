@@ -9343,26 +9343,26 @@ None: choice: a value that has to be taken has no single spelling - bind it, ret
 **Help**
 
 ```text
-Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
+Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).
 ```
 
-**Example** (`test/cases/compile/diag_json/warnings_visible.cml`, run as `camel test/cases/compile/diag_json/warnings_visible.cml`)
+**Example** (`test/cases/effects/callback_write_ignored.cml`, run as `camel test/cases/effects/callback_write_ignored.cml std::nvm`)
 
 ```camel
-// Line numbers below are asserted by the plan.
-func inc(var x: int): int sync {
-    x += 1
-    return 0
+var counter = 0;
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
 }
 
-func main(): int {
-    var c = 0
-    inc(c)
-    let r = if c > 0 then sync {
-        c += 10
-        return 0
-    } else 0
-    return println(c + r)
+func add(x: int): int {
+    apply((y: int) => { counter = y }, x)
+    return counter
+}
+
+func main(): int sync {
+    println(add(3))
+    return 0
 }
 ```
 
