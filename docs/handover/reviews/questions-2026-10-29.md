@@ -4759,3 +4759,7 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 **分离头不是原因**：分离头 + 显式 refspec 照样推得动（`8383b2917` 就是这么推的）。
 
 **补推的实况**：显式 refspec 对 `origin` 推被拒 `non-fast-forward`（`origin/develop` 已到 `b981686cd`，多 8 个提交，两条是兄弟线）；于是在树里 `--no-ff` 合成 `8383b2917`（冲突 0），推成 `origin/develop = 8383b2917`，三个 blob 与本地逐一相同（`a4e497ec3` / `d13c5882b` / `585807c59`）。
+
+**[已替换] 闸门读数（2026-11-20 上半天，车道 `lane-ci-traces`，三条并记）**：树 `e5de12119` 读 `[SUMMARY] total: 9824, pass: 9756, fail: 6, skip: 11, known failures: 51` 与 `check=process-traces findings=696 mode=report`；树 `14df7ed72` 读 `check=process-traces findings=unknown mode=report`；树 `220a724f8` 读同一 `[SUMMARY]` 与 `check=process-traces findings=20 mode=report`。**三条都被替换**：本车道按裁定（「脚本不由本车道落」「改用 develop 自带的接线」）重写了分支，这三个提交因此都不在任何 ref 上（`git branch -a --contains` 全空、`git merge-base --is-ancestor <sha> HEAD` 退出 1），本机只剩未引用的对象、`git gc` 之后连本机也没有，别的机器与 GitHub 上从来点不开；`696 → unknown → 20` 这个序列仍是真实读数（前两个分别是 develop 注释清理落地之前、以及脚本尚未落到树里时的样子），只是不能再用那些 sha 命名它。
+
+**闸门读数（2026-11-20 晚，linux 腿，`-Plan test/plans/feat/modules/rules.plan.toml,test/plans/feat/compile -Check all -NoGpuWatch -Jobs 8`，树 `db9abfd09`）**：`[provenance] tip db9abfd091f35c829e97926764cba3999000ab86 | tier fast | jobs 8`、`[SUMMARY] total: 2836, pass: 2820, fail: 0, known failures: 16`、`killed by a signal` 与 `timed out` 两行都未出现（＝0）、`check=process-traces findings=20 mode=report`、`checks: 20 run, 3 failed`（check-doc-links／export-matrix／gate-static，三条都是 develop 自带，本轮没碰它们点的文件；`headers` 已因本轮的 `node scripts/headers.mjs --fix` 转绿）。
