@@ -6,6 +6,7 @@
 
 #include "refusal_readings.h"
 #include "lift.h"
+#include "jvp.h"
 
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/base.h"
@@ -1055,18 +1056,58 @@ struct Half {
             if (const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
                 call != rt::kInvalidNodeRef) {
                 if (!tangent) {
-                    // The value half's copy of that call answers `(result, lin)`: its component 1
-                    // is a function, not the tangent the source asked for.
-                    return refuseAt(
-                        refusal,
-                        source,
-                        ref,
-                        "a tangent of a call",
-                        "the value half computes the value of the call, and the tangent of a call "
-                        "is "
-                        "computed after the cut -- its component 1 here is the linear half, which "
-                        "is "
-                        "a function and not a tangent");
+                    // The value half's copy of that call answers `(result, lin)`, and the source's
+                    // read of component 1 is a read of the **lifted** linear half -- `Lift<lin>`,
+                    // which is what `jvp(lin)` denotes (`Lift<A => B> = Lift<A> => Lift<B>`, the
+                    // author's ruling of 2026-11-20 16:00: the direction is a parameter of the
+                    // lifted function, so the second order is fed twice and never captured).
+                    //
+                    // That this is the value the source asked for is measured, not assumed: the type
+                    // the source's read has and `jvpSignature` of the linear half are the **same
+                    // type object** (measured 2026-11-20, `equal=yes` by pointer, on
+                    // `(float, float) => (float, float) pure`). Where they differ, the read asks for
+                    // something that is no component's lift, and it is refused below by name.
+                    FunctionType *calleeType = nullptr;
+                    if (source->node(call) != nullptr &&
+                        source->node(call)->kind == rt::GCNodeKind::Call) {
+                        calleeType = callValueSignatureOf(*source, call);
+                    } else if (const rt::GCGraph *callee = calleeGraphOf(*source, program, call);
+                               callee != nullptr) {
+                        calleeType = callee->funcType();
+                    }
+                    const SplitHalves halves = splitHalvesWith(calleeType, nullptr);
+                    FunctionType *linType   = halves.backward;
+                    FunctionType *liftedType =
+                        linType != nullptr && linType->code() == TypeCode::Function
+                            ? jvpSignature(linType)
+                            : nullptr;
+                    if (liftedType == nullptr || node->dataType() != liftedType) {
+                        return refuseAt(
+                            refusal,
+                            source,
+                            ref,
+                            "a tangent of a call",
+                            "the value half hands the call's linear half on lifted, and this read is "
+                            "not that lifted type: the linear half of this call lifts to `" +
+                                (liftedType != nullptr ? liftedType->toString()
+                                                       : std::string("no type")) +
+                                "`, while the read asks for `" +
+                                (node->dataType() != nullptr ? node->dataType()->toString()
+                                                             : std::string("no type")) +
+                                "`");
+                    }
+                    // `lin` is the value half's own component 1 of the copied call -- the read of a
+                    // value the copy already answers, not a second call to anything -- and the value
+                    // handed on is `jvp` of it, typed by the one spelling of that operator's
+                    // signature (`liftedOperatorType`).
+                    const gc_node_ref_t callCopy = inputs.front();
+                    const gc_node_ref_t lin      = draft.addAccsNode(linType, 1);
+                    draft.setNormInputs(lin, std::span<const gc_node_ref_t>(&callCopy, size_t(1)));
+                    const gc_node_ref_t lifted =
+                        draft.addOperNode(liftedOperatorType(linType), nullptr, "transforms:jvp");
+                    draft.setNormInputs(lifted, std::span<const gc_node_ref_t>(&lin, size_t(1)));
+                    copyOf[ref] = lifted;
+                    return true;
                 }
                 const auto index = residualIndexOf->find(call);
                 if (index == residualIndexOf->end()) {

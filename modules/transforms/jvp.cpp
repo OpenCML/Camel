@@ -417,14 +417,11 @@ LiftedMember liftedMemberOf(Type *member) {
     return read;
 }
 
-namespace {
-
-/// The type of `jvp(f)` for a function of this type: `(f: F) => jvpSignature(F)`, or null when `F`
-/// has no forward transform. It is built from the **same law** the operator's resolver asks
-/// (`jvp_operator.cpp#jvpOperatorSignature`), so the `jvp(v)` node a lift writes for a call through
-/// a function value is typed exactly as a `jvp(v)` a program writes is, and the two cannot drift
-/// apart.
-FunctionType *jvpOperatorType(FunctionType *function) {
+/// The operator's own signature, `(f: F) => Lift<F>`; null when `F` has no forward transform. It is
+/// the **one** spelling of that type: the lift writes its `jvp(v)` node with it, and a cut writes its
+/// `jvp(lin)` node with it, so neither can drift from the other or from the resolver
+/// (`jvp_operator.cpp#jvpOperatorSignature` builds the same shape from the same law).
+FunctionType *liftedOperatorType(FunctionType *function) {
     FunctionType *lifted = jvpSignature(function);
     if (lifted == nullptr) {
         return nullptr;
@@ -434,6 +431,8 @@ FunctionType *jvpOperatorType(FunctionType *function) {
     factory.setExitType(lifted);
     return factory.build();
 }
+
+namespace {
 
 /// What a lift hands on to the lifts it starts: the group the members live in, and the callee
 /// graphs already lifted, so that a function called twice is lifted once (key: the original graph's
@@ -1040,17 +1039,33 @@ bool liftGraph(
                 return copyOf[ref];
             }
             if (shape.pair) {
-                return liftedPair(type, valueOf[ref], tangentOf[ref]);
+                // The pair's value leg is the node's **value**: the projection the walk made for it,
+                // or -- where the walk made none because the node is carried whole -- the copy
+                // itself, when the copy's type is the value's type (a loop state port's copy is the
+                // pair, not the value, and is not usable here). A leg this cannot supply is not
+                // written as a hole: the answer is invalid and the caller refuses, because a fill
+                // with an empty member is a graph the encoder rejects far from here.
+                gc_node_ref_t valueLeg = valueOf[ref];
+                if (valueLeg == rt::kInvalidNodeRef && copyOf[ref] != rt::kInvalidNodeRef) {
+                    const auto *copiedNode = draft.node(copyOf[ref]);
+                    if (copiedNode != nullptr && copiedNode->header.dataType == type) {
+                        valueLeg = copyOf[ref];
+                    }
+                }
+                if (valueLeg == rt::kInvalidNodeRef || tangentOf[ref] == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                return liftedPair(type, valueLeg, tangentOf[ref]);
             }
             if (type->code() != camel::core::type::TypeCode::Function) {
                 // A tuple that lifts by component: the node the walk made for it *is* the lifted
                 // value, and its members were built by this same function.
                 return copyOf[ref];
             }
-            // A function's lifted self: `jvp(v)`, typed by the same law (`jvpOperatorType` answers
+            // A function's lifted self: `jvp(v)`, typed by the same law (`liftedOperatorType` answers
             // `(f: F) => Jvp<F>` and `Jvp<F>` is `liftSignature(F)`, which is `Lift<F>`).
             camel::core::type::FunctionType *operatorType =
-                jvpOperatorType(tt::as_ptr<FunctionType>(type));
+                liftedOperatorType(tt::as_ptr<FunctionType>(type));
             if (operatorType == nullptr) {
                 return rt::kInvalidNodeRef;
             }
@@ -2078,7 +2093,7 @@ bool liftGraph(
                 if (calleeType == nullptr) {
                     return fail(refusal);
                 }
-                FunctionType *jvpType = jvpOperatorType(calleeType);
+                FunctionType *jvpType = liftedOperatorType(calleeType);
                 if (jvpType == nullptr) {
                     // `jvp` takes a function of at least one ordinary parameter whose result has a
                     // tangent space; a value outside that shape has no forward transform to reach,

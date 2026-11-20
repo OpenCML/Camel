@@ -86,4 +86,10 @@ struct LiftedMember {
 /// the law does not answer for that member.
 LiftedMember liftedMemberOf(camel::core::type::Type *member);
 
+/// The type of the expression `jvp(f)` for a function of this type: `(f: F) => Lift<F>`. Named once,
+/// here, because a lifted graph and a cut both write a node for `jvp(lin)` -- a cut's value half
+/// hands a call's linear half on **lifted** -- and a second reconstruction of the operator's
+/// signature at either site would be a second answer to the same question.
+camel::core::type::FunctionType *liftedOperatorType(camel::core::type::FunctionType *function);
+
 } // namespace camel::transforms
