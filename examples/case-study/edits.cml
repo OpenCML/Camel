@@ -107,6 +107,11 @@ export func drop_print::<F>(p: F): F! sync {
 /// find exactly one `float` constant, and it no longer does, because a derivative carries constants of
 /// its own -- the seed `grad` reads `vjp` at, and the ones the transpose builds. Those are not the
 /// learning rate, and the graph the rate is written in still holds exactly one.
+///
+/// A count that is not one has to answer "nothing to do" rather than pick one of them, and that is
+/// the whole cost of this rewrite: the program runs unchanged, exit 0, and the reading the pass
+/// existed to make is simply gone. Silence costs more than a refusal -- a refusal names the type and
+/// the place, and a rewrite that quietly declines to pick names nothing at all.
 export func break_rate::<F>(p: F): F! sync {
     let where = graphs_of(p)->filter<holds_the_pair>
     return match one_graph(where) {
