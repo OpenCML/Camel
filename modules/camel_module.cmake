@@ -296,6 +296,9 @@ function(add_camel_module)
     -Wall -Wextra
     -Wno-unused-parameter
     -Wno-unused-private-field
+    # See CMakeLists.txt: a designated initializer that names only the fields it differs from is
+    # the idiom here too, and the omitted fields are value-initialized by the language.
+    -Wno-missing-designated-field-initializers
     # See CMakeLists.txt: the defect that started this was in a module object (split.cpp), so the
     # diagnostic has to fail here too and not only in the core library.
     -Werror=dangling-gsl
