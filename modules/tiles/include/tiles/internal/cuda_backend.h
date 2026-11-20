@@ -193,7 +193,7 @@ class MemoryPool {
     CUresult allocateRaw(void **handle, size_t bytes) noexcept;
 
     Api &api_;
-    PoolKind kind_;
+    PoolKind kind_ = PoolKind::Device;
     PoolPolicy policy_;
     CUcontext context_ = nullptr;
     mutable std::mutex mutex_;

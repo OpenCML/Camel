@@ -15,7 +15,7 @@ using data_list_t = std::initializer_list<data_ptr_t>;
 
 class Data : public std::enable_shared_from_this<Data> {
   protected:
-    type::Type *type_;
+    type::Type *type_ = nullptr;
 
   public:
     Data();

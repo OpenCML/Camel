@@ -27,13 +27,13 @@ struct ObjectHeader {
     union {
         size_t raw_;
         struct {
-            size_t total_ : 48; // Normal mode stores total size (header + payload); GC mode stores
+            size_t total_ : 48 = 0; // Normal mode stores total size (header + payload); GC mode stores
                                 // the forwarded address.
-            size_t age_ : 4;    // Age (0-15)
-            size_t marked_ : 1; // GC mark flag
-            size_t state_ : 1;  // 0=Normal, 1=Forwarded
-            size_t region_ : 4; // Region ID
-            size_t reserved_ : 6; // Reserved bits
+            size_t age_ : 4 = 0;    // Age (0-15)
+            size_t marked_ : 1 = 0; // GC mark flag
+            size_t state_ : 1 = 0;  // 0=Normal, 1=Forwarded
+            size_t region_ : 4 = 0; // Region ID
+            size_t reserved_ : 6 = 0; // Reserved bits
         };
     };
 

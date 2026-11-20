@@ -73,7 +73,7 @@ struct OperatorCallScope {
     ~OperatorCallScope() noexcept { tlsOperator = previous_; }
     OperatorCallScope(const OperatorCallScope &)            = delete;
     OperatorCallScope &operator=(const OperatorCallScope &) = delete;
-    size_t previous_;
+    size_t previous_ = 0;
 };
 
 /// The counters a step boundary reads: what the run has done so far. The allocation counters

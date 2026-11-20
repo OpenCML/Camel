@@ -121,7 +121,7 @@ class Value {
         }
     }
 
-    alignas(std::max_align_t) unsigned char buffer_[kCapacity];
+    alignas(std::max_align_t) unsigned char buffer_[kCapacity] = {};
     void (*manage_)(Op, Value *, Value *) = nullptr;
     const std::type_info *type_           = nullptr;
 };

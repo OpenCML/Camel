@@ -224,7 +224,7 @@ class TypeTable {
         std::vector<uintptr_t> words;
     };
     struct KeyView {
-        Shape shape;
+        Shape shape = Shape::Primitive;
         std::span<const uintptr_t> words;
     };
     struct KeyHash {

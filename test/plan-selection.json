@@ -443,6 +443,11 @@
             "plans": ["feat/docs_ai_reference.plan.toml", "feat/docs_links.plan.toml"]
         },
         {
+            "comment": "The member-initializer sweep: its case is the tool itself, so a change there selects the plan that runs it -- the same shape as the standard-include check below. The plan is fast (the text reading takes 1.2 s over the whole tree), so the rule carries no layer.",
+            "paths": ["scripts/check-member-init.mjs"],
+            "plans": ["feat/tools/member_init.plan.toml"]
+        },
+        {
             "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools. The source-tree artifact check is the same kind of property of the sources, and portability.source_artifacts runs it. The checker's --clean delegates to scripts/clean.js, whose own plan pins the tiers and the tracked-file rule.",
             "paths": ["scripts/check-std-includes.mjs", "scripts/check-source-artifacts.mjs", "scripts/clean.js"],
             "plans": ["feat/tools/portability.plan.toml", "feat/tools/clean.plan.toml"]

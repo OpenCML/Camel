@@ -44,7 +44,7 @@ struct CompilationDebugOptions {
 struct CompilationUnit {
     camel::runtime::GCGraph *runtimeGraph = nullptr;
     std::span<const Bytecode> bytecodes;
-    size_t entryPc;
+    size_t entryPc = 0;
     size_t graphLength                   = 0;
     void *trampolineFunc                 = nullptr; // FUNC trampoline
     void *trampolineTail                 = nullptr; // TAIL trampoline
@@ -67,7 +67,7 @@ struct RelocInfo {
 
 struct CompiledCode {
     std::vector<uint8_t> code;
-    size_t entryOffset;
+    size_t entryOffset = 0;
     size_t jitEntryOffset = 0; // offset to JIT-internal entry (skips C++ ABI wrapper)
     // Framed code (x64::JitExitKind): it leaves to a driver for calls and must be run by one.
     bool framed = false;

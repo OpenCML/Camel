@@ -275,7 +275,7 @@ struct MatchRemainder {
 /// What a match of a rule's left side found: the value each variable stands for.
 struct Match {
     DraftWritings &writings;
-    gc_node_ref_t root;
+    gc_node_ref_t root = kInvalidNodeRef;
     std::span<const gc_node_ref_t> vars;
     /// What the variable `remainder.var` stands for: the chain of the terms the left side did not
     /// name, built with `remainder.oper`. Reading it in the condition or the right side is what

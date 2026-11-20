@@ -18,9 +18,9 @@ namespace profiler {
 struct PerfettoTraceEvent {
     std::string name;
     std::string category;
-    char phase; // 'B'=Begin, 'E'=End, 'I'=Instant
-    uint64_t timestamp;
-    uint32_t threadId;
+    char phase = 0; // 'B'=Begin, 'E'=End, 'I'=Instant
+    uint64_t timestamp = 0;
+    uint32_t threadId = 0;
     uint32_t processId = 1;
 
     std::string args;

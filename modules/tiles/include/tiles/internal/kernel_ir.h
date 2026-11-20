@@ -87,7 +87,7 @@ std::string emitBody(const KernelBody &body);
 IndexExpr
 pointwiseAddress(const Program &program, const Node &node, size_t operand, const IndexExpr &linear);
 struct ReductionAccess {
-    size_t count;
+    size_t count = 0;
     IndexExpr address;
 };
 ReductionAccess reductionAccess(
