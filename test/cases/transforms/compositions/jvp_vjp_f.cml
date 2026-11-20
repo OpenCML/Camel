@@ -16,6 +16,12 @@
  * one parameter (`stdlib/array.cml#vmap`), and `jvp(f)` is the function `(x, dx) => (value,
  * tangent)`, so `vmap(jvp(pull))` is not a call the batch pass accepts. Three points, one call
  * each, and the three tangents are the numbers this case pins.
+ *
+ * The composition is refused one step past both lifts, in `transpose`: the body it is asked to turn
+ * around calls a lifted kernel, and the call's argument list is copied instead of read from the
+ * callee's lifted type, so a parameter the transposed member reads has no source at the call site --
+ * `transforms: transpose has no transpose for this function`. The three lines above are the
+ * arithmetic this program answers when that step lands.
  */
 
 import { jvp } from transforms
