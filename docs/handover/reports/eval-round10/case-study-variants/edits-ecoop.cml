@@ -81,17 +81,55 @@ export func drop_print::<F>(p: F): F! sync {
     return if len(prints) == 0 then p else erased(p, prints)
 }
 
-/// Passes a tensor where the learning rate goes: a rewrite that breaks a type. The entry function
-/// holds one constant of type float (the rate) and one constant of type f32[4, 1] (the targets), and the
-/// rewrite refuses when either is not unique.
+// The `float` constants of one graph.
+func floats_in(g: Graph): Node[] {
+    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'float')>
+}
+
+// The constants of type `f32[4, 1]` in one graph: the targets the rewrite passes in the rate's place.
+func targets_in(g: Graph): Node[] {
+    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'f32[4, 1]')>
+}
+
+// Whether one graph holds both of the constants the rewrite pairs, each exactly once.
+func holds_the_pair(g: Graph): bool {
+    return len(floats_in(g)) == 1 && len(targets_in(g)) == 1
+}
+
+// The one graph of the list, or nothing when the count is not one.
+func one_graph(found: Graph[]): Graph? {
+    return if len(found) == 1 then found[0] else null
+}
+
+// The one node of the list, or nothing when the count is not one.
+func one_node(found: Node[]): Node? {
+    return if len(found) == 1 then found[0] else null
+}
+
+/// Passes the targets where the learning rate goes: a rewrite that breaks a type.
+///
+/// The rate is the one constant of type `float` in the graph that also holds the one constant of type
+/// `f32[4, 1]` (the targets), and the rewrite refuses when no single graph holds that pair. The count
+/// that has to be one is taken per graph, not over the whole program: the count over `all_nodes` used
+/// to find exactly one `float` constant, and it no longer does once the gradient is the library's,
+/// because a derivative carries constants of its own -- the seed `grad` reads `vjp` at, and the ones
+/// the transpose builds. Those are not the learning rate, and the graph the rate is written in still
+/// holds exactly one.
+///
+/// A count that is not one has to answer "nothing to do" rather than pick one of them: the program
+/// then runs unchanged with exit 0, and the reading the pass existed to make is simply gone. Silence
+/// costs more than a refusal -- a refusal names the type and the place, and a rewrite that quietly
+/// declines to pick names nothing at all.
 export func break_rate::<F>(p: F): F! sync {
-    let rate = only(p, (n: Node): bool => constant_of(n, 'float'))
-    let wrong = only(p, (n: Node): bool => constant_of(n, 'f32[4, 1]'))
-    return match rate {
+    let where = graphs_of(p)->filter<holds_the_pair>
+    return match one_graph(where) {
         case null => p
-        case r => match wrong {
+        case g => match one_node(floats_in(g)) {
             case null => p
-            case w => swapped(p, r, w)
+            case r => match one_node(targets_in(g)) {
+                case null => p
+                case w => swapped(p, r, w)
+            }
         }
     }
 }
