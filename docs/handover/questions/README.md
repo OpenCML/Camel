@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：47 页
+## 现在在等作者：48 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -55,6 +55,7 @@
 | [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
 | [`2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code`](2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md) | 外层 `jvp` 要 `split` 交出静态可读的答案代码，那一步在 0.2.45 的范围里吗 |
+| [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 |
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）

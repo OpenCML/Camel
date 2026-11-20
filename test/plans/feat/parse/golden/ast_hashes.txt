@@ -2594,6 +2594,7 @@ d6a7c15f0f666e5a ok test/cases/effects/err_write_readonly_resource.cml
 c90ca6b8bfe43728 ok test/cases/effects/exported_resource_imported.cml
 e4eadcfee18057e8 ok test/cases/effects/exported_resource_qualified.cml
 1d6435aed665a819 ok test/cases/effects/generic_parameter_takes_instantiation.cml
+a2f180becfea401a ok test/cases/effects/hof_callback_effect_footprint.cml
 5b2f241a3389c97d ok test/cases/effects/hof_map_effect.cml
 f08aedb8288d9b5a ok test/cases/effects/hof_map_pure.cml
 2ef4fedc4207f406 ok test/cases/effects/inferred_recursive_is_empty.cml
@@ -4394,6 +4395,8 @@ c72182e52c15bf42 ok test/cases/transforms/nested/hessian.cml
 71e03b3887f5e0b8 ok test/cases/transforms/nested/nest_cube.cml
 9c4c6bd53eff074e ok test/cases/transforms/nested/nest_lambda.cml
 cbef3230ff276a59 ok test/cases/transforms/nested/nest_named.cml
+7cd0720b70efa51e ok test/cases/transforms/nested/nest_quartic.cml
+f10ea5f111e3b0a5 ok test/cases/transforms/nested/nest_quartic_forward.cml
 f442c234da3252cb ok test/cases/transforms/nested/nest_square.cml
 76483a2c16d4eec9 ok test/cases/transforms/nested/rule_constant_agrees.cml
 bd2fb877c79b7e41 ok test/cases/transforms/nested/rule_writes_a_constant.cml
