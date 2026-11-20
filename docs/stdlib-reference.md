@@ -2751,6 +2751,29 @@ type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
 - Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
 - Example: `subtract_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[-9.0, -18.0], [-7.0, -16.0]]`
 
+#### `div_stated`
+
+```camel
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The quotient of two tensors, with **both** operands' extents stated: `x / w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the quotient through `divide`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `div_stated_t` for the reason `mul_stated` records: a quotient broadcasts
+as a product does, so each cotangent comes back to its **own** operand's shape, and on the reverse
+side the operand a cotangent is answered for is a tangent -- `float[...]`, whose type states no
+extents (design principles 5.4). The forward half that computes the two lists is
+`rulesets.jvp`'s `jvp_divide` (and its `jvp_div_stated`, for a program that writes this operator
+itself), where both operands are values.
+
+An operand that is one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `div_stated([[1.0, 2.0], [2.0, 4.0]] as float[2, 2], [2.0, 4.0] as float[2], [2, 2], [2])` gives `[[0.5, 0.5], [1.0, 1.0]]`
+
 #### `matmul_stated`
 
 ```camel

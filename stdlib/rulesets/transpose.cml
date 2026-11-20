@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, add_stated, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, add_stated, broadcast_like, div_stated, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, subtract_stated, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -379,6 +379,30 @@ func divide::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 export rule divide_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
     divide(x, w) => (ct: T[...]) =>
         (sum_to(ct / w, shape(x)), sum_to(-((ct / w) * (x / w)), shape(w)))
+}
+
+/// The transpose of `div_stated(x, w, ax, aw)`: `ct / w` reduced to `ax` for `x`, and
+/// `-(ct / w) * (x / w)` reduced to `aw` for `w` -- `divide_t`'s two answers with the two shapes
+/// **handed over**.
+///
+/// This is the entry every quotient a derivative walks is turned round by, and the reason the operator
+/// exists: on the reverse side the dividend and the divisor are **tangents**, `float[...]`, which state
+/// no extents (design principles 5.4), so `divide_t`'s `shape(x)` / `shape(w)` name the position the
+/// law answers for and nothing can be read there (`skip=parameter-shape`, measured on `jvp_sqrt`,
+/// `jvp_log` and `jvp_divide` before this law existed). The forward half states both lists where both
+/// operands are values -- `stdlib/rulesets/jvp.cml#jvp_divide`, `#jvp_div_stated` for a program that
+/// writes this operator itself -- and this law reads them and nothing of the position it answers.
+///
+/// The two products are `ct / w` and `(x / w)`, in the engine's grouping (`divideVjp`:
+/// `dlhs = ct / w`, then `dlhs * y`, then the negation), so the quotients that produce the two
+/// cotangents are the same quotients and round the same way.
+///
+/// Two lists and not one, for the reason `mul_stated_t` records: a quotient broadcasts as a product
+/// does, so `[2, 2, 3] / [3]` has two different operand shapes and each cotangent comes back to its
+/// own.
+export rule div_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) when is_float::<T>() {
+    div_stated(x, w, ax, aw) => (ct: T[...]) =>
+        (sum_to(ct / w, ax), sum_to(-((ct / w) * (x / w)), aw))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
