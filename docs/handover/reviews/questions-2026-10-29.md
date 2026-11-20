@@ -6446,3 +6446,33 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 ## 催办（2026-11-20 16:55）：八格的分支名与当前一步
 
 决策者。16:25 那条要的"八格分支名与当前一步"还没回。develop 上这半小时只有采集车道在合（A/B/C/E、追加打印、e2e 三版——好）。二阶导（按类型提升，16:00 裁定，`whether-jvp-of-a-closure…` 那页即此）、案例改库 `grad`、transformer 复核三格看不到分支。现在回一行车道表：这三格的分支名、做到哪一步、卡在什么。注：论文 19:00 前拿不到的项就照现有读数写或删。
+
+## 八格的分支名与当前一步（2026-11-20 16:40，协调者回报，回应 `192e359b1`）
+
+`develop` = `d8ceb1d3b`。八格里**代码三格**的分支与当前一步如下；采集四格已全部进主干（`2ad0cf7af` · `156a70612`+`90cf5885e` · `070128473`+`d7fce1bb3`），不再列。
+
+### 第一格：二阶导按类型提升 —— 分支 `origin/lane-jvp-closure` = `6608c7bff`（ahead 2，两页）；树里 `lift.h`/`jvp.cpp`/`split.cpp` **未提交**
+
+**已立的三层，逐层都已裁：**① `Lift<A ⇒ B> = Lift<A> ⇒ Lift<B>` 的右边 `Lift<A>` 在箭头左边 ⇒ 方向是**参数**，故 `Lift<F'>` 是**族**；② 割点逐分量、`split.h` 自述「沿 pair 割，不沿位置」⇒ **类型可算**；③ `split` 手里只有 `jvp(F)`，`R` 不在 ⇒ 需 `liftDecodeOf`（`Lift` 的逆），**当前一步就是它在 `lift.h` 里落地**。
+
+**读数（当前二进制）**：`feat/transforms/split` 30/30/0 ＝基线 · `feat/compile/transforms` fail 0 / known 13 ＝基线 · `feat/transforms/nested` pass 3 / fail 3 / known 4。3 条 fail 是「拒绝没了、用例还钉着拒绝」（进展形态）；4 条 known 是**另一道墙**：`nested.plan.toml:65` 逐字 `refusedOrigin == kInvalidOriginId`、`:67` 实测「the outer `jvp` prints nothing at all」⇒ 提升一步都没走进去。
+
+**两页**：`2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md`（含撤回痕迹）、`2026-11-20-why-the-split-point-is-type-computable.cn.md`（§3 标题即「撤回」）。
+
+### 第二格：案例改用库 `grad` —— 分支本地 `217156abb`（13 文件 +302/−110），**未推、未合**
+
+`train.cml` 的 `grad` 改 `from vjp`，调用写法 `grad(loss)<layer, y>(X)` **一字未动**。四后端 `loss before: 3.7500 / loss after: 0.0000 / [[1.9999925], [-0.99998784]]`，**与引擎版逐字同**。
+
+**`break_rate` 仍被拒**，原文 `graph 'main' node 13 (10): passes a Linear as ordinary argument 3 of 'train', which takes a float`，**连节点号都和迁移前一样**，只有位置 `24:1`→`27:1` ⇒ 拒它的层是 `commit`（`src/runtime/graph_edges.cpp`，契约 §4.2 第 2 条），与 `grad` 是引擎的还是库的无关。
+
+**六计划**：compile 2662/2646/0/known 16 · linear 869/865/0/skip 2/known 2 · opt 1621/1621/0 · parse 126/126/0 · para 104/104/0 · tools 71/70/**fail 1**。
+
+**三件要你点的**：(a) `tools` 那 1 红**是本迁移造成的** —— `inspect.copies.case_study_step_answers` 按「12 字段」判，而图名成了实例化函数类型 `vjp::grad<<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure>`（名字带空格，22 字段）；实测按「尾部十个词判形状」改该计划即 4/4 全绿，但 §1 不许改既有断言，**已撤回，等授权**。(b) `f32[...]`→`f32[?, ?]` **不是装饰**：不改则不构建，原文 `The transpose of '…backward' needs the shape of the parameter at position 2, and the type 'f32[...]' does not state it`。(c) `writings/*.cml` 三个仍 import 引擎 `grad`，`case-study-variants/edits-ecoop.cml#break_rate` 同一套全程序计数，**要不要按同口径重钉，等裁**。
+
+### 第三格：transformer 在库 `grad` 下跑通 —— **不通，而卡点不在 softmax**
+
+`compile` 里 `transformer_step_gradient_stops_at_split.nvm` **PASS**（negative 如旧），程序面卡点 `stdlib/vjp.cml:134:19 … transforms: split does not build this function`；REINTERP 原文 `REINTERP split function=jvp_of_loss_plain skip=forward construct=a node whose input was not copied why=an operand of the node is not reachable from the half's exit`。**`rules=…,jvp_softmax,…` 已在 REINTERP 里 ⇒ softmax 那关过了。**
+
+`showcase/c3-char-transformer/train.cml:178:34 … transforms: jvp has no forward rule for 'tensor:layer_norm'` —— **`jvp` 根本没有这条法则**，比 `split` 更早一步。
+
+**⇒ 所以第一格与第三格同源**：两者都要 `split` 那条割的法则先落地。**第一格不是第三格的前置工作，它们撞的是同一处。**
