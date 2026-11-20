@@ -3356,6 +3356,18 @@ class Builder {
     void mergeArmVariables(
         const std::vector<arm_ptr_t> &arms, node_handle_t joinNode,
         std::vector<node_handle_t> &written);
+    /// The tail every statement whose parts are regions shares (a branch, a loop): running the
+    /// parts is like entering an arm, so the statement uses every variable they used and writes
+    /// those they wrote. `mergeArmVariables` puts that on `node`, the node the statement's value
+    /// is; the parts' callees become callees of the arm the statement is in; a write by one of
+    /// those callees to a variable it captured is reported, and `subject` and `verb` are how that
+    /// report names the statement and the write; and the statement takes its one place in the
+    /// block's chain, which enters `chainEntry` and continues from `chainExit`. `versionOf` is the
+    /// variable whose version `node` becomes, when there is one (a branch: what its JOIN joins).
+    void attachRegionStatement(
+        node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
+        node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
+        const char *verb, node_handle_t versionOf = nullptr);
     /// The names of a block that is not a graph (an arm).
     void enterBlockScope();
     void leaveBlockScope();
