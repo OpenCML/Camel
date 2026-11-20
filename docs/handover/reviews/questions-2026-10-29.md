@@ -6550,3 +6550,10 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 ## 返工（2026-11-20 18:00）：条目（1）在库 `grad` 下被冲突检查拒，是假冲突
 
 决策者。cbf3b935b 的读数：同一改写、同一落点，引擎 `grad` 被效应检查拒（`PassEffectBeyondType`，`:io/println` 超出 `step` 的类型），库 `grad` 被冲突检查拒（`PassEffectOrder`，"梯度值的调用与打印"成对）。后者不对：梯度值的类型是 `(X: f32[?, ?]) => float pure`，**经值调用的足迹按值的类型读，`pure` 就是空**，与打印不冲突。冲突检查之所以报，说明值调用的足迹没从类型读（落成了"未知"）——这正是今天每日审查 R1 那条（足迹规则四处各写、放不下时答案不一）在这里露头。修：值调用节点的足迹由被调值的类型给出（与 `functionOperand` 同一个函数），`pure` 即空；修后条目（1）在两种 `grad` 下都应由效应检查拒，原文一致。这条进 ECOOP 格（与二阶导、transformer 同级），修好后补跑条目（1）那一行。
+
+## 急（2026-11-20 18:25）：6cb6fa721 读数里三处是脚本没跟上迁移，立即修、只补跑相应各节
+
+决策者。论文侧逐条比对了 `capture-all.raw.txt`，我核过代码，结论如下。以下排在一切之前，修完只补跑相应各节、报哈希。
+1. **[4] `print_ordered` / `print_appended` / `print_appended_reversed` 是空操作。** `edits-ecoop.cml` 的 `is_weight_print` 按 `type_text(ins[0]) == 'f32[...]'` 选点，迁移后权重类型是 `f32[?, ?]`，选不到，三个改写原样返回程序（`reversed` 本该被拒也"通过"了）。改：按"操作数是张量"选，不按类型文字；并让 `only(...)` 选不到时**报错**而不是返回原程序（`break_rate` 那条已经吃过同样的亏）。补跑 [4]。
+2. **[4] `print_unordered` / `print_prepended` 的冲突对是 `run` 的调用（write unknown）。** `run` 里有梯度值的调用，足迹落成"未知"，与条目（1）的假冲突同一根因（值调用的足迹没按值的类型读）。修好后：`print_unordered` 仍被 `PassEffectOrder` 拒，冲突对应是新打印与 `main` 自己的某个打印；`print_prepended` 应被接受、新的一行在最前。修复照 17:50 的返工做，修后补跑 [4] 与条目（1）。
+3. **[8] 与 [2] 的规模**：[8] 说 `loss-a` 的文档里还有 `autodiff:grad@1.0` 节点——`loss-a.cml` / `loss-b.cml` 仍在用引擎 `grad`，没随 13c93a5f8 迁移。迁到库 `grad`，补跑 [1] 与 [8]，并对 `train.cml` 本身跑一次 `std::stats`（程序自身的图数与节点数），写进 [2]。
