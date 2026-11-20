@@ -429,11 +429,11 @@ df952f8a8f9dd6b0 ok docs/tutorial/examples/geometry.cml
 f5a44b1707cc0ece ok docs/tutorial/examples/shapes.cml
 e3a25ecda08fd103 ok examples/algorithms/binary_search.cml
 7956b77f3b54405c ok examples/algorithms/merge_sort.cml
-6f4651452e09ddb1 ok examples/case-study/edits.cml
-c76e2e38aceb01c4 ok examples/case-study/train.cml
-27358af07efbb978 ok examples/case-study/writings/moved.cml
-ccb636b6bb8bdb50 ok examples/case-study/writings/renamed.cml
-c79b11576c441c54 ok examples/case-study/writings/swapped.cml
+03e03b997fc2e363 ok examples/case-study/edits.cml
+bbd5b6902c35df5a ok examples/case-study/train.cml
+985c8998b9692692 ok examples/case-study/writings/moved.cml
+78861fc19b326031 ok examples/case-study/writings/renamed.cml
+8400135825282dfe ok examples/case-study/writings/swapped.cml
 5ede3cd26d50aec9 ok examples/cli/exit_status.cml
 d4a0932fc585aa7d ok examples/cli/temperature.cml
 22a5ea0a9ce873eb ok examples/data/dedup_sets.cml
