@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * `Lift<T>` -- the type a value of type `T` has after a forward transform (the author's ruling of
- * 2026-11-20 16:00: 函数值按类型提升, `Lift<A ⇒ B>` 是 `Lift<A> ⇒ Lift<B>`), and **the one place**
- * that shape is computed.
+ * `Lift<T>` -- the type a value of type `T` has after a forward transform, and **the one place**
+ * that shape is computed. A function value lifts by type, so `Lift<A ⇒ B>` is `Lift<A> ⇒ Lift<B>`.
  *
  *     Lift<T>        = (T, Tangent<T>)        for a `T` that has a tangent space -- unchanged
  *     Lift<A => B>   = Lift<A> => Lift<B>     a function lifts to its lifted self
@@ -14,15 +13,15 @@
  * with a function member (a function has none, and an aggregate with one member without a space has
  * none either), so a forward transform had nothing to say about `split`'s forward half handing out
  * `(float, (float) => float)`, and every reader of that shape refused. **No tangent is invented for
- * the function**: a function is not a vector space and has no tangent vector (design principles 9.9,
- * which the ruling leaves standing), and a transform whose implementation *did* hand a function a
- * tangent vector would have implemented the wrong thing. What lifts is the *value*: a value
+ * the function**: a function is not a vector space and has no tangent vector (design principles 9.9),
+ * and a transform whose implementation *did* hand a function a tangent vector would have implemented
+ * the wrong thing. What lifts is the *value*: a value
  * component becomes its own pair, and a function component becomes that function's lift, which is
  * its lifted signature -- this same law one level down.
  *
- * The law has two readers by the ruling itself ("`split`'s forward half handing out
- * `(float, (float) => float)` thus has a lifted shape ... `transpose` recognizes the lifted function
- * components the same way"): the transform that writes the lifted graph (`jvp.cpp`, which also
+ * The law has two readers: `split`'s forward half hands out a lifted shape such as
+ * `(float, (float) => float)`, and `transpose` recognizes the lifted function components the same
+ * way. The two readers are the transform that writes the lifted graph (`jvp.cpp`, which also
  * *defines* this function), and the cut that reads a lifted signature (`split.cpp`). Both ask this
  * one question, so the type a lifted node is written with and the shape a cut is willing to cut
  * cannot drift apart. Nothing about `Lift<T>` is restated at a call site: a site that needs to know
@@ -76,7 +75,7 @@ struct LiftedMember {
     camel::core::type::Type *forward = nullptr;
     /// What the **backward** side answers for this member: `Tangent<ti>` for a value component and
     /// null for a function component -- a function has no tangent space, and no tangent is invented
-    /// for it (design principles 9.9; the ruling of 2026-11-20 16:00 leaves it standing).
+    /// for it (design principles 9.9).
     camel::core::type::Type *tangent = nullptr;
     /// Whether the member is a value component (a pair) rather than a function component.
     bool value = false;

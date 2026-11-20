@@ -41,10 +41,10 @@ void declareResourcesAndDefinitions() {
             // The library pool's count of the most recent call, the same reading `gemm_threads`
             // gives of the pool this module owns: `gemmLibraryThreadsKernel` answers
             // `k::gemmLibraryThreadsUsed()` (utility_ops.cpp), the counter `gemm.cpp` sets on
-            // every product. It was the one of the four (`set_num_threads`, `num_threads`,
-            // `gemm_threads`, and this) left out of the list, so it fell back to the conservative
-            // reading -- every operand read-modify-written -- and a body that called it could not
-            // prove its effect to any clause (2026-11-20).
+            // every product. The name has to be declared here with its three siblings
+            // (`set_num_threads`, `num_threads`, `gemm_threads`): left out of the list it falls
+            // back to the conservative reading -- every operand read-modify-written -- and a body
+            // that calls it proves its effect to no clause.
             {"gemm_library_threads", externalAmbient("tensor:threads", AccessMode::Read)},
         });
     // `load_npy` is not one operator but one per element type a `.npy` file can hold, registered

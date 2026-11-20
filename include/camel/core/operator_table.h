@@ -858,9 +858,9 @@ std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionTy
  * its first `with` input (`with` 0), and a higher-order operator's function operand is the `with`
  * operand its declaration names; a value taken as an ordinary operand leaves the base at 0.
  *
- * This is the base the two sides used to carry apart -- the runtime passed `1` for a call and
- * `index + 1` for an operand, the builder `isWith && isCall ? 1 : 0` -- and it is written here so
- * that one reading answers for both (author 2026-11-20).
+ * This is the base both sides use: the runtime passes `1` for a call and `index + 1` for an
+ * operand, the builder `isWith && isCall ? 1 : 0`, and it is written here so that one reading
+ * answers for both.
  */
 size_t functionValueWithBase(sem::ResourceBinding::Kind kind, size_t index);
 
