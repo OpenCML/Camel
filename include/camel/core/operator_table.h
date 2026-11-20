@@ -840,17 +840,58 @@ void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector
 }
 
 /**
+ * The clause a function value's type writes: what a call through that value reaches, which is also
+ * what a higher-order operator reaches through the value at the operand its declaration names.
+ *
+ * A clause is present iff the type writes one (`Concrete`); a type that writes none (`Generic`)
+ * answers nullopt, and every caller keeps the conservative reading there -- never "touches
+ * nothing", because an unread clause is not an empty one. `pure` is not an absence: it is the clause
+ * that names nothing, so it comes back as a `Concrete` signature whose `pure()` is true and whose
+ * reach is the empty set. That distinction is the whole point of this one function, and it is why
+ * the two answers are `has_value()` and `->pure()` rather than a single bool.
+ */
+std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionType *value);
+
+/**
+ * Where a clause's `with` parameters land once the value stands at an operand of a node: the value
+ * itself takes a slot, so the clause starts one past it. A call through a value keeps the value as
+ * its first `with` input (`with` 0), and a higher-order operator's function operand is the `with`
+ * operand its declaration names; a value taken as an ordinary operand leaves the base at 0.
+ *
+ * This is the base the two sides used to carry apart -- the runtime passed `1` for a call and
+ * `index + 1` for an operand, the builder `isWith && isCall ? 1 : 0` -- and it is written here so
+ * that one reading answers for both (author 2026-11-20).
+ */
+size_t functionValueWithBase(sem::ResourceBinding::Kind kind, size_t index);
+
+/**
+ * A function value's clause together with where it lands: `clause` is the reading above, and the
+ * other two are what a `with` parameter of the clause needs to reach the node's operand. One answer
+ * for every reader, so a call through a value and a higher-order operator's operand cannot disagree
+ * about the same type; an absent clause means the caller keeps its conservative reading.
+ */
+struct FunctionValueClause {
+    std::optional<sem::ResourceSignature> clause;
+    size_t withArgBase = 0;
+    size_t withCount   = 0;
+};
+
+FunctionValueClause functionValueClauseAt(
+    const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index);
+
+/**
  * The clause of the function value a declaration takes its accesses from: the operator names the
  * operand (`sem::ResourceSpec::functionOperand`) and `value` is the function the program put there.
  * Nullopt when the operator names no operand, or the type writes no clause (`Generic`) -- the caller
  * then keeps the conservative reading, never "touches nothing".
  *
- * One rule, read wherever a call stands (design principles 3.3): a call through
- * a function value takes its accesses from the value's type (`Builder::reachOfCall`), and a
- * higher-order operator's call is that same reading with the value at the operand its declaration
- * names -- the builder's ordering (`Builder::reachOfOper`), what a node is worth
- * (`Builder::isEffectNode`), the node-role registry and the effect summary (`EffectWalk::ofNodes`)
- * all answer from it.
+* One rule, read wherever a call stands (design principles 3.3): a call through a function value
+ * takes its accesses from the value's type (`Builder::reachOfCall`, `Builder::isEffectNode`'s `Call`
+ * case, `Resolver::call`), and a higher-order operator's call is that same reading with the value at
+ * the operand its declaration names -- the builder's ordering (`Builder::reachOfOper`),
+ * `Builder::isEffectNode`'s operator case, the node-role registry, the effect summary
+ * (`EffectWalk::ofNodes`) and `Resolver::fromFunctionOperand` all answer from it. The clause itself
+ * is read once (`functionValueClauseAt`); this overload only adds the operand the declaration names.
  */
 std::optional<sem::ResourceSignature> functionOperandClause(
     const OperatorTable &table, OperId id, const type::FunctionType *value);
