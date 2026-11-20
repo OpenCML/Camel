@@ -9,8 +9,8 @@
  * one that was refused" from "the pass did nothing".
  *
  * The second one exists because the check is not asked of every pass in every build: a pass written
- * in Camel is exempt by the theorem of 2026-11-15, and the ruling of 2026-11-16 has the builds that
- * can afford it read the theorem anyway. A reading of that decision needs a program the check
+ * in Camel is exempt by the theorem, and the builds that
+ * can afford it read the theorem anyway. A reading of that rule needs a program the check
  * refuses and a pass the exemption applies to, which is what the two halves of this file are.
  */
 
@@ -141,10 +141,8 @@ SameShapePair findSameShapePair(const Program &program) {
 /// the fixture would be a program whose entry takes a parameter.
 ///
 /// This commit adds no node, so it adds no access, so the commit is not asked the effect or the order
-/// questions (the tier of 2026-11-18, `commitAddsAccess`): a type replacement is what a draft does
+/// questions ( `commitAddsAccess`): a type replacement is what a draft does
 /// without adding an access, and the program it publishes is the one the boundary check below reads.
-/// The fixture could not hand that program on under the ruling of 2026-11-16 -- the commit refused it
-/// there -- which is why the tier changed rather than the fixture.
 const Program *foldTypeOf(
     const camel::core::context::context_ptr_t &context, const Program *program,
     const SameShapePair &pair, std::ostream &out) {
@@ -229,7 +227,7 @@ SplicedPair spliceUnorderedPrintPair(GraphTransaction &transaction) {
 }
 
 /// Says what the draft added, on the record, before the commit is asked: the tier of the checks is
-/// what the draft added and not what the build is (the ruling of 2026-11-18, `commitAddsAccess` in
+/// what the draft added and not what the build is ( `commitAddsAccess` in
 /// camel/runtime/resources.h), so a run that was not asked cannot look like one that was. The line
 /// is a claim the plan can compare, and the one field it does not read is the build's cell.
 void sayWhatTheDraftAdded(std::ostream &out, const char *who, std::string_view added) {
@@ -868,7 +866,7 @@ CommitEffectTestPass::apply(const camel::runtime::Program *program, std::ostream
     }
     sayWhatTheDraftAdded(
         out, "commit_effect", "splices a write to stdout into a graph whose type declares nothing");
-    // The check the containment half is about, written where the ruling of 2026-11-18 asks it: the
+    // The check the containment half is about, written where the commit asks it: the
     // draft adds an access, so the commit is asked in every build, and what it is judged against is
     // the type the graph publishes. This is the same defect `test::fold_function_type` leaves behind
     // (a printing body under a type that declares nothing), reached by the door a rewrite actually
@@ -1118,8 +1116,8 @@ CommitTierTestPass::apply(const camel::runtime::Program *program, std::ostream &
     const bool wasAsked = camel::runtime::commitChecksEnabled();
     // The cell is the one answer a build can give. It is set to each of its two values here, and the
     // two drafts -- one that adds an access and one that adds none -- are read under both: what the
-    // commit asks follows the draft and does not move when the cell does. Under the ruling of
-    // 2026-11-16 the first draft would have been published with the cell off; that is the reading
+    // commit asks follows the draft and does not move when the cell does.Were it to follow the cell,
+    // the first draft would have been published with the cell off; that is the reading
     // this pass exists to make impossible.
     int refusedWithCellOff    = 0;
     int publishedWithCellOn   = 0;

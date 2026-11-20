@@ -97,8 +97,8 @@ std::optional<Width> widthOf(const Type *type) {
 
 /// Why a value of this type is not translated: the reason names the class it belongs to. A whole
 /// tensor is one class (design 8.1: the property would be over every element at once), a floating
-/// width another (S3's work -- and the question "is this floating point" is asked of the family, so
-/// `bf16` and `f16` are in it and not left out), and anything else is refused by its own name.
+/// width another (the floating theory's work -- and the question "is this floating point" is asked
+/// of the family, so `bf16` and `f16` are in it and not left out), and anything else is refused by its own name.
 std::string uncoveredType(const Type *type) {
     if (type == nullptr) {
         return "the type of the value is not known";
@@ -108,7 +108,7 @@ std::string uncoveredType(const Type *type) {
     }
     if (camel::core::type::isFloatingScalar(type->code())) {
         return std::format(
-            "the element type '{}' is not translated yet (the floating theory is S3)",
+            "the element type '{}' is not translated yet (only the integer theory is translated)",
             type->toString());
     }
     return std::format("the element type '{}' is not translated", type->toString());
@@ -485,14 +485,15 @@ const std::string &coverageTable() {
     static const std::string table =
         "the coverage of the integer scalar translation\n"
         "widths translated: int i32\n"
-        "widths declared and not translated yet: float f32 bf16 f16 (the floating theory is S3)\n"
+        "widths declared and not translated yet: float f32 bf16 f16 (only the integer theory is "
+        "translated)\n"
         "operators translated: :op/add_l :op/add_i :op/sub_l :op/sub_i :op/mul_l :op/mul_i "
         ":op/div_l :op/div_i :op/mod_l :op/mod_i :op/neg_l :op/neg_i\n"
         "division and remainder: translated, and the fault at a zero divisor is part of the term "
         "(the decision carries it)\n"
         "beyond translation coverage: a whole tensor, a width or an operator or a node kind not "
         "listed above\n"
-        "a rule's condition: the sides are translated, and the condition is not a premise yet (S4)";
+        "a rule's condition: the sides are translated, and the condition is not a premise yet";
     return table;
 }
 

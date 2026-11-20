@@ -139,7 +139,7 @@ type::FunctionType *operatorOverloadType(
 
 bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
     // The slot `id` reads: a GATE forwards the slot of its **first** normal input, the value the
-    // region hands on (design principles 3.1, the author's ruling of 2026-11-17). The inputs after
+    // region hands on (design principles 3.1). The inputs after
     // it are the reads of the region's writes; they are not the value.
     for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
         const DraftNodeHeader *h = draft.header(id);
@@ -334,7 +334,7 @@ struct FrozenGraphView {
     /// Whether a value the write leaves is read by a reader the program can still see. A reader the
     /// live set does not reach -- a closure definition nothing calls -- reads a value nobody will
     /// ever look at; counting it is what kept a dead write alive, and it is why a graph whose only
-    /// last reader was dropped used to be refused by its own credential check with "has effect node
+    /// last reader was dropped would be refused by its own credential check with "has effect node
     /// N with neither a read of its value nor a place in its chain". The criterion, in one line: a
     /// write may be called dead when it is no root and every node that reads it lies outside this
     /// set. The set is asked here, once per view, from `camel::runtime::liveNodesOf` -- the same walk
@@ -471,14 +471,13 @@ struct DraftGraphView {
 
 /// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
 /// its value input, which is its first normal input, the same node `isWrittenInPlace` above follows
-/// (design principles 3.1, the author's ruling of 2026-11-17). So the cell a `var` parameter writes
+/// (design principles 3.1). So the cell a `var` parameter writes
 /// is the caller's cell, not the gate that carries it across the call: asking the gate alone answers
 /// "no root holds it" for every write made through a parameter, which is a write the caller can
 /// still read (design principles 3.5, 9.7).
 ///
-/// Until 2026-11-19 this followed `inputs.back()` while the comment above claimed it read the slot
-/// as `isWrittenInPlace` does -- `isWrittenInPlace` has always taken `front()`. So the two walks
-/// disagreed on which input a gate forwards, and this one answered about a wait's cell.
+/// It follows `inputs.front()`, as `isWrittenInPlace` does: `inputs.back()` would answer about a
+/// wait's cell.
 template <typename View> bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
     std::unordered_set<gc_node_ref_t> seen;
     gc_node_ref_t place = ref;

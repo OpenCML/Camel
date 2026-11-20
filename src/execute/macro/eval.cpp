@@ -72,7 +72,7 @@ std::string plannedOperatorUri(camel::runtime::GCGraph &graph, camel::runtime::g
     // an in-place form the plan marked Copy runs the plain form, and the copying form of an
     // operator that has an in-place form runs that one where the plan handed it the value it was
     // given (`ExecPlan::operatorUriFor`). Reading `plainForm` here and answering the declared URI
-    // otherwise was one half of that answer, and the half it left out is the one stage S3b adds.
+    // otherwise was one half of that answer, and the half it left out is the plan's decision.
     return graph.execPlan().operatorUriFor(ref);
 }
 

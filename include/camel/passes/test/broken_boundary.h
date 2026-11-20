@@ -71,10 +71,9 @@ class BreakJoinTestPass : public RuntimeGraphRewritePass {
 
 /// Runs `test::break_exit` the way a pass runs another pass by name (`applyRegisteredPass`), and
 /// hands back whatever it returned. The graph is broken by the nested pass, so the only thing
-/// between that graph and the next pass is the boundary check on this route. Until 2026-11-02 the
-/// route had no check at all -- the comment said "no pass of the pipeline, nested or listed, ends
-/// without it" and a nested pass never reached the code that did it -- so this case is what makes
-/// the claim true rather than stated.
+/// between that graph and the next pass is the boundary check on this route. A nested pass never
+/// reaches the code that checks a listed pass's result, so this case is what makes the claim "no
+/// pass of the pipeline, nested or listed, ends without the check" true rather than stated.
 inline constexpr const char *kNestedBreakTestPass = "test::nested_break";
 class NestedBreakTestPass : public RuntimeGraphRewritePass {
   public:

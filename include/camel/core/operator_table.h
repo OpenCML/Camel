@@ -91,7 +91,7 @@ inline constexpr OperId kNoOper = 0;
 
 /// The operators the core recognises by identity, with their ids fixed at compile time. The
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
-/// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
+/// `body->oper == oper::VarGet` asks the question by operator id, not by comparing the uri.
 ///
 /// Besides the variables, the list holds the operators the compiler emits itself, as the
 /// lowering of a construct (`__enum_make__`, `__throw__`, `__set_index__`): the builder refers
@@ -135,9 +135,9 @@ inline constexpr OperId VarAfter = 21; // ":var/after"
 /// its id: reusing it would make the deletion a rename.
 ///
 /// Of that shape, one half is necessary and the other has been measured in one use: a sync
-/// predecessor naming the node was part of it, and 2026-11-18 (`35abac81c`) measured that the
+/// predecessor naming the node was part of it, and a measurement showed that the
 /// predecessor can be dropped here -- built with it and running, then built again without it and
-/// still holding, `e9` 212 cells and `feat/linear` unchanged. Whether another use needs the
+/// still holding. Whether another use needs the
 /// predecessor has not been measured, so this paragraph is not a statement that the keeper needs
 /// no order: it says which half was measured and where.
 inline constexpr OperId kWellKnownCount = 22; // kNoOper included
@@ -463,8 +463,7 @@ class OperatorTable {
     // of that operand's value, as a JOIN, a GATE and a port are carriers of theirs -- it makes no
     // reference of its own, and the reference of the value it hands on is the holder's. Declared
     // where the operator is registered, beside `declareReusesOperand`, and read by the plan --
-    // `forwardsItsValue` (src/execute/exec_plan.cpp) -- which kept a list of these names beside it
-    // until the author's review of 2026-11-17, section 2.8: one fact, one place to write it.
+    // `forwardsItsValue` (src/execute/exec_plan.cpp) -- so there is one fact and one place to write it.
 
     /// Declares that `uri` answers a value an operand already holds; `onlyOutsideArrays` restricts
     /// that to the results that are not arrays (a row of a higher-rank value is its own).
@@ -489,7 +488,7 @@ class OperatorTable {
     /// The types `uri` converts between, or nullopt when it is not a declared conversion.
     std::optional<ConversionTypes> conversionTypesOf(std::string_view uri) const;
 
-    /// True when the operator is a declared conversion. The question `find("to")` used to answer.
+    /// True when the operator is a declared conversion (the question `find("to")` answers).
     bool isConversion(std::string_view uri) const { return conversionTypesOf(uri).has_value(); }
 
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
@@ -886,14 +885,13 @@ FunctionValueClause functionValueClauseAt(
  * Nullopt when the operator names no operand, or the type writes no clause (`Generic`) -- the caller
  * then keeps the conservative reading, never "touches nothing".
  *
- * One rule, read wherever a call stands (design principles 3.3; author 2026-11-19, 2026-11-20): a
- * call through a function value takes its accesses from the value's type (`Builder::reachOfCall`,
- * `Builder::isEffectNode`'s `Call` case, `Resolver::call`, `declaredClauseAt`), and a higher-order
- * operator's call is that same reading with the value at the operand its declaration names --
- * `Builder::reachOfOper` (`readFunctionOperandReach`), `Builder::isEffectNode`'s operator case, the
- * node-role registry, the effect summary (`EffectWalk::ofNodes`) and `Resolver::fromFunctionOperand`.
- * The clause itself is read here, once: a reader that has the value asks `functionValueClause`, and
- * this overload only adds the operand the declaration names.
+* One rule, read wherever a call stands (design principles 3.3): a call through a function value
+ * takes its accesses from the value's type (`Builder::reachOfCall`, `Builder::isEffectNode`'s `Call`
+ * case, `Resolver::call`), and a higher-order operator's call is that same reading with the value at
+ * the operand its declaration names -- the builder's ordering (`Builder::reachOfOper`),
+ * `Builder::isEffectNode`'s operator case, the node-role registry, the effect summary
+ * (`EffectWalk::ofNodes`) and `Resolver::fromFunctionOperand` all answer from it. The clause itself
+ * is read once (`functionValueClauseAt`); this overload only adds the operand the declaration names.
  */
 std::optional<sem::ResourceSignature> functionOperandClause(
     const OperatorTable &table, OperId id, const type::FunctionType *value);

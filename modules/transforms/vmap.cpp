@@ -251,7 +251,7 @@ FunctionType *vmapSignature(FunctionType *function) {
 ///
 /// It is part of the transform's output, on stdout, always: a ruleset that is written is not a
 /// ruleset that is used, so the count is what a reader checks, and a count behind an environment
-/// variable would be a count nobody reads (the author's requirement of 2026-11-01 05:10).
+/// variable would be a count nobody reads.
 std::string askedFoundMissing(const VmapGraph &graph) {
     const size_t missing = graph.asked > graph.found ? graph.asked - graph.found : 0;
     return std::format("asked={} found={} missing={}", graph.asked, graph.found, missing);
@@ -274,10 +274,9 @@ VmapGraph buildVmapGraph(
     // The values the function under the transform captured where it was written. They are part of
     // the function *value* -- its closure tuple -- and they are a *constant* of the batched graph:
     // the transform copies the value in, lifted the way a constant written in the body is lifted,
-    // so the batched body reads the capture and not the batch element. Before this, every port of
-    // the source graph was answered with the batch parameter, the capture port among them, so
-    // `x + c` computed `2x` and answered `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer
-    // (author's review of 2026-11-02, high-2).
+    // so the batched body reads the capture and not the batch element. Answering every port of
+    // the source graph with the batch parameter, the capture port among them, would make
+    // `x + c` compute `2x` and answer `[2.0, 4.0, 6.0]` where `[4.0, 5.0, 6.0]` is the answer.
     const auto captures         = function->closureNodes();
     const auto sourceParameters = function->normPorts();
     // Where a capture port's value is in the closure tuple: the tuple is in capture order, so the
@@ -298,8 +297,7 @@ VmapGraph buildVmapGraph(
     /// as that row at every index, `rulesets/vmap.cml#at`), and it is a wrong *answer*: the
     /// caller's batch has as many rows as it has, and nothing in this graph spreads one row over
     /// it. Asked of the exit below, so that a body whose whole answer is a constant is refused
-    /// instead of answering a one-row array
-    /// (`docs/handover/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`).
+    /// instead of answering a one-row array.
     std::vector<char> oneRowOf;
 
     camel::runtime::GraphDraftGroup group(context, program);
@@ -774,9 +772,9 @@ VmapGraph buildVmapGraph(
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
         // that only forward it.
-        // The walk is camel/runtime/graph.h#valueBehindGates: a gate's first input is the value and the rest are
-        // the statements it waits on (author,  780a83bd), so taking the last input read a write
-        // as the value in a body that printed.
+        // The walk is camel/runtime/graph.h#valueBehindGates: a gate's first input is the value and
+        // the rest are the statements it waits on, so taking the last input would read a write as the
+        // value in a body that printed.
         gc_node_ref_t out = valueBehindGates(*function, function->exitNodeRef());
         if (out >= function->nodeCount() || copyOf[out] == rt::kInvalidNodeRef) {
             refused.refusedOrigin =
@@ -801,8 +799,7 @@ VmapGraph buildVmapGraph(
             // length the caller did not ask for, and everything downstream (`len`, `sum`, an index)
             // is then off by the batch's extent. Refused by name instead, which is design
             // principles 9.9's rule and the rule the port above already states; what the answer
-            // *should* be is the author's
-            // (docs/handover/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md).
+            // *should* be is a language-design question.
             refused.refusedOrigin =
                 static_cast<camel::source::origin_id_t>(function->nodeOrigin(out));
             refused.refusedConstruct = "an answer of one row";

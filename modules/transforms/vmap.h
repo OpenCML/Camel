@@ -4,8 +4,8 @@
 /*
  * The batching transform of a function graph: `reinterp<vmap>(f)`.
  *
- * `reinterp` produces a *new function*, not a rewritten graph (the author's ruling a824031aa, the
- * same one `jvp` follows): the transform builds a graph of its own and hands it to the call site as
+ * `reinterp` produces a *new function*, not a rewritten graph (the same rule `jvp`
+ * follows): the transform builds a graph of its own and hands it to the call site as
  * a function value. The ruleset is `stdlib/rulesets/vmap.cml`, whose `Lift<T>` is `RowsOf<T>`: a
  * value with one dimension of unknown length in front of it (`f32` holds a batch of `f32` rows).
  *

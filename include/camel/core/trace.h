@@ -6,10 +6,10 @@
  * print them.
  *
  * A program's stdout belongs to the program, and the readings a compiler writes about its own work
- * belong on the diagnostic side -- but only when someone asked. Until 2026-11-16 they were
- * unconditional: a program that differentiates a small model wrote 1988 `TRANSPOSE`/`REINTERP` lines
- * on a *default* run, one per operator per step, so debugging output had entered the product path and
- * the program's own four numbers were lost in it (author's ruling of 2026-11-16).
+ * belong on the diagnostic side -- but only when someone asked. Written unconditionally, a program
+ * that differentiates a small model would print a `TRANSPOSE`/`REINTERP` line per operator per step
+ * on a *default* run, so debugging output would enter the product path and bury the program's own
+ * numbers.
  *
  * The asking is the command line: `--trace transforms`, and several areas with commas
  * (`--trace transforms,plan`). It is not an environment variable -- a run's behaviour is decided by

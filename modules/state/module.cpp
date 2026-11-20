@@ -4,9 +4,8 @@
 /*
  * The state module: an explicit mutable reference, as a handle the core provides.
  *
- * A reference is one box a handle points at (design principles 3.3, "handle types"; the author's
- * ruling of 2026-11-14). `ref` makes a box and answers a handle to it; `get` reads the content;
- * `set` writes it; `update` writes `f` of it, for a `pure` `f`. The four are operators of this
+ * A reference is one box a handle points at (design principles 3.3, "handle types"). `ref` makes a box and answers a handle to it;
+ * `get` reads the content; `set` writes it; `update` writes `f` of it, for a `pure` `f`. The four are operators of this
  * module, so what each touches is declared where the operator contract declares it
  * (`OperatorTable::declareResources`, principle 10.5) and not by a body the scheduler cannot see:
  *

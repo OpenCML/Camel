@@ -101,7 +101,7 @@ class FunctionTypeFactory {
     /// The `with` parameters end in a pack (`with <..args>`): it stands for the `with` arguments
     /// a call gives beyond the fixed ones, of any types, and is added after every other `with`
     /// parameter as a `void` parameter no call passes a value for. A declaration with a body
-    /// writes one like a declaration without one (language author, 2026-11-03), and so does a
+    /// writes one like a declaration without one, and so does a
     /// function type.
     ///
     /// A pack that writes an element type (`with <..args: T>`) keeps it in that slot, and the
@@ -319,7 +319,7 @@ class FunctionType : public CompositeType {
         sem::ResourceSignature resources;
         /// The signature is `split`'s backward half: its parameters are the tangents, and the values it
         /// reads are in its closure. Nothing on the type says so -- `transpose` treats every parameter
-        /// as linear (author's ruling of 2026-11-02 11:30).
+        /// as linear.
     };
 
     FunctionType(const Parts &parts, bool open);

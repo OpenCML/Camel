@@ -258,8 +258,7 @@ PortPlacement portPlacement(const GCGraph &graph, gc_node_ref_t ref);
 // It is a query rather than a check here because what to do with the answer -- which diagnostic,
 // carrying which pass name -- belongs to the pass boundary that knows the pass (execute/pass.cpp).
 // A pass that rewrites through the graph module alone cannot build an effectful node, so for it the
-// answer is a theorem and it does not ask (the ruling of 2026-11-15, GraphIRPass::
-// rewritesThroughTheGraphModuleOnly).
+// answer is a theorem and it does not ask (GraphIRPass::rewritesThroughTheGraphModuleOnly).
 
 /// A call site of one graph that does more than its type says: the node, the type it declares as
 /// the declaration spells it, and the accesses of the footprint the declaration does not cover.
@@ -358,10 +357,8 @@ std::string toString(const GraphFootprint &footprint);
 // caller's question (`commitViolation`'s `made` and `changed`), and which regions inside one are the
 // commit's is the same pair's (the regions those nodes are in, and every region around them).
 //
-// Three more things the author's rework of 2026-11-18 makes part of the same commitment (the
-// question page `docs/handover/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`,
-// and the rework that answers it). Two of them are asked by the seal every commit already runs, and
-// are said here so that a reader of this file knows where each of the four lands:
+// Three more things are part of the same commitment. Two of them are asked by the seal every commit
+// already runs, and are said here so that a reader of this file knows where each of the four lands:
 //
 //   Exit    the value the graph hands on is read at its exit, and the exit must be a node of the
 //           function body (region 0). Asked in the seal (`validateRuntimeGraphPayloadImpl`,
@@ -372,7 +369,7 @@ std::string toString(const GraphFootprint &footprint);
 //           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build, before
 //           the two checks below -- one reading, not a second copy of it here.
 //   Tier    the two checks above (effect, order) are asked by the edit the draft used, not by what
-//           the build is (the ruling of 2026-11-18, which replaces the one of 2026-11-16). The table
+//           the build is. The table
 //           of `docs/design/graph-editing/README.cn.md` 8.1 is the rule, and it is why the tier has
 //           two halves: the nodes the draft made (`made`) and the nodes it changed in place through
 //           the low-level interface (`GraphDraft::lowLevelEdits`) -- that table's last row, "add an
@@ -411,9 +408,9 @@ struct CommitViolation {
 ///     the rule, and its last row is why `made` cannot be the whole of it: "add an edge, change an
 ///     operator" owes all six checks and makes no node. A commit whose draft made nothing and
 ///     changed nothing owes no answer about either, in any build; one that made a node carrying an
-///     access, or that changed a node in place, is asked both. (The ruling of 2026-11-18 read the
-///     tier off what the draft *added*, which saw only the first half; a draft that emptied a
-///     statement's chain and spliced nothing was published without a question being asked.)
+///     access, or that changed a node in place, is asked both. (Reading the tier off what the draft
+///     *added* alone sees only the first half: a draft that emptied a statement's chain and
+///     spliced nothing would be published without a question being asked.)
 ///   * which regions of the graph it answers for -- the region each such node is in, and every
 ///     region around it up to the body (`touchedRegions`). Judging only the pairs that name one of
 ///     them is not enough: an owner node stands in the region it sits in for all the accesses under
@@ -426,8 +423,8 @@ struct CommitViolation {
 /// is what the program already was -- the pass boundary's question, not this commit's -- so an
 /// in-place edit answers for the pairs that were ordered and are not any more.
 ///
-/// A *body* that already reached past its declaration is not the same thing and is not passed over
-/// (the ruling of 2026-11-20). The graph a commit starts from is the compiler's own product: the
+/// A *body* that already reached past its declaration is not the same thing and is not passed over.
+/// The graph a commit starts from is the compiler's own product: the
 /// front end built it, or a commit published it after answering for it. One whose body reaches past
 /// the type its own signature declares is a graph the front end accepted beyond its type, and no
 /// program writes that -- so the reading reports it as the compiler's defect
@@ -439,9 +436,8 @@ struct CommitViolation {
 /// reading of `before` is taken there. One reading, one program version: a call's footprint is read
 /// through the callee's *declared* clause, so an old graph read against the program this commit is
 /// publishing measures a callee that grew in this very commit and reports a body the graph never
-/// had. That is the measurement constraint of the 2026-11-18 page (`f61196246`: "a draft plus the
-/// program as it is now, read together, answers about a program nobody has"), and the one commit that
-/// states a widened type is exactly where it bites: `tiles` widens `chain` and its caller in the same
+/// had. A draft plus the program as it is now, read together, answers about a program nobody
+/// has, and the one commit that states a widened type is exactly where that bites: `tiles` widens `chain` and its caller in the same
 /// commit, and the caller's old version is lawful in the old program and beyond in the new one. A
 /// caller whose two programs are the same object passes nothing, which is the whole answer there.
 std::optional<CommitViolation> commitViolation(
@@ -450,7 +446,7 @@ std::optional<CommitViolation> commitViolation(
     const Program *beforeProgram = nullptr);
 
 /// Whether a commit of `graph` added an access: some node `made` names carries an access (or an
-/// effect outside the program). This is the first half of the tier of the ruling of 2026-11-18; the
+/// effect outside the program). This is the first half of the tier; the
 /// second half -- the nodes the commit changed in place -- is `GraphDraft::lowLevelEdits`, and
 /// `commitViolation` is where the two are read together (the table of
 /// `docs/design/graph-editing/README.cn.md` 8.1). It takes no build: what a run asks is decided by
@@ -515,16 +511,16 @@ void reportCommitViolation(
     const CommitViolation &violation);
 
 /// Whether a pass written in Camel is asked the call-site containment check of the pass boundary
-/// (`camel::execute::passBoundaryViolation`, src/execute/pass.cpp). The ruling of 2026-11-15 stopped
-/// asking it of a pass whose only rewriting interface is the graph module, because such a pass
-/// cannot make a node that carries an access; the ruling of 2026-11-16 reads that theorem where a
-/// build can afford it -- a shipped build (`NDEBUG`) does not ask, a debug build asks, and a test
-/// asks through `setCommitChecksEnabled` -- and the two paths read one cell so they cannot drift.
+/// (`camel::execute::passBoundaryViolation`, src/execute/pass.cpp). It is not asked
+/// of a pass whose only rewriting interface is the graph module, because such a pass cannot make
+/// a node that carries an access; that theorem is read where a build can afford it -- a shipped
+/// build (`NDEBUG`) does not ask, a debug build asks, and a test asks through
+/// `setCommitChecksEnabled` -- and the two paths read one cell so they cannot drift.
 ///
-/// This cell is the pass boundary's answer and no longer the commit's: the commit checks are asked
-/// by what the draft added (`commitAddsAccess`), in every build (the ruling of 2026-11-18). A cell
-/// that decided both would be one setting with two meanings, which is how the tier of the commit
-/// came to be read as a build's answer when it was a fact about the draft.
+/// This cell is the pass boundary's answer and not the commit's: the commit checks are asked
+/// by what the draft added (`commitAddsAccess`), in every build. A cell
+/// that decided both would be one setting with two meanings, because the tier of the commit is a
+/// fact about the draft and not a build's answer.
 bool commitChecksEnabled();
 void setCommitChecksEnabled(bool enabled);
 

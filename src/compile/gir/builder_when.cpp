@@ -60,8 +60,7 @@ using camel::core::module::ImportLayer;
 namespace {
 
 /// `$builtin::not` and `not` name the same operator; a name a module qualified is that
-/// module's own. The prefix is `kBuiltinPrefix`, stated once in `builder_helpers.h`: this used to
-/// spell it again, which is the second copy daily review 2026-11-18 (item 4) counts.
+/// module's own. The prefix is `kBuiltinPrefix`, stated once in `builder_helpers.h`.
 std::string plainName(const std::string &written) {
     if (written.starts_with(kBuiltinPrefix)) {
         return written.substr(kBuiltinPrefix.size());
@@ -1579,8 +1578,8 @@ WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_
     }
     // A predicate is a pure function of the types it is given, so its answer is remembered by that
     // pair: the guard of a `match type` case and the `when` of a declaration ask the same question
-    // about the same type, and the second one is answered from here (design principles 5.5, ruling
-    // of 2026-11-14). A call that passes values is not remembered -- its answer depends on them --
+    // about the same type, and the second one is answered from here (design principles 5.5).
+    // A call that passes values is not remembered -- its answer depends on them --
     // and an answer that could not be settled is not remembered either, since a later instance may
     // be the one that can settle it.
     std::string cacheKey;

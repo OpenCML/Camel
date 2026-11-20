@@ -770,7 +770,7 @@ void FunctionEmitter::lowerCall(
     std::vector<std::string> args;
     // The type each argument fills, in the order a direct call lists them: the normal ports' types,
     // then the `with` ports' -- the ports, and not the callee's declared parameter list
-    // (`funcType()`), because those two disagree exactly where this writer used to be wrong.
+    // (`funcType()`), because those two disagree exactly where a writer using the declared list would be wrong.
     //
     // A specialization that binds a value erases the formal from the copy and drops the argument
     // from the call, and the copy's declared parameter list keeps the erased position: it is
@@ -1009,7 +1009,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     // `std::mem::blocks()` reads the runtime's own block space, which is an introspection of this
     // runtime: a program std::cpp writes has no block space of the runtime at all, so on this
     // target the counters are not available. That is a boundary of the target, not a translation
-    // still to be written, and the two are said differently (author's ruling of 2026-10-31: A).
+    // still to be written, and the two are said differently.
     // `rand:uniform_array` and `rand:normal_array` draw from a key into a *shaped* array: the key
     // is a C++-side value (rt::randomStream has the same philox), so naming it is wrong -- the
     // value they build is a shaped array, and std::cpp writes none.

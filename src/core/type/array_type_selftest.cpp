@@ -164,8 +164,7 @@ std::string debugRunArrayTypeSelfTest() {
     // This relation is necessary but not sufficient for one `:op/idx_arr` law to answer every
     // rank: a law's parameter type also fixes the result type of its left side, so a law written
     // on `T[..]` answers `T[..]` where a rank-one index answers the element (5.4). The laws stay
-    // on `T[]` today; the paired readings are
-    // `docs/handover/reviews/2026-11-03-does-an-open-rank-index-law-cover-rank-one.cn.md`.
+    // on `T[]`.
     require(openF32->assignableFrom(anyF32), "f32[..] does not accept f32[] (one unknown extent)");
     ArrayType *open3 = ArrayType::openRank(f32, constants({3}));
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");

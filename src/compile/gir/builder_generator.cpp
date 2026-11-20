@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The generator's machine, built in the translation (author's ruling of 2026-11-18, `96714f465`:
- * "build the generator body in GIR, and the slot unwrap checks and reports an internal error").
+ * The generator's machine, built in the translation: the generator body is built in GIR, and
+ * the slot unwrap checks and reports an internal error.
  *
  * Why it moves out of the construction tree at all. A generator's body is not a block of statements
  * like another: what a pull hands to the next one is a *type* -- a slot's type -- and the tree has
@@ -24,13 +24,13 @@
  * the type its value already has, and the state's types are the ones the machine writes.
  *
  * What a `yield` is to this file. It is a node of the construction tree (`EXIT` with
- * `ExitType::Yield`, built by `gct::Builder::visitExitStmt` since 2026-11-18) and nothing else: the
+ * `ExitType::Yield`, built by `gct::Builder::visitExitStmt`) and nothing else: the
  * GCT machine claims every `yield` today, so no body reaching this file holds one, and this file's
  * branch is a seam, not a behaviour.
  *
  * Why there is no half-landed version of this file. Until it builds a whole generator, the branch
  * below cannot be taken: a body built with `yield` nodes and no machine has its `yield`s refused at
- * `visitExitNode` -- that is the reading the GCT statement builder kept until 2026-11-18
+ * `visitExitNode` -- that is the reading the GCT statement builder kept
  * ("a `yield` reached the statement builder, so the generator machine did not claim it"), moved one
  * layer down so that it is said where the machine that could claim it lives.
  *
@@ -196,7 +196,7 @@ void Builder::buildGeneratorBody(
     Type *const exit = funcType != nullptr ? funcType->exitType() : nullptr;
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
         // A body that yields hands out a stream. Saying it here and not at the first `yield` is the
-        // ruling the GCT machine keeps (`YieldRequiresStreamHead`): the head is what is wrong.
+        // rule the GCT machine keeps (`YieldRequiresStreamHead`): the head is what is wrong.
         diags_->of(SemanticDiag::YieldRequiresStreamHead)
             .atOrigin(gct != nullptr ? gct->at(0)->origin() : camel::source::kInvalidOriginId)
             .commit();
@@ -251,10 +251,7 @@ void Builder::buildGeneratorBody(
 
         // Shapes this segment of the machine does not build yet. The message says which shape was
         // met and that the program is not what is wrong -- the machine is -- because a reading that
-        // stopped here has to say whether the arity was refused or the mechanism is missing (the
-        // lesson of the probe in
-        // `docs/handover/reports/2026-11-18-the-generator-machine-s-next-segment-hits-a-nested-graph.cn.md`
-        // 3).
+        // stopped here has to say whether the arity was refused or the mechanism is missing.
     const auto refuseShape = [&](const char *reason) -> void {
         diags_->of(InternalDiag::UnknownInternalError)
                 .atOrigin(gct != nullptr ? gct->origin() : camel::source::kInvalidOriginId)
@@ -395,9 +392,7 @@ void Builder::buildGeneratorBody(
         // construction machine's own `streamValue` builds -- a FUNC of the stream's step type whose
         // body returns the call -- and visited here, which is what makes `__gen_step__` resolve to
         // the graph this build is filling in (`enterScope` inserts the name when the graph is made,
-        // not when it is finished: the probe in
-        // `docs/handover/reports/2026-11-18-the-generator-machine-s-next-segment-hits-a-nested-graph.cn.md`
-        // 3 measured exactly that).
+        // not when it is finished).
         const auto streamValue = [&](const GCT::node_ptr_t &state) -> node_handle_t {
             GCT::node_ptr_t lambda = tree_->makeFunc("");
             *lambda << tree_->makeType(stream->stepType());

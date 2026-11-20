@@ -1133,7 +1133,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             if (refs.size() == 1) {
                 res = nRefNode;
             } else {
-                // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                // `let a, b = 1, 2` binds every name, not only the last one.
                 *res << nRefNode;
             }
         }
@@ -1290,7 +1290,7 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     tag.ident  = decl->ref().toString();
     // A program may not declare a tag with the name of a core permission or of `strict`:
     // `#reassociate` in the program would still mean the core's permission, so the declaration
-    // would never be read (design principles 6.2, 7.4, log 2026-10-21).
+    // would never be read (design principles 6.2, 7.4).
     if (tag.ident == "finite_math" || tag.ident == "strict" ||
         camel::core::sem::parsePermission(tag.ident).has_value()) {
         diags_->of(SemanticDiag::TagShadowsPermission)
@@ -2292,14 +2292,11 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
 
     // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
-    // A `yield` is a node of this tree from 2026-11-18 (author's ruling: the generator body is
-    // built in GIR, and the GIR splits the body into arms at the `yield` it finds there, so the
-    // node is the only thing it can find). The machine in this file still claims every `yield`
-    // before the statement builder is reached, so nothing builds one today: what this line changes
-    // is the seam the GIR machine lands on, not what a generator is. What stood here was a refusal
-    // -- "a `yield` reached the statement builder, so the generator machine did not claim it" --
-    // and it said exactly that this machine does not claim this shape yet; the same reading is kept
-    // one layer down, where an unclaimed `yield` now arrives (`gir::Builder::visitExitNode`).
+    // A `yield` is a node of this tree: the generator body is built in GIR, and the GIR splits the
+    // body into arms at the `yield` it finds there, so the node is the only thing it can find. The
+    // machine in this file still claims every `yield` before the statement builder is reached, so
+    // nothing builds one today: this line is the seam the GIR machine lands on. An unclaimed `yield`
+    // arrives one layer down (`gir::Builder::visitExitNode`).
     node_ptr_t exitNode = tree_->makeExit(
         astExit == AST::ExitType::Yield ? ExitType::Yield : ExitType::Return);
     if (astExit == AST::ExitType::Return) {
@@ -2313,9 +2310,9 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     if (dataNodes->size() > 0) {
         // Case 1: Single data node
         if (dataNodes->size() == 1) {
-            // Lowered once. It used to be lowered twice and the first result dropped: every
-            // `return` nested in the returned expression doubled the work (2^n lowerings at
-            // depth n) and repeated the diagnostics of the expression.
+            // Lowered once: lowering twice and dropping the first result would double the
+            // work at every `return` nested in the returned expression (2^n lowerings at
+            // depth n) and repeat the diagnostics of the expression.
             *exitNode << visitData(dataNodes->front());
         } else {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
@@ -2910,7 +2907,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         // group of the operator it follows: that operator's set of operand types is what decides
         // whether the write is defined, so it is the operator the graph builder asks. Which group
         // is the plain assignment, and which are the compound ones, is the table in
-        // `operator_names.cpp` (daily review 2026-11-18, item 4): this line asks it instead of
+        // `operator_names.cpp`: this line asks it instead of
         // spelling the name.
         const bool compound =
             camel::core::plainGroupOfCompoundAssignment(groupName).has_value();
@@ -3317,12 +3314,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // is handed on as one call of the compiler's own name for it, which the GIR builder
         // resolves (Builder::buildComposition).
         //
-        // It used to be handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
-        // src/builtin/operators/macro.cpp), whose resolver took two functions and answered with
-        // the exit type of the right one. That path could not build a composition at all — a
-        // value of a function type is a graph, and no built-in executor has one — and it had no
+        // It is not handed to the built-in macro operator `oper::MacroCmp` (`:macro/cmp`,
+        // src/builtin/operators/macro.cpp), whose resolver takes two functions and answers with
+        // the exit type of the right one. That path cannot build a composition at all — a
+        // value of a function type is a graph, and no built-in executor has one — and it has no
         // reading for two integers. The operator and its executor stay registered; the compiler
-        // no longer has a user for them.
+        // has no user for them.
         node_ptr_t opNode  = tree_->makeDRef(std::string(camel::core::kCompositionCall));
         res                = tree_->makeLink(2);
         auto compAstBundle = astSemantic(context_, ast);
@@ -3801,7 +3798,7 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
         bool catchAll        = false;
         bool unreachableSeen = false;
         // A guarded `_` or `#leaf` selects the types its predicate holds for, so a case after it
-        // is reachable (design principles 5.5, ruling of 2026-11-14).
+        // is reachable (design principles 5.5).
         const bool guarded = AST::typeCaseGuardOf(caseAst) != nullptr;
         for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
             const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
@@ -4199,7 +4196,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         // Every escape form is decoded here, so an unknown escape is reported here too, once per
         // spelling, in the lexical catalogue: an octal escape is simply unknown, and so is
         // `\q`. The text keeps the pair as written; the diagnostic is an error, so a program
-        // that writes one does not compile (the author's ruling of 2026-11-02: a string that
+        // that writes one does not compile (a string that
         // silently becomes something else is dearer than one that refuses to build).
         //
         // A raw string (`r"C:\dir"`) is not decoded at all: its text is the value, so a backslash
@@ -4243,8 +4240,8 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
-        // Exact arithmetic. A literal that an int cannot hold used to wrap around
-        // (`9223372036854775808` was the smallest int, as was `1e400`). The value is read by
+        // Exact arithmetic. A literal that an int cannot hold does not wrap around
+        // (as `9223372036854775808` or `1e400` would). The value is read by
         // the same whole-number-token rule an entry argument is (camel/utils/number_text.h):
         // one grammar, one parser for the two places a number is written as text.
         int64_t value = 0;
@@ -4806,7 +4803,7 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         }
     }
     // Any other expression: an annotation CAST (see the declaration). An expression of the
-    // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
+    // declared type is not refused as "dynamic type casting" (`var acc: V = p`
     // with `p: V`); converting a value to its own type does nothing (design principles 5.1).
     node_ptr_t castNode = tree_->makeCast(type, true);
     *castNode << value;
@@ -4820,11 +4817,11 @@ namespace {
 /// as constants (`f32[2, 2]`, `f32[3]`). Those are the positions a literal is one array of
 /// (design principles 5.1, 5.4); a shape with a dimension left open keeps the ordinary build.
 ///
-/// A rank of one is a shape too. It used to be left out here, and that was the whole difference
-/// between `let v: float[3] = [1.0, 2.0, 3.0]` (which built the literal into the stated shape)
-/// and `[1.0, 2.0, 3.0] as float[3]` (which did not: the ordinary build made a `float[]`, and the
-/// `as` path then refused it on `castSafety` with "the value cannot become that type" -- a value
-/// that fits, refused by the one position that could not build it). Nothing about the literal's
+/// A rank of one is a shape too. Leaving it out would be the whole difference
+/// between `let v: float[3] = [1.0, 2.0, 3.0]` (which builds the literal into the stated shape)
+/// and `[1.0, 2.0, 3.0] as float[3]` (which would not: the ordinary build makes a `float[]`, and
+/// the `as` path then refuses it on `castSafety` with "the value cannot become that type" -- a
+/// value that fits, refused by the one position that could not build it). Nothing about the literal's
 /// own rank decides this: the position's shape does, and `[a, b, c]` in a `f32[3]` position is
 /// that shape however it is spelled. The length it writes is checked here, in the same place a
 /// rank-two literal's is, so a mismatch names the extent instead of falling to a conversion that
@@ -5270,8 +5267,7 @@ node_ptr_t Builder::visitTupleInto(const AST::node_ptr_t &ast, Type *tupleType, 
     // no type of its own, and the position's type is what the remaining elements are converted
     // into. Left to the factory, the type would come from the elements — the hole becoming
     // whatever a hole is — and a literal nested in another literal would then fall back to its
-    // ordinary build and lose the position's element types (design principles 5.1
-    // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
+    // ordinary build and lose the position's element types (design principles 5.1).
     data_vec_t data;
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
@@ -5439,7 +5435,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
         const string &name    = namedPair->ref().ident();
         if (!fieldNames.insert(name).second) {
-            // As in a struct type. The later value used to be dropped, silently.
+            // As in a struct type. The later value is not dropped silently.
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
             throw BuildAbortException();
         }
@@ -5453,8 +5449,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     {
         // The value every field was written as is kept even when another field is computed: the
         // position of the whole literal decides each written field's type, and a field converted
-        // from the double it was lowered to is rounded twice (design principles 5.1
-        // of 2026-10-23 on `expected-type-through-literals-and-calls`, item 3).
+        // from the double it was lowered to is rounded twice (design principles 5.1).
         const auto object = std::dynamic_pointer_cast<StructData>(structData);
         std::vector<Tree::LiteralElement> literalElements;
         if (object != nullptr) {
@@ -5691,15 +5686,14 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
-    // A pack among the `with` parameters is allowed on a declaration with a body as on one without
-    // (language author, 2026-11-03): the pack rule is the one the ordinary parameters follow
+    // A pack among the `with` parameters is allowed on a declaration with a body as on one without.
+    // The pack rule is the one the ordinary parameters follow
     // (design principles 4.4, 5.6). Its binding of the call's `with` arguments, and what the body
     // may do with it, are built where the body is; here the signature keeps it as the `void` slot
     // `addWithRest` writes, which a call never passes a value for.
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
-    // module, in which the C++ operators are declared; it may also hold Camel definitions
-    // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
-    // 删除"). One module is the pair: declarations and Camel definitions in the `.cml`, the
+    // module, in which the C++ operators are declared; it may also hold Camel definitions.
+    // One module is the pair: declarations and Camel definitions in the `.cml`, the
     // native kernels they name in the `.cmo` (design principles 10.4).
     if (nativeDeclaration) {
         if (!funcType->hasExitType()) {
@@ -6014,8 +6008,7 @@ The machine is the one docs/design/io-concurrency-streams/plan.cn.md slice E des
 state kept the way this language can keep it:
   - the `pc` cell says which point of the body the next pull starts from. That is the whole of the
     state's own part: whether the pull in hand is done is the round's flag and not the generator's
-    (`roundState` below), and that flag is all the machine's `loop` stops on
-    (`docs/handover/reports/2026-11-18-the-generator-state-holds-only-pc.cn.md`);
+    (`roundState` below), and that flag is all the machine's `loop` stops on;
   - every local that lives across a `yield` is a cell of the function's own body. That is the
     machine's own bookkeeping and not the meaning of `var`: `var` is a name that may be bound
     again, and a closure captures the value the name held where the closure is written (design
@@ -6048,8 +6041,8 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
-    // no declaration shape left that the machine cannot read: the refusal this place used to hold
-    // -- "a local read after a `yield`" -- is gone with the shape it named.
+    // no declaration shape that the machine cannot read, so this place has no refusal for
+    // "a local read after a `yield`".
     Type *exit = funcType->exitType();
     if (exit == nullptr || exit->code() != TypeCode::Stream) {
         // The head is what is wrong: a body that yields hands out a stream, and this head writes
@@ -6073,11 +6066,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // pull starts from. It belongs to the step and not to this body, and the name is used only where
     // such a cell is made, read or written: no decision below asks what a name is, so the name is
     // compared to nothing.
-    // The state carried a second member until 2026-11-18: a `halt` bit the author had dropped
-    // (`6ce3bf1f2`, "answer: drop the generator's halt bit"). It was written where a round answered
-    // and read only where the state was packed, so it decided nothing, and the round's own flag
-    // already says the pull in hand is done
-    // (`docs/handover/reports/2026-11-18-the-generator-state-holds-only-pc.cn.md`).
+    // The state carries `pc` alone: a separate `halt` bit would be written where a round answered
+    // and read only where the state was packed, so it would decide nothing, and the round's own
+    // flag already says the pull in hand is done.
     const std::string pcCell = "__gen_pc__";
     // The step's state parameter. It is named, so the port `src/compile/gir/builder_helpers.h`
     // makes for it carries the same name and the step's body can read it.
@@ -6140,7 +6131,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     // point the next pull starts from -- is not among them: it is the state's own member (see
     // `stateType` below), and the step unpacks it into a cell of its own (`unpackSlot`). A cell here
     // would be a second copy of one fact, and nothing would read it: a name in an arm resolves to
-    // the step's own local, which is what let `bc5ce2249` put the unpacking ahead of the arms. A
+    // the step's own local, which lets the unpacking stand ahead of the arms. A
     // declaration is hoisted only where what it holds does not depend on the point it stands at --
     // a constant or a lambda, which reads its cells when it is called and not now.
     node_ptr_t outer = makeExec(synced);
@@ -6270,13 +6261,11 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
 
     // The state one pull hands to the next: the cell the step unpacks (`pc`) and the slots a local's
     // value travels in. It is a value, not a set of cells, and it is the only place the machine's own
-    // part is kept from one pull to the next -- the generator body holds no cell for it
-    // (`docs/handover/reports/2026-11-16-the-generator-state-travels-by-value.cn.md`). The slots are
+    // part is kept from one pull to the next -- the generator body holds no cell for it.
+    // The slots are
     // empty today, because a program local of a generator body is a `var T` cell and a cell type has
     // no zero value; the state carries `pc` alone until the SSA step gives a local a value to travel
-    // in. What the tuple held on 2026-11-16 -- `S = (pc, halt)` -- is the reading of
-    // `docs/handover/reports/2026-11-16-the-state-tuple-holds-nothing-but-pc-and-halt.cn.md`, kept as
-    // it was written: the `halt` member left the tuple on 2026-11-18.
+    // in.
     std::vector<Type *> stateTypes;
     stateTypes.push_back(intLiteral(0)->data()->type());
     for (const CellDecl &cell : cells) {
@@ -8251,7 +8240,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             applied = typeFunc->apply(types);
         }
         // An argument that is still a `typeof` is not concrete yet -- to the type layer it is a
-        // type variable -- and `typeof e` is a type expression (ruling of 2026-10-31) that the
+        // type variable -- and `typeof e` is a type expression that the
         // graph builder resolves where the type is used, without evaluating `e`. Reporting "not
         // applicable" here would refuse the application before anything had a chance to give the
         // `typeof` its type.
@@ -8479,7 +8468,7 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         return ExtentForm::constant(parsed.value);
     }
     case AST::DataType::ConstAs:
-        // `constas` is no longer written in a shape; the token is a syntax error there.
+        // `constas` is not written in a shape; the token is a syntax error there.
         return report();
     case AST::DataType::Ref: {
         const Reference &ref = ast->loadAs<AST::RefDataLoad>()->ref();

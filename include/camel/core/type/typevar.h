@@ -65,8 +65,8 @@ using type_bindings_t = std::vector<std::pair<std::string, Type *>>;
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name);
 
 /**
- * What runs the guard of a `match type` case (`case p when c => ...`, design principles 5.5,
- * ruling of 2026-11-14). Selecting the case happens inside `substituteTypeVars`, which has no
+ * What runs the guard of a `match type` case (`case p when c => ...`, design principles 5.5).
+ * Selecting the case happens inside `substituteTypeVars`, which has no
  * builder, and the guard is an ordinary Camel predicate that only the compiler can run; the build
  * installs this evaluator for as long as it is compiling, exactly as `extentCallEvaluator`
  * (`extent.h`) lets a type ask the compiler for the value of a call written in an extent.

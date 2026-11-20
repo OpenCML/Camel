@@ -128,8 +128,7 @@ class HalfData : public Data {
 
     /// The float text of the value it holds, as every float of the language prints (11.5, 7.7):
     /// the shortest that reads back as the same element of its own type, not the text of the f32
-    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`; rule 2026-10-23,
-    /// "reduced-precision-text"). Every path that prints a constant -- `--inspect`, a tag
+    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`). Every path that prints a constant -- `--inspect`, a tag
     /// argument's written form -- reads its text here.
     virtual const std::string toString() const override {
         return type_->code() == type::TypeCode::BFloat16
@@ -319,8 +318,8 @@ template <typename T> data_ptr_t PrimaryData<T>::convertTo(type::Type *type) {
         if (from == type::TypeCode::Int32 && to == type::TypeCode::Int64) {
             return std::make_shared<LongData>(static_cast<int64_t>(data_));
         } else if (from == type::TypeCode::Int64 && to == type::TypeCode::Int32) {
-            // A literal an i32 cannot hold is not converted (it used to be cut to 32 bits:
-            // `let b: i32 = 3000000000` was -1294967296). The caller reports it.
+            // A literal an i32 cannot hold is not converted (cutting it to 32 bits would turn
+            // `let b: i32 = 3000000000` into -1294967296). The caller reports it.
             if (!primaryFitsType(data_, to)) {
                 return nullptr;
             }

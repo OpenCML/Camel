@@ -156,10 +156,10 @@ class TokenRef {
     TokenKind kind() const { return raw().kind; }
     bool is(TokenKind k) const { return tree_ != nullptr && raw().kind == k; }
     /// A handle that holds no token (`tok` returns one for a token the node does not have)
-    /// reads as nothing: `view` is empty and so is `text`. Reading one used to follow the null
-    /// tree, and a read that followed it died with a signal where a name was expected - the
-    /// parser no longer makes such a node (parseTypeArguments), and a reader that meets one
-    /// reads no text rather than crashing. What needs the token itself (`raw`, `kind`, `line`,
+    /// reads as nothing: `view` is empty and so is `text`. Following the null
+    /// tree would die with a signal where a name was expected, so a reader that meets one
+    /// reads no text rather than crashing (the parser does not make such a node, see
+    /// parseTypeArguments). What needs the token itself (`raw`, `kind`, `line`,
     /// `column`) still requires one; `is` is guarded.
     std::string_view view() const {
         return tree_ != nullptr ? tree_->tokens().text(index_) : std::string_view();

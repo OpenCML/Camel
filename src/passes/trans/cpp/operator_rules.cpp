@@ -675,7 +675,7 @@ Rules buildRules() {
         false,
     };
     // `array:sort_*` and the rest of the module's kernels are below, one rule per declaration
-    // (the `array:sort_d` line this used to be is now one of the four the loop writes).
+    // (`array:sort_d` is one of the four the loop writes).
     // `array:argsort_bf` and `array:argsort_f6` (src/builtin/operators/array.cpp): the positions
     // of the elements in the order `min` and `max` use, ties where they stand -- the order
     // `array:sort_d` states, read as positions instead of values (rt::halfArgsort). The element
@@ -1152,8 +1152,7 @@ Rules buildRules() {
     // the answer keeps cannot be stated -- and not because such a value is not an array, which it
     // is, and the operator reads it as one. A rank of one is *not* refused: what its one lane sums
     // to is the answer itself (design principles 5.4), a value of no dimension, and the open rank
-    // of the result's type writes that like any other answer. It was refused here until the same
-    // sentence was found to be wrong for `argmax_axis`; the reason was never about the sum.
+    // of the result's type writes that like any other answer.
     //
     // What that answer is *written as* is a second question, and the answer is `rt::sumAll`.
     // Writing it as `rt::sumAxis` hands an array to a node whose type is the element, and the C++
@@ -1230,10 +1229,8 @@ Rules buildRules() {
     // be a different number for an `f32` lane.
     //
     // An integer element type is written too: `mean` answers `T` (design principles), so the answer
-    // of an integer lane is `int(sum / numel)` -- `[1, 2, 4]` giving `2`. It was refused here while
-    // the kernel answered an f32 that the type then read as an integer (`2.3333333` printed as
-    // `1075139925`): that was the kernel's type being wrong, not the mean of an integer being
-    // untranslatable. `bool` stays out because `mean` is declared `when is_numeric::<T>()`.
+    // of an integer lane is `int(sum / numel)` -- `[1, 2, 4]` giving `2`.
+    // `bool` stays out because `mean` is declared `when is_numeric::<T>()`.
     //
     // An empty lane is not refused: the interpreter divides 0.0 by 0.0 and answers the canonical
     // NaN
@@ -1714,7 +1711,7 @@ Rules buildRules() {
     // (docs/design/cpp-standalone/README.cn.md 4) a literal of the same type is. So the rule
     // builds that array: `rt::filledArray<T>(shape, fill, op, site)`, every element the fill.
     //
-    // This is not a bridged call any more. The bridge was right for the tensors whose value is a
+    // This is not a bridged call. A bridge was right for the tensors whose value is a
     // runtime object -- a handle, `rt::Foreign` -- but a tensor the program only reads as elements
     // is data, and data no runtime has to make. The one thing the runtime still answers here is the
     // shape's own refusal: a negative extent is a fault, and `filledArray` raises it with the
@@ -1731,8 +1728,8 @@ Rules buildRules() {
     // `is_numeric::<bool>()` are both false, so there is no string or bool tensor on any backend
     // -- the same `NoMatchingFunction` comes from std::fvm. `c64`/`c128` do not even match the
     // signature although `is_numeric` admits them: the tensor type for a complex element cannot be
-    // formed, and that disagreement is the author's to settle (docs/handover/reviews/
-    // questions-2026-10-31-can-a-tensor-hold-a-complex.md). So the `default` below is a branch
+    // formed, and that disagreementis open.
+    // So the `default` below is a branch
     // that does not run: it is a backstop, not a refusal this rule makes, and no element type is
     // turned away with a written call that would be a second answer.
     auto tensorBuilder = [](bool ones) {

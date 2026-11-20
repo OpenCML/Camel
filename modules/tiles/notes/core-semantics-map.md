@@ -1,8 +1,8 @@
 # Core semantic declaration migration inventory
 
-Status: implementation inventory and proposed migration boundary, 2026-10-15.
-Based on compiler.cpp, schedule.cpp and codegen.cpp at b710916a, including the
-strict matrix-product correction. This does not define new language semantics.
+Status: implementation inventory and proposed migration boundary.
+Based on compiler.cpp, schedule.cpp and codegen.cpp, including the strict
+matrix-product correction. This does not define new language semantics.
 
 ## Boundary
 

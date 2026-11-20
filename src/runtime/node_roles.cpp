@@ -35,7 +35,7 @@ NodeRoleRegistry::NodeRoleRegistry() {
                  return std::nullopt;
              }
              // A higher-order operator is no effect of its own: what it touches is the function
-             // the program hands it (design principles 3.3; author 2026-11-19), read through
+// the program hands it (design principles 3.3), read through
              // `functionValueClause` the way a call through a value is. A type that writes no
              // clause keeps the conservative answer: ordered, never folded away.
              if (const auto *facts = table.semantics(body->oper);

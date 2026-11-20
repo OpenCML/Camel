@@ -657,7 +657,7 @@ class GraphDraft {
     /// so it is not replaced by an interned copy, and its pointer does not move. What a rollback
     /// has to put back is therefore the *content*: the record is taken first (`noteOriginalTypes`,
     /// once per segment), and `replayJournal` writes the recorded result type and resources back
-    /// into that same object (author, 2026-11-19: a rollback restores content, not the pointer).
+    /// into that same object (a rollback restores content, not the pointer).
     /// This is the one place the write is made, so that a caller cannot fill a signature without the
     /// journal seeing it.
     void setOpenExitType(camel::core::type::Type *exitType);
@@ -1029,8 +1029,7 @@ class GraphDraft {
     /// failure, and the `GUARD` stays in every build: a build that reads past the end of the table
     /// without saying anything is one where only a Debug build's standard library would object
     /// (`settleStreamLinearity` read `regions_[0]` of an empty table in Release, bound the
-    /// reference, never read through it and passed; 24 tests of `feat/compile/stream` aborted in
-    /// Debug on 2026-11-02).
+    /// reference, never read through it and passed, while Debug aborted).
     const GCRegion &region(uint32_t id) const {
         GUARD(
             id < regions_.size(),
@@ -1331,8 +1330,7 @@ class GraphDraft {
         /// where it stands (`OpenFunctionType::setExitType`, `setResources`) instead of being
         /// replaced by an interned copy. `exitType` is nullptr while the signature has no result
         /// type yet; `resources` is the signature the declaration publishes. A rollback writes these
-        /// two back into the signature the record names, and the self-check compares them (author,
-        /// 2026-11-19: "还原内容").
+        /// two back into the signature the record names, and the self-check compares them.
         camel::core::type::Type *exitType = nullptr;
         camel::core::sem::ResourceSignature resources;
         camel::core::type::TupleType *closureType = nullptr;
