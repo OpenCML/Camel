@@ -62,3 +62,15 @@
 ## 5. 要作者回答的一句
 
 `parked/` 要不要拆成 `parked/`（活着但暂停）与 `deleted/`（已删、内容在别处）两个前缀，并把现有 6 个按第 4 节那条表逐条改贴、判不出的留 `parked/` 标「未判」？
+
+## 附：`git cherry` 说「已在」与 grep 说「不在树里」可以同时为真
+
+**`git cherry` 与 grep 可以同时为真：`782007912` 把打包从 `develop` 撤掉，于是那两笔「进过 `develop`」（cherry 说 `-`）而「内容现在不在树里」（grep 0 命中）。删分支看现状，不看历史。**
+
+复现（`origin/develop` = `a4fa54cff`，`land/packing-and-rule` = `1cbb4c07b`）：
+
+- `git cherry origin/develop origin/land/packing-and-rule` → `- 6790ffe6f`、`- 8f7b9687f`、`+ 1cbb4c07b`：三笔里两笔被报「已在 `develop`」；
+- 同一棵树的 `git grep` 在 `develop` 上对 `variableParameterTypesOf`、`handBackVariableParameters`、`packsVariableParameters`、`packsVarParameters` **全部 0 命中**；
+- 两件事都对：那笔打包确实进过 `develop`（`9997910f4`，与 `6790ffe6f` 同一 patch-id），随后 `782007912` 把它从 `develop` 撤了，只留在 `land/packing-and-rule`。
+
+⇒ **⇒ 所以 `--is-ancestor` exit 1、cherry 报 `-`、grep 0 命中，是三个不同的问句**：祖先问「这笔提交在不在这个 base 的历史里」，cherry 问「有没有一笔等价的改动进过这个 base」，grep 问「这段代码现在在不在树里」。**删分支与判「内容已在树里」看的是第三个，而能回答它的只有第三个。** 本页第 2 节那 6 个标签的判据也因此不能只靠 `--is-ancestor` 或 cherry 之一。
