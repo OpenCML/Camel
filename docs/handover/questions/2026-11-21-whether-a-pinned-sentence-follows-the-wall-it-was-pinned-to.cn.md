@@ -1,9 +1,33 @@
 # 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗
 
-**状态**：开放。这一页是 `fix/nest-quartic` 上量到的一件事：`nested.nest_quartic` 从 **PASS**
+**状态**：**已裁（2026-11-21 02:20，负责人；基线 `origin/fsh-dev = eb92bf9e8`）**。A、B、C 都不选，
+走第四条：这 15 条的目标是「算出对的数」，不是「拒得对」——二阶与嵌套变换是要打通的功能，墙是实现进度。
+见下面「0 裁定」。这一页原本是 `fix/nest-quartic` 上量到的一件事：`nested.nest_quartic` 从 **PASS**
 变成 **FAIL**，而它不是新错——它钉的那句拒句，正是 `2a2cf31a8`（`lane-split-type-tangent`）要拆掉
 的那道墙。拆掉之后墙往后挪了一步，落到 `transpose` 上，于是钉旧句子的一批用例一起变红：**15 条
 「墙挪了」+ 2 条内部错误**。这一页要的裁定只有一件：**这批红是重钉回绿，还是按红记账。**
+
+## 0 裁定（负责人 2026-11-21 02:20）
+
+- 改成 `known_fail`，**不钉拒句**，`known_fail_ends_when` 写它应打印的结果（用例的期望输出那一行）。
+  墙怎么挪都不必再改它；数对了它自己转绿，标记随之删除。**这不是「改期望让红变绿」：期望（正确的
+  输出）一字不动，记的是「还没做到」。**
+- `nest_quartic` 这类当初为钉一句话而写的 negative：它要证明的性质若是「没有切空间的结果类型被拒」，
+  而这条性质已不成立（`2da9735da` 让它可提升），就改成正向用例、同样走 `known_fail` + 期望输出；
+  性质仍成立的，钉**哪一层拒、哪种诊断码**，不钉句子。**用例注释同轮跟上。**
+- `compositions.jvp_vjp_f` 的**内部错误**：内部错误不是拒绝，是缺陷，**不能进 `known_fail`**。
+- `new red = 0` 照旧是合并条件。
+
+**落地**（`fix/known-fail-ends`，基线 `b74edf66c`）：15 条改成 `known_fail` + `known_fail_ends_when`，
+`known_fail_msg`（钉拒句的那个）删除；`nested.nest_quartic` 从 `negative` 改成正向（`expect_exit = 0`
++ `nested_quartic d2=48.0`）；`test/tools/run-tests.mjs#checkKnownFailMark` 因此允许「`known_fail_msg`
+或 `known_fail_ends_when` 二者其一」（原先只认前者，不钉句子的标记在加载处就被拒，裁定无法落地）。
+代价写在字段旁：不钉句子时运行期把任何失败当作预期失败，另一个缺陷可以顶着这个标记的名字。
+
+**`jvp_vjp_f` 在 `6a21597db` 上量过了**：那时就是内部错误 `Pass 'std::nvm' failed with an internal
+error: Runtime graph 'jvp_of___g_359__' breaks its edge invariants (1 violation(s))`，与 `b74edf66c` 上
+逐字相同（`compositions.plan.toml`，26 条：pass 6 / fail 6 / known 14）。**既有缺陷，`2a2cf31a8` 无罪**；
+按 1.0 红线第 1 条它另开一格。
 
 ## 1 读数：`nested.nest_quartic.nvm` 现在逐字（`2551155bb`，Release，`std::nvm`）
 

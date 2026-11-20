@@ -254,13 +254,29 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // reported a known failure). It is read off the entry itself -- `executePlans` compares against
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
+    //
+    // The mark may instead state the reading that ends it, and that is the shape the author's
+    // ruling of 2026-11-21 02:20 chose for a case whose target is a number and whose wall is being
+    // built: a sentence quoted from a refused run follows the implementation, so a pin on it has to
+    // be re-typed every time the wall moves -- which records the wall's progress as the case's debt
+    // and reads, in the plan, as "this case fails for this reason" long after that reason moved.
+    // `known_fail_ends_when` says what has to arrive instead: the line the entry prints when the
+    // computation is right, which no wall moves. The trade is stated where a reader will weigh it --
+    // the sentence is the only field the run *compares*, so a mark that states its ending reading
+    // accepts any failure as the expected one until the numbers arrive, and a different defect can
+    // wear the mark's name in the meantime. That is why the owner and the reason are still required
+    // on it, and why the reason has to keep naming the wall as it stands today.
     const expected = entry.known_fail_msg
     if (typeof expected !== 'string' || expected.trim().length === 0) {
-        throw new PlanSchemaError(
-            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg: quote the sentence this ` +
-                `case prints today on the entry itself -- without it the runner takes any failure as the ` +
-                `expected one, so another defect wears this mark's name and nothing ever re-reads it`,
-        )
+        const ends = entry.known_fail_ends_when
+        if (typeof ends !== 'string' || ends.trim().length === 0) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg or known_fail_ends_when: ` +
+                    `quote either the sentence this case prints today, or the reading that ends the mark -- a ` +
+                    `mark that names neither takes any failure as the expected one, so another defect wears this ` +
+                    `mark's name and nothing ever re-reads it`,
+            )
+        }
     }
 }
 

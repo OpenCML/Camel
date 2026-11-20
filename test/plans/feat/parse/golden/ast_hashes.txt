@@ -4393,10 +4393,10 @@ a53f27d79738a367 ok test/cases/trans/spelling/declared.cml
 f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 216257761cb074d5 ok test/cases/transforms/compositions/grad_vjp_g_zero.cml
 2673b5760b0bb445 ok test/cases/transforms/compositions/grad_vmap_f.cml
-6a481d92bb98169f ok test/cases/transforms/compositions/hessian_of_a_quadratic.cml
+7a8cc0d29d80d381 ok test/cases/transforms/compositions/hessian_of_a_quadratic.cml
 c10050589b920401 ok test/cases/transforms/compositions/jvp_vjp_f.cml
-c242b16e51e89d5e ok test/cases/transforms/compositions/nested_grad_min.cml
-54ff95f28a3edd26 ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
+ed057562ff7031e0 ok test/cases/transforms/compositions/nested_grad_min.cml
+de2e3227933a6e2e ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
 1e6325d17962b018 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
 de0da90b01639e54 ok test/cases/transforms/compositions/pullback_read_at_a_cotangent.cml
 97cf5ad689355fb3 ok test/cases/transforms/compositions/vjp_single.cml
@@ -4406,7 +4406,7 @@ c72182e52c15bf42 ok test/cases/transforms/nested/hessian.cml
 71e03b3887f5e0b8 ok test/cases/transforms/nested/nest_cube.cml
 9c4c6bd53eff074e ok test/cases/transforms/nested/nest_lambda.cml
 cbef3230ff276a59 ok test/cases/transforms/nested/nest_named.cml
-7cd0720b70efa51e ok test/cases/transforms/nested/nest_quartic.cml
+566624df3c43b02e ok test/cases/transforms/nested/nest_quartic.cml
 f10ea5f111e3b0a5 ok test/cases/transforms/nested/nest_quartic_forward.cml
 f442c234da3252cb ok test/cases/transforms/nested/nest_square.cml
 76483a2c16d4eec9 ok test/cases/transforms/nested/rule_constant_agrees.cml
