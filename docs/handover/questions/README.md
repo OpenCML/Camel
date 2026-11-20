@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：53 页
+## 现在在等作者：54 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -56,6 +56,7 @@
 | [`2026-11-20-a-law-that-states-its-angle-answers-only-that-angle`](2026-11-20-a-law-that-states-its-angle-answers-only-that-angle.cn.md) | 写死一个轴的律只答那一个轴：`jvp_softmax<1>` 与 `jvp_log_softmax<0>` 要不要像 `jvp_reshape` 那样把轴当参数？ |
 | [`2026-11-20-parked-means-paused-or-deleted`](2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
+| [`2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader`](2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader.cn.md) | The higher-order footprint has a place to be written and a reader; what is left is the two shapes it cannot place |
 | [`2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p`](2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p.cn.md) | 一次读错「哪棵树」的上报，以及它教会的两件事 |
 | [`2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code`](2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md) | 外层 `jvp` 要 `split` 交出静态可读的答案代码，那一步在 0.2.45 的范围里吗 |
 | [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ |
