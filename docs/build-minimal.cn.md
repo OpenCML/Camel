@@ -77,8 +77,9 @@ out/latest/bin/camel hello.cml std::gir
 再 `node scripts/build.js`（先删 `build/` 会从零配置）。它少建 `tiles`、`onnx`、`ckpt` 三个模块，
 以及两个方向的 Python 支持（`python`/`pyplot` 的嵌入与 `bindings/python` 的扩展）。结果：`stdlib`
 里 23 个 `.cmo` 而不是 28 个，`out/latest` 64 MB 而不是 68 MB，`out/latest/libs` 里只有 `libcamel.so`。
-`nn` 不在这三个里：它是建在 `tensor` 上的四个模块之一，留了下来，所以案例与 MLP/transformer
-训练步仍然有 `sgd` 和 `save_params`；它自己的 `.cmo` 就是多出来的那 436,960 字节。
+`nn` 不在这三个里：它是这个开关会在其中取舍的四个模块之一（`tiles`、`onnx`、`nn`、`ckpt`），留了
+下来，所以案例与 MLP/transformer 训练步仍然有 `sgd` 和 `save_params`；它自己的 `.cmo` 就是多出
+来的那 436,960 字节。
 
 留下的 `tensor`、`random`、`autodiff`、`transforms` 是刻意的：它们是图与自动微分的演示面；
 `random` 链接 `tensor`，所以裁 `tensor` 会把 `random` 一起带走。少一个模块时，`import` 它的程序

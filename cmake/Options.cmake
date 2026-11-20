@@ -94,9 +94,10 @@ message(STATUS "CAMEL_ENABLE_PYTHON_BINDINGS=${CAMEL_ENABLE_PYTHON_BINDINGS}")
 #                              Python embedding modules and the Python host binding. The numeric
 #                              core stays -- tensor, random, autodiff and transforms are what makes
 #                              the graph story concrete -- and so do the rewrite/verify modules.
-#                              nn stays too: the case study and the MLP/transformer training steps
-#                              import it for sgd and save_params. Three of the four modules built on
-#                              tensor are dropped, not all four.
+#                              nn stays too: it is one of the four modules this switch chooses
+#                              between (tiles, onnx, nn, ckpt), and the case study and the
+#                              MLP/transformer training steps import it for sgd and save_params --
+#                              three of the four are dropped, not all four.
 #   CAMEL_MODULES=<list>       expert form: exactly these modules, in this order. Empty means "the
 #                              set the line above decides". A name that is not a module, or a
 #                              module whose link dependency is missing, fails the configure with a
