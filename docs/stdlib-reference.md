@@ -2452,6 +2452,36 @@ is one too.
 - Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
 - Example: `layer_norm(x, gamma, beta)`
 
+#### `layer_norm_grad`
+
+```camel
+layer_norm_grad: (x: f32[...], gamma: f32[...], dy: f32[...], which: int, eps?: number) => f32[...]
+```
+
+The gradient of the `f32` layer normalization with respect to one of its three operands, chosen
+by `which` (0 the input, 1 gamma, 2 beta), from the input x, `gamma` and the incoming gradient
+dy of the normalization's result. `eps` is the normalization's own and is 1e-5 by default, the
+same default the forward call has. The result has the shape of the operand `which` names.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input.
+- Failure: fault `RuntimeError` when `which` is not 0, 1 or 2.
+- Example: `layer_norm_grad(x, gamma, dy, 0)`
+
+#### `layer_norm_grad`
+
+```camel
+layer_norm_grad: (x: float[...], gamma: float[...], dy: float[...], which: int, eps?: number) => float[...]
+```
+
+The same gradient of `f64` operands, in `f64`: x, gamma and dy are `f64` and the result is one
+too.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input.
+- Failure: fault `RuntimeError` when `which` is not 0, 1 or 2.
+- Example: `layer_norm_grad(x, gamma, dy, 0)`
+
 ### Linear algebra
 
 #### `matmul`
@@ -7872,6 +7902,65 @@ which is what makes this the forward reading and not `log_softmax_t`'s.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
+
+### The forward rule of `layer_norm`
+
+`layer_norm` normalizes each lane of `gamma`'s element count -- the trailing block `gamma` and
+`beta` cover -- so its tangent is not the operator applied to the tangents, and it is not an
+arithmetic this ruleset can write either: the lane is a block of axes and every reduction the
+library declares (`mean_axis`, `sum_axis`, the stated forms beside them) takes **one** axis. A
+law written over `mean<axis>` would answer one rank and call that the operator, which is the
+defect `jvp_reshape` records one section up.
+
+So the tangent is written as the normalization's own derivative, which the library already holds
+once: `layer_norm_grad`, the operator the reverse half's rule emits. Two facts make that legal
+and they are the whole of this law:
+
+  * `y = gamma * xhat + beta` with `xhat = (x - mean) * inv`, so, per element,
+    `d(y) = gamma * (J dx) + dgamma * xhat + dbeta`, and the last two terms are the element-wise
+    products written in `layer_norm_tangent` below;
+  * `J = inv * (I - e eT / n - xhat xhatT / n)` is **symmetric** -- every term of it is -- and
+    `layer_norm_grad(x, g, dy, 0)` answers `J (g * dy)`. With `g` replaced by ones it therefore
+    answers `J dx` exactly, which is the forward half, from the same kernel the reverse half
+    reads. `dgamma` and `dbeta` need nothing of that kind: they multiply `xhat` and `1`.
+
+`xhat` is the forward call with a neutral gain rather than the call's own `gamma` and `beta`,
+because the call's output is not bound on a rule's right side (`softmax_jvp` recomputes its
+`y` for the same reason) and `gamma` and `beta` are what it must *not* carry: this factor is
+the normalized value alone.
+
+`eps` is the operator's fourth parameter and this law does not write it. The law names the three
+ports `layer_norm(x, gamma, beta)` carries, both of its calls inherit the declaration's own
+default, and no constant of the operator's appears anywhere here -- which is the point: a law
+that wrote `1e-5` would be a second writing of the declaration and could drift from it. A call
+that *states* the eps (`layer_norm(x, gamma, beta, eps)`) is a four-port node, and a law names
+the ports it names, so that spelling is refused at the port count rather than answered with a
+default it does not carry. That refusal is what keeps this law safe: a three-port law that also
+matched a four-port node would answer it with `1e-5` while the node stated another eps, which is
+a wrong number and not a missing one. `jvp_softmax` above records the same trade from the other
+side, where the spelling that leaves the axis out is the one refused; the difference is that
+`softmax`'s axis is a `<>` port, so a law there *can* answer a node that states no axis, while
+`layer_norm`'s eps is a data operand, so a node that states none has one port fewer and no law
+of three ports can describe a node of four. One arity per operator is also what
+`scripts/vjp-parity.mjs` requires when it reads the two derivative tables against each other
+("`the rulesets file 'layer_norm' at 3 and 4 operand(s)`"), so a second law for the eps
+spelling would be a second writing of this key and not a second reading of it.
+
+What this does not make work is `grad` of a function that holds a `layer_norm`: the linear half
+of this law holds `layer_norm_grad` with five operands and no transpose of its own, so the
+reverse walk stops there and names it. That is the `split` wall, and it is not this law's.
+
+#### `layer_norm_tangent`
+
+```camel
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
+```
+
+The three terms of `d(layer_norm)`, from the normalized value `xhat` and the input's tangent
+already through the normalization's jacobian (`jx = J dx`).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])` gives `[1.0, 2.0]`
 
 ### The forward rule of `^` (a power)
 

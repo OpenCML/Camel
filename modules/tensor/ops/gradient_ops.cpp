@@ -474,15 +474,28 @@ std::vector<OpDef> gradientOps() {
         {{"x", ParamKind::Tensor}, {"dy", ParamKind::Tensor}},
         gradientLikeTyped(0),
         &erfGradKernel));
-    defs.push_back(internal(
-        "layer_norm_grad",
-        {{"x", ParamKind::Tensor},
-         {"gamma", ParamKind::Tensor},
-         {"dy", ParamKind::Tensor},
-         {"which", ParamKind::Int},
-         {"eps", ParamKind::Number, true}},
-        layerNormGradInfer,
-        &layerNormGradKernel));
+    // `layer_norm_grad` is public, and `softmax_grad` (in `reduction_ops`) is the precedent: the
+    // reverse half's helper, with a source-level name, for a caller that needs the same derivative.
+    // The caller here is `layer_norm`'s *forward* law (`stdlib/rulesets/jvp.cml#jvp_layer_norm`).
+    // A layer normalization reduces each lane over the trailing block `gamma` covers, and no
+    // operator in the library reduces over such a block -- `mean_axis` and its neighbours take one
+    // axis -- so the tangent cannot be written as a rule's own arithmetic the way `jvp_sum`'s can.
+    // It is written with this operator instead: with `which = 0` and `gamma` replaced by ones this
+    // answers `J dx`, because `J = inv * (I - e eT / n - xhat xhatT / n)` is symmetric and the
+    // operator answers `J (gamma * dy)`. That is one writing of the normalization's derivative,
+    // used in both directions, rather than a second copy of it beside this one.
+    defs.push_back(OpDef{
+        .name      = "layer_norm_grad",
+        .exports   = {"layer_norm_grad"},
+        .params    = {{"x", ParamKind::Tensor},
+                      {"gamma", ParamKind::Tensor},
+                      {"dy", ParamKind::Tensor},
+                      {"which", ParamKind::Int},
+                      {"eps", ParamKind::Number, true}},
+        .resultDoc = "float[...]",
+        .infer     = layerNormGradInfer,
+        .kernel    = &layerNormGradKernel,
+        .traits    = {}});
     defs.push_back(internal(
         "matmul_grad_lhs",
         {{"dy", ParamKind::Tensor}, {"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
