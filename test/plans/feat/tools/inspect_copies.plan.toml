@@ -151,8 +151,24 @@ verify_script = '''
   const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('COPIES '))
   assert(lines.length > 0, 'the tool printed a reading: ' + said)
   const fields = lines.map(l => l.split(' '))
+  // A summary line is `COPIES <graph name> updates N in-place N by-count N declared N copied N`.
+  // This used to be read as "12 words, the five counts at 3, 5, 7, 9 and 11", which held for as long
+  // as every graph's name was one word: the program's own graphs, `__root__`, and the `__g_<n>__` a
+  // graph with no name of its own is given. It stopped holding when the case study's gradient became
+  // the library's, because that graph is an instance of the `grad` macro and a graph is named for its
+  // instance -- symbol and type arguments, which is what tells two instantiations of one macro apart
+  // (`src/compile/gir/builder_generics.cpp`, `instanceName`; design principles 10.2). That one line's
+  // name is `vjp::grad<<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure>`, twelve words of
+  // type, spaces and all, so the line was read as none of the three shapes and the check failed a
+  // reading the tool had made correctly. The printer cannot shorten it either: dropping the type
+  // arguments would print two instantiations of one macro as the same line. So the shape is read from
+  // its tail -- whatever the name's width, the ten words after it are the five counts. What the check
+  // asserts is unchanged, and so is the count it compares against the rows.
+  const isSummary = (f) => f.length >= 10 && f[f.length - 10] === 'updates' &&
+    f[f.length - 8] === 'in-place' && f[f.length - 6] === 'by-count' &&
+    f[f.length - 4] === 'declared' && f[f.length - 2] === 'copied'
   const updates = fields.filter(f => f.length === 4)
-  const summaries = fields.filter(f => f.length === 12 && f[2] === 'updates')
+  const summaries = fields.filter(isSummary)
   const noPlan = fields.filter(f => f.length === 3 && f[2] === 'no-plan')
   assert(updates.length + summaries.length + noPlan.length === lines.length,
     'every line is an update row, a graph summary or a no-plan: ' + lines.join(' | '))
@@ -161,9 +177,10 @@ verify_script = '''
   const main = lines.find(l => /^COPIES main updates \d+ in-place \d+ by-count \d+ declared \d+ copied \d+$/.test(l))
   assert(main !== undefined || lines.includes('COPIES main no-plan'),
     'the main graph is answered for, not skipped: ' + lines.join(' | '))
-  const total = (index) => summaries.reduce((sum, f) => sum + Number(f[index]), 0)
-  assert(total(3) === updates.length,
-    'the summaries count the rows printed: ' + total(3) + ' vs ' + updates.length)
+  // The update count of a summary, read from the same tail: 9 words from the end is its number.
+  const total = (fromEnd) => summaries.reduce((sum, f) => sum + Number(f[f.length - fromEnd]), 0)
+  assert(total(9) === updates.length,
+    'the summaries count the rows printed: ' + total(9) + ' vs ' + updates.length)
 }
 '''
 
