@@ -6003,3 +6003,47 @@ parse 126/126/0 · para 104/104/0 · tools 70/70/0 · consistency 1292/1290/2 ·
 - **`lane-second-order`**：08:40 那条——`std::macro` 阶段把操作数代码已知的内层变换就地展开，外层 `jvp` 就能 lift；先用 `std::macro std::nvm` 跑 `nest_named`/`nest_lambda`/`hessian`/`confusion` 四条，看展开是否已生效，没生效就补展开。验收 `x·x`→2.0、`x³`→12、Hessian、四后端一致。
 - **`lane-package-prep`**：23:30、23:50 那五件——过程痕迹盘点与清理脚本、裁剪依赖图、CMake 选项（在主机上实测关掉被裁部分后照常构建）、最小文档（构建说明、命令行基础用法、语言基础手册，英文）、`REPRODUCE.md`。过程痕迹的实际清扫可在 P\* 之后、源码包之前一次扫完（只动注释）。
 闸门格：`lane-member-init` 补完合并后让给闸门。`lane-unknown-resource` 等的两条裁定 09:30 已给（`functionOperand` 与访问并存取并集、`rewrite:*` 声明 `functionOperand`），据此继续，不必再停。
+
+## 负责人上报（2026-11-20 10:30）：**库的反向腿在广播加法上给出静默错值（S1 级）** —— 而它 exit 0
+
+### 一、读数（`transformer` 车道的探针，逐字打印）
+
+```
+x: float[2,3]，b: float[3]，y = x + b，pullback(1.0)
+weighted = sum((x + b) * [[1,2,3],[4,5,6]])   ⇒ cotangents=([[1,2,3],[4,5,6]], [[1,2,3],[4,5,6]])
+plain    = sum(x + b)                         ⇒ cotangents=([[1,1,1],[1,1,1]], [[1,1,1],[1,1,1]])
+```
+
+**⇒ 正确的是**：`dL/db = [5.0, 7.0, 9.0]`（weighted）与 `[2.0, 2.0, 2.0]`（plain）。
+**⇒ 实际给出的是整个 `[2,3]` 的余切，不是 `sum_to([3])`。`dL/dx` 两者都对。**
+
+**⇒ 而它是静默的**：exit 0、`loss=0.0` 正常打印、**无任何诊断**，而 pullback 的**静态类型**说 `(float[2, 3], float[3])` —— **第二个成员实际是 `[2,3]`**。
+⇒ `TRANSPOSE function=split_of_jvp_of_weighted_backward … rhs=sum_stated_t,add_tensor_t,mul_stated_t` ⇒ `add_tensor_t` 被用了，**`sum_to` 一行都没有**。
+⇒ `subtract_t`（`(ct, -ct)`）按 `stdlib/rulesets/transpose.cml` 的读法形状相同 —— **未测量，所以不声称**。
+
+### 二、为什么这是今晚最重的一条
+
+今晚已经出现过三次「读数不成立」与一次「静默 13.5」（`softmax<2>`）。**这一次比它们都重，因为：**
+
+1. **它不响**：调用方拿到一个**形状不合法**的值，而静态类型**声称它是合法的** ⇒ 任何下游的秩检查都拦不住它；
+2. **它在一个最常见的算子上**：`x + b` 是每个训练步都有的广播加偏置；
+3. **它与今晚已合的那条正例并存**：`sum_axis_in_a_training_step` 的 `dL/db=[24,24]` 是**引擎**给的，引擎自己会 `sum_to` ⇒ **引擎对不证明库对**，而两条读数同时绿会让人以为这条路是好的。
+
+### 三、我建议的处置（要你裁）
+
+1. **给 `add_tensor_t` 与 `subtract_t` 加 `sum_to`**（按 `b` 的形状），并把上面两条读数写成用例钉住；
+2. **另加一条**：pullback 的静态类型与它实际返回的形状**必须一致** —— 这一条比第一条更一般，因为这一类缺陷可以出现在任何法则上，而查出它的唯一办法是**在 pullback 出口比形状**，不是比数值。
+
+⇒ 我倾向前者立刻做（它是一行级的修法），后者作为一条独立判据单独派。但**这条路的严重性判断是你的**，我不越过。
+
+### 四、同时落地的两条用例（待合）
+
+```
+transformer_step_gradient          正例：引擎腿 loss=165.23036383453388、dL/db2=[2,5,9,15]、dL/db1=[8.75,6,5.25,11]，**独立 float64 推导逐字相同**（一个 wq1 元素差 4e-16）
+transformer_step_gradient_stops_at_split  负例：库的反向腿被拒 `split does not build this function … an operand of the node is not reachable from the half's exit`
+```
+⇒ 负例的页里写清了一句：**「`lift` 是完整的（`rules=jvp_matmul,…,jvp_sum`, `nodes=254`）⇒ 缺的是那把刀，不是法则；而刀之后 `softmax_t` 仍然不存在。两个缺陷，一个不解决另一个。」**
+
+### 五、`lane-ssa` 已按作者口径处置
+
+`parked/lane-ssa` @ `4d308fc72`，本地与远端都删了，记录写的是**「未验证，不是被取代」** —— 16 笔内容确实不在主树（`calleeValueNode`/`packingTotal`/`callHandsBackResult` 各 0 处），**`test=` 全 0**，且 `5695e055c`(+306/−20, 8 src 文件) 跑在 `0024b76b4` 之前而此后五个文件都动过 ⇒ 回归面不可控。`5559d3c6e` 与 `beea20ad6` 不是同一机制（一个问退出类型的投影、一个问捕获单元）。
