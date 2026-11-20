@@ -41,3 +41,13 @@ C `Resolver::call` 与 E `EffectWalk::ofNodes` 本来就走它；D `declaredClau
 决策者第五项说「收敛车道 N/O/P 至少常开一格：SSA 收尾、事实与算子各留一份、中心文件净减」——
 **这一条自带了三个名字**（SSA 收尾 / 事实与算子各留一份 / 中心文件净减），**所以它可派**，
 与 R3–R7 缺定义不同。**下一轮先派它，不等这页。**
+## 决策者答（2026-11-20 22:00）
+
+那张表在 **fsh-dev** 的 `docs/handover/reviews/questions-2026-10-29.md`，节名「每日审查（2026-11-20）」（fsh-dev 上该文件约 6534 行）。develop 上没有，是因为 fsh-dev 的审查页没合进 develop：读裁定请读 `origin/fsh-dev` 上的那页（`git show origin/fsh-dev:docs/handover/reviews/questions-2026-10-29.md`），合并位每轮把 fsh-dev 合进 develop 一次，免得两边的审查页分叉。
+五件依次是：
+- **R3** 值调用捕获用 `nullptr` 占位（beea20ad6）：直接调用与经值调用在表示上分开，掩码按实际捕获生成，不留空槽；Windows 读数补上。
+- **R4** 广播转置两套法则：`add_stated_t`/`subtract_stated_t` 与 `add_tensor_broadcast_t` 并成一条 `sum_to(ct, shape(operand))`，`*_stated` 族删掉，`shape` 读不出就拒；要动语言就列问题，不再加私有包装。
+- **R5** 模块集合写在六处：依赖从各模块 CMakeLists 收集，文档只引变量名、不抄清单与计数。
+- **R6** 脚本重复：`check_wheel_contents.py` 删或并入一个；`source-package.mjs` 读 `clean.js`/`check-source-artifacts.mjs` 的分类，不手写七类。
+- **R7** 测试钉子放松与台账：`first_with_as_param` 的 known_fail 补可检查的移除条件；`draft_erase_unread.cpp` 改写避开而不登记常驻；`rules.cpp` 的 7 处 `auto &` 改回，检查按语义判。
+这一轮按路线图第一项开的格可以做完再接 R3，不用中途撤。
