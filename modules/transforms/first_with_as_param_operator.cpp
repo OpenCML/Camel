@@ -351,10 +351,15 @@ void registerFirstWithAsParamOperatorMetadata() {
     // so it is declared as not pure, like the module's other transforms.
     camel::core::OperatorTable::instance().declare(
         "transforms", {{"first_with_as_param", false}});
-    // The kernel reads the graph of the function value it receives -- the ports it moves are the
-    // graph's -- so it refuses a loop there as `jvp` does (OperatorTraits::readsGraphs).
+    // The kernel clones `f`'s graph into a draft and registers the moved port: it reads a graph and
+    // builds one, and touches no resource while it does. Its declaration in
+    // stdlib/signatures/transforms.cml writes no `uses` clause, which is the same claim; the
+    // reading it prints goes to the diagnostic side. So the resource claim is the pure one, and not
+    // a foldable one -- the compiler cannot compute a call of it ahead of time (`foldable` false;
+    // operator_table.h).
     camel::core::OperatorTable::instance().set(
-        "transforms:first_with_as_param", {.pure = false, .readsGraphs = true});
+        "transforms:first_with_as_param",
+        {.pure = true, .readsGraphs = true, .foldable = false});
     // How a call is written: one function and no `with` parameters of its own.
     camel::core::OperatorTable::instance().declareCallForm(
         "transforms:first_with_as_param",
