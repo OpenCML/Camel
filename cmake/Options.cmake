@@ -72,6 +72,41 @@ if(DEFINED ENV{CAMEL_SKIP_PYTHON} AND "$ENV{CAMEL_SKIP_PYTHON}" MATCHES "^(1|ON|
 endif()
 message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
 
+# ========== The Python host binding (bindings/python: `camel._camel`) ==========
+# Independent of CAMEL_ENABLE_PYTHON, which embeds Python in Camel (the other direction): this is
+# Camel inside Python. It builds only when Python's development files are present, but a caller may
+# also want it gone by name -- a tree that is read rather than installed, or a source package whose
+# readers have no CPython 3.10.
+option(
+    CAMEL_ENABLE_PYTHON_BINDINGS
+    "Build the CPython extension camel._camel (bindings/python)"
+    ON
+)
+message(STATUS "CAMEL_ENABLE_PYTHON_BINDINGS=${CAMEL_ENABLE_PYTHON_BINDINGS}")
+
+# ========== The module set ==========
+# Which modules/*.cmo an install carries. The whole tree builds the whole list; the two knobs below
+# exist because a source package is read and built by people who do not need every library, and a
+# module that is never built is a directory they never have to compile.
+#
+#   CAMEL_PACKAGE_MINIMAL=ON   drop the sets that are about running AI workloads and about hosting
+#                              Camel somewhere else: tiles (GPU), onnx (deployment), nn, ckpt, the
+#                              Python embedding modules and the Python host binding. The numeric
+#                              core stays -- tensor, random, autodiff and transforms are what makes
+#                              the graph story concrete -- and so do the rewrite/verify modules.
+#   CAMEL_MODULES=<list>       expert form: exactly these modules, in this order. Empty means "the
+#                              set the line above decides". A name that is not a module, or a
+#                              module whose link dependency is missing, fails the configure with a
+#                              message naming both (the link would otherwise fail much later).
+option(
+    CAMEL_PACKAGE_MINIMAL
+    "Build the subset an anonymous source package ships (no tiles/onnx/nn/ckpt, no Python embedding or binding)"
+    OFF
+)
+set(CAMEL_MODULES "" CACHE STRING
+    "Semicolon list of modules to build (empty = every module, or the CAMEL_PACKAGE_MINIMAL subset)")
+message(STATUS "CAMEL_PACKAGE_MINIMAL=${CAMEL_PACKAGE_MINIMAL} (CAMEL_MODULES=\"${CAMEL_MODULES}\")")
+
 # ========== Tensor module ==========
 # Consumed by modules/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.
 option(
