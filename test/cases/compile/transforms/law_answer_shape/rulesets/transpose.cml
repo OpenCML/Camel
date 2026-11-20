@@ -1,0 +1,35 @@
+// A transposition law that is **wrong on purpose**, so that the transform's own type check has
+// something to refuse: this module shadows the standard library's `rulesets.transpose` for the case
+// beside it (a module's imports are looked for in its own directory first), and it holds one law --
+// the array add's -- whose answer states the **wrong shape**:
+//
+//     add(x, w) => (ct) => (ct as float[3], ct as float[3])
+//
+// A cotangent of a value has that value's own type, so the answer for `x: float[2, 3]` may not be a
+// `float[3]`; the draft records what the right side really answered, the transform compares it with
+// the type of the operand it answered for, and refuses where the law is expanded, naming this law.
+//
+// Why the cast and not the old `(ct, ct)` the library itself had: `ct`'s port is `T[...]`, which is
+// open rank (`float[..]` at any instance), and an answer whose type states no shape is one the check
+// cannot fault -- `float[..]` fits `float[3]` as well as `float[2, 3]`. The cast is what *states* the
+// wrong shape, which is exactly what the library's `add_tensor_t` used to leave unstated. That half
+// of the old defect is the *run's* to catch: `sum_to` contract 甲 refuses a target that is not a
+// suffix of the value's shape. So the two controls are one each: this law for the static check, and
+// `broadcast_add_subtract_gradient.cml` (the numbers) for the reduction.
+//
+// `add` is the stand-in the library itself declares for the array add (`rulesets/transpose.cml`), and
+// the rule is filed under that same head -- `tensor:add`, the uri `x + w` on two arrays carries once
+// `tensor`'s overloads are in scope, which is what the import below is for.
+import { is_float } from types
+import tensor
+
+func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
+    return x + w
+}
+
+/// The array add's law, answering every operand at the shape of the smaller one. One type parameter
+/// per operand, so the law's ports are the operands' own types and the check has an operand type to
+/// compare the answer with.
+export rule add_tensor_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
+    add(x, w) => (ct: T[...]) => (ct as float[3], ct as float[3])
+}

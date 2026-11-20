@@ -168,6 +168,32 @@ enum class TransposeRefusalCause {
     /// (`portType`, `handedType`), and its sentence says whose fault it is. No case pins it: a case
     /// cannot reach it, and a criterion nothing reaches is not a criterion.
     CotangentPortMismatch,
+    /// The type a law's right side **answers** with is not the type of the operand whose cotangent
+    /// it claims to be (author, 2026-11-20: a transposition checks, as it runs, the type of each
+    /// law's right side against the type of the operand it answers for -- shape and rank -- and
+    /// names the law where the two disagree). A rule's right side answers one component per port, in
+    /// the order its left side writes them, and nothing ties that component's shape to the
+    /// operand's: the index files a law under its operator's head and its operand count and reads no
+    /// operand types, so a law can hand back the whole broadcast result for an operand the broadcast
+    /// spread one element of. Measured before this cause existed (`add_tensor_t`, `subtract_t`):
+    /// `x: float[2, 3]`, `b: float[3]`, `y = x + b`, `pullback(1.0)` answered `dL/db` as a
+    /// `[[1, 2, 3], [4, 5, 6]]` tensor while the static type said `float[3]`, with exit 0 and no
+    /// diagnostic -- a wrong number under a right type, which is the one reading the language
+    /// forbids (design principles 9.9: give the correct derivative or refuse by name).
+    ///
+    /// It is **not** `CotangentPortMismatch`: that one compares the law's *input* port with the
+    /// cotangent the walk hands it and is a compiler defect no program reaches; this one compares
+    /// the law's *output* with the operand it is the cotangent of, and a program reaches it through
+    /// any operator a law was written for too wide. Nor is it `RuleShape` (the law's pattern
+    /// rejecting the operand types, before anything is built) or `RuleRanks` (the law's body having
+    /// no instance at these operands): here the law was chosen, its body ran, and what it answered
+    /// is a different shape from the one it is answering for.
+    ///
+    /// What is compared is what the two types **state** (`statedShapeDisagreement`, `transpose.cpp`):
+    /// an extent a type leaves open is not compared, and a side whose rank is open (`T[..]`, which
+    /// includes rank 0) is not compared on rank. So a law that reduces with `sum_to` -- the repair
+    /// this cause was added beside -- answers `T[..]` and says nothing here.
+    LawAnswerShape,
     /// The function this call applies is **built by the body out of a parameter** of the function
     /// being transposed: `f(x) = mk(x)(2.0)` with `mk(x) = (y) => x * y`, where the value the call
     /// applies is `mk`'s answer, assembled from `x`. A bare `transpose(f)` treats every parameter
@@ -239,6 +265,14 @@ struct TransposeRefusal {
     /// of the same fact, and the one the program wrote: a reader compares the two and knows which
     /// side moved. Empty for every cause but `CotangentPortMismatch`.
     std::string handedType;
+    /// The type the law's right side answered with (`LawAnswerShape`), as this walk read it off the
+    /// node the expansion built. The repair is an edit to the law's right side, so the spelling is
+    /// the law author's, not the program's.
+    std::string answerType;
+    /// The type of the operand that answer claims to be the cotangent of, in the program's own
+    /// spelling. The other half of the same fact: a reader compares the two and knows what the law
+    /// was supposed to answer.
+    std::string answeredOperandType;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the

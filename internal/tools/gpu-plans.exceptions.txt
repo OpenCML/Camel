@@ -72,13 +72,41 @@
 # in the gate could notice. The reasons below were re-read on 2026-11-18 and every one of them is the
 # failure that is actually there today.
 #
-# THESE REASONS ARE NOT APPROVALS. Thirteen of them are recorded against a defect that is still open
-# and is still owed a fix; writing the real reason down does not turn any of them into "solved", and
-# none of these names may be deleted until the case is green for the reason named here.
+# THESE REASONS ARE NOT APPROVALS. All thirteen are red inside one open question -- what the outlined
+# count should be -- and recording the real reason down does not turn any of them into "solved"; none
+# of these names may be deleted until the case is green for the reason named here. Whether the count
+# or the expectation written in the case has to move is the author's decision; the block below states
+# both readings rather than assuming one of them.
 
-# One defect: `tiles::compile` publishes the body it rewrote before the type that covers it, so the
-# commit that splices the transfer nodes refuses the graph it just built. Still owed a fix (the
-# outlined count these were originally recorded for is no longer what fails).
+# ONE NAME NOW CARRIES A DIFFERENT REASON THAN THE OTHER TWELVE (2026-11-20).
+#
+# `0x040001B0` (`RuntimeDiag::PassEffectBeyondType`) is no longer the failure of any of the thirteen.
+# It was the failure on 2026-11-18, when this column was re-read, and three commits have removed it
+# since: `7a70b5fad` brings the type over a device body up to what the body does, `a004545c4` declares
+# the type a tiles body needs at the commit rather than after it, and `d27b55d94` gives the device
+# outline the flag that says the code it cuts is code it means to execute. That last one moved the
+# device pass from 5 regions to 12; the resident passes still report 5. Tonight's gate reading
+# confirms the removal: not one of the thirteen prints a diagnostic code, so the evidence line carries
+# `-` for twelve of them and the thirteenth's own assertion. What they are red for now is the outlined
+# count -- the failure these names were first recorded for.
+#
+# `resident_graph_transfers` therefore carries the reason its failure actually prints: its case
+# asserts `prefix == "TILES_OUTLINED 10"` and the pass it drives prints 5. The other twelve are left as
+# they are on purpose -- their failure is a plan-level exact-output difference, which prints neither a
+# diagnostic code nor an assertion, so the reading cannot reach a reason for them. The gate says so on
+# every run ("the recorded reason could not be checked") instead of passing them as verified, and
+# inventing a string for them would make this column mean two different things.
+#
+# WHAT `TILES_OUTLINED 10` IS, AND WHY IT IS NOT TOUCHED HERE. Ten is not the count of either
+# configuration as the tree stands: the device pass reports 12 and the resident passes report 5, the
+# second of those on a device and with the device hidden alike, and `feat/modules/tiles` records 5 for
+# this same case under the neighbouring preferred-resident pass (device hidden) and is green. So the
+# expectation of 10 is stale in the cases themselves -- and correcting it is the author's decision
+# rather than a line in this file, because it is the decision that would make these names stop being
+# red. The two readings are side by side in
+# docs/handover/questions/2026-11-19-the-thirteen-expect-ten-and-the-mechanism-says-twelve-or-five.cn.md
+# and the question is open there. A reason recorded below does not answer it; this file says so rather
+# than let a green gate read as an answer.
 outlined_execution.fvm :: 0x040001B0
 outlined_execution.jit :: 0x040001B0
 outlined_execution.nvm :: 0x040001B0
@@ -91,7 +119,7 @@ preferred_resident_execution.fvm :: 0x040001B0
 preferred_resident_execution.jit :: 0x040001B0
 preferred_resident_execution.nvm :: 0x040001B0
 preferred_resident_execution.prl :: 0x040001B0
-resident_graph_transfers :: 0x040001B0
+resident_graph_transfers :: TILES-OUTLINED-5
 
 # Nothing is listed as unclassified any more: the two bit-preservation names were fixed on
 # 2026-11-19 by asking the device for the bits it can promise (see the ruling above).

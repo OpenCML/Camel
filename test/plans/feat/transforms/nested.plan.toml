@@ -116,6 +116,29 @@ known_fail_note = "判据 ④. The expected answer is 1 and a confused implement
 timeout_ms = 30000
 
 [[tests]]
+name = "nested.nest_quartic_forward"
+desc = "The green half of the second-order question, pinned against regression: `jvp(jvp(f))` for f(x)=x^4 at x=2 with the seed 1 answers ((16, 32), (32, 48)) -- the value and the once-lifted derivative, then the same derivative and the twice-lifted one. t1 = 48 is f''(2) = 12x^2 and t0 = 32 is f'(2) = 4x^3, so the two layers are not confused (a nest that read the outer tangent as the inner one answers 32 twice). This is the forward half the library already composes; the reverse half, `grad(grad(f))`, is `nested.nest_quartic` beside it."
+kind = "behavior"
+case = "../../../cases/transforms/nested/nest_quartic_forward.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nested_quartic_forward y=16.0 t0=32.0 t1=48.0"]
+timeout_ms = 30000
+
+[[tests]]
+name = "nested.nest_quartic"
+desc = "The reverse half, recorded as the refusal it is: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It is a negative on the sentence and not on a number -- the nest prints nothing. Why it is refused was measured on 2026-11-20: the outer `jvp` must lift a function whose answer type is `(float, (float) => float)` (the value plus the linear half's closure), and that type has no tangent space, so `liftSignature` answers null before any callee is asked. The reading and the ruling it waits on are in docs/handover/questions/2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md; when that is ruled on, this entry flips to `d2=48.0` and stops being a negative."
+kind = "negative"
+case = "../../../cases/transforms/nested/nest_quartic.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["jvp has no forward transform for this function", "stdlib/vjp.cml:190:25"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "nested.rule_writes_a_constant"
 desc = "A reshape whose configuration is not one any law spells (`reshape<[2, 1, 2]>`) must still reach a law: `jvp_reshape` names `dims` as its second port now, so nothing states a configuration of its own. The reading is WHICH refusal fires -- the transposition half has no rule for `reshape` (`stdlib/rulesets/transpose.cml:613`), so it stops there, where a matcher refusal would mean the configuration was refused before any law ran. That is the regression a by-content comparison in `chooseRuleAmong` reintroduced on 2026-11-20 (27 red lines in `feat/compile`, with `jvp_reshape` and `jvp_permute` both refused over their own parameters). A law that spells a `<>` value of its own is still refused for every other configuration, which is why none is left: `jvp_softmax` wrote `<1>` until 2026-11-20 and answered only that axis (`feat/compile`'s `rules_angle_args.softmax_axes` is the three-axis reading)."
 kind = "negative"

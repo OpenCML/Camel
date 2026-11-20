@@ -3321,6 +3321,42 @@ expect_stderr_contains = ["rhs=dtod_t,sum_from_type_t,subtract_t"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The cotangent of an operand a **sum** broadcast, through the library's own transpose law. `x + b`
+# and `x - b` broadcast (`float[2, 3]` with `float[3]`), and a law that answered `ct` for the smaller
+# operand put a `[2, 3]` value under a `float[3]` type: exit 0, no diagnostic, a wrong number under a
+# right type. The two entries below are the repair read twice -- the numbers through the law, and the
+# transform's own check with a law that is wrong on purpose.
+[[tests]]
+name = "broadcast_add_subtract_gradient"
+desc = "`x + b` and `x - b` with `x: float[2, 3]` and `b: float[3]`, read through the library's `transpose` at a **weight** cotangent: the four readings the repair is for. `ct = [[1, 2, 3], [4, 5, 6]]` gives `dL/db = [5, 7, 9]` for the sum -- `[1+4, 2+5, 3+6]`, the two rows summed lane by lane -- and `[-5, -7, -9]` for the difference; `ct` all ones gives `[2, 2, 2]` and `[-2, -2, -2]`. **`numel` is printed beside each answer because the defect was a shape**: `add_tensor_t` answered `(ct, ct)` and `subtract_t` `(ct, -ct)`, so `b`'s cotangent arrived as the whole `[[1, 2, 3], [4, 5, 6]]` tensor (`numel=6`, and `[[-1, -2, -3], [-4, -5, -6]]` for the difference) under a static type that said `float[3]`; an entry green on the digits and red on `numel` would be that defect wearing the right numbers. The weighted numbers are distinct in every position on purpose -- a law that answered one lane for all of them (`[5, 5, 5]`), reduced the wrong axis (`[6, 15]`), or answered at the cotangent's own shape matches none of them. `dL/dx` is the control in the same program: it was right before the repair (the cotangent as it arrived) and must stay right after it, so a repair that reduced *both* sides of the sum moves that line and not the others. `transpose` is called directly and not through `vjp` because this entry is the law's own reading, with nothing else of the library's in the graph."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_add_subtract_gradient.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["add weighted dL/db numel=3 dL/db=[5.0, 7.0, 9.0]", "add weighted dL/dx=[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]", "add plain dL/db numel=3 dL/db=[2.0, 2.0, 2.0]", "sub weighted dL/db numel=3 dL/db=[-5.0, -7.0, -9.0]", "sub weighted dL/dx=[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]", "sub plain dL/db numel=3 dL/db=[-2.0, -2.0, -2.0]"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The positive control for the transform's own check -- the second half of the same ruling, and the
+# half that is not about broadcasting at all: **a law written for the wrong shape** is refused as it
+# is expanded, by name. The law here is wrong on purpose and lives in the case's own directory (a
+# module's imports are looked for there first), so this entry does not depend on the library being
+# wrong: the day the library regresses, this entry stays green and the one above goes red, and the
+# day the check is removed or narrowed, this one goes red while the library stays right.
+[[tests]]
+name = "transpose_refuses_a_law_that_answers_the_wrong_shape"
+desc = "A `rulesets/transpose.cml` beside the case shadows the standard library's and declares one law, the array add's, with the two answers **swapped** (`(w, x)`). `x: float[2, 3]`, `w: float[3]`, so the answer for `x` is a copy of `w` and its type is `float[3]`: the transform compares what the law answered with the type of the operand it answered for, and refuses -- `transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type`, exit 1. Three things are claimed and they are different: the refusal happens **at the transformation** (no number is computed), it names **the law** and not the function or the operator (the law is the edit), and it carries **both spellings** (a reader compares them and knows which side moved). It is a `negative` entry and not a `known_fail`: the program is refused because a law is wrong, which is the behaviour the language wants (design principles 9.9: give the correct derivative or refuse by name). What it deliberately does **not** claim is that every wrong law is caught here: the old `(ct, ct)` was not, because `ct`'s port is `T[...]` (open rank) and an answer that states no shape fits every operand shape -- that half is the run's, and `broadcast_add_subtract_gradient` above is its control."
+kind = "negative"
+case = "../../../cases/compile/transforms/law_answer_shape/transpose_refuses_a_law_that_answers_the_wrong_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "value_call_with_a_function_parameter"
 desc = "A call through a parameter of plain function type, inside the function `vjp` differentiates: `vjp((h: (z: float) => float, w: float): float => h(w))(square, 3.0)` answers `value=9.0` and a pullback whose answer is `((), 6.0)`. Two things are pinned and they are different: the function parameter has no tangent space, so it takes the `()` slot its type gives it (the halves line up by position, which is what makes the second member unambiguous), and the weight really is differentiated through the call -- 6.0 rather than the 0.0 a lift that stopped at a value call would answer. The call the lift reads is a call through a parameter, which is the shape `modules/transforms/jvp.cpp#liftSignature` hands the run-time lift."
