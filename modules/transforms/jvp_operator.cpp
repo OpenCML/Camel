@@ -265,17 +265,22 @@ std::unordered_map<std::string, operator_t> operatorKernels() {
 }
 
 void registerOperatorMetadata() {
-    // It builds a graph: the call does something the compiler cannot see from the arguments alone,
-    // so it is declared, as every operator must be (design principles 3.3), as not pure.
-    camel::core::OperatorTable::instance().declare(
-        "transforms", {{"jvp", false}, {"transpose", false}});
-    // `jvp` reads the graph of the function value it receives -- that is the whole transform -- so
-    // it refuses a loop there as `grad` does (OperatorTraits::readsGraphs; op-semantics 11.4).
+    // `jvp` builds a graph and touches no resource while it does: `jvpKernel` reads the graph of
+    // the function value it is handed and answers another function value, and the reading it
+    // prints goes to the diagnostic side, not to the program's output (jvp_operator.cpp,
+    // `readings()`). So the resource claim it makes is the pure one -- an operator that is not pure
+    // and itemizes nothing is refused by the table, and the only clause that would name something
+    // here would be an invented access (2026-11-20).
+    //
+    // Pure is not foldable: the call does something the compiler cannot see from the arguments
+    // alone, which is why it is not recomputable either (`foldable` false, `mayBeRecomputed`). The
+    // two answers used to be one flag; they are two here, and both are true.
     camel::core::OperatorTable::instance().set(
-        "transforms:jvp", {.pure = false, .readsGraphs = true});
-    // `transpose` builds a graph of its own from the one it is handed, for the same two reasons.
-    // Its declaration is the one above, beside `jvp` and `split`: a name declared twice says nothing
-    // the first one did not.
+        "transforms:jvp", {.pure = true, .readsGraphs = true, .foldable = false});
+    // `transpose` builds a graph of its own from the one it is handed and touches no resource
+    // either, but it is not this edit's to re-declare: it is declared not pure here, as it was, and
+    // the same reading as `jvp`'s above would have to be measured for it first.
+    camel::core::OperatorTable::instance().declare("transforms", {{"transpose", false}});
     camel::core::OperatorTable::instance().set(
         "transforms:transpose", {.pure = false, .readsGraphs = true});
     // How a call of each is written: `jvp(f)` and `transpose(f)`, one function and no `with`
