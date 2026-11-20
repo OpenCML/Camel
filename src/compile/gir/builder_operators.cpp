@@ -1447,7 +1447,7 @@ namespace {
 
 /// One place a path assignment writes: a field (`v.f`, `v.0`) or an element (`v[i]`).
 struct PathStep {
-    GCT::node_ptr_t node; // the ACCS or __idx__ node, as written
+    GCT::node_ptr_t node = {}; // the ACCS or __idx__ node, as written
     bool isIndex = false; // a field of a struct or tuple, or an element of an array
     size_t field = 0;     // the position of the field
     std::string selector; // the name of the index value of an element

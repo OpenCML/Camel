@@ -47,7 +47,7 @@ class Predicate {
 };
 
 struct Access {
-    size_t buffer;
+    size_t buffer = 0;
     IndexExpr address;
     Predicate mask;
     // No address evaluation takes place when the access is masked out.

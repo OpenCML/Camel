@@ -13,7 +13,7 @@
 
 namespace camel::tiles::kernel {
 struct RowStage {
-    size_t node;
+    size_t node = 0;
     std::optional<ScalarExpr> expression;
     std::optional<core::sem::ReductionLaw> reduction;
 };

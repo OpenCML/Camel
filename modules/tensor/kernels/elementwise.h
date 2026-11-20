@@ -24,8 +24,8 @@ namespace camel::tensor::kernels {
 
 /// Non-owning view of a contiguous typed buffer.
 struct Operand {
-    const void *data;
-    type::TypeCode dtype;
+    const void *data = nullptr;
+    type::TypeCode dtype = type::TypeCode::Int32;
     std::span<const int64_t> shape;
     /// True for a Camel scalar: a value, not a tensor. It takes the other operand's element
     /// type when the two meet (design principles 5.1, the literal takes its context), so a
@@ -60,7 +60,7 @@ struct ScalarOperand {
         /// element zero of the type the caller names in `dtype`.
         Value() : bf16() {}
     } value;
-    type::TypeCode dtype;
+    type::TypeCode dtype = type::TypeCode::Int32;
 
     /// Builds the operand from a Camel numeric slot of type `code`, keeping `code` as written.
     static ScalarOperand fromSlot(type::TypeCode code, slot_t slot);
