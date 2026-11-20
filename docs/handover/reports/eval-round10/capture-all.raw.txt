@@ -1,27 +1,27 @@
 ===== capture-all: the ECOOP section 6 readings and the e2e lane, one run =====
 # the build every reading below ran on:
-#   tree       /home/zjwei/camel-work/capA
-#   git HEAD   213b4f70d242bc049cb47b043a2a5d35eb369b65
-#   camel      /home/zjwei/camel-work/capA/out/latest/bin/camel
+#   tree       /home/zjwei/camel-work/cap8
+#   git HEAD   6cb6fa72157240729f04a9a8b787b222b96c473a
+#   camel      /home/zjwei/camel-work/cap8/out/latest/bin/camel
 #   config       Release
-#   revision     213b4f70d242bc049cb47b043a2a5d35eb369b65
-#   dirty        True (1 path(s))
-#   builtAt      2026-11-20T09:08:54.352Z
-#   footprint    261120_084852_1ae20e5b0
+#   revision     6cb6fa72157240729f04a9a8b787b222b96c473a
+#   dirty        False (0 path(s))
+#   builtAt      2026-11-20T09:55:01.522Z
+#   footprint    261120_095154_6cb6fa721
 #   fingerprint  3a1d3c5275c5aa2a95a99480e8524955c9b63ca2b983663cc13450c7052b4b70 of 1349 files under src, include, modules, tools, stdlib, third_party, cmake, CMakeLists.txt, conanfile.txt
 #   buildOptions 3181e491475bf62ba3b1d939ca95000975b94f2814866713f2f86b3198a02970 platform linux/x64
 #                cmake {"CAMEL_ENABLE_PYTHON": "ON", "CAMEL_ENABLE_PYTHON_BINDINGS": "ON", "CAMEL_PACKAGE_MINIMAL": "OFF", "CAMEL_TENSOR_BLAS": "ON", "ENABLE_FASTVM_JIT": "ON"}
 #                env   {"CAMEL_SKIP_PYTHON": "0", "CAMEL_TARGET_ARCH": "native"}
-#   version    Camel v0.2.45 (Build 261120_084852_1ae20e5b0)
-#   linked at  213b4f70d, and this tree is exactly those sources
+#   version    Camel v0.2.45 (Build 261120_095154_6cb6fa721)
+#   linked at  6cb6fa721, and this tree is exactly those sources
 #
 # No reading below came from another build. A row that could only be taken on an older pin
 # would say so on the row; there is none in this run.
-# The scratch directory the module roots and the pass copies live in is /tmp/camel-capture-all.1221457.YNydgy: this run's own,
+# The scratch directory the module roots and the pass copies live in is /tmp/camel-capture-all.2220966.qOsHxq: this run's own,
 # named here because a diagnostic quotes it and because two runs would otherwise share one.
 
 === [1] the six writings of the case-study program, and the counterexample ===
-# build=213b4f70d
+# build=6cb6fa721
 # The writing form is the library's: `let dloss = grad(loss)` then `dloss<layer, y>(X)`.
 # The six are the ways of writing the program that change no meaning; `train-reorder-output` is
 # the counterexample, which moves the prints and so moves the order edges and must differ.
@@ -223,7 +223,7 @@ unsync-b               same
 
 
 === [2] the scale of train.cml ===
-# build=213b4f70d
+# build=6cb6fa721
 # Node = `graphs[*].nodes` summed; edge = one entry of a node's `inputs`, which is what a
 # reference is in a canonical document (it has no `edges` array); region = `graphs[*].regions`;
 # bytes = the canonical document itself. The two programs are printed apart: the six writings'
@@ -241,7 +241,7 @@ case         graphs=59 nodes=217 edges=190 regions=2 bytes=93172
 
 
 === [3] the three backends on the training program ===
-# build=213b4f70d
+# build=6cb6fa721
 # The program is the one the tree ships, examples/case-study/train.cml. The paper's sentence is
 # that the three backends print the same thing; the comparison at the end is the reading.
 
@@ -270,7 +270,7 @@ nvm against jit  same
 
 
 === [4] the rows of tab:lang, under the library's grad ===
-# build=213b4f70d
+# build=6cb6fa721
 # `edits-ecoop.cml` is copied into the scratch root as `eco.cml`: a module's name is its file's
 # stem, so a pass library reaches a command under that name. The file in the tree is not renamed
 # and not edited. The program is the six writings' baseline.
@@ -295,59 +295,70 @@ nvm against jit  same
 # program's own output instead of a refusal. That is the one way this row can go quiet, and the
 # record shows which of the two happened.
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::print_unordered std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::print_unordered std::nvm
 error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 3 of graph 'main' (a call of 'run'), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write unknown / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
-    --> /tmp/camel-capture-all.1221457.YNydgy/eco.cml:115:12
+    --> /tmp/camel-capture-all.2220966.qOsHxq/eco.cml:153:12
      |
- 115 |     return println('announced')
+ 153 |     return println('announced')
      |            ^^^^^^^
 help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
 ### exit=1
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::print_ordered std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::print_ordered std::nvm
 loss before: 3.7500
 loss after:  0.0000
 [[1.9999925], [-0.99998784]]
 ### exit=0
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::print_appended std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::print_appended std::nvm
 loss before: 3.7500
 loss after:  0.0000
 [[1.9999925], [-0.99998784]]
 ### exit=0
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::print_appended_reversed std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::print_appended_reversed std::nvm
 loss before: 3.7500
 loss after:  0.0000
 [[1.9999925], [-0.99998784]]
 ### exit=0
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::print_prepended std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::print_prepended std::nvm
 error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 3 of graph 'main' (a call of 'run'), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write unknown / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
-    --> /tmp/camel-capture-all.1221457.YNydgy/eco.cml:115:12
+    --> /tmp/camel-capture-all.2220966.qOsHxq/eco.cml:153:12
      |
- 115 |     return println('announced')
+ 153 |     return println('announced')
      |            ^^^^^^^
 help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
 ### exit=1
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::loss_print std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::loss_print std::nvm
 error[RuntimeDiag::PassEffectBeyondType]: 'graph::commit' committed a graph that reaches past the effect its own type declares: node 16 of graph 'loss' (:io/println), in a graph whose type declares nothing, makes an access the type does not cover (write stdout): the commit would publish a body that reaches past its own declared effect
-    --> /tmp/camel-capture-all.1221457.YNydgy/eco.cml:115:12
+    --> /tmp/camel-capture-all.2220966.qOsHxq/eco.cml:153:12
      |
- 115 |     return println('announced')
+ 153 |     return println('announced')
      |            ^^^^^^^
 help: A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.
 ### exit=1
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::drop_print std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::drop_print std::nvm
 ### exit=0
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/train.cml eco::break_rate std::nvm
-loss before: 3.7500
-loss after:  0.0000
-[[1.9999925], [-0.99998784]]
-### exit=0
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/train.cml eco::break_rate std::nvm
+error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'main' breaks its edge invariants (1 violation(s)):
+  graph 'main' node 3 (10): passes a f32[4, 1] as ordinary argument 2 of 'run', which takes a float.
+   --> /tmp/camel-capture-all.2220966.qOsHxq/train.cml:28:1
+    |
+ 28 | func main(): int sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+ 29 |     let X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]] as f32[4, 2]
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   ...
+ 36 | }
+    | ^
+note: the error was made by <graph::commit>, which records no position
+help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+
+### exit=1
 
 
 # --- [B] the three graph checks: exit, acyclic, scoped -- which layer refuses each, verbatim ---
@@ -365,31 +376,31 @@ loss after:  0.0000
 #                 the branch-arm invariant -- the exit is untouched, so the exit rule cannot be
 #                 the one that answers
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/identity_at_exit.cml bad::move_exit std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/identity_at_exit.cml bad::move_exit std::nvm
 move_exit: graph of 6 nodes; the exit is 5 (region kind RegionKind::Root); the node moved in is 1 (region kind RegionKind::Arm)
 error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.replace': the node anchors its graph (an exit, an output, a return or the end of a branch arm).
-   --> /tmp/camel-capture-all.1221457.YNydgy/bad.cml:49:5
+   --> /tmp/camel-capture-all.2220966.qOsHxq/bad.cml:49:5
     |
  49 |     replace(t, pair[0], pair[1])
     |     ^^^^^^^
 help: The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 ### exit=1
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/identity_at_exit.cml bad::self_read std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/identity_at_exit.cml bad::self_read std::nvm
 self_read: the exit is 5 and the value it reads is 4; replacing that value with the exit
 error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.replace': the replacement is the node itself or is computed from it.
-   --> /tmp/camel-capture-all.1221457.YNydgy/bad.cml:68:5
+   --> /tmp/camel-capture-all.2220966.qOsHxq/bad.cml:68:5
     |
  68 |     replace(t, pair[1], pair[0])
     |     ^^^^^^^
 help: The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 ### exit=1
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/identity_at_exit.cml bad::cross_region std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/identity_at_exit.cml bad::cross_region std::nvm
 cross_region: the exit reads 4 (region kind RegionKind::Root); replacing that value with 1 (region kind RegionKind::Arm)
 cross_region: the step check accepted the replace; committing
 error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'f' has its exit at node 5, which is in region 1 instead of the function body: that region runs only when its owner says so, so a value nothing asks for never runs there, and the read never happens.
-   --> /tmp/camel-capture-all.1221457.YNydgy/identity_at_exit.cml:21:1
+   --> /tmp/camel-capture-all.2220966.qOsHxq/identity_at_exit.cml:21:1
     |
  21 | func main(): int {
     | ^^^^^^^^^^^^^^^^^^
@@ -402,11 +413,11 @@ help: A value of type T! that has failed must be opened before the program ends:
 
 ### exit=1
 
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/sibling_arm.cml bad2::cross_arm std::nvm
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/sibling_arm.cml bad2::cross_arm std::nvm
 cross_arm: the reader 3 is in region kind RegionKind::Arm; it reads 2 (region kind RegionKind::Root); that read becomes 5 (region kind RegionKind::Arm)
 cross_arm: the step check accepted the replace; committing
 error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'pick' breaks the branch-arm invariant: OPER 7 (:op/add_l) runs between BRCH 3 and its JOIN 2 and belongs to two arms, 1 and 0: it would run only when arm 1 is taken, and arm 0 reads it (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
-   --> /tmp/camel-capture-all.1221457.YNydgy/sibling_arm.cml:17:1
+   --> /tmp/camel-capture-all.2220966.qOsHxq/sibling_arm.cml:17:1
     |
  17 | func main(): int {
     | ^^^^^^^^^^^^^^^^^^
@@ -422,7 +433,7 @@ help: A value of type T! that has failed must be opened before the program ends:
 # The commit's own reading of the two rows this op set cannot hand it, quoted from the repo's
 # fixtures. These are the fixtures' drafts and not edits made above; the layer is the reading,
 # and leaving the row out would make the layer look absent:
-### camel /tmp/camel-capture-all.1221457.YNydgy/fold_function_type.cml test::commit_cycle std::nvm
+### camel /tmp/camel-capture-all.2220966.qOsHxq/fold_function_type.cml test::commit_cycle std::nvm
 commit_cycle: the draft's input setters do not look for a cycle, the commit does
 commit_cycle: graph 'doubled' node 2 now reads itself
 commit_cycle: refused at the commit: Runtime graph 'doubled' breaks its edge invariants (1 violation(s)):
@@ -430,7 +441,7 @@ commit_cycle: refused at the commit: Runtime graph 'doubled' breaks its edge inv
 3
 ### exit=48
 
-### camel /tmp/camel-capture-all.1221457.YNydgy/sibling_arm.cml test::commit_sibling_arm std::nvm
+### camel /tmp/camel-capture-all.2220966.qOsHxq/sibling_arm.cml test::commit_sibling_arm std::nvm
 commit_sibling_arm: the seal asks whether a node reads only what runs when it runs (`validateRuntimeBranchArms`, src/runtime/branch_arms.cpp), not only whether it reads a port of a region it is not in (`checkGraphCrossReferences`, src/runtime/graph_edges.cpp)
 commit_sibling_arm: graph 'pick' arm 1 of BRCH 3 now ends in node 8, which reads node 7 of arm 2
 commit_sibling_arm: refused at the commit: Runtime graph 'pick' breaks the branch-arm invariant: OPER 7 (:op/add_l) runs between BRCH 3 and its JOIN 2 and belongs to two arms, 1 and 0: it would run only when arm 1 is taken, and arm 0 reads it (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
@@ -438,7 +449,7 @@ commit_sibling_arm: graph 'pick' arm 1 of BRCH 3 now ends in node 8, which reads
 commit_sibling_arm: the copy that reads a value of its own arm was published
 ### exit=50
 
-### camel /tmp/camel-capture-all.1221457.YNydgy/loop_body_read.cml test::commit_loop_body_read std::nvm
+### camel /tmp/camel-capture-all.2220966.qOsHxq/loop_body_read.cml test::commit_loop_body_read std::nvm
 commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph, so a read across either is the same question -- a node reads only what runs whenever it runs
 commit_loop_body_read: graph 'main' has LOOP 17 with its body at region 2 and no BRCH anywhere; the body computes node 14, the function body computed node 3, and node 11 of the body reads it
 commit_loop_body_read: graph 'main' now has COPY 24 in the body (region 0) reading node 14 of the body of LOOP 17 (region 2)
@@ -453,7 +464,7 @@ commit_loop_body_read: the copy in the loop's body that reads a value of the fun
 30
 ### exit=60
 
-### camel /tmp/camel-capture-all.1221457.YNydgy/identity_at_exit.cml test::commit_exit_region std::nvm
+### camel /tmp/camel-capture-all.2220966.qOsHxq/identity_at_exit.cml test::commit_exit_region std::nvm
 commit_exit_region: the seal asks it (`validateRuntimeGraphPayloadImpl`, src/runtime/graph.cpp), whatever the draft added
 commit_exit_region: graph 'f' now reads its value at node 3, which is in arm 1 of the branch at node 2 and not in the function body
 commit_exit_region: refused at the commit: Runtime graph 'f' has its exit at node 3, which is in region 1 instead of the function body: that region runs only when its owner says so, so a value nothing asks for never runs there, and the read never happens.
@@ -472,7 +483,7 @@ commit_exit_region: refused at the commit: Runtime graph 'f' has its exit at nod
 
 
 === [5] the optimization table: the MLP and the char-transformer ===
-# build=213b4f70d
+# build=6cb6fa721
 # Two kinds of row per pass, printed apart:
 #   the document  -- `<prog> <pass> std::jgir canonical=true`, WITH NO --arg on either program:
 #                    the canonical document is read from the program as written, and a document
@@ -511,10 +522,10 @@ opt::dce               same
 opt::saturate          differs first_difference_byte=263
 
 # the MLP's runs: does the pass leave the output alone (seconds= is masked)
-### python3 docs/handover/reports/eval-round10/probes/gen_mlp_data.py --out /tmp/camel-capture-all.1221457.YNydgy/mlp-data
-wrote /tmp/camel-capture-all.1221457.YNydgy/mlp-data train 64 val 16 hidden 128 order 128
+### python3 docs/handover/reports/eval-round10/probes/gen_mlp_data.py --out /tmp/camel-capture-all.2220966.qOsHxq/mlp-data
+wrote /tmp/camel-capture-all.2220966.qOsHxq/mlp-data train 64 val 16 hidden 128 order 128
 
-### camel --arg data=/tmp/camel-capture-all.1221457.YNydgy/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml std::nvm
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml std::nvm
 ### exit=0
 c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
 c2 init val_loss=2.626463508 val_accuracy=0.125000000
@@ -524,7 +535,7 @@ c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.06250000
 c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
 c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
 
-### camel --arg data=/tmp/camel-capture-all.1221457.YNydgy/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::cse std::nvm
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::cse std::nvm
 ### exit=0
 c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
 c2 init val_loss=2.626463508 val_accuracy=0.125000000
@@ -534,7 +545,7 @@ c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.06250000
 c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
 c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
 
-### camel --arg data=/tmp/camel-capture-all.1221457.YNydgy/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::fold std::nvm
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::fold std::nvm
 ### exit=0
 c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
 c2 init val_loss=2.626463508 val_accuracy=0.125000000
@@ -544,7 +555,7 @@ c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.06250000
 c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
 c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
 
-### camel --arg data=/tmp/camel-capture-all.1221457.YNydgy/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::dce std::nvm
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::dce std::nvm
 ### exit=0
 c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
 c2 init val_loss=2.626463508 val_accuracy=0.125000000
@@ -554,7 +565,7 @@ c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.06250000
 c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
 c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
 
-### camel --arg data=/tmp/camel-capture-all.1221457.YNydgy/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::saturate std::nvm
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::saturate std::nvm
 ### exit=0
 c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
 c2 init val_loss=2.626463508 val_accuracy=0.125000000
@@ -711,7 +722,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
  178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
      |                                  ^^^^^^^^^^
 note: raised here
-    --> /home/zjwei/camel-work/capA/out/latest/stdlib/vjp.cml:134:25
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
      |
  134 |     let forward = split(jvp(f))
      |                         ---
@@ -744,7 +755,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
  178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
      |                                  ^^^^^^^^^^
 note: raised here
-    --> /home/zjwei/camel-work/capA/out/latest/stdlib/vjp.cml:134:25
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
      |
  134 |     let forward = split(jvp(f))
      |                         ---
@@ -777,7 +788,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
  178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
      |                                  ^^^^^^^^^^
 note: raised here
-    --> /home/zjwei/camel-work/capA/out/latest/stdlib/vjp.cml:134:25
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
      |
  134 |     let forward = split(jvp(f))
      |                         ---
@@ -810,7 +821,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
  178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
      |                                  ^^^^^^^^^^
 note: raised here
-    --> /home/zjwei/camel-work/capA/out/latest/stdlib/vjp.cml:134:25
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
      |
  134 |     let forward = split(jvp(f))
      |                         ---
@@ -843,7 +854,7 @@ error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no 
  178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
      |                                  ^^^^^^^^^^
 note: raised here
-    --> /home/zjwei/camel-work/capA/out/latest/stdlib/vjp.cml:134:25
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
      |
  134 |     let forward = split(jvp(f))
      |                         ---
@@ -953,44 +964,44 @@ tr    saturate           0         12          1          1          0          
 # leaves a `pass` phase and its window would otherwise read as a fast one.
 # Absolute milliseconds here are only comparable with rows taken at the same load. The load at
 # this block's start and its end is printed, and the median plus the range is the reading the
-# paper's table takes; the nine samples are in the phase files under /tmp/camel-capture-all.1221457.YNydgy.
-#   /proc/loadavg 18.05 21.40 20.45 13/10070 1223175
-### /home/zjwei/camel-work/capA/out/latest/bin/camel examples/case-study/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-case-cse-<n>.json   (nine times, a fresh process each)
-case-cse             n=9 of 9  median_wall_ms=   33.92 [   33.63,    34.32]  median_cpu_ms=   33.91 [   33.60,    34.32]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel examples/case-study/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-case-fold-<n>.json   (nine times, a fresh process each)
-case-fold            n=9 of 9  median_wall_ms=   30.68 [   30.26,    31.59]  median_cpu_ms=   30.65 [   30.26,    31.56]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel examples/case-study/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-case-dce-<n>.json   (nine times, a fresh process each)
-case-dce             n=9 of 9  median_wall_ms=   29.18 [   28.73,    32.48]  median_cpu_ms=   29.18 [   28.73,    32.48]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel examples/case-study/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-case-saturate-<n>.json   (nine times, a fresh process each)
-case-saturate        n=9 of 9  median_wall_ms=   79.01 [   78.02,    82.42]  median_cpu_ms=   79.01 [   78.00,    82.43]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-mlp-cse-<n>.json   (nine times, a fresh process each)
-mlp-cse              n=9 of 9  median_wall_ms=  124.31 [  123.61,   128.29]  median_cpu_ms=  124.30 [  123.61,   128.12]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-mlp-fold-<n>.json   (nine times, a fresh process each)
-mlp-fold             n=9 of 9  median_wall_ms=   32.09 [   31.58,    32.40]  median_cpu_ms=   32.06 [   31.58,    32.40]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-mlp-dce-<n>.json   (nine times, a fresh process each)
-mlp-dce              n=9 of 9  median_wall_ms=   29.44 [   28.78,    29.99]  median_cpu_ms=   29.44 [   28.78,    29.99]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-mlp-saturate-<n>.json   (nine times, a fresh process each)
-mlp-saturate         n=9 of 9  median_wall_ms=   66.53 [   65.45,    67.20]  median_cpu_ms=   66.50 [   65.36,    67.19]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-tr-cse-<n>.json   (nine times, a fresh process each)
-tr-cse               n=9 of 9  median_wall_ms=  183.96 [  182.62,   186.24]  median_cpu_ms=  183.37 [  182.60,   186.24]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-tr-fold-<n>.json   (nine times, a fresh process each)
-tr-fold              n=9 of 9  median_wall_ms=   39.63 [   38.91,    39.91]  median_cpu_ms=   39.61 [   38.89,    39.89]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-tr-dce-<n>.json   (nine times, a fresh process each)
-tr-dce               n=9 of 9  median_wall_ms=   31.32 [   30.36,    32.22]  median_cpu_ms=   31.32 [   30.36,    32.22]  
-### /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-tr-saturate-<n>.json   (nine times, a fresh process each)
-tr-saturate          n=9 of 9  median_wall_ms=   93.74 [   92.47,    99.90]  median_cpu_ms=   93.74 [   92.44,    99.84]  
-#   /proc/loadavg 16.53 20.84 20.29 11/10102 1225055
+# paper's table takes; the nine samples are in the phase files under /tmp/camel-capture-all.2220966.qOsHxq.
+#   /proc/loadavg 22.21 26.40 24.29 13/10271 2223306
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-cse-<n>.json   (nine times, a fresh process each)
+case-cse             n=9 of 9  median_wall_ms=   34.71 [   34.21,    37.25]  median_cpu_ms=   34.58 [   34.21,    36.34]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-fold-<n>.json   (nine times, a fresh process each)
+case-fold            n=9 of 9  median_wall_ms=   31.03 [   30.70,    31.86]  median_cpu_ms=   31.02 [   30.70,    31.85]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-dce-<n>.json   (nine times, a fresh process each)
+case-dce             n=9 of 9  median_wall_ms=   29.30 [   28.85,    29.88]  median_cpu_ms=   29.30 [   28.85,    29.85]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-saturate-<n>.json   (nine times, a fresh process each)
+case-saturate        n=9 of 9  median_wall_ms=   79.64 [   78.73,    81.25]  median_cpu_ms=   79.60 [   78.69,    81.19]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-cse-<n>.json   (nine times, a fresh process each)
+mlp-cse              n=9 of 9  median_wall_ms=  124.14 [  122.97,   126.36]  median_cpu_ms=  124.14 [  122.96,   125.70]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-fold-<n>.json   (nine times, a fresh process each)
+mlp-fold             n=9 of 9  median_wall_ms=   32.32 [   31.64,    32.86]  median_cpu_ms=   32.32 [   31.64,    32.86]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-dce-<n>.json   (nine times, a fresh process each)
+mlp-dce              n=9 of 9  median_wall_ms=   29.60 [   28.40,    29.90]  median_cpu_ms=   29.60 [   28.40,    29.88]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-saturate-<n>.json   (nine times, a fresh process each)
+mlp-saturate         n=9 of 9  median_wall_ms=   66.03 [   64.97,    66.51]  median_cpu_ms=   66.03 [   64.94,    66.47]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-cse-<n>.json   (nine times, a fresh process each)
+tr-cse               n=9 of 9  median_wall_ms=  184.47 [  181.83,   185.72]  median_cpu_ms=  184.18 [  181.82,   185.53]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-fold-<n>.json   (nine times, a fresh process each)
+tr-fold              n=9 of 9  median_wall_ms=   39.99 [   39.48,    43.36]  median_cpu_ms=   39.96 [   39.48,    43.32]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-dce-<n>.json   (nine times, a fresh process each)
+tr-dce               n=9 of 9  median_wall_ms=   31.71 [   31.29,    32.23]  median_cpu_ms=   31.69 [   31.28,    32.23]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-saturate-<n>.json   (nine times, a fresh process each)
+tr-saturate          n=9 of 9  median_wall_ms=   95.32 [   93.99,    97.51]  median_cpu_ms=   95.32 [   93.99,    97.51]  
+#   /proc/loadavg 21.65 26.00 24.21 21/10270 2225940
 
 
 === [6] the fusion ===
-# build=213b4f70d
+# build=6cb6fa721
 # The transform is `greedy::fuse`, a pass written in Camel (test/cases/opt/writings/
 # greedy_fuse.cml.in), copied into the scratch root as `greedy.cml`. The reading below is the
 # strict one: the two writings of one program must fuse to ONE canonical form.
 
-### python3 test/cases/opt/writings/greedy_fusion_writings.py --camel /home/zjwei/camel-work/capA/out/latest/bin/camel --require-one-form
-programs: /tmp/camel-capture-all.1221457.YNydgy/fusion
-transform: test/cases/opt/writings/greedy_fuse.cml.in -> /tmp/camel-capture-all.1221457.YNydgy/fusion/greedy.cml
+### python3 test/cases/opt/writings/greedy_fusion_writings.py --camel /home/zjwei/camel-work/cap8/out/latest/bin/camel --require-one-form
+programs: /tmp/camel-capture-all.2220966.qOsHxq/fusion
+transform: test/cases/opt/writings/greedy_fuse.cml.in -> /tmp/camel-capture-all.2220966.qOsHxq/fusion/greedy.cml
 control (torch.fx, run on the ECOOP side; this host has no torch): test/cases/opt/writings/fx_greedy_fusion.py present
 the transform asks no writing-visible query (id/name/origin/show): PASS
 the two writings differ by exactly this swap of two adjacent lines (2 <-> 3):
@@ -1001,14 +1012,14 @@ writings: base, different, renamed, swapped, swapped_renamed
 reading: raw_one_form -- the two writings, before the transform
   canonical[left] base__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
   canonical[right] swapped__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
-same_graph /tmp/camel-capture-all.1221457.YNydgy/fusion/base__raw.json /tmp/camel-capture-all.1221457.YNydgy/fusion/swapped__raw.json = true
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__raw.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/swapped__raw.json = true
 nodes=14 edges=13
 canonical: 5446 bytes, sha256=e68d3eb674bc0f5f (both sides)
 
 reading: changes_the_graph -- the same program, fused and unfused -- a transform that fused nothing reads as a no-op
   canonical[left] base__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
   canonical[right] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
-same_graph /tmp/camel-capture-all.1221457.YNydgy/fusion/base__raw.json /tmp/camel-capture-all.1221457.YNydgy/fusion/base__fused.json = false
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__raw.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json = false
 nodes=14 edges=13   (base__raw.json)
 nodes=13 edges=11   (base__fused.json)
 canonical: first difference at byte 188 (line 11, column 16); 5446 bytes vs 5023 bytes
@@ -1046,14 +1057,14 @@ symmetric difference
 reading: renamed -- the same program with every local renamed, both fused
   canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
   canonical[right] renamed__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
-same_graph /tmp/camel-capture-all.1221457.YNydgy/fusion/base__fused.json /tmp/camel-capture-all.1221457.YNydgy/fusion/renamed__fused.json = true
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/renamed__fused.json = true
 nodes=13 edges=11
 canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
 
 reading: swapped -- two adjacent statements swapped, both fused -- THE CRITERION
   canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
   canonical[right] swapped__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
-same_graph /tmp/camel-capture-all.1221457.YNydgy/fusion/base__fused.json /tmp/camel-capture-all.1221457.YNydgy/fusion/swapped__fused.json = true
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/swapped__fused.json = true
 nodes=13 edges=11
 canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
 
@@ -1062,7 +1073,7 @@ canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
 reading: swapped_and_renamed -- both changes at once, both fused
   canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
   canonical[right] swapped_renamed__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
-same_graph /tmp/camel-capture-all.1221457.YNydgy/fusion/base__fused.json /tmp/camel-capture-all.1221457.YNydgy/fusion/swapped_renamed__fused.json = true
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/swapped_renamed__fused.json = true
 nodes=13 edges=11
 canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
 
@@ -1071,7 +1082,7 @@ canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
 reading: different_constant -- `y * 4` for `y * 3`, both fused -- the comparator must be able to say no
   canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
   canonical[right] different__fused.json: 5023 bytes, sha256=7bb09cf32a818ebc66bf50193b2a801d649bfe6be8f0adc68d1ed6dfdca7c64a
-same_graph /tmp/camel-capture-all.1221457.YNydgy/fusion/base__fused.json /tmp/camel-capture-all.1221457.YNydgy/fusion/different__fused.json = false
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/different__fused.json = false
 nodes=13 edges=11
 canonical: first difference at byte 4408 (line 220, column 18); 5023 bytes vs 5023 bytes
 the node and edge relation is not one
@@ -1111,11 +1122,11 @@ the greedy fusion is not a no-op, a rename fuses to the same graph, and a differ
 ### exit=0
 
 # the two losses, each fused, and each against its own unfused document
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/loss-a.cml greedy::fuse std::jgir canonical=true > fused-loss-a.json
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/loss-a.cml greedy::fuse std::jgir canonical=true > fused-loss-a.json
 doc=fused-loss-a exit=0 bytes=89019 md5=e0b62d41525f711248f38b04d40638d6 sha256=9ed6dc88a90d5fabd5937c08f544fd0462fd99c118bb5c19a464ac9270c68319
 
 fused loss-a against unfused differs first_difference_byte=264
-### CAMEL_PACKAGES=/tmp/camel-capture-all.1221457.YNydgy camel /tmp/camel-capture-all.1221457.YNydgy/loss-b.cml greedy::fuse std::jgir canonical=true > fused-loss-b.json
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/loss-b.cml greedy::fuse std::jgir canonical=true > fused-loss-b.json
 doc=fused-loss-b exit=0 bytes=89019 md5=e0b62d41525f711248f38b04d40638d6 sha256=9ed6dc88a90d5fabd5937c08f544fd0462fd99c118bb5c19a464ac9270c68319
 
 fused loss-b against unfused differs first_difference_byte=264
@@ -1124,7 +1135,7 @@ fused loss-a against fused loss-b  same
 
 
 === [7] commit and normalization time (this section floats: it is the only one that does) ===
-# build=213b4f70d
+# build=6cb6fa721
 # Three probes in docs/handover/reports/eval-round10/probes, each run as an ordinary pass on examples/case-study/train.cml:
 #   canonical_once::run    one normalization, one call of `nodes(graph_of)`
 #   canonical_walk::walk   one normalization per graph, the way a pass that walks every graph
@@ -1136,45 +1147,45 @@ fused loss-a against fused loss-b  same
 # printed here because a time with no load beside it cannot be read, moves with the host too.
 
 # the host's load, which is part of this section for the reason above
-#   /proc/loadavg 16.73 20.81 20.28 13/10107 1225500
+#   /proc/loadavg 21.65 26.00 24.21 16/10301 2226177
 
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_once::run std::jgir canonical=true --time-phases=/tmp/camel-capture-all.1221457.YNydgy/ph-once-<n>.json   (nine times, a fresh process each)
-run=1 wall_ms=1.65 cpu_ms=1.65 total_ms=98.50
-run=2 wall_ms=1.48 cpu_ms=1.48 total_ms=92.58
-run=3 wall_ms=1.56 cpu_ms=1.56 total_ms=93.62
-run=4 wall_ms=1.63 cpu_ms=1.63 total_ms=94.26
-run=5 wall_ms=1.46 cpu_ms=1.47 total_ms=100.31
-run=6 wall_ms=1.71 cpu_ms=1.71 total_ms=96.22
-run=7 wall_ms=1.63 cpu_ms=1.63 total_ms=98.41
-run=8 wall_ms=1.75 cpu_ms=1.75 total_ms=98.40
-run=9 wall_ms=1.66 cpu_ms=1.66 total_ms=97.89
-canonical_once::run    n=9 median_wall_ms=1.63 [1.46, 1.75] median_cpu_ms=1.63
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_once::run std::jgir canonical=true --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/ph-once-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=1.69 cpu_ms=1.69 total_ms=95.32
+run=2 wall_ms=1.56 cpu_ms=1.56 total_ms=95.33
+run=3 wall_ms=1.56 cpu_ms=1.56 total_ms=92.30
+run=4 wall_ms=1.45 cpu_ms=1.45 total_ms=95.70
+run=5 wall_ms=1.58 cpu_ms=1.58 total_ms=90.79
+run=6 wall_ms=1.55 cpu_ms=1.55 total_ms=90.19
+run=7 wall_ms=1.66 cpu_ms=1.66 total_ms=95.32
+run=8 wall_ms=1.68 cpu_ms=1.68 total_ms=95.37
+run=9 wall_ms=1.58 cpu_ms=1.58 total_ms=92.20
+canonical_once::run    n=9 median_wall_ms=1.58 [1.45, 1.69] median_cpu_ms=1.58
 
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_walk::walk std::jgir canonical=true --time-phases=/tmp/camel-capture-all.1221457.YNydgy/ph-walk-<n>.json   (nine times, a fresh process each)
-run=1 wall_ms=17.06 cpu_ms=17.06 total_ms=128.98
-run=2 wall_ms=18.90 cpu_ms=18.87 total_ms=138.47
-run=3 wall_ms=17.17 cpu_ms=17.17 total_ms=135.43
-run=4 wall_ms=17.38 cpu_ms=17.38 total_ms=131.80
-run=5 wall_ms=17.28 cpu_ms=17.28 total_ms=130.15
-run=6 wall_ms=17.07 cpu_ms=17.07 total_ms=134.66
-run=7 wall_ms=16.85 cpu_ms=16.85 total_ms=130.32
-run=8 wall_ms=17.33 cpu_ms=17.33 total_ms=128.38
-run=9 wall_ms=17.10 cpu_ms=17.09 total_ms=125.82
-canonical_walk::walk   n=9 median_wall_ms=17.17 [16.85, 18.90] median_cpu_ms=17.17
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_walk::walk std::jgir canonical=true --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/ph-walk-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=17.71 cpu_ms=17.71 total_ms=130.15
+run=2 wall_ms=17.30 cpu_ms=17.30 total_ms=128.94
+run=3 wall_ms=17.36 cpu_ms=17.36 total_ms=132.72
+run=4 wall_ms=17.12 cpu_ms=17.12 total_ms=128.82
+run=5 wall_ms=17.49 cpu_ms=17.49 total_ms=130.13
+run=6 wall_ms=17.29 cpu_ms=17.29 total_ms=128.58
+run=7 wall_ms=17.71 cpu_ms=17.71 total_ms=130.52
+run=8 wall_ms=17.60 cpu_ms=17.58 total_ms=127.49
+run=9 wall_ms=17.45 cpu_ms=17.45 total_ms=129.48
+canonical_walk::walk   n=9 median_wall_ms=17.45 [17.12, 17.71] median_cpu_ms=17.45
 
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml commit_only::touch std::jgir canonical=true --time-phases=/tmp/camel-capture-all.1221457.YNydgy/ph-commit-<n>.json   (nine times, a fresh process each)
-run=1 wall_ms=1.54 cpu_ms=1.54 total_ms=94.76
-run=2 wall_ms=1.52 cpu_ms=1.52 total_ms=91.65
-run=3 wall_ms=1.56 cpu_ms=1.51 total_ms=92.93
-run=4 wall_ms=1.62 cpu_ms=1.62 total_ms=94.57
-run=5 wall_ms=2.62 cpu_ms=1.67 total_ms=133.94
-run=6 wall_ms=1.66 cpu_ms=1.66 total_ms=168.65
-run=7 wall_ms=1.59 cpu_ms=1.59 total_ms=96.43
-run=8 wall_ms=1.82 cpu_ms=1.78 total_ms=100.37
-run=9 wall_ms=1.76 cpu_ms=1.76 total_ms=98.87
-commit_only::touch     n=9 median_wall_ms=1.62 [1.52, 2.62] median_cpu_ms=1.62
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml commit_only::touch std::jgir canonical=true --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/ph-commit-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=1.57 cpu_ms=1.57 total_ms=91.80
+run=2 wall_ms=1.66 cpu_ms=1.66 total_ms=90.01
+run=3 wall_ms=1.60 cpu_ms=1.60 total_ms=91.04
+run=4 wall_ms=1.56 cpu_ms=1.56 total_ms=92.52
+run=5 wall_ms=1.54 cpu_ms=1.54 total_ms=94.32
+run=6 wall_ms=1.68 cpu_ms=1.68 total_ms=96.76
+run=7 wall_ms=1.54 cpu_ms=1.54 total_ms=97.14
+run=8 wall_ms=1.57 cpu_ms=1.57 total_ms=92.09
+run=9 wall_ms=1.57 cpu_ms=1.57 total_ms=91.21
+commit_only::touch     n=9 median_wall_ms=1.57 [1.54, 1.68] median_cpu_ms=1.57
 
-#   /proc/loadavg 16.73 20.81 20.28 39/10197 1226471
+#   /proc/loadavg 21.35 25.87 24.17 12/10388 2226761
 # --- what one commit costs against the size of the program ---
 # `commit_only::touch` opens a transaction on the program and commits it with no edit in
 # between, so the number is the checks and the publish of a program nothing changed: the floor a
@@ -1186,24 +1197,24 @@ commit_only::touch     n=9 median_wall_ms=1.62 [1.52, 2.62] median_cpu_ms=1.62
 # bigger ones are the benchmark models, which import `camel_bench` and so take benchmarks/common
 # as a module root (see its definition at the top); neither is a showcase, so their entry point
 # is a model rather than a training loop -- the reading is the commit path, which does not care.
-#   /proc/loadavg 16.73 20.81 20.28 40/10197 1226472
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/benchmarks/common camel benchmarks/resnetbn/model.cml std::jgir canonical=true > scale-resnetbn.json
+#   /proc/loadavg 21.35 25.87 24.17 13/10388 2226762
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common camel benchmarks/resnetbn/model.cml std::jgir canonical=true > scale-resnetbn.json
 doc=scale-resnetbn exit=0 bytes=577824 md5=eb5748b090028cc66ca4d97deb31e3be sha256=fd79a994c9f663c1f322cad45e01adc62e5d6d53435560b17a69775365fdb9ed
 
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/benchmarks/common camel benchmarks/resnet/model.cml std::jgir canonical=true > scale-resnet.json
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common camel benchmarks/resnet/model.cml std::jgir canonical=true > scale-resnet.json
 doc=scale-resnet exit=0 bytes=335262 md5=f1c28a1b9de2b658ef9eebb0f0ab82a3 sha256=4a955f0fc440b14863e1a036b35d84fece46736aa32e27072143d16a9ab461bf
 
 
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/capA/out/latest/bin/camel examples/case-study/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-commit-case-<n>.json   (nine times, a fresh process each)
-commit-case          n=9 of 9  median_wall_ms=    1.71 [    1.59,     5.82]  median_cpu_ms=    1.71 [    1.59,     2.01]  nodes=217
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-commit-mlp-<n>.json   (nine times, a fresh process each)
-commit-mlp           n=9 of 9  median_wall_ms=    1.77 [    1.69,     2.69]  median_cpu_ms=    1.74 [    1.69,     2.05]  nodes=355
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c3-char-transformer/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-commit-tr-<n>.json   (nine times, a fresh process each)
-commit-tr            n=9 of 9  median_wall_ms=    2.22 [    1.94,     2.32]  median_cpu_ms=    2.09 [    1.94,     2.22]  nodes=657
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/benchmarks/common:/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/capA/out/latest/bin/camel benchmarks/resnetbn/model.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-commit-resnetbn-<n>.json   (nine times, a fresh process each)
-commit-resnetbn      n=9 of 9  median_wall_ms=    2.33 [    2.20,     7.02]  median_cpu_ms=    2.27 [    2.20,     3.03]  nodes=1099
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/benchmarks/common:/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/capA/out/latest/bin/camel benchmarks/resnet/model.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-commit-resnet-<n>.json   (nine times, a fresh process each)
-commit-resnet        n=9 of 9  median_wall_ms=    2.06 [    2.00,    12.40]  median_cpu_ms=    2.06 [    2.00,     4.33]  nodes=688
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-case-<n>.json   (nine times, a fresh process each)
+commit-case          n=9 of 9  median_wall_ms=    1.59 [    1.55,     1.67]  median_cpu_ms=    1.59 [    1.55,     1.67]  nodes=217
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-mlp-<n>.json   (nine times, a fresh process each)
+commit-mlp           n=9 of 9  median_wall_ms=    1.62 [    1.55,     1.64]  median_cpu_ms=    1.62 [    1.55,     1.64]  nodes=355
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-tr-<n>.json   (nine times, a fresh process each)
+commit-tr            n=9 of 9  median_wall_ms=    1.95 [    1.89,     2.08]  median_cpu_ms=    1.95 [    1.89,     2.08]  nodes=657
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common:/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel benchmarks/resnetbn/model.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-resnetbn-<n>.json   (nine times, a fresh process each)
+commit-resnetbn      n=9 of 9  median_wall_ms=    2.09 [    2.03,     2.14]  median_cpu_ms=    2.09 [    2.03,     2.14]  nodes=1099
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common:/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel benchmarks/resnet/model.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-resnet-<n>.json   (nine times, a fresh process each)
+commit-resnet        n=9 of 9  median_wall_ms=    1.78 [    1.74,     1.83]  median_cpu_ms=    1.78 [    1.74,     1.83]  nodes=688
 
 # --- the same commit with ONE node changed, on the char-transformer ---
 # `commit_one::poke` is `commit_only::touch` plus exactly one edit: it adds one constant node to
@@ -1213,7 +1224,7 @@ commit-resnet        n=9 of 9  median_wall_ms=    2.06 [    2.00,    12.40]  med
 # The document below is the proof the edit landed: it is the transformer after the poke, and its
 # node count is the untouched program's plus one. The probe itself prints nothing, because a
 # line per run would be charged inside the window it measures.
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes camel showcase/c3-char-transformer/train.cml commit_one::poke std::jgir canonical=true > tr-poked.json
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel showcase/c3-char-transformer/train.cml commit_one::poke std::jgir canonical=true > tr-poked.json
 doc=tr-poked exit=0 bytes=277115 md5=abbc362428b80330086fa205e390d24a sha256=8f9e79ecff6621185fe3c55ae7256c526f0b19c76561827209880bee00cabfe2
 --- stderr (tr-poked)
 warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
@@ -1235,12 +1246,12 @@ help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm end
 --- end stderr (tr-poked)
 
 # the edit: 657 nodes before, 658 after, +1 node(s)
-### CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/capA/out/latest/bin/camel showcase/c3-char-transformer/train.cml commit_one::poke std::gir --time-phases=/tmp/camel-capture-all.1221457.YNydgy/t-commit-tr-poke-<n>.json   (nine times, a fresh process each)
-commit-tr-poke       n=9 of 9  median_wall_ms=    2.70 [    2.62,     3.14]  median_cpu_ms=    2.68 [    2.62,     2.72]  nodes=658
-#   /proc/loadavg 19.85 21.35 20.46 36/10170 1227319
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml commit_one::poke std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-tr-poke-<n>.json   (nine times, a fresh process each)
+commit-tr-poke       n=9 of 9  median_wall_ms=    2.51 [    2.48,     2.71]  median_cpu_ms=    2.51 [    2.48,     2.71]  nodes=658
+#   /proc/loadavg 21.41 25.80 24.16 10/10308 2228057
 
 === [8] loss-a against loss-b: the two documents, what is NOT in them, and the numbering ===
-# build=213b4f70d
+# build=6cb6fa721
 # READ THIS FIRST. This section used to say the derivative graph is a graph of the canonical
 # document ('the derivative is a library transform that runs at compile time, so the derivative
 # graph is a graph of the canonical document'). On this build it is not:
@@ -1424,7 +1435,7 @@ loss-a after opt, twice  same
 
 
 === [9] the e2e lane: all of e2e/capture.sh, run unchanged ===
-# build=213b4f70d
+# build=6cb6fa721
 # This is that script, not a copy of its commands: if the two ever drift, this section says so.
 # It moves to the worktree root and to the e2e directory itself, which is where `passes` is
 # found beside the program. Its own header prints the build it ran on. The three versions of the
@@ -1442,20 +1453,21 @@ loss-a after opt, twice  same
   "schema": 3,
   "config": "Release",
   "tag": "latest",
-  "footprint": "261120_084852_1ae20e5b0",
-  "builtAt": "2026-11-20T09:08:54.352Z",
-  "revision": "213b4f70d242bc049cb47b043a2a5d35eb369b65",
-  "dirty": true,
-  "dirtyCount": 1,
-  "dirtyPaths": [
-    "docs/handover/reports/eval-round10/capture-all.sh"
-  ],
+  "footprint": "261120_095154_6cb6fa721",
+  "builtAt": "2026-11-20T09:55:01.522Z",
+  "revision": "6cb6fa72157240729f04a9a8b787b222b96c473a",
+  "dirty": false,
+  "dirtyCount": 0,
+  "dirtyPaths": [],
   "git": true,
   "fingerprint": {
     "version": 1,
     "roots": [
       "src",
-     
+      "include",
+      "modules",
+      "tools",
+      "stdlib"
 
 ===== A: before the edit =====
 ### camel program.cml std::nvm
@@ -1566,7 +1578,7 @@ total 86 tail 14
 ===== the edits the commit refuses =====
 ### camel program.cml passes::instrument_unordered std::nvm
 error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 9 of graph '__g_441__' (:io/println), in one region of graph '__g_441__', has no order against node 13 of graph '__g_441__' (:io/println), and at least one of the two writes (write stdout / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
-    --> /home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/e2e/passes.cml:146:12
+    --> /home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/e2e/passes.cml:146:12
      |
  146 |     return println('# tick')
      |            ^^^^^^^
@@ -1756,7 +1768,7 @@ total 86 tail 14
 
 
 === [10] [C] std::prl: 200 runs of the case and of the e2e program, and what is compared ===
-# build=213b4f70d
+# build=6cb6fa721
 # The question is whether the scheduler's parallel execution is observable in the output. The
 # comparison is over RAW BYTES: nothing is masked. Neither program prints a time, a path or a
 # pid, so there is nothing to mask -- and a mask here would hide the very thing asked about, so
@@ -1767,19 +1779,19 @@ total 86 tail 14
 # (instrument then report), because a run whose passes walk the graph is the run in which work
 # could be ordered differently.
 
-### 200 runs, a fresh process each: /home/zjwei/camel-work/capA/out/latest/bin/camel examples/case-study/train.cml std::prl
+### 200 runs, a fresh process each: /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml std::prl
 case-prl               stdout sha256=5cd621c316969fc92cd0e5a0d907ea2189067db21aa1e13936f7df9e5c731325 bytes=69 runs=200
 case-prl               stderr sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 runs=200
 case-prl               exit   code=0 runs=200
 case-prl               runs=200 distinct_stdout=1 distinct_stderr=1 distinct_exit=1 => byte-identical
 
-### 200 runs, a fresh process each: /home/zjwei/camel-work/capA/out/latest/bin/camel docs/handover/reports/eval-round10/e2e/program.cml std::prl
+### 200 runs, a fresh process each: /home/zjwei/camel-work/cap8/out/latest/bin/camel docs/handover/reports/eval-round10/e2e/program.cml std::prl
 e2e-prl                stdout sha256=8c43fab1f44428deeddfa7f93e4da95bb517c0e650a26f39e328826c5ac3afff bytes=69 runs=200
 e2e-prl                stderr sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 runs=200
 e2e-prl                exit   code=0 runs=200
 e2e-prl                runs=200 distinct_stdout=1 distinct_stderr=1 distinct_exit=1 => byte-identical
 
-### 200 runs, a fresh process each: CAMEL_PACKAGES=/home/zjwei/camel-work/capA/docs/handover/reports/eval-round10/e2e /home/zjwei/camel-work/capA/out/latest/bin/camel docs/handover/reports/eval-round10/e2e/program.cml passes::instrument passes::report std::prl
+### 200 runs, a fresh process each: CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/e2e /home/zjwei/camel-work/cap8/out/latest/bin/camel docs/handover/reports/eval-round10/e2e/program.cml passes::instrument passes::report std::prl
 e2e-prl-passes         stdout sha256=035d2a8403053c8786ed89f7d68d28639b4634c0f018690eb85e3e562e2f0231 bytes=146 runs=200
 e2e-prl-passes         stderr sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 runs=200
 e2e-prl-passes         exit   code=0 runs=200
@@ -1793,7 +1805,7 @@ e2e against e2e+passes (must differ)       differs first_difference_byte=1
 
 
 === [11] [E] the scheduling seed: the switch does not exist, and where the random actually lives ===
-# build=213b4f70d
+# build=6cb6fa721
 # One of the five readings has no row, and this section says so with the searches that would have
 # found a switch. Three sentences in this order: what was searched; the hits and why none of them
 # is a seed; where the random actually lives.
@@ -1804,7 +1816,7 @@ src/passes/sched/fastvm/jit/mir/mir_builder.h:684:    // SysV AMD64 restores jit
 src/passes/sched/fastvm/jit/mir/mir_encode.cpp:571:            // r13 is seeded once by the SysV entry wrapper and survives helper calls.
 ### git grep -n 'seed' -- docs/cli.md
 (no hit)
-### /home/zjwei/camel-work/capA/out/latest/bin/camel --help | grep -iE 'seed|thread'   (the option table itself)
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel --help | grep -iE 'seed|thread'   (the option table itself)
         camel [-P] [-S <scheduler type>] [-t <max threads>] [--max-recursion-depth <calls>]
         -t, --threads <max threads>
                     max threads
