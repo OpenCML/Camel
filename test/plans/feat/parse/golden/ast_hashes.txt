@@ -560,7 +560,7 @@ b2579aff6f390432 ok stdlib/tree.cml
 3c09a0494de711d5 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-22816a141d9b4fd0 ok stdlib/rulesets/transpose.cml
+2cd34cf2eb58742a ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f3e1daeaada48d18 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml

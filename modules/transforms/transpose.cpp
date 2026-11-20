@@ -3345,8 +3345,23 @@ bool buildTransposeMember(
                         }
                         if (!noInstance) {
                             refuse(TransposeRefusalCause::LawReadsAValue);
-                            os << " uri=" << body->uri() << " position=" << i << " reason=" << why
-                               << '\n';
+                            // The operands, because the two answers to this refusal are told apart
+                            // by them and a reader has nothing else: an operand whose declaration
+                            // writes its extents is a shape to write down (and this cause's
+                            // neighbour, `ParameterShape`, says so when one is behind it), while a
+                            // pair whose types state no extents is a value to carry. The list is
+                            // the node's normal inputs in order, the ct not among them.
+                            os << " uri=" << body->uri() << " position=" << i
+                               << " operand-types=";
+                            for (size_t operand = 0; operand < inputs.size(); ++operand) {
+                                const camel::runtime::GCNode *const inputNode =
+                                    function->node(inputs[operand]);
+                                os << (operand == 0 ? "" : ",")
+                                   << (inputNode != nullptr
+                                           ? camel::core::type::typeToString(inputNode->dataType())
+                                           : std::string("?"));
+                            }
+                            os << " reason=" << why << '\n';
                             return {};
                         }
                         refuse(TransposeRefusalCause::RuleRanks);
@@ -4324,7 +4339,23 @@ bool buildTransposeMember(
                         }
                         if (!noInstance) {
                             refuse(TransposeRefusalCause::LawReadsAValue);
-                            os << " uri=" << uri << " position=" << i << " reason=" << why << '\n';
+                            // The operands' own types, because the two answers to this refusal are
+                            // told apart by them and a reader has nothing else: an operand whose
+                            // declaration writes its extents is a shape to write down (the
+                            // neighbour cause `ParameterShape` says so when one is behind it), while
+                            // a pair whose types state no extents is a value to carry. This is the
+                            // same field the arm walk prints; `operands=` at the rank refusal above
+                            // is a count and not a list.
+                            os << " uri=" << uri << " position=" << i << " operand-types=";
+                            for (size_t operand = 0; operand < inputs.size(); ++operand) {
+                                const camel::runtime::GCNode *const inputNode =
+                                    function->node(inputs[operand]);
+                                os << (operand == 0 ? "" : ",")
+                                   << (inputNode != nullptr
+                                           ? camel::core::type::typeToString(inputNode->dataType())
+                                           : std::string("?"));
+                            }
+                            os << " reason=" << why << '\n';
                             return false;
                         }
                         refuse(TransposeRefusalCause::RuleRanks);
