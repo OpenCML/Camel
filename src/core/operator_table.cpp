@@ -933,16 +933,33 @@ std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
     return id;
 }
 
+std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionType *value) {
+    if (value == nullptr || value->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+        return std::nullopt;
+    }
+    return value->resources();
+}
+
+size_t functionValueWithBase(sem::ResourceBinding::Kind kind, size_t index) {
+    return kind == sem::ResourceBinding::Kind::With ? index + 1 : 0;
+}
+
+FunctionValueClause functionValueClauseAt(
+    const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index) {
+    FunctionValueClause out;
+    out.clause      = functionValueClause(value);
+    out.withArgBase = functionValueWithBase(kind, index);
+    out.withCount   = value != nullptr ? value->withTypesCount() : 0;
+    return out;
+}
+
 std::optional<sem::ResourceSignature> functionOperandClause(
     const OperatorTable &table, OperId id, const type::FunctionType *value) {
     const sem::OperatorSemantics *facts = table.semantics(id);
     if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
         return std::nullopt;
     }
-    if (value == nullptr || value->resources().mode != sem::ResourceSignature::Mode::Concrete) {
-        return std::nullopt;
-    }
-    return value->resources();
+    return functionValueClause(value);
 }
 
 } // namespace camel::core

@@ -263,7 +263,9 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // A call through a function value: the value's type is all there is to read at this call,
         // and one that writes no clause promises nothing -- what it reaches is fixed by the
         // instantiation, which may write a cell or print -- so it is read conservatively. Only a
-        // type that promises the empty set says the call is not an effect.
+        // type that promises the empty set says the call is not an effect. The clause is read in
+        // one place (`core::functionValueClause`), the same one the builder's ordering and the
+        // runtime's footprint ask.
         const auto callee = withInputsOf(node);
         if (callee.empty()) {
             return false;
@@ -272,8 +274,13 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         if (type == nullptr || type->code() != TypeCode::Function) {
             return false;
         }
-        const auto *func = tt::as_ptr<FunctionType>(type);
-        return !func->resources().pure();
+        const auto *func     = tt::as_ptr<FunctionType>(type);
+        const auto site      = camel::core::functionValueClauseAt(
+            func, camel::core::sem::ResourceBinding::Kind::With, 0);
+        if (!site.clause.has_value()) {
+            return true; // no clause written: the conservative answer, an effect
+        }
+        return !site.clause->pure();
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
