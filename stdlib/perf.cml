@@ -6,10 +6,9 @@ import { sqrt } from math
 import { mean } from array
 import { stdev } from statistics
 
-// The durations, one per repetition, the first repetition first. `timeit` used to take the array as
-// a `var` parameter and hand it on through a partial application, which is a `var` captured by a
-// value; a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
-// The answer is a value now, so nothing is carried.
+// The durations, one per repetition, the first repetition first. The answer is a value, so
+// nothing is carried through a closure: a closure may not assign an outer name (design principles
+// 3.5).
 with <repeat: int>
 export func timeit(fn: () => void): float[] sync {
     if repeat <= 0 then {

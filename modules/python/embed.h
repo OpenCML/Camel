@@ -195,8 +195,8 @@ inline void promote_libpython_to_global() {
 // a system Python, `C:\hostedtoolcache\...\bin` in CI -- while the prefix CPython wants as its home
 // is the one that holds `lib/pythonX.Y/os.py` (`/usr`). Handing the executable's directory over
 // makes CPython look for `/usr/bin/lib/python3.10`, find no standard library and stop with "failed
-// to get the Python codec of the filesystem encoding", which is what a Linux host saw on
-// 2026-11-03 (Windows retains `home` as written: there the two are the same directory).
+// to get the Python codec of the filesystem encoding", which is what a Linux host sees
+// (Windows retains `home` as written: there the two are the same directory).
 inline std::string basePrefixFromVenvHome(const std::string &homeInCfg) {
 #if defined(_WIN32)
     return homeInCfg;

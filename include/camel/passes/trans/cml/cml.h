@@ -1,7 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// `std::cml`: print a runtime program as Camel source (step S1).
+// `std::cml`: print a runtime program as Camel source.
 
 #pragma once
 

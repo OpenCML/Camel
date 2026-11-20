@@ -373,7 +373,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
 bool Builder::branchTakesNoValue(const GCT::node_ptr_t &gct) const {
     // A `return` in a function declared `: void`, and the tail of such a body, stand in a
     // position whose type is `void`: nothing takes what the branch gives there (design
-    // principles 3.7, and the ruling on the arm of a branch at a position that takes no value).
+    // principles 3.7).
     if (expectedValueType_ != nullptr && expectedValueType_->code() == TypeCode::Void) {
         return true;
     }
@@ -388,7 +388,7 @@ void Builder::readArmCellValue(const arm_ptr_t &arm) {
         return;
     }
     // A cell is not a value: an arm that gives one gives the value the cell holds, and the
-    // cell's type never reaches the join (the ruling on the cell-typed arm of a branch). The
+    // cell's type never reaches the join. The
     // read takes the data edge every read has -- the version the last write made, or the cell
     // itself before any write (`valueVersionOf`), and the cell itself for a write that gives
     // the cell it wrote into (`__assn__`) -- and nothing else: it stands in the arm's region,
@@ -1619,8 +1619,8 @@ node_handle_t Builder::buildBranch(
     }
     // A position that takes no value joins nothing: an `if` without `else` is one (`valueless`,
     // `dropsArmValues`), and so is a branch at a `void` position or written as a statement whose
-    // value the block drops. One rule (design principles 3.7, and the ruling on the arm of a
-    // branch at a position that takes no value): the arms' effects happen, no value is joined,
+    // value the block drops. One rule (design principles 3.7):
+    // the arms' effects happen, no value is joined,
     // and what the arms give is dropped. It is known before the arms are added, and an `if` that
     // does write an `else` does not undo it.
     const bool joinsNoValue = dropsArmValues || branchTakesNoValue(gct);
@@ -1639,8 +1639,8 @@ node_handle_t Builder::buildBranch(
         armList.push_back(arm);
         if (!joinsNoValue && !absentElse) {
             // A position that takes a value reads a cell out before the arms are joined: an arm
-            // of `var T` joins as its `T` (design principles 3.8, and the ruling on the
-            // cell-typed arm). Nothing is read where the join takes no value.
+            // of `var T` joins as its `T` (design principles 3.8).
+            // Nothing is read where the join takes no value.
             readArmCellValue(arm);
         }
         Type *exitType = arm->exitType();
@@ -1771,7 +1771,7 @@ node_handle_t Builder::buildBranch(
     // records are the ones the joins above read, and the depth is what says whether a branch is
     // open at all.
     ssa_.endBranch();
-    // A `var` an arm writes as a value is carried by the branch's JOIN (stage S2). The join has one
+    // A `var` an arm writes as a value is carried by the branch's JOIN. The join has one
     // value slot, so the scan lets a branch write one declaration and no more; an arm that writes
     // nothing hands out the value the declaration had before the branch, which is why the
     // pre-branch value is taken while the arms are built (SsaEnv::rebind). What the arms wrote is
@@ -1858,16 +1858,16 @@ node_handle_t Builder::buildBranch(
     // branch joins no value, but the arms' writes are still that branch's value: each arm gives
     // what it wrote, which already stands in the join's WITH slot, and an arm that did not write
     // (`if c then { x = 1 }`) gives the value the `var` had before the branch. That is the shape
-    // the ruling names: `if c then { x = 1 }` is `x = if c then 1 else x`, and
+    // the rule names: `if c then { x = 1 }` is `x = if c then 1 else x`, and
     // `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else 2` (design principles 3.5,
-    // the ruling of 2026-11-15: `var` is lowered to SSA, a branch assignment is a result of the
+    //  `var` is lowered to SSA, a branch assignment is a result of the
     // branch).
     //
     // The carry is one variable per branch, because the WITH slots are one per arm and not one per
     // variable: a branch whose arms write two or more `var`s has no slot to merge them in and keeps
     // its cells. A `var` that escapes through a closure or a `var` argument keeps its cell too, and
     // so does a `var` parameter. A write inside a loop is carried state, the third of the places
-    // the ruling names: this path sees a JOIN, never a LOOP.
+    // the rule names: this path sees a JOIN, never a LOOP.
     node_handle_t mergeVariable{};
     if (joinsNoValue && joinWithInputs.size() == armList.size() && !armList.empty()) {
         // For each distinct `var` the arms wrote: one entry per arm, holding the value that arm's
@@ -2003,7 +2003,7 @@ node_handle_t Builder::buildBranch(
                 joinType      = valueType;
                 mergeVariable = variable;
                 // The branch is this variable's write from here on: a read written after it takes
-                // the join, and the `sync` block that used to order such a read is not needed.
+                // the join, so no `sync` block is needed to order such a read.
                 carriedVersions_[variable] = joinNode;
             }
         }
@@ -2030,7 +2030,7 @@ node_handle_t Builder::buildBranch(
     if (!ssaCarried.empty()) {
         // The join is the name's value from here on: an arm that wrote it hands that value out, and
         // the arm that wrote nothing hands out the value the name had before the branch. A loop
-        // head around this branch carries the name as a value too (stage S3), and the value it
+        // head around this branch carries the name as a value too, and the value it
         // carries is the join -- not the value of the arm that happened to be built last.
         ssa_.rebind(nodeScope_, ssaCarried, joinNode, armWritesHere());
         noteLoopStateWrite(ssaCarried, joinNode);
@@ -2326,7 +2326,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         node_handle_t start = nullptr;
         std::string name;
         node_handle_t port = nullptr;
-        /// The state is a value, not a cell (stage S3): the body's name is the port, a write
+        /// The state is a value, not a cell: the body's name is the port, a write
         /// rebinds it and is the round's next value, and the head's phi is the port.
         bool ssa = false;
     };
@@ -2334,7 +2334,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     {
         // The names assigned by a statement of the body's block, in the order they are written; the
         // names assigned below it in a region this loop can hand the value back out of -- an arm of
-        // a statement branch (S2's JOIN) or a loop body (that head's value, S3) -- in the order
+        // a statement branch (a JOIN) or a loop body (that head's value) -- in the order
         // they are first written there; and the names assigned in a region it cannot (a block of
         // its own, a closure's body, a static loop's), which are left to that region's own
         // lowering.
@@ -2417,7 +2417,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             }
         }
         // A name a region this loop cannot hand a value back out of writes keeps its cell: that is
-        // what the shape was before S2 and S3, and it is the cheap direction to be wrong in.
+        // the cheap direction to be wrong in.
         for (const std::string &name : carriedWrites) {
             if (outsideWrites.contains(name) || seenWrites.contains(name)) {
                 continue;
@@ -2452,14 +2452,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             const node_handle_t bound = resolved.value();
-            // A name the declaration built as a value (stages S1-S3) is carried as a value: the
+            // A name the declaration built as a value is carried as a value: the
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
             const SsaEnv::Entry *ssa = ssa_.find(nodeScope_, name);
             const node_handle_t value = ssa_.valueOf(ssa);
             const bool asValue        = ssa != nullptr && value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
-            // region of its own does -- the rule this loop had before S2 and S3, and the reason a
+            // region of its own does, which is the reason a
             // write inside a block of the body is left to that block: the port is read where the
             // write stands, so a write the round may skip cannot be the state. A value has no cell
             // to fall back to, and the regions the scan lets such a name be used across (an arm,
@@ -2539,12 +2539,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // A `for` over an array of any rank is the core's, and no module takes part in it: `t[i]`
     // takes the i-th along the first dimension (design principles 5.4), so the round of a rank-1
     // array is its element and the round of a higher-rank one is the row one dimension shorter
-    // (ArrayType::firstDimensionElement). The tensor module used to declare `__iter__` for a
-    // numeric array (`tensor:iter`, sub-arrays along the first dimension), and asking it here
-    // made the iterable position an OPER node: that is what hid a constant array's row count
+    // (ArrayType::firstDimensionElement). The tensor module declares no `__iter__` for a
+    // numeric array (`tensor:iter`, sub-arrays along the first dimension): asking it here
+    // would make the iterable position an OPER node, which would hide a constant array's row count
     // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). Design principles 5.4
-    // states it once, in the core, for every array; the module's `iter` went with the P4 alias
-    // (one thing, one spelling).
+    // states it once, in the core, for every array (one thing, one spelling).
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
@@ -2746,7 +2745,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             buildArm(gct->loopBody(), {}, runtime::GCRegionKind::LoopBody, [&](ArmBuild &part) {
                 declarePorts(part, hasIterable, gct->loopBody());
                 // The name of a carried `var` is the port the body reads and writes. A state the
-                // declaration built as a value (stage S3) binds the name to the port as that value:
+                // declaration built as a value binds the name to the port as that value:
                 // a read takes the port, an assignment rebinds it, and the write is the round's
                 // next state (noteLoopStateWrite). A state that is still a cell hands the name to
                 // the port and the port stands for the cell (loopStateAssignmentOf).
@@ -3377,11 +3376,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // destructuring is. No `:var/get` is made, and nothing of the `var`'s unit is left to read
     // (dropCarriedVariableUnits).
     //
-    // A state the declaration built as a value (stage S3) is the head's phi for the name: the name
+    // A state the declaration built as a value is the head's phi for the name: the name
     // is rebound to what the head hands out, so every read after the loop takes that value and no
     // cell is involved anywhere. The rebinding is a write of the name in the region the loop is
     // written in, so the head of a loop *around* this one takes it too (noteLoopStateWrite), and an
-    // arm around it has the join carry it (S2).
+    // arm around it has the join carry it.
     for (size_t j = 0; j < carried.size(); ++j) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
@@ -3816,15 +3815,15 @@ node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
-    // A `yield` is a node of the construction tree from 2026-11-18 (author's ruling: the generator
-    // body is built here, and the machine splits the body into arms at the `yield` it finds -- and
-    // it can only find what the tree holds). Exactly one machine claims such a node
+    // A `yield` is a node of the construction tree: the generator body is built here, and the
+    // machine splits the body into arms at the `yield` it finds -- and it can only find what the
+    // tree holds. Exactly one machine claims such a node
     // (`buildGeneratorBody`, `builder_generator.cpp`); one that arrives here is a `yield` nobody
-    // claimed, and the reading is the one the GCT statement builder kept until this seam opened:
+    // claimed, and the reading is:
     // "a `yield` reached the statement builder, so the generator machine did not claim it. Nothing
-    // in the program is wrong: the machine missed a shape it builds". It was an internal error
-    // there and it is one here: a refusal is not a defect of the program (author's ruling of
-    // 2026-11-02), so the text never asks the reader to send it.
+    // in the program is wrong: the machine missed a shape it builds". It is an internal error
+    // all the same: a refusal is not a defect of the program, so the text never asks the
+    // reader to send it.
     if (gct->exitType() != ExitType::Return) {
         diags_->of(InternalDiag::UnknownInternalError)
             .atOrigin(gct->origin())

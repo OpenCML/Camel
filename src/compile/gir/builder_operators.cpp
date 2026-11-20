@@ -2004,7 +2004,7 @@ void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
 }
 
 node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
-    // `x = e` where `x` is a `var` built as a value (stage S1 of the direct-SSA plan). The name
+    // `x = e` where `x` is a `var` built as a value. The name
     // stands for a value, so the write is the value: `e` is built where the store would have put
     // it -- in the type the cell would have held, so a value of another type is refused as it was
     // -- and the name is rebound to it. Nothing is stored, and no cell is read or written, which
@@ -2071,7 +2071,7 @@ node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
         ssa_.noteWrite(value, at != camel::source::kInvalidOriginId ? at : gct->origin());
     }
     ssa_.rebind(nodeScope_, name, value, armWritesHere());
-    // The write is the round's next state where a loop head carries the name as a value (stage S3):
+    // The write is the round's next state where a loop head carries the name as a value:
     // the head's phi takes it instead of a cell (loopStateAssignmentOf, noteLoopStateWrite).
     noteLoopStateWrite(name, value);
     return value;
@@ -2139,9 +2139,9 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
 
 void Builder::noteLoopStateWrite(const std::string &name, node_handle_t value) {
     // The same record the cell path makes where the write stands (loopStateAssignmentOf above), for
-    // a `var` the loop head carries as a value (stage S3): the round's next state is the value just
+    // a `var` the loop head carries as a value: the round's next state is the value just
     // written. The write itself can stand anywhere in the body -- a statement of the body's block,
-    // an arm of a branch inside it (where S2's JOIN is the value), or a loop body inside it (where
+    // an arm of a branch inside it (where the JOIN is the value), or a loop body inside it (where
     // that head's value is) -- and each of those hands the value to this head when it is done, so
     // every path that finishes a write calls this one. A name no head of this build carries is not
     // loop state: the environment holds no port for it and nothing is recorded.
@@ -2187,7 +2187,7 @@ node_handle_t Builder::visitAssignNode(const GCT::node_ptr_t &gct) {
         LEAVE("ASSIGN");
         return rebound;
     }
-    // A write to a `var` built as a value (stage S1 of the direct-SSA plan): the name is rebound,
+    // A write to a `var` built as a value: the name is rebound,
     // and nothing is stored. The statement is worth the value the write gave, which is what the
     // read of the name after it takes. A dropped assignment is a dropped value, and it is reported
     // as one (UnusedAssignedValue) rather than as a pure call whose result nobody takes.
@@ -2216,7 +2216,7 @@ node_handle_t Builder::visitAssignNode(const GCT::node_ptr_t &gct) {
         }
     }
     // What is left is a store: the cell the target is, and the value written into it. The call is
-    // the one the write used to be spelled as -- a call of the group that writes its first
+    // the one the write is spelled as -- a call of the group that writes its first
     // argument -- and its form says which store this is.
     const GCT::AssignmentForm form  = gct->assignmentForm();
     GCT::node_ptr_t store           = tree_->makeLink(2);
@@ -2243,10 +2243,9 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
     //    chosen by the arguments' types. It has no single id (an assignment the program may also
     //    write as `=`), so it stays by name -- the one place a name is the reference, and here it
     //    is the store's own name, not the write's. The name itself is `core::kAssignmentGroup`:
-    //    the table in `operator_names.cpp` states it once, and this switch asks for it (daily
-    //    review 2026-11-18, item 4). The rebuild writes through that same name, without the
-    //    `$builtin::` prefix it carried until 2026-11-19 -- the prefix only marked a name the
-    //    compiler made, and that marking cost three readers a prefix judgement of their own.
+    //    the table in `operator_names.cpp` states it once, and this switch asks for it. The rebuild
+    //    writes through that same name; a `$builtin::` prefix would only mark a name the compiler
+    //    made and cost readers a prefix judgement of their own.
     //  - `op=`: the compound group, whose overload set is what says whether the write is defined
     //    for these types (the node carries it, see AssignmentForm::Compound).
     //  - the rebinding to an in-place operator's result: that operator, by id.
@@ -2258,10 +2257,8 @@ GCT::node_ptr_t Builder::makeStoreOperator(const GCT::node_ptr_t &gct) {
     case GCT::AssignmentForm::Rebuilt:
     case GCT::AssignmentForm::Plain:
         // One group for both: the whole variable's rebuild writes through the same assignment
-        // group `=` names, and `core::kAssignmentGroup` is where the name is stated. Until
-        // 2026-11-19 the rebuild prefixed it with `$builtin::` to mark a name the compiler made,
-        // which cost three readers a prefix judgement (daily review 2026-11-18, item 4); the
-        // bare name resolves to that same group, which is the only thing the prefix ever meant.
+        // group `=` names, and `core::kAssignmentGroup` is where the name is stated. The bare name
+        // resolves to that same group; a `$builtin::` prefix would only mark a name the compiler made.
         dref = tree_->makeDRef(std::string(camel::core::kAssignmentGroup));
         break;
     case GCT::AssignmentForm::Owned:
@@ -2441,8 +2438,8 @@ node_handle_t Builder::visitLinkNode(
                   targetNode,
                   gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
     // The type of the position the call stands in, aligned with the callee's result type, solves
-    // the type variables that result mentions (design principles 5.1, 5.5; the rule of
-    // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result
+    // the type variables that result mentions (design principles 5.1, 5.5).
+    // Every variable the result
     // mentions — not only one that appears in the result alone — is solved here, and a parameter
     // that mentions one of them is a position with an expected type like any other: the
     // arguments are built with the substituted parameter, so `keep([1.0, 2.0], 2)` in an `f32[]`
@@ -2479,7 +2476,7 @@ node_handle_t Builder::visitLinkNode(
     // into a body in place of the call, and no instance is made (inlineRestCall). A pack among the
     // `with` parameters is a pack like any other -- it stands for the `with` arguments given past
     // the fixed ones -- so a function that writes one is expanded the same way, and the body reads
-    // the pack's own arguments as a compile-time tuple (language author, 2026-11-03; design
+    // the pack's own arguments as a compile-time tuple ( design
     // principles 4.4, 5.6).
     generic_template_ptr_t restTemplate;
     if (auto generic = genericDrefs_.find(targetNode);
@@ -2840,8 +2837,8 @@ node_handle_t Builder::visitLinkNode(
     // An argument that is still a name without a single function value (several overloads, or
     // an operator whose signature is not one function type). Where the callee has one known
     // signature and its parameter there is a function type, the overload with exactly that
-    // type is the argument. Anywhere else the name has no value: it used to be passed on as
-    // a value of type void, which ended in "No matching function ... <void>" or, when the
+    // type is the argument. Anywhere else the name has no value: passing it on as
+    // a value of type void would end in "No matching function ... <void>" or, when the
     // callee takes anything (`println(println)`), in an internal error about a live DREF.
     {
         FunctionType *knownCalleeType = nullptr;
@@ -3221,8 +3218,8 @@ node_handle_t Builder::visitLinkNode(
         }
     }
 
-    // A call with an argument of type `never` never runs (design principles 3.9; the author's
-    // ruling of 2026-10-26 on `never-argument-scope`): an argument is evaluated before the call
+    // A call with an argument of type `never` never runs (design principles 3.9):
+    // an argument is evaluated before the call
     // it is written in, and this one never gives a value, so the call itself is typed `never` and
     // no overload is chosen for it. The reading stands before the resolution -- a set of
     // overloads that fits is not the question for a call that never runs, and a call that never
@@ -3708,8 +3705,7 @@ node_handle_t Builder::visitLinkNode(
             if (ops->name() == "__rule_generic") {
                 // The maker of a rule whose head declares type parameters: its sides are generic
                 // functions, which have no value, so it takes their templates and is called with
-                // the id they are registered under (design principles 5.5; the rule of
-                // 2026-10-23 on generic-rule-instantiation).
+                // the id they are registered under (design principles 5.5).
                 settleGenericRuleMaker(normInputs, normInputTypes, gct);
             }
             if (ops->name() == "__rule") {
@@ -3717,7 +3713,7 @@ node_handle_t Builder::visitLinkNode(
                 // two function values and the rule value is an ordinary rule, but the two graphs
                 // are registered in the table of rule templates too, so a transform that picks
                 // between the laws of one key can find a law whose parameter types name a type
-                // (author, 2026-11-03 12:10: two laws of one key are told apart by their parameter
+                // ( two laws of one key are told apart by their parameter
                 // types). The call itself is not changed: an ordinary rule stays ordinary.
                 settleRuleMaker(normInputs, normInputTypes, gct);
             }
@@ -4419,8 +4415,8 @@ node_handle_t Builder::visitLinkNode(
         // needs. A program can stand a value of another type there -- a number, a tuple, the answer
         // a transform hands back before the member it names is built -- and an ordinary program
         // that does is not a broken builder. Reporting it and refusing the call is what keeps the
-        // contract: the assertion that used to stand here stopped the process instead, which is
-        // what the fallible case above left it doing for every other type (536999073). A target
+        // contract:an assertion here would stop the process instead, which is
+        // what the fallible case above would do for every other type. A target
         // whose type the *builder* failed to record is the one case left for a `GUARD`, and it is
         // the precondition of the cast and nothing a program can write.
         if (dataType == nullptr || dataType->code() != TypeCode::Function) {
@@ -4644,11 +4640,11 @@ node_handle_t Builder::visitLinkNode(
             // here
             // -- before the write path below decides how to remember the argument, and before the
             // shape check -- because the specific reason must answer for a position where the
-            // generic one could also apply. `let k = 0; k = 5` used to be answered with
-            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), and
+            // generic one could also apply. `let k = 0; k = 5` is answered with
+            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), not with
             // `AssignmentTargetNotVariable`
-            // ("the target must be a variable") replaced it when the write path stopped asking this
-            // question; a diagnostic that does not say what to change is not the one to keep.
+            // ("the target must be a variable"): a diagnostic that does not say what to change is
+            // not the one to keep.
             if (const auto immutable = immutableNameOf(arg.expr)) {
                 diags_->of(SemanticDiag::ImmutablePassedToVarParam)
                     .atOrigin(arg.expr->origin())
@@ -4660,8 +4656,7 @@ node_handle_t Builder::visitLinkNode(
             // remembered apart from the real escapes (a closure capturing the variable, a user
             // function's `var` parameter) so that the SSA fold can tell "kept a resource because it
             // is written" from "kept a resource because it leaves the body". Which operators are
-            // writes is `core::isAssignmentUri`, the answer the table's family bit is set from
-            // (daily review 2026-11-18, item 4).
+            // writes is `core::isAssignmentUri`, the answer the table's family bit is set from.
             const bool writeOperator =
                 targetOperator != nullptr && camel::core::isAssignmentUri(targetOperator->uri());
             if (writeOperator) {
@@ -4743,7 +4738,7 @@ node_handle_t Builder::visitLinkNode(
                 // A `var` handed to another graph is read before the callee writes it, and what
                 // that read takes is the version the variable's nearest write made, not the cell
                 // the first write made: the port carries that version as a data edge, and the
-                // control input the writer used to stand in for it is gone with it
+                // control input the writer would stand in for it is not needed
                 // (a capture of a cell is linked the same way, Builder::captureValueOf;
                 // Builder::valueVersionOf says what a version is). The version is the cell the
                 // write stored into -- `:op/assn` gives that cell back as its own value -- so the
@@ -4812,7 +4807,7 @@ node_handle_t Builder::visitLinkNode(
         if (arg.readsVersion) {
             // The port carries the nearest write's version, and that data edge is what runs the
             // write this read uses and orders the call after it (design principles 3.5, F3): the
-            // control input the writer used to stand in for it is not written.
+            // control input is not written for the writer.
             continue;
         }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
@@ -4937,7 +4932,7 @@ node_handle_t Builder::visitLinkNode(
     }
     if (!synced_ && !capturedWrites.empty()) {
         // A `var` argument is a value passed in and handed back: the write it takes is written back
-        // where the call stands (design principles 3.1 and 3.5, the ruling of 2026-11-15), so a
+        // where the call stands (design principles 3.1 and 3.5), so a
         // call that takes one is not reported for that reason -- `sync` has nothing to do with it,
         // and an assignment (`__assn__`, whose first parameter is a `var`) is that same shape.
         // What stays reported here is a write to a variable the callee captured: that write is not

@@ -516,8 +516,8 @@ enum class SemanticDiag : uint32_t {
     /// A type parameter is declared at the head of a declaration and written nowhere in its
     /// signature, so no argument could ever give it a type.
     TypeVariableUnused = 0x1001A5,
-    // `never` as an argument and `fail` as a statement (design principles 3.9; the author's ruling of
-    // 2026-10-26). An argument of type `never` never gives a value, and an argument is evaluated
+    // `never` as an argument and `fail` as a statement (design principles 3.9). An argument of type
+    // `never` never gives a value, and an argument is evaluated
     // before the call it is written in, so such a call never runs: its own type is `never` and no
     // overload is chosen for it. A `fail` written as a statement of its own is no effect, so it runs
     // only where its value is wanted, and a statement after it is never reached.
@@ -531,9 +531,9 @@ enum class SemanticDiag : uint32_t {
     /// A statement written after a `fail` in the same block: the `fail` never returns, so the statement
     /// is never reached.
     StatementAfterFail = 0x1001C2,
-    /// A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
-    /// 2026-11-15: assigning to a `var` is not an effect, so a write nothing reads is a value nothing
-    /// uses -- one rule for one thing, and the words are the words of a dropped value, not of an effect).
+    /// A write to a variable whose value nothing reads (design principles 3.1 and 3.5: assigning to a
+    /// `var` is not an effect, so a write nothing reads is a value nothing uses -- one rule for one
+    /// thing, and the words are the words of a dropped value, not of an effect).
     UnusedAssignedValue = 0x1001C3,
 };
 

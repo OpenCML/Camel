@@ -882,8 +882,8 @@ namespace {
 /// that takes none.
 ///
 /// This is the part of a rule's signature the head cannot answer -- the head is the operator, and
-/// two laws of one operator with different parameter types are two laws (the author's ruling of
-/// 2026-11-03 11:10; design principles 5.4, 9.11) -- and it is read here, where the declaration is
+/// two laws of one operator with different parameter types are two laws (design principles 5.4,
+/// 9.11) -- and it is read here, where the declaration is
 /// still syntax, for the same reason the head is: at the stage a module's declarations are read a
 /// rule's `__lhs` has no body, so nothing later has these types as they were written.
 std::string parameterTypesOf(cst::ParentParams params) {
@@ -950,7 +950,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const auto conditionClause = context->get<cst::WhenClause>();
         std::string condition      = conditionClause ? conditionClause->text() : std::string();
         // The type of each parameter, in order: the other half of what a duplicate is. A key holds
-        // one rule per parameter-type list (the author's ruling of 2026-11-03 11:10), so the two
+        // one rule per parameter-type list, so the two
         // laws of `T[...]` and `T` are filed under one key and the engine picks the one the
         // operand's own type enters -- the declaration is not refused for writing the same
         // `is_float::<T>()` twice.
@@ -3117,7 +3117,7 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
     ENTER("MatchCase");
     // `case a | b => body` enters the body when any of its patterns matches. A branch has one
     // value per arm, so the case becomes one arm per pattern, each with its own copy of the
-    // body (only the first pattern used to be read). An alternative that is the wildcard
+    // body (not only the first pattern is read). An alternative that is the wildcard
     // matches everything: the whole case is then the wildcard arm.
     std::vector<node_ptr_t> patterns;
     for (const auto patternContext : context->all<cst::Pattern>()) {
@@ -3381,8 +3381,8 @@ Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
 typeCase
     : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
     ;
-A case may carry the guard a value-level `match` case carries (design principles 5.5, ruling of
-2026-11-14): `case p when c => body`, kept as child [1] after the body so the body stays child
+A case may carry the guard a value-level `match` case carries (design principles 5.5):
+`case p when c => body`, kept as child [1] after the body so the body stays child
 [0] for the reader that builds it.
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
@@ -3499,7 +3499,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
         for (const auto matchCase : context->all<cst::MatchCase>()) {
             if (wildcardSeen) {
                 // The branch takes its last arm when no value matches, and `case _` always
-                // matches: a case written after it is never taken (it used to be entered in
+                // matches: a case written after it is never taken (it is not entered in
                 // the wildcard's place).
                 diags_->of(SemanticDiag::MatchCaseAfterWildcard)
                     .at(rangeOf(matchCase->firstToken(), matchCase->lastToken()))
@@ -3596,7 +3596,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
 
     default:
         // Every kind `visitExpr` sends here has a case above. `try`/`catch`/`finally` are not
-        // part of the language (design principles 3.9) and are not tokens any more, so the
+        // part of the language (design principles 3.9) and are not tokens, so the
         // parser never builds a node for them.
         throw std::runtime_error("Invalid control expression");
     }
@@ -4783,7 +4783,7 @@ std::string decodeFStringText(std::string_view text) {
 }
 
 /// An interpolation is empty when it holds no token that is neither white space nor a comment
-/// (the author's criterion). White space is never a token, so this is: every token
+///  White space is never a token, so this is: every token
 /// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
 /// leaves the interpolation non-empty.
 bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {
@@ -5038,7 +5038,7 @@ Value Builder::visitLiteral(cst::Literal context) {
     } else if (context->tok(TK::String) || context->tok(TK::FString)) {
         // The text of a string constant, as a pattern takes it (`case 'x'`). The formatted
         // strings of an expression go to visitFStringData (visitLiteralData), and the pattern
-        // production no longer takes one, so what arrives here is a plain string.
+        // production does not take one, so what arrives here is a plain string.
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
     } else if (context->tok(TK::RawString)) {

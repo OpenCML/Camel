@@ -1379,8 +1379,8 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     if (!unmetConditions.empty()) {
         // Every candidate the arguments fit was made inapplicable by its own `when`: the call
         // reports the conditions it could not meet rather than the overloads it did not match
-        // (design principles 4.4; questions-2026-10-23 `sorts-per-element-type` 1: "条件不满足与
-        // 类型不匹配分开报"). Sorted, for the reason the ambiguity above is sorted.
+        // (design principles 4.4).
+        // Sorted, for the reason the ambiguity above is sorted.
         std::sort(unmetConditions.begin(), unmetConditions.end());
         unmetConditions.erase(
             std::unique(unmetConditions.begin(), unmetConditions.end()),
@@ -2760,7 +2760,7 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     }
     if (GCT::hasTypeOfPlaceholder(type)) {
         // `typeof e` gives the type `e` would have and evaluates nothing, so it is a type
-        // expression, not only a whole type (ruling of 2026-10-31): it may stand as the argument
+        // expression, not only a whole type: it may stand as the argument
         // of a type function, and `ElementOf<typeof xs>` is the element type of what `xs` holds.
         // Each `typeof` met on the way down is resolved to the type it stands for; the type
         // function is then applied to a concrete argument like any other.

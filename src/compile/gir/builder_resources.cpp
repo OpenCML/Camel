@@ -136,7 +136,7 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
 /// makes the cell the closure captured outlive the call.
 
 /// The ordering key of an access through a handle the body received (design principles 3.3, handle
-/// types, 负责人 2026-11-15): the handle's type when the type is a handle type, and the name the
+/// types): the handle's type when the type is a handle type, and the name the
 /// body gave the value otherwise. A handle is a run-time value, so two names may be one handle, and
 /// nothing in the body tells two same-typed names apart -- the accesses through them are one
 /// resource's and keep the order they are written in. Two handle types are two handles, a
@@ -688,7 +688,7 @@ bool Builder::reachOfOper(
             table.hasExternalEffect(uri));
     }
     if (spec.functionOperand) {
-        // The accesses are the function operand's (design principles 3.3; author 2026-11-19), so
+        // The accesses are the function operand's (design principles 3.3), so
         // they are read off that value's type -- the same reading `reachOfCall` makes for a call
         // through a value, with the value standing where the call's value does. A value that is
         // not there, is not a function, or whose type writes no clause promises nothing and is

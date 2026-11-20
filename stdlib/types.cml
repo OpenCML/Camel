@@ -162,10 +162,9 @@ export type Tangent<T>
 /// The shape of a reverse transform's second half (design 4.4): `vjp(f)(x)` is the pair
 /// `(value, pullback)`, and the pullback takes the cotangent of the result and answers the cotangents
 /// of `f`'s parameters, one tuple member per parameter. A function of one parameter's pullback
-/// answers a one-long tuple -- `(27.0)` -- because the rule is one rule for every arity (author's
-/// ruling of 2026-11-01 14:30).
+/// answers a one-long tuple -- `(27.0)` -- because the rule is one rule for every arity.
 ///
-/// It does **not** take `f`'s `with` list (author's ruling of 2026-11-03 15:15). A `with` value the
+/// It does **not** take `f`'s `with` list . A `with` value the
 /// backward half reads is a residual like every other value it reads -- the rule is one rule, and it
 /// is "whatever the second half reads is a residual and goes into `lin`'s closure", `with` values
 /// included. `lin` is therefore a function of the tangents alone, and its transpose is this: one
@@ -204,23 +203,21 @@ export type Gradient<F> =
 ///
 /// It is one shape with `Gradient<F>` above, written out of the same three pieces, and the two
 /// aliases denote one type: this one exists because it is the name `grad`'s own declaration spells
-/// (`stdlib/vjp.cml#grad`). Two names for one type is a spelling a reader has to learn, and the
-/// merge into one is the rework the 2026-11-19 review already asks for (R1); it is not done here,
-/// where the subject is the call form.
+/// (`stdlib/vjp.cml#grad`). Two names for one type is a spelling a reader has to learn, and merging
+/// them is not done here, where the subject is the call form.
 ///
-/// **The weight is inside the angle brackets, and it was not.** Until 2026-11-19 this alias was
-/// `<...Rest> (w: W, ...ParamsOf<F>) => Tangent<W>`: the weight as the first *ordinary* parameter,
-/// which is the list `first_with_as_param` moves it to and the list a reverse transform
-/// differentiates. That put an implementation's shape on the language's surface. `grad`
+/// **The weight is inside the angle brackets.** Written as
+/// `<...Rest> (w: W, ...ParamsOf<F>) => Tangent<W>`, the weight would be the first *ordinary*
+/// parameter, which is the list `first_with_as_param` moves it to and the list a reverse transform
+/// differentiates, and that would put an implementation's shape on the language's surface. `grad`
 /// differentiates a function's first `with` parameter (design principles 9.9) and a `with` value is
 /// written in the angle brackets of a call, so the derivative is called the way the differentiated
-/// function is called (`with_grad(loss)<m>(x, y)`) -- the author's ruling of 2026-11-19 22:40
-/// restores it. Two readings turn on it: a caller who wrote `grad(loss)<y>(layer, X)` was reading
-/// `first_with_as_param`'s answer and not `grad`'s meaning, and an inner `grad` of a library
-/// gradient met a function with no `with` parameter at all, which is why a nest of this `grad` was
-/// refused at `first_with_as_param`. With the form restored a nest builds, and what refuses it now
-/// is the layer after this one -- `jvp` over a function value computed at run time
-/// (`stdlib/vjp.cml#grad`) -- so the form is no longer the thing that stops it.
+/// function is called (`with_grad(loss)<m>(x, y)`). Two readings turn on it: a caller who writes
+/// `grad(loss)<y>(layer, X)` is reading `first_with_as_param`'s answer and not `grad`'s meaning,
+/// and an inner `grad` of a library gradient would meet a function with no `with` parameter at
+/// all, so a nest of this `grad` would be refused at `first_with_as_param`. With this form a nest
+/// builds, and what refuses it is the layer after this one -- `jvp` over a function value computed
+/// at run time (`stdlib/vjp.cml#grad`) -- so the form is not the thing that stops it.
 ///
 /// **The whole `with` list is carried, in its own order.** A function with a second `with` value --
 /// the data `y` beside the weight in `examples/case-study/train.cml`, the port the derivative is
@@ -241,7 +238,7 @@ export type GradientOf<F> =
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
 /// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
-/// parameters as `f` does (author's ruling of 2026-11-03 09:50): a transform differentiates the
+/// parameters as `f` does: a transform differentiates the
 /// ordinary parameters only, and a `with` value is handed on unchanged, as a constant, its tangent
 /// the zero of its type. So this is `Jvp<F>`'s shape -- the same `with` list, then the parameters.
 /// @example is_same::<Vjp<(x: float) => float>, <...WithOf<(x: float) => float>> (x: float) => (float, Pullback<(x: float) => float>)>()    // true
@@ -250,7 +247,7 @@ export type Vjp<F> = <...WithOf<F>> (...ParamsOf<F>) => (ResultOf<F>, Pullback<F
 /// The forward transform's type: the parameters of `f` and their tangents, then the value and its
 /// tangent (`jvp(f)(2.0, 1.0)` is `f(2.0)` and `df` in the direction 1).
 ///
-/// **This declaration is the contract** (author, 2026-11-03, `origin/fsh-dev` `6eceaa89d`): the build
+/// **This declaration is the contract**: the build
 /// makes the declared type, and no declaration is approximate. The order written above is "all the
 /// parameters, then all their tangents"; the build today pairs each parameter with its tangent as it
 /// goes (`modules/transforms/jvp.cpp#jvpSignature`), and gives a parameter with no tangent space one

@@ -192,8 +192,8 @@ void registerVmapOperatorMetadata() {
         "transforms:vmap", {.pure = false, .readsGraphs = true});
     // It builds the batched graph out of the graph of the function value it is handed, and out of the
     // value's closure: what the function captured is handed to the build as the constants the
-    // batched body reads. Before 2026-11-02 the batch element took the capture's place and the
-    // capture was dropped, so `x + c` answered `2x` in silence (author's review, high-2).
+    // batched body reads. The batch element must not take the capture's place: dropping the
+    // capture would make `x + c` answer `2x` in silence.
 }
 
 } // namespace camel::transforms

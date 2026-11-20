@@ -158,7 +158,7 @@ bool sameTypes(const GraphDraft &draft, const UndoSnapshot &snapshot) {
     // fills an open signature writes it where it stands -- `funcType_` keeps pointing at the same
     // object -- so a comparison of the pointer finds the draft unchanged however much the signature
     // now says, and `test::undo_selfcheck` reports "back" for a signature that was never put back
-    // (author, 2026-11-19: the self-check compares content, not the pointer). The pointer still has
+    // ( the self-check compares content, not the pointer). The pointer still has
     // to match: a different one is a different signature, its parameters included.
     return draft.funcType() == snapshot.funcType &&
            exitTypeOf(draft.funcType()) == snapshot.exitType &&
@@ -537,7 +537,7 @@ void GraphDraft::replayJournal(const Savepoint &mark) {
         // it held: a segment fills an open signature where it stands, so putting the pointer back
         // leaves the write in place -- the result type the segment wrote and the resources with it.
         // An open signature is the one kind that can be written in place (the type table never holds
-        // one), so it is the one with content to write back (author, 2026-11-19). The two writes go
+        // one), so it is the one with content to write back. The two writes go
         // to the signature and not through `setOpenExitType` / `setOpenResources`: a restore is not
         // a write of the segment, and the recording entries do not check `undoSuspended_`, so going
         // through them would record the state this rollback is leaving.

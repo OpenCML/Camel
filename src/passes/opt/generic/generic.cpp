@@ -60,8 +60,8 @@ namespace {
 ///
 /// The count belongs to the process, not to a run: `std::opt` is a pass like any other and the same
 /// process may run it again (a second program, a second pipeline), and the pass layer has no place
-/// to reset a counter at. The log line says so; it used to say "in this run", which was a claim
-/// nothing kept. Atomic because the pass may be run by more than one thread at a time.
+/// to reset a counter at. The log line says so, and does not claim "in this run", which nothing
+/// would keep true. Atomic because the pass may be run by more than one thread at a time.
 std::atomic<size_t> g_foldsKeptForEffects{0};
 
 /// Records a fold the optimizer refused to keep the effects around it running, and says why.
@@ -874,7 +874,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     after.insert(after.end(), brchPreds.begin(), brchPreds.end());
     // Its value users ran after the whole branch too. When the result comes from outside the
-    // taken arm (a constant, an input), reading it no longer orders them after what the branch
+    // taken arm (a constant, an input), reading it does not order them after what the branch
     // waited on, so they wait on it explicitly (as replaceNode does for a replaced value).
     std::vector<gc_node_ref_t> joinValueUsers;
     for (auto group : {draft.normUsersOf(join), draft.withUsersOf(join)}) {
@@ -1783,7 +1783,7 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
                 // node's wait to: what stands in its place is a `GATE` reading that node's own
                 // value, and the gate takes the place the statement had in the chain, with the node
                 // as its sync predecessor. The node then keeps the use that says it runs, instead
-                // of being reached only by the order of the chain that used to pass through the
+                // of being reached only by the order of the chain that passed through the
                 // statement (design principles 3.3 as amended, 9.7).
                 if (!draft.syncUsersOf(id).empty()) {
                     if (h->kind == GCNodeKind::Gate && draft.syncInputsOf(id).size() == 1) {
@@ -2022,8 +2022,8 @@ const camel::runtime::Program *simplifyGraph(
     /// the previous one. `InlineDecline::GrowthBudget` is the reason the engine only gives a call
     /// it would otherwise have inlined (the owner cap and the strategy are asked first, engine.cpp),
     /// so a round that changed nothing while one of these is recorded did not reach a fixed point:
-    /// it reached the budget. The two used to print the same sentence (`std::opt: fixpoint after N
-    /// round(s)`), which is what let a spent budget be read as a settled optimizer.
+    /// it reached the budget. The two do not print the same sentence (`std::opt: fixpoint after N
+    /// round(s)` is for a settled optimizer only), so a spent budget is not read as one.
     const auto growthBudgetRefusal = [&]() -> std::optional<InlineDeclined> {
         if (context == nullptr) {
             return std::nullopt;
@@ -2102,7 +2102,7 @@ const camel::runtime::Program *simplifyGraph(
             // A round that leaves every count at zero is the end of the pass only when nothing was
             // left undone. A call the inliner left for the growth budget is something left undone,
             // and the budget is the reason the round changed nothing: reporting that as a fixed
-            // point was the silence this reads instead (the ruling of 2026-11-20, (b)). The pass
+            // point was the silence this reads instead. The pass
             // still stops -- the budget is the caller's to raise -- and ends with the program as it
             // stands, exactly as the fixed point does; what changes is the sentence and that the
             // spent budget is now a warning the default log level prints.

@@ -7,7 +7,7 @@
  * The wiring is `jvp`'s, copied rather than shared: a type resolver, a kernel and a registration.
  * The work is `buildTransposeGraph` (transpose.cpp), which is the one place that knows what
  * `transpose(f)` is. Like `jvp`, it answers with a function value naming the graph it built, so `f`
- * itself is untouched -- the author's ruling (a824031aa).
+ * itself is untouched.
  */
 
 #pragma once

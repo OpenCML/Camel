@@ -3,23 +3,24 @@
 
 /**
  * @file translate.h
- * @brief The translation layer of the rule verifier (docs/design/rewrite/plan-verification.cn.md,
- * S1): a rule's two sides as logic terms, and the declaration of what it covers.
+ * @brief The translation layer of the rule verifier
+ * (docs/design/rewrite/plan-verification.cn.md): a rule's two sides as logic terms, and the
+ * declaration of what it covers.
  *
  * Rewrite design 8.1 splits the field in two: what a translation covers, and what it does not. A
  * rule the layer cannot translate is refused **with a reason** -- the layer never guesses and never
- * approximates, because a verdict read off a guessed translation would be a lie (the rule on `verification-verdict-surface`, 3: a rule outside the coverage is `sampled` and the
- * reason is written on its row).
+ * approximates, because a verdict read off a guessed translation would be a lie (a rule
+ * outside the coverage is `sampled` and the reason is written on its row).
  *
- * Slice S1 translates the **integer scalar** fragment: the widths `int` and `i32`, the operators
+ * The layer translates the **integer scalar** fragment: the widths `int` and `i32`, the operators
  * `+ - * / %` and unary `-`, integer constants and the rule's own parameters. Everything else -- the
- * floating widths `f64`/`f32`/`f16`/`bf16` (S3), a whole-tensor property, a region-carrying pattern,
+ * floating widths `f64`/`f32`/`f16`/`bf16` (the floating theory), a whole-tensor property, a region-carrying pattern,
  * a call outside the fragment -- is refused by name. `coverageTable()` is that declaration as a
  * value, so the boundary is something a reader and a test can check rather than a paragraph.
  *
  * A rule's `/` and `%` fault when the divisor is 0 and wrap at -1 (design 1.8): the language has no
  * undefined behaviour, so the term carries the operation as it is written and the fault is a
- * property of it that the decision procedure of S2 has to carry, not something this layer may drop.
+ * property of it that the decision procedure has to carry, not something this layer may drop.
  *
  * The layer is a library of the rewrite module, not a Camel module: it registers no operator and
  * has no `.cml` declaration, so it is not a `.cmo` (modules/verify/CMakeLists.txt).
@@ -92,7 +93,7 @@ struct Translation {
     /// `covered`: the width the two sides work in.
     Width width = Width::Int64;
     /// `covered`: whether the declaration carries a condition. The sides are translated, and the
-    /// condition is not a premise of the proposition yet (S4); the column says so.
+    /// condition is not a premise of the proposition yet; the column says so.
     bool conditional = false;
     /// Not `covered`: which of the declared reasons refused it.
     std::string reason;

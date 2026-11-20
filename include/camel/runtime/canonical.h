@@ -61,12 +61,11 @@
  *
  *    What the position is *not* is where the node would stand if something reached it. There is
  *    no such place -- the walk starts from roots -- and inventing one would mean walking from a
- *    root the graph does not have. The three readings this paragraph replaces are recorded in
- *    `docs/handover/reports/2026-11-18-canonical-unreachable-and-a-draft-s-id.cn.md`: ordering the
- *    tail by kind and parameters alone (a preorder, so two different graphs read as one), leaving
- *    the tail out of `nodes` and giving it a view of its own (`nodes` stops being every node of
- *    the graph, and a document that prints the graph needs the second view anyway, so the
- *    question moves rather than closes), and this one. What the order does not carry is *which*
+ *    root the graph does not have. Two other readings were rejected: ordering the
+ *    tail by kind and parameters alone (a preorder, so two different graphs read as one), and
+ *    leaving the tail out of `nodes` and giving it a view of its own (`nodes` stops being every
+ *    node of the graph, and a document that prints the graph needs the second view anyway, so the
+ *    question moves rather than closes). What the order does not carry is *which*
  *    nodes are unreachable: the section is last, so a reader who wants to know asks the walk.
  *
  *    In a program this repository can build, an unreachable node is a region port nothing in its

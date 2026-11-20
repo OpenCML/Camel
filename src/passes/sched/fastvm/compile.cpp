@@ -603,8 +603,8 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Gate: {
             const auto normInputs = graph->normInputsOf(runtimeNodeIndex);
             if (!normInputs.empty()) {
-                // The value a GATE hands on is its first normal input (design principles 3.1, the
-                // author's ruling of 2026-11-17); the inputs after it are the reads of the region's
+                // The value a GATE hands on is its first normal input (design principles 3.1);
+                // the inputs after it are the reads of the region's
                 // writes and are not what it produces.
                 const auto valueInput = normInputs.front();
                 if (auto it = valueProducerMap.find(valueInput); it != valueProducerMap.end()) {
@@ -686,9 +686,8 @@ static bytecode_vec_t compileRuntimeGraph(
         for (const auto &[pc, ref] : sites) {
             const size_t position =
                 ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
-            // The holds are refHoldsAt, the plan's only column of them: the second column,
-            // refCopiesAt, kept the same numbers at the value's own position and disagreed for a
-            // value a CALL or a FILL makes, so it is gone (author review 2026-11-16, item 7).
+            // The holds are refHoldsAt, the plan's only column of them: a second column at the value's own
+            // position would disagree for a value a CALL or a FILL makes.
             const uint32_t taken =
                 position < plan.refHoldsAt.size() ? plan.refHoldsAt[position] : 0;
             const uint32_t given =
@@ -700,14 +699,11 @@ static bytecode_vec_t compileRuntimeGraph(
             }
             // A diagnostic and not the program's output: the log's RefSites scope, written to
             // stderr with every other log line and off unless a threshold or --log-include asks
-            // for it, so a program's stdout is the program's own (author review 2026-11-16,
-            // item 7). It was std::cout here until then, which put the compiler's dump among the
-            // program's lines and made every plan that reads a program's output skip it.
+            // for it, so a program's stdout is the program's own: the compiler's dump never lands among the
+            // program's lines, which every plan that reads a program's output would otherwise have to skip.
             // A reading of the plan's reference sites, on the run's tracing channel
-            // (`--trace plan`, `include/camel/core/trace.h`) and not on a log scope: the tree had
-            // three ways to ask for one kind of reading (a log threshold, a log scope, an environment
-            // variable) and the author's ruling of 2026-11-16 keeps one. The text is unchanged, down
-            // to the newline the log used to add.
+            // (`--trace plan`, `include/camel/core/trace.h`) and not on a log scope: one kind of reading has one
+            // way to ask for it, not a log threshold, a log scope and an environment variable.
             camel::core::trace(camel::core::TraceArea::Plan)
                 << std::format(
                        "PLAN_REF_SITES {} at {} node {} +{} -{} {}\n",

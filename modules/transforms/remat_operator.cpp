@@ -10,8 +10,7 @@
  * the whole of what `remat` says is a property of the graph (`kGraphFlagRecomputeBackward`).
  *
  * The reading it prints is the pair the step has to be able to show: the property before the copy
- * (0 for a function nobody marked) and after it (1), so a run says both numbers the author asked
- * for. `split` reads the same bit and prints what it did with it (split.cpp).
+ * (0 for a function nobody marked) and after it (1), so a run says both numbers. `split` reads the same bit and prints what it did with it (split.cpp).
  */
 
 #include "remat_operator.h"
@@ -143,7 +142,7 @@ slot_t rematKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         // The captures of the graph being copied are ports too, and the copy has to declare them or a
         // call through the marked value binds nothing: the closure tuple is there, the graph says it
         // takes none, and every read of a capture answered the zero of its slot -- `x + c` computed
-        // `x`, i.e. 1.0 where 4.0 is the answer (author's review of 2026-11-02, high-2). The clone
+        // `x`, i.e. 1.0 where 4.0 is the answer. The clone
         // carries them in the source graph's order, which is the closure tuple's order, and the
         // layout comes from the value, the same one the copy's tuple is made of below.
         for (rt::gc_node_ref_t port : cloned.closureNodes) {
@@ -210,9 +209,9 @@ void registerRematOperatorMetadata() {
         "transforms:remat",
         {.pure = false, .readsGraphs = true});
     // The mark is a property of the graph it is handed, and the copy carries the graph's captures as
-    // well: before 2026-11-02 the copy declared none, so a call through the marked value bound
-    // nothing and answered the zero of every capture's slot -- measured 1.0 where `x + c` says 4.0
-    // (author's review, high-2, the same capture-loss class as `vmap`'s).
+    // well: a copy that declared none would bind nothing for a call through the marked
+    // value and answer the zero of every capture's slot (1.0 where `x + c` says 4.0, the same
+    // capture-loss class as `vmap`'s).
 }
 
 } // namespace camel::transforms

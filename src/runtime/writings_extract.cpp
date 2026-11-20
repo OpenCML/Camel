@@ -332,10 +332,10 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
                     continue;
                 }
                 // What the member carries: the wait it has, and whether it sits on a block's chain.
-                // A structural reading, written where it is read -- `EffectLivenessFacts` no longer
-                // carries a wait field (camel/runtime/effect_liveness.h says why). Only the wait is
+                // A structural reading, written where it is read -- `EffectLivenessFacts`
+                // carries no wait field (camel/runtime/effect_liveness.h says why). Only the wait is
                 // moved; the member's place on a block's chain is not, so it is not read here
-                // either (it used to be assigned and never used, which is one more reason the
+                // either (assigned and never used, it was one more reason the
                 // field was a bag rather than an answer).
                 const bool memberCarriesWait = !draft_.ctrlInputsOf(member).empty();
                 if (!memberCarriesWait) {

@@ -888,8 +888,8 @@ class TilesModule final : public BuiltinModule {
         // `regions` reads the graph of the function value it is handed and answers the region
         // analysis as a string; its own contract says it neither executes the graph nor
         // initializes CUDA (tiles/internal/regions.h, `inspectRegions`), so it touches no
-        // resource, and a clause that named one would be a claim its body contradicts
-        // (2026-11-20). It is not foldable either: the answer is the analysis of a graph the
+        // resource, and a clause that named one would be a claim its body contradicts.
+        // It is not foldable either: the answer is the analysis of a graph the
         // compiler cannot see through, which is what `readsGraphs` says, and `pure` here is the
         // resource claim and not a promise that a call may be computed ahead of time
         // (operator_table.h, `declareUnfoldable`). The module's signature for it in

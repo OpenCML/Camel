@@ -337,8 +337,8 @@ std::string indexRule(const std::string &family, const RuleHead &rule) {
         }
         // Two rules of one operator that cannot be told apart -- one spelling, one operand count,
         // one parameter-type list -- are a duplicate: neither can be preferred, and a family that
-        // holds both would answer by filing order. The condition is *not* part of that test (author,
-        // 2026-11-03 12:10): a `when` clause is a question about the same operands, not a different
+        // holds both would answer by filing order. The condition is *not* part of that test:
+        // a `when` clause is a question about the same operands, not a different
         // shape, so two laws of one parameter-type list are one law written twice whatever their
         // guards say. A rule that wants to answer two questions of one operand writes two laws of two
         // parameter types (`jvp_float_from_float::<S>` beside `jvp_float_from_int(x: int)`,

@@ -803,8 +803,8 @@ std::optional<uint8_t> sumToLaw(std::optional<TypeCode> dtype) {
 }
 
 /**
- * sum_to(t, at): t summed down to the extents `at`, which must be a suffix of t's shape (ruling
- * 甲: a leading-axis reduction). The tensor's shape is read as a fact of the operand; the target
+ * sum_to(t, at): t summed down to the extents `at`, which must be a suffix of t's shape (a
+ * leading-axis reduction). The tensor's shape is read as a fact of the operand; the target
  * is the constant list the caller wrote. An `at` that is not constant leaves the operator to the
  * kernel: an index map has to be built from numbers, and a list the run computes is not one.
  *

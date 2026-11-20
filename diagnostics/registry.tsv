@@ -32,8 +32,8 @@ syntax	WhenAfterBody	0x000010	error	A 'when' condition comes before what it guar
 # naming the parentheses is what keeps the program from being told only that a token did not fit.
 syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.	A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.	edit
 #
-# A range has only a bounded form (design principles 4.2; the author's ruling of 2026-11-16): there
-# is no open `a..` that counts on forever, counting until a condition holds is a counting `while`
+# A range has only a bounded form (design principles 4.2): there is no open `a..` that counts on
+# forever, counting until a condition holds is a counting `while`
 # loop, and no syntax is added for one. `..` is an operator, so `1..` makes the parser read the token
 # that follows as its missing right operand and stop on it -- usually the keyword that starts the
 # next line, which is the one token in the file that is not wrong. Naming the range is what keeps
@@ -456,8 +456,8 @@ semantic	DimensionNameUsedOnce	0x100161	warn	The dimension name '{0}' is written
 #/ A type parameter is declared at the head of a declaration and written nowhere in its
 #/ signature, so no argument could ever give it a type.
 semantic	TypeVariableUnused	0x1001A5	warn	The type parameter '{0}' is declared at the head but never written in the signature.	A type parameter is one the declaration uses in a parameter or result type; a declaration that writes it nowhere can never take a type for it. Write it in a type, or remove it from '::<...>'.	none: choice: the repair is a decision only the writer can make
-# `never` as an argument and `fail` as a statement (design principles 3.9; the author's ruling of
-# 2026-10-26). An argument of type `never` never gives a value, and an argument is evaluated
+# `never` as an argument and `fail` as a statement (design principles 3.9). An argument of type
+# `never` never gives a value, and an argument is evaluated
 # before the call it is written in, so such a call never runs: its own type is `never` and no
 # overload is chosen for it. A `fail` written as a statement of its own is no effect, so it runs
 # only where its value is wanted, and a statement after it is never reached.
@@ -471,9 +471,9 @@ semantic	FailNotExecuted	0x1001C1	warn	This 'fail' is not executed: {0}.	A 'fail
 #/ A statement written after a `fail` in the same block: the `fail` never returns, so the statement
 #/ is never reached.
 semantic	StatementAfterFail	0x1001C2	warn	This statement cannot run: the 'fail' written before it never returns.	A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.	none: choice: whether the statements after the 'fail' are meant at all is the writer's decision
-#/ A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
-#/ 2026-11-15: assigning to a `var` is not an effect, so a write nothing reads is a value nothing
-#/ uses -- one rule for one thing, and the words are the words of a dropped value, not of an effect).
+#/ A write to a variable whose value nothing reads (design principles 3.1 and 3.5: assigning to a
+#/ `var` is not an effect, so a write nothing reads is a value nothing uses -- one rule for one
+#/ thing, and the words are the words of a dropped value, not of an effect).
 semantic	UnusedAssignedValue	0x1001C3	warn	The value this assignment stores is never read.	An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.	none: choice: a stored value no reader takes can be removed or read, and which one is the intent
 runtime	RuntimeError	0x000000	error	An error has occurred: {0}.	The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.	none: runtime: the catch-all fault; which code it should have is not known here
 runtime	DivisionByZero	0x000001	error	Attempted division by zero.	Ensure the denominator is not zero before performing division.	none: runtime: the divisor is zero at run time, and where to guard it is the program's logic
@@ -538,10 +538,9 @@ runtime	DeviceUnavailable	0x000070	error	CUDA device {0} was named by --devices 
 # or the calling convention of this use, or an operator the graph the scope calls brings that has
 # none. Both are one refusal of one promise, found by the pass `tiles::compile` while it runs; the
 # pass is `(f: F) => F!` (design principles 9.1), so the failure is the error value
-# `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives
-# (docs/handover/stdlib/error-kinds.md). It is not a diagnostic: what a scope can run is only
-# known once the pass has looked at the graph, and the report is then the one an error value
-# nobody handled gets.
+# `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives.
+# It is not a diagnostic: what a scope can run is only known once the pass has looked at the
+# graph, and the report is then the one an error value nobody handled gets.
 # The same promise refused while the program runs, because the pass deferred the shape to the
 # actual arguments and the device turns them down: the operator that asked for the device program
 # of a graph a `#gpu` scope covers (`run_compiled`, `run_preferred_resident`) reports it instead
@@ -568,11 +567,10 @@ runtime	GpuScopeMacroNotExpanded	0x0001A9	error	`#gpu` scope '{0}': {1} is a mac
 # The unwrap of a `T?` a program cannot write, in the one place it refuses: `:op/tag_unwrap`
 # (`src/builtin/operators/tagged.cpp`), which the compiler places where it has already read the
 # tag. A null there is a defect of what the compiler emitted and not a state the program made,
-# which is the ruling of 2026-11-18 (`96714f465`: "the slot unwrap checks and reports an internal
-# error"): it does not return the zero slot, because a zero slot is a value of the right shape and
-# the reader could not tell the two apart (the reasoning is the question page
-# `docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`). No other fault in
-# this table is of that kind, so the code says so in its own words and it is never isolated by
+# so the slot unwrap checks and reports an internal error: it does not return the zero slot,
+# because a zero slot is a value of the right shape and the reader could not tell the two apart.
+# No other fault in this table is of that kind, so the code says so in its own words and it is
+# never isolated by
 # `attempt` (`isIsolatableFault`: a defect of the compiler is not a fault of the program).
 runtime	NullSlotUnwrapped	0x0001B2	error	The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.	The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.	none: runtime: the fault is raised while the program runs, and no change to the program's logic repairs a defect of the lowering
 # Warnings (severity bits = Warn).
@@ -597,7 +595,7 @@ runtime	JitWithoutCodeGenerator	0x100018	warn	`std::jit` has no native code gene
 # nothing further leaves every count at zero, so `std::opt` used to report that round as its fixed
 # point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
 # left of the budget -- so that round reports here instead, one diagnostic for "the pass stopped at a
-# bound, not at the end of its work" the two bounds share (the ruling of 2026-11-20).
+# bound, not at the end of its work" the two bounds share.
 runtime	OptimizationStoppedShort	0x100019	warn	`std::opt` stopped short of a fixed point: {0}.	Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The pass has two bounds, and either one reports here. The round count is the pass's own, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. The growth budget (`growth_budget`, the nodes specializing and inlining may copy) is the caller's: past it the remaining calls stay calls. A round that changed nothing while the inliner had left a call for that budget reports here and is not a fixed point -- it used to be reported as one, which made a spent budget look like a settled optimizer. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.	none: choice: how far to unroll a recursion of non-static depth is the writer's decision, and the program is correct at every bound
 # #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
 # body-less declaration f of the same module is the operator that runs it. The graph builder
@@ -681,7 +679,7 @@ semantic	DuplicateRuleForOperator	0x000205	error	The rule '{0}' and the rule '{1
 semantic	RuleRightUsesOuterVariable	0x000207	error	The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound.	A family whose transform reads a rule's callee and calls it with the batch never calls the rule's right side as a function, so nothing binds the names the left side's pattern writes ('x', 'w'): the batched graph has batches where those values used to be, and a reference to one is a value the graph has none of. Write the right side so it reads only the names its own arrow declares -- the batch parameters -- and passes them to the named function: 'x + w => (bx: Lift<T>, bw: Lift<T>) => vmap_add(bx, bw)'.	none: choice: the right side has to be rewritten to pass the batch parameters to the named function, and which function and which parameters those are is the writer's
 semantic	ExtentOfNeedsStatedShape	0x00020B	error	`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.	Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[...]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.	none: choice: the extents the type should write, or the value whose shape stands in for them, are the writer's
 semantic	RefContentHoldsRef	0x000211	error	'{0}' cannot be the content of a reference: {1}.	A reference is a box reclaimed by counting the handles that point at it: the last handle to go frees it (design principles 3.3). A box that holds a reference -- directly, or through a field, an element, a variant's payload, what a function takes or returns, or a value a closure captures -- keeps that other box's count above zero for ever, so neither is freed and the program holds values it can no longer reach. The content is any other type. When the value to store already holds a reference, read what it holds out first and make the box of that value, or keep the one reference instead of making a second box.	none: choice: the content holds a reference; either store the value the reference holds, or use one reference where two boxes would be needed, and which of the two is the writer's
-semantic	ResourceInferenceConflict	0x000212	error	The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.	A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.	none: choice: the repair is a decision only the writer can make
+semantic	ResourceInferenceConflict	0x000212	error	The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.	A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.	none: choice: the repair is a decision only the writer can make
 semantic	ClosureAssignsCapturedName	0x000213	error	'{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name.	A closure holds a value, not a place, so an assignment to a name outside it would write nothing the closure can see. Three ways out: return the new value as the closure's result and let the caller bind it; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`, so every round hands the next one a value; or hold the state in a `Ref` (`let r = ref(0)`, `get(r)`, `set(r, v)`), which a closure may capture because a handle is a value.	none: choice: the three ways out are the writer's to choose
 semantic	CapturedVarWrittenAfterTheClosure	0x000214	error	'{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read.	The closure holds the value `{0}` had when it was made, so this assignment cannot reach it. Three ways out: return the new value as the closure's result; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on assigning a name of its own, bind it first (`let x0 = x`) and let the closure mention `x0`.	none: choice: the three ways out are the writer's to choose
 semantic	CapturedVarHandedToVarParameter	0x000215	error	'{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure.	The write stands in the callee and is handed back to `{0}` where the call is, so it changes a name the closure already holds the value of. Three ways out: return the new value instead of writing it back; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on handing the name to a call, bind it first (`let x0 = x`) and hand `x0` on.	none: choice: the three ways out are the writer's to choose

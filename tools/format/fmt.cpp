@@ -180,7 +180,7 @@ any Formatter::visitProgram(cst::Program context) {
             head.push_back(pair.first);
             // The comments after an import. Those between the last import and the first
             // other declaration belong to that declaration (its documentation) and are
-            // written with it; they used to be written twice.
+            // written with it, once.
             auto after = declTokenRanges[pair.second + 1];
             if (!tailWithIndex.empty() && pair.second + 1 == tailWithIndex[0].second) {
                 after.first = after.second;
@@ -206,8 +206,8 @@ any Formatter::visitProgram(cst::Program context) {
     }
 
     string headStr, tailStr;
-    // The comments above the first declaration (the description of the file) stay above it; they
-    // used to be dropped. A blank line between two of them is kept: it is what separates the
+    // The comments above the first declaration (the description of the file) stay above it, not
+    // dropped. A blank line between two of them is kept: it is what separates the
     // licence header from the file's own description, and without it the two runs of comments
     // become one, which changes how the parser reads the file.
     {
@@ -364,7 +364,7 @@ any Formatter::visitStmtBlock(cst::StmtBlock context) {
     if (stmtList) {
         // The comments between the last statement of the block and its closing brace belong to the
         // block: the statement list writes comments up to its last statement and no further, and
-        // they used to be dropped - `// mark:` after the last statement of a body, say. They are
+        // they must not be dropped - `// mark:` after the last statement of a body, say. They are
         // written where they stood: on the statement's line if they were on it, which is where
         // every statement but the last one keeps such a comment. The brace keeps its own line.
         const size_t lastStmt = stmtList->lastToken()->index();
@@ -1562,7 +1562,7 @@ any Formatter::visitCtrlExpr(syn::Node context) {
 
     default:
         // `try`/`catch`/`finally` are not part of the language (design principles 3.9) and are not
-        // tokens any more, so the parser never builds a control expression for them.
+        // tokens, so the parser never builds a control expression for them.
         throw runtime_error("Invalid structExpr context");
     }
 }
@@ -1691,10 +1691,8 @@ conversion: the type after `as` takes a `..` that stands on its line as a mark -
 `x as int..5` is not the interval from `x as int` to `5`: it is a `..` written where a type
 stands, which SyntaxDiag::AsRightSideIsType reports (test/cases/parse/rulings/
 stream_type_as_interval.cml says why, and names the spelling `(a..b)`). An input that writes
-`let r = n as int` and `..5` on the next line is a range, and this function used to write it back
-as `let r = n as int..5`, which the parser refuses -- the formatter had turned an accepted
-program into text that does not parse. `camel-parsecheck fuzz` met it at iteration 929, on a
-mutation of that ruling case, and the input is written down as
+`let r = n as int` and `..5` on the next line is a range, and writing it back as
+`let r = n as int..5` would turn an accepted program into text the parser refuses; the input is
 test/cases/parse/rulings/dotdot_after_cast.cml. A conversion that a `..` follows is written in
 parentheses, the spelling the diagnostic names, which reads back as the same tree.
 */
