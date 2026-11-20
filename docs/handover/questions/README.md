@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：59 页
+## 现在在等作者：67 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -59,15 +59,23 @@
 | [`2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit`](2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md) | 写明降维结果秩的函数，为什么把 `vjp` 挡在「反向半边的出口类型」上 |
 | [`2026-11-20-parked-means-paused-or-deleted`](2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
+| [`2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread`](2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread.cn.md) | 条目（1）与三条打印判据：四条读数一字未动，挡住它们的是「没写子句」，不是读法 |
 | [`2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader`](2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader.cn.md) | The higher-order footprint has a place to be written and a reader; what is left is the two shapes it cannot place |
 | [`2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p`](2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p.cn.md) | 一次读错「哪棵树」的上报，以及它教会的两件事 |
 | [`2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint`](2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md) | The optimizer calls a spent growth budget a fixpoint, and the budget is reset on every call |
 | [`2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code`](2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md) | 外层 `jvp` 要 `split` 交出静态可读的答案代码，那一步在 0.2.45 的范围里吗 |
+| [`2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations`](2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations.cn.md) | A refused access no clause can name: the ruling stands, the corpus cannot take it yet |
 | [`2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document`](2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document.cn.md) | 「两张导数图」这一项按 `std::jgir` 现在的读法比的不是导数图 —— 该改措辞，还是该换读法 |
+| [`2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program`](2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program.cn.md) | v1 的 `std::jgir` 是二进制的函数，不是程序的函数 |
 | [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ |
 | [`2026-11-20-when-a-ruling-read-a-success-line-as-the-failure`](2026-11-20-when-a-ruling-read-a-success-line-as-the-failure.cn.md) | 当一条裁定把成功行读成了失败原因？ |
+| [`2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function`](2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function.cn.md) | `jvp` 与 `vjp` 对同一个 `f` 各造一张图 —— 两张图的边集合是不是不一致？ |
 | [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 |
+| [`2026-11-20-whether-splits-forward-half-takes-a-tangent-port`](2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md) | `split` 割「结果含函数」的图时，前向半要不要收切向端口 |
+| [`2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops`](2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops.cn.md) | 割说「一个节点的操作数不在它这一半的出口可达集合里」—— 掉的是第二个 `with` 参数，还是切线端口那道墙的下游？ |
+| [`2026-11-20-whether-the-value-half-takes-tangent-ports`](2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md) | 值半要不要收一个切向端口 —— 割「提升过的函数」时的那条缝 |
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
+| [`2026-11-20-why-the-split-point-is-type-computable`](2026-11-20-why-the-split-point-is-type-computable.cn.md) | （A）不必要：割点对「结果含函数」也是**类型可算**的 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 

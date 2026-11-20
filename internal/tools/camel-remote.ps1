@@ -512,6 +512,14 @@ $checkers = [ordered]@{
     # so `-NoBuild` after one needs `-AllowStale` -- the parser's reading of a file does not depend
     # on the tree its binary was built from, which is the one thing that stamp cannot know.
     'ast-hashes'          = @{ script = 'scripts/check-ast-hashes.mjs'; args = @(); compiler = $true }
+    # A comment says what the code does and why; it does not record how the project got there. This
+    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
+    # a path that is data in a string literal is not its business, and it counts a comment that names
+    # a dated ruling, a handover page, a role or a lane, a slice code, a host path. A wall with a
+    # threshold of zero: the tree carries none of those comments, so the first one added is this
+    # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
+    # what the gate returns.
+    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
@@ -541,17 +549,6 @@ $checkers = [ordered]@{
     # this entry becomes once the reading is 0/0. The script's header states the scope, the counting
     # rule and what the repository-wide corpus would add (`--all`).
     'capture-census'        = @{ script = 'scripts/check-capture-census.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-capture-census: ([0-9]+) reference capture port.*/\1/p' }
-    # A comment says what the code does and why; it does not record how the project got there. This
-    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
-    # a path that is data in a string literal is not its business, and it counts a comment that names
-    # a dated ruling, a handover page, a role or a lane, a slice code, a host path. It is
-    # `reportOnly` because its count is not zero yet, and the residue is named: the two files whose
-    # comments still carry those traces, `modules/transforms/jvp.cpp` and
-    # `src/passes/opt/inline/engine.cpp`, belong to lanes that are editing them now, so their
-    # comments travel with those lanes rather than through this merge. `findings` reduces the
-    # checker's own summary line; when that reading reaches 0 the entry loses `reportOnly` and the
-    # exit 1 it already implements becomes the wall.
-    'process-traces'        = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/^process traces in comments: ([0-9]+).*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both

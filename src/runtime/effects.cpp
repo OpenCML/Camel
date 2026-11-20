@@ -11,8 +11,10 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/resources.h"
 
 #include <algorithm>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -31,35 +33,15 @@ struct OperandClause {
     bool writesVariables = true;
 };
 
-OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
-    OperandClause out;
-    const auto &table = camel::core::OperatorTable::instance();
-    const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-    const auto *facts = table.semantics(oper);
-    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
-        return out;
-    }
-    const core::sem::ResourceBinding &where = *facts->resources->functionOperand;
-    if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
-        where.kind != core::sem::ResourceBinding::Kind::With) {
-        return out;
-    }
-    const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
-                              ? graph.normInputsOf(ref)
-                              : graph.withInputsOf(ref);
-    if (size_t(where.index) >= operands.size()) {
-        return out;
-    }
-    const GCNode *value = graph.node(operands[where.index]);
-    const auto *type =
-        value != nullptr && value->dataType() != nullptr &&
-                value->dataType()->code() == core::type::TypeCode::Function
-            ? static_cast<const core::type::FunctionType *>(value->dataType())
-            : nullptr;
-    const auto clause = core::functionOperandClause(table, oper, type);
+/// What a clause amounts to in the two answers this summary can speak: whether it reaches outside
+/// the program, and whether a parameter it writes is program state. `pure` is a clause -- the one
+/// that names nothing -- so it answers "no" to both; an absent clause (`Generic`, or a value the
+/// walk cannot read) answers "yes" to both, because a clause nobody wrote is not an empty one.
+OperandClause clauseReach(const std::optional<core::sem::ResourceSignature> &clause) {
     if (!clause.has_value()) {
-        return out;
+        return OperandClause{};
     }
+    OperandClause out;
     out.external        = clause->external;
     out.writesVariables = false;
     for (const auto &use : clause->params) {
@@ -71,6 +53,24 @@ OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
         }
     }
     return out;
+}
+
+OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
+    const auto &table = camel::core::OperatorTable::instance();
+    const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
+    const auto *facts = table.semantics(oper);
+    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
+        return OperandClause{};
+    }
+    // The operand lookup, the gates and the base are the runtime footprint's own reading
+    // (`clauseOfOperand`), so this summary and the check it feeds cannot disagree.
+    return clauseReach(clauseOfOperand(graph, ref, *facts->resources->functionOperand).clause);
+}
+
+/// The same reading for a call through a function value: the callee is `with` input 0, and its
+/// clause is what the call reaches.
+OperandClause callClause(const GCGraph &graph, gc_node_ref_t ref) {
+    return clauseReach(clauseOfCall(graph, ref).clause);
 }
 
 struct EffectWalk {
@@ -143,7 +143,13 @@ struct EffectWalk {
                 break;
             }
             case GCNodeKind::Call:
-                summary.external        = true;
+                // A call through a function value: its reach is the value's clause, read the same
+                // way `Resolver::call` reads it for the footprint (design principles 3.3). `pure` is
+                // the clause that names nothing, so a call through a pure value is not an external
+                // effect. A reader that answers from no type at all calls every call "external",
+                // `pure` included, which is what makes a pure call look like a write nobody can
+                // name.
+                summary.external |= callClause(*graph, ref).external;
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
                 break;

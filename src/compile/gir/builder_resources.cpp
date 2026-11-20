@@ -367,8 +367,8 @@ bool Builder::placeCalleeCapture(
 
 bool Builder::readCalleeSignature(
     BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
-    const ResourceSignature &sig, size_t calleeWithCount, bool isCall, draft_node_ref_t id,
-    const compile_graph_ptr_t &calleeGraph) const {
+    const ResourceSignature &sig, size_t calleeWithCount, bool isCall, size_t withArgBase,
+    draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const {
     // What one node's signature amounts to for this body: its own parameters, in the numbering the
     // callee uses (with parameters first, then ordinary ones -- the same mapping as
     // runtime/resources.cpp fromSignature), read back onto the parameters of this body where the
@@ -384,8 +384,10 @@ bool Builder::readCalleeSignature(
     for (const auto &use : sig.params) {
         draft_node_ref_t operand = 0;
         if (use.index < calleeWithCount) {
-            // A call through a value keeps the value itself as its first `with` input.
-            const size_t at = size_t(use.index) + (isCall ? 1 : 0);
+            // Where the callee's `with` parameters land among this node's `with` inputs: the shared
+            // `withArgBase` (`core::functionValueWithBase`), which is 1 past the value itself when
+            // the value is the node's callee and 0 when the node is the callee.
+            const size_t at = size_t(use.index) + withArgBase;
             if (at >= with.size()) {
                 return false;
             }
@@ -455,6 +457,40 @@ bool Builder::readCalleeSignature(
     return true;
 }
 
+std::optional<Builder::FunctionValueAt> Builder::functionValueAt(
+    const runtime::GraphTransaction &transaction, draft_node_ref_t node,
+    const sem::ResourceBinding &where) const {
+    // The function value standing at one of a node's operands, found where the graph stores it: the
+    // operand the declaration names (a call's callee is the node's first `with`, `With` 0), and the
+    // type that operand carries. This is the builder's half of `runtime::clauseOfOperand` /
+    // `clauseOfCall`, and it asks the same `core::functionValueClauseAt` for the clause, the base
+    // its `with` parameters land at and how many there are -- so the ordering, the effect summary
+    // and the footprint cannot come to different answers about one type.
+    if (where.kind != sem::ResourceBinding::Kind::Norm &&
+        where.kind != sem::ResourceBinding::Kind::With) {
+        return std::nullopt;
+    }
+    const auto &draft  = transaction.graph();
+    const auto inputs  = where.kind == sem::ResourceBinding::Kind::Norm
+                             ? draft.normInputsOf(node)
+                             : draft.withInputsOf(node);
+    if (size_t(where.index) >= inputs.size()) {
+        return std::nullopt;
+    }
+    const draft_node_ref_t operand = inputs[size_t(where.index)];
+    Type *type                     = nodeTypeOf(draft.ref(operand));
+    if (type == nullptr || type->code() != TypeCode::Function) {
+        return std::nullopt;
+    }
+    FunctionValueAt out;
+    out.site = camel::core::functionValueClauseAt(
+        tt::as_ptr<FunctionType>(type), where.kind, size_t(where.index));
+    // The body behind the value, when the program names one statically: what a call through it
+    // reaches is measured from there when the type wrote no clause of its own.
+    out.body = functionValueGraphOf(draft.ref(operand));
+    return out;
+}
+
 Builder::OperandReach Builder::readFunctionOperandReach(
     BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
     draft_node_ref_t id, const sem::ResourceBinding &where, sem::ElementShape shape) const {
@@ -470,17 +506,15 @@ Builder::OperandReach Builder::readFunctionOperandReach(
         // would place it on the array: left as the walk found it.
         return OperandReach::CannotPlace;
     }
-    const auto &draft = transaction.graph();
-    const auto with   = draft.withInputsOf(id);
-    if (where.index >= with.size()) {
+    // The value at the operand the declaration names, read the one way the builder reads one
+    // (`functionValueAt`: behind the gates, at the `Norm`/`With` index, through the shared
+    // `core::functionValueClauseAt`) -- the same lookup `reachOfCall` makes for a call's callee.
+    const auto at = functionValueAt(transaction, id, where);
+    if (!at.has_value()) {
+        // No value at the operand, or one that is not a function.
         return OperandReach::Unreadable;
     }
-    Type *type = nodeTypeOf(draft.ref(with[where.index]));
-    if (type == nullptr || type->code() != TypeCode::Function) {
-        return OperandReach::Unreadable;
-    }
-    const auto *fn = tt::as_ptr<FunctionType>(type);
-    if (fn->resources().mode != ResourceSignature::Mode::Concrete) {
+    if (!at->site.clause.has_value()) {
         // A parameter of function type that writes no clause promises nothing (`Generic`).
         return OperandReach::Unreadable;
     }
@@ -490,11 +524,12 @@ Builder::OperandReach Builder::readFunctionOperandReach(
             walk,
             graph,
             transaction,
-            fn->resources(),
-            fn->withTypesCount(),
+            *at->site.clause,
+            at->site.withCount,
             true,
+            at->site.withArgBase,
             id,
-            functionValueGraphOf(draft.ref(with[where.index])))) {
+            at->body)) {
         return OperandReach::Unreadable;
     }
     return OperandReach::Placed;
@@ -566,19 +601,18 @@ std::optional<sem::ResultAlias> Builder::resultAliasOf(
         return sig.result;
     }
     if (kind == runtime::GCNodeKind::Call) {
-        const auto callee = draft.withInputsOf(id);
-        if (callee.empty()) {
+        // The result a call through a value names, read off the same value the builder's one operand
+        // lookup finds (`functionValueAt`), so this answer and the clause answer come from one place.
+        const auto at = functionValueAt(
+            transaction, id,
+            camel::core::sem::ResourceBinding{.kind = sem::ResourceBinding::Kind::With});
+        if (!at.has_value()) {
             return std::nullopt;
         }
-        Type *calleeType = nodeTypeOf(draft.ref(callee[0]));
-        if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
-            return std::nullopt;
-        }
-        const auto *fnType = tt::as_ptr<FunctionType>(calleeType);
-        if (fnType->resources().mode != ResourceSignature::Mode::Concrete) {
+        if (!at->site.clause.has_value()) {
             return sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
         }
-        return fnType->resources().result;
+        return at->site.clause->result;
     }
     return std::nullopt;
 }
@@ -703,6 +737,11 @@ bool Builder::reachOfOper(
             readUnknownValue(walk);
             break;
         case OperandReach::CannotPlace:
+            // A use this walk cannot place is not a use that is not there: the runtime records the
+            // operand it cannot read as "some resource" (`Resolver::fromFunctionOperand` does the
+            // same), so the builder records the same value rather than measuring the body as if the
+            // callback touched nothing.
+            readUnknownValue(walk);
             break;
         }
         return true;
@@ -787,6 +826,7 @@ bool Builder::reachOfFunc(
             inferred->second,
             calleeType->withTypesCount(),
             false,
+            /*withArgBase=*/0,
             id,
             callee);
     }
@@ -805,6 +845,7 @@ bool Builder::reachOfFunc(
         calleeType->resources(),
         calleeType->withTypesCount(),
         false,
+        /*withArgBase=*/0,
         id,
         callee);
 }
@@ -813,20 +854,16 @@ bool Builder::reachOfCall(
     DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
     draft_node_ref_t id) const {
     // A call through a function value: what it runs is the value's signature, which is the first
-    // `with` input of the call (isEffectNode reads it the same way). A value of a function that
-    // wrote no clause carries the set its body was measured to reach; the only function type that
-    // says nothing is a parameter of function type, whose clause the callee writes at each
-    // instantiation -- so this is read conservatively.
-    const auto callee = transaction.graph().withInputsOf(id);
-    if (callee.empty()) {
+    // `with` input of the call (isEffectNode reads it the same way, through `functionValueAt`). A
+    // value of a function that wrote no clause carries the set its body was measured to reach; the
+    // only function type that says nothing is a parameter of function type, whose clause the callee
+    // writes at each instantiation -- so this is read conservatively.
+    const auto at = functionValueAt(
+        transaction, id, camel::core::sem::ResourceBinding{.kind = sem::ResourceBinding::Kind::With});
+    if (!at.has_value()) {
         return false;
     }
-    Type *calleeType = nodeTypeOf(transaction.graph().ref(callee[0]));
-    if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
-        return false;
-    }
-    const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
-    if (calleeFunc->resources().mode != ResourceSignature::Mode::Concrete) {
+    if (!at->site.clause.has_value()) {
         readUnknownValue(walk);
         return true;
     }
@@ -834,11 +871,12 @@ bool Builder::reachOfCall(
         walk,
         graph,
         transaction,
-        calleeFunc->resources(),
-        calleeFunc->withTypesCount(),
+        *at->site.clause,
+        at->site.withCount,
         true,
+        at->site.withArgBase,
         id,
-        functionValueGraphOf(transaction.graph().ref(callee[0])));
+        at->body);
 }
 
 void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const {

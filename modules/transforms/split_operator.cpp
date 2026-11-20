@@ -184,11 +184,13 @@ std::unordered_map<std::string, operator_t> splitOperatorKernels() {
 }
 
 void registerSplitOperatorMetadata() {
-    camel::core::OperatorTable::instance().declare("transforms", {{"split", false}});
-    // The step reads the graph of the function value it receives -- that is the whole transform --
-    // so it refuses a loop there (OperatorTraits::readsGraphs).
+    // `splitKernel` reads `f`'s graph, never changes it, and answers a function value built from
+    // it; the reading it prints goes to the diagnostic side. It touches no resource, so the claim
+    // it makes is the pure one -- and not a foldable one, because the compiler cannot compute a
+    // call of it ahead of time (`foldable` false; operator_table.h). Its `#macro` declaration in
+    // stdlib/signatures/transforms.cml writes no `uses` clause, which is the same claim.
     camel::core::OperatorTable::instance().set(
-        "transforms:split", {.pure = false, .readsGraphs = true});
+        "transforms:split", {.pure = true, .readsGraphs = true, .foldable = false});
     // How a call of it is written: `split(f)`, one function and no `with` parameters. A Camel
     // declaration cannot spell the signature -- the result is the function's two halves, a type no
     // signature writes -- so the call shape is recorded here, where the operator is declared,

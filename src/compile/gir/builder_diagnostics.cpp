@@ -222,23 +222,13 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         if (id.has_value()) {
             if (const auto *facts = table.semantics(*id);
                 facts != nullptr && facts->resources && facts->resources->functionOperand) {
-                const auto &where = *facts->resources->functionOperand;
-                if (where.kind == sem::ResourceBinding::Kind::Norm ||
-                    where.kind == sem::ResourceBinding::Kind::With) {
-                    const auto operands = where.kind == sem::ResourceBinding::Kind::Norm
-                                              ? normInputsOf(node)
-                                              : withInputsOf(node);
-                    if (where.index < operands.size()) {
-                        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(operands[where.index]));
-                        const auto *value =
-                            type != nullptr && type->code() == TypeCode::Function
-                                ? tt::as_ptr<FunctionType>(type)
-                                : nullptr;
-                        if (const auto clause =
-                                camel::core::functionOperandClause(table, *id, value)) {
-                            return !clause->pure();
-                        }
-                    }
+                // The clause at the operand the declaration names, read through the builder's one
+                // lookup (`functionValueAt`): the same lookup, and the same function, the Call case
+                // below makes for a call's value.
+                const auto at = functionValueAt(
+                    graph->transaction(), nodeIdOf(node), *facts->resources->functionOperand);
+                if (at.has_value() && at->site.clause.has_value()) {
+                    return !at->site.clause->pure();
                 }
             }
         }
@@ -263,17 +253,19 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         // A call through a function value: the value's type is all there is to read at this call,
         // and one that writes no clause promises nothing -- what it reaches is fixed by the
         // instantiation, which may write a cell or print -- so it is read conservatively. Only a
-        // type that promises the empty set says the call is not an effect.
-        const auto callee = withInputsOf(node);
-        if (callee.empty()) {
-            return false;
+        // type that promises the empty set says the call is not an effect. The clause comes from
+        // the builder's one lookup (`functionValueAt`), the same reading the ordering and the
+        // runtime's footprint make of the same value.
+        const auto at = functionValueAt(
+            graph->transaction(), nodeIdOf(node),
+            camel::core::sem::ResourceBinding{.kind = sem::ResourceBinding::Kind::With});
+        if (!at.has_value()) {
+            return false; // no value at `with` 0, or a value that is not a function
         }
-        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(callee[0]));
-        if (type == nullptr || type->code() != TypeCode::Function) {
-            return false;
+        if (!at->site.clause.has_value()) {
+            return true; // no clause written: the conservative answer, an effect
         }
-        const auto *func = tt::as_ptr<FunctionType>(type);
-        return !func->resources().pure();
+        return !at->site.clause->pure();
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
