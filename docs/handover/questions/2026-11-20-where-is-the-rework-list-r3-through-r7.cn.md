@@ -1,4 +1,4 @@
-# R1 做完了，R3 到 R7 是哪五件事？
+# 返工表 R3 到 R7 在哪：在 `questions-2026-10-29.md` 的 `.md` 那一半里
 
 **2026-11-20 21:40。决策者当日第三项：**
 
@@ -20,7 +20,25 @@ C `Resolver::call` 与 E `EffectWalk::ofNodes` 本来就走它；D `declaredClau
 | `docs/handover/questions/` | 无 |
 | `docs/roadmap.cn.md` | 无 |
 
-**⇒ 所以「R3–R7」这个编号所附的那张表，不在仓库里。**
+## 找到了：它在 `docs/handover/reviews/questions-2026-10-29.md`（`.md`，**没有 `.cn`**）
+
+**上表那次搜索是错的，范围报得不完整：我用了 `-Filter '*.cn.md'`，于是 `reviews/` 里那批 `.md` 文件一个都没被扫到。
+那份文件里有 62 处 `R1`–`R7`。**这正是我自己记过的那条：零命中要报出搜索范围。**
+
+**逐条（`:3106`–`:3112`）：**
+
+| 件 | 内容 |
+| --- | --- |
+| **R3** | `let _ = export_model(…)` 还在 8 条用例和官方示例里（`examples/ml/export_onnx.cml`、`test/cases/modules/onnx/export_train…`） |
+| **R4** | `autodiff-migration-ledger.mjs` 的钉死常量（`:212` 的 `LEDGER_RECORDED`；plan 的 `desc` 与期望里又写一遍） |
+| **R5** | `extent_of` 的属性在 C++ 里重述了一遍（`builtin.cpp:673`）—— 属性表只该从实现表登记 |
+| **R6** | 两个「有没有路径」的遍历（`draft_inline.cpp:1367` `waitsOnAnyEdge` 与 `:1614` 的 lambda `waitsOn`） |
+| **R7** | 拒绝原因有两套表 + 一条只给测试看的通道（`refusal_readings.h` 的 16 项枚举、手写 JSON、stderr 的 `READING_REFUSAL`） |
+
+**排程（`:3125`）：**R2、R3 跟着 ONNX 那条车道走；R1 作为机械清理可与主线并行；R4 到 R11 排在第七节第 3 项（库层 `grad`）之后、删引擎之前。
+
+**⇒ 而这张表一直在被追加，取最新版要读到最后：**`:3201`/`:3273` 是「R3 返工（第三次）」、`:3276`「R4 常开读数又添一处」、
+`:3277`「R5 同一段复制粘贴出现三份」。**读 R3 之前先读 `:3273` 那一版，`3106` 那版已是旧的。**
 
 ## 要问的
 

@@ -71,7 +71,7 @@
 | [`2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut`](2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut.cn.md) | 一张提升图的第 2 段，在下一刀 `split` 里是切向还是值 |
 | [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ |
 | [`2026-11-20-when-a-ruling-read-a-success-line-as-the-failure`](2026-11-20-when-a-ruling-read-a-success-line-as-the-failure.cn.md) | 当一条裁定把成功行读成了失败原因？ |
-| [`2026-11-20-where-is-the-rework-list-r3-through-r7`](2026-11-20-where-is-the-rework-list-r3-through-r7.cn.md) | R1 做完了，R3 到 R7 是哪五件事？ |
+| [`2026-11-20-where-is-the-rework-list-r3-through-r7`](2026-11-20-where-is-the-rework-list-r3-through-r7.cn.md) | 返工表 R3 到 R7 在哪：在 `questions-2026-10-29.md` 的 `.md` 那一半里 |
 | [`2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function`](2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function.cn.md) | `jvp` 与 `vjp` 对同一个 `f` 各造一张图 —— 两张图的边集合是不是不一致？ |
 | [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 |
 | [`2026-11-20-whether-splits-forward-half-takes-a-tangent-port`](2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md) | `split` 割「结果含函数」的图时，前向半要不要收切向端口 |
