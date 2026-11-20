@@ -480,8 +480,8 @@ Builder::OperandReach Builder::readFunctionOperandReach(
         return OperandReach::Unreadable;
     }
     const auto *fn = tt::as_ptr<FunctionType>(type);
-    const auto clause = camel::core::functionValueClause(fn);
-    if (!clause.has_value()) {
+    const auto site = camel::core::functionValueClauseAt(fn, where.kind, size_t(where.index));
+    if (!site.clause.has_value()) {
         // A parameter of function type that writes no clause promises nothing (`Generic`).
         return OperandReach::Unreadable;
     }
@@ -491,8 +491,8 @@ Builder::OperandReach Builder::readFunctionOperandReach(
             walk,
             graph,
             transaction,
-            *clause,
-            fn->withTypesCount(),
+            *site.clause,
+            site.withCount,
             true,
             id,
             functionValueGraphOf(draft.ref(with[where.index])))) {
@@ -704,6 +704,11 @@ bool Builder::reachOfOper(
             readUnknownValue(walk);
             break;
         case OperandReach::CannotPlace:
+            // A use this walk cannot place is not a use that is not there: the runtime records the
+            // operand it cannot read as "some resource" (`Resolver::fromFunctionOperand` does the
+            // same), so the builder records the same value rather than measuring the body as if the
+            // callback touched nothing.
+            readUnknownValue(walk);
             break;
         }
         return true;
@@ -827,10 +832,12 @@ bool Builder::reachOfCall(
         return false;
     }
     const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
-    // The clause is read in one place (`core::functionValueClause`), so a call through a value and
-    // a higher-order operator's operand cannot come to different answers about the same type.
-    const auto clause = camel::core::functionValueClause(calleeFunc);
-    if (!clause.has_value()) {
+    // The clause is read in one place (`core::functionValueClauseAt`: the clause, the base its
+    // `with` parameters land at, and how many there are), so a call through a value and a
+    // higher-order operator's operand cannot come to different answers about the same type.
+    const auto site = camel::core::functionValueClauseAt(
+        calleeFunc, camel::core::sem::ResourceBinding::Kind::With, 0);
+    if (!site.clause.has_value()) {
         readUnknownValue(walk);
         return true;
     }
@@ -838,8 +845,8 @@ bool Builder::reachOfCall(
         walk,
         graph,
         transaction,
-        *clause,
-        calleeFunc->withTypesCount(),
+        *site.clause,
+        site.withCount,
         true,
         id,
         functionValueGraphOf(transaction.graph().ref(callee[0])));

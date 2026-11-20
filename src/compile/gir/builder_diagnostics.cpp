@@ -275,11 +275,12 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             return false;
         }
         const auto *func     = tt::as_ptr<FunctionType>(type);
-        const auto clause    = camel::core::functionValueClause(func);
-        if (!clause.has_value()) {
+        const auto site      = camel::core::functionValueClauseAt(
+            func, camel::core::sem::ResourceBinding::Kind::With, 0);
+        if (!site.clause.has_value()) {
             return true; // no clause written: the conservative answer, an effect
         }
-        return !clause->pure();
+        return !site.clause->pure();
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.

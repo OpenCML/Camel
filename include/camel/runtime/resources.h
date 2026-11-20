@@ -496,6 +496,17 @@ class GraphBeforeEditBeyondType : public std::runtime_error {
     explicit GraphBeforeEditBeyondType(std::string what) : std::runtime_error(std::move(what)) {}
 };
 
+/// The clause of the function value that arrives at a node's operand, found the way the graph stores
+/// it: the value is read through the gates the graph puts between an operand and the value the
+/// program handed over, and the operand is picked by the declaration's `Norm`/`With` kind and index.
+/// The one lookup the runtime and the effect summary share, so a call through a value
+/// (`clauseOfCall`) and a higher-order operator's operand (`clauseOfOperand`) read the same place.
+core::FunctionValueClause clauseOfOperand(
+    const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where);
+
+/// The same reading for a call through a function value: the callee is the call's first `with` input.
+core::FunctionValueClause clauseOfCall(const GCGraph &graph, gc_node_ref_t node);
+
 /// Records a refusal as the diagnostic both commit paths carry, and says who asked: `site` is the
 /// pass's name, or `graph::commit` for the graph module. The diagnostic is the report; the caller
 /// still has to stop, which is why this answers nothing.

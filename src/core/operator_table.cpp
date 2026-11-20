@@ -942,6 +942,19 @@ std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionTy
     return value->resources();
 }
 
+size_t functionValueWithBase(sem::ResourceBinding::Kind kind, size_t index) {
+    return kind == sem::ResourceBinding::Kind::With ? index + 1 : 0;
+}
+
+FunctionValueClause functionValueClauseAt(
+    const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index) {
+    FunctionValueClause out;
+    out.clause      = functionValueClause(value);
+    out.withArgBase = functionValueWithBase(kind, index);
+    out.withCount   = value != nullptr ? value->withTypesCount() : 0;
+    return out;
+}
+
 std::optional<sem::ResourceSignature> functionOperandClause(
     const OperatorTable &table, OperId id, const type::FunctionType *value) {
     const sem::OperatorSemantics *facts = table.semantics(id);

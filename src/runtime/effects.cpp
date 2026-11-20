@@ -11,6 +11,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/resources.h"
 
 #include <algorithm>
 #include <optional>
@@ -54,16 +55,6 @@ OperandClause clauseReach(const std::optional<core::sem::ResourceSignature> &cla
     return out;
 }
 
-/// The type of the function value at operand `at`, or nullptr when that value carries no function
-/// type. The one place this file reads a value's type, for the two readers below.
-const core::type::FunctionType *valueTypeAt(const GCGraph &graph, gc_node_ref_t at) {
-    const GCNode *value = graph.node(at);
-    return value != nullptr && value->dataType() != nullptr &&
-                   value->dataType()->code() == core::type::TypeCode::Function
-               ? static_cast<const core::type::FunctionType *>(value->dataType())
-               : nullptr;
-}
-
 OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
     const auto &table = camel::core::OperatorTable::instance();
     const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
@@ -71,28 +62,15 @@ OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
     if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
         return OperandClause{};
     }
-    const core::sem::ResourceBinding &where = *facts->resources->functionOperand;
-    if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
-        where.kind != core::sem::ResourceBinding::Kind::With) {
-        return OperandClause{};
-    }
-    const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
-                              ? graph.normInputsOf(ref)
-                              : graph.withInputsOf(ref);
-    if (size_t(where.index) >= operands.size()) {
-        return OperandClause{};
-    }
-    return clauseReach(core::functionValueClause(valueTypeAt(graph, operands[where.index])));
+    // The operand lookup, the gates and the base are the runtime footprint's own reading
+    // (`clauseOfOperand`), so this summary and the check it feeds cannot disagree.
+    return clauseReach(clauseOfOperand(graph, ref, *facts->resources->functionOperand).clause);
 }
 
 /// The same reading for a call through a function value: the callee is `with` input 0, and its
 /// clause is what the call reaches.
 OperandClause callClause(const GCGraph &graph, gc_node_ref_t ref) {
-    const auto with = graph.withInputsOf(ref);
-    if (with.empty()) {
-        return OperandClause{};
-    }
-    return clauseReach(core::functionValueClause(valueTypeAt(graph, with[0])));
+    return clauseReach(clauseOfCall(graph, ref).clause);
 }
 
 struct EffectWalk {
