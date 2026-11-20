@@ -138,16 +138,10 @@ type::FunctionType *operatorOverloadType(
 }
 
 bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id) {
-    // The slot `id` reads: a GATE forwards the slot of its **first** normal input, the value the
-    // region hands on (design principles 3.1). The inputs after
-    // it are the reads of the region's writes; they are not the value.
-    for (size_t hops = 0; hops < draft.nodeSlotCount(); ++hops) {
-        const DraftNodeHeader *h = draft.header(id);
-        if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-            break;
-        }
-        id = draft.normInputsOf(id).front();
-    }
+    // The slot `id` reads: the value behind the gates that forward it, taken by the one walk
+    // (`camel/runtime/draft.h#ungated`: a gate's first ordinary input is the value, the inputs
+    // after it are the reads of the region's writes).
+    id = ungated(draft, id);
     // Every user of that slot, through the GATEs that forward it. A GATE reached along two
     // paths is looked at once: a shared DAG of GATEs would otherwise cost a walk per path.
     std::vector<gc_node_ref_t> work{id};
