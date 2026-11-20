@@ -6223,3 +6223,57 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 2. **身份痕迹那一轴不在仓库里做**：仓库保留真名，匿名化（改名、去作者与地址、去过程痕迹）由决策者在出包时一次做，你这边不用填替换值。仓库要做的只有已派的那件"代码注释里的过程痕迹删干净"（23:30 第一节），它在 P\* 之后一次扫完。
 3. 被裁模块的 `.cml` 仍在 `stdlib/`：出包时由决策者按模块集删掉；`collect-out` 按模块集过滤 `.cml` 是好的后续，不急。
 `gpu-plans` 那条与本件无关，照发版一侧的分级走。
+
+## 负责人上报（2026-11-20 11:35）：★ **你 `d979e61e8` 第 2 条的根因不成立 —— 按它修会修错地方**
+
+这条不是反对裁定，是**读数**。你说「二阶导的根因是 `jvp` 的 `calleeIdOf` 不认 `FunctionClosure`」。而那条车道按你的话去改之前先量了，量出**六条读数**，其中第一条就否掉了这个根因。
+
+### 一、闭包的代码**今天就已经能读**
+
+```
+`jvp(lin)`，而 `lin` 正是那个 `FILL(FunctionClosure)` 值 ⇒ **成功**：
+`REINTERP jvp function=split_of_jvp_of_quartic_backward graph=344 liftedFrom=343 type=(float, float) => (float, float) … callees=1 rules=-`
+读数 `y=16.0  lin=32.0  pair=32.0  slope=32.0`
+（还顺带 lift 了 `autodiff::mul_tangent<float>`，graph=345 rules=jvp_mul,jvp_add）
+```
+
+⇒ 而原因很直接：**`liftFuncValue`（`jvp.cpp:1036`）只对 `Func` 节点跑，Fill 节点从不问 `calleeIdOf`。** 所以 `calleeIdOf` 认不认 `FunctionClosure`，在二阶这条路上**根本不被问到**。
+
+### 二、真正的墙是**类型**，而语言自己已经说了
+
+```
+函数、以及含函数的元组**没有切平面**（`src/core/tangent_space.cpp:55-74,123`）
+而 `split` 前向一半交出的答案正是 `(float, (float) => float)`
+⇒ 语言的诊断逐字：
+`Invalid call to 'jvp' with argument types <> ((float) => (float, (float) => float pure) pure):
+ 'jvp' takes a function whose result has a tangent space, and this one's result is a
+ '(float, (float) => float pure)', which has none: the lifted signature answers the pair (value, tangent).`
+```
+
+### 三、两处死点，各自死在**不同**的地方
+
+```
+`nest_named`  ⇒ callee 的**出口是闭包** ⇒ `liftSignature` 拒，**走 walk 之前就死**
+              `jvp signature=null function=vjp::grad<<x: float> () => float pure> exitType=<__pack_0_0: float> () => float`
+`grad(grad(quartic))` ⇒ walk 停在被捕获 `forward` 的 CALL ⇒ `node=2 kind=8 type=(float, (float) => float)`
+```
+⇒ **所以不是「一处识别」，是两处不同位置的拒绝，而共同的根都是「那对类型里带了函数」。**
+
+### 四、前向那一半仍是好的
+
+```
+`jvp(jvp(quartic))` x=2 种子 1 ⇒ `y=16.0  t0=32.0  t1=48.0`（`f''=48` 对）
+`grad(grad(quartic))` 在 x=1/2/3 **全部 exit 1**
+```
+
+### 五、我建议的改裁定（要你一句）
+
+**`Jvp<F>` 从「(value, tangent) 那对」改成「一个提升后的闭包」**，并把外层 `transforms:transpose` 算子（graph 415 的 n5）在 `jvp` 里的规则一并补上 —— `transpose` 一侧同样要认出提升后的闭包。
+
+⇒ 理由是硬的：**「函数没有切平面」是原则 9.9 与 `stdlib/signatures/transforms.cml:13-27` 的法则级裁定**。若坚持「(value, tangent)」，那么 `split` 的前向一半就不该交出带函数的类型 —— **那要么改签名、要么改 `split`，两者都比「改识别处」大**。
+
+⇒ **我把这条写成问题页，默认建议写死为上面那句**，一页一问、在 `docs/handover/questions/`。**而你若维持原裁定，我就按原裁定派，但那条车道会再撞同一堵墙一次 —— 那是我该提前说清的代价。**
+
+### 六、一条我自己的教训
+
+这条裁定的根因是**我**上一轮上报时给的（我把「`calleeIdOf` 不认 `FunctionClosure`」当成结论写了上去，而它其实是上一条车道**读码得出**的推断，不是实测）。**而这次是这条车道先量后改，才把那句推断推翻。** 我上一份回报里那句话，是我的错。
