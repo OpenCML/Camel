@@ -641,8 +641,6 @@ bool liftGraph(
     size_t copiedKinds = 0;
     size_t seenKinds   = 0;
     std::vector<std::string> usedRules;
-    // The copy of the loop node the walk made, if any.
-    gc_node_ref_t liftedLoopNode = camel::runtime::kInvalidNodeRef;
     {
         auto &transaction = group.transaction(member);
         auto &draft       = transaction.edit();
@@ -2236,7 +2234,6 @@ bool liftGraph(
                     break;
                 }
                 copyOf[ref]    = draft.addLoopNode(liftedBody, liftedValueType);
-                liftedLoopNode = copyOf[ref];
                 copied[ref]    = true;
                 ++copiedKinds;
                 // What the node hands its readers. With one state the lifted value *is* that

@@ -442,12 +442,10 @@ size_t reduceOrderingEdges(
 /// undecided, and until it is, a reduction that ignored them would be answering a question about a
 /// graph the compiler does not build.
 size_t reduceOrderDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
-    auto &draft = transaction.edit();
     return reduceOrderingEdges(transaction, maxWork, OrderingReading::Pass);
 }
 
 size_t reduceDocumentOrdering(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
-    auto &draft = transaction.edit();
     return reduceOrderingEdges(transaction, maxWork, OrderingReading::Document);
 }
 

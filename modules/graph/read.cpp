@@ -288,8 +288,7 @@ slot_t nameKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCGraph &graph = graphOf(handle, "graph.nodes");
+    const auto *handle = norm.get<Handle *>(0);
     std::vector<Handle *> items;
     // The nodes in *canonical* order, not in NodeId order (design principles 9.5): the order the
     // graph's own structure decides, which `src/runtime/canonical.cpp` already computes for the
