@@ -133,6 +133,12 @@ enum class RuntimeDiag : uint32_t {
     // telling the user -- and at the default log level a line on the log channel is never seen, which is
     // why it is a warning on the diagnostics channel, naming the graph (one function) the last round was
     // still changing.
+
+    // The growth budget is the pass's other bound, and it ends the pass the same way: a round that copies
+    // nothing further leaves every count at zero, so `std::opt` used to report that round as its fixed
+    // point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
+    // left of the budget -- so that round reports here instead, one diagnostic for "the pass stopped at a
+    // bound, not at the end of its work" the two bounds share (the ruling of 2026-11-20).
     OptimizationStoppedShort = 0x100019,
 };
 

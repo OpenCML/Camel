@@ -592,7 +592,13 @@ runtime	JitWithoutCodeGenerator	0x100018	warn	`std::jit` has no native code gene
 # telling the user -- and at the default log level a line on the log channel is never seen, which is
 # why it is a warning on the diagnostics channel, naming the graph (one function) the last round was
 # still changing.
-runtime	OptimizationStoppedShort	0x100019	warn	`std::opt` stopped short of a fixed point: {0}.	Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The round count is the pass's own bound, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.	none: choice: how far to unroll a recursion of non-static depth is the writer's decision, and the program is correct at every bound
+#
+# The growth budget is the pass's other bound, and it ends the pass the same way: a round that copies
+# nothing further leaves every count at zero, so `std::opt` used to report that round as its fixed
+# point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
+# left of the budget -- so that round reports here instead, one diagnostic for "the pass stopped at a
+# bound, not at the end of its work" the two bounds share (the ruling of 2026-11-20).
+runtime	OptimizationStoppedShort	0x100019	warn	`std::opt` stopped short of a fixed point: {0}.	Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The pass has two bounds, and either one reports here. The round count is the pass's own, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. The growth budget (`growth_budget`, the nodes specializing and inlining may copy) is the caller's: past it the remaining calls stay calls. A round that changed nothing while the inliner had left a call for that budget reports here and is not a fixed point -- it used to be reported as one, which made a spent budget look like a settled optimizer. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.	none: choice: how far to unroll a recursion of non-static depth is the writer's decision, and the program is correct at every bound
 # #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
 # body-less declaration f of the same module is the operator that runs it. The graph builder
 # resolves the tag when it declares the module, so no pass reads it and it names no reader.
