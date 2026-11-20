@@ -3340,6 +3340,27 @@ expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The same broadcast, one layer in: the law above reads a difference the **program** wrote, and this
+# one reads the difference a forward **rule** wrote -- `jvp_subtract`'s tangent, which is a
+# `subtract_stated(dx, dw, shape(x), shape(w))` because on the reverse side the position a cotangent
+# is answered for is a tangent and a tangent's type states no extents. It is the shape
+# `showcase_s2`'s three entries walk (a `matmul` product's tangent subtracted from a stated target),
+# reduced to the one operator, and its two readings are the numbers and their length.
+[[tests]]
+name = "broadcast_difference_through_vjp"
+desc = "`vjp` of `step(w: float[2]) = sum((m - w) * (m - w))` on `m = [[1, 2], [3, 4]]` at `w = [0.5, 1.0]`: the loss `16.5` and the cotangent `[-6.0, -8.0]`, `numel 2`. The difference broadcasts -- `float[2, 2]` with `float[2]` -- so `dL/dw` is the **sum of what `w` fed** and not the `[2, 2]` cotangent it arrived on, and every one of the four numbers below separates a wrong answer from the right one: the unreduced cotangent is `[-1, -2, -5, -6]` (`numel=4`), the reduction along the wrong axis is `[-6, -6]` or `[-8, -8]`, and the digit that would come from reading the cotangent as a scalar is neither. `numel` is printed beside the array because the failure this entry guards is a **shape**: the law that answered before `subtract_stated_t` existed answered the whole `[2, 2]` cotangent under a static type that said `float[2]`, which is a wrong number with exit 0 and no diagnostic (measured 2026-11-20). The engine's leg is the second reading and is taken through its own pullback, so the two halves of the transform are held against each other and not only against the arithmetic; the `rhs=` line is pinned because the claim is that the law which answered is the stated one, and a run that answered through another law would be a different program. What it does not claim is that any other broadcast reduction is right: this is one operator's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_difference_through_vjp.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["broadcast difference vjp value=16.5 dL/dw numel=2 dL/dw=[-6.0, -8.0]", "broadcast difference engine value=16.5 dL/dw numel=2 dL/dw=[-6.0, -8.0]", "broadcast difference max_abs_diff library_vs_engine w=0.000000000000e+00"]
+expect_stderr_contains = ["rhs=sum_stated_t,add_tensor_t,mul_stated_t,subtract_stated_t"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The positive control for the transform's own check -- the second half of the same ruling, and the
 # half that is not about broadcasting at all: **a law written for the wrong shape** is refused as it
 # is expanded, by name. The law here is wrong on purpose and lives in the case's own directory (a
