@@ -6003,3 +6003,145 @@ parse 126/126/0 · para 104/104/0 · tools 70/70/0 · consistency 1292/1290/2 ·
 - **`lane-second-order`**：08:40 那条——`std::macro` 阶段把操作数代码已知的内层变换就地展开，外层 `jvp` 就能 lift；先用 `std::macro std::nvm` 跑 `nest_named`/`nest_lambda`/`hessian`/`confusion` 四条，看展开是否已生效，没生效就补展开。验收 `x·x`→2.0、`x³`→12、Hessian、四后端一致。
 - **`lane-package-prep`**：23:30、23:50 那五件——过程痕迹盘点与清理脚本、裁剪依赖图、CMake 选项（在主机上实测关掉被裁部分后照常构建）、最小文档（构建说明、命令行基础用法、语言基础手册，英文）、`REPRODUCE.md`。过程痕迹的实际清扫可在 P\* 之后、源码包之前一次扫完（只动注释）。
 闸门格：`lane-member-init` 补完合并后让给闸门。`lane-unknown-resource` 等的两条裁定 09:30 已给（`functionOperand` 与访问并存取并集、`rewrite:*` 声明 `functionOperand`），据此继续，不必再停。
+
+## 负责人上报（2026-11-20 10:30）：**库的反向腿在广播加法上给出静默错值（S1 级）** —— 而它 exit 0
+
+### 一、读数（`transformer` 车道的探针，逐字打印）
+
+```
+x: float[2,3]，b: float[3]，y = x + b，pullback(1.0)
+weighted = sum((x + b) * [[1,2,3],[4,5,6]])   ⇒ cotangents=([[1,2,3],[4,5,6]], [[1,2,3],[4,5,6]])
+plain    = sum(x + b)                         ⇒ cotangents=([[1,1,1],[1,1,1]], [[1,1,1],[1,1,1]])
+```
+
+**⇒ 正确的是**：`dL/db = [5.0, 7.0, 9.0]`（weighted）与 `[2.0, 2.0, 2.0]`（plain）。
+**⇒ 实际给出的是整个 `[2,3]` 的余切，不是 `sum_to([3])`。`dL/dx` 两者都对。**
+
+**⇒ 而它是静默的**：exit 0、`loss=0.0` 正常打印、**无任何诊断**，而 pullback 的**静态类型**说 `(float[2, 3], float[3])` —— **第二个成员实际是 `[2,3]`**。
+⇒ `TRANSPOSE function=split_of_jvp_of_weighted_backward … rhs=sum_stated_t,add_tensor_t,mul_stated_t` ⇒ `add_tensor_t` 被用了，**`sum_to` 一行都没有**。
+⇒ `subtract_t`（`(ct, -ct)`）按 `stdlib/rulesets/transpose.cml` 的读法形状相同 —— **未测量，所以不声称**。
+
+### 二、为什么这是今晚最重的一条
+
+今晚已经出现过三次「读数不成立」与一次「静默 13.5」（`softmax<2>`）。**这一次比它们都重，因为：**
+
+1. **它不响**：调用方拿到一个**形状不合法**的值，而静态类型**声称它是合法的** ⇒ 任何下游的秩检查都拦不住它；
+2. **它在一个最常见的算子上**：`x + b` 是每个训练步都有的广播加偏置；
+3. **它与今晚已合的那条正例并存**：`sum_axis_in_a_training_step` 的 `dL/db=[24,24]` 是**引擎**给的，引擎自己会 `sum_to` ⇒ **引擎对不证明库对**，而两条读数同时绿会让人以为这条路是好的。
+
+### 三、我建议的处置（要你裁）
+
+1. **给 `add_tensor_t` 与 `subtract_t` 加 `sum_to`**（按 `b` 的形状），并把上面两条读数写成用例钉住；
+2. **另加一条**：pullback 的静态类型与它实际返回的形状**必须一致** —— 这一条比第一条更一般，因为这一类缺陷可以出现在任何法则上，而查出它的唯一办法是**在 pullback 出口比形状**，不是比数值。
+
+⇒ 我倾向前者立刻做（它是一行级的修法），后者作为一条独立判据单独派。但**这条路的严重性判断是你的**，我不越过。
+
+### 四、同时落地的两条用例（待合）
+
+```
+transformer_step_gradient          正例：引擎腿 loss=165.23036383453388、dL/db2=[2,5,9,15]、dL/db1=[8.75,6,5.25,11]，**独立 float64 推导逐字相同**（一个 wq1 元素差 4e-16）
+transformer_step_gradient_stops_at_split  负例：库的反向腿被拒 `split does not build this function … an operand of the node is not reachable from the half's exit`
+```
+⇒ 负例的页里写清了一句：**「`lift` 是完整的（`rules=jvp_matmul,…,jvp_sum`, `nodes=254`）⇒ 缺的是那把刀，不是法则；而刀之后 `softmax_t` 仍然不存在。两个缺陷，一个不解决另一个。」**
+
+### 五、`lane-ssa` 已按作者口径处置
+
+`parked/lane-ssa` @ `4d308fc72`，本地与远端都删了，记录写的是**「未验证，不是被取代」** —— 16 笔内容确实不在主树（`calleeValueNode`/`packingTotal`/`callHandsBackResult` 各 0 处），**`test=` 全 0**，且 `5695e055c`(+306/−20, 8 src 文件) 跑在 `0024b76b4` 之前而此后五个文件都动过 ⇒ 回归面不可控。`5559d3c6e` 与 `beea20ad6` 不是同一机制（一个问退出类型的投影、一个问捕获单元）。
+
+## 负责人回报（2026-11-20 10:45）：**second order** —— 前向通，反向被挡，而挡住它的不是新机制
+
+你两次点名 `second order` 没有可见车道。这是那条车道的读数。它**没写一行代码**，因为判据在反向那一半被拒，而拒的原因值得你先看一眼。
+
+### 一、前向：二阶**已经成立**
+
+```
+`jvp(jvp(quartic))`，f = x⁴，x=2 ⇒ exit 0
+   y=16.0  d1=32.0  t0=32.0  t1=48.0
+⇒ `t1 = f''(2) = 48` 正确；`t0` 仍是 `f'(2)=32`，**两层没有混淆**
+```
+⇒ 前向没有 `split`，所以它证的只是「既有形状走两遍」的**前向那一半**。但它确实通了。
+
+### 二、反向：二阶在**内层第一阶**就被挡住，而不是二阶本身
+
+```
+`grad(grad(quartic))<2.0>()` ⇒ exit 1
+   `(vjp)stdlib/vjp.cml:190:25: [Error]: … transforms: jvp has no forward transform for this function.`
+```
+`--trace transforms` 显示**内层全绿**：
+```
+first_with_as_param graph=411 → REINTERP jvp graph=412 → split forward=413 backward=414
+→ TRANSPOSE function=split_of_jvp_of_quartic__first_with_as_param_backward graph=380
+```
+而**外层一行 `REINTERP` 都没有**（`refusedOrigin == kInvalidOriginId`）。
+
+### 三、根因：`lift` 只认 `Func` 节点，而一阶交出的是 `FunctionClosure`
+
+```
+一阶的两半已经是静态的：`split.cpp:1202 buildLinearClosure` 走 `FILL(FunctionClosure)`，静态源是 `Function(backwardId)` + 该次调用的残差
+⇒ **⇒ 所以二阶的图只能来自「外层 `jvp` 去 lift 那个导数函数」**
+⇒ **⇒ 而 `jvp` 的 `calleeIdOf` 只认 `Func` 节点，`FunctionClosure` 在 `jvp.cpp`/`jvp_operator.cpp`/`transpose*.cpp` 里出现 **0 次****
+⇒ **⇒ 于是空拒：「no forward transform for this function」，而那个 function 其实是一个 closure 值**
+```
+
+⇒ 这一条与 `transformer` 那条是**同一个形状的两个面**：那次是 `split` 切不动一个有着不可达操作数的图，这次是 `jvp` lift 不认一个已经静态化了的闭包。**两次都不是「缺法则」——法则都在。缺的是「谁来消费这个形状」。**
+
+### 四、另两条读数（都是**响的**拒绝，不是静默错值）
+
+```
+`grad(lane)<xs>()`（写降秩 `sum<0,false>`）⇒ `Function of type '(float[2]) => (float[2,2],)' cannot be called with argument types: <> (float)`
+   ⇒ 这是 `grad` 拿标量 `1.0` 当种子（`vjp.cml:194`）撞上张量余切 —— 与那条降秩签名的页是同一处
+`grad(total)<xs>()`（softmax 形）⇒ `split does not build this function (… an operand of the node is not reachable from the half's exit)`
+   ⇒ `READING_REFUSAL {"transform":"split","cause":"backward","construct":"a node whose input was not copied"}`
+```
+
+### 五、我建议的处置（要你裁）
+
+1. **让 `jvp` 的 `calleeIdOf` 认 `FunctionClosure`**（一阶交出的导数函数就是一个闭包；不认它，二阶反向永远进不去）。这是「谁来消费这个形状」的问题，不是法则问题。
+2. **`grad` 的种子 `1.0` 与张量余切**：`grad` 只对返回标量的函数有意义 —— 这条要么在类型上写明、要么让 `grad` 接受一个种子。**我不建议改 `vjp.cml:194`**，因为那是「`grad` 是 `vjp` 的一个特例」这句话的落地。
+3. **`split` 那条 not-reachable**：与 `transformer` 的负例同一个缺陷，一处在等你的裁定。
+
+⇒ **我不建议为二阶新开一条车道**：它现在卡在一条**单点**上（`calleeIdOf` 不认 closure），而那一点修好后，`jvp(jvp)` 那一半已经是绿的，剩下的只是把 `grad(grad)` 接上。
+
+## 负责人回报（2026-11-20 11:00）：**package preparation** —— 本机可查、不可发；两件要你裁
+
+你两次点名 `package preparation` 没有可见车道。这是那条车道的读数与三件挡路的东西。
+
+### 一、它做到哪一步（全离线、不在 88 之外构建）
+
+```
+`PIP_NO_INDEX=1 CAMEL_PYPI_SKIP_BUILD=1 CAMEL_PYPI_PYTHON=… npm run pypi:rollup`
+⇒ 两只 0.2.45 wheel（24,944,520 / 24,825,989 B），`check_wheel_tags.py --ruling` 通过
+⇒ 新增 `scripts/check_wheel_contents.py --out out/latest`：把 wheel 与 `out/latest`+`stdlib`+`include` 逐条比，**431/430 文件、886 行、exit 0**，清单在主机 `/tmp/wheel-manifest-0.2.45.txt`
+```
+
+打包只有一处 `pypi/camel-lang/`：pyproject 0.2.45、`packages=["camel"]`+`py-modules camel_cli`、4 个入口、package-data `.cmlenv/*`、MANIFEST `recursive-include src/camel/.cmlenv **`。取料是 `out/<tag>` 整树，**必须进 wheel 的都在清单里**（bin 8 / libs 3 / stdlib 80 / include 329 / python 1 / build-info.json）。
+
+### 二、挡路三件，第 2、3 件要你裁
+
+**1）可发布 Linux tag 只能由 auditwheel 给出，88 上没装** —— 离线轮子在 `~/h597/bundle/wheels/auditwheel-6.8.2-py3-none-any.whl`。本机 tag 停在 `linux_x86_64`，**PyPI 必拒**，发布仍只走 CI manylinux。`build-pypi.yml` 确实跑成过（PyPI 最新 0.2.44，2026-11-05T19:10Z，cp310-abi3 + py3-none 双形态），**0.2.45 未发**。
+
+**2）★ ISA 基线不一致 —— 这条要你定**
+```
+88 的 `build/CMakeCache.txt` 是 `CAMEL_TARGET_ARCH=native`
+   ⇒ `cmake/Options.cmake` 的默认、`camel-remote.ps1` 不传
+而 `ci.yml` 传 `x86-64-v3`，design-principles 9.10 要求发布包是 `x86-64-v3`
+⇒ **⇒ 所以本机 wheel 内容可查、不可发**
+```
+⇒ 我不擅自改 `camel-remote.ps1` 去传 `x86-64-v3`，因为那会让**所有**车道的构建变慢或改变读数。**要的是你一句：闸门构建该不该固定 `x86-64-v3`？** 若该，我改 `camel-remote.ps1` 一处并重跑一轮九项作对照。
+
+**3）版本与 release note 由你定**
+```
+pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45]` **空着**
+⇒ `agents/branching.md` 明写：发布前版本、下一个开发版本、release-note 内容**须与你确认**
+⇒ **⇒ 所以这一条我按规矩不自己填**
+```
+
+### 三、它顺手堵掉的一个坑（值得记）
+
+```
+`.gitignore` 补 `pypi/camel-lang/src/camel/.cmlenv/` 与 `python.stash/`
+⇒ 理由：**一次失败的 rollup 会把整份 install 留在包目录里，`git add -A` 就能进历史**
+```
+⇒ 这正好撞在你定的「不往 git 历史里拉屎」上。**而它不是被要求做的 —— 是它自己在失败路径上看到的。**
+
+另修了 `docs/pypi-packaging.md` 两处过期（`wrapper-dist`/`script-files` 已不存在；无 SDK 回退不再用 `packaging.tags`）并补 §8.1 离线配方。本机 wheel 24.9 MB vs 已发 0.2.44 linux 15.0 MB：差在 `libstdc++.so.6`（本机链接解析在 conda 工具链，manylinux 里解析在 `/usr/lib` 所以不打包）—— **这不是缺陷，是容器差异，但它说明「本机 wheel 与 CI wheel 不是同一种东西」。**
