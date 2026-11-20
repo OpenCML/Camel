@@ -8,19 +8,30 @@
 #   NAME <output_name>           # 输出名，如 io -> io.cmo
 #   [SOURCES src1 src2 ...]      # 默认 executor.cpp module.cpp operators.cpp
 #   [EXTRA_LIBS lib1 lib2]       # 额外链接库（在 libcamel fmt 之外）
+#   [LINK_MODULES mod1 mod2]     # 本模块链接的兄弟模块（模块名，如 tensor），顶层据此校验所选集合
 #   [EXTRA_INCLUDES dir1 dir2]   # 额外 include 目录
 #   [EXTRA_DEFINITIONS def1]     # 额外编译定义
 #   [USE_PYTHON]                 # 启用 Python/pybind11 依赖
 # )
 
 function(add_camel_module)
-  cmake_parse_arguments(ARG "USE_PYTHON" "NAME" "SOURCES;EXTRA_LIBS;EXTRA_INCLUDES;EXTRA_DEFINITIONS" ${ARGN})
+  cmake_parse_arguments(ARG "USE_PYTHON" "NAME" "SOURCES;EXTRA_LIBS;LINK_MODULES;EXTRA_INCLUDES;EXTRA_DEFINITIONS" ${ARGN})
   if(NOT ARG_NAME)
     message(FATAL_ERROR "add_camel_module requires NAME")
   endif()
 
   set(_name ${ARG_NAME})
   set(_target ${_name}_cmo)
+
+  # A module that links a sibling module names it here, beside its own sources: this pair is the
+  # relation the top-level CMakeLists.txt checks against the selected set, so a subset that drops a
+  # dependency fails at configure with both names instead of at the link of a target several
+  # minutes later.
+  set(_linked_targets "")
+  foreach(_linked IN LISTS ARG_LINK_MODULES)
+    set_property(GLOBAL APPEND PROPERTY CAMEL_MODULE_LINKS "${_name}|${_linked}")
+    list(APPEND _linked_targets ${_linked}_cmo)
+  endforeach()
 
   # The .cmo files this configure builds, for the manifest written at the end of the top-level
   # CMakeLists.txt. scripts/common.js installs exactly these files: a .cmo that a module left in
@@ -57,13 +68,9 @@ function(add_camel_module)
   # The objects need the include paths and definitions of the extra libraries, but not the
   # libraries themselves (and linking another module here would recreate the cycle: that module
   # links libcamel, which waits for these objects). Header-only packages and the system libraries
-  # are safe; a sibling .cmo module only contributes a link dependency to the shared target.
-  set(_object_libs camel_options fmt::fmt)
-  foreach(_extra IN LISTS ARG_EXTRA_LIBS)
-    if(NOT _extra MATCHES "_cmo$")
-      list(APPEND _object_libs ${_extra})
-    endif()
-  endforeach()
+  # are safe; a sibling module's .cmo is named by LINK_MODULES and only reaches the link line of
+  # the shared target below.
+  set(_object_libs camel_options fmt::fmt ${ARG_EXTRA_LIBS})
   target_link_libraries(${_objects} PRIVATE ${_object_libs})
 
   set_target_properties(${_target} PROPERTIES
@@ -72,10 +79,10 @@ function(add_camel_module)
     PREFIX ""
   )
 
-  # A module that links another module (nn and onnx link tensor) must resolve it to the copy
-  # next to itself, the file the module loader opens. With only build-tree runpaths, importing
-  # such a module first loads a second tensor.cmo from the build tree, with its own operator
-  # registry and type codes. $ORIGIN comes first; the build-tree entries follow for libcamel.
+  # A module that links another module (LINK_MODULES) must resolve it to the copy next to itself,
+  # the file the module loader opens. With only build-tree runpaths, importing such a module first
+  # loads a second tensor.cmo from the build tree, with its own operator registry and type codes.
+  # $ORIGIN comes first; the build-tree entries follow for libcamel.
   if(UNIX AND NOT APPLE)
     set_target_properties(${_target} PROPERTIES BUILD_RPATH "\$ORIGIN")
   endif()
@@ -92,7 +99,7 @@ function(add_camel_module)
     set_target_properties(${_target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
   endif()
 
-  set(_libs libcamel fmt::fmt ${ARG_EXTRA_LIBS})
+  set(_libs libcamel fmt::fmt ${_linked_targets} ${ARG_EXTRA_LIBS})
   if(ARG_USE_PYTHON)
     set(_python_sdks_root "${CMAKE_SOURCE_DIR}/modules/python/sdks")
     # PyPI rollup only (env set by scripts/build.js when rollupMm passed). Normal build: env unset → full SDK scan.

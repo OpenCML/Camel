@@ -80,26 +80,23 @@ exporter. Write a `.camel-opts.json` in the root of the tree:
 { "CAMEL_PACKAGE_MINIMAL": "ON" }
 ```
 
-and run `node scripts/build.js` again (delete `build/` first to configure from scratch). That leaves
-out the three modules `tiles`, `onnx`, `ckpt` and both directions of Python support (the
-`python`/`pyplot` embedding and the `bindings/python` extension). The result: 23 `.cmo` in `stdlib`
-instead of 28, `out/latest` at 64 MB instead of 68 MB, and only `libcamel.so` in `out/latest/libs`.
-`nn` is not one of them: it is one of the four modules this switch chooses between (`tiles`, `onnx`,
-`nn`, `ckpt`), and it stays so that the case study and the MLP/transformer training steps keep their
-`sgd` and `save_params`; its own `.cmo` accounts for the 436,960 bytes added.
+and run `node scripts/build.js` again (delete `build/` first to configure from scratch). What the trim
+leaves out is written in one place and this page does not repeat it: `CAMEL_MINIMAL_DROPS` in the
+top-level `CMakeLists.txt` names the modules, with the reason each one goes or stays beside it, and
+the two directions of Python support are the options above. The configure then prints the set it
+builds (`CAMEL_PACKAGE_MINIMAL: building ...`), the install carries exactly those modules' `.cmo`,
+and the size difference is a reading to take off that build rather than a number written here.
 
-`tensor`, `random`, `autodiff` and `transforms` stay on purpose: they are what the graph and the
-automatic differentiation are demonstrated with. `random` links `tensor`, so dropping `tensor` would
-take `random` with it. When a module is missing, a program that imports it says so, and names the
-module:
+When a module is missing, a program that imports it says so, and names the module:
 
 ```
 error[SemanticDiag::NativeTypeNotProvided]: The type 'Device' is declared without a right side,
 so a C++ module has to provide it, and the module 'tiles' registered no type of that name.
 ```
 
-The link dependencies between modules are written down in `CMakeLists.txt` as
-`CAMEL_MODULE_LINKS_<name>` and checked at configure time, so `-DCAMEL_MODULES=tiles` without
-`tensor` fails during configure and names both modules instead of failing at a link several minutes
-later. Both switches default off (`CAMEL_PACKAGE_MINIMAL=OFF`, `CAMEL_ENABLE_PYTHON_BINDINGS=ON`),
-so a default build is unchanged.
+The link dependencies between modules are not a list in the top-level file either: a module names the
+sibling it links beside its own sources (`LINK_MODULES` in `modules/<name>/CMakeLists.txt`), and
+`CMakeLists.txt` reads those pairs back and checks them against the selected set. So
+`-DCAMEL_MODULES=tiles` without `tensor` fails during configure and names both modules instead of
+failing at a link several minutes later. Both switches default off (`CAMEL_PACKAGE_MINIMAL=OFF`,
+`CAMEL_ENABLE_PYTHON_BINDINGS=ON`), so a default build is unchanged.

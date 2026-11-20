@@ -27,7 +27,7 @@
         },
         {
             "name": "CAMEL_PACKAGE_MINIMAL",
-            "description": "Build the subset an anonymous source package ships: no tiles/onnx/ckpt, no Python embedding (python/pyplot) and no Python host binding. The numeric core (tensor, random, autodiff, transforms) and rewrite/verify stay, and so does nn, which the case study and the training steps import",
+            "description": "Build the subset CAMEL_MINIMAL_DROPS names (top-level CMakeLists.txt, with the reason each module is in or out), without the Python embedding modules and the Python host binding",
             "default": "OFF",
             "type": "bool"
         }

@@ -89,22 +89,17 @@ message(STATUS "CAMEL_ENABLE_PYTHON_BINDINGS=${CAMEL_ENABLE_PYTHON_BINDINGS}")
 # exist because a source package is read and built by people who do not need every library, and a
 # module that is never built is a directory they never have to compile.
 #
-#   CAMEL_PACKAGE_MINIMAL=ON   drop the sets that are about running AI workloads and about hosting
-#                              Camel somewhere else: tiles (GPU), onnx (deployment), ckpt, the
-#                              Python embedding modules and the Python host binding. The numeric
-#                              core stays -- tensor, random, autodiff and transforms are what makes
-#                              the graph story concrete -- and so do the rewrite/verify modules.
-#                              nn stays too: it is one of the four modules this switch chooses
-#                              between (tiles, onnx, nn, ckpt), and the case study and the
-#                              MLP/transformer training steps import it for sgd and save_params --
-#                              three of the four are dropped, not all four.
+#   CAMEL_PACKAGE_MINIMAL=ON   build the full list minus CAMEL_MINIMAL_DROPS (top-level
+#                              CMakeLists.txt, which is where that set is written and where the
+#                              reason each module is in or out is given) and minus the two Python
+#                              directions. This file only names the switch, not the set.
 #   CAMEL_MODULES=<list>       expert form: exactly these modules, in this order. Empty means "the
 #                              set the line above decides". A name that is not a module, or a
 #                              module whose link dependency is missing, fails the configure with a
 #                              message naming both (the link would otherwise fail much later).
 option(
     CAMEL_PACKAGE_MINIMAL
-    "Build the subset an anonymous source package ships (no tiles/onnx/ckpt, no Python embedding or binding)"
+    "Build the subset CAMEL_MINIMAL_DROPS names, without the Python embedding modules and the Python host binding"
     OFF
 )
 set(CAMEL_MODULES "" CACHE STRING

@@ -5,8 +5,9 @@ add_camel_module(
     module.cpp
     src/checkpoint.cpp
     src/checkpoint_io.cpp
+  LINK_MODULES
+    tensor
   EXTRA_LIBS
-    tensor_cmo
     nlohmann_json::nlohmann_json
 )
 file(READ "${CMAKE_SOURCE_DIR}/package.json" _checkpoint_package)
