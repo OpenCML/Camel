@@ -1,29 +1,33 @@
-// The library's `softmax` gradient stops **before** the transposition, and that is what this case
-// pins: `split`, not a missing `softmax_t`.
+// The library's `softmax` gradient stops **after** the split, on the transposition's walk, and that is
+// what this case pins: not a `softmax_t` that is merely missing, and not the cut any more.
 //
-// The audit's row said `softmax` was "one rule away -- `jvp_softmax` exists and only `softmax_t` is
-// missing". The measurement says otherwise. The forward half is built, with the rule named:
+// The forward half is built, with the laws named:
 //
-//     REINTERP jvp function=total graph=250 ... rules=jvp_softmax,jvp_mul_tensor,jvp_sum
+//     REINTERP jvp function=total graph=362 ... rules=jvp_softmax,jvp_mul_tensor,jvp_sum
 //
-// and then the cut refuses, before any `TRANSPOSE` line exists at all:
+// the cut builds the function (`REINTERP split function=jvp_of_total forward=406 backward=407
+// residuals=5`), and then the transposed walk refuses at the tangent the `softmax` law writes:
 //
-//     REINTERP split function=jvp_of_total skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit
-//     split does not build this function: a node of the backward half reads a value the forward half
-//     did not copy
+//     TRANSPOSE function=rulesets.jvp::softmax_jvp<float> skip=parameter-shape uri=tensor:multiply node=9 position=1 param=1 param-type=float[...]
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=call-no-transpose node=15 callee=rulesets.jvp::softmax_jvp<float>
+//     transforms: transpose has no transpose for this function: this call's callee has no transpose of its own
 //
-// No transpose rule can help: `softmax_t` would be looked up by the walk that never starts. The
-// tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, and that call carries
-// its axis as a context input (`softmax<1>`, `sum<1, true>`); the forward half's exit does not reach
-// that input, so the copy refuses. `relu`'s mask did not hit this because `where(x > 0, 1, 0)` carries
-// no context input -- it is built from `x` alone, and `split` carries it as a residue.
+// **Where the refusal used to be.** Until 2026-11-20 this case pinned the cut refusing one layer
+// earlier (`skip=backward construct=a node whose input was not copied uri=- why=an operand of the node
+// is not reachable from the half's exit`, "split does not build this function"), because the tangent
+// was written inline in the rule's right side and needed `y = softmax<1>(x)` -- a call carrying its axis
+// as a context input that the forward half's exit did not reach, so the copy refused. The law reads its
+// axis from the node now and the same tangent is one call, `softmax_jvp(x, dx, axis)`, whose inputs the
+// cut does carry; so the refusal moved **one layer down**, from the cut to the walk. Nothing was
+// relaxed to get here: the program still exits 1, and the new sentence is the later wall.
 //
-// The question this opens is
-// `docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`;
-// this case is its measurement, kept as a case so the day it is answered the refusal goes red and says
-// what replaced it. The engine's answer for the same function is the neighbouring
-// `softmax_gradient_through_the_engine.cml` -- that is the number the library will have to reproduce,
-// and it is written out element for element there.
+// That wall is the transpose half's own, and it is two facts at once: `mul_tensor_t` needs the shape of
+// the operand it answers for (design principles 5.4 -- `float[...]` states no extents), and the callee
+// `softmax_jvp` would need a transpose of its own (`skip=call-no-transpose`). `softmax_t` is still
+// missing as well, so this is not the last layer either.
+//
+// The number the library will have to reproduce is the neighbouring
+// `softmax_gradient_through_the_engine.cml` -- it is written out element for element there.
 //
 //     camel test/cases/compile/transforms/softmax_gradient_stops_at_split.cml
 import { vjp } from vjp

@@ -1,0 +1,54 @@
+// `log_softmax`'s tangent on a **non-uniform** lane, which is the only input where the two candidate
+// spellings disagree -- so this is the case that says which of them the forward law is.
+//
+// `y_i = x_i - log(sum_j exp(x_j))` differentiates to `dy_i = dx_i - sum_j (p_j * dx_j)` with
+// `p = softmax(x) = exp(y)`: the sum runs over the **product**, and `p` multiplies the tangent inside
+// it. The transposition's shape is the other way round, `dy_i = dx_i - p_i * sum_j dx_j`
+// (`stdlib/rulesets/transpose.cml#log_softmax_t` answers exactly that for a cotangent, and it is
+// right *there*, because the reverse direction's sum runs over the cotangent alone). The two readings
+// are equal when, and only when,
+//
+//     sum_j (p_j * dx_j) = p_i * sum_j dx_j for every i   <=>   every p_j equal,
+//
+// so a lane of constant `x` is **blind** to the difference: `p` is uniform, both spellings answer the
+// same number, and a wrong one looks right. `log_softmax_axis_jvp` is written on such a lane (all
+// zeros) and therefore measures the axis and not the formula.
+//
+// Here `x = [1, 2, 3]` and `dx = [1, 1, 1]`, where they cannot agree. With `sum_j p_j = 1` the forward
+// reading answers
+//
+//     dy_i = 1 - sum_j (p_j * 1) = 1 - 1 = 0      (every i, to within the sum's own rounding)
+//
+// and the transposition's reading answers `1 - 3 * p_i`:
+//
+//     [0.7299082804888587, 0.2658145868356071, -0.9957228673244654]
+//
+// -- the numbers the neighbouring `log_softmax_gradient_through_the_engine.cml` records, because its
+// `d` is the *reverse* direction's answer for a cotangent of ones
+// (`modules/tensor/ops/reduction_ops.cpp#logSoftmaxVjp`), where the sum over the cotangent alone is
+// the right shape. One formula, two directions, and that is the whole trap: the engine's number is
+// not a second opinion about the forward law, it is the answer to the other question.
+//
+// The reading is two booleans rather than digits, so that no machine-epsilon value has to be pinned
+// and the same sentence holds on both backends: `zeros=true misread=false` is the forward law, and
+// `zeros=false misread=true` is the transposition's shape wearing the forward law's name.
+import rulesets.jvp
+import { jvp } from transforms
+import { abs, log_softmax, sum } from tensor
+
+/// The operator itself, so the tangent is the jacobian applied to `dx` and not a scalar functional of
+/// it: a `sum(...)` in between would hide which element answered what.
+func axial(x: float[...]): float[...] {
+    return log_softmax<0>(x)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0] as float[]
+    let dxs = [1.0, 1.0, 1.0] as float[]
+    let (value, tangent) = jvp(axial)(xs, dxs)
+    let total = sum(abs(tangent))
+    let zeros = total < 1e-9
+    let misread = total > 0.5
+    `log_softmax non-uniform zeros={} misread={} value={}`->format<zeros, misread, value>->println
+    return 0
+}

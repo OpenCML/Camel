@@ -233,35 +233,41 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // the axis laws below are written `mean<axis, keepdims>(xs)`: the name, with the axis and the flag in
 // angle brackets where the node keeps them as context ports -- one name and one spelling.
 //
-// `reshape` and `softmax` are the two operators that state a deciding value in angle brackets --
-// `reshape<shape>(x)`, `softmax<axis>(x)` -- because the shape and the axis are what decides which
-// function this is (design principles 4.4: `<...>` is configuration, `(...)` is the data). A rule's
-// parameters are the operator's ports in port order, the `<>` ones included, so the *pattern* half
-// names that position the way it names an operand: `reshape<dims>(x)` binds the value the node
-// writes, and the right side receives it as a value it can hand on (`jvp_reshape` below and the
-// `reshape_dims` it calls; `rulesets.vmap`'s `vmap_rule_reshape`/`vmap_reshape` is where that same
-// arrangement was first landed, `ff09ab5a0`).
+// `reshape`, `permute` and `softmax` are the operators that state a deciding value in angle brackets
+// -- `reshape<shape>(x)`, `permute<perm>(x)`, `softmax<axis>(x)` -- because the shape, the
+// permutation and the axis are what decides which function this is (design principles 4.4: `<...>` is
+// configuration, `(...)` is the data). A rule's parameters are the operator's ports in port order,
+// the `<>` ones included, so the *pattern* half names that position the way it names an operand:
+// `reshape<dims>(x)` binds the value the node writes, and the right side receives it as a value it
+// can hand on (`jvp_reshape` below and the `reshape_jvp` it calls; `rulesets.vmap`'s
+// `vmap_rule_reshape`/`vmap_reshape` is where that same arrangement was first landed, `ff09ab5a0`).
 //
-// What a law must not do is write a **constant** there. The fit compares port types and port counts
-// and never the value a `<>` port carries (`modules/transforms/rule_expand.cpp#chooseRuleAmong`), so
-// a law whose left side says `reshape<[2, 2]>` is chosen for a node of any shape and its right side
-// then answers `reshape<[2, 2]>`: the tangent of `reshape<[8, 2, 8]>(x)` came back reshaped to
-// `[2, 2]` and stopped the program at `TensorDimensionMismatch: [128] -> [2, 2]`. That is a wrong
-// number, not a missing one, and the repair is in the pattern half and nowhere else -- which is why
-// `jvp_reshape` names its shape and `jvp_softmax` cannot name its axis: `softmax`'s axis is a
-// parameter with a default, so `softmax(x)` has one port and `softmax<0>(x)` has two under the same
-// key, and a law that names the axis is refused for the first spelling -- the one most programs
-// write. Its `<1>` is the last axis that default names, so the axis is right for `softmax(x)` and
-// for `softmax<1>(x)`, and a `softmax<0>(x)` under forward mode is answered by a law that writes
-// `<1>`. That limit is real, it is reported, and it is not something this ruleset can repair.
+// What a law must not do is write a **constant** there. The fit compares the value a `<>` port
+// carries against the one the law wrote (`modules/transforms/rule_expand.cpp#lawConstantsFitNode`),
+// so a law written for one configuration answers only a node that carries that configuration.
+// Measured 2026-11-20: `jvp_reshape` was written for `[2, 2]` and the tangent of
+// `reshape<[8, 2, 8]>(x)` came back reshaped to `[2, 2]`, stopping the program at
+// `TensorDimensionMismatch: [128] -> [2, 2]` -- a wrong number, not a missing one. Naming the port is
+// the repair in the pattern half and nowhere else, and it is what all three laws now do.
 //
-// The paragraph that used to stand here said `softmax` and `reshape` were not in this file because a
-// rule's right side may not pass a context argument of its own -- `4fb738332` removed exactly that
-// refusal (the `with` input of a right side is carried over like an operand, and one the body does
-// not carry is still refused by name) -- and then said the pattern half could not name the position
-// at all, which `ff09ab5a0` also stopped being true.
-// `test/plans/feat/compile/rules_angle_args.plan.toml` pins the numbers these two laws have to
-// answer; `rules_angle_args.reshape_shape` is the one a constant could not have answered.
+// A `<>` position written on a rule's **right** side is refused for a reason of its own: the right
+// side is a closure over the values the left side bound, and that position asks the closure for a
+// compile-time value it does not carry ("jvp has no forward rule for `tensor:reshape` (the rule's
+// right side passes a context argument it does not carry)", measured 2026-11-20). So the value is
+// handed to a function that writes the operator -- `reshape_jvp`, `permute_jvp`, `softmax_jvp`. A
+// permutation and a reshape need the value and the tangent; a softmax's tangent reads its operand as
+// well (`y = softmax<axis>(x)` is recomputed), so `softmax_jvp` takes the operand too.
+//
+// `softmax`'s axis is a parameter with a default, so `softmax(x)` has one port and `softmax<0>(x)`
+// has two under the same key, and no single law names both spellings. The named form is the one
+// written here, so every `softmax<axis>` is answered and `softmax(x)` -- the axis left to the
+// declaration's default -- is refused at the port count. It was refused before the axis was named,
+// too, by the constant check; neither spelling has ever been answered by a law that guessed the
+// default (`rules_angle_args.softmax_without_its_axis` pins it).
+//
+// `test/plans/feat/compile/rules_angle_args.plan.toml` pins the numbers these laws have to answer;
+// `rules_angle_args.reshape_shape` and `rules_angle_args.softmax_axes` are the ones a constant could
+// not have answered.
 //
 // Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
 // operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
@@ -482,36 +488,61 @@ export rule jvp_mul_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
         mul_stated(dx, w, shape(x), shape(w)) + mul_stated(x, dw, shape(x), shape(w))
 }
 
-/// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.
+// ---- the forward rules of `softmax` and `log_softmax` ----
+// Two laws and the two tangents they write, indexed by the axis the call names.
+
+/// `d(softmax<axis>(x)) = y * (dx - sum<axis, true>(y * dx))` with `y = softmax<axis>(x)`.
 ///
-/// **This law answers the wrong axis, silently.** The `1` in the left side is not matched against the
-/// call: `softmax<2>` matches this rule too, and the right side then states `softmax<1>` and
-/// `sum<1, true>` of a `[2, 2, 3]` operand. Measured on `x = 0` along `dx = 1..12` with
-/// `f = sum(softmax<2>(x) * w)`, where the answer is `26.0` and `4 * 2/3 = 2.666667`:
+/// `axis` is the operator's second port and this law names it, so the call's own `<>` value reaches
+/// the right side as an ordinary value -- the protocol `jvp_reshape` above states, and the one
+/// `jvp_permute` below states again. The tangent is a call to `softmax_jvp`, for the reason
+/// `reshape_jvp` records: a `<>` position written in a rule's right side asks the closure for a
+/// compile-time value it does not carry.
 ///
-/// ```
-/// softmax axis 2 value=26.000000 tangent=13.500000     <- this law
-/// softmax axis 2 value=26.000000 tangent=2.666667      <- the law that names the axis
-/// ```
-///
-/// The named form is written and reverted: the axis is the operator's second port, `jvp_reshape`
-/// above binds its own port the same way, and the right side has to hand the axis to a function
-/// (`softmax<axis>` written directly in a rule's right side is refused, `the rule's right side uses
-/// a node written after it`). That function is a callee with an open-rank parameter, which is what
-/// the transposed walk refuses (`skip=parameter-shape`), so `vjp`'s backward half then stops with a
-/// **different** sentence: `test/cases/compile/vjp/softmax_gradient_stops_at_split.cml` pins today's
-/// `split does not build this function` and goes red on the repair. A wrong tangent read quietly is
-/// worse than a missing rule, so the repair is the thing to take -- once that case is re-read.
-/// `docs/handover/questions/2026-11-19-a-rules-angle-argument-is-a-port.cn.md` states the trade.
-export rule jvp_softmax::<T>(x: T[...]) when is_float::<T>() {
-    softmax<1>(x) => (dx: T[...]) => softmax<1>(x) * (dx - sum<1, true>(softmax<1>(x) * dx))
+/// The law used to write `<1>` in its own left side, which made it answer one axis. Since the fit
+/// compares the `<>` value a law writes against the node's configuration it answered no other axis
+/// at all: `softmax<2>` was refused by name (`the rule 'jvp_softmax' writes 1 `<>` value(s) of its
+/// own, and this node's configuration is not that one`), and the `attention` block's
+/// `reshape<[8, 2, 8]>` -> `permute<[1, 0, 2]>` -> `softmax<2>` chain could not be lifted
+/// (`rules_angle_args.softmax_after_layout` is that chain). A law that reads its angle from the node
+/// answers every node, which is what `jvp_reshape` and `jvp_permute` already did.
+export rule jvp_softmax::<T>(x: T[...], axis: int) when is_float::<T>() {
+    softmax<axis>(x) => (dx: T[...]) => softmax_jvp(x, dx, axis)
 }
-/// `d(log_softmax(x)) = dx - sum(exp(y) * dx)` with `y = log_softmax(x)`, the axis (0, the only axis of the
-/// rank-1 input this rule is written for) summed with `keepdims`: the jacobian is `I - 1 pᵀ` with `p = softmax(x)`, so the tangent loses its own axis sum
-/// broadcast back over the axis. `exp(y)` is `p` and is an x-only value, the shape `exp` proved the cut
-/// carries; the axis lives in a `<>` argument, which is the part `softmax` is refused for.
-export rule jvp_log_softmax::<T>(x: T[...]) when is_float::<T>() {
-    log_softmax<0>(x) => (dx: T[...]) => (dx - sum<0, true>(exp(log_softmax<0>(x)) * dx))
+
+/// The tangent the rule above writes, with the axis handed over as an ordinary value: the softmax
+/// itself (`y`), the tangent's own sum over the axis, and the subtraction element by element. Written
+/// as one function and not in the rule's right side for the reason `reshape_jvp` gives.
+/// @example softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)    // [0.25, -0.25]
+export func softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_float::<T>() {
+    return softmax<axis>(x) * (dx - sum<axis, true>(softmax<axis>(x) * dx))
+}
+
+/// `d(log_softmax<axis>(x)) = dx - sum<axis, true>(exp(y) * dx)` with `y = log_softmax<axis>(x)`:
+/// the jacobian is `I - 1 pᵀ` with `p = softmax(x)`, so `dy_i = dx_i - sum over j of p_j * dx_j` --
+/// the sum runs over the **product** `p * dx`, and `p` multiplies the tangent inside it.
+///
+/// Do not write it as `dx - p * sum<axis, true>(dx)`: that is the **transpose**'s shape
+/// (`stdlib/rulesets/transpose.cml#log_softmax_t` answers `ct - p * sum(ct)`, because the reverse
+/// direction's sum runs over the cotangent alone). The two differ by a broadcast, and they agree only
+/// where `p` is uniform along the axis: `sum(p * dx) = p_i * sum(dx)` holds when every `p_j` is `1/n`,
+/// which is exactly the program whose `x` is constant -- so a case written on a constant lane cannot
+/// tell them apart and every wrong number looks right. `log_softmax_jvp_on_a_non_uniform_lane` is the
+/// case that separates them (`x = [1, 2, 3]`, `dx = [1, 1, 1]`: this law answers zero, the other
+/// answers `1 - 3p = [0.7299082804888587, 0.2658145868356071, -0.9957228673244654]`).
+///
+/// The axis is the operator's second port and this law names it, exactly as `jvp_softmax` above
+/// does; it used to write `<0>`, so it answered the first axis of a rank-1 input and nothing else.
+export rule jvp_log_softmax::<T>(x: T[...], axis: int) when is_float::<T>() {
+    log_softmax<axis>(x) => (dx: T[...]) => log_softmax_jvp(x, dx, axis)
+}
+
+/// The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
+/// over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
+/// which is what makes this the forward reading and not `log_softmax_t`'s.
+/// @example log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)    // [0.7310585786300049, -0.2689414213699951]
+export func log_softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_float::<T>() {
+    return dx - sum<axis, true>(exp(log_softmax<axis>(x)) * dx)
 }
 
 /// `d(relu(x)) = dx` where `x > 0`, and zero where it is not: the tangent is the mask multiplied by
