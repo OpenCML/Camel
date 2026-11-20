@@ -876,24 +876,20 @@ struct FunctionValueClause {
     size_t withCount   = 0;
 };
 
-FunctionValueClause functionValueClauseAt(
-    const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index);
-
 /**
- * The clause of the function value a declaration takes its accesses from: the operator names the
- * operand (`sem::ResourceSpec::functionOperand`) and `value` is the function the program put there.
- * Nullopt when the operator names no operand, or the type writes no clause (`Generic`) -- the caller
- * then keeps the conservative reading, never "touches nothing".
- *
-* One rule, read wherever a call stands (design principles 3.3): a call through a function value
+ * One rule, read wherever a call stands (design principles 3.3): a call through a function value
  * takes its accesses from the value's type (`Builder::reachOfCall`, `Builder::isEffectNode`'s `Call`
  * case, `Resolver::call`), and a higher-order operator's call is that same reading with the value at
- * the operand its declaration names -- the builder's ordering (`Builder::reachOfOper`),
- * `Builder::isEffectNode`'s operator case, the node-role registry, the effect summary
- * (`EffectWalk::ofNodes`) and `Resolver::fromFunctionOperand` all answer from it. The clause itself
- * is read once (`functionValueClauseAt`); this overload only adds the operand the declaration names.
+ * the operand its declaration names (`sem::ResourceSpec::functionOperand`) -- the builder's ordering
+ * (`Builder::reachOfOper`) and effect check (`Builder::isEffectNode`'s operator case), both through
+ * `Builder::functionValueAt`; the node-role registry; the effect summary (`EffectWalk::ofNodes`);
+ * and `Resolver::fromFunctionOperand`. The clause itself is read once (`functionValueClause`, above),
+ * and every one of those readers asks this reading for it -- through `functionValueClauseAt` here,
+ * or the clause alone where the base and the count are not needed -- rather than reading the type's
+ * `resources()` itself. The one reader that does read the signature itself is `declaredClauseAt`,
+ * because a call site that writes no clause has to be judged there and not declined.
  */
-std::optional<sem::ResourceSignature> functionOperandClause(
-    const OperatorTable &table, OperId id, const type::FunctionType *value);
+FunctionValueClause functionValueClauseAt(
+    const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index);
 
 } // namespace camel::core
