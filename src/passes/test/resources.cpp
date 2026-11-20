@@ -215,21 +215,21 @@ void syntheticGraphs(std::ostream &os, const rt::Program &base) {
     }
     {
         // A function whose return is its parameter: the result is the port, not fresh.
-        auto transaction = makeDraft(idPass, unaryInt());        auto &draft = transaction->edit();
+        auto transaction = makeDraft(idPass, unaryInt());
         finish(*transaction, addPort(*transaction, Type::Int64()));
         encode(*transaction, "passthrough");
     }
     {
         // The same body, but the type publishes `uses h`: the call touches the argument even
         // though the body does not.
-        auto transaction = makeDraft(idTyped, typedUnaryInt(true));        auto &draft = transaction->edit();
+        auto transaction = makeDraft(idTyped, typedUnaryInt(true));
         finish(*transaction, addPort(*transaction, Type::Int64()));
         encode(*transaction, "typed");
     }
     {
         // `pure` with a `var` parameter: a call that passes a cell the signature says is unused
         // touches nothing (the plan's 2.2/2.3 property).
-        auto transaction = makeDraft(idTypedUnused, typedUnaryInt(false, true));        auto &draft = transaction->edit();
+        auto transaction = makeDraft(idTypedUnused, typedUnaryInt(false, true));
         finish(*transaction, addPort(*transaction, Type::Int64()));
         encode(*transaction, "typed-unused");
     }

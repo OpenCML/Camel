@@ -158,52 +158,18 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                 const type_vec_t &with,
                 const type_vec_t &norm) -> optional<Type *> { return fn(with, norm); });
     };
-    // An operation on one collection configured by `count` arguments: the collection is the
-    // ordinary argument and what configures the operation is written in angle brackets,
-    // `put<k, v>(m)` or `m->put<k, v>`, the one calling form of the standard library (design
-    // principles 11.4). `fn` is handed the collection's type and the configuring types.
-    using keyed_fn = std::function<optional<Type *>(Type *coll, const type_vec_t &config)>;
-    const auto keyed = [](size_t count, const char *signature, keyed_fn fn) {
-        return DynamicFuncTypeResolver::create(
-            {{static_cast<int>(count), std::vector<bool>(count, false)}, {1, {false}}},
-            signature,
-            [count, fn = std::move(fn)](
-                const type_vec_t &with,
-                const type_vec_t &norm) -> optional<Type *> {
-                if (with.size() == count && norm.size() == 1) {
-                    return fn(norm[0], with);
-                }
-                return nullopt;
-            });
-    };
     // A key argument must have exactly the key type: nothing is converted.
     const auto mapWithKey = [](Type *m, Type *key) -> const MapType * {
         const MapType *map = asMapType(m);
         return map != nullptr && map->keyType()->equals(key) ? map : nullptr;
-    };
-    const auto collWithKey = [](Type *c, Type *key) -> const CollectionType * {
-        const CollectionType *coll = asCollectionType(c);
-        return coll != nullptr && coll->keyType()->equals(key) ? coll : nullptr;
     };
     // Two collections of one type.
     const auto sameCollections = [](const type_vec_t &norm) -> const CollectionType * {
         const CollectionType *coll = asCollectionType(norm[0]);
         return coll != nullptr && coll->equals(norm[1]) ? coll : nullptr;
     };
-    const auto sameSets = [=](const type_vec_t &norm) -> const CollectionType * {
-        const CollectionType *coll = sameCollections(norm);
-        return coll != nullptr && !coll->isMap() ? coll : nullptr;
-    };
-    const auto itself = [](const CollectionType *type) -> optional<Type *> {
-        return type ? optional<Type *>(const_cast<CollectionType *>(type)) : nullopt;
-    };
     const auto boolIf = [](bool matches) -> optional<Type *> {
         return matches ? optional<Type *>(Type::Bool()) : nullopt;
-    };
-    const auto setOperation = [=](const char *signature) {
-        return typed(0, 2, signature, [=](const type_vec_t &, const type_vec_t &norm) {
-            return itself(sameSets(norm));
-        });
     };
 
     // `items(m)`: the (key, value) pairs in key order (design principles 11.3). The loop

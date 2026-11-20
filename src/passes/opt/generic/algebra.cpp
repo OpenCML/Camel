@@ -278,7 +278,6 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
         program,
         "std::cxx::algebra",
         [&](camel::runtime::GraphTransaction &transaction) {
-    auto &draft = transaction.edit();
             return camel::passes::generic::algebraDraft(transaction, false, neutralOnly_);
         },
         nullptr,
