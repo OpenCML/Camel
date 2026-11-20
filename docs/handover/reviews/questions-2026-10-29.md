@@ -6561,3 +6561,26 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 ## 催办（2026-11-20 18:40）
 
 决策者。develop 两小时没有动代码的提交，远端各车道分支最后一笔是 18:02（`lane-jvp-closure` 17:58）。18:25 那三条急件（选点改按张量、值调用足迹、loss-a/b 迁移）与条目（1）、`layer_norm` 前向法则、二阶导——回一行：各在哪个分支、哪一步。改动先推分支再接着做，别只留在工作树。
+
+## 一条推送规则的更正：远端名必须写出来（2026-11-20 18:38，协调者记）
+
+采集车道报「`714cf0d93..05dd1679f  HEAD -> develop`，remote 无任何 `remote:` 行」。我核 `origin` 四条 —— `ls-remote` 是 `b981686cd`、ahead 3、`is-ancestor` exit 1、`branch -r --contains` 空 —— 于是判「推送报成功而 ref 没动」。
+
+**那个判断错了。ref 真的动了，动在主机裸库 `ssh://88zjwei/home/zjwei/camel-work/Camel.git` 上，不是 `origin`。**
+
+```
+ssh://88zjwei/.../Camel.git  refs/heads/develop ⇒ 05dd1679ff9e…
+origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
+```
+
+**⇒ 所以错的不是推送，是那句话：**它在一个坐标系里成立、在另一个里不成立，而写下来之后两边都读得通。**「一句话在两个坐标系里都读得通，就是它误导的地方。」**
+
+**而 `remote:` 行缺失也不是异常**：裸库没有钩子，`origin` 有 —— 所以「没有 `Bypassed rule violations`」在这一笔上不说明任何事。
+
+**规则的更正（取代原来那句「`pushExit=0` 且 `ls-remote` 复核」）：**
+
+> **每一条推送都必须写出远端名；判据是 `ls-remote <那个被点名的远端>` 的输出，不是推送的退出码，也不是另一个远端的读数。**
+
+**分离头不是原因**：分离头 + 显式 refspec 照样推得动（`8383b2917` 就是这么推的）。
+
+**补推的实况**：显式 refspec 对 `origin` 推被拒 `non-fast-forward`（`origin/develop` 已到 `b981686cd`，多 8 个提交，两条是兄弟线）；于是在树里 `--no-ff` 合成 `8383b2917`（冲突 0），推成 `origin/develop = 8383b2917`，三个 blob 与本地逐一相同（`a4e497ec3` / `d13c5882b` / `585807c59`）。

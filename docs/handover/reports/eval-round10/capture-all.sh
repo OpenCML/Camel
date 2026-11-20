@@ -91,6 +91,21 @@ banner() {
     echo "# build=$BUILD"
 }
 
+# Which sections this run takes. `CAPTURE_ONLY=1,2,4,8` takes those and skips the rest, so the
+# sections a rework touched can be re-taken without re-measuring everything else; empty takes them
+# all. A skipped section prints nothing at all, and that is deliberate: its lines in a record that
+# names two builds come from the run its own `# build=` line names, so a spliced record is spliced
+# and not re-printed by a run that did not take it.
+want() {
+    if [ -z "${CAPTURE_ONLY:-}" ]; then
+        return 0
+    fi
+    case ",$CAPTURE_ONLY," in
+        *",$1,"*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # The last component of a pass name, or `baseline` for no pass: a tag for the scratch files.
 leaf() {
     if [ -z "$1" ]; then
@@ -277,6 +292,10 @@ print("#   %-12s cmake %s" % ("", json.dumps(opt.get("cmake", {}), sort_keys=Tru
 print("#   %-12s env   %s" % ("", json.dumps(opt.get("env", {}), sort_keys=True)))
 PY
 echo "#   version    $("$CAMEL" --version 2>&1)"
+echo "#   note       the footprint's NAME is not this run's sha: it is stamped once per fingerprint and"
+echo "#              keeps the sha of the build that first produced it, so a docs-only commit moves"
+echo "#              \`revision\` and leaves the name alone. The sha to read is \`revision\`, and \`linked at\`"
+echo "#              compares against that one and not against the name."
 # The reading is only reproducible if this tree is the sources the binary was linked from, so the
 # difference between those sources and HEAD is printed. The sha to compare against is `revision`,
 # which the build writes as the tree it actually linked; it is NOT the sha inside the footprint name
@@ -304,12 +323,26 @@ if [ -n "$FPSHA" ]; then
     fi
 fi
 echo "#"
-echo "# No reading below came from another build. A row that could only be taken on an older pin"
-echo "# would say so on the row; there is none in this run."
+# A record can be assembled from two runs -- the sections a rework touched re-taken, the rest kept
+# byte for byte -- and then it has two coordinates. Saying which section is in which is the whole
+# point of printing this: a reader who is not told will read one record as one run, and a reading
+# taken on an older tree will look like a reading of this one.
+if [ -z "${CAPTURE_ONLY:-}" ]; then
+    echo "# No reading below came from another build. A row that could only be taken on an older pin"
+    echo "# would say so on the row; there is none in this run."
+    echo "#   sections   all eleven were taken in this run"
+else
+    echo "# The sections this run took came from the build above. The sections it did not take are"
+    echo "# another build's readings, kept byte for byte, and each of them names that build on its own"
+    echo "# \`# build=\` line: this record has TWO coordinates, and the line below says which is which."
+    echo "#   sections   taken in this run: [$CAPTURE_ONLY]; every other section is unchanged from the"
+    echo "#              run at ${CAPTURE_RETAINED_AT:-an earlier sha}"
+fi
 echo "# The scratch directory the module roots and the pass copies live in is $SCRATCH: this run's own,"
 echo "# named here because a diagnostic quotes it and because two runs would otherwise share one."
 
 # ---------------------------------------------------------------------------------------------
+if want 1; then
 banner 1 "the six writings of the case-study program, and the counterexample"
 echo "# The writing form is the library's: \`let dloss = grad(loss)\` then \`dloss<layer, y>(X)\`."
 echo "# The six are the ways of writing the program that change no meaning; \`train-reorder-output\` is"
@@ -381,6 +414,9 @@ echo "# output is the program's output is a rewrite that changed nothing this pr
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 2; then
 banner 2 "the scale of train.cml"
 echo "# Node = \`graphs[*].nodes\` summed; edge = one entry of a node's \`inputs\`, which is what a"
 echo "# reference is in a canonical document (it has no \`edges\` array); region = \`graphs[*].regions\`;"
@@ -404,9 +440,24 @@ for path in sys.argv[1:]:
     print("             per graph, in the document's order: %s" % per)
     print("             entry=%s root=%s" % (d.get("entry"), d.get("root")))
 PY
+echo "# The program's own count, as the compiler answers it and not as the document counts: \`std::stats\`"
+echo "# reports the graphs and nodes of the program this build compiles. It is taken on the shipped"
+echo "# program and on the variants' baseline, and the document is consumed by \`std::jgir\` so that"
+echo "# nothing here runs the program. Where the two counts part, the document has dropped something"
+echo "# the program holds -- and that is the reading, not a discrepancy to fix."
+for f in "$CASE" "$VARIANTS/train.cml"; do
+    echo "### camel $f std::stats std::jgir canonical=true"
+    st_all=$("$CAMEL" "$f" std::stats std::jgir canonical=true 2>/dev/null)
+    st=$?
+    printf '    %s  file=%s\n' "$(printf '%s\n' "$st_all" | grep '^GRAPH_STATS')" "$f"
+    echo "### exit=$st"
+done
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 3; then
 banner 3 "the three backends on the training program"
 echo "# The program is the one the tree ships, examples/case-study/train.cml. The paper's sentence is"
 echo "# that the three backends print the same thing; the comparison at the end is the reading."
@@ -421,6 +472,9 @@ printf 'nvm against jit  %s\n' "$(first_diff "$SCRATCH/back-nvm.masked" "$SCRATC
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 4; then
 banner 4 "the rows of tab:lang, under the library's grad"
 echo "# \`edits-ecoop.cml\` is copied into the scratch root as \`eco.cml\`: a module's name is its file's"
 echo "# stem, so a pass library reaches a command under that name. The file in the tree is not renamed"
@@ -441,10 +495,14 @@ echo "#                    expected refused (effect check, PassEffectBeyondType)
 echo "#   drop_print       every println erased -- expected accepted, and nothing printed"
 echo "#   break_rate       the targets tensor put in the learning-rate slot -- expected refused by the"
 echo "#                    check on the edge's types"
-echo "# The break_rate row selects the one constant of type float and the one of type f32[4, 1]; if"
-echo "# either is not unique the pass returns the program unchanged, so the row would print the"
-echo "# program's own output instead of a refusal. That is the one way this row can go quiet, and the"
-echo "# record shows which of the two happened."
+echo "# The break_rate row selects the one constant of type float and the one of type f32[4, 1]; a row"
+echo "# whose selection is not one node now REFUSES and names the count, instead of returning the"
+echo "# program unchanged -- a no-op printed the program's own output where a refusal belonged, and the"
+echo "# record could not tell a rewrite that declined to pick from a pass that never ran. The same rule"
+echo "# fixed the weight print's selector: it was \`type_text(...) == 'f32[...]'\`, which held while the"
+echo "# weight's shape was stated in full and fails once \`Linear.weight\` is \`f32[?, ?]\`; it is now"
+echo "# \`shape_text(...) != null\`, \"the operand is an array of known element type\", and the three"
+echo "# rewrites anchored on that print stopped being no-ops on 2026-11-20."
 cp "$VARIANTS/edits-ecoop.cml" "$SCRATCH/eco.cml"
 cp "$VARIANTS/train.cml" "$SCRATCH/train.cml"
 echo
@@ -495,6 +553,9 @@ echo "# one of its own region, is published), so a refusal here is about the rea
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 5; then
 banner 5 "the optimization table: the MLP and the char-transformer"
 echo "# Two kinds of row per pass, printed apart:"
 echo "#   the document  -- \`<prog> <pass> std::jgir canonical=true\`, WITH NO --arg on either program:"
@@ -689,6 +750,9 @@ echo "#   /proc/loadavg $(cat /proc/loadavg)"
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 6; then
 banner 6 "the fusion"
 echo "# The transform is \`greedy::fuse\`, a pass written in Camel (test/cases/opt/writings/"
 echo "# greedy_fuse.cml.in), copied into the scratch root as \`greedy.cml\`. The reading below is the"
@@ -710,6 +774,9 @@ printf 'fused loss-a against fused loss-b  %s\n' "$(first_diff "$SCRATCH/fused-l
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 7; then
 banner 7 "commit and normalization time (this section floats: it is the only one that does)"
 echo "# Three probes in $PROBES, each run as an ordinary pass on examples/case-study/train.cml:"
 echo "#   canonical_once::run    one normalization, one call of \`nodes(graph_of)\`"
@@ -818,15 +885,21 @@ timed commit-tr-poke "$TRANSFORMER" commit_one::poke "$PROBES_ROOT" "nodes=$(nod
 echo "#   /proc/loadavg $(cat /proc/loadavg)"
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 8; then
 banner 8 "loss-a against loss-b: the two documents, what is NOT in them, and the numbering"
 echo "# READ THIS FIRST. This section used to say the derivative graph is a graph of the canonical"
 echo "# document ('the derivative is a library transform that runs at compile time, so the derivative"
-echo "# graph is a graph of the canonical document'). On this build it is not:"
-echo "#   std::stats on loss-a prints graphs=5, nodes=57, and the five graphs carry [2,17,14,8,16] nodes;"
-echo "#   the document holds ONE autodiff:grad@1.0 node (in step's graph) whose result is called"
-echo "#   indirectly (\"call\":\"indirect\"), and no graph of the derivative. The derivative is built by"
-echo "#   modules/autodiff's GradResolver after the program's graphs exist, and never enters the"
-echo "#   canonical form."
+echo "# graph is a graph of the canonical document'), and it used to describe the program as it was"
+echo "# before the migration: five graphs, 57 nodes, and ONE autodiff:grad@1.0 node built by"
+echo "# modules/autodiff's GradResolver. Both statements are stale on this tree, and the second one"
+echo "# was stale in a way that flattered nothing: 13c93a5f8 moved the gradient into the library's"
+echo "# \`grad\`, so the operator the old text counted does not exist in either loss's document any"
+echo "# more -- the front end expands the macro and no derivative graph is a graph of the record."
+echo "# The count is not restated here. It is measured three lines below, by \`std::stats\` and by"
+echo "# walking the document: the \`graphs=... nodes=... grad_nodes=... indirect_calls=...\` line is"
+echo "# that reading, and grad_nodes is 0 on this build for both losses."
 echo "# So this section is two readings and nothing more, and neither of them is a comparison of two"
 echo "# derivative graphs -- that reading has no entry point today:"
 echo "#   (1) the two losses' PROGRAM documents, and"
@@ -907,10 +980,11 @@ echo "# This block is a placeholder and it prints no measurement: no line below 
 echo "# What is owed here, in the author's own words (review page of 2026-11-20 02:30): the second"
 echo "# derivative of \`x*x\` at 2, of \`x^3\` at 2, and a Hessian example, each on std::nvm, std::fvm,"
 echo "# std::jit and std::tf, with whether the four agree. Section [8] above compares the two losses'"
-echo "# documents and reports that no derivative graph is IN them on this build -- one"
-echo "# \`autodiff:grad@1.0\` node whose result is called indirectly, no graph for the derivative. So even"
-echo "# the first derivative is not a graph of the canonical document here, and a second derivative"
-echo "# needs \`grad(grad(f))\`, whose outer \`grad\` is refused on every build in develop today."
+echo "# documents and reports that no derivative graph is IN them on this build -- \`grad_nodes=0\` on"
+echo "# the line that counts them, because the derivative is the library's macro and the front end"
+echo "# expands it. So even the first derivative is not a graph of the canonical document here, and a"
+echo "# second derivative needs \`grad(grad(f))\`, whose outer \`grad\` is refused on every build in"
+echo "# develop today."
 echo "# PENDING: to be taken after lane-jvp-closure lands in develop. That is the lane that lands the"
 echo "# \`liftedShapeOf\` rule in modules/transforms/jvp.cpp, and the rule is what the outer \`grad\` needs"
 echo "# -- not a branch's head sha, which is why the two readings below are printed and the rule is the"
@@ -941,6 +1015,9 @@ fi
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 9; then
 banner 9 "the e2e lane: all of e2e/capture.sh, run unchanged"
 echo "# This is that script, not a copy of its commands: if the two ever drift, this section says so."
 echo "# It moves to the worktree root and to the e2e directory itself, which is where \`passes\` is"
@@ -959,6 +1036,9 @@ echo "### e2e capture.sh exit=$?"
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 10; then
 banner 10 "[C] std::prl: 200 runs of the case and of the e2e program, and what is compared"
 echo "# The question is whether the scheduler's parallel execution is observable in the output. The"
 echo "# comparison is over RAW BYTES: nothing is masked. Neither program prints a time, a path or a"
@@ -1040,6 +1120,9 @@ printf 'e2e against e2e+passes (must differ)       %s\n' "$(first_diff "$SCRATCH
 echo
 
 # ---------------------------------------------------------------------------------------------
+fi
+
+if want 11; then
 banner 11 "[E] the scheduling seed: the switch does not exist, and where the random actually lives"
 echo "# One of the five readings has no row, and this section says so with the searches that would have"
 echo "# found a switch. Three sentences in this order: what was searched; the hits and why none of them"
@@ -1071,5 +1154,7 @@ echo "#    seed. origin/lane-determinism is fully merged (0 commits ahead of dev
 echo "#    switch either. This is a reason and not a gap: no row was dropped to make the section short,"
 echo "#    and the 200 runs of [10] are not offered as a substitute for the seeds that section asked for."
 echo
+
+fi
 
 echo "===== capture-all: the end ====="

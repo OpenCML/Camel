@@ -3707,9 +3707,9 @@ SplitGraph buildSplitGraph(
             "a lifted function answers with the pair (result, tangent); here the pair is a call's "
             "result -- the differentiated lambda ends in a call to a `with`-parameterised function "
             "-- and not the two-member tuple fill this cut takes its two halves from, so there is "
-            "no pair to cut. This shape is not accepted: "
-            "`docs/handover/reviews/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-"
-            "split-cut.cn.md` weighs the three routes through it");
+            "no pair to cut. This shape is not accepted: an exit's shape is the lowering's "
+            "product, while this cut is the semantic invariant, and a criterion naming more "
+            "shapes is harder to state than a product that writes the one shape");
         os << "REINTERP split function=" << function->name()
            << " skip=" << refusalCauseName(RefusalCause::Exit) << " (" << refusal.refusedWhy
            << ")\n";

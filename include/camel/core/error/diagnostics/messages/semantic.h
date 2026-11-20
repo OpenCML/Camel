@@ -60,8 +60,8 @@ enum class SemanticDiag : uint32_t {
     // 0x000026: empty. The number is not reused.
     ImportNameConflict = 0x000027,
     // An error: the construct it reports is not compiled, so a program that uses it must not
-    // run: a warning would drop the declaration that used the feature while the rest of the
-    // program went on.
+    // run. It used to be a warning (0x100000), and the declaration that used the feature was
+    // dropped while the rest of the program went on.
     // Generic functions and type functions (design principles 5.6).
     TypeVariableRedeclared      = 0x000051,
     TypeVariableNotBindable     = 0x000052,
@@ -255,7 +255,7 @@ enum class SemanticDiag : uint32_t {
     // principles 3.3), so the rule is gone and the number is not reused.
     VariableInUses = 0x00020D,
 
-    // `std::cml`, the source printer. 0x1A5 and up.
+    // `std::cml`, the source printer (step S1). 0x1A5 and up.
     /// A graph holds a construct the printer does not turn into source.
     CmlUnsupportedConstruct = 0x0001A5,
     /// A constant is larger than the printer's max_literal_bytes.
@@ -516,7 +516,8 @@ enum class SemanticDiag : uint32_t {
     /// A type parameter is declared at the head of a declaration and written nowhere in its
     /// signature, so no argument could ever give it a type.
     TypeVariableUnused = 0x1001A5,
-    // `never` as an argument and `fail` as a statement (design principles 3.9). An argument of type `never` never gives a value, and an argument is evaluated
+    // `never` as an argument and `fail` as a statement (design principles 3.9). An argument of type
+    // `never` never gives a value, and an argument is evaluated
     // before the call it is written in, so such a call never runs: its own type is `never` and no
     // overload is chosen for it. A `fail` written as a statement of its own is no effect, so it runs
     // only where its value is wanted, and a statement after it is never reached.
@@ -530,9 +531,9 @@ enum class SemanticDiag : uint32_t {
     /// A statement written after a `fail` in the same block: the `fail` never returns, so the statement
     /// is never reached.
     StatementAfterFail = 0x1001C2,
-    /// A write to a variable whose value nothing reads (design principles 3.1 and 3.5:
-    /// assigning to a `var` is not an effect, so a write nothing reads is a value nothing
-    /// uses -- one rule for one thing, and the words are the words of a dropped value, not of an effect).
+    /// A write to a variable whose value nothing reads (design principles 3.1 and 3.5: assigning to a
+    /// `var` is not an effect, so a write nothing reads is a value nothing uses -- one rule for one
+    /// thing, and the words are the words of a dropped value, not of an effect).
     UnusedAssignedValue = 0x1001C3,
 };
 
