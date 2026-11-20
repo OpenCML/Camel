@@ -560,7 +560,7 @@ b2579aff6f390432 ok stdlib/tree.cml
 3c09a0494de711d5 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-16c6d5fd430af982 ok stdlib/rulesets/transpose.cml
+2cd34cf2eb58742a ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f3e1daeaada48d18 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
@@ -1885,6 +1885,7 @@ c83e5809e618425c ok test/cases/compile/tags/rule_binding_argument.cml
 2bd0a3894b4efa1b ok test/cases/compile/tags/tag_on_unnamed_field.cml
 144a3bd47457e3a3 ok test/cases/compile/transforms/a_refusal_keeps_stdout_to_the_program.cml
 2f54f6872e24738e ok test/cases/compile/transforms/abs_gradient_both_legs.cml
+63caf8a574438540 ok test/cases/compile/transforms/broadcast_add_subtract_gradient.cml
 70f63d93b3b0e4e9 ok test/cases/compile/transforms/broadcast_product_gradient_of_a_stated_shape.cml
 97af166dbb55d9e8 ok test/cases/compile/transforms/broadcast_product_gradient_of_an_open_rank.cml
 8adf6235831a6000 ok test/cases/compile/transforms/broadcast_product_gradient_through_the_engine.cml
@@ -2099,6 +2100,8 @@ e4a44a3460466d5d ok test/cases/compile/transforms/where_gradient_both_legs.cml
 8bc4cd1f2b0f44ec ok test/cases/compile/transforms/with_grad_composition_meets_the_split_wall.cml
 db6d6ba8ebe83c7c ok test/cases/compile/transforms/with_grad_from_the_library.cml
 74e0f9eaa8f0cdeb ok test/cases/compile/transforms/with_value_call_is_not_lifted.cml
+7457db443dc99d96 ok test/cases/compile/transforms/law_answer_shape/transpose_refuses_a_law_that_answers_the_wrong_shape.cml
+b1f87e1d04744539 ok test/cases/compile/transforms/law_answer_shape/rulesets/transpose.cml
 b0f0aafc83253276 ok test/cases/compile/type_array/selftest.cml
 d1b45e7550dab7f3 ok test/cases/compile/type_identity/branch_unify.cml
 d5d97dada8287446 no test/cases/compile/type_identity/sync_in_type.cml
