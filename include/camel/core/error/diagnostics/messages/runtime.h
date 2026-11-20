@@ -79,7 +79,7 @@ enum class RuntimeDiag : uint32_t {
     // or the calling convention of this use, or an operator the graph the scope calls brings that has
     // none. Both are one refusal of one promise, found by the pass `tiles::compile` while it runs; the
     // pass is `(f: F) => F!` (design principles 9.1), so the failure is the error value
-    // `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives
+    // `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives.
     // It is not a diagnostic: what a scope can run is only known once the pass has looked at the
     // graph, and the report is then the one an error value nobody handled gets.
     // The same promise refused while the program runs, because the pass deferred the shape to the
@@ -109,9 +109,9 @@ enum class RuntimeDiag : uint32_t {
     // (`src/builtin/operators/tagged.cpp`), which the compiler places where it has already read the
     // tag. A null there is a defect of what the compiler emitted and not a state the program made,
     // so the slot unwrap checks and reports an internal error: it does not return the zero slot,
-    // because a zero slot is a value of the right shape and the reader could not tell the two
-    // apart. No other fault in
-    // this table is of that kind, so the code says so in its own words and it is never isolated by
+    // because a zero slot is a value of the right shape and the reader could not tell the two apart.
+    // No other fault in this table is of that kind, so the code says so in its own words and it is
+    // never isolated by
     // `attempt` (`isIsolatableFault`: a defect of the compiler is not a fault of the program).
     NullSlotUnwrapped = 0x0001B2,
     // Warnings (severity bits = Warn).
@@ -133,7 +133,8 @@ enum class RuntimeDiag : uint32_t {
     // still changing.
 
     // The growth budget is the pass's other bound, and it ends the pass the same way: a round that copies
-    // nothing further leaves every count at zero, which would read as a fixed point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
+    // nothing further leaves every count at zero, so `std::opt` used to report that round as its fixed
+    // point. It is not one -- the inliner recorded the call it left because the copy did not fit what was
     // left of the budget -- so that round reports here instead, one diagnostic for "the pass stopped at a
     // bound, not at the end of its work" the two bounds share.
     OptimizationStoppedShort = 0x100019,
