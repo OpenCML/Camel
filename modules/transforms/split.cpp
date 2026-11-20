@@ -239,19 +239,45 @@ camel::core::type::FunctionType *callValueSignatureOf(const rt::GCGraph &graph, 
     return liftedSignatureOf(value->dataType());
 }
 
-/// `Lift<T>`, read from types: the lifted parameter list is the original's, values first, and then
-/// one tangent slot per parameter in the same order (`jvpSignature`), so the
-/// value ports are simply the first half. A slot for a parameter with no tangent space (`n: int`)
-/// is `()` and stands in the tangent half where its value stands in the value half -- the two
-/// halves keep their places position by position, which is the whole reason the slot exists.
+/// The **value** ports of a lifted signature, read from the type by the law the lift is written
+/// with (`jvp.cpp#liftSignature`): `Lift<F>` is `F`'s parameters followed by each one's tangent, in
+/// the same order, and a parameter with no tangent space (`n: int`) stands in the tangent half as
+/// `()`. So a parameter list is a lift exactly when every port is followed, `half` places on, by
+/// **its own tangent space** -- and that is what this asks of each pair of ports, using the type
+/// system's one answer for what a tangent is (`tangentSpaceOf`). Nothing here decides by a count
+/// alone: a signature whose second half is not the first half's tangents is not a lift, answers no
+/// value ports, and then no reader splits its argument list (`Half::halfInputsOf`).
 std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedType) {
     std::vector<size_t> values;
     if (liftedType == nullptr) {
         return values;
     }
-    const size_t half = liftedType->normTypesCount() / 2;
+    const size_t count = liftedType->normTypesCount();
+    if (count == 0 || count % 2 != 0) {
+        return values;
+    }
+    const size_t half = count / 2;
     values.reserve(half);
     for (size_t i = 0; i < half; ++i) {
+        const Type *value   = liftedType->normTypeAt(i);
+        const Type *tangent = liftedType->normTypeAt(half + i);
+        if (value == nullptr || tangent == nullptr) {
+            return {};
+        }
+        const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(value);
+        if (space.hasSpace()) {
+            if (tangent != space.space) {
+                return {};
+            }
+            values.push_back(i);
+            continue;
+        }
+        // A parameter with no tangent space takes the `()` slot: the tangent half keeps its place
+        // so that the halves line up position by position.
+        const auto *slot = tt::as_ptr<TupleType>(const_cast<Type *>(tangent));
+        if (slot == nullptr || slot->size() != 0) {
+            return {};
+        }
         values.push_back(i);
     }
     return values;
@@ -293,6 +319,81 @@ parameterOfPort(const camel::core::type::FunctionType *liftedType, size_t port) 
         return {port - half, true};
     }
     return {kNone, false};
+}
+
+/// The two halves of the **answer**, read member by member from the lifted type
+/// (`liftedShapeOf` / `liftedMemberOf`, `lift.h`) instead of from two places in the exit's node.
+///
+/// A lifted answer has two forms, and the type says which one it is:
+///
+///   - `Lift<R>` is the pair `(R, Tangent<R>)` -- the ordinary case. The exit's two members are the
+///     halves as they stand: the forward half's answer and the backward half's.
+///   - `Lift<R>` is a tuple of member lifts -- an answer that holds a function. Each member is read
+///     back into the source member it came from: a **value** member is itself a pair, and gives its
+///     value leg to the forward half and its tangent leg to the backward half; a **function**
+///     member gives the lifted function to the forward half and nothing to the backward half, since
+///     a function has no tangent space (design principles 9.9).
+///
+/// Reading two positions instead of this law is what made a cut of a lifted graph walk into a
+/// tangent its own value half cannot have: in the second form the answer's first member is itself a
+/// pair, so handing it to the forward half as it stands hands it both legs.
+struct ExitHalves {
+    /// The nodes the forward half copies, in the answer's member order.
+    std::vector<gc_node_ref_t> forward;
+    /// The nodes the backward half copies, one per **value** member, in the same order.
+    std::vector<gc_node_ref_t> tangent;
+    /// Why the answer is not a form `Lift` writes; empty when it is.
+    std::string why;
+    bool ok() const { return why.empty(); }
+};
+
+ExitHalves exitHalvesOf(const rt::GCGraph &graph, gc_node_ref_t exit, const Type *exitType) {
+    ExitHalves halves;
+    if (exit >= graph.nodeCount() || graph.node(exit) == nullptr || exitType == nullptr) {
+        halves.why = "the exit is not a node with a type";
+        return halves;
+    }
+    const std::span<const gc_node_ref_t> members = graph.withInputsOf(exit);
+    const LiftedShape shape = liftedShapeOf(const_cast<Type *>(exitType));
+    if (shape.pair) {
+        if (members.size() != 2) {
+            halves.why =
+                "the answer is the pair (value, tangent), and the exit does not hold two members";
+            return halves;
+        }
+        halves.forward.push_back(ungated(&graph, members[0]));
+        halves.tangent.push_back(ungated(&graph, members[1]));
+        return halves;
+    }
+    if (shape.type == nullptr) {
+        halves.why = "the answer is not a shape `Lift` writes";
+        return halves;
+    }
+    for (gc_node_ref_t member : members) {
+        const rt::GCNode *made = graph.node(member);
+        const LiftedMember read =
+            liftedMemberOf(made != nullptr ? const_cast<Type *>(made->dataType()) : nullptr);
+        if (read.forward == nullptr) {
+            halves.why = "a member of the answer is not a form `Lift` writes: it is neither a "
+                         "(value, tangent) pair nor a lifted function";
+            return halves;
+        }
+        if (!read.value) {
+            // A function member: the forward half keeps the lifted function, the backward half
+            // takes nothing for it.
+            halves.forward.push_back(ungated(&graph, member));
+            continue;
+        }
+        const std::span<const gc_node_ref_t> legs = graph.withInputsOf(member);
+        if (legs.size() != 2) {
+            halves.why = "a value member of the answer is a pair, and its fill does not hold the "
+                         "value and its tangent";
+            return halves;
+        }
+        halves.forward.push_back(ungated(&graph, legs[0]));
+        halves.tangent.push_back(ungated(&graph, legs[1]));
+    }
+    return halves;
 }
 
 /// The graph a call node names, or null when it names none (or the program does not have it).
@@ -494,39 +595,34 @@ struct Half {
         if (!answersAPairAt(*source, program, ref)) {
             return all;
         }
-        // Which half of the call's list this half takes is the **callee's** signature's answer: the
-        // value ports are the first half of `Lift<F>`. For a call by name that is the callee
-        // graph's type; for a call through a value it is the value's own type (there is no graph
-        // yet).
+        // Which half of the call's list this half takes is the **callee's signature's** answer, and
+        // it is read from the type: `valuePortsOf` asks each port of `Lift<F>` whether the port
+        // `half` places on is its tangent space, and the ports that pass are the values the caller
+        // passes. For a call by name that is the callee graph's type; for a call through a value it
+        // is the value's own type (there is no graph yet).
+        //
+        // Neither a record of what the call passes nor a count is a reading here. The record
+        // (`GCNode::tangentArgs`, `GCGraph::callTangentArgsOf`) is written by a rule's expansion,
+        // and a lifted call the transform builds carries none; and the position of the tangents in
+        // a call's argument list is not the signature's arithmetic, because a function value passed
+        // as an argument is an ordinary data input and a call through a value has no callee among
+        // its data inputs at all.
         const camel::core::type::FunctionType *liftedType = callValueSignatureOf(*source, ref);
         const rt::GCGraph *callee = liftedType != nullptr ? nullptr : calleeOf(ref);
         if (liftedType == nullptr) {
             liftedType = callee != nullptr ? callee->funcType() : source->funcType();
         }
         const std::vector<size_t> valuePorts = valuePortsOf(liftedType);
+        if (valuePorts.empty()) {
+            // The callee's signature is not a lift: there is no half to read, and a half that took
+            // some of the arguments and not others would place the rest in the wrong slots.
+            return all;
+        }
         std::vector<gc_node_ref_t> values;
         values.reserve(valuePorts.size());
-        // Which of the call's arguments this half takes. A call records which of its arguments are
-        // tangents (`GCNode::tangentArgs`, one bit per position; `jvp` writes it when it builds a
-        // lifted call), and that is the answer this needs: the value half takes every argument that
-        // is not a tangent. Reading the seam by arithmetic instead (`valuePortsOf`, the first half
-        // of the signature) is wrong wherever the call passes a function value as an argument,
-        // because such a call's list does not put the tangents where the signature's arithmetic
-        // expects them: a function value passed as an argument is an ordinary data input, and a
-        // call through a value has no callee among its data inputs at all.
-        const uint16_t tangentArgBits = source->callTangentArgsOf(ref);
-        if (tangentArgBits != 0) {
-            for (size_t slot = 0; slot < all.size(); ++slot) {
-                if (slot < 16 && (tangentArgBits & static_cast<uint16_t>(1u << slot)) != 0) {
-                    continue;
-                }
-                values.push_back(all[slot]);
-            }
-        } else {
-            for (size_t port : valuePorts) {
-                if (port < all.size()) {
-                    values.push_back(all[port]);
-                }
+        for (size_t port : valuePorts) {
+            if (port < all.size()) {
+                values.push_back(all[port]);
             }
         }
         // ...and the call's `with` arguments, which `valuePortsOf` does not name: they are not
@@ -1275,28 +1371,33 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     if (lifted.funcType() == nullptr) {
         return residuals;
     }
-    // The exit is the pair (result, tangent); anything else is not a lifted graph, and there is no
-    // cut to compute residuals of.
+    // The exit's two sides, read from the lifted type by the one reader of that law
+    // (`exitHalvesOf`): the answer is the pair (value, tangent), or a tuple of member lifts whose
+    // value members give their two legs to the two halves and whose function member belongs to the
+    // forward half alone. A graph whose answer is not a shape `Lift` writes is not a lifted graph,
+    // and there is no cut to compute residuals of.
     const gc_node_ref_t exit = ungated(&lifted, lifted.exitNodeRef());
-    if (exit >= lifted.nodeCount() || lifted.node(exit) == nullptr) {
+    if (exit >= lifted.nodeCount() || lifted.node(exit) == nullptr ||
+        lifted.node(exit)->kind != rt::GCNodeKind::Fill) {
         return residuals;
     }
-    const auto &exitWith = lifted.withInputsOf(exit);
-    if (lifted.node(exit)->kind != rt::GCNodeKind::Fill || exitWith.size() != 2) {
+    const ExitHalves exitHalves =
+        exitHalvesOf(lifted, exit, lifted.funcType()->exitType());
+    if (!exitHalves.ok()) {
         return residuals;
     }
-    const gc_node_ref_t resultHalf  = ungated(&lifted, exitWith[0]);
-    const gc_node_ref_t tangentHalf = ungated(&lifted, exitWith[1]);
 
-    // Which side of the cut every node is on, as the exit says it: what the result reaches is
-    // computed before the cut, what the tangent reaches is computed after it.
+    // Which side of the cut every node is on, as the exit says it: what the forward half computes
+    // is computed before the cut, what the backward half computes is computed after it.
     const size_t nodeCount = static_cast<size_t>(lifted.nodeCount());
     std::vector<char> beforeCut(nodeCount, 0);
     {
         std::vector<gc_node_ref_t> stack;
-        if (resultHalf < nodeCount) {
-            stack.push_back(resultHalf);
-            beforeCut[resultHalf] = 1;
+        for (gc_node_ref_t resultHalf : exitHalves.forward) {
+            if (resultHalf < nodeCount && beforeCut[resultHalf] == 0) {
+                stack.push_back(resultHalf);
+                beforeCut[resultHalf] = 1;
+            }
         }
         while (!stack.empty()) {
             const gc_node_ref_t ref = stack.back();
@@ -1359,8 +1460,10 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
         // today.
         std::vector<gc_node_ref_t> stack;
         std::vector<gc_node_ref_t> later;
-        if (tangentHalf < nodeCount) {
-            stack.push_back(tangentHalf);
+        for (gc_node_ref_t tangentRoot : exitHalves.tangent) {
+            if (tangentRoot < nodeCount) {
+                stack.push_back(tangentRoot);
+            }
         }
         while (!stack.empty() || !later.empty()) {
             const bool behindCut    = stack.empty();
@@ -1468,7 +1571,10 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 }
                 continue;
             }
-            if (!behindCut && beforeCut[ref] != 0 && ref != tangentHalf &&
+            if (!behindCut && beforeCut[ref] != 0 &&
+                std::find(
+                    exitHalves.tangent.begin(), exitHalves.tangent.end(), ref) ==
+                    exitHalves.tangent.end() &&
                 portIndex[ref] == Residual::kNotAParameter) {
                 // A call of a callee that answers the pair (value, tangent) reads both sides of the
                 // cut and is not itself carried (see the note where the list is filtered below):
@@ -1501,22 +1607,26 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                     continue;
                 }
                 const std::vector<gc_node_ref_t> arguments = dataInputsOf(&lifted, ref);
-                // The lifted signature writes a callee's value arguments first (`jvpSignature`) and
-                // its tangents after them, so what the walk keeps here are the ordinary arguments'
-                // first half. `dataInputsOf` is the ordinary inputs followed by the context ones,
-                // so the count to halve is the list without the call's `with` arguments: halving
-                // the whole list puts the boundary in the wrong place as soon as a lifted callee
-                // keeps a `with` list. Keep the weight on the boundary and the composition
-                // `vjp((ww) => f<ww>(..))(w)` stops one step past the exit, in the backward walk's
-                // words, `the backward half reads the value of parameter 0, and it is not one of
-                // the values the cut carries`. Anything the tangent half
-                // reads *beyond* these values is a residual the cut carries, decided by what the
-                // callee reads (`residualsOf` above), never by where a parameter stands.
+                // Which of those arguments are values is the callee's signature's answer, read
+                // from its type (`valuePortsOf`): the ports of `Lift<F>` whose partner is their own
+                // tangent space. `dataInputsOf` is the ordinary inputs followed by the context
+                // ones, so the ports are numbered in the ordinary list and the call's `with`
+                // arguments are added after them. Anything the tangent half reads *beyond* these
+                // values is a residual the cut carries, decided by what the callee reads
+                // (`residualsOf` above), never by where a parameter stands.
                 const size_t withArguments = lifted.withInputsOf(ref).size();
                 const size_t valueArguments =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
-                for (size_t i = 0; i < valueArguments / 2; ++i) {
-                    const gc_node_ref_t input = arguments[i];
+                const camel::core::type::FunctionType *calleeType =
+                    callValueSignatureOf(lifted, ref);
+                if (calleeType == nullptr && calleeGraph != nullptr) {
+                    calleeType = calleeGraph->funcType();
+                }
+                for (size_t port : valuePortsOf(calleeType)) {
+                    if (port >= valueArguments) {
+                        continue;
+                    }
+                    const gc_node_ref_t input = arguments[port];
                     if (input < nodeCount && visited[input] == 0) {
                         stack.push_back(input);
                     }
@@ -1771,22 +1881,25 @@ std::vector<rt::GCGraph *>
 pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
     std::vector<rt::GCGraph *> callees;
     const gc_node_ref_t exit = ungated(&graph, graph.exitNodeRef());
-    if (exit >= graph.nodeCount() || graph.node(exit) == nullptr) {
+    if (exit >= graph.nodeCount() || graph.node(exit) == nullptr ||
+        graph.node(exit)->kind != rt::GCNodeKind::Fill || graph.funcType() == nullptr) {
         return callees;
     }
-    const auto &exitWith = graph.withInputsOf(exit);
-    if (graph.node(exit)->kind != rt::GCNodeKind::Fill || exitWith.size() != 2) {
+    const ExitHalves answerHalves =
+        exitHalvesOf(graph, exit, graph.funcType()->exitType());
+    if (!answerHalves.ok()) {
         return callees;
     }
     const size_t nodeCount = static_cast<size_t>(graph.nodeCount());
     std::vector<char> visited(nodeCount, 0);
     std::vector<gc_node_ref_t> stack;
-    const gc_node_ref_t resultHalf = ungated(&graph, exitWith[0]);
-    if (resultHalf >= nodeCount) {
-        return callees;
+    for (gc_node_ref_t resultHalf : answerHalves.forward) {
+        if (resultHalf >= nodeCount || visited[resultHalf] != 0) {
+            continue;
+        }
+        visited[resultHalf] = 1;
+        stack.push_back(resultHalf);
     }
-    visited[resultHalf] = 1;
-    stack.push_back(resultHalf);
     while (!stack.empty()) {
         const gc_node_ref_t ref = stack.back();
         stack.pop_back();
@@ -1798,10 +1911,20 @@ pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
                 callees.push_back(program->graph(calleeId));
             }
             const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
-            const size_t withCount               = graph.withInputsOf(ref).size();
-            const size_t ordinary = all.size() > withCount ? all.size() - withCount : 0;
-            for (size_t i = 0; i < ordinary / 2 && i < all.size(); ++i) {
-                inputs.push_back(all[i]);
+            // The values the caller passes, read from the callee's signature (`valuePortsOf`), and
+            // then the call's `with` arguments, which that reading does not name.
+            const rt::GCGraph *callee =
+                program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
+            const camel::core::type::FunctionType *calleeType = callValueSignatureOf(graph, ref);
+            if (calleeType == nullptr && callee != nullptr) {
+                calleeType = callee->funcType();
+            }
+            const size_t withCount = graph.withInputsOf(ref).size();
+            const size_t ordinary  = all.size() > withCount ? all.size() - withCount : 0;
+            for (size_t port : valuePortsOf(calleeType)) {
+                if (port < ordinary) {
+                    inputs.push_back(all[port]);
+                }
             }
             for (size_t i = ordinary; i < all.size(); ++i) {
                 inputs.push_back(all[i]);
@@ -3850,8 +3973,17 @@ SplitGraph buildSplitGraph(
         return refusal;
     }
     }
-    const gc_node_ref_t resultHalf  = ungated(function, function->withInputsOf(exit)[0]);
-    const gc_node_ref_t tangentHalf = ungated(function, function->withInputsOf(exit)[1]);
+    // The two sides of the answer, read from the lifted type: the pair (value, tangent), or a tuple
+    // of member lifts whose value members give their two legs to the two halves and whose function
+    // member belongs to the forward half alone (`exitHalvesOf`).
+    const ExitHalves answerHalves =
+        exitHalvesOf(*function, exit, function->funcType()->exitType());
+    if (!answerHalves.ok()) {
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Exit) << " (" << answerHalves.why << ")\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Exit));
+        return SplitGraph{};
+    }
 
     const std::span<const gc_node_ref_t> sourcePorts = function->normPorts();
     if (sourcePorts.size() != function->funcType()->normTypesCount()) {
@@ -3979,22 +4111,52 @@ SplitGraph buildSplitGraph(
             return SplitGraph{};
         }
         // The lifted list is two halves -- the values, then their tangents -- so the forward half
-        // takes the first half of it, one port per parameter value.
-        const size_t valueCount = sourcePorts.size() / 2;
-        for (size_t i = 0; i < valueCount; ++i) {
-            Type *type               = function->funcType()->normTypeAt(i);
+        // takes the value ports, one port per parameter value (`valuePortsOf`, read from the
+        // types).
+        for (size_t i : valuePortsOf(function->funcType())) {
+            Type *type = function->funcType()->normTypeAt(i);
+            if (type == nullptr) {
+                continue;
+            }
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             forward.portOf[i] = port;
         }
-        if (!forward.copyHalf(resultHalf, built)) {
+        // The answer's forward members, in the order the lifted type writes them (`exitHalvesOf`):
+        // the value leg of every value member and every function member as it stands. What the
+        // forward half answers is those, made into the tuple the source's answer has without its
+        // tangents -- one member is that member, and several are a tuple, which is the same shape
+        // `splitHalvesWith` typed this half with.
+        std::vector<gc_node_ref_t> answerMembers;
+        answerMembers.reserve(answerHalves.forward.size());
+        for (gc_node_ref_t root : answerHalves.forward) {
+            if (!forward.copyHalf(root, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward)
+                                .atConstruct(built.refusedConstruct));
+                return built;
+            }
+            answerMembers.push_back(forward.copyOf[root]);
+        }
+        const auto *forwardExitType = tt::as_ptr<TupleType>(halves.forward->exitType());
+        Type *answerType = forwardExitType != nullptr && forwardExitType->size() > 0
+                               ? const_cast<Type *>(forwardExitType->typeAt(0))
+                               : nullptr;
+        gc_node_ref_t answerValue = rt::kInvalidNodeRef;
+        if (answerMembers.size() == 1 && answerType != nullptr) {
+            answerValue = answerMembers.front();
+        } else if (answerType != nullptr) {
+            answerValue = fillTuple(draft, answerType, answerMembers);
+        }
+        if (answerValue == rt::kInvalidNodeRef) {
             os << "REINTERP split function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::Forward)
-               << " construct=" << built.refusedConstruct
-               << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
-               << " why=" << built.refusedWhy << '\n';
-            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward)
-                            .atConstruct(built.refusedConstruct));
+               << " (the answer's forward members are not a value this half can hold)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward));
             return built;
         }
         // A call whose **linear half** crosses the cut is made by this half even when nothing on
@@ -4124,11 +4286,11 @@ SplitGraph buildSplitGraph(
             halves.closure,
             halves.backward,
             std::span<const gc_node_ref_t>(residualMembers.data(), residualMembers.size()));
-        const std::array<gc_node_ref_t, 2> exitHalves{forward.copyOf[resultHalf], linValue};
+        const std::array<gc_node_ref_t, 2> forwardExit{answerValue, linValue};
         const gc_node_ref_t out = fillTuple(
             draft,
             halves.forward->exitType(),
-            std::span<const gc_node_ref_t>(exitHalves.data(), exitHalves.size()));
+            std::span<const gc_node_ref_t>(forwardExit.data(), forwardExit.size()));
         // The exit: the pair, and -- when the body wrote statements the source's exit waited on --
         // a gate over it that waits on the same statements, in the same order. A body that printed
         // once prints once here too, because a call of this half calls the lift's forward side
@@ -4162,27 +4324,58 @@ SplitGraph buildSplitGraph(
         }
         Half backward(draft, function, program, true, &graphResiduals, &residualIndexOf);
         addResidualCaptures(draft, graphResiduals, backward);
-        for (size_t i = sourcePorts.size() / 2; i < sourcePorts.size(); ++i) {
+        // The tangent ports: every ordinary port that is not a value port (`valuePortsOf`) and whose
+        // type is a tangent space. A `()` slot is an answer this half gives, never an argument it
+        // takes.
+        std::vector<char> isValuePort(sourcePorts.size(), 0);
+        for (size_t i : valuePortsOf(function->funcType())) {
+            if (i < isValuePort.size()) {
+                isValuePort[i] = 1;
+            }
+        }
+        for (size_t i = 0; i < sourcePorts.size(); ++i) {
+            if (isValuePort[i] != 0) {
+                continue;
+            }
             Type *type = function->funcType()->normTypeAt(i);
             if (type == nullptr || !camel::core::tangentSpaceOf(type).hasSpace()) {
-                // A () slot is an answer this half gives, never an argument it takes.
                 continue;
             }
             const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
             draft.appendNormPort(port);
             backward.portOf[i] = port;
         }
-        if (!backward.copyHalf(tangentHalf, built)) {
+        // The answer's tangent members, in the order the lifted type writes them (`exitHalvesOf`):
+        // one per value member of the answer, and none for a function member.
+        std::vector<gc_node_ref_t> tangentMembers;
+        tangentMembers.reserve(answerHalves.tangent.size());
+        for (gc_node_ref_t root : answerHalves.tangent) {
+            if (!backward.copyHalf(root, built)) {
+                os << "REINTERP split function=" << function->name()
+                   << " skip=" << refusalCauseName(RefusalCause::Backward)
+                   << " construct=" << built.refusedConstruct
+                   << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
+                   << " why=" << built.refusedWhy << '\n';
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Backward)
+                                .atConstruct(built.refusedConstruct));
+                return built;
+            }
+            tangentMembers.push_back(backward.copyOf[root]);
+        }
+        Type *tangentAnswerType = halves.backward->exitType();
+        gc_node_ref_t out       = rt::kInvalidNodeRef;
+        if (tangentMembers.size() == 1) {
+            out = tangentMembers.front();
+        } else if (tangentAnswerType != nullptr) {
+            out = fillTuple(draft, tangentAnswerType, tangentMembers);
+        }
+        if (out == rt::kInvalidNodeRef) {
             os << "REINTERP split function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::Backward)
-               << " construct=" << built.refusedConstruct
-               << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
-               << " why=" << built.refusedWhy << '\n';
-            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Backward)
-                            .atConstruct(built.refusedConstruct));
+               << " (the answer's tangent members are not a value this half can hold)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Backward));
             return built;
         }
-        const gc_node_ref_t out = backward.copyOf[tangentHalf];
         draft.setExitNode(out);
         draft.setOutputNode(out);
         draft.setReturnNode(out, rt::GCReturnKind::Self);
