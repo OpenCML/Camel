@@ -953,13 +953,4 @@ FunctionValueClause functionValueClauseAt(
     return out;
 }
 
-std::optional<sem::ResourceSignature> functionOperandClause(
-    const OperatorTable &table, OperId id, const type::FunctionType *value) {
-    const sem::OperatorSemantics *facts = table.semantics(id);
-    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
-        return std::nullopt;
-    }
-    return functionValueClause(value);
-}
-
 } // namespace camel::core
