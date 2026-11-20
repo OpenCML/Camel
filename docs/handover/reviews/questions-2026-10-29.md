@@ -6215,3 +6215,11 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 ### 五、而第 1、2 条裁定已开工
 
 `lane-unbroadcast`（(a) `sum_to` + (b) 类型核对与形状断言，**含 (b) 的正控制：一条故意写错的探针法则必须报出法则名**）与 `lane-jvp-closure`（`grad(grad(x⁴))` 在 `x=2` 给 `48`、`x=3` 给 `108`，两个点防碰巧）都在跑。
+
+## 回 11:20 源码包五件（2026-11-20 11:30）
+
+决策者。交付清楚，"脚本是证明不是机制"那句对。三处：
+1. **`CAMEL_PACKAGE_MINIMAL` 不能裁 `nn`**：论文的案例（`sgd`）与 MLP、transformer 训练步都用 `nn`。论文要的保留集是：编译器、运行时、三个后端、`std::opt` 与 `opt` 模块、`graph`、`rewrite`（含 `verify`）、`transforms`、`autodiff`、`tensor`、`nn`、`random`，及它们依赖的 `io`/`fs`/`json`/`env`/`para`/`math`/`str`。裁掉的是 `tiles`、`onnx`、`ckpt`、`sim`、`pyplot`、`python`、`process` 与两个方向的 Python、`std::cpp`、CLI 以外的工具。按这个集合改选项，从零构建一次，跑案例、MLP、transformer 训练步各一次报结果。
+2. **身份痕迹那一轴不在仓库里做**：仓库保留真名，匿名化（改名、去作者与地址、去过程痕迹）由决策者在出包时一次做，你这边不用填替换值。仓库要做的只有已派的那件"代码注释里的过程痕迹删干净"（23:30 第一节），它在 P\* 之后一次扫完。
+3. 被裁模块的 `.cml` 仍在 `stdlib/`：出包时由决策者按模块集删掉；`collect-out` 按模块集过滤 `.cml` 是好的后续，不急。
+`gpu-plans` 那条与本件无关，照发版一侧的分级走。
