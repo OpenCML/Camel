@@ -293,16 +293,12 @@ function(add_camel_module)
 
   target_compile_options(${_objects} PRIVATE
     $<$<CONFIG:Release>:-O3>
-    -Wall -Wextra
-    -Wno-unused-parameter
-    -Wno-unused-private-field
-    # See CMakeLists.txt: a designated initializer that names only the fields it differs from is
-    # the idiom here too, and the omitted fields are value-initialized by the language.
-    -Wno-missing-designated-field-initializers
-    # See CMakeLists.txt: the defect that started this was in a module object (split.cpp), so the
-    # diagnostic has to fail here too and not only in the core library.
-    -Werror=dangling-gsl
   )
+  # The warning set is not written here: cmake/Warnings.cmake holds it, and a module has exactly the
+  # list `camel_warnings_module` carries -- the set every target in this tree gets. It does not carry
+  # the pedantic group the core library and the tools add, and the switches that group needs travel
+  # with it, so a module needs none of them.
+  target_link_libraries(${_objects} PRIVATE camel_warnings_module)
 
   if(WIN32)
     target_compile_definitions(${_objects} PRIVATE NOMINMAX ${ARG_EXTRA_DEFINITIONS})
