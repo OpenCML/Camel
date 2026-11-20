@@ -496,7 +496,8 @@ export function caseLedgerProblems() {
     // are prose of the same kind: they name a lane and a wall, never a file the plan runs, and the
     // reason quotes a page (`docs/...`) that the plan does not read.
     const PROSE_KEYS = new Set([
-        'desc', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'failure_note', 'comment',
+        'desc', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_ends_when',
+        'failure_note', 'comment',
     ])
     const valueText = (node, out) => {
         if (typeof node === 'string') out.push(node)

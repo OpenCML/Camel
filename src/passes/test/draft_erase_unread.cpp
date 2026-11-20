@@ -43,11 +43,11 @@ void say(std::ostream &os, std::string_view line) { os << "[ERASE_UNREAD] " << l
 /// The readers that keep a node: a normal or a `with` port of another node. A chain, a control edge
 /// and an ordering are not readers (docs/design/effects/edges.cn.md 1.5, 5.3), which is what lets
 /// the interface hand a removed statement's place on.
-int readersOf(camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t id) {
+int readersOf(auto &draft, camel::runtime::gc_node_ref_t id) {
     return static_cast<int>(draft.normUsersOf(id).size() + draft.withUsersOf(id).size());
 }
 
-int aliveAs(camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t id) {
+int aliveAs(auto &draft, camel::runtime::gc_node_ref_t id) {
     return draft.header(id) != nullptr && draft.alive(id) ? 1 : 0;
 }
 
@@ -61,7 +61,7 @@ DraftEraseUnreadTestPass::apply(const camel::runtime::Program *program, std::ost
     };
 
     compile_graph_ptr_t builder = make();
-    camel::runtime::GraphDraft &draft = builder->edit();
+    auto &draft                 = builder->edit();
 
     // copy <- middle <- outside: the set {copy, middle} is read from outside it, by `outside`.
     const node_handle_t copyNode    = builder->addCopyNode(camel::core::type::Type::Float32());
