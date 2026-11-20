@@ -293,7 +293,7 @@ set(CAMEL_MODULE_LINKS_random "tensor")
 set(CAMEL_MODULE_LINKS_rewrite "graph")
 # What a minimal package leaves out: the GPU back end, the deployment exporter, the NN and
 # checkpoint libraries built on tensor, and the two Python directions (in/bindings above).
-set(CAMEL_MINIMAL_DROPS tiles onnx nn ckpt)
+set(CAMEL_MINIMAL_DROPS tiles onnx ckpt)
 
 if(CAMEL_PACKAGE_MINIMAL)
     set(_camel_modules ${CAMEL_ALL_MODULES})
