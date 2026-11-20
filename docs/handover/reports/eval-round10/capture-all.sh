@@ -16,20 +16,33 @@
 #   [3] the three backends' output on the training program, and that they agree byte for byte
 #   [4] the rows of tab:lang: the two prints in `main`, the print in `loss`, the deleted prints,
 #       and `break_rate` (the edge-type check refusing the wrong value in the learning-rate slot)
-#   [5] the optimization table on the MLP and on the char-transformer
+#   [5] the optimization table on the MLP and on the char-transformer, and, beside its
+#       accept/refuse column, what the paper's table asks for: the nodes before and after each
+#       pass, the regions counted by kind (the `loop_body` column is the answer to "is LoopBody
+#       > 0"), the same four passes on the case-study program whole, the median of nine fresh
+#       processes per pass, and the transformer's output compared byte for byte
 #   [6] the fusion: the strict writings reading, then loss-a and loss-b fused
-#   [7] commit and normalization time (the one floating section, see its head)
-#   [8] the two derivative graphs, loss-a against loss-b
+#   [7] commit and normalization time, and what one commit costs against the size of the program
+#       (the case, the MLP, the transformer and two bigger ones) and with one node changed on the
+#       transformer (the floating blocks, see their heads; [5] floats now too)
+#   [8] the two derivative graphs, loss-a against loss-b, and the SECOND derivative on the four
+#       backends, which this build owes and does not have: that block says what it waits for
 #   [9] the e2e lane, which is e2e/capture.sh run unchanged, so the two never drift apart
+#
+# [5], [7] and [8] each carry one reading more than their head says: the three the dispatch of
+# 2026-11-20 16:10 adds -- items 6 and 14 of the author's list, and item 5's placeholder. The three
+# go where their subject already is rather than into new blocks, so a reader of the paper's table
+# finds the node counts and the times in the section that table is drawn from.
 #
 # Run it from anywhere; it moves to the worktree root itself:
 #
 #   sh docs/handover/reports/eval-round10/capture-all.sh \
 #       > docs/handover/reports/eval-round10/capture-all.raw.txt 2>&1
 #
-# Repeatability: two runs of this script on one build differ only in section [7]. That section is
-# time (wall and CPU per probe, which is what it reads) plus the host's load line beside it, because
-# a time with no load beside it cannot be read. Everything else is byte for byte the same: the MLP's
+# Repeatability: two runs of this script on one build differ only in the parts that are time --
+# section [7] and the timing block that closes section [5] -- each of which is wall and CPU time
+# plus the host's load line beside it, because a time with no load beside it cannot be read.
+# Everything else is byte for byte the same: the MLP's
 # own `seconds=` field is masked below because every run moves it, and the scratch directory is a
 # fixed path rather than a fresh temp one because a diagnostic quotes it -- a path that changed per
 # run would make two runs differ. PYTHONHASHSEED is pinned so tools that walk sets print in one order.
@@ -144,6 +157,92 @@ first_diff() {
     else
         echo "differs first_difference_byte=$off"
     fi
+}
+
+# The node count of a canonical document: the sum of `graphs[*].nodes`, the same count section [2]
+# defines. It is a count of the document, so it is a determinate number and not a sample. A document
+# that is not there -- a program that did not compile, a run that wrote nothing -- answers `?` and
+# not 0, because a count of nothing and a count that failed are different readings.
+nodes_of() {
+    python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+sys.stdout.write(str(sum(len(g.get("nodes", [])) for g in d["graphs"])))' "$1" 2>/dev/null || printf '?'
+}
+
+# One pass, nine fresh processes, and the median of the pass window itself.
+#
+# The reading is the `pass` phase's own entry from --time-phases (`name=pass`, `detail=<the pass as
+# the pipeline spelled it>`), so the terminator pass and the printing of the document are not in it.
+# Wall follows the host's load and CPU time does not, which is why both are printed and why the
+# caller prints the host's load line beside them: a time with no load beside it cannot be read.
+#
+# Every process's exit code is printed too. A pass that failed still leaves a `pass` phase in the
+# file (the scope is entered before the pass runs), so without the exit code a failed window would
+# read as a fast one -- the number would be real and would not be the pass.
+#
+#   $1 tag naming the phase files   $2 the program   $3 the pass
+#   $4 the module roots, or `-` for none    $5 a note printed verbatim on the summary line
+timed() {
+    tag=$1
+    prog=$2
+    word=$3
+    pkg=$4
+    note=$5
+    if [ "$pkg" = "-" ]; then
+        echo "### camel $prog $word std::gir --time-phases=$SCRATCH/t-$tag-<n>.json   (nine times, a fresh process each)"
+    else
+        echo "### CAMEL_PACKAGES=$pkg camel $prog $word std::gir --time-phases=$SCRATCH/t-$tag-<n>.json   (nine times, a fresh process each)"
+    fi
+    i=1
+    while [ "$i" -le 9 ]; do
+        if [ "$pkg" = "-" ]; then
+            "$CAMEL" "$prog" "$word" std::gir --time-phases="$SCRATCH/t-$tag-$i.json" \
+                > "$SCRATCH/t-$tag-$i.out" 2>&1
+        else
+            CAMEL_PACKAGES="$pkg" "$CAMEL" "$prog" "$word" std::gir \
+                --time-phases="$SCRATCH/t-$tag-$i.json" > "$SCRATCH/t-$tag-$i.out" 2>&1
+        fi
+        echo $? > "$SCRATCH/t-$tag-$i.st"
+        i=$((i + 1))
+    done
+    python3 - "$tag" "$word" "$SCRATCH" "$note" <<'PY'
+import json
+import os
+import statistics
+import sys
+
+tag, word, scratch, note = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+wall, cpu, failed = [], [], []
+for i in range(1, 10):
+    st_path = "%s/t-%s-%d.st" % (scratch, tag, i)
+    ph_path = "%s/t-%s-%d.json" % (scratch, tag, i)
+    st = open(st_path).read().strip() if os.path.exists(st_path) else "(no exit code)"
+    if st != "0":
+        failed.append("run%d exit=%s" % (i, st))
+    hit = []
+    if os.path.exists(ph_path):
+        try:
+            d = json.load(open(ph_path))
+            hit = [p for p in d.get("phases", []) if p.get("name") == "pass" and p.get("detail") == word]
+        except ValueError:
+            hit = []
+    if not hit:
+        continue
+    wall.append(hit[0]["wall_ns"] / 1e6)
+    cpu.append(hit[0]["cpu_ns"] / 1e6)
+if not wall:
+    out = "%s/t-%s-1.out" % (scratch, tag)
+    said = open(out).read().strip().splitlines() if os.path.exists(out) else []
+    print("%-20s NO READING: no 'pass' phase named %s in any of the nine%s; its first line of "
+          "output: %s"
+          % (tag, word, (" (" + ", ".join(failed) + ")") if failed else "",
+             said[0] if said else "(it printed nothing)"))
+else:
+    print("%-20s n=%d of 9  median_wall_ms=%8.2f [%8.2f, %8.2f]  median_cpu_ms=%8.2f  %s%s"
+          % (tag, len(wall), statistics.median(wall), min(wall), max(wall),
+             statistics.median(cpu), note,
+             ("  failed: " + ", ".join(failed)) if failed else ""))
+PY
 }
 
 echo "===== capture-all: the ECOOP section 6 readings and the e2e lane, one run ====="
@@ -321,6 +420,143 @@ for p in "" opt::cse opt::fold opt::dce opt::saturate; do
         --arg lr=0.001 --arg seed=1 "$TRANSFORMER" $p std::nvm
 done
 
+echo
+echo "# --- the transformer's output, byte for byte, before and after each pass ---"
+echo "# This is the column the paper quotes for the transformer. Each row is \`cmp\`, so \`same\` means"
+echo "# every byte of the two outputs is equal, and any other answer names the first byte that parts;"
+echo "# 'the output looks the same' is not a reading and is not what this line says."
+echo "# Three forms per row, because the transformer's own run stops before it prints anything:"
+echo "#   run raw     the program's own stdout+stderr with the pass and without it, unmasked. Today it"
+echo "#               is the same diagnostic both times, so this is a byte equality of two sentences."
+echo "#   run masked  the same with \`seconds=<n>\` masked. The mask is what makes the comparison a"
+echo "#               reading of the pass rather than of a clock, so on a build where this program"
+echo "#               runs, this is the column to quote and the raw one will part on that field."
+echo "#   document    the canonical document of the program with the pass and without it: the pass's"
+echo "#               output in the sense the rest of this section uses, and it is deterministic."
+echo "# The section [5] note above stands: the transformer cannot run on this build (its loss goes"
+echo "# through the library's vjp, which stops at 'jvp has no forward transform'), so the run rows are"
+echo "# equal because the same refusal is printed both times -- that is the fact, not an assumption"
+echo "# that the pass changes nothing at runtime."
+for p in opt::cse opt::fold opt::dce opt::saturate; do
+    l=$(leaf "$p")
+    printf '%-14s run raw  %-36s run masked  %-36s document  %s\n' "$p" \
+        "$(first_diff "$SCRATCH/tr-run-baseline.out" "$SCRATCH/tr-run-$l.out")" \
+        "$(first_diff "$SCRATCH/tr-run-baseline.masked" "$SCRATCH/tr-run-$l.masked")" \
+        "$(first_diff "$SCRATCH/tr-baseline.json" "$SCRATCH/tr-$l.json")"
+done
+
+echo
+echo "# --- the same four passes on the case-study program, whole ---"
+echo "# The rows above are two showcases. The paper's table is also asked for on the case-study"
+echo "# program as written, so the same four passes run on examples/case-study/train.cml -- the whole"
+echo "# program, no --arg, the document read from it as written. It has no run row here because its"
+echo "# output is section [3]'s three backends, which is the same program."
+for p in opt::cse opt::fold opt::dce opt::saturate; do
+    doc "case-$(leaf "$p")" "$CASE" $p std::jgir canonical=true
+done
+echo "# each against the case-study program's own document, which section [2] took"
+for p in opt::cse opt::fold opt::dce opt::saturate; do
+    printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/case.json" "$SCRATCH/case-$(leaf "$p").json")"
+done
+
+echo
+echo "# --- the nodes before and after each pass ---"
+echo "# Node = the sum of \`graphs[*].nodes\` of the canonical document, the count section [2] defines."
+echo "# The two columns are two documents of the same program -- the one with no pass and the one with"
+echo "# that pass -- so both numbers are read and neither is a proxy: the before column is a"
+echo "# determinate count and repeats exactly, and the after column likewise."
+echo "# A row whose delta is 0 is a pass that left the count alone, which is a reading too; it is not a"
+echo "# missing measurement, and the document row above says whether it changed anything else."
+python3 - "$SCRATCH" <<'PY'
+import json
+import sys
+
+scratch = sys.argv[1]
+# program tag, the document of the program with no pass
+programs = [("case", "case.json"), ("mlp", "mlp-baseline.json"), ("tr", "tr-baseline.json")]
+passes = ["cse", "fold", "dce", "saturate"]
+
+
+def nodes_of(path):
+    d = json.load(open(path))
+    return sum(len(g.get("nodes", [])) for g in d["graphs"])
+
+
+print("%-5s %-9s %9s %9s %8s" % ("prog", "pass", "nodes", "after", "delta"))
+for tag, base_name in programs:
+    before = nodes_of("%s/%s" % (scratch, base_name))
+    print("%-5s %-9s %9d %9s %8s" % (tag, "-", before, "-", "-"))
+    for p in passes:
+        after = nodes_of("%s/%s-%s.json" % (scratch, tag, p))
+        print("%-5s %-9s %9d %9d %+8d" % (tag, p, before, after, after - before))
+PY
+
+echo
+echo "# --- the regions of each program, counted by kind ---"
+echo "# Region = one entry of \`graphs[*].regions\`. The kinds are the runtime's GCRegionKind names as"
+echo "# the document spells them: body, arm, loop_cond, loop_body, inline, block. The loop_body column"
+echo "# is the answer to 'is LoopBody > 0' -- it is the count itself, so a 0 and a 3 are different"
+echo "# readings and neither is the boolean."
+echo "# Two shapes of the document have to be known to read a zero: the body region is written only"
+echo "# when it carries a fact (the tags on the function), and a graph with no region besides the body"
+echo "# writes no regions key at all. So a program of straight-line code shows every column 0 because"
+echo "# it has no region to count -- the same 0 a broken count would give, which is why the total is"
+echo "# printed beside the columns and why section [2] counts the same field."
+python3 - "$SCRATCH" <<'PY'
+import collections
+import json
+import sys
+
+scratch = sys.argv[1]
+KINDS = ["body", "arm", "loop_cond", "loop_body", "inline", "block"]
+programs = [("case", "case.json"), ("mlp", "mlp-baseline.json"), ("tr", "tr-baseline.json")]
+passes = ["cse", "fold", "dce", "saturate"]
+
+
+def census(path):
+    d = json.load(open(path))
+    c = collections.Counter()
+    for g in d["graphs"]:
+        for r in g.get("regions", []):
+            c[r.get("kind", "(no kind)")] += 1
+    return c
+
+
+print("%-5s %-9s %s %8s" % ("prog", "pass", " ".join("%10s" % k for k in KINDS), "regions"))
+for tag, base_name in programs:
+    rows = [("-", base_name)] + [(p, "%s-%s.json" % (tag, p)) for p in passes]
+    for p, name in rows:
+        c = census("%s/%s" % (scratch, name))
+        print("%-5s %-9s %s %8d"
+              % (tag, p, " ".join("%10d" % c.get(k, 0) for k in KINDS), sum(c.values())))
+PY
+
+echo
+echo "# --- the time of each pass: nine fresh processes, the median ---"
+echo "# The reading is the pass window itself (--time-phases: the entry named \`pass\` whose detail is"
+echo "# the pass as the pipeline spelled it), so the terminator's printing is not in it. Wall follows"
+echo "# the host's load and CPU time does not; both are printed with the load line beside them, and"
+echo "# the exit code of every process is printed with the median, because a pass that failed still"
+echo "# leaves a \`pass\` phase and its window would otherwise read as a fast one."
+echo "# Absolute milliseconds here are only comparable with rows taken at the same load. The load at"
+echo "# this block's start and its end is printed, and the median plus the range is the reading the"
+echo "# paper's table takes; the nine samples are in the phase files under $SCRATCH."
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+timed case-cse "$CASE" opt::cse - ""
+timed case-fold "$CASE" opt::fold - ""
+timed case-dce "$CASE" opt::dce - ""
+timed case-saturate "$CASE" opt::saturate - ""
+timed mlp-cse "$MLP" opt::cse - ""
+timed mlp-fold "$MLP" opt::fold - ""
+timed mlp-dce "$MLP" opt::dce - ""
+timed mlp-saturate "$MLP" opt::saturate - ""
+timed tr-cse "$TRANSFORMER" opt::cse - ""
+timed tr-fold "$TRANSFORMER" opt::fold - ""
+timed tr-dce "$TRANSFORMER" opt::dce - ""
+timed tr-saturate "$TRANSFORMER" opt::saturate - ""
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+echo
+
 # ---------------------------------------------------------------------------------------------
 banner 6 "the fusion"
 echo "# The transform is \`greedy::fuse\`, a pass written in Camel (test/cases/opt/writings/"
@@ -343,7 +579,7 @@ printf 'fused loss-a against fused loss-b  %s\n' "$(first_diff "$SCRATCH/fused-l
 echo
 
 # ---------------------------------------------------------------------------------------------
-banner 7 "commit and normalization time (this section floats: it is the only one that does)"
+banner 7 "commit and normalization time, and what one commit costs against the size of the program (these blocks float, as does the timing block that closes [5])"
 echo "# Three probes in $PROBES, each run as an ordinary pass on examples/case-study/train.cml:"
 echo "#   canonical_once::run    one normalization, one call of \`nodes(graph_of)\`"
 echo "#   canonical_walk::walk   one normalization per graph, the way a pass that walks every graph"
@@ -400,6 +636,54 @@ timing walk canonical_walk::walk
 timing commit commit_only::touch
 echo "#   /proc/loadavg $(cat /proc/loadavg)"
 
+echo
+echo "# --- what one commit costs against the size of the program ---"
+echo "# \`commit_only::touch\` opens a transaction on the program and commits it with no edit in"
+echo "# between, so the number is the checks and the publish of a program nothing changed: the floor a"
+echo "# commit of a change is read against. It includes \`open\` -- the pass window is the only window"
+echo "# the recorder has, and there is no scope inside a pass -- and the row below it pays the same"
+echo "# \`open\`, so the pair still isolates the edit."
+echo "# Five sizes, nine fresh processes each, with the program's own node count on the row so the"
+echo "# sizes are read and not assumed: the three the paper names, then the two bigger ones."
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+doc "scale-resnet" "benchmarks/resnetbn/model.cml" std::jgir canonical=true
+doc "scale-mcts" "showcase/d4-mcts/search.cml" std::jgir canonical=true
+echo
+timed commit-case "$CASE" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/case.json")"
+timed commit-mlp "$MLP" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/mlp-baseline.json")"
+timed commit-tr "$TRANSFORMER" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/tr-baseline.json")"
+timed commit-resnet "benchmarks/resnetbn/model.cml" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-resnet.json")"
+timed commit-mcts "showcase/d4-mcts/search.cml" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-mcts.json")"
+
+echo
+echo "# --- the same commit with ONE node changed, on the char-transformer ---"
+echo "# \`commit_one::poke\` is \`commit_only::touch\` plus exactly one edit: it adds one constant node to"
+echo "# the graph the entry function value has and commits. No existing node moves and no second graph"
+echo "# is touched, so this is the smallest edit there is; it is not what a rewriting pass pays, and"
+echo "# the paper's sentence is about this one."
+echo "# The document below is the proof the edit landed: it is the transformer after the poke, and its"
+echo "# node count is the untouched program's plus one. The probe itself prints nothing, because a"
+echo "# line per run would be charged inside the window it measures."
+docp "$PROBES_ROOT" "tr-poked" "$TRANSFORMER" commit_one::poke std::jgir canonical=true
+python3 - "$SCRATCH" <<'PY'
+import json
+import sys
+
+scratch = sys.argv[1]
+
+
+def nodes(path):
+    d = json.load(open(path))
+    return sum(len(g.get("nodes", [])) for g in d["graphs"])
+
+
+before = nodes("%s/tr-baseline.json" % scratch)
+after = nodes("%s/tr-poked.json" % scratch)
+print("# the edit: %d nodes before, %d after, %+d node(s)" % (before, after, after - before))
+PY
+timed commit-tr-poke "$TRANSFORMER" commit_one::poke "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/tr-poked.json")"
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+
 # ---------------------------------------------------------------------------------------------
 banner 8 "the two derivative graphs: loss-a against loss-b"
 echo "# The two losses are two writings of one loss, and the derivative is a library transform that"
@@ -422,6 +706,29 @@ for path in sys.argv[1:]:
 PY
 echo "# the two documents against each other"
 printf 'loss-a against loss-b  %s\n' "$(first_diff "$SCRATCH/loss-a.json" "$SCRATCH/loss-b.json")"
+echo
+echo "# --- the SECOND derivative on the four backends: NOT TAKEN in this run, and what it waits for ---"
+echo "# This block is a placeholder and it prints no measurement: no line below is a second derivative."
+echo "# What is owed here, in the author's own words (review page of 2026-11-20 02:30): the second"
+echo "# derivative of \`x*x\` at 2, of \`x^3\` at 2, and a Hessian example, each on std::nvm, std::fvm,"
+echo "# std::jit and std::tf, with whether the four agree. The first derivative of the two losses above"
+echo "# is what section [8] compares; a second derivative needs \`grad(grad(f))\`, and the outer \`grad\`"
+echo "# is refused on every build in develop today: it needs \`split\` to hand out static code, which is"
+echo "# the product of another lane. So the block is PENDING -- to be taken once 925c38791 (the head of"
+echo "# item5-red-925c38791, unmerged) is in develop -- and the line below is the check of that"
+echo "# condition, not a reading of the derivative."
+PDEP=925c38791
+if ! git -C "$ROOT" cat-file -e "$PDEP^{commit}" 2>/dev/null; then
+    echo "#   wait state: $PDEP is not in this checkout at all (a lane's own commits do not travel to the"
+    echo "#   host), so even the wait cannot be resolved here; re-take this block on the tree that holds"
+    echo "#   it. The block stays owed either way."
+elif git -C "$ROOT" merge-base --is-ancestor "$PDEP" HEAD 2>/dev/null; then
+    echo "#   wait state: $PDEP IS an ancestor of this tree now, so this block can be taken -- and this"
+    echo "#   run did not take it. That is the reading: the product arrived and the block is still owed."
+else
+    echo "#   wait state: $PDEP resolves here and is NOT an ancestor of HEAD, so the block is owed"
+    echo "#   exactly as this line says. Nothing in this run stands in for it."
+fi
 echo
 
 # ---------------------------------------------------------------------------------------------

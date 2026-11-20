@@ -1,0 +1,33 @@
+// Measurement probe (ECOOP round 10, item 14): the commit path with ONE node changed.
+//
+// `commit_only::touch` opens a transaction on the program and commits it with no edit in between,
+// so `camel --time-phases … <program> commit_only::touch std::jgir` measures the checks and the
+// publish of a program nothing changed. This probe is the same run with exactly one edit: it adds
+// one constant node to the graph the entry function value has and commits. The pair is the reading
+// -- the difference between the two rows is what one changed node costs the commit path.
+//
+// It is one node ADDED: no existing node changes place and no other graph is touched, so this is
+// the smallest edit there is, and it is *not* the reading a rewriting pass pays -- a pass that
+// changed nodes other graphs read hands commit more to check. The report says which of the two each
+// number is.
+//
+// Both timings include `open`: the pass-phase window (the only window the recorder has) starts
+// before the pass, so `open + edits + commit` is one number and there is no scope inside the pass
+// that could separate them (include/camel/utils/phase_timer.h places scopes around whole phases
+// only). `touch` and `poke` pay the same `open`, so the difference of the two rows is the edit plus
+// what the commit path does with it.
+//
+// The probe prints nothing: a line per run would be charged inside the window it measures. Whether
+// the edit landed is read from the document instead -- `<program> commit_one::poke std::jgir
+// canonical=true` has exactly one more node than the untouched program's document, and the capture
+// script prints that pair beside the time.
+import { add_constant, commit, graph_of, open } from graph
+import { is_function } from types
+
+/// Opens a transaction, adds one constant node, and commits.
+export func poke::<F>(p: F): F! when is_function::<F>() sync {
+    let t = open(p)
+    let g = graph_of(p)
+    let _ = add_constant(t, g, 7)
+    return commit(t)
+}
