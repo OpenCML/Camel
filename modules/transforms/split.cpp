@@ -505,9 +505,27 @@ struct Half {
         const std::vector<size_t> valuePorts = valuePortsOf(liftedType);
         std::vector<gc_node_ref_t> values;
         values.reserve(valuePorts.size());
-        for (size_t port : valuePorts) {
-            if (port < all.size()) {
-                values.push_back(all[port]);
+        // Which of the call's arguments this half takes. A call records which of its arguments are
+        // tangents (`GCNode::tangentArgs`, one bit per position; `jvp` writes it when it builds a
+        // lifted call), and that is the answer this needs: the value half takes every argument that
+        // is not a tangent. Reading the seam by arithmetic instead (`valuePortsOf`, the first half of
+        // the signature) is wrong wherever the call passes a function value as an argument, because
+        // such a call's list does not put the tangents where the signature's arithmetic expects them
+        // -- measured 2026-11-20 on `jvp_of_use`, whose three data inputs end in an `Oper` that is an
+        // argument and not the callee.
+        const uint16_t tangentArgBits = source->callTangentArgsOf(ref);
+        if (tangentArgBits != 0) {
+            for (size_t slot = 0; slot < all.size(); ++slot) {
+                if (slot < 16 && (tangentArgBits & static_cast<uint16_t>(1u << slot)) != 0) {
+                    continue;
+                }
+                values.push_back(all[slot]);
+            }
+        } else {
+            for (size_t port : valuePorts) {
+                if (port < all.size()) {
+                    values.push_back(all[port]);
+                }
             }
         }
         // ...and the call's `with` arguments, which `valuePortsOf` does not name: they are not

@@ -2021,12 +2021,28 @@ bool liftGraph(
                 camel::core::type::Type *valueType =
                     isValue ? static_cast<camel::core::type::Type *>(calleeSignature)
                             : static_cast<camel::core::type::Type *>(resultPair);
+                // Which of this call's arguments are tangents, written onto the call itself: the list
+                // a lifted callee takes is "every value first, and their tangents after them", so the
+                // second run of `tangents.size()` positions is the tangent half. A reader cannot
+                // recover this from the signature -- the cut used to read the seam at
+                // `normTypesCount() / 2`, and a call that passes a function value as an argument puts
+                // a value where that arithmetic expects a tangent.
+                uint16_t tangentMask = 0;
+                if (!isValue) {
+                    const size_t total = values.size() + tangents.size();
+                    for (size_t position = values.size(); position < total && position < 16;
+                         ++position) {
+                        tangentMask = static_cast<uint16_t>(
+                            tangentMask | static_cast<uint16_t>(1u << position));
+                    }
+                }
                 const gc_node_ref_t made = draft.addFuncNode(
                     at->second,
                     valueType,
                     0,
                     draft.allocateRuntimeSlot(valueType),
-                    0);
+                    0,
+                    tangentMask);
                 if (!isValue) {
                     if (!arguments.empty()) {
                         draft.setNormInputs(made, arguments);
