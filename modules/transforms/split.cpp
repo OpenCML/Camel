@@ -601,12 +601,14 @@ struct Half {
         // passes. For a call by name that is the callee graph's type; for a call through a value it
         // is the value's own type (there is no graph yet).
         //
-        // Neither a record of what the call passes nor a count is a reading here. The record
-        // (`GCNode::tangentArgs`, `GCGraph::callTangentArgsOf`) is written by a rule's expansion,
-        // and a lifted call the transform builds carries none; and the position of the tangents in
-        // a call's argument list is not the signature's arithmetic, because a function value passed
-        // as an argument is an ordinary data input and a call through a value has no callee among
-        // its data inputs at all.
+        // Neither a record of what the call passes nor a count is a reading here: the callee's
+        // signature already says which ports are values, and a second record of the same positions
+        // (`GCNode::tangentArgs`) would make the answer depend on which side wrote it -- a call a
+        // rule's expansion wrote and a call `jvp` built carry the record, a call this transform
+        // builds forwards whatever its source had, and none of that is what the seam is. And the
+        // position of the tangents in a call's argument list is not the signature's arithmetic
+        // either, because a function value passed as an argument is an ordinary data input and a
+        // call through a value has no callee among its data inputs at all.
         const camel::core::type::FunctionType *liftedType = callValueSignatureOf(*source, ref);
         const rt::GCGraph *callee = liftedType != nullptr ? nullptr : calleeOf(ref);
         if (liftedType == nullptr) {
