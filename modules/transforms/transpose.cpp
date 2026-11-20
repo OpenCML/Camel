@@ -6004,33 +6004,25 @@ TransposeGraph buildTransposeGraph(
     }
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
-    // The graph must take exactly what the law says it takes, and the two counts come from **one
-    // reading**: `transposeSignature` asked of the same type, with the same graph fact
-    // (`GCGraph::liftedFrom`) that built the member, so a signature that is a `Lift` promises its
-    // value half here as well. What is left for this comparison to catch is what the body adds and
-    // no type states -- a value a law reads (a capture) or the shape of a parameter whose
-    // declaration leaves it open -- and the two numbers are reported when they differ rather than
-    // either being taken as the count to allocate from.
+    // The graph must take exactly what the operator's own type says it takes. `transpose(f)` is
+    // resolved by `transposeOperatorSignature`, which reads `f`'s type and no body, so the call
+    // site is told `(ct) => (cotangents)` -- one port, the cotangent. A member that needs a value
+    // the body reads and no type of the program can supply declares one port *more*, and the call
+    // site then hands the graph one argument where it has two ports: the run dies on `nargs.size()
+    // == normPorts.size()`, which is a signal and says nothing. Rather than let the shape reach the
+    // run, the build compares the two counts here -- the only place that has both -- and refuses by
+    // name. The count is not the rule: it is the one reading that can tell "this member is the
+    // function the call site was promised" from "this member is a different function".
     //
-    // The difference that does **not** cancel here is the operator's own call site: it is typed by
-    // `Transpose<F>`, resolved from a type and nothing else, so a lift's value half cannot be part
-    // of it. That side is checked where the site's promise is in hand
-    // (`transpose_operator.cpp#transposeKernel`, which compares the member's ports with
-    // `Transpose<F>`'s), and the sentence there names the lift rather than a value the body reads.
-    //
-    // Only the operator's own call site is compared here: `promisedToTheOperator` is what the
-    // kernel says, and it is false for a member the walk builds for a *call inside a body*, whose
-    // caller writes its type with the captures in hand (`calleeNeeds`) and therefore fills them.
-    // Comparing there would refuse the honest `index_into` over an array whose extent only the
-    // caller knows -- the value is carried, the adjoint is built from `ct` and a known value, and
-    // the rule allows exactly that.
+    // Only the operator's own call site is compared: `promisedToTheOperator` is what the kernel
+    // says, and it is false for a member the walk builds for a *call inside a body*, whose caller
+    // writes its type with the captures in hand (`calleeNeeds`) and therefore fills them. Comparing
+    // there would refuse the honest `index_into` over an array whose extent only the caller knows
+    // -- the value is carried, the adjoint is built from `ct` and a known value, and the rule
+    // allows exactly that.
     if (promisedToTheOperator) {
-        const bool liftedSignature = function->liftedFrom() != rt::kInvalidGraphId;
         FunctionType *const promised =
-            function->funcType() != nullptr
-                ? transposeSignature(
-                      function->funcType(), {}, nullptr, nullptr, liftedSignature)
-                : nullptr;
+            function->funcType() != nullptr ? transposeSignature(function->funcType()) : nullptr;
         const size_t promisedPorts = promised != nullptr ? promised->normTypesCount() : 0;
         const size_t builtPorts    = made != nullptr ? made->normPorts().size() : 0;
         if (promisedPorts != 0 && builtPorts != promisedPorts) {
