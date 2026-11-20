@@ -157,7 +157,25 @@ args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+# Two needles over the kernel's transposition, because one prefix was not a reading of "built".
+#
+# The success line `modules/transforms/transpose.cpp#buildTransposeMember` writes -- `TRANSPOSE
+# function=<name> graph=<id> type=<signature> nodes=<n> arms=<n> rhs=<rules>`, the line immediately
+# before its `return true` -- is not the only line that begins with `TRANSPOSE
+# function=autodiff::mul_tangent<float>`. The file's one refuse lambda, inside the same function,
+# writes `TRANSPOSE function=<name> skip=<cause>`, and no path writes both: a success line carries no
+# `skip=` token at all. So the bare prefix also matches a *refusal* of this kernel, and a plan
+# holding only that prefix would go green on one -- which is what the weld to `graph=` removes,
+# because no refusal line has that token. The `type=` needle stays beside it, unchanged: it is the
+# one assertion that names the signature the answer comes out of, and the two together are a
+# reading rather than a shape.
+#
+# The negative needle names the refusal of *this* kernel instead of the bare token `skip=`: the
+# trace is whole-run, so a bare `skip=` would also pin every other function that refuses for a
+# reason of its own in the same program, and `TRANSPOSE function=autodiff::mul_tangent<float>
+# skip=` is a line only a refusal of this kernel can produce.
+expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> graph=", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+expect_output_not_contains = ["TRANSPOSE function=autodiff::mul_tangent<float> skip="]
 # The arm-call reading names its node by position, so the position is `<>` and the rest of the line
 # stays exact -- and the rest is what names it: the region, the callee, the argument count, and how
 # many of those arguments are tangents. Both arms hold a call of the same rule kernel, and the pair

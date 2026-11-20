@@ -2684,6 +2684,48 @@ operand that is one number states no extents, and its list is empty.
 - Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
 - Example: `mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])` gives `[3.0, 8.0]`
 
+#### `add_stated`
+
+```camel
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the sum and spends nothing on the extents: the broadcast, the element type and the
+one rounding are `add`'s own. `rulesets.transpose`'s `add_stated_t` reads the two lists instead
+of the operand whose cotangent it is answering -- on the reverse side that operand is a tangent,
+and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+computes them is `rulesets.jvp`'s `jvp_add_tensor`, where both operands are values and
+`shape(...)` of each is one.
+
+Two lists and not one, for the reason `mul_stated` states: a sum broadcasts, so `[2, 2, 3] + [3]`
+has two different operand shapes and each cotangent comes back to its **own**. An operand that is
+one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `add_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[11.0, 22.0], [13.0, 24.0]]`
+
+#### `subtract_stated`
+
+```camel
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the difference through `subtract`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `subtract_stated_t` for the reason `add_stated` records: an answer that
+may not be the operand's shape is refused and not guessed, and a tangent's shape is not in its
+type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `subtract_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[-9.0, -18.0], [-7.0, -16.0]]`
+
 #### `matmul_stated`
 
 ```camel
