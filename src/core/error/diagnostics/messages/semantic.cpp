@@ -1897,7 +1897,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "IgnoredSideEffect",
                 "{0} is not in a sync block, and {1}.",
-                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).",
             },
         },
         {
