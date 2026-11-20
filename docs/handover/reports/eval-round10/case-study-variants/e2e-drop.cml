@@ -1,4 +1,5 @@
-// Item A's fourth rewrite: one dead pure statement added to un. It produces no node at all, so the\n// canonical document must not move; the five lines must not move either.
+// Item A's fourth rewrite: one dead pure statement added inside `run`. It produces no node at
+// all, so the canonical document must not move -- and the five lines must not move either.
 
 func apply(f: (x: int) => int, x: int): int sync {
     return f(x)

@@ -1,4 +1,6 @@
-// Item A's fifth rewrite: a function nobody calls. The text produces no node in any graph the program\n// runs -- the question is whether the canonical document gains a graph for it. Same five lines.
+// Item A's fifth rewrite: a function nobody calls. The text produces no node in any graph the
+// program runs; the question this row asks is whether the canonical document gains a graph
+// for it. Same five lines as e2e/program.cml.
 
 func unused(x: int): int {
     return x + 1

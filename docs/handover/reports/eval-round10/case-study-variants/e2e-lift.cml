@@ -1,4 +1,5 @@
-// Item A's first rewrite of the e2e program: the closure's body lifted into a named declaration,\n// so the lambda only calls it. It must print the same five lines as e2e/program.cml.
+// Item A's first rewrite of the e2e program: the closure's body lifted into a named declaration, so
+// the lambda only calls it. It must print the same five lines as e2e/program.cml.
 
 func closure_body(base: int, label: string, x: int): int sync {
     let weight = base + 1

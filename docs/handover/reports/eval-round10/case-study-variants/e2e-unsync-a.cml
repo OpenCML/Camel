@@ -1,4 +1,6 @@
-// Item A's sixth rewrite, first form: the sync is dropped from the closure's body, which is the block\n// whose print is the only effect inside it. Same five lines are the question: the sync block is the\n// write's ordering, so the document may move even though the output does not.
+// Item A's sixth rewrite, first form: the `sync` is dropped from the closure's body, which is
+// the block whose print is the only effect inside it. Same five lines are the question: the
+// sync block is the write's ordering, so the document may move even when the output cannot.
 
 func apply(f: (x: int) => int, x: int): int sync {
     return f(x)

@@ -242,14 +242,15 @@ for f in lift direct merge drop unreach unsync-a unsync-b; do
     printf '%-22s %s\n' "$f" "$(first_diff "$SCRATCH/e2e-program.json" "$SCRATCH/e2e-$f.json")"
 done
 echo
-echo "# the second reading: what \`passes::report\` hashes, on the same eight programs"
-echo "# (\`passes\` is found beside the program, so the package root is $E2E for all of them)"
+echo "# the second reading: what \`passes::report\` hashes on the same eight programs. It reads the"
+echo "# document as the program hands it over, with no instrumentation pass in front of it: that pass" 
+echo "# adds its own nodes, and a digest over an instrumented graph would not be the program's."
 for f in program lift direct merge drop unreach unsync-a unsync-b; do
     prog="$E2E/program.cml"
     if [ "$f" != program ]; then prog="$VARIANTS/e2e-$f.cml"; fi
     out="$SCRATCH/e2e-report-$f.txt"
-    echo "### CAMEL_PACKAGES=$E2E camel $prog passes::instrument passes::report std::nvm"
-    CAMEL_PACKAGES="$ROOT/$E2E" "$CAMEL" "$prog" passes::instrument passes::report std::nvm > "$out" 2>&1
+    echo "### CAMEL_PACKAGES=$E2E camel $prog passes::report std::nvm"
+    CAMEL_PACKAGES="$ROOT/$E2E" "$CAMEL" "$prog" passes::report std::nvm > "$out" 2>&1
     st=$?
     echo "### exit=$st"
     sed -n 's/^\(e2e graphs=.*\|e2e canonical=.*\)$/'"$f"' \1/p' "$out"

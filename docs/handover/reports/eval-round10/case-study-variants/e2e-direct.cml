@@ -1,4 +1,6 @@
-// Item A's second rewrite: the call through a known function value made a direct call (let ap = apply\n// then p(f, i)). It must print the same five lines as e2e/program.cml.
+// Item A's second rewrite: the call through a known function value made a direct call (a
+// binding of `apply` to a local, then the local called where the value was called). Same five
+// lines as e2e/program.cml.
 
 func apply(f: (x: int) => int, x: int): int sync {
     return f(x)

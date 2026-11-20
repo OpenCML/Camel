@@ -1,4 +1,5 @@
-// Item A's sixth rewrite, second form: the sync is dropped from pply, the function that calls the\n// closure. Same five lines; the document is the reading.
+// Item A's sixth rewrite, second form: the `sync` is dropped from `apply`, the function that
+// calls the closure. Same five lines; the document is the reading.
 
 func apply(f: (x: int) => int, x: int): int {
     return f(x)
