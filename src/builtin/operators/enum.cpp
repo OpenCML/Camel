@@ -132,7 +132,7 @@ slot_t __enum_tag__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (value == nullptr) {
         // The value a tag is read from is null: it came from the program and the operator cannot
         // take it. A branch rather than an assert, because an assert's premise is not held in a
-        // release build (the assert audit of 2026-11-02: an assert that guards a dereference is
+        // release build (an assert that guards a dereference is
         // no guard at all there).
         throwRuntimeFault(
             camel::core::error::RuntimeDiag::InvalidArgument,

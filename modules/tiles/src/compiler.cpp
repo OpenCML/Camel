@@ -1226,7 +1226,7 @@ class Compiler {
             auto product    = apply(
                 "tensor:matmul",
                 left ? std::vector<Value>{dy, transposed} : std::vector<Value>{transposed, dy});
-            // `sum_to` takes the target extents, not the operand they belong to (ruling 甲), and
+            // `sum_to` takes the target extents, not the operand they belong to, and
             // the tiles compiler already holds those extents: the shape of the operand the fused
             // product is the cotangent of. Writing them as the list keeps the reduction a
             // leading-axis one and reads no value for its shape.

@@ -84,7 +84,7 @@ export func dim::<T>(t: T[...]): int when is_numeric::<T>()
 /// length stated by whoever holds the value.
 ///
 /// The length is a **known operand**, and it is the reason this spelling exists beside the
-/// language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
+/// language's own `t[i]`. A transpose rule may read only known operands,
 /// and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
 /// cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
 /// to build the zeros from unless the value's length is handed to it. A forward half can state it --
@@ -110,8 +110,7 @@ export func pick_at::<T>(t: T[...], position: int, length: int): T when is_numer
 // A reduction and a gather both forget something a pullback has to put back: `sum` forgets how many
 // elements it added, `take` forgets how many rows it read from, and `mean` over an axis forgets the
 // lane. The reverse of each spreads one cotangent over *that* shape, and it cannot read the shape
-// off the operand: a transpose rule may read only **known** operands (author, 2026-11-03 11:10 and
-// 17:35), and the operand a cotangent comes back through has no value on that side -- while `T[...]`
+// off the operand: a transpose rule may read only **known** operands, and the operand a cotangent comes back through has no value on that side -- while `T[...]`
 // carries no extents in its type (design principles 5.4).
 //
 // So the forward half states them, and these declarations are what it states them to. Each is the
@@ -216,8 +215,7 @@ export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[..
 // of one, so they follow from the *values* it states, and the only type
 // a declaration could write is `T[...]`. That type is what put a `float[...]` on a node whose value is
 // the element itself (design principles 5.4): `numel(ct)` in
-// `stdlib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer
-// (docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its signature
+// `stdlib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer. Its signature
 // is computed (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`) and recorded in
 // `stdlib/signatures/tensor.cml`.
 //
@@ -387,10 +385,9 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 /// `at` is the target itself -- the extents the answer has, written where the call is. The length is
 /// therefore the caller's: it is not read off another value's shape (the older spelling passed a
 /// zero array whose shape stood in for the target) and not off a type, and no registry, context or
-/// expected result type supplies it -- the extents are the runtime shape the caller states, which is
-/// the layer the author's ruling of 2026-11-05 puts them on.
+/// expected result type supplies it -- the extents are the runtime shape the caller states.
 ///
-/// **The contract is 甲: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
+/// **The contract: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
 /// summed away, and an axis `at` states 1 against a longer one is summed too -- the adjoint of a
 /// broadcast that handed one element along that lane (design principles 5.4). Two equal shapes are
 /// the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
@@ -415,10 +412,10 @@ export func sum_to::<T>(t: T[...], at: int[]): T[...] when is_float::<T>()
 /// `t` spread out to the shape `like` states: the **other** direction of the same adjoint, and the
 /// operator that owns it.
 ///
-/// The two directions used to share `sum_to`, and they are not one move: a reduction reads a target
+/// The two directions do not share `sum_to`, because they are not one move: a reduction reads a target
 /// that is a suffix of its operand's shape and adds over the axes in front of it, while a spread
 /// writes an element into every lane a broadcast would have handed it out along -- the operation
-/// `broadcast_like` is named for. `sum_to` now takes the extents themselves (ruling 甲) and refuses
+/// `broadcast_like` is named for. `sum_to` takes the extents themselves and refuses
 /// a target *longer* than its operand by name; a law that needs a rank-one value in the lanes of a
 /// rank-two one says `broadcast_like(value, like)` and reads the shape off a value the cut carries.
 ///

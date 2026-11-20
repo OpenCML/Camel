@@ -694,8 +694,8 @@ void Builder::recordDeclaration(
     const auto origin                    = decl->origin();
     declOrigins_[nodeScope_.get()][name] = origin;
     // A `var` built as a value is still a `var` to the program: the recorder and the tools read
-    // the declaration the writer wrote, and only the shape of the graph differs (stage S1 of the
-    // direct-SSA plan), so the declaration is recorded as the variable it is.
+    // the declaration the writer wrote, and only the shape of the graph differs, so the
+    // declaration is recorded as the variable it is.
     const bool variable = isVariable(node) || nameIsSsa(name);
     recorder_->valueDeclared(origin, name, valueTypeOf(nodeTypeOf(node)), variable);
     recorder_->valueBound(
@@ -1206,7 +1206,7 @@ FunctionType *Builder::completeLambdaSignature(
     const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct);
     // A pack among the `with` parameters (`<..ws> (..xs) => ...`) is open in the same sense a
     // parameter without a type is: the function type of the position says what it stands for
-    // (author's ruling of 2026-11-03 13:50, on the pack rule of design principles 5.6). It is not
+    // (the pack rule of design principles 5.6). It is not
     // in the GCT's unwritten list -- that list is about parameter types -- so it joins the holes
     // here, at its own index (the `with` parameters are numbered first).
     const bool withPack = funcType->hasWithRest();
@@ -2017,8 +2017,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
             }
-            // A statement written after a `fail` in the same block (design principles 3.9; the
-            // author's ruling of 2026-10-26): the `fail` never returns, so where it is executed
+            // A statement written after a `fail` in the same block (design principles 3.9):
+            // the `fail` never returns, so where it is executed
             // nothing written after it in the block is reached. Recorded here and reported when
             // the body is complete, because whether the `fail` runs at all is a fact about the
             // whole body: a `fail` whose value nothing wants does not run, and the statements

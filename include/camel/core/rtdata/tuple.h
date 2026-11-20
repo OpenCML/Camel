@@ -32,7 +32,7 @@ namespace detail {
 /// `codes[i]` past the end of the type's array: a garbage code that happens to be a traced kind
 /// crashed at `typeAt(i)`, and one that is not a traced kind was skipped in silence and its
 /// reference was never relocated (the stale pointer `docs/technical/36_gc_handle_rules.md` is
-/// about). The trace stops here rather than reading on (author, 2026-11-02 06:30): a disagreeing
+/// about). The trace stops here rather than reading on: a disagreeing
 /// value is a memory-safety bug, and a guard that reports one and then reads anyway is worse than
 /// no guard, because it turns "I know this is wrong" into a read that may be taken as data.
 inline std::string membersBeyondTypeReading(
@@ -371,16 +371,14 @@ class Tuple : public rtdata::Object {
         auto codes                       = tupleType->codes();
         rtdata::Object **refArr          = reinterpret_cast<rtdata::Object **>(data_);
 
-        // The lesson this check exists for (author, 2026-11-02 05:30): the collector trusts a value's
+        // What this check exists for: the collector trusts a value's
         // static type -- `codes` is the type's array and `refArr` is the value's slots -- so a type and
         // a value that disagree about how many members there are is a memory-safety bug, not a
         // diagnostic question. The check below is in the shipped build, not only in a debug one: a
         // release that trusts the same static type has the same bug.
         //
-        // The bound on the walk is gone (05:30: "B 的兜底代码在同一笔删掉"). It was there to stop
-        // `codes[i]` leaving the array the type owns while a residuals tuple still reached the caller
-        // as a tuple; the ruling that residuals are no longer a tuple removes the disagreement, so the
-        // walk goes back to the value's own count.
+        // The walk is bounded by the value's own count, not by `codes`: residuals are no longer a
+        // tuple, so a type and a value cannot disagree here.
         const size_t members = size();
         GUARD(
             members <= tupleType->size(),

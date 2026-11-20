@@ -482,8 +482,8 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             return resolved;
         }
         if (header->kind == GCNodeKind::Gate) {
-            // The value a GATE hands on is its first normal input (design principles 3.1, the
-            // author's ruling of 2026-11-17); the inputs after it are the reads of the region's
+            // The value a GATE hands on is its first normal input (design principles 3.1);
+            // the inputs after it are the reads of the region's
             // writes, so the canonical node behind a region's GATE is the first one.
             const auto normInputs = draft.normInputsOf(canonicalId);
             if (!normInputs.empty()) {
@@ -2545,8 +2545,8 @@ DraftInlineResult inlineCallableInDraft(
     // the control edge that names the same pair beside it; it runs here rather than inside
     // eraseNode below because the users have to be known before the call's own edges go.
     //
-    // What the body ordered before those statements used to be carried as one order edge into the
-    // body's anchor as well (7ca495665). It is gone: an order edge only orders something that has
+    // What the body ordered before those statements is not carried as one order edge into the
+    // body's anchor: an order edge only orders something that has
     // an order, and the following statement is a plain statement of the block, not an effect
     // (docs/design/effects/edges.cn.md 1.5, 4.6). The ordering it named is what the body's region
     // carries once it stands on the chain as one statement of the block.

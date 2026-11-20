@@ -128,8 +128,7 @@ class HalfData : public Data {
 
     /// The float text of the value it holds, as every float of the language prints (11.5, 7.7):
     /// the shortest that reads back as the same element of its own type, not the text of the f32
-    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`; rule 2026-10-23,
-    /// "reduced-precision-text"). Every path that prints a constant -- `--inspect`, a tag
+    /// it widens to (`0.1` for bf16 `0.1`, not `0.100097656`). Every path that prints a constant -- `--inspect`, a tag
     /// argument's written form -- reads its text here.
     virtual const std::string toString() const override {
         return type_->code() == type::TypeCode::BFloat16

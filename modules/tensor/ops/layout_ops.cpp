@@ -621,21 +621,18 @@ void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
 // writable at all. `xs[i]`'s transpose is a scatter into an array of zeros with `xs`'s length
 // (design principles 9.9), `T[]` carries no length in its type (5.4), and a transpose law may read
 // only known operands -- the array itself is the operand the cotangent comes back through, so on
-// that side it has no value (author, 2026-11-03 11:10 and 17:35). So the linear half of the read
-// states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `len(xs)`, a value the forward side
-// computes, and `rulesets.transpose`'s `pick_at_t` builds its zeros from `length` and reads
-// nothing of the array.
+// that side it has no value. So the linear half of the read states the length:
+// `rulesets.jvp`'s `jvp_idx_arr` passes `len(xs)`, a value the forward side computes, and
+// `rulesets.transpose`'s `pick_at_t` builds its zeros from `length` and reads nothing of the array.
 //
 // It is a second spelling of `:op/idx_arr` rather than a third operand of it, because that
 // operator's key is filed at two operands in the core (`src/core/forward.cpp`,
 // `kRuleKeyExceptions`) and a law's parameters are bound one per operand: a law filed under it
 // cannot receive a third value (measured -- `skip=rule uri=:op/idx_arr reason=no-rule`).
 //
-// The position and the length are two parameters of their own. They used to travel in one integer
-// list, on the reading that the transpose walk answers an operator with one or two normal operands
-// and two integers beside the tensor would be three. Measured 2026-11-04: the walk refuses a third
+// The position and the length are two parameters of their own. The transpose walk refuses a third
 // *tensor*, not a third parameter -- `tensor:take_stated` takes two `int[]` operands beside its
-// tensor and its law is reached on both legs -- so the packing had no constraint behind it.
+// tensor and its law is reached on both legs -- so nothing forces them into one list.
 //
 // The stated length is checked against the tensor and the position against both: a length that
 // disagrees is a fault, not a silently reshaped answer. An answer sized by a number nobody verified
@@ -682,7 +679,7 @@ std::optional<Type *> elementAtInfer(const InferContext &ctx) {
 // this rule walks to `take_grad` is the caller's own `indices`. That is the one difference from
 // the library's law for this operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which
 // builds the zeros from the extents because a transpose law reads only known operands and the
-// tensor a cotangent comes back through has no value there (author, 2026-11-03 11:10 and 17:35).
+// tensor a cotangent comes back through has no value there.
 // Both answer the same array:
 // `test/cases/compile/transforms/stated_take_answered_by_the_engine.cml` prints the two together.
 void takeStatedVjp(VjpBuilder &b, const VjpCall &call) {
@@ -701,16 +698,13 @@ void takeStatedVjp(VjpBuilder &b, const VjpCall &call) {
 //
 // A take's adjoint puts each row's cotangent back where that row came from, in an array of zeros
 // with the *operand's* shape -- and the operand is the one thing the reverse side does not have: a
-// transpose law reads only known operands, and `t` is the operand the cotangent comes back through
-// (author, 2026-11-03 11:10, 17:35). The indices do not supply the row count and the cotangent
-// supplies only the columns, so the extents have to be stated by the forward half
+// transpose law reads only known operands, and `t` is the operand the cotangent comes back through. The indices do not supply the row count and the
+// cotangent supplies only the columns, so the extents have to be stated by the forward half
 // (`rulesets.jvp`'s `jvp_take` passes `shape(t)` beside the indices).
 //
 // The two arrays are separate parameters: `indices` is what `take` reads and `extents` is the
-// shape the adjoint spreads the rows back into. They used to travel in one list with a leading
-// count, because the transpose walk was believed to answer an operator with one or two normal
-// operands; the walk takes two `int[]` operands beside the tensor, which is what the take_stated
-// law reads today.
+// shape the adjoint spreads the rows back into. The transpose walk takes two `int[]` operands
+// beside the tensor, which is what the take_stated law reads.
 //
 // Both are checked: the extents against the tensor's shape (`support.h#checkStatedExtents`) and
 // every index against the first extent, so a gradient is never built over a shape nobody verified.

@@ -105,7 +105,7 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
         }
         // A wait the gate carried through the chain of its `sync` block is handed on in that kind:
         // the consumer that is a statement of the block follows the same predecessor through the
-        // sync edge (docs/handover/README.cn.md 5.21 item 4).
+        // sync edge.
         for (gc_node_ref_t predecessor : draft.syncInputsOf(id)) {
             handOverSyncWait(transaction, predecessor, user.id);
         }

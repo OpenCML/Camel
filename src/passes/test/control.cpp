@@ -86,8 +86,7 @@ void mandatoryDataPaths() {
     // where the block's chain ends (docs/design/effects/edges.cn.md 5.3) is where the wait lives.
     // A hand-built graph like this one, with no sync predecessor, is what the runtime refuses at
     // commit ("GATE node without a wait", src/runtime/graph.cpp) -- which is why nothing the builder
-    // makes reaches it. Measured: the rescue that used to put the edge back never fired once across
-    // the fast corpus (docs/handover/reports/opt-ctrl-inventory.md, item 7).
+    // makes reaches it.
     check(
         reduceControlDependencies(*owner) == 1 && draft.ctrlInputsOf(gate).empty(),
         "a covered control edge on a GATE survived the reduction");

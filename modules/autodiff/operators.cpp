@@ -37,7 +37,7 @@ using type::TypeCode;
 /// grad and with_grad: (f) => the gradient function of f, and (f, has_aux) => the same for a
 /// function whose result is the pair `(value, aux)` (see stdlib/signatures/autodiff.cml).
 /// `argnums` is not a parameter: what is differentiated is the first `with` parameter (design
-/// principles 9.9), and the author's ruling keeps that the one way to choose it.
+/// principles 9.9), and that stays the one way to choose it.
 class GradResolver final : public type::FuncTypeResolver {
   public:
     explicit GradResolver(bool withValue, bool hasAux) : withValue_(withValue), hasAux_(hasAux) {}

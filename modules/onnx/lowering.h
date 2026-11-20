@@ -121,9 +121,8 @@ using LowerFn = std::function<Value(const LowerContext &ctx)>;
 
 /// What one export target needs written differently, in one place: the same operator has a
 /// different ONNX form per target and per element width, which is legitimate lowering content
-/// and not an inconsistency between two spellings (ruling 2026-10-26,
-/// onnx-gradient-width-and-fused-matmul: "the rule is written in the lowering's target table,
-/// defined in one place").
+/// and not an inconsistency between two spellings: the rule is written in the lowering's target
+/// table, defined in one place.
 struct LoweringTarget {
     /// `true` when the target's *default* session optimization fuses a MatMul beside a Transpose
     /// into an operator it has no kernel for on doubles. onnxruntime-cpu's level-2

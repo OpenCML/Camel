@@ -153,10 +153,9 @@ OpDef reduceAxisDef(
         // One call spelling: `t` in the parentheses, the axis and the flag in angle brackets
         // (`mean<0>(xs)`, `argmin<0, true>(rows)`). `ordinaryParams` is one, so
         // `OpDefResolver::resolveForCall` refuses a call that writes the axis in the parentheses --
-        // that spelling named a second operator (`mean_axis(t, axis, keepdims)`), and the author's
-        // ruling of 2026-11-05 removed it: a reduction over an axis has one name, the whole
-        // reduction's. `withAfterNorm` joins the angle-bracketed parameters back into the kernel's
-        // one list.
+        // that spelling would name a second operator (`mean_axis(t, axis, keepdims)`): a reduction
+        // over an axis has one name, the whole reduction's. `withAfterNorm` joins the
+        // angle-bracketed parameters back into the kernel's one list.
         //
         // The extents are `reduceAxisInfer`'s answer. They have to be: a declaration cannot state
         // them at all -- they follow from the operand's type *and* from the values of `axis` and
@@ -262,7 +261,7 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
 // adjoint of `sum(t)` spreads one number over `shape(t)`, and the adjoint of `mean(t, axis, ...)`
 // spreads each lane's mean over the lane. Neither can be built from the operand on the reverse
 // side -- a transpose law reads only **known** operands, and the operand a cotangent comes back
-// through is not one: it has no value there (author, 2026-11-03 11:10, 17:35) -- and `T[..]`
+// through is not one: it has no value there -- and `T[..]`
 // carries no extents in its type (design principles 5.4). So the forward half of a reduction states
 // them, and the two operators below are what it states them to.
 //
@@ -270,8 +269,8 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
 // second spelling of `:op/idx_arr` (`modules/tensor/ops/layout_ops.cpp#elementAtKernel`): a law's
 // parameters are bound one per operand, and `:op/idx_arr`'s key is filed at two operands in the
 // core, so a third value cannot ride on it. The extents are operands of their own here -- the walk
-// answers an operator with a third *parameter*; what it refuses is a third *tensor* (measured
-// 2026-11-04 on `take_stated`, two `int[]` beside the tensor, both legs answered).
+// answers an operator with a third *parameter*; what it refuses is a third *tensor*
+// (`take_stated` has two `int[]` beside the tensor, both legs answered).
 // `rulesets.jvp`'s `jvp_sum` and `jvp_mean_axis` state them, and `rulesets.transpose`'s
 // `sum_stated_t` and `mean_axis_stated_t` read them and nothing of the operand.
 
@@ -326,8 +325,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// difference between a result somebody stated and a result nobody did: with the declaration this
 /// name had, every call read `float[..]`, and the cotangent the reverse law was handed had no rank
 /// while its type said array (`numel(ct)` in `stdlib/rulesets/transpose.cml#mean_axis_cotangent`
-/// read a number's bits as a pointer,
-/// docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md).
+/// read a number's bits as a pointer).
 ///
 /// A call whose parameters are **values of the run** has stated nothing, and this inference says
 /// exactly that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse,
@@ -342,8 +340,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// the cotangent: it states the cotangent as the element
 /// (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`), so the language's own `T` -> `T[..]`
 /// conversion at its next call argument boxes the value and `numel(ct)` answers 1. The rank-0
-/// program answers `[0.25, 0.25, 0.25, 0.25]` instead of dying
-/// (docs/handover/reviews/2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md).
+/// program answers `[0.25, 0.25, 0.25, 0.25]` instead of dying.
 std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const TypeCode dtype = reductionDtype(k::ReduceOp::Mean, in.dtype);

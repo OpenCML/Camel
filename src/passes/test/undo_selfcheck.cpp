@@ -289,7 +289,7 @@ std::string signatureContent(const GraphDraft &draft) {
             : "generic");
 }
 
-/// The shape a pointer comparison cannot see (author, 2026-11-19): a segment **fills an open
+/// The shape a pointer comparison cannot see: a segment **fills an open
 /// signature where it stands**, so the draft's `funcType_` names the same object before and after
 /// the write and every comparison of the parts of `UndoTypes` came out equal -- the check answered
 /// "nothing is missing" for a signature whose result type was still the one the segment wrote, and a

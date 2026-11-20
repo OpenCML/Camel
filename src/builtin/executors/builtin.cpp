@@ -475,8 +475,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 }
 
 namespace {
-/// The built-in module's operators itemize their accesses (design principles 3.3, author
-/// 2026-11-19), or the load stops. One report for all of them: the repair is the same in each and
+/// The built-in module's operators itemize their accesses (design principles 3.3), or the load
+/// stops. One report for all of them: the repair is the same in each and
 /// it is the module's, not the program's -- an operator that leaves its accesses out is read two
 /// different ways (the graph builder read-modify-writes every operand; the declaration's readers
 /// see one write of the global resource), and declaring what it touches settles both.
@@ -540,7 +540,7 @@ void registerBuiltinOperatorTraits() {
         // the null slot and `:struct/copy_arr` is the private copy a loop state starts from (its
         // `copyWithRoom` allocates a new array and leaves the argument as it was). Neither touches
         // a resource, so both are declared here, where the empty list is the declaration
-        // (design principles 3.3; author 2026-11-19).
+        // (design principles 3.3).
         "macro/cmp",
         "struct/copy_arr",
         // The append the loop rewrite gives a state it knows is held alone: it appends inside that
@@ -762,7 +762,7 @@ void registerBuiltinOperatorTraits() {
     // which turns `attempt(f)` into the value itself: no graph ever holds this node, and the
     // transform calls nothing -- the marked call the value stands for is `:mark/isolate`'s, and
     // that one declares the external effect. So the transform is pure: it touches no resource,
-    // and what a call of the value it gives does is the value's own effect (author 2026-11-19).
+    // and what a call of the value it gives does is the value's own effect.
     registry.set(std::string(camel::execute::kAttemptTransformUri), {.pure = true});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
@@ -770,7 +770,7 @@ void registerBuiltinOperatorTraits() {
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     // The cell a generator's local is made with before it has a value: a variable of the
-    // program's, made the same way, and nothing outside the program changes (author 2026-11-19).
+    // program's, made the same way, and nothing outside the program changes.
     registry.set(":var/new/empty", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/after", {.stateOnly = true});
@@ -792,7 +792,7 @@ void registerBuiltinOperatorTraits() {
     // the program wrote and the form is what the compiler made of it. This one had neither a call
     // shape nor an in-place form of its own, so a reader asking "what does a program write here"
     // had nothing to read and spelled the name out of the URI's tail instead -- which is the second
-    // spelling this declaration retires (author review 2026-11-17, item 11). Written here, beside
+    // spelling this declaration retires. Written here, beside
     // the other two forms, because a declaration belongs where the operator is registered and not
     // in its reader.
     registry.declareCallForm(
@@ -813,8 +813,8 @@ void registerBuiltinOperatorTraits() {
         names.push_back(name);
     }
     declareBuiltinOperatorResources(names);
-    // Every operator of the built-in module itemizes its accesses (design principles 3.3, author
-    // 2026-11-19). An operator that itemizes none was read as writing the global resource, while
+    // Every operator of the built-in module itemizes its accesses (design principles 3.3).
+    // An operator that itemizes none was read as writing the global resource, while
     // the graph builder read the same operator as read-modify-writing every operand: one call was
     // on the sync chain for one reader and not for the other, and neither answer was a declaration.
     // The check is here, where the module's operators are registered and once, so a new one that

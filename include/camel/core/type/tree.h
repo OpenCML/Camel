@@ -50,7 +50,7 @@ inline bool isInternal(const Type *type) {
 /// The empty value travels in every build, and a caller cannot take the count without saying what
 /// it does when there is none.
 ///
-/// **There is one `arity`, not two** (author's ruling, `a2cc57100`): a second name that still
+/// **There is one `arity`, not two**: a second name that still
 /// answers a number keeps the defect alive for whoever reaches for it, and that caller gets no
 /// diagnosis. A caller that has already established the type is a struct or an ordinary tuple may
 /// say so and unwrap; a caller that has not must handle the empty value.

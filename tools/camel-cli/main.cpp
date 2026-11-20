@@ -501,8 +501,8 @@ int runCommand(int argc, char *argv[]) {
                 // an append, a path assignment or a sort rebinding reuses the storage of the value
                 // it is given or allocates new storage. The decision is the plan's, made once
                 // (camel/runtime/exec_plan.h, StorageReuse); this only prints it. Read with
-                // `camel/runtime/storage_reuse.h`, which is the ruler the direct-SSA plan's S3b
-                // names: the tool reports, it does not make an update in-place.
+                // `camel/runtime/storage_reuse.h`: the tool reports, it does not make an update
+                // in-place.
                 camel::runtime::dumpStorageReuse(
                     *ctx->runtimeProgram(),
                     os,

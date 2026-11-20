@@ -188,8 +188,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
     // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
     // that names a resource means the call touches it, `pure` means it touches nothing.
-    // A `var` parameter is not an effect of the call (design principles 3.1 and 3.5, the ruling of
-    // 2026-11-15): what it writes is a value passed in and handed back, written into the caller's
+    // A `var` parameter is not an effect of the call (design principles 3.1 and 3.5):
+    // what it writes is a value passed in and handed back, written into the caller's
     // cell where the call stands, so the shape of a signature says nothing about anything outside
     // the program. An assignment is that shape as well -- its first parameter is a `var` cell --
     // and it is declared state-only for the same reason (builtin_semantics.cpp).
@@ -212,8 +212,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         if (op->uri() == ":var/after") {
             return false;
         }
-        // A higher-order operator's accesses are the function operand's (design principles 3.3;
-        // author 2026-11-19): the same reading the Call case below makes of a value's type, at the
+        // A higher-order operator's accesses are the function operand's (design principles 3.3):
+        // the same reading the Call case below makes of a value's type, at the
         // operand the declaration names. A value that is not there, or a type that writes no
         // clause, keeps the answer the table gives -- a `map` over a pure function is not an
         // effect, and one over a function that prints is.
@@ -447,8 +447,7 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
         return known->second;
     }
     // The answer is the node's *effect as it is declared or inferred*, never the operator's name
-    // (the author's spec of 2026-11-17, `fd75209cc`:
-    // "区域里每个按效应推断会写外部资源或句柄的节点（算子、 调用、分支、循环一样）"), and it is
+    // (an operator, a call, a branch and a loop alike), and it is
     // asked of the node's own kind, because the three kinds answer it from different places. Read
     // once per node: the tables do not change while a body is laid out.
     const auto answer = [&](bool writes) {
@@ -472,8 +471,8 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
     case runtime::GCNodeKind::Call: {
         // A call is answered by the **signature of the function it calls** -- the clause it wrote,
         // or, when it wrote none, the set its body was measured to reach (design principles 3.3;
-        // the same reading `reachOfFunc` takes, and the other half of "调用 ... 一样" in the ruling
-        // of 2026-11-17). The *body's footprint* would answer a different question: `footprintOf`
+        // the same reading `reachOfFunc` takes).
+        // The *body's footprint* would answer a different question: `footprintOf`
         // places an access only when the written value is one of this body's own ports, so a call
         // that writes a box this body computed reads as writing nothing -- `state::set(c, 7)` on a
         // `let c = state::ref(0)` is exactly that (`test/cases/compile/ref/refwrite_shapes.cml`).
@@ -516,12 +515,10 @@ bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) co
 }
 
 void Builder::layRegionWriteEdges() {
-    // The author's ruling of 2026-11-17 (`fd75209cc`, design principles 3.1), which replaces the
-    // sync-edge reading this file used to implement:
-    //
-    //   每个区域的出口放一个 `GATE`：第一个输入是区域交出的值，其余输入是区域里按效应推断会写
-    //   外部资源或句柄的节点（算子、调用、分支、循环一样），不论它们的值有没有人读；这些写之间
-    //   不加边。
+    // Each region's exit holds one `GATE` (design principles 3.1): its first input is the value
+    // the region hands out, and the rest are the nodes of the region that are inferred to write an
+    // external resource or a handle (an operator, a call, a branch and a loop alike), whether or
+    // not anyone reads their values; no edge joins the writes to one another.
     //
     // So what is laid here is a GATE, not a fan-in of sync edges: the exit receives the writes as
     // **normal inputs** and nothing joins the writes to one another. That is what makes the
@@ -536,7 +533,7 @@ void Builder::layRegionWriteEdges() {
     //   * the writes are *not* ordered among themselves -- no sync edge joins two of them, and no
     //     sync predecessor is invented. The order of two writes on one resource is what
     //     `orderEffectsOnOneResource` lays, by the order they are written in, and the order of two
-    //     writes on two resources is nothing the graph has to keep (that is the author's
+    //     writes on two resources is nothing the graph has to keep(that is
     //     `std::gir` evidence: swapping a `println` with a write to a file leaves the graph the
     //     same);
     //   * nothing searches for another root afterwards. The graph holds no rule about regions and
@@ -696,9 +693,9 @@ void Builder::layRegionWriteEdges() {
             // What a region owes, per region, in node order: every statement in it that writes,
             // whatever else the statement already waits on.
             //
-            // Whether the region runs is *not* asked here (the author's ruling of 2026-11-17,
-            // `fd75209cc`, design principles 3.1): the writes are the front end's promise, and the
-            // GATE below is what makes them live -- "活性由 GATE 读了它这件事本身提供". Reading
+            // Whether the region runs is *not* asked here (design principles 3.1):
+            // the writes are the front end's promise, and the
+            // GATE below is what makes them live. Reading
             // `liveNodesOf` here would make the promise conditional on a liveness walk that runs
             // before the GATE exists, and then a body whose writes are not (yet) live would collect
             // none of them and no GATE would ever be built.
@@ -749,8 +746,8 @@ void Builder::layRegionWriteEdges() {
                 // already carried, so it needs no second reason to run" is true of the write
                 // **inside a region that runs** and false of the region itself: a `sync` block
                 // whose value nobody takes runs only because something reads what it holds, and the
-                // something is this GATE. Hanging every write, chained or not, is also what the
-                // ruling asks for in so many words -- the region's exit reads the region's writes
+                // something is this GATE. Hanging every write, chained or not, is also what
+                // the design asks for: the region's exit reads the region's writes
                 // (`test/ cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is the last statement of
                 // the block `case _ => sync { q(5); return 0; }`, and with it hung on the exit the
                 // block's own GATE is read, the arm runs and `q(5)` prints).
@@ -779,8 +776,8 @@ void Builder::layRegionWriteEdges() {
                 chains[region].push_back(statement);
             }
             // A branch or a loop written in a region is one of that region's writes when the region
-            // it owns writes (the author names the four shapes together: "算子、调用、分支、循环一
-            // 样"). The GATE inside the arm carries the arm's write but cannot make the arm run --
+            // it owns writes (operators, calls, branches and loops alike).
+            // The GATE inside the arm carries the arm's write but cannot make the arm run --
             // an arm runs because its owner runs -- so what makes it run is the owner being one of
             // the enclosing region's GATE's inputs. Walked to a fixpoint, because an arm may hold a
             // loop whose body writes, and then the loop's owner is a write of the arm.
@@ -851,7 +848,7 @@ void Builder::layRegionWriteEdges() {
                     return runtime::kInvalidNodeRef;
                 }
                 // The value the region hands out is not always the node the region's own exit
-                // names. A branch carries a `var` its arms write as the branch's value (stage S2):
+                // names. A branch carries a `var` its arms write as the branch's value:
                 // the arm `then sync { x = 3; x = 4; println(1); println(2) }` hands the JOIN the
                 // value the write stored, while its own exit is the `sync` block's GATE over the
                 // block's tail
@@ -1248,7 +1245,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
 
     // Which graphs hold an effect that runs. `settleEffectfulGraphs` reads this, so it is asked
     // whether anything is reported here or not. A statement that does not run is not reported: the
-    // author's ruling of 2026-11-17 (design principles 3.1) makes what a region writes a root of
+    // rule of design principles 3.1 makes what a region writes a root of
     // that region, so a call, a loop and a block run with the region they are written in even when
     // nothing takes the value they give. What such a statement leaves behind is a value nobody
     // uses, and that is a value -- never an effect that failed to run.
@@ -1264,12 +1261,12 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return;
     }
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    // A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
-    // 2026-11-15: assigning to a `var` is not an effect). What such a write drops is a value, and a
+    // A write to a variable whose value nothing reads (design principles 3.1 and 3.5:
+    // assigning to a `var` is not an effect). What such a write drops is a value, and a
     // dropped value is what this says: the same thing one rule says about any value nobody uses
     // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. A write is not an
     // effect, and whether the statement it stands in runs is a fact about that statement, not about
-    // this value (design principles 3.1 and 3.3, the ruling of 2026-11-16: a write of a handle is
+    // this value (design principles 3.1 and 3.3: a write of a handle is
     // used by the region it is written into, by the same rule as an outside write).
     //
     // What makes such a write's value dead is that no read takes it, and the walk above does not
@@ -1409,7 +1406,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
     }
-    // A write to a `var` built as a value (stage S1 of the direct-SSA plan) stores nothing: the
+    // A write to a `var` built as a value stores nothing: the
     // name is rebound to the value, so the value nobody reads is a value node with no user, and
     // that is the same fact the check above reads off a store that the graph no longer has. A
     // value the region goes on to hand on -- the body's result, a statement of a sync chain -- is
@@ -1438,8 +1435,8 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
     }
-    // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
-    // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no
+    // A `fail` written as a statement whose value nothing takes (design principles 3.9).
+    // It gives no value and is no
     // effect of its own, so where its value is not wanted nothing runs it and the fault is never
     // raised -- which is what the writer has to be told, because the program was meant to stop
     // there. Inside a `sync` block the statement is on the chain and runs; on the path the data
@@ -1464,8 +1461,8 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             .atOrigin(origin)
             .commit("nothing needs it and it is not in a sync block");
     }
-    // The statements a `fail` of this block leaves behind (design principles 3.9; the author's
-    // ruling of 2026-10-26): they are reached only if the `fail` is not run at all, which the walk
+    // The statements a `fail` of this block leaves behind (design principles 3.9):
+    // they are reached only if the `fail` is not run at all, which the walk
     // over `needed` above has just answered -- a `fail` nothing needs does not run, and then these
     // statements do run (FailNotExecuted tells the writer why). Where the `fail` is needed, it
     // raises its fault first and nothing after it is reached, whatever the statements are.
@@ -2245,7 +2242,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     }
     if (valueTypeOf(nodeTypeOf(node))->code() == TypeCode::Never) {
         // A statement of the bottom type `never` is not a value somebody forgot to bind (design
-        // principles 3.9; the author's ruling of 2026-10-26 on a `fail` written as a statement of
+        // principles 3.9, a `fail` written as a statement of
         // its own): it gives no value at all, so there is nothing to use and no "it changes
         // nothing" to say either. Whether it is executed at all is the effect rule's question,
         // and a `fail` nobody needs has a warning of its own (FailNotExecuted).
@@ -2282,7 +2279,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
         nodeAt(call->at(1)->name()).has_value()) {
         target = resolveNodeByRef(call->at(1)->name());
     }
-    // A name built as a value (stage S1) is assignable just as the cell was, so the advice to
+    // A name built as a value is assignable just as the cell was, so the advice to
     // write the result to it still holds: the same reading, with the name standing for its value.
     if (target != nullptr &&
         (isVariable(target) || capturePortOfAVariable(target) || nameIsSsa(call->at(1)->name()))) {

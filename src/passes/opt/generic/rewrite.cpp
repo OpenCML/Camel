@@ -525,8 +525,7 @@ void replaceNode(
         }
         for (gc_node_ref_t pred : preds) {
             // A wait that came through the chain is handed on in that kind: the consumer that is a
-            // statement of the block follows the same predecessor through a sync edge
-            // (docs/handover/README.cn.md 5.21 item 4).
+            // statement of the block follows the same predecessor through a sync edge.
             if (std::ranges::find(chainWait, pred) != chainWait.end() &&
                 handOverSyncWait(transaction, pred, user)) {
                 continue;
@@ -785,8 +784,8 @@ const camel::runtime::Program *rewriteReachableGraphs(
     }
     const camel::runtime::Program *const committed = session.commit();
     // The check every pass ends with, at the granularity of one rewrite step: `std::opt` runs
-    // fold, cse, algebra, dce and order through here, and until 2026-11-02 none of them was checked
-    // -- the pass was, once, after all of them. A step that moves an effect past another on one
+    // fold, cse, algebra, dce and order through here, so each step is checked by itself, not
+    // once after all of them. A step that moves an effect past another on one
     // resource is refused here, so the next step never sees such a graph.
     if (context != nullptr &&
         checkPassBoundary(context, std::string(passName), *program, *committed)) {

@@ -1069,8 +1069,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 // the batch never calls the rule's right side itself, so nothing binds the names
                 // its left side's pattern writes. A rule that reads one of them is a rule no such
                 // transform can use -- and the place to say so is here, where the rule is written,
-                // not the call that would have used it (the author's ruling of 2026-11-01 05:10:
-                // the outer arrow is not called, so nothing may depend on it).
+                // not the call that would have used it:
+                // the outer arrow is not called, so nothing may depend on it.
                 if (familyCallsOnlyItsCallee(ruleset) && !rule.outerUses.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleRightUsesOuterVariable);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
@@ -1118,8 +1118,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // runs here, while the bodies are still in hand; the report runs per module below, with
         // the other diagnostics of the module being reported.
         //
-        // It runs before the two walks below because of the author's spec of 2026-11-17
-        // (`3e4c0929c`): a region's use of its writes is an edge laid at build time from every node
+        // It runs before the two walks below because
+        // a region's use of its writes is an edge laid at build time from every node
         // whose *inferred effect* writes (a call, a loop, a branch and an operator alike), and the
         // effect of a call is the measured signature of its callee, so the measurements have to
         // exist before the edges are laid. The measurement reads no edge of this kind --
@@ -1154,7 +1154,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportEffectfulConditions();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
-                // The content rule of `Ref<T>` (the author's ruling of 2026-11-14): a reference
+                // The content rule of `Ref<T>`: a reference
                 // may hold any type but one that holds a reference, because the boxes are
                 // reclaimed by counting the handles that point at them. Also before the bodies are
                 // let go.

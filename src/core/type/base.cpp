@@ -321,18 +321,16 @@ bool Type::assignableFrom(Type *from) const {
 
     // A `Ref` is a position whose type is not decided yet -- a name, or a composite member whose
     // target has not been filled in -- and it is an input this judgement has to answer, not one it
-    // may abort on. The author's ruling of 2026-11-02 14:10: resolve it at the entry of every type
+    // may abort on. It is resolved at the entry of every type
     // judgement instead of asking each caller to remember.
     //
     // Resolution lives where the target does: the composite types fill their `Ref` members from a
     // type list (`TupleType::resolve`, `StructType`'s refs slots, `ArrayType::resolved`), and the
     // value side reads a name through `RefData`. A `Ref` that is still standing when a judgement is
     // asked therefore means "undecided", and the answer here is the one the general path below
-    // already gives: it equals itself and nothing else. What it is not is a `GUARD`: this site used
-    // to abort the Debug build on seventeen plan cases, all of them valid programs
+    // already gives: it equals itself and nothing else. What it is not is a `GUARD`: aborting here would reject valid programs
     // (`comprehension_context.annotated`, `context.var_sibling`, the `rank_zero_slot_*` family,
-    // `print_and_recompile`, `ort_struct_casts`), and the ruling reads that as the compiler having
-    // written a legal case down as an assertion.
+    // `print_and_recompile`, `ort_struct_casts`), and treat a legal case as an assertion failure.
     if (to->code_ == TypeCode::Ref || from->code_ == TypeCode::Ref)
     {
         return to->code_ == from->code_;

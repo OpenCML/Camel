@@ -738,7 +738,7 @@ void GraphDraft::removeNormPort(gc_node_ref_t id) {
     // (`EdgeChecker::checkCall`), a translation printing the signature, the entry-argument reader
     // -- places the parameters after it one slot too early.
     //
-    // Measured 2026-11-18: `test/cases/opt/generic/specialize_dim_name_recursion.cml` publishes a
+    // For example, `test/cases/opt/generic/specialize_dim_name_recursion.cml` publishes a
     // `walk$spec0` that declares `(n: int, xs: f32[n]) => f32 pure` over the one port node it kept,
     // whose type is `f32[n]` -- the port of the parameter declared `int` was gone and the one left
     // stood for it. `reinferDraftTypes` refuses to rebuild a signature whose two counts disagree

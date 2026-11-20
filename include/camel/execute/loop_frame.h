@@ -228,8 +228,7 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
 ///
 /// This lives here, beside `loopEnd`, because the ordering "give back before the frame goes back to
 /// the pool" is the loop's own knowledge and not a backend's: the twelve fault paths in nodevm,
-/// fastvm, gotovm, the JIT trampoline and taskflow each carried a copy of that two-line sentence
-/// (daily review 2026-11-18, item 6; the review counted 16 lines, of which 12 were call sites).
+/// fastvm, gotovm, the JIT trampoline and taskflow each carries a copy of that two-line sentence.
 inline void giveBackOpenLoopsOfEveryFrame(camel::core::context::FramePool &pool) {
     pool.foreach([](camel::core::context::Frame *frame) {
         camel::runtime::applyRefEntriesOfOpenLoops(frame);
@@ -271,8 +270,7 @@ inline bool loopEnd(
         // The plan's count is applied at the position of the node that ran; the LOOP node's own
         // position is the one position that runs every round and that no operator covers, and this
         // is the moment it means: the loop is leaving, so what the rounds held a value for comes
-        // back (camel/runtime/exec_plan.h, `applyRefEntriesForLoopExit`; author review 2026-11-16,
-        // item 6 -- the give-back at the loop's exit). The loop's value is final here, which is why
+        // back (camel/runtime/exec_plan.h, `applyRefEntriesForLoopExit`, the give-back at the loop's exit). The loop's value is final here, which is why
         // this runs after the tuple above was brought up to date.
         if (const camel::runtime::GCGraph *graph = frame.graph()) {
             camel::runtime::applyRefEntriesForLoopExit(graph->execPlan(), &frame, loop.position);

@@ -543,7 +543,7 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             GUARD(caseNode->type() == GCT::NodeKind::TCASE, "A case of match type is a TCASE.");
             const uint16_t patterns = caseNode->typeCasePatterns();
             // A guarded `_` or `#leaf` selects the types its predicate holds for, not every type,
-            // so a case written after it is reachable (design principles 5.5, ruling of 2026-11-14).
+            // so a case written after it is reachable (design principles 5.5).
             const bool guarded      = tree_->caseGuardOf(caseNode) != nullptr;
             const bool catchesAll =
                 !guarded && (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
@@ -632,7 +632,7 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             // The guard of the case is a Camel predicate, read here with the type arguments of the
             // instance bound. A case whose guard does not hold sends the subject on to the case
             // written after it, exactly as the guard of a value `match` does (design principles
-            // 5.5, ruling of 2026-11-14); a predicate that cannot be read here is reported as the
+            // 5.5); a predicate that cannot be read here is reported as the
             // defect it is, rather than as a type no case selects.
             const GCT::node_ptr_t guardNode = tree_->caseGuardOf(caseNode);
             if (guardNode == nullptr) {
@@ -993,7 +993,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
             const auto bound = nodeAt(value->name());
             if (bound.has_value()) {
                 // A `var` may hold another array by the time the loop runs, and one built as a
-                // value is the same to the compiler's knowledge (stage S1 keeps this reading).
+                // value is the same to the compiler's knowledge.
                 if (isVariable(*bound) || nameIsSsa(value->name())) {
                     return std::nullopt;
                 }
@@ -1179,8 +1179,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: the fold the fields of `T`
     // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or a
     // sequence the compiler works out (`in 0..5`, `in range(0, 9, 3)`, `in [1, 2, 3]`, `in
-    // xs`, which dropped the head's parentheses
-    // of 2026-10-25 that draws the line by the one rule of `staticLoopSequenceOf`). The body is
+    // xs`; the line is drawn by the one rule of `staticLoopSequenceOf`). The body is
     // built once per round in the current graph; its value is the next state. No LOOP node, no
     // region, and nothing of the state or the generator left in the graph: the first values are
     // ordinary values and each round reads the previous round's node directly (a DREF to a
@@ -1644,7 +1643,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
             // A `let` bound to a value the compiler knows is a constant too: the binding is
             // immutable, and `first_leaf` in the library names the first field once this way.
             // A `var` is not: it can be assigned another key before the access, and one built as
-            // a value reads the same way the cell did (stage S1 keeps this reading).
+            // a value reads the same way the cell did.
             if (data_ptr_t data = constantOfNode(*bound)) {
                 key = keyOfData(data);
             }

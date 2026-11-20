@@ -39,7 +39,7 @@
 ///   reading of neither check.
 ///
 /// All three print what the draft added before they commit it. The tier of the checks is what the
-/// draft added, not what the build is (the ruling of 2026-11-18, `commitAddsAccess` in
+/// draft added, not what the build is (`commitAddsAccess` in
 /// camel/runtime/resources.h), and each of these drafts adds an access, so each one is asked in every
 /// build the plans run in -- the line is on the record so that a run which was not asked cannot look
 /// like one that was.
@@ -89,7 +89,7 @@ class ValueRetypeTwiceTestPass : public RuntimeGraphRewritePass {
 };
 
 /**
- * The four readings the author's rework of 2026-11-18 asks for beyond the two of analysis 4.1. Each
+ * The four readings asked for beyond the two of analysis 4.1. Each
  * one writes the one thing that check is about, commits it, and prints what the commit answered; the
  * plan compares the answer.
  *
@@ -114,7 +114,7 @@ class ValueRetypeTwiceTestPass : public RuntimeGraphRewritePass {
  *
  *   `test::commit_tier` reads the tier itself: the same two drafts, one that adds an access and one
  *   that does not, under both answers the one build cell can hold. The two drafts answer different
- *   things and the cell changes neither -- which is the ruling, read as a number rather than
+ *   things and the cell changes neither -- the rule read as a number rather than
  *   asserted: the tier is what the draft added, and no build can move it.
  */
 inline constexpr const char *kCommitExitRegionTestPass = "test::commit_exit_region";
@@ -271,7 +271,7 @@ class CommitPortTypeTestPass : public RuntimeGraphRewritePass {
  * answer for the same reason every other one does. Two narrower placements missed it, and neither
  * was the case either was written for -- that case was the compiler's own outputs (`*$spec*`,
  * `main$lift0`, `split_of_jvp_of_*_backward`) whose norm-port lists sat one place over from their
- * signatures, a defect since fixed at its source. Measured 2026-11-18: the commit's closing loop
+ * signatures. The commit's closing loop
  * decodes a made graph, finds no write recorded, drops it from `edited_`, so a commit that asked
  * only the graphs it edited never asked it (`graph 'made$mismatch' not asked the port question
  * (edited=0, made=1)`); and the signature tier `sameSignature(before, after)` would have waived it

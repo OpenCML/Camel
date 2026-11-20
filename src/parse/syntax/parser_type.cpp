@@ -256,7 +256,7 @@ void ParserImpl::parseMatchTypeType() {
 
 /// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
 /// A case of a type function's `match type` takes the guard a value-level `match` case takes
-/// (design principles 5.5, ruling of 2026-11-14): `case _ when is_numeric::<T>() => int[0]` is
+/// (design principles 5.5): `case _ when is_numeric::<T>() => int[0]` is
 /// taken only where the predicate holds, and a case whose guard does not hold falls through to
 /// the one written after it.
 void ParserImpl::parseTypeArm() {

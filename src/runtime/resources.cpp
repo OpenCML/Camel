@@ -89,9 +89,9 @@ namespace {
 // ---- Small helpers ----------------------------------------------------------------------------
 
 /// The value a GATE forwards is camel::runtime::valueBehindGates: its first normal input, then its
-/// first context input, then nothing (design principles 3.1, the author's ruling of 2026-11-17;
+/// first context input, then nothing (design principles 3.1;
 /// camel/runtime/graph.h). What follows the value in the input list is the reads a region's writes
-/// are held by, which gateWaitsOf answers. This file used to walk the chain itself.
+/// are held by, which gateWaitsOf answers.
 using camel::runtime::valueBehindGates;
 
 /// The union of two modes of access to one resource.
@@ -646,8 +646,8 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
         // `docs/design/effects/plan.cn.md` 2.2) is not a reading at all, so the call keeps the
         // conservative one: recording it as `unknown` is the honest answer about a value whose reach
         // the program does not state. Reaching that fallback is a fact about the type, not about the
-        // call site, and the handover page of 2026-11-19 records one type that lands there (the one
-        // `autodiff`'s `grad` answers with) and the question it raises.
+        // call site; one type that lands there is the one
+        // `autodiff`'s `grad` answers with.
         if (!with.empty()) {
             if (const core::type::FunctionType *type =
                     functionTypeOfValue(graph, valueBehindGates(graph, with[0]));
@@ -1634,7 +1634,7 @@ std::optional<CommitViolation> effectBeyondDeclaration(
     }
     // The one sentence that differs. The graph a commit starts from was built by the front end and
     // accepted as it is, so a body outside its own declaration was let through there: it is the
-    // compiler's defect, and the reading says so rather than blaming the program (2026-11-20).
+    // compiler's defect, and the reading says so rather than blaming the program.
     const std::string closing =
         reader == EffectReader::Publishing
             ? std::string("the commit would publish a body that reaches past its own declared "
@@ -1739,8 +1739,8 @@ bool addsAnAccess(const NodeAccessTable &table, std::span<const gc_node_ref_t> m
 }
 
 /// The regions a commit answers for: the region each node it touched is in -- one it made, or one it
-/// changed in place -- and every region around that one up to the body (the author's ruling of
-/// 2026-11-18, "recheck the touched regions with all their ancestors"). A region is touched by what
+/// changed in place -- and every region around that one up to the body.
+/// A region is touched by what
 /// was written in it and by what was written anywhere under it: an owner node stands in the region
 /// it sits in for every region under it (the `RegionEntrant` below), so a write spliced into an arm
 /// changes the footprint the branch node carries outside, and the pair out there can be new while
@@ -2002,8 +2002,8 @@ std::optional<CommitViolation> commitViolation(
     // and a commit does not. A splice answers by construction (the node it made was in no pair
     // before), so that half keeps the whole-body reading it always had.
     //
-    // The effect half is not the same shape, and it is not answered that way any more (the ruling of
-    // 2026-11-20). The graph a commit starts from is the compiler's own product -- the front end
+    // The effect half is not the same shape, and it is not answered that way.
+    // The graph a commit starts from is the compiler's own product -- the front end
     // built it, or a commit published it after answering for it -- so one whose body already reaches
     // past its own signature is a graph the front end accepted beyond its type. No program writes
     // that: it is a defect of the compiler, and it is reported as an internal error instead of being
@@ -2016,7 +2016,7 @@ std::optional<CommitViolation> commitViolation(
         // callee's declared clause, and this commit is publishing new declarations for the callees it
         // rewrote. Reading `before` against them would measure the old body through a promise it was
         // never published under, and report the graph as beyond a type it satisfied (the measurement
-        // constraint of the 2026-11-18 page; `tiles` widens a callee and its caller in one commit).
+        // constraint: `tiles` widens a callee and its caller in one commit).
         const Program &beforeIn = beforeProgram != nullptr ? *beforeProgram : program;
         FootprintWalk beforeWalk(beforeIn, core::OperatorTable::instance().declarationEpoch());
         Resolver beforeResolver(

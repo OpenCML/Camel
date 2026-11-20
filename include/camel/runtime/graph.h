@@ -797,7 +797,7 @@ class GCGraph : public camel::core::rtdata::Object {
     /// region's **exit** (`region.result`; a loop's condition region has one too).
     ///
     /// The owner's read is the rule's one exception and it is written on the port, not on the
-    /// reader's identity or on the exit's node kind (author ruling 2026-11-03 08:10): a `LOOP`
+    /// reader's identity or on the exit's node kind: a `LOOP`
     /// consumes its body's exit round by round, and a body written `do s` ends in the state port
     /// while one written `do s + 1` ends in an Oper -- the same thing to the loop, so a rule that
     /// told the two apart would be a special case. Any *other* port of the region is refused to the
@@ -1538,12 +1538,11 @@ class ProgramHold {
 ///
 /// This is **the** reading of a gate, stated once for every reader of a graph: a GATE orders the
 /// value it reads after other nodes -- an inlined call gates its arguments after what the call
-/// waited for -- and changes nothing else (design principles 3.1, author ruling 0780a83bd: a gate's
+/// waited for -- and changes nothing else (design principles 3.1: a gate's
 /// trailing input is a wait rather than a use). The value is the **first** ordinary input, and
 /// everything after it in that list is a wait. Resolving a forwarded value reference, emitting the
-/// draft payload and asking a node for its result type all read `front()`; the walkers that ask
-/// "what does this gate pass on" used to answer with `back()` -- the last wait -- and each carried
-/// its own copy of the loop (daily review 2026-11-18, item 5).
+/// draft payload and asking a node for its result type all read `front()`; `back()` is the last
+/// wait and answers nothing about the value a gate passes on.
 ///
 /// It is a template over the reader rather than a function of `GCGraph` because a draft hands out
 /// its own reader while it is being written, and the compile front end reads a graph through

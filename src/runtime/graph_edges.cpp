@@ -184,10 +184,10 @@ class EdgeChecker {
      * that republishes a graph under another signature -- `GraphDraft::setFuncType`, which is how a
      * fold, a retype and `test::commit_tier` all write a new signature -- moves the second and
      * leaves the first where it was, so the graph says `float` to its callers and `int` to its own
-     * body. Until this check, no path asked whether the two were the same promise: measured
-     * 2026-11-18, with `test/cases/opt/commit_checks/port_type.cml` and a draft that writes one
-     * graph's signature over another's port nodes, the commit published the graph and every plan
-     * stayed green.
+     * body. Without this check, no path asks whether the two are the same promise:
+     * with `test/cases/opt/commit_checks/port_type.cml` and a draft that writes one
+     * graph's signature over another's port nodes, the commit publishes the graph and every plan
+     * stays green.
      *
      * The relation is the seal's own one spelling of "the types agree" (`typesCompatible`,
      * camel/runtime/graph.h), not a stricter one written here: two parameters that agree in either
@@ -201,15 +201,12 @@ class EdgeChecker {
      * the two counts are two questions and not one.
      *
      * This is asked of every graph a commit encodes, in every build (see
-     * `validateRuntimeGraphPortTypes` below for where it is called). It used to be asked only of a
-     * graph the commit gave another signature than the one the graph had, because the compiler's
-     * own specializations published exactly this defect: their norm-port list was one entry short
-     * of the signature they published, so the port of parameter 0 carried parameter 1's type
+     * `validateRuntimeGraphPortTypes` below for where it is called). It is asked of every graph and
+     * not only of one the commit gave another signature, because a graph that is wrong from the
+     * moment it is made would otherwise be missed: a specialization whose norm-port list is one entry
+     * short of the signature it publishes gives the port of parameter 0 the type of parameter 1
      * (`walk$spec0` in `test/cases/opt/generic/specialize_dim_name_recursion.cml` declared
-     * `(n: int, xs: f32[n])` over one port whose type was `f32[n]`). That was a defect of the
-     * specialization and not of this check -- `GraphDraft::removeNormPort` moved the port list and
-     * left the signature, fixed 2026-11-18 -- and with it fixed the check is asked unconditionally,
-     * as it was meant to be from the first.
+     * `(n: int, xs: f32[n])` over one port whose type was `f32[n]`).
      *
      * The port of a `var` parameter holds the variable and the parameter is typed by
      * its value -- the relation `reinferDraftTypes` holds the signature to when it re-infers one
@@ -284,8 +281,8 @@ class EdgeChecker {
     ///     so there is no promise to break. Camel has no `any` to stand in for one (5.10) -- an
     ///     empty declaration is not "no type", it is "whatever the body returns".
     ///
-    /// Everything else is judged, tagged or not. Measured 2026-11-04 on the half this check used to
-    /// leave alone, with a rule library that replaces the node a function returns by a value of
+    /// Everything else is judged, tagged or not. With a rule library that replaces the node a
+    /// function returns by a value of
     /// another type (`import { rewrite } from rewrite`): `func target(n: float): float` handed on a
     /// `float[]` and the run printed `6.3956244425295e-310` -- the array's address read as a float
     /// -- and `func target(n: int): int` handed on a `float` and printed `4612811918334230528`,
@@ -794,8 +791,8 @@ class EdgeChecker {
             break;
         case GCNodeKind::Gate:
             // The first input is the value the gate forwards; the ones after it are reads it takes
-            // and say nothing about what is handed on (design principles 3.1, the author's ruling of
-            // 2026-11-17, the region `GATE`).
+            // and say nothing about what is handed on (design principles 3.1,
+            // the region `GATE`).
             if (!norm.empty() && type && typeOf(norm.front()) &&
                 !compatible(typeOf(norm.front()), type)) {
                 report(
@@ -971,10 +968,7 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
  * encoded, in every build (`EdgeChecker::checkPortTypes`, which does the judging).
  *
  * Every graph and not only one the commit gave another signature: a graph that is wrong from the
- * moment it is made is exactly what a check placed on republished graphs misses. That placement was
- * a holding position while the compiler's own specializations published a shifted port list (the
- * defect `GraphDraft::removeNormPort` held, fixed 2026-11-18), and this is the end state it was
- * holding for.
+ * moment it is made is exactly what a check placed on republished graphs misses.
  */
 void validateRuntimeGraphPortTypes(
     const Program &program, const GCGraph *graph, GraphState state) {
@@ -1161,22 +1155,16 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     // question behind it: is the frame the port lives in there when the read happens? Inside it, in
     // a region it contains, and in the node it is the inside of, yes; anywhere else, no.
     //
-    // Measured over the whole fast tier on 2026-11-03: 961 cross-region port reads in 58 graphs of
-    // 63 cases, of which 647 are `Arm` -> `Root`, 155 `Arm` -> `LoopBody` where the arm sits in the
-    // body, 122 `LoopBody` -> `Root`, 10 `Inline` -> `Root`, 2 `LoopCond` -> `Root`, 1
-    // `Arm` -> `LoopCond`, and 0 across two branches -- see
-    // docs/handover/reports/2026-11-03-does-a-partial-transposition-need-the-operand-values.cn.md 9.
-    // Every one of those has the reader inside and the port outside.
+    // Every cross-region port read has the reader inside and the port outside (an `Arm` -> `Root`
+    // read, an `Arm` -> `LoopBody` read where the arm sits in the body, a `LoopBody` -> `Root`
+    // read, and so on); none crosses two branches.
     //
-    // The author's rule (2026-11-03) is "a region reads its ancestors' ports and commit checks
-    // that", and the one shape it leaves out -- a LOOP node reading the value its own body region
-    // ends in -- is the owner's read, added on the same day with the two programs that ask for it
-    // (see docs/handover/reviews/2026-11-03-may-a-region-owner-read-its-own-exit.cn.md). An
-    // earlier version allowed the whole reverse direction instead, on the reading of those 155
-    // `Arm` -> `LoopBody` reads as an arm holding a loop; they are the opposite shape (the arm sits
-    // in the body), so the widening was measuring its own misreading.
+    // A region reads its ancestors' ports, and commit checks that. The one shape it adds -- a LOOP
+    // node reading the value its own body region ends in -- is the owner's read. An `Arm` ->
+    // `LoopBody` read is an arm sitting in the loop body and not an arm holding a loop, so the
+    // reverse direction is not allowed.
     //
-    // The owner's read was then narrowed to the region's exit (author ruling 2026-11-03 08:10): the
+    // The owner's read is narrowed to the region's exit: the
     // rule is written on the port -- is this the value the region ends in -- and not on the
     // reader's identity or on the exit's node kind, because a body ending in `do s` and one ending
     // in `do s + 1` are the same thing to the loop. So `regionIsVisibleFrom` is handed the port,

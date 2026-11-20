@@ -57,9 +57,8 @@ struct ForeignResourceDescriptor {
     /// `retainCountNow`/`giveBackCountNow` (below) apply to a block only when its descriptor says
     /// so, and the anchor counts only these blocks. Declared by the type's owner and by nothing
     /// else -- the kind string is a name for diagnostics and is not an identity the count reads
-    /// (author review 2026-11-16, item 7: the count recognized `"state.ref"` by comparing `kind`,
-    /// which made the module's own name a fact of the runtime and would have counted any other
-    /// module's handle the day it was wrapped the same way).
+    /// (recognizing a handle by comparing `kind` would make a module's own name a fact of the
+    /// runtime).
     bool counted = false;
 };
 
@@ -73,7 +72,7 @@ class ForeignResourceControlBlock final {
     void retain() noexcept;
     /// The plan's count: another holder of the value. Distinct from `retain`, which is another
     /// wrapper of the handle appearing. The collector may still be holding a wrapper after the
-    /// count says no holder is left, and that is the transition the author ruled on 2026-11-15:
+    /// count says no holder is left, and that is the transition:
     /// the count decides when the **resource** goes, the collector still owns the handle value.
     void retainHolder() noexcept;
     void releaseReference() noexcept;
@@ -166,10 +165,8 @@ class ForeignResourceObject final : public Object {
 //
 // Design principles 10.5: an immutable value is freed by counting alone, the count is the number of
 // its holders, and the count comes from one last-use analysis on the execution plan that every back
-// end follows. These two functions are the whole runtime surface for that count -- the author's
-// ruling of 2026-11-15 is that the compiler emits the duplicate and the drop and the runtime
-// provides nothing else (docs/handover/reviews/
-// 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) -- and where they are
+// end follows. These two functions are the whole runtime surface for that count -- the compiler
+// emits the duplicate and the drop and the runtime provides nothing else -- and where they are
 // called is the plan's business (camel::runtime::ExecPlan::refGiveBacksAt names the positions and
 // the references).
 //

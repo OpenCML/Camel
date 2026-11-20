@@ -184,8 +184,7 @@ ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
     // values of the top level, else through the function constant itself -- and through a FUNC
     // node once a pass has settled the callee (`std::cxx::devirtualize` does). A FUNC node is the
     // same call with its graph named in the node instead of held in a value; the writer reads it
-    // too, or every optimized program is refused as one that does not call main (defect of the
-    // 2026-11-01 eval report: 72 to 78 of 138 programs in each pipeline from devirtualize on).
+    // too, or every optimized program is refused as one that does not call main.
     Entry entry;
     // The call is the root's result; when main gives nothing, only its completion point.
     gc_node_ref_t call = root->returnNodeRef();

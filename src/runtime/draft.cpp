@@ -771,7 +771,7 @@ gc_node_ref_t GraphDraft::resolveForwardedValueRef(gc_node_ref_t id) const {
         const auto normInputs = normInputsOf(current);
         if (!normInputs.empty()) {
             // The value a GATE hands on is its first normal input; the ones after it are the reads
-            // of the region's writes (design principles 3.1, the author's ruling of 2026-11-17).
+            // of the region's writes (design principles 3.1).
             current = normInputs.front();
             continue;
         }
@@ -1529,8 +1529,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // successor to hand a place to, so the statement the erased node held keeps only the ORDER edge
     // to the statement written after it, an order edge carries no place, and the effects it carried
     // fall out of the execution while the graph still passes the seal check. That is how a fold
-    // after an inline lost the callee's `println` under `std::opt` (the six wrong values bisected in
-    // docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md; five of them, this line).
+    // after an inline lost the callee's `println` under `std::opt`.
     const auto survives = [&](gc_node_ref_t pred, gc_node_ref_t user) {
         pred = chainExitOf(*this, pred);
         if (header(id)->kind == GCNodeKind::Join && chainEntryOf(*this, id) == pred) {
@@ -1613,8 +1612,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // old test left it alone and the wait the erased gate carried went to nobody. That is the
     // splice: the gate standing for the call carries the statement written before the call, the
     // statement written after it waits on the body's tail, and `1 -> 13 -> 15` lost its `1 -> 15`.
-    // The effect then stood on nothing while the graph still passed every other check, which is
-    // seed 311 of the six wrong values (docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md).
+    // The effect then stood on nothing while the graph still passed every other check.
     //
     // What the node waited on through neither kind -- a read of a `var` reads its writer through
     // the data port alone -- is not here to hand on: the fold that would remove such a read keeps
@@ -2588,8 +2586,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // A GATE waits on the sync chain's tail (docs/design/effects/edges.cn.md 5.3): its wait
             // is a **sync predecessor**, and 5.3 keeps a GATE with one -- it "may not be deleted,
             // and may not be replaced by its input, unless its sync predecessor is already gone".
-            // A gate whose wait is a control input is what that wait used to be written as; the
-            // ones this lane has not moved onto the sync edge keep the old condition. A gate with
+            // A gate whose wait is a control input keeps the old condition. A gate with
             // neither waits on nothing, and is plain forwarding.
             if (!h || h->kind != GCNodeKind::Gate || !syncInputsOf(id).empty() ||
                 !ctrlInputsOf(id).empty() || normInputsOf(id).empty()) {
@@ -2597,7 +2594,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
             }
             // A gate that reads more than the value it forwards is not plain forwarding: the inputs
             // after the first are reads it takes, and the last of them is often the only read a
-            // region's write has (design principles 3.1, the author's ruling of 2026-11-17: the
+            // region's write has (design principles 3.1: the
             // region `GATE` of `Builder::layRegionWriteEdges` is `[the value, the region's writes...]`).
             // Dissolving it would take that read with it and the write would stop running, which is
             // the one thing this walk may not do; the gate is kept and orders its reads by reading

@@ -723,8 +723,8 @@ struct PullbackPlan {
     }
 };
 
-/// `pure`: Concrete and touching nothing. The reverse half publishes it (design principles 9.9,
-/// author 2026-11-19): the effect skeleton goes into the forward half, and the reverse half only
+/// `pure`: Concrete and touching nothing. The reverse half publishes it (design principles 9.9):
+/// the effect skeleton goes into the forward half, and the reverse half only
 /// computes the transposed rules over the values the forward recorded, so it has no skeleton of its
 /// own. A reverse half that did touch a resource would be refused where a graph's body is compared
 /// with the clause its type declares (`effectBeyondDeclaration`), and that refusal -- not a
@@ -952,8 +952,7 @@ class ForwardRewrite {
     /// A node that stands for another takes the chain place of the one it replaces as well: a
     /// statement of a `sync` block is written after the statement before it through the sync
     /// edge, and a clone or a direct call that keeps only the control edge beside it leaves the
-    /// block's chain broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md
-    /// 5.21 item 4).
+    /// block's chain broken (docs/design/effects/edges.cn.md 1, 4.6).
     void takeSyncPlace(gc_node_ref_t from, gc_node_ref_t to) const {
         draft().takeStatementPlace(from, to);
     }
@@ -1008,8 +1007,7 @@ class ForwardRewrite {
     /// `with_grad`, and their `has_aux` forms) to a static function, else nullptr. `vjp` is not one
     /// of them: it is a function of `stdlib/vjp.cml`, built out of `jvp`, `split` and `transpose`,
     /// so a call of it inside a differentiated graph has no OPER of this module to resolve and the
-    /// pullback it hands out is a value the graph cannot name (see
-    /// `docs/handover/reviews/2026-11-04-what-does-the-second-derivative-need.cn.md`).
+    /// pullback it hands out is a value the graph cannot name.
     ::Function *macroCallee(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users. A call
     /// that writes captured variables hands on their new versions after its value
@@ -3902,12 +3900,10 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         }
         // Nothing here names the operator. Which operator computed a function value is
         // *provenance*, and a verdict read off provenance is a verdict about where the value came
-        // from rather than about what it is: the sentence used to read "the function is the result
-        // of 'transforms:split'", which named a transform this engine knows nothing else about and
-        // told a reader to go and look at it (author, 2026-11-04 04:20: the engine's "this is the
-        // result of `transforms:split`" refusal judges by provenance, so the engine deletes it and
-        // does not learn to read provenance -- the library's `grad` covers those shapes). What this
-        // engine can say about such a value by its content is the sentence below the switch: it is
+        // from rather than about what it is: a sentence such as "the function is the result of
+        // 'transforms:split'" would name a transform this engine knows nothing else about, so the
+        // engine does not learn to read provenance -- the library's `grad` covers those shapes.
+        // What this engine can say about such a value by its content is the sentence below the switch: it is
         // computed at run time, so which function it calls is not evident where it is called. A
         // transform's own answer to "what is this function's derivative" is the library's rule --
         // `stdlib/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine
