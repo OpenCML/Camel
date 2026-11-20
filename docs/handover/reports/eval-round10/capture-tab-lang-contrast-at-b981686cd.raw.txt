@@ -1,0 +1,111 @@
+# The tab:lang control, taken on ONE binary: two versions of the same pass library, one program.
+#
+# `case-study-variants/edits-ecoop.cml` selected the entry function's weight print by comparing its
+# operand's type text with `'f32[...]'`. When the case study moved to the library's `grad` the same
+# tensor states its rank and leaves the extents open (`f32[?, ?]`), so the comparison matched no node
+# and the three rewrites that make the tab:lang rows -- `print_ordered`, `print_appended`,
+# `print_appended_reversed` -- each answered the program unchanged with exit 0. A pass that publishes
+# the program reports success, so the reading those three rows exist to make was simply absent.
+#
+# WHY ONE BINARY. This is a C-class contrast -- two versions of the *input*, everything else held --
+# and the "everything else" that matters most is the build: a before/after taken across two builds
+# mixes the fix with whatever else moved between them. So both sides ran on the same Release binary,
+# in the same run, on the same program, and the only difference between the two invocations is which
+# copy of the pass library the module root holds:
+#
+#   before  19d97829bf42c76840bfd91e40353439c83ed46fee56a660df612456f8d5c5d5
+#   after   e40d7c798294dafaec491721f8bda24a85383d922b3650922d6f3f25729efc59
+#
+# WHAT THE THREE ROWS SAY. `before` prints the program's own three lines three times, exit 0: the
+# selection answered nothing, and `only` answered null, and every rewrite answered `p`. `after`,
+# `print_ordered` prints `announced` where the weight print stood (still three lines -- the statement
+# hands its place over), `print_appended` prints four (the body is added beside the print, not in its
+# place), and `print_appended_reversed` reaches `commit` and is refused by `PassEffectOrder` -- which
+# is what the record's own head says that row should be, and what the row could not show while all
+# three returned the program.
+#
+# THE ROW THAT IS THE POINT OF THE FIX. A rewrite whose selection finds nothing must say so: the last
+# two rows of the transcript run `after` on `e2e/program.cml`, which prints three times and never a
+# tensor, so the count is 0 -- `RuntimeDiag::NotOne`, exit 1, and the same program with no pass runs
+# and prints its five lines, exit 0. That is the difference between "this edit was made" and "this
+# edit was not made and nobody said so": silence reports success and costs the reading; a refusal
+# costs a run.
+#
+# PROVENANCE. Release, host 88, `b981686cd`: `build-info.json` reads `config Release`,
+# `revision b981686cdb4ffaf73c6796206bfa744566432cae`, `builtAt 2026-11-20T10:35:05.420Z`,
+# `fingerprint 2bc76e4fb0b3e062de3770b47f629edaed578887980102ac29ae8e772b0b2634` over 1349 files
+# under src, include, modules, tools, stdlib, third_party, cmake. The one dirty path that build
+# carries is this pass library itself, which is the input this reading varies on purpose.
+#
+# WHY ONLY THIS FILE LANDED. The same two items are on `develop` by another mechanism
+# (`714cf0d93`: the selector reads `shape_text`, and every rewrite answers
+# `error('InvalidArgument', '<pass>: no single ...')` when the count is not one, `break_rate`
+# included), and the three sections this branch also re-took agree with the record `develop` carries
+# byte for byte -- `doc=train` 89317 B sha256 cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e62
+# 1c105ffab77424, `train graphs=59 nodes=211 edges=169 regions=1`, `loss-a against loss-b  same`,
+# and after `std::opt` both 138284 B with sha256 92968d7c... against 77546883... (isomorphic, the
+# difference is the numbering). So the branch is archived rather than merged
+# (`agents/branching.md`: a branch with no new content does not need a merge commit), and what
+# lands here is the one reading only it took: the before/after of the fix on one binary.
+#
+# Nothing below this head is edited by hand: the two commands' own output, in one run.
+
+== sha256 ==
+19d97829bf42c76840bfd91e40353439c83ed46fee56a660df612456f8d5c5d5  /tmp/edits4-contrast.3897424.OCqX/before/eco.cml
+e40d7c798294dafaec491721f8bda24a85383d922b3650922d6f3f25729efc59  /tmp/edits4-contrast.3897424.OCqX/after/eco.cml
+
+### eco.cml=before  camel train.cml eco::print_ordered std::nvm
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+### exit=0
+
+### eco.cml=before  camel train.cml eco::print_appended std::nvm
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+### exit=0
+
+### eco.cml=before  camel train.cml eco::print_appended_reversed std::nvm
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+### exit=0
+
+### eco.cml=after  camel train.cml eco::print_ordered std::nvm
+loss before: 3.7500
+loss after:  0.0000
+announced
+### exit=0
+
+### eco.cml=after  camel train.cml eco::print_appended std::nvm
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+announced
+### exit=0
+
+### eco.cml=after  camel train.cml eco::print_appended_reversed std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 3 of graph 'main' (a call of 'run'), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write unknown / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /tmp/edits4-contrast.3897424.OCqX/after/eco.cml:159:12
+     |
+ 159 |     return println('announced')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### after/eco.cml on e2e/program.cml (no print whose operand is a tensor): eco::print_ordered
+error[RuntimeDiag::NotOne]: the rewrite selects by what a node is, and this count is 0: it wants exactly one
+   --> /tmp/edits4-contrast.3897424.OCqX/after/eco.cml:61:18
+    |
+ 61 |         else fail<'NotOne'>(`the rewrite selects by what a node is, and this count is ${len(found)}: it wants exactly on...
+    |                  ^^^^^^^^^^
+help: The fault was raised by the program itself, and its message says which premise it states.
+
+### the same program with no pass
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
