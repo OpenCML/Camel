@@ -3239,6 +3239,17 @@ class Builder {
         const GCT::node_ptr_t &gct, node_handle_t sequence,
         const std::vector<node_handle_t> &initial,
         const std::vector<camel::core::type::Type *> &stateTypes);
+    /// The tail every LOOP node shares once its node and its parts are built (visitLoopNode,
+    /// buildStreamLoop): the With inputs are the parts' results (the body's, then the condition's)
+    /// and the slot the rounds are counted in, the parts are its regions, and running the loop is
+    /// like entering an arm, so it uses every variable its parts used and writes those they wrote.
+    /// What is left to report is a write by a callee the parts call to a variable that callee
+    /// captured (design principles 3.1: a write to a `var` is a value, so what the body writes is
+    /// the states the LOOP hands on, not an effect). The loop then takes the place of a statement
+    /// of the block, like a call.
+    void attachLoopParts(
+        node_handle_t loopNode, const arm_ptr_t &bodyPart, const arm_ptr_t &condPart,
+        const GCT::node_ptr_t &gct);
     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
     /// that state's first value is a fresh literal, to the form that may append to the state in
     /// place (design principles 10.5): the state's old value cannot be seen once the next round
