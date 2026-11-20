@@ -24,6 +24,7 @@
 #include "camel/core/type/tree.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/utils/assert.h"
 
 #include <algorithm>
 #include <cstring>
@@ -124,6 +125,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "no-cotangent-arithmetic";
     case TransposeRefusalCause::CotangentPortMismatch:
         return "cotangent-port-mismatch";
+    case TransposeRefusalCause::LawAnswerShape:
+        return "law-answer-shape";
     case TransposeRefusalCause::CalleeBuiltFromAParameter:
         return "callee-built-from-a-parameter";
     }
@@ -345,6 +348,89 @@ operandRanksText(const camel::runtime::GCGraph *function, std::span<const gc_nod
         text += std::to_string(rank);
     }
     return text.empty() ? std::string("()") : text + ")";
+}
+
+/// Whether a law's answer and the operand it answers for state shapes that cannot both be right,
+/// and -- when they cannot -- the sentence that names both spellings.
+///
+/// This is the check the author's 2026-11-20 ruling puts at the transposition itself, and the class
+/// it covers is not the broadcast: it is **a law written for the wrong shape**. A rule's right side
+/// answers one component per port, in the order its left side writes them, and the index files a law
+/// under its operator's head and that head's operand count and reads no operand types -- so nothing
+/// ties a component's shape to the shape of the operand whose cotangent it claims to be.
+/// `add_tensor_t` answered `ct` for a `float[3]` operand of a `float[2, 3]` sum: a `[2, 3]` tensor
+/// under a static type that said `[3]`, exit 0 and no diagnostic (measured 2026-11-20).
+/// `subtract_t` answered the same shape negated, and `where_t` answers both branches at the
+/// condition's shape.
+///
+/// What can be judged is what the two types **state**, and nothing more:
+///
+///   * an extent a type leaves open (`float[]`, `float[n, 3]` over a name nothing binds) states no
+///     extent at that axis and is not compared there;
+///   * a side whose rank is open (`T[..]`, `T[3, ..]`) states no rank at all -- `T[..]` includes
+///     rank 0, a rank-zero array being the element itself (design principles 5.4) -- so such a side
+///     is not compared on rank either;
+///   * a value that is not an array is a rank-zero value (5.4), so a number answered for an array
+///     operand is a rank disagreement and is named as one.
+///
+/// Element types are not compared here. The law's *cotangent port* against the value handed to it is
+/// a different question with its own cause (`CotangentPortMismatch`), and a differing width at this
+/// site would be a claim about the arithmetic rather than about the shape.
+///
+/// The read is deliberately narrow: the two hedges above are what keep a check on a law from
+/// refusing an answer it cannot fault. Every law that reduces a broadcast -- `sum_to(...)`, the
+/// repair this check was added beside -- answers `T[..]` and says nothing here; the answers it can
+/// fault are the ones a law gave a shape its operand cannot have.
+std::optional<std::string> statedShapeDisagreement(const Type *answer, const Type *operand) {
+    if (answer == nullptr || operand == nullptr) {
+        return std::nullopt;
+    }
+    // A `Ref` is a type that is not decided yet, so nothing about its shape is a fact -- the same
+    // exception the port comparison below makes, for the same reason.
+    if (answer->code() == camel::core::type::TypeCode::Ref ||
+        operand->code() == camel::core::type::TypeCode::Ref) {
+        return std::nullopt;
+    }
+    const auto arrayOf = [](const Type *type) -> const ArrayType * {
+        return type != nullptr && type->code() == camel::core::type::TypeCode::Array
+                   ? tt::as_ptr<ArrayType>(const_cast<Type *>(type))
+                   : nullptr;
+    };
+    const ArrayType *const answerArray  = arrayOf(answer);
+    const ArrayType *const operandArray = arrayOf(operand);
+    // The rank each side states: a number states rank 0 and is never open, an array states the axes
+    // of its prefix and is open when its type says the rank is the value's.
+    const size_t answerRank  = answerArray != nullptr ? answerArray->rank() : 0;
+    const size_t operandRank = operandArray != nullptr ? operandArray->rank() : 0;
+    const bool answerOpen    = answerArray != nullptr && answerArray->anyRank();
+    const bool operandOpen   = operandArray != nullptr && operandArray->anyRank();
+    const auto both = [&]() {
+        return "the law answers a `" + camel::core::type::typeToString(answer) +
+               "` for an operand of type `" + camel::core::type::typeToString(operand) + "`";
+    };
+    if (!answerOpen && !operandOpen && answerRank != operandRank) {
+        return both();
+    }
+    if (answerArray == nullptr || operandArray == nullptr || answerOpen || operandOpen) {
+        // One side is a number or states no rank, and the extents of a rank that is not stated are
+        // not a fact this check has: nothing left to compare.
+        return std::nullopt;
+    }
+    // Both ranks are stated and equal, so the axes line up one for one; an axis one side leaves
+    // open is skipped, and an axis both state must state the same number.
+    const auto answerExtents  = answerArray->extents();
+    const auto operandExtents = operandArray->extents();
+    for (size_t axis = 0; axis < answerExtents.size() && axis < operandExtents.size(); ++axis) {
+        const std::optional<int64_t> answered = answerExtents[axis].evaluate({});
+        const std::optional<int64_t> expected = operandExtents[axis].evaluate({});
+        if (!answered.has_value() || !expected.has_value()) {
+            continue;
+        }
+        if (*answered != *expected) {
+            return both();
+        }
+    }
+    return std::nullopt;
 }
 
 /// Whether the rule named `ruleName` describes a node whose ports are `operandTypes`.
@@ -2052,7 +2138,7 @@ bool buildTransposeMember(
                                          Type *ctType,
                                          std::string &why,
                                          bool &noInstance,
-                                         bool &portMismatch,
+                                         bool &refusedAtTheLaw,
                                          std::optional<size_t> &unboundSlot) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 if (slot == inputs.size()) {
@@ -2178,7 +2264,7 @@ bool buildTransposeMember(
                 (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Ref);
             if (port != nullptr && ctType != nullptr && handed == ct && !undecided &&
                 portIsArray == handedIsArray && !port->assignableFrom(ctType)) {
-                portMismatch = true;
+                refusedAtTheLaw = true;
                 // `refuse` writes the record whole (`TransposeRefusal{cause, param}`), so the two
                 // spellings go in after it and not before: a field written first is a field the
                 // record drops, and the sentence below read two empty strings.
@@ -2211,6 +2297,43 @@ bool buildTransposeMember(
                 &unbound);
             if (expanded == rt::kInvalidNodeRef && unbound != std::numeric_limits<size_t>::max()) {
                 unboundSlot = unbound;
+            }
+            // **The law's right side, against the operand it answers for** (author, 2026-11-20).
+            // The question is asked here, on the node the expansion built, because this is the one
+            // place that holds both: the type the law's body really answered with (the draft's own
+            // record of that node, not a guess from the law's text) and the type of the operand at
+            // `position`, which is the type the answer must have -- a cotangent of a value has that
+            // value's type. A disagreement is refused with the **law's name**, because the law is
+            // the thing to edit, and the two spellings follow it: see `statedShapeDisagreement` for
+            // what is compared and why nothing else is.
+            //
+            // This runs after the body was expanded and not instead of it: a law that answers the
+            // wrong shape is exactly the law that expanded without complaint, so there is no
+            // earlier moment at which it could be caught. The node it built stays in the draft and
+            // is discarded with it (`buildTransposeMember` throws the whole member away on a
+            // refusal), so nothing half-built survives.
+            if (expanded != rt::kInvalidNodeRef) {
+                const camel::runtime::DraftNodeHeader *const answered = draft.header(expanded);
+                const Type *const answerType = answered != nullptr ? answered->dataType : nullptr;
+                const Type *const answeredOperand =
+                    position + 1 < operandTypes.size() ? operandTypes[position + 1] : nullptr;
+                if (std::optional<std::string> disagreement =
+                        statedShapeDisagreement(answerType, answeredOperand);
+                    disagreement.has_value()) {
+                    refusedAtTheLaw = true;
+                    refuse(TransposeRefusalCause::LawAnswerShape, position);
+                    // The record carries the law and the two spellings; `refuse` wrote the cause
+                    // whole, so the fields go in after it.
+                    state.refusal.rule                 = ruleName;
+                    state.refusal.answerType           = camel::core::type::typeToString(answerType);
+                    state.refusal.answeredOperandType =
+                        camel::core::type::typeToString(answeredOperand);
+                    os << " rule=" << ruleName << " position=" << position
+                       << " answer=" << state.refusal.answerType
+                       << " operand=" << state.refusal.answeredOperandType << " reason="
+                       << *disagreement << '\n';
+                    return rt::kInvalidNodeRef;
+                }
             }
             return expanded;
         };
@@ -3166,8 +3289,8 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
-                    bool noInstance   = false;
-                    bool portMismatch = false;
+                    bool noInstance      = false;
+                    bool refusedAtTheLaw = false;
                     std::optional<size_t> unboundSlot;
                     const gc_node_ref_t answer = ruleCotangent(
                         chosenRule,
@@ -3177,14 +3300,15 @@ bool buildTransposeMember(
                         armCotangentType,
                         why,
                         noInstance,
-                        portMismatch,
+                        refusedAtTheLaw,
                         unboundSlot);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
-                        if (portMismatch) {
-                            // The walk recorded and printed the refusal where the two types met
-                            // (`ruleCotangent`); a cause written here would overwrite it with one
-                            // about a value it did reach.
+                        if (refusedAtTheLaw) {
+                            // The walk recorded and printed the refusal where the law met the step
+                            // (`ruleCotangent`): the value handed to its cotangent port would not
+                            // enter it, or the shape it answered is not its operand's. A cause
+                            // written here would overwrite one about a value it did reach.
                             return {};
                         }
                         // Two facts, and the expansion names which one it met: `noInstance` means
@@ -4151,8 +4275,8 @@ bool buildTransposeMember(
                         continue;
                     }
                     std::string why;
-                    bool noInstance   = false;
-                    bool portMismatch = false;
+                    bool noInstance      = false;
+                    bool refusedAtTheLaw = false;
                     std::optional<size_t> unboundSlot;
                     const gc_node_ref_t answer = ruleCotangent(
                         chosenRule,
@@ -4162,13 +4286,14 @@ bool buildTransposeMember(
                         stepCotangentType,
                         why,
                         noInstance,
-                        portMismatch,
+                        refusedAtTheLaw,
                         unboundSlot);
                     if (answer == rt::kInvalidNodeRef) {
-                        if (portMismatch) {
-                            // Recorded and printed where the two types met (`ruleCotangent`): the
-                            // value was in hand and the law's port would not read it, which is not
-                            // either of the two facts below.
+                        if (refusedAtTheLaw) {
+                            // Recorded and printed where the law met the step (`ruleCotangent`):
+                            // the value was in hand and the law's cotangent port would not read it,
+                            // or the answer it gave is not its operand's shape. Neither is the two
+                            // facts below, and a cause written here would replace the recorded one.
                             return false;
                         }
                         // The same two facts as the arm walk above, told apart the same way: the
@@ -5469,6 +5594,40 @@ bool buildTransposeMember(
                         return false;
                     }
                     parts.push_back(cotangent[ports[port]]);
+#ifndef NDEBUG
+                    // **The pullback's own exit, asserted** (author, 2026-11-20, the second half of
+                    // the same ruling): every law was checked as it ran (`LawAnswerShape`), and this
+                    // is the net under that check at the one place the answer leaves the graph.
+                    // The two facts are the same two, read from the assembled member instead of
+                    // from the law: the node that lands in slot `at` and the cotangent space the
+                    // signature promised for that parameter. They must state the same shape; where
+                    // one of them states none, `statedShapeDisagreement` says nothing (that is the
+                    // same hedge the law check makes, and it is why this cannot turn a right answer
+                    // into a crash).
+                    //
+                    // A Debug-only assertion and not a `GUARD`: no program reaches it, because the
+                    // law check runs first on the same answer and refuses there with the law's name.
+                    // It exists so that a future law site which answers without passing through
+                    // `ruleCotangent` -- a second entrance this file does not have today -- cannot
+                    // put a wrong shape in the pullback's tuple in silence. `npm run debug` is the
+                    // build that runs it; `test/plans/debug` is how the tree proves that build
+                    // reaches its assertions at all.
+                    {
+                        const camel::runtime::DraftNodeHeader *const answeredNode =
+                            draft.header(cotangent[ports[port]]);
+                        const Type *const answeredType =
+                            answeredNode != nullptr ? answeredNode->dataType : nullptr;
+                        ASSERT(
+                            !statedShapeDisagreement(answeredType, space.space).has_value(),
+                            ("the pullback's exit for parameter " + std::to_string(at) +
+                             " answers the type " +
+                             camel::core::type::typeToString(answeredType) +
+                             " where the signature's cotangent space is " +
+                             camel::core::type::typeToString(space.space) +
+                             "; a law's answer and the parameter's own shape disagree")
+                                .c_str());
+                    }
+#endif
                     partTypes.push_back(space.space);
                     continue;
                 }

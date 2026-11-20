@@ -182,17 +182,34 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x + w
 }
 
-/// The transpose of `x + w` on two arrays: each operand's cotangent is `ct`. A sum is its own
-/// adjoint, which is what the engine's own `addVjp` says too (`modules/tensor/ops/elementwise_ops.cpp`:
-/// both operands accumulate `dy`).
+/// The transpose of `x + w` on two arrays: each operand's cotangent is `ct`, **reduced to that
+/// operand's own shape**. A sum is its own adjoint, which is what the engine's own `addVjp` says
+/// too (`modules/tensor/ops/elementwise_ops.cpp`: both operands accumulate `dy`).
+///
+/// The reduction is not decoration. `x + w` on two arrays **broadcasts**, so one operand can be
+/// smaller than the sum and its cotangent is the sum of what it fed: for `x: float[2, 3]` and
+/// `w: float[3]`, `dL/dw` is a `float[3]` and the answer is `sum_to(ct, shape(w))`, three numbers
+/// and not the whole `[2, 3]` tensor. This law used to answer `(ct, ct)`, and the reading it gave
+/// `w` was a `[2, 3]` value under a static type that said `[3]` -- a wrong number with exit 0 and
+/// no diagnostic (measured 2026-11-20: `[[1, 2, 3], [4, 5, 6]]` where the answer is `[5, 7, 9]`).
+/// `sum_to` with the operand's own extents is the identity when the two shapes are equal, so the
+/// law is still one law for both shapes the operator is called with.
+///
+/// The extents are `shape(x)` / `shape(w)` for the reason `mul_tensor_t` below records: they are the
+/// extents the operand's declaration states, answered by the rule layer out of the law's own port
+/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`), and a declaration that states none
+/// (`float[...]`) stops the step by name instead of guessing at a shape. The head takes one type
+/// parameter per operand for the same reason it does there: written as one `T` for both, the
+/// instance is made at the element type and its ports state no extents at all, so `shape(..)` would
+/// have nothing to read.
 ///
 /// It is here because the array product's law is unreachable without it: the product rule's right
 /// side is `dx * w + x * dw`, so the linear graph a product's pullback walks holds an array add, and
 /// the walk refused there -- `TRANSPOSE ... skip=rule uri=tensor:add reason=unbound` -- before this
 /// rule existed. Filed under the call `add(x, w)` for the same reason `mul_tensor` is: the key is
 /// the operator's own name, and `+` at two operands is `:op/add_d`'s.
-export rule add_tensor_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    add(x, w) => (ct: T[...]) => (ct, ct)
+export rule add_tensor_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
+    add(x, w) => (ct: T[...]) => (sum_to(ct, shape(x)), sum_to(ct, shape(w)))
 }
 
 /// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
@@ -354,12 +371,20 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x - w
 }
 
-/// The transpose of `x - w` on two arrays: `ct` for `x`, `-ct` for `w`. It is the mirror of
-/// `add_tensor_t` above and the adjoint of `jvp_subtract` (`stdlib/rulesets/jvp.cml`), and it is here
-/// because a loss written `pred - target` -- the one line every training step has -- puts this
-/// operator in the backward graph between the product's law and the sum's.
-export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    subtract(x, w) => (ct: T[...]) => (ct, -ct)
+/// The transpose of `x - w` on two arrays: `ct` for `x`, `-ct` for `w`, **each reduced to its own
+/// operand's shape** (`sum_to`, exactly as `add_tensor_t` above). It is the mirror of that law and
+/// the adjoint of `jvp_subtract` (`stdlib/rulesets/jvp.cml`), and it is here because a loss written
+/// `pred - target` -- the one line every training step has -- puts this operator in the backward
+/// graph between the product's law and the sum's.
+///
+/// The two reductions are the same defect this operator had as an add: `x - w` broadcasts, so the
+/// operand that was spread over the larger one gets the sum of the cotangents it fed, and answering
+/// `-ct` at the result's shape put a `[2, 3]` tensor under a `float[3]` type (measured 2026-11-20:
+/// `[[-1, -2, -3], [-4, -5, -6]]` where the answer is `[-5, -7, -9]`). The extents are the
+/// operands' own, and a declaration that states none stops the step by name -- `add_tensor_t`
+/// records why, and why the head names one type parameter per operand.
+export rule subtract_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
+    subtract(x, w) => (ct: T[...]) => (sum_to(ct, shape(x)), sum_to(-ct, shape(w)))
 }
 
 // ---- the transpose rule of the matrix product ----
