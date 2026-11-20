@@ -7,8 +7,8 @@
  *
  * The refusal is the error value of the export call: nothing handles it, so
  * writing it as the last statement of `main` makes it the program's result and
- * the exit reports it (design principles 3.9). The export that is expected to
- * succeed is dropped on purpose with `let _ =`.
+ * the exit reports it (design principles 3.9). The unchecked export is read
+ * as well: a refusal there is printed and becomes the program's result.
  */
 
 import { reshape, relu } from tensor
@@ -22,7 +22,15 @@ func counts(t: f32[...]): i64[...] {
 func main(): void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(counts(x))
-    let _ = export_model<out: get_env('ONNX_OUT_UNCHECKED') ?? '', dynamic_axes: [], target: 'none'>(counts, x)
-    println('written without the check')
-    export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
+    let unchecked = export_model<out: get_env('ONNX_OUT_UNCHECKED') ?? '', dynamic_axes: [], target: 'none'>(counts, x)
+    return match unchecked {
+        case error e => sync {
+            println(e)
+            return e
+        }
+        case _ => sync {
+            println('written without the check')
+            export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
+        }
+    }
 }

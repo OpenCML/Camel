@@ -43,16 +43,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanSourceArtifacts } from './check-source-artifacts.mjs'
+import { sourceOnlyReason } from './clean.js'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const HERE = path.resolve(SCRIPT_DIR, '..')
 
-// Never deleted, even if a pattern above would match: tracked files that live inside a trace
-// directory's shape. `stdlib/*.cml` is the standard library; the one tracked `.cmo` is a 72-byte
-// text fixture the module loader is tested against.
-const KEEP = [/^stdlib\/[^/]+\.cml$/, /^test\/cases\/modules\/pass_not_found\/unloadable\.cmo$/]
-// Tracked editor files: the checkout's own launch/task/settings templates are source, the rest of
-// `.vscode/` is whatever an editor wrote there.
+// What is source rather than a trace, even though a class above would match its shape: the standard
+// library and the one tracked `.cmo` are `sourceOnlyReason` in `scripts/clean.js`, read from there so
+// that this inventory and `npm run clean` cannot name different things.
 const TRACKED_EDITOR_FILES = new Set([
     '.vscode/launch.json',
     '.vscode/tasks.json',
@@ -216,7 +214,7 @@ function matchSegment(pattern, name) {
 }
 
 function isKept(rel) {
-    return KEEP.some((re) => re.test(rel)) || TRACKED_EDITOR_FILES.has(rel)
+    return sourceOnlyReason(rel) !== null || TRACKED_EDITOR_FILES.has(rel)
 }
 
 /** Every trace under `root`, as `{ classId, classLabel, why, rel, bytes }`. */

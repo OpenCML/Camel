@@ -57,6 +57,7 @@
 | [`2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge`](2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge.cn.md) | 一本「只许降」的账本，遇到一次合法合并带进来的新住户：账本该涨吗？ |
 | [`2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away`](2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away.cn.md) | A marker that asks for a `var` the compiler folded away before the printer saw it |
 | [`2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit`](2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md) | 写明降维结果秩的函数，为什么把 `vjp` 挡在「反向半边的出口类型」上 |
+| [`2026-11-20-may-a-law-reduce-only-when-the-extents-are-readable`](2026-11-20-may-a-law-reduce-only-when-the-extents-are-readable.cn.md) | 一条法则能不能只在 extents 读得出时才归约？ |
 | [`2026-11-20-parked-means-paused-or-deleted`](2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
 | [`2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread`](2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread.cn.md) | 条目（1）与三条打印判据：四条读数一字未动，挡住它们的是「没写子句」，不是读法 |

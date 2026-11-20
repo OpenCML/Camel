@@ -56,13 +56,15 @@ timeout_ms = 30000
 name = "rules_angle_args.reshape_shape"
 desc = "The reading `rules_angle_args.reshape` cannot take: `jvp` of `f(x) = sum(reshape<[8, 2, 8]>(x))` on x = [1.0 ... 128.0] along dx = [0.5] * 128, with the number derived by hand in the case's own header -- f = 128 * 129 / 2 = 8256.0, and a reshape moves no element, so f' = 128 * 0.5 = 64.0. `[2, 2]` is the one shape a law's text could have stated, so `reshape<[2, 2]>` answered `rules_angle_args.reshape` whether the pattern bound the operator's second port or wrote a constant there; `[8, 2, 8]` is a shape only a law that names the port can answer, and the law that stated it handed back `reshape<[2, 2]>(dx)` and stopped the program at `TensorDimensionMismatch: [128] -> [2, 2]`."
 kind = "behavior"
-# The case sits under `test/cases/compile/transforms/` and not beside its three siblings: the
-# autodiff migration ledger counts every case in `test/cases/modules/autodiff/` as a row of its
-# ratchet (`scripts/autodiff-migration-ledger.mjs#LEDGER_RECORDED`), and a new case there moves
-# `total`, `library` and `array` -- the two denominators are recorded as a decision and `array` may
-# only fall. Recording them is a change to an expectation outside `test/plans/`, which this lane may
-# not make, so the reading lives where it costs no record a line. Reading the same number is the
-# point; the directory is not.
+# The case sits under `test/cases/compile/transforms/` and not beside its three siblings: when it was
+# added, the autodiff migration ledger recorded `total`, `library` and `array` as numbers
+# (`scripts/autodiff-migration-ledger.mjs`), and a case added under `test/cases/modules/autodiff/`
+# moved them -- recording a new value is a change to an expectation outside `test/plans/`, which the
+# lane that added this reading may not make. **That reason is gone (2026-11-21):** the ledger now
+# records the paths of the cases that pass, so a new case is a name `--record` adds rather than a
+# denominator somebody has to re-decide, and a case that does not pass is simply not part of that
+# floor. The reading stays where its plan is; the directory says nothing about the ledger either way.
+# Reading the same number is the point; the directory is not.
 #
 # What that costs is `--changed`, and only in the harmless direction (author's ruling, 2026-11-20
 # 04:2x): a change to this case selects `feat/compile/transforms.plan.toml` by the directory rule,

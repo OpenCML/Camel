@@ -853,17 +853,16 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
         }
         return nullptr;
     }
-    const bool wrapped = value->second.hasReturn || value->second.variables.size() > 1;
-    for (size_t k = 0; k < value->second.variables.size(); ++k) {
-        if (value->second.variables[k] != variable) {
+    const bool wrapped = value->second.hasReturn || value->second.versionCount > 1;
+    for (const CallValue::Version &version : value->second.versions) {
+        if (version.variable != variable) {
             continue;
         }
         if (!wrapped) {
             return *modifier;
         }
         return callValuePartOf(
-            *modifier,
-            static_cast<uint32_t>(value->second.hasReturn ? 1 + k : k));
+            *modifier, value->second.hasReturn ? 1 + version.position : version.position);
     }
     // The call is this variable's writer -- recordWrite recorded it through the callee -- but the
     // parts of the call's value say nothing about it: the parts come from the callee's
