@@ -2275,7 +2275,20 @@ class CmlPrinter {
         if (!isRoot_ && tail != camel::runtime::kInvalidNodeRef && !tailPrintedAsStatement) {
             const Type *type = graph_->node(tail)->dataType();
             if (type != nullptr && type->code() != TypeCode::Void) {
-                if (declared_.contains(tail)) {
+                // A branch that hands on a cell's version is not the block's value: the cell is, and
+                // the branch is the statement the source wrote (`joinEntryCell` says how one is
+                // recognised). It has to stand where it stands, and the value is read after it --
+                // `if c then {...} else {...}` and then `return t`, which is the shape the builder
+                // folded the read into. Written as `return if ...` each arm has to spell a value the
+                // source never wrote, and no spelling of it rebuilds the shared `COPY`.
+                if (const gc_node_ref_t entryCell = joinEntryCell(tail);
+                    entryCell != camel::runtime::kInvalidNodeRef) {
+                    branchAsStatement_     = true;
+                    const std::string text = expression(tail).text;
+                    branchAsStatement_     = false;
+                    emit(indent_ + text);
+                    emit(std::format("{}return {}", indent_, cells_.at(entryCell)));
+                } else if (declared_.contains(tail)) {
                     emit(std::format("{}return {}", indent_, declared_[tail]));
                 } else {
                     emit(std::format("{}return {}", indent_, expression(tail).text));
@@ -2428,6 +2441,82 @@ class CmlPrinter {
                  graph_->node(second->result)->kind == camel::runtime::GCNodeKind::Data &&
                  graph_->node(second->result)->dataType() != nullptr &&
                  graph_->node(second->result)->dataType()->code() == TypeCode::Void));
+    }
+
+    /// The cell this JOIN hands a version of, when one of its arms hands on the value the cell was
+    /// *created* with (`cellOfValue_`). Such a branch had no value of its own in the source: an arm
+    /// that answers "the value this `var` was made with" and wrote nothing has no spelling as an
+    /// arm value (a name there is a `:var/get`, and the literal is a second `DATA`), so the source
+    /// wrote the branch as a statement and read the cell after it, and the builder's version mapping
+    /// is what carries that read into the arms. `kInvalidNodeRef` otherwise, and for a JOIN whose
+    /// type is `void` (`ifWithoutElse` already says what that one is).
+    ///
+    /// Printing such a branch as a value is what made `arm_read` red on
+    /// `trans/cml.plan.toml#print_and_recompile`: `picked`'s `if c then { ... t += 1 ... } else
+    /// { report('int', 0, t) }` followed by `return t` printed as `return if c then { ... } else
+    /// { report('int', 0, t)` / `3 }`, and the arm's result was a fresh `DATA 3` where the
+    /// original's is the one `COPY` the `var` made -- no counterpart for it, and the checker said
+    /// `a structural class has 1 vertex/vertices on the left and 0 on the right` naming that
+    /// `COPY`. Spelling the arm's value with the variable's name instead is the other way to be
+    /// wrong: a second `:var/get` in the arm (measured), because the write in the sibling arm means
+    /// the name is no longer the value the cell was created with.
+    gc_node_ref_t joinEntryCell(gc_node_ref_t joinRef) const {
+        if (joinRef == camel::runtime::kInvalidNodeRef) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        // The block hands its value on through the exit's gate chain; the branch is at the bottom
+        // of it (`blockValueWrite` walks the same chain for the same reason).
+        for (int guard = 0; guard < 16; ++guard) {
+            const camel::runtime::GCNode *below = graph_->node(joinRef);
+            if (below == nullptr || (below->kind != camel::runtime::GCNodeKind::Gate &&
+                                     below->kind != camel::runtime::GCNodeKind::Copy)) {
+                break;
+            }
+            const auto slots = graph_->normInputsOf(joinRef);
+            if (slots.empty()) {
+                break;
+            }
+            joinRef = slots.front();
+        }
+        const camel::runtime::GCNode *node = graph_->node(joinRef);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Join) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const Type *joinType = node->dataType();
+        if (joinType == nullptr || joinType->code() == TypeCode::Void) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const auto *body = graph_->nodeBodyAs<camel::runtime::GCJoinBody>(joinRef);
+        if (body == nullptr || body->brch == camel::runtime::kInvalidNodeRef) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        for (const uint32_t arm : control_->armsOf(body->brch)) {
+            const camel::runtime::GCRegion *region = graph_->region(arm);
+            if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            // An arm's result is the GATE that waits on the arm's last statement; the value it
+            // hands on is that gate's first normal input.
+            gc_node_ref_t value = region->result;
+            const camel::runtime::GCNode *result = graph_->node(value);
+            if (result != nullptr && result->kind == camel::runtime::GCNodeKind::Gate) {
+                const auto slots = graph_->normInputsOf(value);
+                if (slots.empty()) {
+                    continue;
+                }
+                value = slots.front();
+            }
+            const auto created = cellOfValue_.find(value);
+            if (created == cellOfValue_.end()) {
+                continue;
+            }
+            // The name has to be readable where the branch stands: a `var` whose declaration the
+            // text has not reached cannot be named.
+            if (cells_.contains(created->second)) {
+                return created->second;
+            }
+        }
+        return camel::runtime::kInvalidNodeRef;
     }
 
     /// Whether the source ended this region with an explicit `return`: the region yields a gate
@@ -3333,6 +3422,14 @@ class CmlPrinter {
                 return std::string("()");
             }
             Body arm = buildBody(arms[k], region->result, indent_, false);
+            // A branch that hands on a cell's version (`joinEntryCell`) has no arm values to write:
+            // each arm hands on the version of the cell it leaves, and the arm that wrote nothing
+            // hands on the value the cell was created with. Spelling it as a value adds a node the
+            // original does not have (see `joinEntryCell`), so the arm's statements are the whole
+            // of it and the value is read after the branch.
+            if (joinEntryCell(joinRef) != camel::runtime::kInvalidNodeRef) {
+                arm.hasTail = false;
+            }
             const bool braces =
                 asStatement || (joinType != nullptr && joinType->code() == TypeCode::Void);
             std::string text = blockText(arm, braces);
@@ -3384,10 +3481,14 @@ class CmlPrinter {
                 fail(joinRef, "a match arm without a pattern");
             }
             const auto *region = graph_->region(arms[k]);
-            std::string arm =
-                region != nullptr
-                    ? blockText(buildBody(arms[k], region->result, caseIndent, false), false)
-                    : std::string("()");
+            Body caseBody;
+            if (region != nullptr) {
+                caseBody = buildBody(arms[k], region->result, caseIndent, false);
+                if (joinEntryCell(joinRef) != camel::runtime::kInvalidNodeRef) {
+                    caseBody.hasTail = false;
+                }
+            }
+            std::string arm = region != nullptr ? blockText(caseBody, false) : std::string("()");
             text += " => " + arm + "\n";
         }
         text += indent_ + "}";
