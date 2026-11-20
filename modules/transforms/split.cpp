@@ -1009,14 +1009,19 @@ struct Half {
                 copyOf[ref] = made;
                 return true;
             }
-            // A fact about the call, not about the half it is copied into: when the rule's
-            // expansion recorded how many of the call's trailing arguments are tangents, the copy
-            // is the same call and says the same thing. It is what `transpose` reads at a call
-            // inside an arm. The record is a **count of the call's trailing arguments**, not a mask
-            // of positions
-            // (`GCNode::tangentArgs`, `GCGraph::callTangentArgsOf`): both readers -- the copy here,
-            // and `transpose.cpp`'s `calleeParams - tangentArgs` -- have to take it that way, and a
-            // call whose tangents are not its trailing arguments has no record that says so.
+            // A fact about the call, not about the half it is copied into: whatever the rule's
+            // expansion recorded on the call it produced, the copy is the same call and says the
+            // same thing. It is what `transpose` reads at a call inside an arm. The record is a
+            // **set of argument positions** -- one bit per position, bit `i` set when the call's
+            // i-th ordinary argument is a tangent (`GCNode::tangentArgs`,
+            // `GCGraph::callTangentArgsOf`) -- and not a count of a trailing run: the writer is the
+            // rule's own text, and a rule may put a tangent wherever its right side writes one
+            // (`mul_tangent(x, w, dx, dw)` ends with its two, `index_into(dxs, i)` begins with
+            // one), so what a reader needs is the position and not the total. `jvp` writes the
+            // same shape of record when it builds a lifted call, over the positions its tangent
+            // half occupies. The count of tangents is therefore derived from the set by whoever
+            // wants it (the number of set bits below `kTangentArgumentBits`), never read off the
+            // record.
             const gc_node_ref_t made = draft.addFuncNode(
                 callee,
                 node->dataType(),
