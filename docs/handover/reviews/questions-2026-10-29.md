@@ -6496,3 +6496,22 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 **另记，别和上面混成一条**：`showcase/c3-char-transformer/train.cml:178:34 … transforms: jvp has no forward rule for 'tensor:layer_norm'` 是**更早的、和 `split` 无关的另一道墙** —— `jvp` 根本没有 `layer_norm` 的法则，小模型靠 `mean<-1, true>` 手写层归一才绕过它。**所以第三格就算 `split` 通了，c3 大模型仍然停在这里**；两件事分开验、分开报。
 
 **谁在等这一格**：没有别的车道在等；它也不阻塞第二格（案例迁移已经独立完成）。
+
+## 案例搬迁的第三笔：ECOP 条目（1）在迁移后没有落点（2026-11-20 17:37，协调者记）
+
+`851ef4986` 把 `edits-ecoop.cml` 的 `is_grad`（按名找算子 `autodiff:grad`）改成 `grad_in_update`（结构读法：程序里唯一 `nn:sgd` 节点的第 2 个实参）。C 类对照两侧不同 —— 改前 exit 0 什么也不拒（静默消失）、改后 exit 1 有名字的拒绝。
+
+**而它落在「做不到 + 原因」，而两个原因都不在选点上：**
+
+```
+`graph.inline`: "the callee of the call is not known in this graph: run std::defunctionalize on it first"
+`std::defunctionalize`: `types=7 values=16 calls=0 refused=7`，梯度自己的类型
+  `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure` 的理由是
+  "the value is read by a node that is not a call"
+```
+
+⇒ 那个节点是**函数值调用的结果**（`grad(loss)<layer,y>` 返回函数、再拿 `X` 调用），`inline` 落不下去；点名的 pass 给了它机会，`defunctionalize` 又把这些值一律拒了。**「加打印、由 `commit_order` 回答」这个读法要求它是直接调用，而那个前置条件在这个程序里不成立。**
+
+**两条出路都在那个文件之外**：让 `grad` 交出一个**直接调用**，或让 `inline` 能割**闭包调用**。
+
+**⇒ 这是「库的 `grad` 是 macro」的直接后果，不是选点问题。** 论文条目（1）的读法原来靠的是引擎的 `autodiff:grad` **算子**；那个算子变成 macro 实例之后，**节点种类变了，读法的前提也变了。**
