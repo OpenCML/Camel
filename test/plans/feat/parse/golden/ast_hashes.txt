@@ -547,7 +547,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 8b155599d8b461ea ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
 1df6aaef0265dfcb ok stdlib/stream.cml
-2256e61d33eea518 ok stdlib/tensor.cml
+124d30ed39869077 ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
 7412e62e8d9372be ok stdlib/test_support.cml
 3c4d85f022206889 ok stdlib/this.cml
@@ -557,10 +557,10 @@ b0da3dbb545728a6 ok stdlib/tiles.cml
 b2579aff6f390432 ok stdlib/tree.cml
 f998300d401777db ok stdlib/types.cml
 095693f2d829fcda ok stdlib/vjp.cml
-f1104eecff923a27 ok stdlib/rulesets/jvp.cml
+e7b5599700edf885 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-d6edc9554936a027 ok stdlib/rulesets/transpose.cml
+dd0d538191ab20df ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f08b2a93a3c13b34 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml

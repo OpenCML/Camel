@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：72 页
+## 现在在等作者：74 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -81,6 +81,8 @@
 | [`2026-11-20-whether-the-value-half-takes-tangent-ports`](2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md) | 值半要不要收一个切向端口 —— 割「提升过的函数」时的那条缝 |
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
 | [`2026-11-20-why-the-split-point-is-type-computable`](2026-11-20-why-the-split-point-is-type-computable.cn.md) | （A）不必要：割点对「结果含函数」也是**类型可算**的 |
+| [`2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments`](2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments.cn.md) | 「规则把切向写在哪个实参上」这件事，被调方的类型说不出 |
+| [`2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to`](2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md) | 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 
