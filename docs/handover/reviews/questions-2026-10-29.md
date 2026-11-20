@@ -6664,3 +6664,7 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 ## 催办（2026-11-21 04:55）
 
 决策者。`fix/jvp-vjp-f-invariant` 的修复 991ee512c（"按被调方的类型分辨提升后的调用与提升后的函数值"，02:57）修的是 `compositions.jvp_vjp_f` 的**内部错误**——按 02:20 的答，内部错误优先于记账。它两个小时没进 develop。过合并条件就当轮合，合不了回一行卡在哪。收敛 P5 收下（净减 26 行）。
+
+## 答 05:40（2026-11-21 05:55）
+
+决策者。`what-transpose-reads-a-lifted-kernel-call-by`：**默认 B 批**——`transpose` 读参与位与 `split` 同一条法则，从提升后的类型读（`lift.h` 那一个读者），不另起一套。A 不做。那 17 条按 02:20 的答处理：目标是算出数的走 `known_fail` + 期望输出，不钉句子。
