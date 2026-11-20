@@ -4394,7 +4394,7 @@ f2359cb27baac27f ok test/cases/trans/spelling/undeclared.cml
 216257761cb074d5 ok test/cases/transforms/compositions/grad_vjp_g_zero.cml
 2673b5760b0bb445 ok test/cases/transforms/compositions/grad_vmap_f.cml
 7a8cc0d29d80d381 ok test/cases/transforms/compositions/hessian_of_a_quadratic.cml
-c10050589b920401 ok test/cases/transforms/compositions/jvp_vjp_f.cml
+41edbc1e58df7787 ok test/cases/transforms/compositions/jvp_vjp_f.cml
 ed057562ff7031e0 ok test/cases/transforms/compositions/nested_grad_min.cml
 de2e3227933a6e2e ok test/cases/transforms/compositions/nested_grad_through_a_binding.cml
 1e6325d17962b018 ok test/cases/transforms/compositions/pullback_of_a_sum_of_squares.cml
