@@ -109,30 +109,17 @@ namespace graph {
 bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
-    switch (kind) {
-    case GCNodeKind::Data:
-    case GCNodeKind::Port:
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
-    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
-    case GCNodeKind::Brch:
-    case GCNodeKind::Join:
-        return true;
-    case GCNodeKind::Cast:
-        return !nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource, fixedShapes);
-    case GCNodeKind::Oper: {
-        const auto &table = camel::core::OperatorTable::instance();
-        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-        if (!table.mayBeRecomputed(oper) || !traits.has_value()) {
-            return false;
-        }
-        return !nodeMayFault(kind, oper, nullptr, nullptr, fixedShapes);
-    }
-    default:
-        // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
-        // refuses an order on it (docs/design/effects/edges.cn.md 4.6).
+    // A node a pass may move is one running it cannot fail -- `nodeMayFault` above, asked of every
+    // kind -- and, for an operator, one a pass may run again. `mayBeRecomputed` is the one question
+    // the fault table does not answer: a pure operator a rule writes, and one a macro expands, does
+    // not fault, yet a pass may neither drop it nor copy it.
+    if (kind == GCNodeKind::Oper &&
+        !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
         return false;
     }
+    // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing refuses an
+    // order on it (docs/design/effects/edges.cn.md 4.6) -- the fault table says they may fault.
+    return !nodeMayFault(kind, oper, castTarget, castSource, fixedShapes);
 }
 
 bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
@@ -969,6 +956,27 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
+/// Whether the finished node `id` carries no order edge: a node that arranges itself freely says
+/// nothing with one, so the payload the graph holds does not keep them. Two readers ask this -- the
+/// payload plan below, which decides the edge count and the edges emitted, and the delivery check
+/// (`verifyDraftDelivery`), which would otherwise report every dropped order edge as lost -- and
+/// they ask it here so that they cannot answer it two ways.
+bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+        !nodeIsFreelySchedulable(draft, id)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            if (draft.region(region).owner == id) {
+                return false; // it stands for its region and carries its order
+            }
+        }
+    }
+    return true;
+}
+
 /// Every sync edge the draft has is built into the payload, whatever it ends on: the edges stay,
 /// and the check side changes. An edge is built even when its end is neither a statement, a `GATE`
 /// nor a node in the tail's region -- leaving it out so as not to build "a wait the seal would
@@ -1052,27 +1060,13 @@ DraftPayloadPlan planDraftPayload(
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
-        // The finished node answers for itself here, and this is the one owner of that answer: the
-        // payload the graph will hold is the one the draft holds, so the question the seal check
-        // asks of the frozen graph (nodeTakesNoOrder, graph_edges.cpp) is asked of this node before
-        // it is written, and the answer decides both the edge count and the edges emitted. It
-        // cannot be asked where the edge is written: a node still being built has no payload, so
-        // nodeIsFreelySchedulable answers for a half-made node and every writer believes the edge
-        // is wanted. Asked here, once, the two answers cannot disagree.
-        bool dropsOrder = false;
-        if (const DraftNodeHeader *ordered = draft.header(draftId);
-            ordered != nullptr && ordered->kind != GCNodeKind::Dead &&
-            ordered->kind != GCNodeKind::Cast && nodeIsFreelySchedulable(draft, draftId)) {
-            dropsOrder = true;
-            if (ordered->kind == GCNodeKind::Brch || ordered->kind == GCNodeKind::Loop) {
-                for (uint32_t region = 1; region < draft.regionCount(); ++region) {
-                    if (draft.region(region).owner == draftId) {
-                        dropsOrder = false; // it stands for its region and carries its order
-                        break;
-                    }
-                }
-            }
-        }
+        // The finished node answers for itself here: the payload the graph will hold is the one the
+        // draft holds, so the question the seal check asks of the frozen graph (nodeTakesNoOrder,
+        // graph_edges.cpp) is asked of this node before it is written, and the answer decides both
+        // the edge count and the edges emitted. It cannot be asked where the edge is written: a node
+        // still being built has no payload, so nodeIsFreelySchedulable answers for a half-made node
+        // and every writer believes the edge is wanted.
+        const bool dropsOrder = takesNoOrder(draft, draftId);
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
             if (dropsOrder) {
@@ -1563,26 +1557,6 @@ std::string spelledRefs(std::span<const gc_node_ref_t> refs) {
         text += std::to_string(refs[i]);
     }
     return text;
-}
-
-/// Whether the encoder writes no order input on `id`: the edge says nothing on a node that
-/// arranges itself freely, so the payload plan drops them (this file, `planDraftPayload`, and
-/// `carriesOrdering`, which is the same rule read by the rewrite side). The delivery check has to
-/// read that rule the same way or it would report every order edge of such a node as lost.
-bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
-    const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
-        !nodeIsFreelySchedulable(draft, id)) {
-        return false;
-    }
-    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
-        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
-            if (draft.region(region).owner == id) {
-                return false; // it stands for its region and carries its order
-            }
-        }
-    }
-    return true;
 }
 
 } // namespace
