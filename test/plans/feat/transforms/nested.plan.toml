@@ -10,8 +10,10 @@
 #   `pb_again`: f=x^3, the pullback at 2 is the linear map ct |-> 12 ct, whose own slope is 12
 #   `confusion`: d/dx ( x * (d/dy (x+y) at y=1) ) at x=1 == 1 (a confused reading gives 2)
 #
-# The first run of this plan is a *measurement*: these entries are what the nest has to answer, and
-# an entry that is refused is the wall, quoted verbatim in its failure.
+# The first run of this plan was a *measurement*, and it stayed one: an entry that is refused is a
+# wall the implementation has not reached yet. Since the ruling of 2026-11-21 02:20 a mark on such an
+# entry states the line the entry has to print instead of quoting the refusal it reads that day, so
+# the wall can move -- and it has, three times -- without the mark following it.
 
 [[tests]]
 name = "nested.nest_square"
@@ -23,13 +25,14 @@ backends = ["nvm"]
 expect_exit = 0
 expect_stdout_contains = ["nested_square x=2.0 d1=4.0 d2=2.0"]
 # `grad(grad(square))<2.0>()`: both numbers are the target shape (a `with` parameter is the weight,
-# design principles 9.9) and both stop on the same wall as `nested.nest_named`.
+# design principles 9.9). `nested.nest_named` and `nested.nest_lambda` still stop at the lift, one
+# wall earlier, and pin that sentence; this entry and `nested.nest_cube` are past it and mark the
+# numbers instead.
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
-known_fail_reason = "the wall moved one step later on 2026-11-20 (`2da9735da`): the outer `jvp`'s lift now DOES lift a function whose answer type is `(float, (float) => float)`, so `liftSignature` no longer answers null, and the refusal comes from the cut instead (`transforms: split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`, `split.cpp`)"
-known_fail_msg = "split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)"
-known_fail_ends_when = "when `modules/transforms/split.cpp` stops refusing with `the value half reads the tangent of parameter 0` -- the value half taking that tangent port -- this entry prints `nested_square x=2.0 d1=4.0 d2=2.0` and exits 0. The run decides it, in the two ways it already checks a mark: the reading arrives and it says `marked known_fail ... but passes`, or a different wall replaces the pinned one and it says `known failure changed its mind`."
-known_fail_note = "Re-pinned 2026-11-20 on the merged tree (`79e47232d`, develop's plan byte for byte). The old sentence `jvp has no forward transform for this function` is OBSOLETE: it marked `liftSignature` answering null before any callee was asked, i.e. the lift never happened at all. The new sentence marks the opposite kind of stop -- the lift DID happen and the cut refuses to hand the backward half a tangent for a parameter the call passes as an ordinary argument. The reading is in `docs/handover/questions/2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md`. Re-read before that: after `c74e59759` restored `grad`'s call form, this writing stopped at `first_with_as_param ... there is no first one to move` (design principles 9.9's refusal) and then at the lift. That is why this entry is a `known_fail` on the number and not a negative on any one sentence."
+known_fail_reason = "the wall has moved three times and the mark no longer tracks it: `2da9735da` made the outer `jvp`'s lift lift the answer type, `2a2cf31a8` removed `split`'s refusal (`the value half reads the tangent of parameter 0`), and what refuses today is one step later -- `transforms: transpose has no transpose for this function`, cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`. The mark is on the number, so this one moving again does not touch the entry"
+known_fail_ends_when = "when the nest answers the numbers instead of a refusal, this entry prints `nested_square x=2.0 d1=4.0 d2=2.0` and exits 0 -- f(x)=x*x has f'(x)=2x and f''(x)=2, and d2 is the number that says the nest ran at all. No refusal is pinned, so the mark ends on that line and not on any wall moving: the run reports `marked known_fail ... but passes` on that reading"
+known_fail_note = "Re-registered 2026-11-21 by the author's ruling of 02:20 (readings: `docs/handover/questions/2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md`). It was a re-pin on 2026-11-20 and a re-pin before that, and each one held only until the wall moved: `jvp has no forward transform for this function` (liftSignature answering null), then `split does not build this function ...`, then `transpose has no transpose for this function`. Three sentences for one unfinished computation is the argument for the shape used now -- the mark names the line it has to print, which no wall changes. Cost: without a pinned sentence the run accepts any failure as the expected one until the numbers arrive."
 timeout_ms = 30000
 
 [[tests]]
@@ -43,10 +46,9 @@ expect_exit = 0
 expect_stdout_contains = ["nested_cube x=2.0 d1=12.0 d2=12.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
-known_fail_reason = "same wall as `nested.nest_square` after `2da9735da` moved it: the outer `jvp`'s lift now lifts the answer type, and the cut refuses (`transforms: split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`)"
-known_fail_msg = "split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)"
-known_fail_ends_when = "with `nested.nest_square`: when `modules/transforms/split.cpp` stops refusing with `the value half reads the tangent of parameter 0`, this entry prints `nested_cube x=2.0 d1=12.0 d2=12.0` and exits 0 -- the run reports `marked known_fail ... but passes` on that reading, or `known failure changed its mind` if another wall replaces the pinned one first."
-known_fail_note = "Both derivatives of f(x)=x^3 at 2 are 12 (f'=3x^2, f''=6x), which is why the square case sits beside it: a run that answers 12 twice has to be read together with a case whose two numbers differ. Re-pinned 2026-11-20 on the merged tree (`79e47232d`). The old sentence `jvp has no forward transform for this function` is OBSOLETE: it marked `liftSignature` answering null, i.e. the lift never ran. The new sentence marks the opposite kind of stop -- the lift ran and the cut will not hand the backward half a tangent for a parameter this call passes as an ordinary argument. The note on `nested.nest_square` carries the reading and the page."
+known_fail_reason = "same wall as `nested.nest_square`, and the same reason for not pinning it: what refuses today is `transforms: transpose has no transpose for this function` (cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`), and the mark is on the numbers"
+known_fail_ends_when = "with `nested.nest_square`: when the nest answers the numbers, this entry prints `nested_cube x=2.0 d1=12.0 d2=12.0` and exits 0 -- f(x)=x^3 has f'(x)=3x^2=12 and f''(x)=6x=12 at 2. Both being 12 is why the square case sits beside it; the mark ends on that line, and the run reports `marked known_fail ... but passes` on that reading"
+known_fail_note = "Re-registered 2026-11-21 with `nested.nest_square` (author's ruling of 02:20): the mark states the line that ends it instead of the refusal it reads today, because that refusal has now moved twice (`split`'s `the value half reads the tangent of parameter 0`, then `transpose`'s `no transpose for this function`) while the number has not. Both derivatives of f(x)=x^3 at 2 are 12, which is why a run that answers 12 twice has to be read together with a case whose two numbers differ. The cost of the shape is stated on the sibling's note."
 timeout_ms = 30000
 
 [[tests]]
@@ -64,9 +66,8 @@ expect_stdout_contains = ["nest_named x=2.0 d1=12.0 d2=12.0"]
 # in `docs/handover/questions/2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md`.
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
-known_fail_reason = "the outer `jvp`'s lift refuses a call whose callee's code is not readable, and the callee here is what `split` handed out: `transforms: jvp has no forward transform for this function`, raised from `modules/transforms/jvp_operator.cpp:188` with `refusedOrigin == kInvalidOriginId` (no cause, no place). Same wall as `compositions.jvp_vjp_f`'s note"
-known_fail_msg = "jvp has no forward transform for this function"
-known_fail_ends_when = "when `split` hands out code the transforms can read -- the `FunctionClosure` the backward graph is already published as, which `modules/transforms/jvp_operator.cpp` asks for and does not accept -- the outer lift stops refusing with `jvp has no forward transform for this function` and this entry prints `nest_named x=2.0 d1=12.0 d2=12.0` and exits 0. The run decides it: `marked known_fail ... but passes` on that reading, `known failure changed its mind` if a different refusal replaces the pinned one."
+known_fail_reason = "the outer `jvp`'s lift refuses a call whose callee's code is not readable, and the callee here is what `split` handed out: `transforms: jvp has no forward transform for this function`, raised from `modules/transforms/jvp_operator.cpp:188` with `refusedOrigin == kInvalidOriginId` (no cause, no place). The nest stops here, one wall before `compositions.jvp_vjp_f`, whose composition does get past the lift"
+known_fail_ends_when = "when `split` hands out code the transforms can read -- the `FunctionClosure` the backward graph is already published as, which `modules/transforms/jvp_operator.cpp` asks for and does not accept -- the outer lift stops refusing with `jvp has no forward transform for this function` and this entry prints `nest_named x=2.0 d1=12.0 d2=12.0` and exits 0. No refusal is pinned here, so the mark ends on that line and not on any wall moving: the run reports `marked known_fail ... but passes` on that reading."
 known_fail_note = "Measured 2026-11-20 with `--trace transforms` and pasted verbatim in the question page: the inner `grad(cube)` leaves `first_with_as_param function=cube ... graph=359`, `jvp function=cube__first_with_as_param ... source=ruleset rules=jvp_mul`, `split function=jvp_of_cube__first_with_as_param ... residuals=2`, and a `TRANSPOSE` line for its backward half; then `first_with_as_param function=dcube ... graph=405` succeeds and the outer `jvp` prints nothing at all. Lifting this wall needs `split` to hand out statically readable code first, which is the `grad-callform`/甲 face -- see the page for why this lane stopped there."
 timeout_ms = 30000
 
@@ -82,8 +83,7 @@ expect_stdout_contains = ["nest_lambda x=2.0 d2=12.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_named`: the outer `jvp`'s lift refuses a call whose callee's code is not readable (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`, no cause and no place)"
-known_fail_msg = "jvp has no forward transform for this function"
-known_fail_ends_when = "with `nested.nest_named`: when the outer lift stops refusing with `jvp has no forward transform for this function`, this entry prints `nest_lambda x=2.0 d2=12.0` and exits 0 -- the run reports `marked known_fail ... but passes` on that reading, or `known failure changed its mind` if the refusal changes first. The two writings may part ways when the lift learns to recurse, which is why this entry has its own trigger."
+known_fail_ends_when = "with `nested.nest_named`: when the outer lift stops refusing with `jvp has no forward transform for this function`, this entry prints `nest_lambda x=2.0 d2=12.0` and exits 0 -- the run reports `marked known_fail ... but passes` on that reading. The two writings may part ways when the lift learns to recurse, which is why this entry has its own trigger."
 known_fail_note = "The writing differs from `nested.nest_named` only in where the inner transform sits -- here it is a lambda's body rather than a value reached by name -- and the refusal is the same sentence, measured 2026-11-20 on `nvm`. Kept separate because a value reached as a function is the case `second_order_refused_captured.cml` pins for the engine's `grad`, and the two writings may part ways when the lift learns to recurse."
 timeout_ms = 30000
 
@@ -99,8 +99,7 @@ expect_stdout_contains = ["hessian g=[21.0,12.0] row0=[12.0,6.0] row1=[6.0,4.0]"
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_named`: every row of the matrix is a nest, so every row needs the outer `jvp`'s lift to reach a callee `split` handed out, and it refuses (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`)"
-known_fail_msg = "jvp has no forward transform for this function"
-known_fail_ends_when = "when the outer lift stops refusing with `jvp has no forward transform for this function` and `split` hands it readable code, every row of the matrix is produced: the entry prints `hessian g=[21.0,12.0] row0=[12.0,6.0] row1=[6.0,4.0]` and exits 0, and the run says `marked known_fail ... but passes`. A different refusal in its place says `known failure changed its mind`."
+known_fail_ends_when = "when the outer lift stops refusing with `jvp has no forward transform for this function` and `split` hands it readable code, every row of the matrix is produced: the entry prints `hessian g=[21.0,12.0] row0=[12.0,6.0] row1=[6.0,4.0]` and exits 0, and the run says `marked known_fail ... but passes`. No refusal is pinned here, so a different refusal in its place does not turn the entry red."
 known_fail_note = "判据 ③ of the author's four readings. Not one of the four elements is produced today, so the matrix is not partly right: the first row dies before any number is printed. The expectation stays at the values worked out by hand (g = [21, 12], H = [[12, 6], [6, 4]] at (2, 3)) rather than moving to a reading: a number moved to match a refused composition would let the case pass on nothing."
 timeout_ms = 30000
 
@@ -116,8 +115,7 @@ expect_stdout_contains = ["confusion x=1.0 d=1.0"]
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "same wall as `nested.nest_named`: the inner transform sits in the body of the function the outer one differentiates, so the outer `jvp`'s lift has to reach a callee `split` handed out, and it refuses (`transforms: jvp has no forward transform for this function`, `modules/transforms/jvp_operator.cpp:188`)"
-known_fail_msg = "jvp has no forward transform for this function"
-known_fail_ends_when = "when the outer lift stops refusing with `jvp has no forward transform for this function`, this entry prints `confusion x=1.0 d=1.0` and exits 0 -- 1 and not 2, which is what a nest that read the outer tangent as the inner one answers. The run reports `marked known_fail ... but passes` on that reading, or `known failure changed its mind` if another wall replaces the pinned one."
+known_fail_ends_when = "when the outer lift stops refusing with `jvp has no forward transform for this function`, this entry prints `confusion x=1.0 d=1.0` and exits 0 -- 1 and not 2, which is what a nest that read the outer tangent as the inner one answers. No refusal is pinned here, so the mark ends on that line: the run reports `marked known_fail ... but passes` on that reading."
 known_fail_note = "判据 ④. The expected answer is 1 and a confused implementation answers 2 (it reads the outer tangent as the inner one), which is what makes this reading worth keeping: the day the wall lifts, this is the entry that tells a correct nest from a plausible one. Today it prints nothing -- the refusal comes before the first number."
 timeout_ms = 30000
 
@@ -134,13 +132,18 @@ timeout_ms = 30000
 
 [[tests]]
 name = "nested.nest_quartic"
-desc = "The reverse half, recorded as the refusal it is: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It is a negative on the sentence and not on a number -- the nest prints nothing. **Re-pinned 2026-11-20 (`2da9735da`, merged tree `79e47232d`)**: the refusal it used to pin, `jvp has no forward transform for this function`, is OBSOLETE -- that sentence marked `liftSignature` answering null because the answer type `(float, (float) => float)` had no tangent space, so the lift never ran. It now runs (that law is what `2da9735da` put in), and the stop is one step later: `transforms: split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`. The entry stays `negative` and not a number because the nest still prints nothing: pinning `d2=48.0` today would pin a value no reading produces. The reading and the ruling it waits on are in docs/handover/questions/2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md; when the value half learns to hand that tangent out, this entry flips to `d2=48.0` and stops being a negative."
-kind = "negative"
+desc = "The reverse half, now a positive on the number: `grad(grad(f))` for f(x)=x^4, whose hand-worked second derivative is f''(2)=48 (and f''(3)=108). It was `kind = \"negative\"`, pinning `split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)`, and that negative had stopped holding before it stopped passing: `2da9735da` added the law that lifts an answer type of `(float, (float) => float)`, so the property the case was written to pin -- 'a result type with no tangent space is refused' -- is not true any more, and `2a2cf31a8` could then remove the cut's refusal. A positive on the number is what the case is about now: the nest prints 48.0, not a refusal. Re-registered 2026-11-21 by the author's ruling of 02:20, which named this entry as the one that must turn positive."
+kind = "behavior"
 case = "../../../cases/transforms/nested/nest_quartic.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_output_contains = ["split does not build this function (the value half reads the tangent of parameter 0, which the forward half does not take)"]
+expect_exit = 0
+expect_stdout_contains = ["nested_quartic d2=48.0"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-nested-transforms (nested-b)"
+known_fail_reason = "the nest is one step past both lifts now and what refuses is `transforms: transpose has no transpose for this function` (cause `the callee's transpose was built, but the parameter at position 3 reads a value this call does not carry`, `modules/transforms/transpose_operator.cpp#refusalSentence`). The mark is on `d2=48.0` and not on that sentence -- this entry is the one the 2026-11-21 ruling turned from a negative on a refusal into a positive on a number, precisely so that the next move of that wall does not turn it red again"
+known_fail_ends_when = "when `grad(grad(f))` answers a number instead of a refusal, this entry prints `nested_quartic d2=48.0` and exits 0 -- f(x)=x^4 has f'(x)=4x^3 and f''(x)=12x^2, so f''(2)=48 and f''(3)=108, and `nested.nest_quartic_forward` beside it already answers the same 48 as `t1` from the forward composition. No refusal is pinned, so the mark ends on that line: the run reports `marked known_fail ... but passes` on that reading"
+known_fail_note = "Re-registered 2026-11-21 (author's ruling of 02:20). Two readings make the positive and not the negative the right shape: the sentence it pinned (`split does not build this function ...`, read at `6a21597db`) stopped appearing at `2a2cf31a8`, and the reason the case had for existing at all -- a result type with no tangent space being refused -- stopped being true at `2da9735da`. Its `desc` had been corrected on 2026-11-20 while the case file's own comment still described the oldest wall; the comment was corrected in the same commit as this registration. Cost, as on `nested.nest_square`: without a pinned sentence the run accepts any failure as the expected one until the number arrives."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

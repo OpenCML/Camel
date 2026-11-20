@@ -685,7 +685,6 @@ std::optional<std::string> ProgramValues::type(const Type *t) {
         decl += std::format("        {} out;\n", name);
         decl += "        out.tag = static_cast<int32_t>(Tag);\n";
         for (size_t tag = 0; tag < variants.size(); ++tag) {
-            const auto &variant = variants[tag];
             std::string init = payloadNames[tag] + "{";
             for (size_t i = 0; i < plans[tag].size(); ++i) {
                 if (i > 0) {

@@ -3239,6 +3239,27 @@ class Builder {
         const GCT::node_ptr_t &gct, node_handle_t sequence,
         const std::vector<node_handle_t> &initial,
         const std::vector<camel::core::type::Type *> &stateTypes);
+    /// The value a LOOP hands the program, once the loop is built (visitLoopNode, buildStreamLoop):
+    /// the states its head declares, and nothing of the loop's own -- not the collection slots
+    /// beside a state (collectLoopAppends), not the `var`s the body wrote, and not the machine's
+    /// parts (the stream a `for` pulls from and the flag that says it is over). `states` are the
+    /// declared states' types, in order, and `firstState` is the index of the first of them among
+    /// the LOOP's With inputs. One state is its own value; several are a tuple whose FILL reads
+    /// the state components and leaves what else the loop carries to autodiff and the exporter.
+    node_handle_t attachVisibleLoopState(
+        node_handle_t loopNode, const std::vector<camel::core::type::Type *> &states,
+        uint32_t firstState, const GCT::node_ptr_t &gct);
+    /// The tail every LOOP node shares once its node and its parts are built (visitLoopNode,
+    /// buildStreamLoop): the With inputs are the parts' results (the body's, then the condition's)
+    /// and the slot the rounds are counted in, the parts are its regions, and running the loop is
+    /// like entering an arm, so it uses every variable its parts used and writes those they wrote.
+    /// What is left to report is a write by a callee the parts call to a variable that callee
+    /// captured (design principles 3.1: a write to a `var` is a value, so what the body writes is
+    /// the states the LOOP hands on, not an effect). The loop then takes the place of a statement
+    /// of the block, like a call.
+    void attachLoopParts(
+        node_handle_t loopNode, const arm_ptr_t &bodyPart, const arm_ptr_t &condPart,
+        const GCT::node_ptr_t &gct);
     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
     /// that state's first value is a fresh literal, to the form that may append to the state in
     /// place (design principles 10.5): the state's old value cannot be seen once the next round
@@ -3313,6 +3334,9 @@ class Builder {
     /// be told to try the next when a guard refuses -- so it is one decision list over the cases
     /// in written order.
     node_handle_t buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle_t condNode);
+    /// The `bool` constant `value`, as a static data node registered against `origin`: the value
+    /// a branch arm and a loop's condition both hand out where the program wrote none.
+    node_handle_t staticBool(bool value, const GCT::node_ptr_t &origin);
     /// `!value`: a branch that gives true where the value is false, and false where it is true.
     node_handle_t negateCondition(node_handle_t value, const GCT::node_ptr_t &origin);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
@@ -3326,6 +3350,10 @@ class Builder {
         const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {},
         runtime::GCRegionKind kind                     = runtime::GCRegionKind::Arm,
         const std::function<void(ArmBuild &)> &declare = {});
+    /// The value a sync block hands back: a block that ends in a value gives it behind a `GATE`
+    /// (visitExecNode), so the value the block is worth is the one the `GATE` forwards. Anything
+    /// that is not a `GATE`, and a `GATE` with no input, is itself (design principles 3.4).
+    node_handle_t behindSyncGate(node_handle_t value);
     /// Gives the arm `arm` the value `result` (the last expression of its body) unless a
     /// `return` has given one.
     void setArmResult(ArmBuild &arm, node_handle_t result);
@@ -3345,6 +3373,18 @@ class Builder {
     void mergeArmVariables(
         const std::vector<arm_ptr_t> &arms, node_handle_t joinNode,
         std::vector<node_handle_t> &written);
+    /// The tail every statement whose parts are regions shares (a branch, a loop): running the
+    /// parts is like entering an arm, so the statement uses every variable they used and writes
+    /// those they wrote. `mergeArmVariables` puts that on `node`, the node the statement's value
+    /// is; the parts' callees become callees of the arm the statement is in; a write by one of
+    /// those callees to a variable it captured is reported, and `subject` and `verb` are how that
+    /// report names the statement and the write; and the statement takes its one place in the
+    /// block's chain, which enters `chainEntry` and continues from `chainExit`. `versionOf` is the
+    /// variable whose version `node` becomes, when there is one (a branch: what its JOIN joins).
+    void attachRegionStatement(
+        node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
+        node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
+        const char *verb, node_handle_t versionOf = nullptr);
     /// The names of a block that is not a graph (an arm).
     void enterBlockScope();
     void leaveBlockScope();

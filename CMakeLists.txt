@@ -186,6 +186,12 @@ add_library(camel_options INTERFACE)
 set(CAMEL_OPTIONS_TARGET camel_options)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
 
+# The warning set is written once, in cmake/Warnings.cmake, and reaches a target by the interface
+# target that carries that target's list: camel_warnings_libcamel here, camel_warnings_tool for the
+# tools (tools/libcamel_tool.cmake), camel_warnings_module for the modules (modules/camel_module.cmake).
+# No file writes a warning flag of its own.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Warnings.cmake)
+
 target_compile_options(libcamel_objects PRIVATE
     $<$<CONFIG:Release>:-O3>
     $<$<CONFIG:RelWithDebInfo>:-O2>
@@ -193,14 +199,6 @@ target_compile_options(libcamel_objects PRIVATE
     $<$<CONFIG:RelWithDebInfo>:-fno-PIE>
     $<$<CONFIG:Debug>:-O0>
     $<$<CONFIG:Debug>:-g3>
-    -Wall -Wextra -Wpedantic
-    -Wno-unused-parameter
-    -Wno-c99-extensions # Uses flexible array members.
-    -Wno-gnu-anonymous-struct
-    -Wno-nested-anon-types
-    -Wno-unused-private-field
-    -Wno-gnu-label-as-value # for Computed Goto
-    -Wno-nan-infinity-disabled
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
     ${CAMEL_TARGET_ARCH_FLAGS} # cmake/Options.cmake: CAMEL_TARGET_ARCH
@@ -237,6 +235,7 @@ target_link_libraries(libcamel PRIVATE
 # (ENABLE_FASTVM_JIT and friends) and include paths the library had when it was one target.
 target_link_libraries(libcamel_objects PRIVATE
     camel_options
+    camel_warnings_libcamel
     fmt::fmt
     gtest::gtest
     nlohmann_json::nlohmann_json

@@ -21,6 +21,7 @@
 
 #include "camel/runtime/program.h"
 #include "camel/runtime/graph.h"
+#include "runtime/graph_build.h" // GCGraphDebugRecord, which freeGraph deletes
 
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"

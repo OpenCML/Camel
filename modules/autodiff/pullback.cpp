@@ -1983,7 +1983,6 @@ std::vector<Type *> reverseStateTypes(const ReverseLoop &loop) {
 gc_node_ref_t packState(
     rt::GraphTransaction &transaction, const std::vector<Type *> &types,
     std::span<const gc_node_ref_t> values) {
-    auto &draft = transaction.edit();
     ASSERT(types.size() == values.size(), "autodiff: state component count mismatch.");
     if (types.size() == 1) {
         return values.front();

@@ -302,7 +302,16 @@ struct TransposeGraph {
 /// `participates` is the one exception, and it belongs to a call site rather than to a type: one
 /// flag per parameter, true where a cotangent is answered for. A parameter outside the set is a
 /// value the caller still passes, which is the shape a rule's tangent function has. Empty means
-/// every parameter participates, which is the ordinary transposition. `answersOf`, when given, is
+/// every place is read by the lift law (`lift.h#liftedParametersOf`): the ordinary transposition,
+/// where every parameter is a tangent, and the signature of a graph that is itself a `Lift`, where
+/// the law writes a value half and a tangent half and only the tangent half is answered for. Which
+/// places those are is never decided here -- the law says it, and this signature, the ports the
+/// member takes and the answer it gives are all that one answer.
+///
+/// `liftedSignature` is which of the law's two readings applies, and it is a fact about the *graph*
+/// the signature belongs to (`GCGraph::liftedFrom`): the two shapes are one type, so no type says
+/// it. False -- what a caller holding only a type passes -- reads the list the ordinary way.
+/// `answersOf`, when given, is
 /// filled with the position of the parameter each member of the answer tuple is the cotangent of,
 /// in the order the answer writes them. A caller that builds a call to this member reads the
 /// positions here instead of deciding them again from the parameter list: `xs[i]` has an `int`
@@ -310,7 +319,8 @@ struct TransposeGraph {
 /// the callee's parameters are not the same list.
 camel::core::type::FunctionType *transposeSignature(
     camel::core::type::FunctionType *function, const std::vector<bool> &participates = {},
-    std::vector<size_t> *answersOf = nullptr, const std::vector<size_t> *captures = nullptr);
+    std::vector<size_t> *answersOf = nullptr, const std::vector<size_t> *captures = nullptr,
+    bool liftedSignature = false);
 
 /// Why this transform has no cotangent for a result of type `result`, in the words the call site's
 /// diagnosis uses; empty when it has one. The call site asks this for its message and the gate asks
