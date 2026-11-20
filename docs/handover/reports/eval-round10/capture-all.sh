@@ -10,7 +10,11 @@
 # number in the report named at its head; nothing here changes an argument to make a number look
 # better, and no file under src/, no expected value and no pass is touched. The blocks are the nine
 # readings the dispatch of 2026-11-20 01:10 lists, in that order, plus the five the capture lanes
-# were handed afterwards. A lane reading sits inside the block it extends, marked with its letter:
+# were handed afterwards, plus the three the capture lane was handed at 16:10. A lane reading sits
+# inside the block it extends, marked with its letter -- or, where the dispatch names the item by
+# number, with that number: [item 6] the optimization table's counts and times, [item 14 = G] the
+# cost of one commit against the size of the program (the dispatch letters that one G itself), and
+# [item 5] the second derivative, which this run does not take and whose block says what it waits for.
 #
 #   [1] the six writings of the case-study program, in the library's `grad` form, and the counterexample
 #       [A] then the six rewrites of the e2e program, each against the program's own canonical hash
@@ -20,10 +24,14 @@
 #       and `break_rate` (the edge-type check refusing the wrong value in the learning-rate slot)
 #       [B] then the three graph checks -- exit, acyclic, scoped -- which layer refuses each, verbatim
 #   [5] the optimization table on the MLP and on the char-transformer
+#       [item 6] then the node counts per pass, the regions counted by kind, the same four passes on
+#       the case program whole, and nine-process medians with the host's load beside them
 #   [6] the fusion: the strict writings reading, then loss-a and loss-b fused
 #   [7] commit and normalization time (the one floating section, see its head)
+#       [item 14 = G] then one commit against five program sizes, and one commit with one node changed
 #   [8] loss-a against loss-b: the two documents, what the derivative graph is NOT, and the numbering
 #       once `std::opt` has run (read that head: this is the numbering-stability reading)
+#       [item 5] and the second derivative, which this build does not take -- a placeholder, no number
 #   [9] the e2e lane, which is e2e/capture.sh run unchanged, so the two never drift apart
 #   [10] [C] `std::prl` on the case and on the e2e program, 200 runs each, and what is compared
 #   [11] [E] the scheduling seed: the switch does not exist, and where the random actually lives
@@ -33,9 +41,12 @@
 #   sh docs/handover/reports/eval-round10/capture-all.sh \
 #       > docs/handover/reports/eval-round10/capture-all.raw.txt 2>&1
 #
-# Repeatability: two runs of this script on one build differ in section [7] and in the scratch path.
-# Section [7] is time (wall and CPU per probe, which is what it reads) plus the host's load line
-# beside it, because a time with no load beside it cannot be read. The scratch path is per run
+# Repeatability: two runs of this script on one build differ in section [7], in the timing block that
+# closes [5], and in the scratch path. Those two blocks are time (wall and CPU per process) plus the
+# host's load line beside them, because a time with no load beside it cannot be read. Everything the
+# other blocks print -- node counts, region counts, byte comparisons -- is the same on both runs, and
+# that difference is the point of separating them: a count that moved between two runs would not be a
+# count. The scratch path is per run
 # because it used to be one fixed directory (`/tmp/camel-capture-all`) and that made two runs share
 # state: two lanes running this script at once wrote into it, and a run whose scratch another run had
 # emptied printed readings that were wrong and said nothing about it. The path carries the run's own
@@ -60,6 +71,14 @@ VARIANTS=docs/handover/reports/eval-round10/case-study-variants
 PROBES=docs/handover/reports/eval-round10/probes
 PROBES_ROOT=$ROOT/$PROBES
 E2E=docs/handover/reports/eval-round10/e2e
+# The benchmark programs import `camel_bench` out of this directory, so it is a module root for the
+# two big rows of [item 14 = G]. It is passed absolute on purpose: a module root in CAMEL_PACKAGES is
+# resolved against the *entry program's* directory, not against the worktree root, so a relative
+# `benchmarks/common` resolves to `benchmarks/resnetbn/benchmarks/common` and the import fails. That
+# failure writes its diagnostic to *stdout*, so the document path would store a 1451-byte diagnostic
+# as a "document" -- which is how the first attempt at those two rows read NO READING on a document
+# that parsed as nothing.
+BENCH_ROOT=$ROOT/benchmarks/common
 MLP=showcase/c2-mlp-mnist/train.cml
 TRANSFORMER=showcase/c3-char-transformer/train.cml
 CASE=examples/case-study/train.cml
@@ -152,6 +171,86 @@ first_diff() {
     else
         echo "differs first_difference_byte=$off"
     fi
+}
+
+# The node count of a canonical document: the sum of `graphs[*].nodes`, which is the count section [2]
+# defines. It is a determinate number -- two documents of the same program at the same pin give the
+# same sum -- so nothing here takes a median of it. A document that will not parse prints `?` rather
+# than a number, because a diagnostic stored in place of a document is not a zero-node program: the
+# two would read the same if this returned 0 on failure.
+nodes_of() {
+    python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(sum(len(g.get("nodes", [])) for g in d["graphs"]))
+except Exception:
+    print("?")
+' "$1" 2>/dev/null || echo "?"
+}
+
+# The pass window of one pass, over nine fresh processes: `timed <tag> <program> <pass> <pkgs|-> <note>`.
+# Nine processes rather than nine runs inside one, because a second run in one process would be timed
+# with the first run's memory and page cache behind it. Every process writes its own phase file, its
+# own unmasked output and its own exit code, and the row names the count that actually produced a
+# reading (`n=`), so a process that failed cannot be silently averaged in. `std::gir` is the
+# terminator: it prints the graph and yields an empty one, so the schedule is not in the window.
+# The format is `median [min, max]` for wall and CPU both, and the load is printed by the caller
+# beside the block, because absolute milliseconds are only comparable at the same load.
+timed() {
+    tag=$1
+    prog=$2
+    pass=$3
+    pkgs=$4
+    note=$5
+    if [ "$pkgs" = "-" ]; then
+        prefix=""
+    else
+        prefix="CAMEL_PACKAGES=$pkgs "
+    fi
+    echo "### ${prefix}$CAMEL $prog $pass std::gir --time-phases=$SCRATCH/t-$tag-<n>.json   (nine times, a fresh process each)"
+    i=1
+    while [ "$i" -le 9 ]; do
+        if [ "$pkgs" = "-" ]; then
+            "$CAMEL" "$prog" $pass std::gir --time-phases="$SCRATCH/t-$tag-$i.json" \
+                > "$SCRATCH/t-$tag-$i.out" 2>&1
+        else
+            CAMEL_PACKAGES="$pkgs" "$CAMEL" "$prog" $pass std::gir \
+                --time-phases="$SCRATCH/t-$tag-$i.json" > "$SCRATCH/t-$tag-$i.out" 2>&1
+        fi
+        echo "$?" > "$SCRATCH/t-$tag-$i.st"
+        i=$((i + 1))
+    done
+    python3 - "$SCRATCH" "$tag" "$pass" "$note" <<'PY'
+import json, statistics, sys
+
+scratch, tag, pass_name, note = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+wall, cpu, codes = [], [], []
+for i in range(1, 10):
+    codes.append(open("%s/t-%s-%d.st" % (scratch, tag, i)).read().strip())
+    try:
+        phases = json.load(open("%s/t-%s-%d.json" % (scratch, tag, i)))["phases"]
+    except Exception:
+        continue
+    for ph in phases:
+        if ph.get("name") == "pass" and ph.get("detail") == pass_name:
+            wall.append(ph["wall_ns"] / 1e6)
+            cpu.append(ph["cpu_ns"] / 1e6)
+            break
+if not wall:
+    first = ""
+    try:
+        first = open("%s/t-%s-1.out" % (scratch, tag)).readline().strip()
+    except Exception:
+        pass
+    print("%-20s NO READING: no 'pass' phase named %s in any of the nine (run1..run9 exit=%s); "
+          "its first line of output: %s"
+          % (tag, pass_name, ", ".join("run%d exit=%s" % (i + 1, c) for i, c in enumerate(codes)), first))
+else:
+    print("%-20s n=%d of 9  median_wall_ms=%8.2f [%8.2f, %8.2f]  median_cpu_ms=%8.2f [%8.2f, %8.2f]  %s"
+          % (tag, len(wall), statistics.median(wall), min(wall), max(wall),
+             statistics.median(cpu), min(cpu), max(cpu), note))
+PY
 }
 
 echo "===== capture-all: the ECOOP section 6 readings and the e2e lane, one run ====="
@@ -391,9 +490,13 @@ echo "#                    compared against one taken with another --arg set is 
 echo "#   the run       -- the program actually runs, with the arguments each program documents."
 echo "#                    The MLP's data comes from probes/gen_mlp_data.py (same seed, same shapes),"
 echo "#                    64 train / 16 val, 2 epochs; the transformer's is its own committed corpus."
-echo "# The transformer cannot run on this build: its loss goes through the library's vjp, and that"
-echo "# stops at 'jvp has no forward transform'. Its run row therefore shows the diagnostic once per"
-echo "# pass, and its table row is the document alone. That is the reading, not a gap."
+echo "# The transformer cannot run on this build: its loss goes through the library's vjp, which stops"
+echo "# at a missing forward rule -- the diagnostic names \`tensor:layer_norm\` on this pin, and it is"
+echo "# quoted where it is printed below rather than here, because a diagnostic's text moves between"
+echo "# pins and a sentence that quotes it from memory goes stale without saying so. Its run row shows"
+echo "# the diagnostic once per pass, and its table row is the document alone. That is the reading."
+echo "# (This note said \`jvp has no forward transform\` until 2026-11-20; that is the wording of an"
+echo "# earlier pin, and the run below has printed the newer one since the forward-rule work landed.)"
 echo
 echo "# --- the MLP: showcase/c2-mlp-mnist/train.cml ---"
 for p in "" opt::cse opt::fold opt::dce opt::saturate; do
@@ -434,6 +537,143 @@ for p in "" opt::cse opt::fold opt::dce opt::saturate; do
         --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 \
         --arg lr=0.001 --arg seed=1 "$TRANSFORMER" $p std::nvm
 done
+
+echo "# --- the transformer's output, byte for byte, before and after each pass ---"
+echo "# This is the column the paper quotes for the transformer. Each row is \`cmp\`, so \`same\` means"
+echo "# every byte of the two outputs is equal, and any other answer names the first byte that parts;"
+echo "# 'the output looks the same' is not a reading and is not what this line says."
+echo "# Three forms per row, because the transformer's own run stops before it prints anything:"
+echo "#   run raw     the program's own stdout+stderr with the pass and without it, unmasked. Today it"
+echo "#               is the same diagnostic both times, so this is a byte equality of two sentences."
+echo "#   run masked  the same with \`seconds=<n>\` masked. The mask is what makes the comparison a"
+echo "#               reading of the pass rather than of a clock, so on a build where this program"
+echo "#               runs, this is the column to quote and the raw one will part on that field."
+echo "#   document    the canonical document of the program with the pass and without it: the pass's"
+echo "#               output in the sense the rest of this section uses, and it is deterministic."
+echo "# The section [5] note above stands: the transformer cannot run on this build (its loss goes"
+echo "# through the library's vjp, which stops at a missing forward rule), so the run rows are"
+echo "# equal because the same refusal is printed both times -- that is the fact, not an assumption"
+echo "# that the pass changes nothing at runtime. The two lines above the row say which diagnostic"
+echo "# was printed, so a reader does not have to take this sentence's word for what it said."
+for p in opt::cse opt::fold opt::dce opt::saturate; do
+    l=$(leaf "$p")
+    printf '%-14s run raw  %-36s run masked  %-36s document  %s\n' "$p" \
+        "$(first_diff "$SCRATCH/tr-run-baseline.out" "$SCRATCH/tr-run-$l.out")" \
+        "$(first_diff "$SCRATCH/tr-run-baseline.masked" "$SCRATCH/tr-run-$l.masked")" \
+        "$(first_diff "$SCRATCH/tr-baseline.json" "$SCRATCH/tr-$l.json")"
+done
+
+echo
+echo "# --- the same four passes on the case-study program, whole ---"
+echo "# The rows above are two showcases. The paper's table is also asked for on the case-study"
+echo "# program as written, so the same four passes run on examples/case-study/train.cml -- the whole"
+echo "# program, no --arg, the document read from it as written. It has no run row here because its"
+echo "# output is section [3]'s three backends, which is the same program."
+for p in opt::cse opt::fold opt::dce opt::saturate; do
+    doc "case-$(leaf "$p")" "$CASE" $p std::jgir canonical=true
+done
+echo "# each against the case-study program's own document, which section [2] took"
+for p in opt::cse opt::fold opt::dce opt::saturate; do
+    printf '%-22s %s\n' "$p" "$(first_diff "$SCRATCH/case.json" "$SCRATCH/case-$(leaf "$p").json")"
+done
+
+echo
+echo "# --- the nodes before and after each pass ---"
+echo "# Node = the sum of \`graphs[*].nodes\` of the canonical document, the count section [2] defines."
+echo "# The two columns are two documents of the same program -- the one with no pass and the one with"
+echo "# that pass -- so both numbers are read and neither is a proxy: the before column is a"
+echo "# determinate count and repeats exactly, and the after column likewise."
+echo "# A row whose delta is 0 is a pass that left the count alone, which is a reading too; it is not a"
+echo "# missing measurement, and the document row above says whether it changed anything else."
+python3 - "$SCRATCH" <<'PY'
+import json
+import sys
+
+scratch = sys.argv[1]
+# program tag, the document of the program with no pass
+programs = [("case", "case.json"), ("mlp", "mlp-baseline.json"), ("tr", "tr-baseline.json")]
+passes = ["cse", "fold", "dce", "saturate"]
+
+
+def nodes_of(path):
+    d = json.load(open(path))
+    return sum(len(g.get("nodes", [])) for g in d["graphs"])
+
+
+print("%-5s %-9s %9s %9s %8s" % ("prog", "pass", "nodes", "after", "delta"))
+for tag, base_name in programs:
+    before = nodes_of("%s/%s" % (scratch, base_name))
+    print("%-5s %-9s %9d %9s %8s" % (tag, "-", before, "-", "-"))
+    for p in passes:
+        after = nodes_of("%s/%s-%s.json" % (scratch, tag, p))
+        print("%-5s %-9s %9d %9d %+8d" % (tag, p, before, after, after - before))
+PY
+
+echo
+echo "# --- the regions of each program, counted by kind ---"
+echo "# Region = one entry of \`graphs[*].regions\`. The kinds are the runtime's GCRegionKind names as"
+echo "# the document spells them: body, arm, loop_cond, loop_body, inline, block. The loop_body column"
+echo "# is the answer to 'is LoopBody > 0' -- it is the count itself, so a 0 and a 3 are different"
+echo "# readings and neither is the boolean."
+echo "# Two shapes of the document have to be known to read a zero: the body region is written only"
+echo "# when it carries a fact (the tags on the function), and a graph with no region besides the body"
+echo "# writes no regions key at all. So a program of straight-line code shows every column 0 because"
+echo "# it has no region to count -- the same 0 a broken count would give, which is why the total is"
+echo "# printed beside the columns and why section [2] counts the same field."
+python3 - "$SCRATCH" <<'PY'
+import collections
+import json
+import sys
+
+scratch = sys.argv[1]
+KINDS = ["body", "arm", "loop_cond", "loop_body", "inline", "block"]
+programs = [("case", "case.json"), ("mlp", "mlp-baseline.json"), ("tr", "tr-baseline.json")]
+passes = ["cse", "fold", "dce", "saturate"]
+
+
+def census(path):
+    d = json.load(open(path))
+    c = collections.Counter()
+    for g in d["graphs"]:
+        for r in g.get("regions", []):
+            c[r.get("kind", "(no kind)")] += 1
+    return c
+
+
+print("%-5s %-9s %s %8s" % ("prog", "pass", " ".join("%10s" % k for k in KINDS), "regions"))
+for tag, base_name in programs:
+    rows = [("-", base_name)] + [(p, "%s-%s.json" % (tag, p)) for p in passes]
+    for p, name in rows:
+        c = census("%s/%s" % (scratch, name))
+        print("%-5s %-9s %s %8d"
+              % (tag, p, " ".join("%10d" % c.get(k, 0) for k in KINDS), sum(c.values())))
+PY
+
+echo
+echo "# --- the time of each pass: nine fresh processes, the median ---"
+echo "# The reading is the pass window itself (--time-phases: the entry named \`pass\` whose detail is"
+echo "# the pass as the pipeline spelled it), so the terminator's printing is not in it. Wall follows"
+echo "# the host's load and CPU time does not; both are printed with the load line beside them, and"
+echo "# the exit code of every process is printed with the median, because a pass that failed still"
+echo "# leaves a \`pass\` phase and its window would otherwise read as a fast one."
+echo "# Absolute milliseconds here are only comparable with rows taken at the same load. The load at"
+echo "# this block's start and its end is printed, and the median plus the range is the reading the"
+echo "# paper's table takes; the nine samples are in the phase files under $SCRATCH."
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+timed case-cse "$CASE" opt::cse - ""
+timed case-fold "$CASE" opt::fold - ""
+timed case-dce "$CASE" opt::dce - ""
+timed case-saturate "$CASE" opt::saturate - ""
+timed mlp-cse "$MLP" opt::cse - ""
+timed mlp-fold "$MLP" opt::fold - ""
+timed mlp-dce "$MLP" opt::dce - ""
+timed mlp-saturate "$MLP" opt::saturate - ""
+timed tr-cse "$TRANSFORMER" opt::cse - ""
+timed tr-fold "$TRANSFORMER" opt::fold - ""
+timed tr-dce "$TRANSFORMER" opt::dce - ""
+timed tr-saturate "$TRANSFORMER" opt::saturate - ""
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+echo
 
 # ---------------------------------------------------------------------------------------------
 banner 6 "the fusion"
@@ -512,6 +752,56 @@ echo
 timing once canonical_once::run
 timing walk canonical_walk::walk
 timing commit commit_only::touch
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+
+echo "# --- what one commit costs against the size of the program ---"
+echo "# \`commit_only::touch\` opens a transaction on the program and commits it with no edit in"
+echo "# between, so the number is the checks and the publish of a program nothing changed: the floor a"
+echo "# commit of a change is read against. It includes \`open\` -- the pass window is the only window"
+echo "# the recorder has, and there is no scope inside a pass -- and the row below it pays the same"
+echo "# \`open\`, so the pair still isolates the edit."
+echo "# Five sizes, nine fresh processes each, with the program's own node count on the row so the"
+echo "# sizes are read and not assumed: the three the paper names, then the two bigger ones. The two"
+echo "# bigger ones are the benchmark models, which import \`camel_bench\` and so take benchmarks/common"
+echo "# as a module root (see its definition at the top); neither is a showcase, so their entry point"
+echo "# is a model rather than a training loop -- the reading is the commit path, which does not care."
+echo "#   /proc/loadavg $(cat /proc/loadavg)"
+docp "$BENCH_ROOT" "scale-resnetbn" "benchmarks/resnetbn/model.cml" std::jgir canonical=true
+docp "$BENCH_ROOT" "scale-resnet" "benchmarks/resnet/model.cml" std::jgir canonical=true
+echo
+timed commit-case "$CASE" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/case.json")"
+timed commit-mlp "$MLP" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/mlp-baseline.json")"
+timed commit-tr "$TRANSFORMER" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/tr-baseline.json")"
+timed commit-resnetbn "benchmarks/resnetbn/model.cml" commit_only::touch "$BENCH_ROOT:$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-resnetbn.json")"
+timed commit-resnet "benchmarks/resnet/model.cml" commit_only::touch "$BENCH_ROOT:$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-resnet.json")"
+
+echo
+echo "# --- the same commit with ONE node changed, on the char-transformer ---"
+echo "# \`commit_one::poke\` is \`commit_only::touch\` plus exactly one edit: it adds one constant node to"
+echo "# the graph the entry function value has and commits. No existing node moves and no second graph"
+echo "# is touched, so this is the smallest edit there is; it is not what a rewriting pass pays, and"
+echo "# the paper's sentence is about this one."
+echo "# The document below is the proof the edit landed: it is the transformer after the poke, and its"
+echo "# node count is the untouched program's plus one. The probe itself prints nothing, because a"
+echo "# line per run would be charged inside the window it measures."
+docp "$PROBES_ROOT" "tr-poked" "$TRANSFORMER" commit_one::poke std::jgir canonical=true
+python3 - "$SCRATCH" <<'PY'
+import json
+import sys
+
+scratch = sys.argv[1]
+
+
+def nodes(path):
+    d = json.load(open(path))
+    return sum(len(g.get("nodes", [])) for g in d["graphs"])
+
+
+before = nodes("%s/tr-baseline.json" % scratch)
+after = nodes("%s/tr-poked.json" % scratch)
+print("# the edit: %d nodes before, %d after, %+d node(s)" % (before, after, after - before))
+PY
+timed commit-tr-poke "$TRANSFORMER" commit_one::poke "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/tr-poked.json")"
 echo "#   /proc/loadavg $(cat /proc/loadavg)"
 
 # ---------------------------------------------------------------------------------------------
@@ -597,6 +887,44 @@ printf 'loss-a after opt against loss-b after opt  %s\n' "$(first_diff "$SCRATCH
 echo "# std::opt is deterministic, so the difference above is the two writings and not the run:"
 doc "opt-loss-a-again" "$VARIANTS/loss-a.cml" std::opt std::jgir canonical=true
 printf 'loss-a after opt, twice  %s\n' "$(first_diff "$SCRATCH/opt-loss-a.json" "$SCRATCH/opt-loss-a-again.json")"
+echo
+
+echo "# --- the SECOND derivative on the four backends: NOT TAKEN in this run, and what it waits for ---"
+echo "# This block is a placeholder and it prints no measurement: no line below is a second derivative."
+echo "# What is owed here, in the author's own words (review page of 2026-11-20 02:30): the second"
+echo "# derivative of \`x*x\` at 2, of \`x^3\` at 2, and a Hessian example, each on std::nvm, std::fvm,"
+echo "# std::jit and std::tf, with whether the four agree. Section [8] above compares the two losses'"
+echo "# documents and reports that no derivative graph is IN them on this build -- one"
+echo "# \`autodiff:grad@1.0\` node whose result is called indirectly, no graph for the derivative. So even"
+echo "# the first derivative is not a graph of the canonical document here, and a second derivative"
+echo "# needs \`grad(grad(f))\`, whose outer \`grad\` is refused on every build in develop today."
+echo "# PENDING: to be taken after lane-jvp-closure lands in develop. That is the lane that lands the"
+echo "# \`liftedShapeOf\` rule in modules/transforms/jvp.cpp, and the rule is what the outer \`grad\` needs"
+echo "# -- not a branch's head sha, which is why the two readings below are printed and the rule is the"
+echo "# one that decides: a sha can be an ancestor of HEAD while the rule is still absent, and a"
+echo "# placeholder that only watched a sha would then read as 'the product arrived' when it had not."
+RULE_FILE=modules/transforms/jvp.cpp
+RULE_NAME=liftedShapeOf
+PB=lane-jvp-closure
+if git -C "$ROOT" grep -q "$RULE_NAME" HEAD -- "$RULE_FILE" 2>/dev/null; then
+    echo "#   wait state: the rule $RULE_NAME IS in $RULE_FILE of this tree, so this block can be taken"
+    echo "#   -- and this run did not take it. That is the reading: the product arrived and the block is"
+    echo "#   still owed."
+else
+    echo "#   wait state: the rule $RULE_NAME is NOT in $RULE_FILE of this tree, so the block is owed"
+    echo "#   exactly as this line says. Nothing in this run stands in for it."
+fi
+if ! git -C "$ROOT" rev-parse --verify --quiet "$PB^{commit}" > /dev/null 2>&1; then
+    echo "#   the lane $PB is not in this checkout (a lane's own commits do not travel to the host), so"
+    echo "#   its head cannot be read here; re-take this block on the tree that holds it."
+elif git -C "$ROOT" merge-base --is-ancestor "$PB" HEAD 2>/dev/null; then
+    echo "#   the lane $PB resolves at $(git -C "$ROOT" rev-parse --short=9 "$PB") and its head IS an"
+    echo "#   ancestor of HEAD. That does not make the block takeable: the rule above decides, and a lane"
+    echo "#   whose head is already merged has landed the commits it had, not the one this waits for."
+else
+    echo "#   the lane $PB resolves at $(git -C "$ROOT" rev-parse --short=9 "$PB") and its head is NOT"
+    echo "#   an ancestor of HEAD, so the block is owed both ways."
+fi
 echo
 
 # ---------------------------------------------------------------------------------------------

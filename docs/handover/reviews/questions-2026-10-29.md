@@ -6459,15 +6459,17 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 
 **两页**：`2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md`（含撤回痕迹）、`2026-11-20-why-the-split-point-is-type-computable.cn.md`（§3 标题即「撤回」）。
 
-### 第二格：案例改用库 `grad` —— 分支本地 `217156abb`（13 文件 +302/−110），**未推、未合**
+### 第二格：案例改用库 `grad` —— 分支 `origin/lane-case-lib` = `c46471cdf`（三提交，13 文件 +302/−110），**已推，待合**
 
 `train.cml` 的 `grad` 改 `from vjp`，调用写法 `grad(loss)<layer, y>(X)` **一字未动**。四后端 `loss before: 3.7500 / loss after: 0.0000 / [[1.9999925], [-0.99998784]]`，**与引擎版逐字同**。
 
 **`break_rate` 仍被拒**，原文 `graph 'main' node 13 (10): passes a Linear as ordinary argument 3 of 'train', which takes a float`，**连节点号都和迁移前一样**，只有位置 `24:1`→`27:1` ⇒ 拒它的层是 `commit`（`src/runtime/graph_edges.cpp`，契约 §4.2 第 2 条），与 `grad` 是引擎的还是库的无关。
 
-**六计划**：compile 2662/2646/0/known 16 · linear 869/865/0/skip 2/known 2 · opt 1621/1621/0 · parse 126/126/0 · para 104/104/0 · tools 71/70/**fail 1**。
+**六计划**（迁移提交 `217156abb`）：compile 2662/2646/0/known 16 · linear 869/865/0/skip 2/known 2 · opt 1621/1621/0 · parse 126/126/0 · para 104/104/0 · tools 71/70/**fail 1**。
 
-**三件要你点的**：(a) `tools` 那 1 红**是本迁移造成的** —— `inspect.copies.case_study_step_answers` 按「12 字段」判，而图名成了实例化函数类型 `vjp::grad<<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure>`（名字带空格，22 字段）；实测按「尾部十个词判形状」改该计划即 4/4 全绿，但 §1 不许改既有断言，**已撤回，等授权**。(b) `f32[...]`→`f32[?, ?]` **不是装饰**：不改则不构建，原文 `The transpose of '…backward' needs the shape of the parameter at position 2, and the type 'f32[...]' does not state it`。(c) `writings/*.cml` 三个仍 import 引擎 `grad`，`case-study-variants/edits-ecoop.cml#break_rate` 同一套全程序计数，**要不要按同口径重钉，等裁**。
+**那 1 红已按授权收掉（`c46471cdf`）**：`tools` **71/71/0**（干净树 `c46471cdf`，`[provenance] tip c46471cdf5a02a8c05fd9b49e4fd00ff63fd2ae3`），`parse` 126/126/0 复核。**①「把工具打印改短」不可行**：打印在 `src/runtime/storage_reuse.cpp:259` 的一句 `os << "COPIES " << graph->name()`，而图名就是**实例名**（`src/compile/gir/builder_generics.cpp:2476` 的 `instanceName` ＝ 符号 + 类型实参，设计原则 10.2 明写「带着声明它的模块显示」）——短化会把同一个 macro 的两个实例打成同一行，读数就不可归属；且那是 `src/`。**②改的是判形状的口径，不是断言要的东西**：12 曾经对（每个图名都是一个词：程序自己的图、`__root__`、无名图拿到的 `__g_<n>__`），迁移后 `grad` 那一张是 macro 实例，于是按尾部十个词判形状；「每行是 update 行 / 图摘要 / no-plan、摘要数加总等于行数」一字未动。
+
+**三件要你点的**：(a) 已收（见上）。(b) `f32[...]`→`f32[?, ?]` **不是装饰**：不改则不构建，原文 `The transpose of '…backward' needs the shape of the parameter at position 2, and the type 'f32[...]' does not state it`；改的是类型标注，`grad(loss)<layer, y>(X)` 的写法没动。(c) `writings/*.cml` 三个仍 import 引擎 `grad`，`case-study-variants/edits-ecoop.cml#break_rate` 同一套全程序计数，**要不要按同口径重钉，等裁**。
 
 ### 第三格：transformer 在库 `grad` 下跑通 —— **不通，而卡点不在 softmax**
 
@@ -6484,3 +6486,13 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 (b) `f32[...]`→`f32[?, ?]`：批。转置要知道秩，开秩写法说不出来；这是库 `grad` 的真要求。
 (c) `writings/*.cml` 三个与 `case-study-variants/` 七个一律改用库 `grad`，`break_rate` 的全程序计数按迁移后的程序重钉（拒绝原文照录）。
 **现在就推 `217156abb` 并合进 develop**，(a)(c) 随同一批。第一、三格同源（`split` 那把刀），合力做，进展照回。
+
+#### 第三格为什么停在这里（停手决定，2026-11-20 16:51，车道 `lane-case-lib` 写下）
+
+**这一格停手，不是放弃，是「再试一次也是同一个读数」。** 三次读数指向同一处：`transformer_step_gradient_stops_at_split.nvm` PASS（negative 如旧）、REINTERP 的 `split … skip=forward construct=a node whose input was not copied why=an operand of the node is not reachable from the half's exit`、程序面的 `stdlib/vjp.cml:134:19 … transforms: split does not build this function`。**`rules=…,jvp_softmax,…` 在 REINTERP 里出现过 ⇒ softmax 那关已经过了**，作者说的「`softmax` 法则已合」确实生效，只是它不是这条路上剩下的那道墙。
+
+**恢复条件写在这里，免得下一轮重新推一遍**：等 `origin/lane-jvp-closure` 的割点法则（`liftDecodeOf`，`Lift` 的逆）落地之后，**与本格一次复验**，不要再单独试。届时预期有两种形态，都要按当时的读数写，不许照抄今天的：① `transformer_step_gradient_stops_at_split.cml` 的拒绝消失 ⇒ 那条 entry 会变成「用例还钉着一个已经没了的拒绝」，是进展形态，要重钉成它实际打印的东西；② 拒绝还在但换了一处 ⇒ 新位置进这一节，旧句子记成「已过时」而不是删掉。
+
+**另记，别和上面混成一条**：`showcase/c3-char-transformer/train.cml:178:34 … transforms: jvp has no forward rule for 'tensor:layer_norm'` 是**更早的、和 `split` 无关的另一道墙** —— `jvp` 根本没有 `layer_norm` 的法则，小模型靠 `mean<-1, true>` 手写层归一才绕过它。**所以第三格就算 `split` 通了，c3 大模型仍然停在这里**；两件事分开验、分开报。
+
+**谁在等这一格**：没有别的车道在等；它也不阻塞第二格（案例迁移已经独立完成）。

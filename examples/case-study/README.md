@@ -7,8 +7,11 @@ an effect, and one that breaks a type. `writings/` holds three more writings of 
 which change no meaning, for the comparison in the last section.
 
 Every reading below was taken on 2026-11-15 from the tree at `96a27e435` with a Release build
-(`npm run build`), and re-taken on the merge that brought this directory in. The program and both
-rewrites are gated by `test/plans/feat/examples.plan.toml`
+(`npm run build`), and re-taken on the merge that brought this directory in. They were taken again on
+2026-11-20 at `7ecc30a9a`, after the program moved from the engine's `grad` to the library's
+(`import { grad } from vjp`): the three lines the program prints and the refusal below are the same
+on both, and what the move changed is the inventory in Reading 1 and the position the error reports.
+The program and both rewrites are gated by `test/plans/feat/examples.plan.toml`
 (`examples.case_study.train`, `.drop_print`, `.break_rate`).
 
 `edits.cml` is a pass library, not an import of the program: a command names its directory as a
@@ -53,80 +56,238 @@ camel examples/case-study/train.cml edits::list std::nvm
 ```
 - : () => int
 - : int
+- : float
+- : float
+math:pow_d : float
+- : float
+- : float
+- : float
+- : (dx: float, dy: float) => float pure
+- : float
+- : float
+- : (dx: float, dy: float) => float pure
+- : int
+:op/ltod : float
+- : () => float pure
+- : int
+- : i32
+:op/itod : float
+- : () => float pure
+- : i32
+- : string
+:op/stod : float
+- : () => float pure
+- : string
+- : int
+:op/ltof : f32
+- : () => f32 pure
+- : int
+- : i32
+:op/itof : f32
+- : () => f32 pure
+- : i32
+- : string
+:op/stof : f32
+- : () => f32 pure
+- : string
+- : int
+:op/ltof6 : f16
+- : () => f16 pure
+- : int
+- : i32
+:op/itof6 : f16
+- : () => f16 pure
+- : i32
+- : string
+:op/stof6 : f16
+- : () => f16 pure
+- : string
+- : int
+:op/ltobf : bf16
+- : () => bf16 pure
+- : int
+- : i32
+:op/itobf : bf16
+- : () => bf16 pure
+- : i32
+- : string
+:op/stobf : bf16
+- : () => bf16 pure
+- : string
+- : float
+math:log_d : float
+- : float
+- : float
+- : (dx: float) => float pure
+- : float
+- : (dx: float) => float pure
+- : float
+- : float
+math:pow_d : float
+- : float
+- : float
+- : float
+- : (ct: float) => (float, float) pure
+- : float
+- : float
+- : (ct: float) => (float, float) pure
+- : float
+math:log_d : float
+- : float
+- : float
+- : (ct: float) => float pure
+- : float
+- : (ct: float) => float pure
+- : f32[?, ?]
 - : Linear
-- : f32[...]
-- : f32[...]
-- : f32[...]
-tensor:matmul : f32[...]
-tensor:subtract : f32[...]
-tensor:multiply : f32[...]
+- : f32[?, ?]
+tensor:matmul : f32[?, ?]
+- : f32[?, ?]
+tensor:subtract : f32[?, ?]
+tensor:multiply : f32[?, ?]
 tensor:sum : f32
 :op/ftod : float
-tensor:shape : int[]
+tensor:shape : int[2]
 - : int
 :op/idx_arr : int
 :op/ltod : float
 :op/div_d : float
 - : Linear
-- : f32[...]
-- : f32[...]
+- : f32[?, ?]
+- : <layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure
+- : <__pack_0_0: Linear, __pack_0_1: f32[?, ?]> (__pack_0_0: f32[?, ?]) => { weight: f32[?, ?] }
+- : f32[?, ?]
+- : { weight: f32[?, ?] }
 - : float
-- : <layer: Linear, y: f32[...]> (X: f32[...]) => float pure
-autodiff:grad : <Linear, f32[...]> (f32[...]) => { weight: f32[...] }
-- : { weight: f32[...] }
 nn:sgd : Linear
-- : Linear
-- : f32[...]
-- : f32[...]
-- : float
 - : int
 - : int
 :op/eq_l : bool
 - : Linear
-- : int
+- : f32[?, ?]
+- : f32[?, ?]
+- : float
 - : Linear
 - : int
 :op/sub_l : int
 - : Linear
+- : int
+- : Linear
+- : int
+- : Linear
+- : f32[]
 - : int[]
 - : f32[]
+- : int[]
+- : f32[]
+- : int[]
 tensor:reshape : f32[4, 2]
-- : int[]
-- : f32[]
 tensor:reshape : f32[4, 1]
-- : int[]
-- : f32[]
 tensor:reshape : f32[2, 1]
 - : Linear
-- : Linear
 - : float
 - : int
 - : Linear
-- : float
+- : f32[?, ?]
 - : string
+- : string
+- : float
 :str/format : string
 :io/println : string
 - : float
-- : string
 :str/format : string
 :io/println : string
-- : f32[...]
-:io/println : f32[...]
+:io/println : f32[?, ?]
 - : int
+- : float
+- : float
+- : float
+:op/sub_d : float
+math:pow_d : float
+:op/mul_d : float
+- : float
+:op/mul_d : float
+math:pow_d : float
+math:log_d : float
+:op/mul_d : float
+- : float
+:op/mul_d : float
+:op/add_d : float
+- : float
+- : float
+- : float
 - : int
+:op/ltof : f32
+- : int
+:op/ltof : f32
+- : int
+:op/ltof : f32
+- : int
+:op/ltof6 : f16
+- : int
+:op/ltof6 : f16
+- : int
+:op/ltof6 : f16
+- : int
+:op/ltobf : bf16
+- : int
+:op/ltobf : bf16
+- : int
+:op/ltobf : bf16
+- : float
+- : float
+:op/div_d : float
+- : (float, float)
+- : float
+- : float
+:op/mul_d : float
+- : float
+- : float
+:op/sub_d : float
+math:pow_d : float
+:op/mul_d : float
+math:pow_d : float
+:op/mul_d : float
+math:log_d : float
+:op/mul_d : float
+- : (float, float)
+- : float
+- : float
+:op/div_d : float
+- : <w: Linear, ws_0: f32[?, ?]> (xs_0: f32[?, ?]) => { weight: f32[?, ?] }
+- : <layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure
+transforms:first_with_as_param : <y: f32[?, ?]> (layer: Linear, X: f32[?, ?]) => float pure
+transforms:jvp : <f32[?, ?]> (Linear, f32[?, ?], Linear, f32[?, ?]) => (float, float) pure
+transforms:split : <f32[?, ?]> (Linear, f32[?, ?]) => (float, (Linear, f32[?, ?]) => float pure) pure
+- : <w: Linear, ws_0: f32[?, ?]> (xs_0: f32[?, ?]) => { weight: f32[?, ?] }
+- : float
+- : Linear
+- : f32[?, ?]
+- : <f32[?, ?]> (Linear, f32[?, ?]) => (float, (Linear, f32[?, ?]) => float pure) pure
+- : f32[?, ?]
+- : (float, (Linear, f32[?, ?]) => float pure)
+- : (Linear, f32[?, ?]) => float pure
+transforms:transpose : (float) => (Linear, f32[?, ?])
+- : (Linear, f32[?, ?])
+- : Linear
+- : { weight: f32[?, ?] }
 loss before: 3.7500
 loss after:  0.0000
 [[1.9999925], [-0.99998784]]
 ```
 
-The listing walks the graphs in the order `graphs_of` gives them: the program's root (2 nodes), the
-derivative's `loss` (14), `step` (8), `train` (13), and the entry (26). The last three lines are the
-program's own output, because the pass hands the program on and it runs.
+The listing walks the graphs in the order `graphs_of` gives them. Since the gradient is the library's,
+that is 59 graphs and 217 nodes: the rules a transform is built from, the graphs those rules make, and
+then the program's own. The last three lines are the program's own output, because the pass hands the
+program on and it runs.
 
 This inventory is the ground the two rewrites stand on. `:io/println` appears three times (two
-printing a formatted string, one printing the weight, `f32[...]`), and the program holds exactly one
-constant of type `float` (the learning rate, `0.1`) and exactly one constant of type `Linear` (the
-starting model).
+printing a formatted string, one printing the weight, `f32[?, ?]`). A constant of type `float` and a
+constant of type `Linear` are still what the third reading pairs -- the learning rate `0.1` and the
+starting model -- but they are no longer the only constants of their types in the program, and that
+is the one thing this move changed about the rewrites: the derivative carries `float` constants of its
+own (the seed `grad` reads `vjp` at, and the ones the transpose builds), six of them, in graphs of
+their own. Reading 3 is where that matters.
 
 One interface gap this reading ran into, written down because the 9.5 work needs it as input:
 `graph_of(p)` hands a pass the program's root (`__root__`), not the entry function, and `callee`
@@ -164,9 +325,12 @@ and the accepted half is what a rewrite can do today.
 
 ## Reading 3: a rewrite that breaks a type — refused
 
-`edits::break_rate` puts the starting model where the learning rate goes: it selects the one
-constant of type `float` and the one of type `Linear` by type and by being a constant, refuses when
-either is not unique, and replaces one with the other.
+`edits::break_rate` puts the starting model where the learning rate goes: it selects the one constant
+of type `float` and the one of type `Linear` by type and by being a constant, refuses when the count
+is not one, and replaces one with the other. The count is taken **per graph** rather than over the
+whole program: the graph that writes the rate holds exactly one `float` constant, and it is the one
+that also holds the model. Counting over the whole program would find seven since the gradient became
+the library's, refuse to pick, and leave the program unchanged.
 
 ```powershell
 camel examples/case-study/train.cml edits::break_rate std::nvm
@@ -175,14 +339,14 @@ camel examples/case-study/train.cml edits::break_rate std::nvm
 ```
 error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'main' breaks its edge invariants (1 violation(s)):
   graph 'main' node 13 (10): passes a Linear as ordinary argument 3 of 'train', which takes a float.
-   --> examples/case-study/train.cml:24:1
+   --> examples/case-study/train.cml:27:1
     |
- 24 | func main(): int sync {
+ 27 | func main(): int sync {
     | ^^^^^^^^^^^^^^^^^^^^^^^
- 25 |     let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
+ 28 |     let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    ...
- 33 | }
+ 36 | }
     | ^
 note: the error was made by <graph::commit>, which records no position
 help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).

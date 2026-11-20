@@ -1,24 +1,24 @@
 // A linear model trained by gradient descent: the loss, its gradient as a library
 // transform, and a training step that takes the model in and gives a new one back.
-import { grad } from autodiff
+import { grad } from vjp
 import { shape, sum } from tensor
 import { sgd } from nn
 
-type Linear = { weight: f32[...] }
+type Linear = { weight: f32[?, ?] }
 
-with <layer: Linear, y: f32[...]>
-func loss(X: f32[...]): float {
+with <layer: Linear, y: f32[?, ?]>
+func loss(X: f32[?, ?]): float {
     let err = X @ layer.weight - y
     return float(sum(err * err)) / float(shape(X)[0])
 }
 
-func step(layer: Linear, X: f32[...], y: f32[...], rate: float): Linear {
+func step(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float): Linear {
     let dloss = grad(loss)
     let g = dloss<layer, y>(X)
     return sgd(layer, g, rate)
 }
 
-func run(X: f32[...], y: f32[...], rate: float): (float, Linear) {
+func run(X: f32[?, ?], y: f32[?, ?], rate: float): (float, Linear) {
     let w0: Linear = { weight: [[0.0], [0.0]] as f32[2, 1] }
     let model = loop m = w0 for i in 0..200 do step(m, X, y, rate)
     return (loss<w0, y>(X), model)

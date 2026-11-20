@@ -48,10 +48,28 @@ func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
     return flatten(graphs_of(p)->map<nodes>)
 }
 
-// The one node satisfying `keep`, or nothing when there is none or more than one: a rewrite picks by
-// what a node is, and refuses an answer that is not unique.
-func only::<F, K>(p: F, keep: K): Node? when is_function::<K>() {
-    let found = all_nodes(p)->filter<keep>
+// The `float` constants of one graph.
+func floats_in(g: Graph): Node[] {
+    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'float')>
+}
+
+// The constants of type `Linear` in one graph.
+func models_in(g: Graph): Node[] {
+    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'Linear')>
+}
+
+// Whether one graph holds both of the constants the rewrite pairs, each exactly once.
+func holds_the_pair(g: Graph): bool {
+    return len(floats_in(g)) == 1 && len(models_in(g)) == 1
+}
+
+// The one graph of the list, or nothing when the count is not one.
+func one_graph(found: Graph[]): Graph? {
+    return if len(found) == 1 then found[0] else null
+}
+
+// The one node of the list, or nothing when the count is not one.
+func one_node(found: Node[]): Node? {
     return if len(found) == 1 then found[0] else null
 }
 
@@ -81,17 +99,29 @@ export func drop_print::<F>(p: F): F! sync {
     return if len(prints) == 0 then p else erased(p, prints)
 }
 
-/// Passes the starting model where the learning rate goes: a rewrite that breaks a type. The program
-/// holds one constant of type float (the rate) and one of type Linear (the model), and the rewrite
-/// refuses when either is not unique.
+/// Passes the starting model where the learning rate goes: a rewrite that breaks a type.
+///
+/// The rate is the one constant of type `float` in the graph that also holds the one constant of type
+/// `Linear` (the model), and the rewrite refuses when no single graph holds that pair. The count that
+/// has to be one is taken per graph, not over the whole program: the count over `all_nodes` used to
+/// find exactly one `float` constant, and it no longer does, because a derivative carries constants of
+/// its own -- the seed `grad` reads `vjp` at, and the ones the transpose builds. Those are not the
+/// learning rate, and the graph the rate is written in still holds exactly one.
+///
+/// A count that is not one has to answer "nothing to do" rather than pick one of them, and that is
+/// the whole cost of this rewrite: the program runs unchanged, exit 0, and the reading the pass
+/// existed to make is simply gone. Silence costs more than a refusal -- a refusal names the type and
+/// the place, and a rewrite that quietly declines to pick names nothing at all.
 export func break_rate::<F>(p: F): F! sync {
-    let rate = only(p, (n: Node): bool => constant_of(n, 'float'))
-    let wrong = only(p, (n: Node): bool => constant_of(n, 'Linear'))
-    return match rate {
+    let where = graphs_of(p)->filter<holds_the_pair>
+    return match one_graph(where) {
         case null => p
-        case r => match wrong {
+        case g => match one_node(floats_in(g)) {
             case null => p
-            case w => swapped(p, r, w)
+            case r => match one_node(models_in(g)) {
+                case null => p
+                case w => swapped(p, r, w)
+            }
         }
     }
 }
