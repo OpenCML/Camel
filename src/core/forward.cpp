@@ -36,15 +36,13 @@ constexpr std::array<WrittenOperation, 6> kWrittenOperations{{
     {"pow", "^", 2},
 }};
 
-/// The operators whose key cannot be derived, and why. They are written up in
-/// `docs/handover/reviews/questions-2026-11-01-how-does-an-operator-without-a-token-get-a-key.md`;
-/// the reason is repeated here because this is the code a reader of the key finds first.
+/// The operators whose key cannot be derived, and why. This is the code a reader of the key finds first.
 ///
 /// The six axis reductions are the same question in one shape: their URI keeps an identity of the
 /// implementation (`tensor:mean_axis`), while the one spelling a program writes is the whole
 /// reduction's name with the axis and the flag in angle brackets -- `mean<axis, keepdims>(xs)` --
 /// so their laws are filed under `mean` at one operand, and the name inside the URI says neither
-/// (author's ruling, 2026-11-05: a reduction over an axis has one name).
+/// ( a reduction over an axis has one name).
 const std::array<RuleKeyException, 8> kRuleKeyExceptions{{
     {":op/idx_arr",
      "index_into",

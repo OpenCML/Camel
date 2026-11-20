@@ -20,19 +20,16 @@ class Program;
  * rebinding such as `xs = xs->sort` (camel/runtime/exec_plan.h, StorageReuse). The decision is made
  * once, in the plan, and every back end follows it; this function prints it, and decides nothing.
  *
- * It exists to be the ruler the direct-SSA plan's S3b is read with (docs/handover/plans/
- * 2026-11-16-direct-ssa-construction.cn.md): "the SSA value, at its last use, hands its storage to
- * an update; the criterion is `camel inspect --copies` reporting in-place for the `v =
- * v->append(x)` loop and for the case study's training step". The tool reports what the tree does
- * today; it does not make an update in-place, and both answers are readings.
+ * It is the criterion for whether an SSA value, at its last use, hands its storage to an update:
+ * `camel inspect --copies` reports in-place for the `v = v->append(x)` loop. The tool reports what
+ * the tree does; it does not make an update in-place, and both answers are readings.
  *
  * "In place" is two answers, not one: `in-place` (the plan decided at compile time that the storage
  * is reused) and `by-count` (the update asks the array's own count at run time, and reuses the
  * storage when it is the only holder -- design principles 10.5; it is in place, only decided
  * later). The criterion is "not `copied`": `in-place` and `by-count` both pass it. Read as "only
- * `in-place`", the criterion would fail every site in today's tree, including the ones that already
- * work in place, and it would fail them over a wording -- see
- * docs/handover/reviews/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md.
+ * `in-place`", the criterion would fail every site, including the ones that already work in
+ * place, and it would fail them over a wording.
  *
  * A fourth word, `declared`, is neither of the two: an operator that declares it reuses an operand
  * (see below) has been given the criterion's answer by its own claim, before anything asked a
@@ -46,7 +43,7 @@ class Program;
  *   COPIES <file>:<line>:<column> <update> <verdict>
  *
  * `<update>` is the name the program writes, read off the operator table and not derived from the
- * URI's spelling (author review 2026-11-17, item 11): the call shape the operator's declaration
+ * URI's spelling: the call shape the operator's declaration
  * states (`OperatorTable::callFormOf` -- `append` for `:struct/append_arr` from
  * `stdlib/prelude.cml`'s `#op`, `sort_i` for `array:sort_i`), so the copying form of an operator
  * and the plain operator print the same name, and a form a program cannot write prints the name of
@@ -82,11 +79,10 @@ class Program;
  *             walked leaf by leaf). Nothing here proves the write is in place: the row records the
  *             claim, and whether the run really allocated is not answered by this tool. Kept apart
  *             from `by-count` on purpose -- one word for both would make a claim and a measurement
- *             indistinguishable in the column the S3b criterion is read with. This is the one word
+ *             indistinguishable in the column the criterion is read with. This is the one word
  *             of the four that no decision of the plan can be: `storageReuseAt` never holds it, so
  *             it is this tool's word and is written here (src/runtime/storage_reuse.cpp,
- *             `CopyVerdict`), not a member of `StorageReuse` (camel/runtime/exec_plan.h; author
- *             review 2026-11-17, item 11);
+ *             `CopyVerdict`), not a member of `StorageReuse` (camel/runtime/exec_plan.h);
  *   copied    the plan proved the old value has a holder the update must leave alone
  *             (StorageReuse::Copy), or the node is the copying form of an operator that has an
  *             in-place form -- `v = v->append(x)` on an array the compiler did not hand over, where

@@ -9,30 +9,25 @@
  * transposes a function printed the transform's own walk among the program's numbers, and the only
  * place the *reason* a transpose was refused existed was that same stream, so a reader who captured
  * the program's output captured the transform's debugging with it and a reader who collected the
- * diagnostics got nothing (the author's review, high-3 second half).
+ * diagnostics got nothing.
  *
  * The walk goes to `std::cerr`, the diagnostic side, and never to `std::cout`.
  *
  * It is written only when the run asked for it, and the asking is the command line:
  * `--trace transforms` (`include/camel/core/trace.h`, whose registry holds the area name and the
- * switch, and whose `trace` is the one place the stream is decided). It was unconditional until
- * 2026-11-16: "a refusal's reason has to be readable without turning anything on, and a reading that
- * can be silenced is a reading nobody can cite" (`present.remat` pins `in_recompute=0
- * out_recompute=1` so that a transform which stopped marking anything cannot stay green). The
- * author's ruling of 2026-11-16 narrowed that to what it was always about: a program that
- * differentiates a small model wrote **1988** such lines on a default run -- one per operator per
- * step -- so the walk was in the product path, and the case study's break-rate reading carried all
- * of it while the program's own four numbers were lost in it.
+ * switch, and whose `trace` is the one place the stream is decided). It is not unconditional: a
+ * program that differentiates a small model would write **1988** such lines on a default run -- one
+ * per operator per step -- so the walk would be in the product path, and a reading of the break
+ * rate would carry all of it while the program's own four numbers were lost in it.
  *
- * The environment is not a way to ask. A run's behaviour is decided by the program, the command line
- * and the build options (design principles 9.3), and `test/tools/check-env-switches.mjs` refused the
- * first shape of this switch in one line: "reads 'CAMEL_TRANSFORMS_READINGS' from the environment
- * and no ledger line allows it". A pass parameter was tried next and measured to be too narrow: two
+ * The environment is not a way to ask. A run's behaviour is decided by the program, the command
+ * line and the build options (design principles 9.3), and `test/tools/check-env-switches.mjs` refuses a
+ * switch that reads the environment without a ledger line. A pass parameter is too narrow: two
  * entries that pin a reading write `args = ["${case}"]` and name no pass at all (the `std::nvm`
  * fallback), so the parameter has nowhere to hang. The command line is what is left, and the first
  * thing 9.3 names.
  *
- * What the old reason still buys is `verdicts()` below: **what a transform refused, it says, always**.
+ * What a refusal's reason is owed is `verdicts()` below: **what a transform refused, it says, always**.
  * The sentence for a refused transpose goes to `verdicts()` and not through the switch, because a
  * reader who never heard of `--trace` still has to be able to read why their derivative was
  * refused -- and that is one sentence per refusal, not one line per step.

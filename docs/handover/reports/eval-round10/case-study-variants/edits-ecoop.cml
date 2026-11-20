@@ -7,7 +7,7 @@
 // nodes in, so renaming a value or swapping two independent declarations would silently change which
 // node a rewrite edits.
 import { flatten } from array
-import { Graph, Node, commit, erase, graphs_of, inline, inputs, is_constant, nodes, op, op_name, open, order, order_inputs, replace, type_name, type_of } from graph
+import { Graph, Node, commit, erase, graphs_of, inline, inputs, is_constant, nodes, op, op_name, open, order, order_inputs, replace, shape_text, type_name, type_of } from graph
 import { is_function } from types
 
 // What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
@@ -48,8 +48,13 @@ func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
     return flatten(graphs_of(p)->map<nodes>)
 }
 
-// The one node satisfying `keep`, or nothing when there is none or more than one: a rewrite picks by
-// what a node is, and refuses an answer that is not unique.
+/// The one node satisfying `keep`, or nothing when there is none or more than one: a rewrite picks by
+/// what a node is, and refuses an answer that is not unique.
+///
+/// A rewrite that gets `null` here must REFUSE, never hand the program back unchanged: a no-op prints
+/// the program's own output and the reading the row existed to make is simply gone -- `break_rate`
+/// answered that way once and the record showed three lines of the program in a row that was supposed
+/// to be a refusal. Every `case null` below returns `error(...)` for that reason.
 func only::<F, K>(p: F, keep: K): Node? when is_function::<K>() {
     let found = all_nodes(p)->filter<keep>
     return if len(found) == 1 then found[0] else null
@@ -116,18 +121,19 @@ func one_node(found: Node[]): Node? {
 /// the transpose builds. Those are not the learning rate, and the graph the rate is written in still
 /// holds exactly one.
 ///
-/// A count that is not one has to answer "nothing to do" rather than pick one of them: the program
-/// then runs unchanged with exit 0, and the reading the pass existed to make is simply gone. Silence
-/// costs more than a refusal -- a refusal names the type and the place, and a rewrite that quietly
-/// declines to pick names nothing at all.
+/// A count that is not one is a refusal, not a no-op: returning the program unchanged makes it run
+/// with exit 0, and the reading the pass existed to make is simply gone -- this row answered that way
+/// for one round, and the record printed the program's own output where a refusal belonged. Silence
+/// costs more than a refusal: a refusal names the count it wanted, and a rewrite that quietly declines
+/// to pick names nothing at all.
 export func break_rate::<F>(p: F): F! sync {
     let where = graphs_of(p)->filter<holds_the_pair>
     return match one_graph(where) {
-        case null => p
+        case null => error('InvalidArgument', 'break_rate: no single graph holds the rate and the targets')
         case g => match one_node(floats_in(g)) {
-            case null => p
+            case null => error('InvalidArgument', 'break_rate: the rate graph holds no single float rate')
             case r => match one_node(targets_in(g)) {
-                case null => p
+                case null => error('InvalidArgument', 'break_rate: the rate graph holds no single f32[4, 1] targets')
                 case w => swapped(p, r, w)
             }
         }
@@ -195,14 +201,23 @@ func is_inputs(n: Node): bool {
     return constant_of(n, 'f32[4, 2]')
 }
 
-/// The entry function's print of the model's weights: the one printing call whose operand is the
+/// The entry function's print of the model's weights: the one printing call whose operand is a
 /// tensor. Chosen by what it prints and not by where it stands, so the three prints of the program
 /// are not told apart by the order they were written in.
+///
+/// "Is a tensor" is `shape_text`, not the printed type: the test used to be
+/// `type_text(ins[0]) == 'f32[...]'`, which held while the weight's shape was stated in full. Once
+/// the gradient is the library's, `Linear.weight` is `f32[?, ?]` -- an array of known element type
+/// and unknown extent -- so the text is `f32[?, ?]`, the comparison failed, and the three rewrites
+/// that anchor on this print returned the program unchanged: `print_ordered` and `print_appended`
+/// printed the program's own three lines, and `print_appended_reversed` printed them where it should
+/// have been refused. Selecting by a type's *text* is what let a migration change a reading; selecting
+/// by the fact that the value is an array of known element type does not.
 func is_weight_print(n: Node): bool {
     let ins = inputs(n)
     return if !is_print(n) then false
         else if len(ins) != 1 then false
-        else type_text(ins[0]) == 'f32[...]'
+        else shape_text(ins[0]) != null
 }
 
 /// The printing call whose operand is a string the program already holds. `train.cml` has none of that
@@ -227,7 +242,7 @@ func spliced_at::<F>(p: F, at: Node): F! sync {
 export func print_unordered::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_inputs(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'print_unordered: no single training-input constant to splice at')
         case a => spliced_at(p, a)
     }
 }
@@ -239,7 +254,7 @@ export func print_unordered::<F>(p: F): F! sync {
 export func print_ordered::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_weight_print(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'print_ordered: no single print of the model weights')
         case a => spliced_at(p, a)
     }
 }
@@ -254,9 +269,9 @@ export func print_appended::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_inputs(n))
     let last = only(p, (n: Node): bool => is_weight_print(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'print_appended: no single training-input constant to splice at')
         case a => match last {
-            case null => p
+            case null => error('InvalidArgument', 'print_appended: no single print of the model weights to order after')
             case l => {
                 let t = open(p)
                 let added = inline(t, a, announce)
@@ -274,9 +289,9 @@ export func print_appended_reversed::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_inputs(n))
     let last = only(p, (n: Node): bool => is_weight_print(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'print_appended_reversed: no single training-input constant to splice at')
         case a => match last {
-            case null => p
+            case null => error('InvalidArgument', 'print_appended_reversed: no single print of the model weights to order before')
             case l => {
                 let t = open(p)
                 let added = inline(t, a, announce)
@@ -314,9 +329,9 @@ export func print_prepended::<F>(p: F): F! sync {
         case g => head_print(g)
     }
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'print_prepended: no single training-input constant to splice at')
         case a => match head {
-            case null => p
+            case null => error('InvalidArgument', 'print_prepended: no single head print of the printing graph')
             case h => {
                 let t = open(p)
                 let added = inline(t, a, announce)
@@ -345,7 +360,7 @@ export func print_prepended::<F>(p: F): F! sync {
 export func step_print::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_update(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'step_print: no single model-update node in the program')
         case a => spliced_at(p, a)
     }
 }
@@ -365,7 +380,7 @@ func is_sum(n: Node): bool {
 export func loss_print::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_sum(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'loss_print: no single sum node in the program')
         case a => spliced_at(p, a)
     }
 }
@@ -376,7 +391,7 @@ export func loss_print::<F>(p: F): F! sync {
 export func step_print_ordered::<F>(p: F): F! sync {
     let at = only(p, (n: Node): bool => is_literal_print(n))
     return match at {
-        case null => p
+        case null => error('InvalidArgument', 'step_print_ordered: no single print of a string literal')
         case a => spliced_at(p, a)
     }
 }

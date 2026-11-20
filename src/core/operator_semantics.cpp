@@ -247,9 +247,8 @@ bool OperatorSemantics::writesForTheRegion() const {
     // read of `env` or `console` exactly as demand-driven as it was: `get_env` is effectful and
     // reaches outside, and it writes nothing.
     //
-    // A write of a **handle** is one of them too, and that is what design principles 3.3's
-    // "对 `Ref` 的写由之后的读者用到（3.1）" was asking for; the author's ruling of 2026-11-16 made
-    // it the rule of 3.1 itself, "对外部资源与句柄的写由所在区域用到". A reference is a box the
+    // A write of a **handle** is one of them too (design principles 3.1: a write to an external
+    // resource or a handle is used by the region it is written in). A reference is a box the
     // program owns, so writing it
     // reaches nothing outside the program and `reachesOutside` answers false -- yet a running region
     // owes the write no less, because the reader of a box may stand somewhere this graph cannot see:
@@ -260,7 +259,7 @@ bool OperatorSemantics::writesForTheRegion() const {
     // The cost is stated where the root is: a write that truly has no reader anywhere now runs once
     // instead of being deleted (unobservable; it moves debugger line coverage and timing).
     //
-    // `Variable` stays out of this, and so does `Object` (the ruling of 2026-11-15: assigning to a
+    // `Variable` stays out of this, and so does `Object` (assigning to a
     // `var` is not an effect -- what it writes is a value passed in and handed back). The two
     // questions this file answers are asked by different readers and are deliberately not the same:
     // "does anything outside the program see it" (`external()`, the effect summary) and "does the
@@ -299,13 +298,13 @@ std::vector<ResourceAccess> OperatorSemantics::accessList() const {
         return resources->accesses;
     }
     // No list. An operator of the built-in module must itemize its accesses (design principles
-    // 3.3; author 2026-11-19), and the load refuses one that does not (builtin.cpp,
+    // 3.3), and the load refuses one that does not (builtin.cpp,
     // `requireDeclaredBuiltinAccesses`), so reaching here with a built-in URI is a registration
-    // mistake and not a program's error. It used to be answered with one write of the global
-    // resource: that is not a declaration (`checkResources` refuses an unknown class, so no module
-    // could write it) and the graph builder read the same operator another way -- every operand
-    // read-modify-written -- so one call was on the sync chain for one reader and not for the
-    // other. The report names the operator and the one change that settles it.
+    // mistake and not a program's error. One write of the global resource would not be a
+    // declaration (`checkResources` refuses an unknown class, so no module could write it) and the
+    // graph builder reads the same operator another way -- every operand read-modify-written -- so
+    // one call would be on the sync chain for one reader and not for the other. The report names
+    // the operator and the one change that settles it.
     if (key.uri().starts_with(':')) {
         throw camel::core::error::DiagnosticBuilder::of(
                   camel::core::error::SemanticDiag::OperatorAccessesUndeclared)

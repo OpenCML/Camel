@@ -179,7 +179,7 @@ struct ResourceSpec {
     /// the operator, once, here.
     bool spelling = false;
     /// The accesses are the function value's that arrives in the operand `functionOperand` names
-    /// (design principles 3.3; author 2026-11-19): what a higher-order operator touches is what
+    /// (design principles 3.3): what a higher-order operator touches is what
     /// the function the program hands it touches -- `map(f, xs)` over a pure `f` touches nothing,
     /// over an `f` that prints it writes `stdout` -- so the declaration names the operand and not
     /// a resource. The function is the first `with` operand for the array shapes and the first
@@ -305,7 +305,7 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source);
 /// the console, the file system, a module's own state, a resource nobody itemized. A variable or
 /// an object is the program's own; a handle is a value the program owns -- but its reader may
 /// stand in a graph this one cannot see, which is why a *write* of one is asked separately (see
-/// `writesForTheRegion`, and the ruling of 2026-11-16 quoted there).
+/// `writesForTheRegion`).
 bool reachesOutside(ResourceClass cls);
 
 /// Whether what a signature describes writes a resource the region that runs it owes (design
@@ -319,8 +319,7 @@ bool reachesOutside(ResourceClass cls);
 /// operator's name, so a call, a branch and a loop are answered by what they reach exactly as an
 /// operator is; `OperatorSemantics::writesForTheRegion` states a declared spec as the same
 /// signature (`signatureOf`) and calls this, so a declaration and a measured body cannot disagree
-/// about what a write is (the daily review of 2026-11-18, item 3: the predicate was written three
-/// times).
+/// about what a write is.
 bool writesForTheRegion(const ResourceSignature &signature);
 
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,

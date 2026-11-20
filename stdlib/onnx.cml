@@ -63,8 +63,7 @@ export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>
 /// the function when the export receives it and after the export's own simplification.
 // Temporary, while the generator only reads one line: this declaration stays on one line because
 // scripts/stdlib-reference.mjs takes a declaration's parameters from a single line. The proper fix
-// is for the generator to read the block form, and it is written down in
-// docs/handover/reviews/questions-2026-10-31-stdlib-reference-one-line-declarations.md. Do not
+// is for the generator to read the block form. Do not
 // read this as the house style for pass parameters.
 with <out: string = "", trace: bool = false, dump: bool = false, prep_stats: bool = false>
 export func export_model::<F>(f: F): F! when is_function::<F>()

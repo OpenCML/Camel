@@ -297,15 +297,14 @@ export func taskflow::<F>(f: F): F! when is_function::<F>()
 // is what decides whether the Camel ones can carry the optimization: the same program is folded, or
 // swept for repeated expressions, by the C++ pass and by the Camel one, and the two graphs are read
 // with `std::jgir canonical=true` and compared byte for byte
-// (test/plans/feat/opt/cxx_isolation.plan.toml; docs/roadmap.cn.md section 0, P, 2026-11-18).
+// (test/plans/feat/opt/cxx_isolation.plan.toml).
 // Neither set is deleted until that comparison says which one carries the weight.
 //
 // The default pipeline keeps the name it has always had, `std::opt`: the choice "optimize by
 // default", which resolves to `std::cxx::opt`, so a program that names no pass, the pass the fixed
 // lowering steps insert, and every page that writes `std::opt` run the C++ pipeline. The
 // standalone stages do **not** keep their old names: `std::opt::fold` and the rest are gone, and a
-// pipeline that writes one is refused as an unknown pass (author's rework, 2026-11-18,
-// docs/handover/reviews/questions-2026-10-29.md) -- a reader copies `std::cxx::fold` out of
+// pipeline that writes one is refused as an unknown pass -- a reader copies `std::cxx::fold` out of
 // docs/cli.md, and an old spelling is a name nothing answers to.
 
 namespace cxx {

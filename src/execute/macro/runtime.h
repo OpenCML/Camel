@@ -57,8 +57,8 @@ class MacroEvaluator {
     std::optional<MacroEvalResult> tryEvaluate(const MacroCandidate &candidate, std::ostream &os);
 
     /// An evaluator belongs to one rewrite round. Only failures from the final round,
-    /// in which nothing changes any more, are reported: another expansion can make a
-    /// previously unsuccessful call evaluable.
+    /// in which nothing changes, are reported: another expansion can make an
+    /// unsuccessful call evaluable.
     /// Reports the failures of the current round as run-time faults (`RuntimeDiag::
     /// MacroEvaluationFailed`) at the call, with the reason, through the run-time diagnostics
     /// sink: a failed evaluation stops the pipeline like any other fault during the run of a

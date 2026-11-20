@@ -77,8 +77,8 @@ enum class ElementSubject {
 /// The sentence a refusal about a tensor element carries, in the words of `subject`.
 ///
 /// A complex element is none of the three: `is_numeric` admits it (`stdlib/types.cml`) and the
-/// tensor store does not hold it, so whether one should join the tensor element types is the
-/// author's call (docs/handover/reviews/questions-2026-10-31-can-a-tensor-hold-a-complex.md).
+/// tensor store does not hold it, so whether one should join the tensor element types is an
+/// open design question.
 /// Asking about a complex element therefore answers with what is true today and names nobody,
 /// whatever subject the caller asks for.
 inline std::string noTensorElement(type::TypeCode code, ElementSubject subject) {

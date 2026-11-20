@@ -4736,3 +4736,36 @@ S2 随后，S3 最后。
 而 `loss_print`（`loss` 里的 `tensor:sum`）迁移后仍是 `PassEffectBeyondType` —— **这条对照没变。**
 
 **⇒ 所以「库的 `grad` 是 macro」改变的是「调用语句由什么构成」，于是改变的是**拒信的名字**，不是「有没有落点」。**
+
+## 一条推送规则的更正：远端名必须写出来（2026-11-20 18:38，协调者记）
+
+采集车道报「`714cf0d93..05dd1679f  HEAD -> develop`，remote 无任何 `remote:` 行」。我核 `origin` 四条 —— `ls-remote` 是 `b981686cd`、ahead 3、`is-ancestor` exit 1、`branch -r --contains` 空 —— 于是判「推送报成功而 ref 没动」。
+
+**那个判断错了。ref 真的动了，动在主机裸库 `ssh://88zjwei/home/zjwei/camel-work/Camel.git` 上，不是 `origin`。**
+
+```
+ssh://88zjwei/.../Camel.git  refs/heads/develop ⇒ 05dd1679ff9e…
+origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
+```
+
+**⇒ 所以错的不是推送，是那句话：**它在一个坐标系里成立、在另一个里不成立，而写下来之后两边都读得通。**「一句话在两个坐标系里都读得通，就是它误导的地方。」**
+
+**而 `remote:` 行缺失也不是异常**：裸库没有钩子，`origin` 有 —— 所以「没有 `Bypassed rule violations`」在这一笔上不说明任何事。
+
+**规则的更正（取代原来那句「`pushExit=0` 且 `ls-remote` 复核」）：**
+
+> **每一条推送都必须写出远端名；判据是 `ls-remote <那个被点名的远端>` 的输出，不是推送的退出码，也不是另一个远端的读数。**
+
+**分离头不是原因**：分离头 + 显式 refspec 照样推得动（`8383b2917` 就是这么推的）。
+
+**补推的实况**：显式 refspec 对 `origin` 推被拒 `non-fast-forward`（`origin/develop` 已到 `b981686cd`，多 8 个提交，两条是兄弟线）；于是在树里 `--no-ff` 合成 `8383b2917`（冲突 0），推成 `origin/develop = 8383b2917`，三个 blob 与本地逐一相同（`a4e497ec3` / `d13c5882b` / `585807c59`）。
+
+**2026-11-20 · lane-jvp-closure**：提交 `2da9735da`（一处实现 `liftedOperatorType` 共享 / 值半交 `jvp(lin)` / 提升对两腿补出或拒 / 期望未改）；读数 nested 3/3/4 · split 30/30 · compile/transforms 201/13；墙从「提升图带洞」退到「值半读 port 1 = 参数 0 的切向」，其 user 是 `kind=10 Func` 且 `type=float` ⇒ **那是一次调用**（`Func` 的 `dataType` 是它的答案类型），`ẋ` 是被调方的**参数**、由**调用方**传进去；缺陷是值半没有它要传出去的那个实参的端口。`portOf[1]` invalid 而体在读它 ⇒ 下一笔改在 `splitHalvesWith` 的签名侧（读数见 `2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md`）。
+
+**2026-11-20 19:12 · lane-jvp-closure**：三条 `nested` 已按新句重钉（`f07f7e3c2`）——`nest_square`/`nest_cube` 的 `known_fail_msg` 与 `nest_quartic` 的 `expect_output_contains` 换成 `split does not build this function (the value half reads the tangent of parameter 0, …)`；每条 `note` 写明旧句 `jvp has no forward transform for this function` **已过时**（它标「提升根本没发生」，新句标「提升发生了、割的那一步不要切向」）。读数 `nested` **4 pass / 0 fail / known 6**，与 `develop` 同形；`split` 30/30 · `compile/transforms` 201/13 不变。
+
+**[已替换] 闸门读数（2026-11-20 上半天，车道 `lane-ci-traces`，三条并记）**：树 `e5de12119` 读 `[SUMMARY] total: 9824, pass: 9756, fail: 6, skip: 11, known failures: 51` 与 `check=process-traces findings=696 mode=report`；树 `14df7ed72` 读 `check=process-traces findings=unknown mode=report`；树 `220a724f8` 读同一 `[SUMMARY]` 与 `check=process-traces findings=20 mode=report`。**三条都被替换**：本车道按裁定（「脚本不由本车道落」「改用 develop 自带的接线」）重写了分支，这三个提交因此都不在任何 ref 上（`git branch -a --contains` 全空、`git merge-base --is-ancestor <sha> HEAD` 退出 1），本机只剩未引用的对象、`git gc` 之后连本机也没有，别的机器与 GitHub 上从来点不开；`696 → unknown → 20` 这个序列仍是真实读数（前两个分别是 develop 注释清理落地之前、以及脚本尚未落到树里时的样子），只是不能再用那些 sha 命名它。
+
+**闸门读数（2026-11-20 19:40，linux 腿，合并后的树 `0f72eac1e` ＝ `194472af4`（`lane-jvp-closure` 已合）＋本车道四个文件，`-Plan test/plans/feat/compile,test/plans/feat/modules/rules.plan.toml,test/plans/feat/transforms -Check all -NoGpuWatch -Jobs 8`）**：`[provenance] tip 0f72eac1e62bc9dba9d76a7a5c113f606f3ec0b6 | tier fast | jobs 8`、`[SUMMARY] total: 2907, pass: 2865, fail: 14, known failures: 28`、`killed by a signal` 与 `timed out` 两行都未出现（＝0）、`check=process-traces findings=26 mode=report`（closure 合入把 20 抬到 26）、`checks: 20 run, 3 failed`（check-doc-links／export-matrix／gate-static）。14 红全在 `feat/transforms/compositions`（`jvp_vjp_f`／`nested_grad_min`／`nested_grad_through_a_binding`／`hessian_of_a_quadratic` × 四个后端），成因是 `f07f7e3c2` 只把 `nested` 的旧句重钉了、`compositions` 那 14 条 `known_fail_msg` 还钉着 `jvp has no forward transform for this function`（`known failure changed its mind: expected "jvp has no forward transform for this function", got "expected exit 0, got exit 1"`），**develop 自带，不是本车道**。
+
+**闸门读数（2026-11-20 晚，linux 腿，`-Plan test/plans/feat/modules/rules.plan.toml,test/plans/feat/compile -Check all -NoGpuWatch -Jobs 8`，树 `db9abfd09`）**：`[provenance] tip db9abfd091f35c829e97926764cba3999000ab86 | tier fast | jobs 8`、`[SUMMARY] total: 2836, pass: 2820, fail: 0, known failures: 16`、`killed by a signal` 与 `timed out` 两行都未出现（＝0）、`check=process-traces findings=20 mode=report`、`checks: 20 run, 3 failed`（check-doc-links／export-matrix／gate-static，三条都是 develop 自带，本轮没碰它们点的文件；`headers` 已因本轮的 `node scripts/headers.mjs --fix` 转绿）。

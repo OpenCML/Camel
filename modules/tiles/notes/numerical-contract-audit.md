@@ -8,8 +8,8 @@ declared ULP error bound. Five independent explicit permissions govern relaxatio
 
 ## Reproduced subnormal difference
 
-On 2026-10-15, an isolated evaluation checkout, with Tiles and tensor
-registry sources from commit `18148014`, was rebuilt using `npm run build`.
+An isolated evaluation checkout, with Tiles and tensor
+registry sources, was rebuilt using `npm run build`.
 RTX 3090 device 7 passed the existing 82 relevant tests. The additional manual
 program below nevertheless produced a CPU/GPU difference on all three host
 schedulers: `std::nvm`, `std::fvm`, and `std::jit`.
@@ -76,7 +76,7 @@ tile boundaries and distinguishes the continuous chain (1) from independent
 panel accumulators (2). This does not grant contraction to ordinary multiply/add
 nodes; their NVRTC policy remains `--fmad=false`.
 
-## CUDA library accuracy evidence (2026-10-16)
+## CUDA library accuracy evidence
 
 The [CUDA 12.3 mathematical functions table](https://docs.nvidia.com/cuda/archive/12.3.0/cuda-c-programming-guide/index.html#mathematical-functions)
 and [CUDA 12.6 table](https://docs.nvidia.com/cuda/archive/12.6.0/cuda-c-programming-guide/index.html#mathematical-functions)
@@ -89,7 +89,7 @@ Contract-specific high-precision reference tests must use a clearly defined ULP
 metric and check exceptional values separately. The same tables specify correctly
 rounded division and square root under the precise options now fixed by Tiles.
 
-## Remaining validation and author clarification
+## Remaining validation
 
 The native module-lease test includes a runtime-input GPU bit probe for the
 explicit NVRTC policy: smallest-subnormal multiplication and addition, division
@@ -97,7 +97,6 @@ of 1 by 10, square root of 2, and the distinction between ordinary multiply/add
 and explicit FMA. It compares raw binary32 output words to exact expected values;
 these targeted cases do not establish exhaustive correct-rounding or ULP bounds.
 
-On 2026-10-16 the user delegated the remaining NaN representation decision.
 Extrema and relu return the fixed quiet NaN f32 `0x7fc00000` / f64
 `0x7ff8000000000000`, independent of input sign or payload. Tiles implements
 the f32 case; the merged CPU extrema implementation uses the same representation

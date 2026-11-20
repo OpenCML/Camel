@@ -972,7 +972,7 @@ Generator sumToCases() {
         const StaticShape g  = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
         const StaticShape at = rng.chance(20) ? g : broadcastFrom(rng, g);
         // `sum_to` is ::<T>(t: T[..], at: int[]) (gradient_ops.cpp): the target is the extents
-        // themselves (ruling 甲), so the generator writes the list rather than a tensor read for
+        // themselves, so the generator writes the list rather than a tensor read for
         // its shape. `broadcastFrom` drops leading axes and sets axes to 1, so the list it writes
         // is a suffix of the tensor's -- exactly what the kernel admits.
         std::vector<int64_t> target;
@@ -1106,8 +1106,8 @@ void runOperator(
             // array states its elements' code, so the code alone puts an f32 array and an f32
             // scalar together; the shape separates them, and a rank-zero result states an empty
             // one. The whole-tensor `sum` and `mean` answer in their elements' own type (design
-            // principles 7.3) and are such results; the test used to be `code() == Float64`, which
-            // read them as a pointer and ended the process.
+            // principles 7.3) and are such results; a test `code() == Float64` would
+            // read them as a pointer and end the process.
             bool numberResult = false;
             if (resultType != nullptr) {
                 const TensorFacts facts = tensorFactsOf(resultType);

@@ -108,8 +108,8 @@ class ProofObject final : public rtdata::Object {
     /// object file that defines it -- the module's. The debugger is such a reader: its
     /// `explain` TU calls the inline accessors above on a `ProofObject`, and `-fsanitize=vptr`
     /// (part of the UBSan leg) turns every such call into a lookup of `typeinfo for ProofObject`,
-    /// which the debugger does not link (2026-11-02: Debug + ASan/UBSan failed to link
-    /// `camel-db` on exactly that symbol, while the Release leg, with no sanitizer, never asked
+    /// which the debugger does not link (a Debug + ASan/UBSan build fails to link
+    /// `camel-db` on exactly that symbol, while a Release build, with no sanitizer, never asks
     /// for it). With no key function the type info is emitted with vague linkage in every object
     /// file that needs it, so the reader gets its own copy and the module keeps its one.
     bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override {

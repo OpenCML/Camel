@@ -290,10 +290,9 @@ runtime::gc_node_ref_t standingIn(
 
 namespace {
 /// The declarations over the bodies this pass rewrote, stated on the drafts before the commit that
-/// judges them (the ruling of 2026-11-18, `f61196246`: the pass declares the widened type at the
-/// commit, and a commit that widened it itself could not tell an edit that needs a wider promise
-/// from a hand-written clause the author narrowed -- the two are the same three facts, a draft, the
-/// graph it was decoded from, and a body).
+/// judges them (the pass declares the widened type, and a commit that widened it itself could not
+/// tell an edit that needs a wider promise from a hand-written clause the user narrowed -- the two
+/// are the same three facts, a draft, the graph it was decoded from, and a body).
 ///
 /// `session.prepared()` encodes the drafts without judging or delivering them, which is the same
 /// graph the commit's check reads, so `bodySignature` answers over this pass's body and not over
@@ -971,8 +970,8 @@ const runtime::Program *outlineRegions(
     // clause they inherited speaks of the host body they replaced.
     declareBodiesOverDrafts(session);
     // The order of the effects this rewrite wrote, written once and after the declarations have
-    // stopped growing -- the author's ruling of 2026-11-19 (`e2524717e`): widen the whole program's
-    // declarations to a fixpoint first, then order the effects, once. A graph's clause can still
+    // stopped growing: widen the whole program's declarations to a
+    // fixpoint first, then order the effects, once. A graph's clause can still
     // grow here (a caller of a grown callee grows too, `__root__` included, and this pass rewrites
     // no node of it), and the check that judges the order reads the declarations the program ends
     // with, so an edge written before the last widening would be written against a program that no

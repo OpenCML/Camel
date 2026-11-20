@@ -7,7 +7,7 @@
  * it. It stands where the print stood, so nothing else about the program moves: the name set is the
  * same before and after, which is what the check compared, and the access is not.
  *
- * The type moves with the body (the tier of 2026-11-18): a draft that adds an access is asked
+ * The type moves with the body: a draft that adds an access is asked
  * containment at the commit, so a read of `stdout` in a graph whose type declares the write would be
  * refused there and the boundary's admission invariant -- an effect operator with neither a value
  * reader nor a place in a chain -- would never be asked. The fixture declares the read it makes, so
@@ -88,7 +88,7 @@ BoundsFlipTestPass::apply(const camel::runtime::Program *program, std::ostream &
             const std::vector<gc_node_ref_t> inputs(draft.normInputsOf(print).begin(),
                                                     draft.normInputsOf(print).end());
             // The type this graph publishes has to cover what the draft is about to make. The commit
-            // asks containment of a draft that added an access (the tier of 2026-11-18), and a read
+            // asks containment of a draft that added an access, and a read
             // of `stdout` where the program wrote it is an access the type has to declare -- so the
             // type moves with the body here, and the question this pass exists to reach stays the
             // boundary's admission invariant: an effect operator with neither a value reader nor a

@@ -66,7 +66,7 @@ bool elementEntersParameter(Type *parameter, Type *element) {
 
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
 /// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
-/// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept.
+/// (a type variable, a union, a reference). This is what a parameter typed `any` accepts.
 bool isConcreteValueType(Type *type) {
     return type != nullptr && type->code() != TypeCode::Void && !isAuxiliary(type->code());
 }
@@ -1469,8 +1469,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         // adds the array entry to them. `==` and `!=` do not name them: the whole comparison is
         // the reduction of the elementwise one, and a program gets it from this group alone.
         // `__strict_eq__` still takes its scalar entries from `==`'s group below, because on a
-        // scalar `===` is `==`; `__neq__` keeps none now, so `__strict_neq__` comes out empty of
-        // them and `!==` no longer names it at all -- it is built as `!(===)` (gct/builder.cpp),
+        // scalar `===` is `==`; `__neq__` keeps none, so `__strict_neq__` comes out empty of
+        // them and `!==` does not name it at all -- it is built as `!(===)` (gct/builder.cpp),
         // which is why the negation of an elementwise comparison had to exist on `bool[]` too
         // (`__not__`'s tensor entry).
         // <、<=、>、>=
@@ -2073,8 +2073,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create("print", {}),
         // The rules of `println` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("println", {}),
-        // `println` on the standard error stream, with the same declaration shape (the author's
-        // rule on question 2: it is in the prelude, so no import).
+        // `println` on the standard error stream, with the same declaration shape
+        // it is in the prelude, so no import.
         // The rules of `eprintln` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("eprintln", {}),
         // ======= string =======

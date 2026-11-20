@@ -5,7 +5,7 @@
  * @file windows_parser_guard.h
  * @brief Establish the Windows header options used by parser hosts.
  *
- * The handwritten parser's token names no longer collide with Windows macros.
+ * The handwritten parser's token names do not collide with Windows macros.
  * Preserve those macros: later Winsock and HTTP headers need IN, CONST, TRUE and FALSE.
  */
 

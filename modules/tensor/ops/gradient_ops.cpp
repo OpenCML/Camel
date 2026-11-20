@@ -175,7 +175,7 @@ std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 
 /// `sum_to(t, at)`: `t` reduced over its leading axes to the extents `at` states. The extents are
 /// the target itself and nothing else is read for them -- not another tensor's shape and not the
-/// type: the length is the caller's (author, 2026-11-05: the extents are the primal's runtime
+/// type: the length is the caller's (the extents are the primal's runtime
 /// shape, and no type states them).
 std::optional<Type *> sumToInfer(const InferContext &ctx) {
     const auto dtype = ctx.facts(0).dtype;
@@ -197,7 +197,7 @@ std::optional<Type *> sumToInfer(const InferContext &ctx) {
     // When the list is a **value** the model computes -- a dynamic-batch `shape(y)` -- only its
     // length is a fact (an `int64[n]` argument states it: a list written in place, or a
     // `tensor:shape` node whose operand's rank is fixed). Then only the rank is stated: the extents
-    // stay in the list, where ruling 甲 put them, and the exporter reads the rank it needs.
+    // stay in the list, where they are, and the exporter reads the rank it needs.
     const auto length = ctx.facts(1).shape;
     if (!length || length->size() != 1 || !(*length)[0]) {
         return tensorOf(dtype, std::nullopt);
@@ -320,8 +320,7 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t g = call.inputs[0];
         if (isTensorNode(b, g)) {
-            // The reduction's target is the extents, not the value: `sum_to` takes an `int[]`
-            // (ruling 甲), so the shape is computed as an operand of its own.
+            // The reduction's target is the extents, not the value: `sum_to` takes an `int[]`, so the shape is computed as an operand of its own.
             const vjp_node_t shape = b.addOper(
                 shapeListType(b, g),
                 "tensor:shape",
@@ -439,9 +438,8 @@ std::vector<OpDef> gradientOps() {
 
     // sum_to(t, at) is `::<T>(t: T[..], at: int[])`: a tensor and the extents its leading-axis
     // reduction answers at. The target is the list itself -- a plain `int[]`, not another tensor
-    // read for its shape -- so no value of the program stands in for a length (ruling 甲; the
-    // author's 2026-11-05 ruling puts the extents on the primal's runtime shape, which is what a
-    // list is, and not on the type, which is what a tensor operand's facts are).
+    // read for its shape -- so no value of the program stands in for a length (the extents are the primal's runtime shape, which is what a
+    // list is, and not the type, which is what a tensor operand's facts are).
     //
     // The kernel admits f32 and f64 and refuses int64 and bool by name (design principles 5.1: no
     // conversion to reach an arm); the result is at the input's element type, which is also the

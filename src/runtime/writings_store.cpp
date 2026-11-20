@@ -114,7 +114,7 @@ WritingStore::Layer &WritingStore::layer(camel::core::sem::PermissionMask contex
     // The comparison reads the whole mask: `PermissionMask` is 16 bits and `refine_accuracy` is
     // bit 9, so a mask the pass branded with it (`515`, say) must not be searched for as its low
     // byte (`3`). Read that way the search missed the layer it had already made and made a second
-    // one for the same context, until four of them tripped `kMaxLayers` (measured 2026-10-24:
+    // one for the same context, until four of them tripped `kMaxLayers`(for example
     // `rules.accuracy_licence_gates_simplify` failed with layers `{515, 3, 515, 3}`).
     auto it = std::lower_bound(
         layers_.begin(),

@@ -169,6 +169,17 @@ bool OnnxModule::load() {
     camel::core::OperatorTable::instance().set(
         "onnx:export_model",
         {.pure = false, .readsGraphs = true});
+    // What it touches: the model file it writes. `exportKernel` translates the function value it
+    // is handed and then writes the result with `writeModelFile`, so the resource is the file
+    // system, named the way `modules/fs` names it (`fs`, read-modify-written), and the effect is
+    // outside the program, as the traits above say. The graph it translates is a value it is
+    // handed, not a resource. Left undeclared, every operand read conservatively, so a body that
+    // called it reached a resource no clause could name and could prove nothing about its own
+    // effect (2026-11-20).
+    camel::core::OperatorTable::instance().declareResources(
+        "onnx:export_model",
+        camel::core::sem::externalAmbient(
+            "fs", camel::core::sem::AccessMode::ReadModifyWrite));
     // Where an export would stop: an operator the ONNX backend has no lowering for.
     camel::runtime::NodeRoleRegistry::instance().add(
         {"export-capability", "export capability (no ONNX lowering)", "#cfe2f3"},

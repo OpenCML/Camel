@@ -8,12 +8,12 @@
  * camel/runtime/graph.h): the innermost arm or loop region the node sits in, and the BRCH or LOOP
  * whose running is that region's running.
  *
- * This file used to hold the *roots* a region has -- the nodes a running region runs although no
- * value of theirs is read, seeded by four walks (the warning, the liveness of a graph, the encode
- * and the execution order) and re-derived by each. The author's spec of 2026-11-17 (`3e4c0929c`,
- * design principles 3.1) replaced that derivation with an edge: "建图时，区域里每个按效应推断会写
- * 外部资源或句柄的节点（算子、调用、分支、循环一样）连一条同步边到本区域的出口，不论它的值有没有
- * 人读；... 执行、清理与各后端只沿边走，不另行推导哪些必须执行". So the use is laid once, by
+ * The *roots* a region has -- the nodes a running region runs although no value of theirs is
+ * read -- are not derived by each walk (the warning, the liveness of a graph, the encode and the
+ * execution order). Design principles 3.1 makes them an edge: at build time every node of the
+ * region that writes an external resource or a handle by effect (an operator, a call, a branch or
+ * a loop alike) gets a sync edge to the region's exit, whether or not its value is read, and
+ * execution, cleanup and every back end only follow edges. So the use is laid once, by
  * `Builder::layRegionWriteEdges` (src/compile/gir/builder_diagnostics.cpp), from the node to the
  * exit of the region that decides it -- `GCRegion::result`, the node whose value the region yields
  * -- and every walk follows edges from then on.

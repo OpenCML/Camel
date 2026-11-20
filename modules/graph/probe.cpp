@@ -10,9 +10,9 @@
  * pass is how the refusal is exercised, once, in the gate -- with a handle that is wrong on
  * purpose, because a check nobody triggers is a comment.
  *
- * The second check is `GCGraph::nodeRegion` (camel/runtime/graph.h). It used to answer 0 for a ref
- * that is not a node, and 0 is the body: the query handed back the membership "in the body" for a
- * node that is not there. It now fails instead. This pass asks it of the same wrong ref, after the
+ * The second check is `GCGraph::nodeRegion` (camel/runtime/graph.h). Answering 0 for a ref
+ * that is not a node would hand back the membership "in the body" (0 is the body) for a
+ * node that is not there, so it fails instead. This pass asks it of the same wrong ref, after the
  * control that a node which is there still answers the body (0). The process ends by that abort,
  * so the plan asserts the abort and its reading rather than an exit code; a region query that went
  * back to answering 0 prints the line and exits 0, which the plan rejects.

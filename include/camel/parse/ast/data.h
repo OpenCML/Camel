@@ -252,7 +252,7 @@ class TypeCaseLoad : public DataLoad {
 /// The guard a `match type` case writes (`case p when c`), or null when it writes none: child [1]
 /// of the case, after the body (or the type) it answers, which stays child [0]. A case is taken
 /// when its pattern matches *and* the condition holds; one whose guard does not hold sends the
-/// subject on to the case written after it (design principles 5.5, ruling of 2026-11-14).
+/// subject on to the case written after it (design principles 5.5).
 inline node_ptr_t typeCaseGuardOf(const node_ptr_t &caseNode) {
     return caseNode != nullptr && caseNode->size() > 1 ? caseNode->at(1) : nullptr;
 }

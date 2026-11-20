@@ -171,7 +171,7 @@ void printRuleUris(
                        ? 0
                        : std::count(head.variables.begin(), head.variables.end(), ',') + 1)
                << '\n';
-            // Step 1 of the replacement, for the operator the author named first. The right side
+            // Step 1 of the replacement, for the first operator. The right side
             // of the rule is a graph that *builds* a closure over the values the left side bound,
             // so what a call at the operator's site yields is a function value naming that graph.
             // It is built here -- with one closure slot per variable, in the order the left side
@@ -275,8 +275,8 @@ class ReinterpPass : public RuntimeGraphRewritePass {
             }
         }
         // Nothing is replaced in the program this pass was given: rewriting a graph that is already
-        // published is the road measured at 9cb1c3a94, and it ends in SIGSEGV at the entry it makes.
-        // `reinterp` produces a new function instead (the author's ruling, a824031aa): a new graph,
+        // published ends in SIGSEGV at the entry it makes.
+        // `reinterp` produces a new function instead: a new graph,
         // written node by node with the rule's right side in place of each primitive, handed to the
         // call site as a function value -- the shape `camel::autodiff::buildGradientGraph` builds
         // for the reverse direction. The same program is answered with until that graph exists.

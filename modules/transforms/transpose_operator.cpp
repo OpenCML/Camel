@@ -37,7 +37,7 @@ using camel::core::type::TypeCode;
 
 /// The type of `transpose(f)`: `(f: (float) => float) => (cotangent: float) => (float,)`. The call
 /// takes the cotangent of `f`'s result and answers one cotangent per parameter of `f` -- every
-/// parameter is a linear input (author, 2026-11-02 11:30), so the transposed function takes nothing
+/// parameter is a linear input, so the transposed function takes nothing
 /// else and a value the body needs is captured by the function that is transposed. The parameter is
 /// named, so the type prints the way the declaration writes it
 /// (`stdlib/signatures/transforms.cml`), and the two are one string.
@@ -115,7 +115,7 @@ class TransposeResolver final : public FuncTypeResolver {
     std::string signature() const override {
         // The result is any type that has a cotangent, and the parameter the transposed function
         // takes is that cotangent -- `Tangent<result>`, not a `float` it would have to be read into
-        // (`f6ee4f5d0`; design principles 9.9).
+        // (design principles 9.9).
         return "(f: (params..) => result) => (Tangent<result>) => (cotangents..)";
     }
 
@@ -203,9 +203,8 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
     case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
     case TransposeRefusalCause::CotangentPortMismatch:
-        // **Measured unreachable from any program, so this is not a language rule** (author,
-        // 2026-11-04, second ruling on this item: an internal inconsistency that no program reaches
-        // must say so, and must not be written as "the language does not allow this"). The two
+        // **No program reaches this, so it is not a language rule**: an internal inconsistency that no
+        // program reaches must say so, and must not be written as "the language does not allow this". The two
         // spellings are handed over verbatim because the repair is an edit to one of them -- the
         // law's port and the value the step really has -- but the sentence names the fault as the
         // compiler's: a law filed under its operator's head and operand count cannot be tied to the
@@ -219,7 +218,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                "not the program's fault";
     case TransposeRefusalCause::LawAnswerShape:
         // The law, and the two spellings a reader compares: the type the law's right side answered
-        // with and the type of the operand whose cotangent it claims to be (author, 2026-11-20). The
+        // with and the type of the operand whose cotangent it claims to be. The
         // law's name comes first because the law is the edit; the operand's type second because it
         // is what the program wrote and the law did not. Neither is "an internal error": a law
         // written for a wider shape than its operator is called with is a mistake in the library,
@@ -230,7 +229,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                refusal.answeredOperandType +
                "`, and a cotangent of a value has that value's own type";
     case TransposeRefusalCause::CalleeBuiltFromAParameter:
-        // **The language's rule, and the parameter it is about** (author, 2026-11-04). `transpose`
+        // **The language's rule, and the parameter it is about.** `transpose`
         // answers the map a linear function is; a call whose callee the body *built* out of a
         // parameter applies a function that parameter produced, so the function being transposed is
         // not linear in that parameter. The sentence names the parameter because that is the edit a
@@ -241,11 +240,10 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                                           : "the parameter '" + refusal.paramName + "'") +
                ": it builds the function this call applies out of that parameter";
     case TransposeRefusalCause::CallNoTranspose:
-        // One of the two causes a call site can meet, and the one this file said for both of them
-        // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee
-        // whose transpose *was* built, and whose member reads a value the call site cannot hand
-        // over, was refused with this same sentence, and the reading above the refusal contradicted
-        // it -- `TRANSPOSE function=rulesets.jvp::index_into<float> graph=307 type=(int, float[],
+        // One of the two causes a call site can meet. It is true only here: the callee has no
+        // transpose to call. A callee whose transpose *was* built, and whose member reads a value the
+        // call site cannot hand over, must not be refused with this same sentence, since the reading
+        // above the refusal would contradict it -- `TRANSPOSE function=rulesets.jvp::index_into<float> graph=307 type=(int, float[],
         // float) => (float[],) ... rhs=idx_arr_t` says the member exists. That shape is the word
         // below, whose position is the callee's own parameter index.
         return "this call's callee has no transpose of its own, so the call cannot be turned "
@@ -260,7 +258,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         return "the callee's transpose was built, but " + position +
                " reads a value this call does not carry";
     case TransposeRefusalCause::CallValueComputedByTheBody:
-        // The other shape, and the one the sentence above used to cover: the value is not missing
+        // The other shape: the value is not missing
         // from the call -- it is a value the function's own body computes, and it comes out of a
         // loop or a branch. Handing it over is not passing one more argument; it is turning the
         // region that computes it around, which is a transposition of a whole body.
@@ -282,8 +280,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         {
             // Each of the three slots below can say "the walk recorded nothing here", and none of
             // those three sentences is reachable today: every graph the walk can enter has a name
-            // -- a written-out lambda gets a synthesised one (`__g_48__` in the probe that measured
-            // it, 2026-11-03) -- and the one site that records a `Rule` refusal always knows the
+            // -- a written-out lambda gets a synthesised one (`__g_48__`) -- and the one site that records a `Rule` refusal always knows the
             // node and its operator. They are written out rather than left as a gap because a gap
             // reads as "there is no such thing"; and if one of them ever fires, the reading is that
             // naming or the site's record is where the defect is, not the program -- so the shape
@@ -310,7 +307,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 // The key itself was missing, and the site's word does not say which way: a family
                 // that was never built spells no head at all, and an operator whose name the index
                 // does not spell has none either. So the sentence names the key's origin and both
-                // ways it can be absent, instead of claiming the family is here (measured: the
+                // ways it can be absent, instead of claiming the family is here (the
                 // missing-module shape reaches this branch when the step is a module operator,
                 // whose key comes from the family's index -- the shape `no-such-family` covers only
                 // an operator the family could spell without the module, like `:op/mul_d`).
@@ -320,8 +317,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 // gradient. What is *not* said is that the operator is not linear in its k-th
                 // parameter: that would need the forward family's index, and a program that only
                 // imports `rulesets.transpose` does not carry it -- so the claim is out of reach
-                // here, and a wrong explanation is worse than none, because a reader acts on it
-                // (docs/handover/reviews/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md).
+                // here, and a wrong explanation is worse than none, because a reader acts on it.
                 found =
                     refusal.uri.empty()
                         ? "the family holds no rule for that operator; `transpose` is for linear "
@@ -338,7 +334,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                    found;
         }
     case TransposeRefusalCause::RuleShape: {
-        // The other half of the same lookup, and the sentence `Rule` above used to stand in for.
+        // The other half of the same lookup.
         // The index files a rule under the head of its left side and that head's operand count and
         // reads no operand types, so a key can hold a law written for another shape: this step has
         // a law, and the law's own parameter list says this step is not it. "No rule" would be a
@@ -358,9 +354,8 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         return answer;
     }
     case TransposeRefusalCause::RuleRanks: {
-        // The neighbour of the sentence above, and the one that used to be answered with the
-        // builder's own words ("No matching function found for argument types"), which name a
-        // helper rather than the law and never say the rank. Here the law's pattern *took* the
+        // The neighbour of the sentence above: the builder's own words ("No matching function
+        // found for argument types") name a helper rather than the law and never say the rank. Here the law's pattern *took* the
         // operands: the law was chosen, and its body -- the cotangent helpers a law that serves
         // several shapes writes, one overload per shape -- has nothing for the ranks this step has.
         // So the sentence names the law, the operator it is filed under, and the ranks, because
@@ -412,10 +407,10 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
 /// walk reads is that graph and every graph it refers to -- never the value of any call. Two calls
 /// that hand it the same graph version therefore ask for the same member, and building it again is
 /// work with no answer to show for it. The cut is already made once, where `vjp(f)` and `grad(f)`
-/// are evaluated (`stdlib/vjp.cml#vjp`, author 2026-11-18, `befe6c399`); this is the other half of
+/// are evaluated (`stdlib/vjp.cml#vjp`); this is the other half of
 /// that step: `lin` is a new value on every call of a reading and always one of the same graph, so
-/// the walk runs once for that graph and the calls after it name the member the walk built
-/// (author, 2026-11-19 15:40: the transposition is a cost of the transform, not of every call).
+/// the walk runs once for that graph and the calls after it name the member the walk built:
+/// the transposition is a cost of the transform, not of every call.
 ///
 /// What a call still does per call is what only it can do: `Function::create` over the member's
 /// graph, closed over the residuals *this* call's `lin` carries. The residuals are values, they are
@@ -522,7 +517,7 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         // A cause the language has a rule for is raised as the diagnostic the registry declares for
         // it, not as the catch-all: `ParameterShape` is the shape rule -- the adjoint of a linear
         // map needs the shape of its domain, and the program's type does not state it -- so a
-        // reader is told to write the shape in the type (author, 2026-11-03 16:15). Everything else
+        // reader is told to write the shape in the type. Everything else
         // keeps the sentence `refusalSentence` renders from the cause.
         if (built.refusal.cause == TransposeRefusalCause::ParameterShape) {
             const std::string named =
@@ -564,17 +559,17 @@ slot_t transposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     //
     // What the extra parameter carries is a parameter's **value**, and `transpose`'s law says a
     // parameter of the function is a linear input whose cotangent is answered for and whose value
-    // is never passed (author, 2026-11-02 11:30). The body asked for the value because a cotangent
+    // is never passed. The body asked for the value because a cotangent
     // of that parameter is built from it: `idx_arr_t` answers a zero array of the operand's shape,
     // and `mean_axis_cotangent` reads `xs` for `numel`/`ones_like`. That ask is a fact of the body
     // and not of the type, so the two sides disagree on how many parameters the transposed function
     // has, and the run could only say so as a count (`nargs` against `normPorts`), naming neither
-    // the parameter nor the reason: measured 2026-11-04 on `pick(x: float[3]) = x[1]`, the fast VM
+    // the parameter nor the reason: on `pick(x: float[3]) = x[1]` the fast VM
     // aborts (`expected 2, got 1`) and `std::nvm` reports a defect of the compiler instead of a
     // fact about the program.
     //
     // This refusal is also what leaves `RuntimeDiag::PassInternalError`'s norm-arity text unreached
-    // from `transpose`: no call of a member is built any more whose argument count the member's own
+    // from `transpose`: no call of a member is built whose argument count the member's own
     // ports do not fit, because the operator stops where the two counts are known. The pass-level
     // report is kept as the internal fallback it is for every other pass -- its help is written for
     // the whole pipeline and is true there, so it is not rewritten for one operator's old wall.

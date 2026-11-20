@@ -4,6 +4,8 @@
 #include "jvp.h"
 #include "camel/runtime/graph.h"
 
+#include "lift.h"
+
 #include "refusal_readings.h"
 #include "rule_expand.h"
 #include "rule_types.h"
@@ -82,6 +84,11 @@ camel::core::type::TupleType *pairTypeOf(camel::core::type::Type *type) {
     }
     return camel::core::type::TupleType::create(std::vector<camel::core::type::Type *>{type, type});
 }
+
+/// `Lift<T>` -- declared in `lift.h` with the three cases and the ruling that names them, defined
+/// below the signature law it answers with (`liftSignature`), because a function's lift *is* its
+/// lifted signature and the two must not be able to disagree.
+FunctionType *liftSignature(FunctionType *function);
 
 /// The empty tuple `()`, which is the tangent space of a parameter that has none
 /// (`Tangent<int> = ()`, `stdlib/types.cml`). It is **the** empty tuple type and not a second one:
@@ -262,12 +269,16 @@ FunctionType *liftSignature(FunctionType *function) {
     // of them are each their own space. A result with no tangent space -- an `int`, a `string` --
     // has nothing to differentiate and is refused here, which is the same refusal as before for
     // every type that was refused, now asked once instead of written out per type.
-    const camel::core::TangentSpaceAnswer resultSpace =
-        camel::core::tangentSpaceOf(function->exitType());
-    if (!resultSpace.hasSpace()) {
+    //
+    // The result type is `Lift<ResultOf<F>>`, and that shape has **one** computation
+    // (`liftedShapeOf` above): a result whose components all have tangent spaces lifts to the pair
+    // `(result, Tangent<result>)` exactly as before, and a result that holds a function lifts by
+    // component -- the function member to its own lifted self, through this same function one level
+    // down. Nothing here names a type: the law does.
+    Type *lifted = liftedShapeOf(function->exitType()).type;
+    if (lifted == nullptr) {
         return nullptr;
     }
-    auto *lifted = TupleType::create(std::vector<Type *>{function->exitType(), resultSpace.space});
     // The value half, in the order a call passes it: the ordinary parameters, and nothing else.
     std::vector<Type *> values;
     values.reserve(function->normTypesCount());
@@ -316,14 +327,101 @@ FunctionType *liftSignature(FunctionType *function) {
 /// `split(jvp(f))<..ws>(..xs)`.
 FunctionType *jvpSignature(FunctionType *function) { return liftSignature(function); }
 
-namespace {
+/// `Lift<T>`, the law `lift.h` states. Its three cases are the whole of it, and every shape a lifted
+/// graph is written with -- a call's answer, a projection's type, a tuple's type, the exit's type,
+/// and the shape a cut is willing to cut (`split.cpp`) -- is read from here, so a site that needs to
+/// know whether a component is a function asks this, not a kind test of its own.
+///
+/// The function case answers `liftSignature`, which is the *same* function the lifted signature of a
+/// callee is built by: `Lift<F>` for a function `F` is exactly the signature `jvp(F)` has. Mutual
+/// with `liftSignature` (which asks this of a function's exit type), which is why both are declared
+/// before either is defined.
+LiftedShape liftedShapeOf(Type *type) {
+    LiftedShape shape;
+    if (type == nullptr) {
+        return shape;
+    }
+    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
+    if (space.hasSpace()) {
+        if (space.space == nullptr) {
+            return shape;
+        }
+        shape.type = TupleType::create(std::vector<Type *>{type, space.space});
+        shape.pair = true;
+        return shape;
+    }
+    // No tangent space: a function or a tuple. A function's lift is its lifted signature, and a
+    // tuple's is the tuple of its members' lifts -- the law applied to each member.
+    if (type->code() == camel::core::type::TypeCode::Function) {
+        shape.type = liftSignature(tt::as_ptr<FunctionType>(type));
+        return shape;
+    }
+    if (type->code() != camel::core::type::TypeCode::Tuple) {
+        return shape;
+    }
+    const auto *tuple = static_cast<const TupleType *>(type);
+    std::vector<Type *> members;
+    members.reserve(tuple->size());
+    for (size_t index = 0; index < tuple->size(); ++index) {
+        const LiftedShape member = liftedShapeOf(const_cast<Type *>(tuple->typeAt(index)));
+        if (member.type == nullptr) {
+            // A member the law does not answer for (a `bool` beside a function) leaves the whole
+            // tuple unanswerable, rather than answering a tuple with a hole in it.
+            return LiftedShape{};
+        }
+        members.push_back(member.type);
+    }
+    shape.type = TupleType::create(std::move(members));
+    return shape;
+}
 
-/// The type of `jvp(f)` for a function of this type: `(f: F) => jvpSignature(F)`, or null when `F`
-/// has no forward transform. It is built from the **same law** the operator's resolver asks
-/// (`jvp_operator.cpp#jvpOperatorSignature`), so the `jvp(v)` node a lift writes for a call through
-/// a function value is typed exactly as a `jvp(v)` a program writes is, and the two cannot drift
-/// apart.
-FunctionType *jvpOperatorType(FunctionType *function) {
+/// One member of a lifted answer, read back (`lift.h` states the rule, and why it is unambiguous).
+/// A reading of types only: it builds no node, takes no graph, and nothing calls it yet -- it is the
+/// piece a component-wise cut needs before it can ask "is this member a value or a tangent?" of
+/// `Lift<R>`, which is the only thing a cut holds.
+LiftedMember liftedMemberOf(Type *member) {
+    LiftedMember read;
+    if (member == nullptr) {
+        return read;
+    }
+    if (member->code() == camel::core::type::TypeCode::Function) {
+        // A function component: `m` *is* `Lift<F>` for the source function `F`, and the forward side
+        // keeps it as it stands -- a lifted function is a value. No tangent: a function is not a
+        // vector space, and the ruling that lifts the function component leaves that standing.
+        read.forward = member;
+        read.value   = false;
+        return read;
+    }
+    if (member->code() != camel::core::type::TypeCode::Tuple) {
+        return read;
+    }
+    const auto *pair = static_cast<const TupleType *>(member);
+    if (pair->size() != 2) {
+        return read;
+    }
+    Type *value   = const_cast<Type *>(pair->typeAt(0));
+    Type *tangent = const_cast<Type *>(pair->typeAt(1));
+    if (value == nullptr || tangent == nullptr) {
+        return read;
+    }
+    // A value component is `(ti, Tangent<ti>)` **exactly**: the second half is the first half's
+    // tangent space and nothing else. A member whose second half is not that tangent is not a form
+    // `Lift` writes, so the law does not answer for it -- which is the refusal, not a guess.
+    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(value);
+    if (!space.hasSpace() || space.space != tangent) {
+        return read;
+    }
+    read.forward = value;
+    read.tangent = tangent;
+    read.value   = true;
+    return read;
+}
+
+/// The operator's own signature, `(f: F) => Lift<F>`; null when `F` has no forward transform. It is
+/// the **one** spelling of that type: the lift writes its `jvp(v)` node with it, and a cut writes its
+/// `jvp(lin)` node with it, so neither can drift from the other or from the resolver
+/// (`jvp_operator.cpp#jvpOperatorSignature` builds the same shape from the same law).
+FunctionType *liftedOperatorType(FunctionType *function) {
     FunctionType *lifted = jvpSignature(function);
     if (lifted == nullptr) {
         return nullptr;
@@ -333,6 +431,8 @@ FunctionType *jvpOperatorType(FunctionType *function) {
     factory.setExitType(lifted);
     return factory.build();
 }
+
+namespace {
 
 /// What a lift hands on to the lifts it starts: the group the members live in, and the callee
 /// graphs already lifted, so that a function called twice is lifted once (key: the original graph's
@@ -911,6 +1011,69 @@ bool liftGraph(
                 const std::array<gc_node_ref_t, 2> halves{half, halfTangent};
                 return fillTupleOf(pairType, halves);
             };
+        // The lifted **value** of one node: the node `Lift<type>` is written on, in the one place
+        // the law is turned into graph. It answers the same node the walk hands a reader wherever
+        // `Lift<type>` is the pair (that value is carried as the walk's two halves, so its lifted
+        // value is `valueOf`), and it answers a *new* node only where the value itself is what
+        // lifts:
+        //   - a function: `jvp(v)`, the operator whose answer is the lifted function -- its static
+        //     code lifted, its captures lifted the same way, exactly as a program's `jvp(v)` is;
+        //   - a tuple that lifts by component: the node the walk already made for it, whose members
+        //     were built by this same function.
+        // Nothing here asks what kind a member is: the shape came from `liftedShapeOf`, and these
+        // are its three cases.
+        const auto liftedValueOf = [&draft,
+                                    &copyOf,
+                                    &valueOf,
+                                    &tangentOf,
+                                    &liftedPair](gc_node_ref_t ref, Type *type) -> gc_node_ref_t {
+            if (valueOf[ref] != rt::kInvalidNodeRef) {
+                return valueOf[ref];
+            }
+            if (copyOf[ref] == rt::kInvalidNodeRef || type == nullptr) {
+                return rt::kInvalidNodeRef;
+            }
+            const LiftedShape shape = liftedShapeOf(type);
+            if (shape.type == nullptr) {
+                // The law answers nothing for this type: the value is carried as it stands.
+                return copyOf[ref];
+            }
+            if (shape.pair) {
+                // The pair's value leg is the node's **value**: the projection the walk made for it,
+                // or -- where the walk made none because the node is carried whole -- the copy
+                // itself, when the copy's type is the value's type (a loop state port's copy is the
+                // pair, not the value, and is not usable here). A leg this cannot supply is not
+                // written as a hole: the answer is invalid and the caller refuses, because a fill
+                // with an empty member is a graph the encoder rejects far from here.
+                gc_node_ref_t valueLeg = valueOf[ref];
+                if (valueLeg == rt::kInvalidNodeRef && copyOf[ref] != rt::kInvalidNodeRef) {
+                    const auto *copiedNode = draft.node(copyOf[ref]);
+                    if (copiedNode != nullptr && copiedNode->header.dataType == type) {
+                        valueLeg = copyOf[ref];
+                    }
+                }
+                if (valueLeg == rt::kInvalidNodeRef || tangentOf[ref] == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                return liftedPair(type, valueLeg, tangentOf[ref]);
+            }
+            if (type->code() != camel::core::type::TypeCode::Function) {
+                // A tuple that lifts by component: the node the walk made for it *is* the lifted
+                // value, and its members were built by this same function.
+                return copyOf[ref];
+            }
+            // A function's lifted self: `jvp(v)`, typed by the same law (`liftedOperatorType` answers
+            // `(f: F) => Jvp<F>` and `Jvp<F>` is `liftSignature(F)`, which is `Lift<F>`).
+            camel::core::type::FunctionType *operatorType =
+                liftedOperatorType(tt::as_ptr<FunctionType>(type));
+            if (operatorType == nullptr) {
+                return rt::kInvalidNodeRef;
+            }
+            const gc_node_ref_t made = draft.addOperNode(operatorType, nullptr, "transforms:jvp");
+            const gc_node_ref_t operand = copyOf[ref];
+            draft.setNormInputs(made, std::span<const gc_node_ref_t>(&operand, 1));
+            return made;
+        };
         // The body's result of a LOOP node and the loop's own value are the same shape (see
         // `liftedLoopValueType`): the state values first, then what the collection slots keep. The
         // state components are the pair -- one per component -- and the collection components are
@@ -1420,6 +1583,20 @@ bool liftGraph(
                                        : nullptr;
                 const std::vector<gc_node_ref_t> members = function.withInputsOf(ref);
                 const auto norm                          = function.normInputsOf(ref);
+                // What this tuple becomes is `Lift<its type>` (`liftedShapeOf`), and the members a
+                // tuple that lifts by component is built from are the members' *lifted* values --
+                // a value member its pair, a function member `jvp` of it. A tuple that lifts as one
+                // pair keeps today's members: the fill stands for the value, and its tangent is the
+                // fill built below from the tangents.
+                const LiftedShape fillShape = liftedShapeOf(node->dataType());
+                // A **tuple** fill is what lifts by component. A closure fill's type is a function,
+                // and a function value's lift is not a fill of its members but `jvp(v)` -- its
+                // static code lifted (`liftedValueOf`), so its own node is copied as the closure it
+                // is and the lift is written where the value is *read*.
+                const bool liftsByComponent =
+                    fillShape.type != nullptr && !fillShape.pair && node->dataType() != nullptr &&
+                    node->dataType()->code() == camel::core::type::TypeCode::Tuple;
+                const Type *fillType = liftsByComponent ? fillShape.type : node->dataType();
                 std::vector<gc_node_ref_t> values;
                 std::vector<gc_node_ref_t> memberTangents;
                 values.reserve(members.size());
@@ -1430,8 +1607,23 @@ bool liftGraph(
                         allCopied = false;
                         break;
                     }
-                    values.push_back(
-                        valueOf[member] != rt::kInvalidNodeRef ? valueOf[member] : copyOf[member]);
+                    if (liftsByComponent) {
+                        const NodeFace *memberFace = function.node(member);
+                        const gc_node_ref_t lifted =
+                            liftedValueOf(member,
+                                          memberFace != nullptr
+                                              ? const_cast<Type *>(memberFace->dataType())
+                                              : nullptr);
+                        if (lifted == rt::kInvalidNodeRef) {
+                            allCopied = false;
+                            break;
+                        }
+                        values.push_back(lifted);
+                    } else {
+                        values.push_back(
+                            valueOf[member] != rt::kInvalidNodeRef ? valueOf[member]
+                                                                   : copyOf[member]);
+                    }
                     memberTangents.push_back(tangentOf[member]);
                 }
                 if (!allCopied) {
@@ -1450,14 +1642,14 @@ bool liftGraph(
                     !norm.empty() && norm.front() < function.nodeCount() && copied[norm.front()]
                         ? copyOf[norm.front()]
                         : rt::kInvalidNodeRef;
-                const gc_node_ref_t made = draft.addFillNode(node->dataType(), payload);
+                const gc_node_ref_t made = draft.addFillNode(const_cast<Type *>(fillType), payload);
                 const gc_node_ref_t fillTemplate =
                     templateCopy != rt::kInvalidNodeRef
                         ? templateCopy
                         : draft.materializeStaticValue(
                               camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
                                   ::Tuple::create(arity, mm::autoSpace())),
-                              node->dataType());
+                              const_cast<Type *>(fillType));
                 draft.setNormInputs(made, std::span<const gc_node_ref_t>(&fillTemplate, 1));
                 if (!values.empty()) {
                     draft.setWithInputs(made, values);
@@ -1561,6 +1753,19 @@ bool liftGraph(
                     return projection;
                 };
                 const gc_node_ref_t tuple = inputs.front();
+                // Which node a projection reads, and what type the projection has, is `Lift<...>`
+                // of the aggregate and of the member (`liftedShapeOf`) -- the law again, not a kind
+                // test here. A pair-shaped aggregate is carried as the walk's two halves, and
+                // projecting its j-th member is projecting each half at j. An aggregate that lifts
+                // by component *is* its lifted value, and its j-th member is `Lift<Tj>` already, so
+                // the projection is that member and the node has no tangent half of its own.
+                const NodeFace *tupleFace = function.node(tuple);
+                const LiftedShape aggregate =
+                    liftedShapeOf(tupleFace != nullptr ? const_cast<Type *>(tupleFace->dataType())
+                                                       : nullptr);
+                if (aggregate.type == nullptr) {
+                    break;
+                }
                 const gc_node_ref_t source =
                     valueOf[tuple] != rt::kInvalidNodeRef ? valueOf[tuple] : copyOf[tuple];
                 // A member of a tuple this transform filled is that member's own node, not a
@@ -1576,6 +1781,40 @@ bool liftGraph(
                     }
                     return at->second[body->value];
                 };
+                if (!aggregate.pair) {
+                    const LiftedShape memberShape = liftedShapeOf(node->dataType());
+                    if (memberShape.type == nullptr) {
+                        break;
+                    }
+                    const gc_node_ref_t valueMember = memberHalf(copyOf[tuple]);
+                    if (valueMember != rt::kInvalidNodeRef) {
+                        copyOf[ref] = valueMember;
+                    } else {
+                        const gc_node_ref_t liftedAggregate = copyOf[tuple];
+                        copyOf[ref] = keyed
+                                          ? draft.addAccsNode(memberShape.type, body->key())
+                                          : draft.addAccsNode(memberShape.type, body->value);
+                        draft.setNormInputs(
+                            copyOf[ref], std::span<const gc_node_ref_t>(&liftedAggregate, 1));
+                    }
+                    copied[ref] = true;
+                    ++copiedKinds;
+                    if (memberShape.pair) {
+                        // The member lifts to its own pair, so a reader of the member's value (or of
+                        // its tangent) reads the pair's halves -- the same two projections every
+                        // pair-shaped value is read through.
+                        const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
+                        draft.setNormInputs(half, std::span<const gc_node_ref_t>(&copyOf[ref], 1));
+                        const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
+                        draft.setNormInputs(
+                            halfTangent, std::span<const gc_node_ref_t>(&copyOf[ref], 1));
+                        valueOf[ref]   = half;
+                        tangentOf[ref] = halfTangent;
+                    } else {
+                        valueOf[ref] = copyOf[ref];
+                    }
+                    break;
+                }
                 const gc_node_ref_t valueMember = memberHalf(source);
                 copyOf[ref] = valueMember != rt::kInvalidNodeRef ? valueMember : project(source);
                 copied[ref] = true;
@@ -1854,7 +2093,7 @@ bool liftGraph(
                 if (calleeType == nullptr) {
                     return fail(refusal);
                 }
-                FunctionType *jvpType = jvpOperatorType(calleeType);
+                FunctionType *jvpType = liftedOperatorType(calleeType);
                 if (jvpType == nullptr) {
                     // `jvp` takes a function of at least one ordinary parameter whose result has a
                     // tangent space; a value outside that shape has no forward transform to reach,
@@ -1913,17 +2152,22 @@ bool liftGraph(
                 if (carries.size() != liftedType->withTypesCount()) {
                     return fail(refusal);
                 }
-                TupleType *resultPair = pairOf(node->dataType());
-                if (resultPair == nullptr) {
-                    // The lifted callee answers a pair this graph carries no type for: the copy
-                    // would answer one the readers cannot project. Refused, not guessed.
+                // The call's answer is the lifted callee's answer, and its shape is `Lift<call's
+                // type>` -- read from the same law the signature was built with, so the node's type
+                // and the callee's signature cannot disagree. A pair-shaped answer is carried as the
+                // walk's two halves (the projections below); an answer that lifts by component *is*
+                // the lifted value, and a reader of member j projects the lifted member from it.
+                const LiftedShape answer = liftedShapeOf(node->dataType());
+                if (answer.type == nullptr) {
+                    // The law answers nothing for this answer type: the copy would answer a value
+                    // the readers cannot project. Refused, not guessed.
                     return fail(refusal);
                 }
                 std::vector<gc_node_ref_t> arguments;
                 arguments.reserve(values.size() + tangents.size());
                 arguments.insert(arguments.end(), values.begin(), values.end());
                 arguments.insert(arguments.end(), tangents.begin(), tangents.end());
-                const gc_node_ref_t made = draft.addCallNode(resultPair);
+                const gc_node_ref_t made = draft.addCallNode(answer.type);
                 if (!arguments.empty()) {
                     draft.setNormInputs(made, arguments);
                 }
@@ -1932,14 +2176,20 @@ bool liftGraph(
                 callWith.push_back(liftedValue);
                 callWith.insert(callWith.end(), carries.begin(), carries.end());
                 draft.setWithInputs(made, callWith);
-                copyOf[ref]              = made;
-                const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
-                draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
-                const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
-                draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
-                valueOf[ref]   = half;
-                tangentOf[ref] = halfTangent;
-                pairIsTheCopy.insert(ref);
+                copyOf[ref] = made;
+                if (answer.pair) {
+                    const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
+                    draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
+                    const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
+                    draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
+                    valueOf[ref]   = half;
+                    tangentOf[ref] = halfTangent;
+                    pairIsTheCopy.insert(ref);
+                } else {
+                    // No value half and no tangent half: the answer carries the function component
+                    // as its lifted self, and the value components as their pairs.
+                    valueOf[ref] = made;
+                }
                 copied[ref] = true;
                 ++copiedKinds;
                 break;
@@ -2546,12 +2796,19 @@ bool liftGraph(
         // value the rules gave a tangent for, and the exit is the pair built from the two.
         const rt::DraftNodeHeader *chain = draft.header(chainValue);
         TupleType *exitPair              = pairOf(valueTypeOf(oldValue));
+        // The exit's own lifted shape (`Lift<exit type>`, the one law). A body whose exit holds a
+        // function does not end in the pair: its exit *is* the lifted value the walk built for that
+        // node (the per-component tuple, whose function member is that function's lifted self), and
+        // there is no separate tangent half to close it with -- which is exactly what the law says,
+        // not a case written here.
+        const LiftedShape exitShape = liftedShapeOf(valueTypeOf(oldValue));
+        const bool exitIsLiftedValue = exitShape.type != nullptr && !exitShape.pair;
         // Whether the node's copy *is* the pair, or is a tuple of pairs the exit has to take apart.
         // The type cannot answer: a two-state loop's value is `Tuple(pair, pair)`, the same type as
         // the pair of the whole value, so only `pairIsTheCopy` knows which of the two this is.
         const bool alreadyLifted = chain != nullptr && exitPair != nullptr &&
                                    chain->dataType == exitPair && pairIsTheCopy.contains(oldValue);
-        if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted) {
+        if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted && !exitIsLiftedValue) {
             os << "REINTERP jvp function=" << name
                << " skip=" << refusalCauseName(RefusalCause::Tangent) << '\n';
             noteRefusal(RefusalReading("jvp", name, RefusalCause::Tangent));
@@ -2590,10 +2847,13 @@ bool liftGraph(
                                             ? valueOf[oldValue]
                                             : chainValue;
         const gc_node_ref_t out =
-            hydrateExitPair
-                ? liftedPair(valueTypeOf(oldValue), valueOf[oldValue], tangentOf[oldValue])
-                : (alreadyLifted ? chainValue
-                                 : liftedPair(valueTypeOf(oldValue), exitValue, chainTangent));
+            exitIsLiftedValue
+                ? chainValue
+                : (hydrateExitPair
+                       ? liftedPair(valueTypeOf(oldValue), valueOf[oldValue], tangentOf[oldValue])
+                       : (alreadyLifted
+                              ? chainValue
+                              : liftedPair(valueTypeOf(oldValue), exitValue, chainTangent)));
         // The `sync` block's own ordering: in the original graph the exit passes through a GATE
         // that waits on the block's statements -- a print among them -- and that wait is the only
         // thing that keeps an effect whose result nobody reads from being dropped. The lifted exit
@@ -2602,8 +2862,10 @@ bool liftGraph(
         const gc_node_ref_t originalExit = function.exitNodeRef();
         if (originalExit < function.nodeCount() && function.node(originalExit) != nullptr &&
             function.node(originalExit)->kind == rt::GCNodeKind::Gate) {
-            Type *gateType =
-                exitPair != nullptr ? static_cast<Type *>(exitPair) : valueTypeOf(oldValue);
+            Type *gateType = exitShape.type != nullptr
+                                 ? exitShape.type
+                                 : (exitPair != nullptr ? static_cast<Type *>(exitPair)
+                                                        : valueTypeOf(oldValue));
             const gc_node_ref_t gate =
                 draft.addGateNode(gateType, draft.allocateRuntimeSlot(gateType));
             // The waits are the gate's **trailing ordinary inputs** (author, 780a83bd: "a

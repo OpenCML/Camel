@@ -39,7 +39,7 @@ const EnumType *enumTypeOf(const Type *type) {
 bool traceWanted() { return camel::profile::variantTrace(); }
 
 /// Reports a `Variant` whose type the trace cannot use, and stops. It stays in a release build on
-/// purpose: `ASSERT` compiles to nothing under `NDEBUG`, which is how this path used to take the
+/// purpose: `ASSERT` compiles to nothing under `NDEBUG`, which would take the
 /// process down with no word at all (exit 139 in the training workload).
 [[noreturn]] void reportUntraceableVariant(
     const void *value, const Type *type, size_t tag, size_t fields, const char *why) {
@@ -143,7 +143,7 @@ void Variant::updateRefs(const RefRelocator &relocate, const Type *type) {
     // asked about a type that is no longer there, and the readings below say which of the three
     // shapes the break has. They are printed before the type is read, so a break the read cannot
     // survive still leaves them in the log; the check after it is in a release build on purpose
-    // (ASSERT is not: that is how this path used to die with no word at all).
+    // (ASSERT is not: this path would die with no word at all).
     if (UNLIKELY(traceWanted())) {
         std::fprintf(
             stderr,

@@ -726,7 +726,7 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
         //     that follows as its missing right operand; when that token cannot start an
         //     expression the parser stops there, and the token it stopped on is usually a keyword
         //     that starts the next line -- the one token in the file that is not wrong. A range
-        //     has only a bounded form (design principles 4.2, the author's ruling of 2026-11-16),
+        //     has only a bounded form (design principles 4.2),
         //     so the mistake is named at the `..` and what replaces it is in the help.
         //     The two other readings of `..` never reach this branch: `a..b` and the composition
         //     `f..g` have their right operand read, so the parser does not stop in front of one,

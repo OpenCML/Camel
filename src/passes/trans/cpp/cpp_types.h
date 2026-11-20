@@ -6,7 +6,7 @@
  * type of each Camel type, the C++ text of a constant, and the identifiers the generated code
  * uses (docs/design/cpp-standalone/README.cn.md, section 4).
  *
- * Within this lane the translated types grow stage by stage; a type without a translation here
+ * A type without a translation here
  * makes the pass refuse the program at the construct that has it.
  */
 
