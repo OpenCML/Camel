@@ -50,9 +50,14 @@
  *   * the lane: a mean over the whole tensor, as above.
  *   * the eps: `inv` is the declaration's `1e-5`, and both calls of this law inherit that one
  *     default (`layer_norm`'s and `layer_norm_grad`'s, `modules/tensor/kernels/reduce.cpp` and
- *     `modules/tensor/kernels/gradient.cpp`). `k` moves in its seventh digit if either default
+ *     `modules/tensor/ops/gradient_ops.cpp`). `k` moves in its seventh digit if either default
  *     moves, so the numbers below are also the keeper of that agreement -- the one
  *     `layerNormVjp` already relies on.
+ *
+ * `normed` declares its three parameters as `float[...]`, which is the shape
+ * `showcase/c3-char-transformer/train.cml`'s own `block` gives them: the law's neutral gain and
+ * bias are read off the operands it was handed, so the case is written against the operands whose
+ * extents are not known at compile time rather than only against the easy declared ones.
  *
  * Nothing here is exact in binary floating point, because `1/sqrt(6 + 1e-5)` is not; every figure
  * above is the same expression evaluated in the same order the kernels evaluate it

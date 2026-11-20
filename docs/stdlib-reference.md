@@ -7962,6 +7962,28 @@ already through the normalization's jacobian (`jx = J dx`).
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])` gives `[1.0, 2.0]`
 
+#### `layer_norm_neutral`
+
+```camel
+layer_norm_neutral: (t: T[...], v: float) => T[...] when is_float::<T>()
+```
+
+A tensor of `t`'s shape and element type filled with `v`: the neutral gain is this at `1.0` and
+the zero bias this at `0.0`. `zeros_like` carries the shape *and* the element type, so both
+operands of the neutral `layer_norm` below are built the same way and cannot answer different
+shapes; `full(shape(t), v)` would answer `float` and refuse a 32-bit lane.
+
+The inline spelling this replaces, `layer_norm(x, ones_like(gamma), zeros_like(beta))`, answered
+`Array shape mismatch in 'layer_norm': layer_norm: gamma and beta must share the normalized
+trailing shape` at run time, on nvm and fvm, for a function whose three parameters are all
+`float[...]` -- the shape the showcase's own `block` has. The same `ones_like`/`zeros_like` pair
+on the same two arrays is right outside a lift, and the same law is exact for parameters whose
+extents are declared, so the reading to keep is: which of the two spellings the lift answers
+correctly is what the case in `test/cases/compile/transforms/layer_norm_jvp.cml` holds, and the
+isolation of that difference is written up in the lane's report rather than guessed at here.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+
 ### The forward rule of `^` (a power)
 
 #### `pow_tangent`
