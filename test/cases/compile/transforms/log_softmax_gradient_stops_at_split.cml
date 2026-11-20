@@ -10,9 +10,19 @@
 // the cut builds the function (`REINTERP split function=jvp_of_total forward=395 backward=396
 // residuals=3`), and then the transposed walk refuses at the tangent the law writes:
 //
-//     TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:multiply node=7 position=1 param=1 param-type=float[...]
+//     TRANSPOSE function=rulesets.jvp::log_softmax_jvp<float> skip=parameter-shape uri=tensor:sum_axis node=7 param=1 param-type=float[...]
 //     TRANSPOSE function=split_of_jvp_of_total_backward skip=call-no-transpose node=6 callee=rulesets.jvp::log_softmax_jvp<float>
 //     transforms: transpose has no transpose for this function: this call's callee has no transpose of its own
+//
+// **The stop moved out one node later the same day.** Between `5810292c4` and `1a0ac4144` the law's
+// body was `dx - exp(y) * sum<axis, true>(dx)`, whose operand after the subtraction is the `multiply`,
+// so that is where the walk refused. `1a0ac4144` put the product back inside the sum -- the form the
+// inlined tangent below had before it became a call -- `dx - sum<axis, true>(exp(y) * dx)`, so the walk
+// now meets the enclosing `sum<axis, true>` first and refuses one node further out. Same graph, same
+// exit code, same wall (`mul_tensor_t`'s operand shape, which `float[...]` does not state), one layer
+// earlier on the walk. The old spelling, `uri=tensor:multiply`, is pinned as absent by the plan entry
+// beside this case, so a walk that steps back onto the `multiply` turns this case red instead of
+// passing quietly.
 //
 // **Where the refusal used to be.** Until 2026-11-20 this case pinned the cut refusing one layer
 // earlier (`skip=backward construct=a node whose input was not copied`, "split does not build this
