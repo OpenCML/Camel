@@ -6557,3 +6557,7 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 1. **[4] `print_ordered` / `print_appended` / `print_appended_reversed` 是空操作。** `edits-ecoop.cml` 的 `is_weight_print` 按 `type_text(ins[0]) == 'f32[...]'` 选点，迁移后权重类型是 `f32[?, ?]`，选不到，三个改写原样返回程序（`reversed` 本该被拒也"通过"了）。改：按"操作数是张量"选，不按类型文字；并让 `only(...)` 选不到时**报错**而不是返回原程序（`break_rate` 那条已经吃过同样的亏）。补跑 [4]。
 2. **[4] `print_unordered` / `print_prepended` 的冲突对是 `run` 的调用（write unknown）。** `run` 里有梯度值的调用，足迹落成"未知"，与条目（1）的假冲突同一根因（值调用的足迹没按值的类型读）。修好后：`print_unordered` 仍被 `PassEffectOrder` 拒，冲突对应是新打印与 `main` 自己的某个打印；`print_prepended` 应被接受、新的一行在最前。修复照 17:50 的返工做，修后补跑 [4] 与条目（1）。
 3. **[8] 与 [2] 的规模**：[8] 说 `loss-a` 的文档里还有 `autodiff:grad@1.0` 节点——`loss-a.cml` / `loss-b.cml` 仍在用引擎 `grad`，没随 13c93a5f8 迁移。迁到库 `grad`，补跑 [1] 与 [8]，并对 `train.cml` 本身跑一次 `std::stats`（程序自身的图数与节点数），写进 [2]。
+
+## 催办（2026-11-20 18:40）
+
+决策者。develop 两小时没有动代码的提交，远端各车道分支最后一笔是 18:02（`lane-jvp-closure` 17:58）。18:25 那三条急件（选点改按张量、值调用足迹、loss-a/b 迁移）与条目（1）、`layer_norm` 前向法则、二阶导——回一行：各在哪个分支、哪一步。改动先推分支再接着做，别只留在工作树。
