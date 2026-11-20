@@ -4,6 +4,7 @@
 #include "transpose.h"
 
 #include "jvp.h"
+#include "lift.h"
 #include "node_order.h"
 #include "rule_expand.h"
 #include "split.h"
@@ -734,7 +735,7 @@ bool isUnitType(const Type *type) {
 
 FunctionType *transposeSignature(
     FunctionType *function, const std::vector<bool> &participates, std::vector<size_t> *answersOf,
-    const std::vector<size_t> *captures, bool valuesForParticipants) {
+    const std::vector<size_t> *captures, bool liftedSignature) {
     if (answersOf != nullptr) {
         answersOf->clear();
     }
@@ -791,6 +792,17 @@ FunctionType *transposeSignature(
     // is, and is read as a value: nothing enters or leaves its place in the answer. A function
     // whose parameters all lack a space has no transpose at all.
     const size_t count = function->normTypesCount();
+    // **Which places are values and which are the places a cotangent is answered for**: the lift
+    // law's answer, asked once (`lift.h#liftedParametersOf`), and the one reader this file uses for
+    // it. A signature that is itself a `Lift` has a value behind every port and a tangent beside
+    // it, so the tangent-space question cannot stand for "this place appears only as a tangent": the
+    // law writes which half is which, and both halves are read from it. A signature that is not a
+    // lift is read by the same entry the ordinary way -- a parameter with no cotangent is a value
+    // the call site fills, one with a cotangent is a place the answer is about -- so a change to
+    // what a lift is reaches this signature, the ports it writes and the answer it promises
+    // together. Which of the two readings applies is `liftedSignature`: a fact about the *graph*
+    // the signature belongs to, since the two shapes are one type (`lift.h` says why).
+    const LiftedParameters places = liftedParametersOf(function, liftedSignature);
     if (!participates.empty()) {
         // The participating-set form is a **call site's**: one flag per parameter of the callee,
         // saying which places a cotangent is answered for. What it requires is the same thing the
@@ -829,7 +841,7 @@ FunctionType *transposeSignature(
         Type *const parameter                       = function->normTypeAt(i);
         const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(parameter);
         const bool participatesHere =
-            participates.empty() ? (space.hasSpace() && space.space != nullptr) : participates[i];
+            participates.empty() ? places.answers(i) : participates[i];
         if (!participatesHere) {
             if (participates.empty() && isUnitType(parameter)) {
                 // `()` is an **answer** with an empty slot, not a parameter:
@@ -862,16 +874,11 @@ FunctionType *transposeSignature(
             answersOf->push_back(i);
         }
         // A parameter whose cotangent is answered for normally takes no value port: the answer is
-        // *about* it and the caller holds no value for it. `valuesForParticipants` is the exception
-        // and it is a fact of the signature rather than of the answer: a graph whose signature is
-        // itself a `Lift` has a tangent space behind every one of its ports, so the participating
-        // test answers for all of them and the parameter can no longer mean "this place appears
-        // only as a tangent". It keeps its cotangent in the answer *and* takes the value the call
-        // passed for it, which is what the body may read -- a value, whichever direction it is the
-        // direction of one level up, and never a cotangent in place of one.
-        if (valuesForParticipants) {
-            params.emplace_back(parameter, false);
-        }
+        // *about* it and the caller holds no value for it. The exception is the value half of a
+        // lift, and it is not an exception here at all: the law reads those places as values
+        // (`LiftedPlace::Value`), so they took their port above and this loop is looking at a
+        // tangent place. A place is one of the two halves by the law and never by a special case in
+        // this signature.
     }
     if (cotangentsOfParticipants.empty()) {
         return nullptr;
@@ -892,12 +899,10 @@ FunctionType *transposeSignature(
             if (at >= count) {
                 return nullptr;
             }
-            Type *const parameter                       = function->normTypeAt(at);
-            const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(parameter);
-            const bool answeredHere = participates.empty()
-                                          ? (space.hasSpace() && space.space != nullptr)
-                                          : participates[at];
-            if (answeredHere && !valuesForParticipants) {
+            Type *const parameter = function->normTypeAt(at);
+            const bool answeredHere =
+                participates.empty() ? places.answers(at) : participates[at];
+            if (answeredHere) {
                 params.emplace_back(parameter, false);
             }
         }
@@ -1265,7 +1270,7 @@ bool transposePairCall(
 bool buildTransposeMember(
     TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,
     std::ostream &os, const std::vector<bool> &participates = {},
-    std::vector<size_t> *needs = nullptr, bool valuesForParticipants = false) {
+    std::vector<size_t> *needs = nullptr) {
     camel::runtime::GraphDraftGroup &group = state.group;
     if (state.program == nullptr || function == nullptr) {
         return false;
@@ -1325,7 +1330,7 @@ bool buildTransposeMember(
         const GraphId probeMember = scratch.reserve("transpose_probe", "transpose_probe");
         std::vector<size_t> found;
         (void)buildTransposeMember(
-            probe, function, probeMember, probeLog, participates, &found, valuesForParticipants);
+            probe, function, probeMember, probeLog, participates, &found);
         // `found` is what this half needs and is recorded on the state; nothing prints it. A
         // probe line here would make every reading carry a line no cause asked for.
         state.calleeNeeds[function] = found;
@@ -1349,8 +1354,14 @@ bool buildTransposeMember(
     // written, not after the build that reads it. The probe above is the one that found it, and its
     // answer is read here rather than decided a second time.
     const std::vector<size_t> &capturesOf = state.calleeNeeds[function];
-    FunctionType *signature = transposeSignature(
-        function->funcType(), participates, nullptr, &capturesOf, valuesForParticipants);
+    // Which of the law's two readings this signature takes: a fact about the graph, not about the
+    // type (`lift.h#liftedParametersOf` says why the two shapes cannot be told apart from a type).
+    // `liftedFrom` is the record a forward transform writes on every graph it lifts, so it is the
+    // one place this file asks that question; the ports, the participating places and the answer all
+    // come from the single reading below.
+    const bool liftedSignature = function->liftedFrom() != rt::kInvalidGraphId;
+    FunctionType *signature =
+        transposeSignature(function->funcType(), participates, nullptr, &capturesOf, liftedSignature);
     if (signature == nullptr) {
         refuse(TransposeRefusalCause::Signature);
         os << '\n';
@@ -1358,18 +1369,22 @@ bool buildTransposeMember(
     }
     const size_t nodeCount  = function->nodeCount();
     const size_t paramCount = function->funcType()->normTypesCount();
-    // Whether parameter `at` is one the transposition answers for. An empty set means every
-    // parameter is: that is the ordinary transposition, where a parameter is a linear input and
-    // nothing the caller passes. Only a parameter that cannot hold a
-    // cotangent -- an integer, a `bool` -- stays outside it and is read as a value. A set that is
-    // not empty belongs to a call site, and its flags are read as written.
-    const bool partial        = !participates.empty();
+    // Which places a cotangent is answered for, and which are values the caller fills: the lift
+    // law's answer (`lift.h#liftedParametersOf`), read once from the signature. A set that is not
+    // empty belongs to a call site and its flags are read as written; with no set, the law decides
+    // -- the ordinary transposition answers for every parameter, a parameter whose type holds no
+    // cotangent stays a value, and a signature that is itself a `Lift` answers for its tangent half
+    // and fills the value half.
+    const LiftedParameters places = liftedParametersOf(function->funcType(), liftedSignature);
+    // Whether any place is outside the answer. When none is, every cotangent that lands on a
+    // parameter port is one the answer holds; when some is, a cotangent that lands there is a
+    // value's, not an answer's, and `portOfParameter` says which place a port belongs to.
+    const bool partial        = !participates.empty() || (places.isLift && places.hasValues());
     const auto participatesOf = [&](size_t at) {
-        if (partial) {
+        if (!participates.empty()) {
             return at < participates.size() && participates[at];
         }
-        const Type *const type = at < paramCount ? function->funcType()->normTypeAt(at) : nullptr;
-        return type != nullptr && camel::core::tangentSpaceOf(type).hasSpace();
+        return places.answers(at);
     };
     std::vector<std::string> usedRules;
     std::vector<uint32_t> armRegionsBuilt;
@@ -1435,20 +1450,15 @@ bool buildTransposeMember(
         // That reading rests on the participating flag meaning "this place appears **only as a
         // tangent**": the shape a rule kernel has, and the shape a cut's backward half has, where
         // the values its body reads travel in the closure. A graph whose signature is itself a
-        // `Lift` is not that shape. Every port of it has a tangent space behind it, so "has a
-        // tangent space" and "appears only as a tangent" stop saying the same thing: the test above
-        // answers for every parameter, every one of them `continue`s, and a member that answers a
-        // cotangent for all of them and takes no port at all is not a member that has answered for
-        // them -- it is one nothing can be handed to. Its body asks for the value of a parameter
-        // (a call it stands on reads that value as an operand) and the request has no source, while
-        // the call site holds exactly that value among the arguments the call already passes. So
-        // for such a graph a participating place takes a value port as well and keeps its cotangent
-        // in the answer; what fills the port is the argument the call made, never a cotangent and
-        // never a direction this transform invented.
+        // `Lift` is not that shape: the law writes it as a value half and a tangent half, so its
+        // first half is a place the caller fills with a value and only the second half is a place
+        // the answer is about. Nothing here decides which half is which -- `places` is the law's
+        // answer and `participatesOf` reads it -- so a value place takes its port and a tangent
+        // place takes none, in both shapes and by one test.
         std::vector<gc_node_ref_t> portOfParam(paramCount, rt::kInvalidNodeRef);
         {
             for (size_t i = 0; i < paramCount; ++i) {
-                if (participatesOf(i) && !valuesForParticipants) {
+                if (participatesOf(i)) {
                     continue;
                 }
                 Type *const portType = function->funcType()->normTypeAt(i);
@@ -2419,11 +2429,12 @@ bool buildTransposeMember(
                         // expanding
                         // (`pick_at(dxs, [i, len(xs)])` states the length), so the value is a slot
                         // of that call rather than a member of this closure picked by position.
-                        // The one exception is a member whose signature is itself a `Lift`
-                        // (`valuesForParticipants`, and `#portOfParam`'s note says why): there the
-                        // participating places take ports, and the port stands for the argument the
-                        // call made -- so a body that reads such a parameter's value is answered
-                        // with the value the caller passed, not with a number this walk made up.
+                        // The one exception is a parameter whose place the law reads as a value -- the
+                        // value half of a `Lift` signature (`lift.h#liftedParametersOf`, and
+                        // `#portOfParam`'s note says why): that place takes a port, and the port
+                        // stands for the argument the call made -- so a body that reads such a
+                        // parameter's value is answered with the value the caller passed, not with a
+                        // number this walk made up.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
@@ -3012,16 +3023,18 @@ bool buildTransposeMember(
                         // callee answers the pair -- so neither contradicts the other.
                         continue;
                     } else {
-                        // An ordinary call: a parameter whose type can hold a cotangent is answered
-                        // for and is passed no value; a parameter that cannot -- the `int` of
-                        // `xs[i]` -- is a value the member reads. The list is the parameters'
-                        // places, so an answered parameter standing before a value is written
-                        // correctly.
+                        // An ordinary call: which places the transposition answers for and which are values the
+                        // member reads is the lift law's reading of the callee's signature
+                        // (`lift.h#liftedParametersOf`), the same entry the member's own signature
+                        // and its arguments are written from -- with the callee graph's fact about
+                        // which of the law's two readings its signature takes. The list is the
+                        // parameters' places, so an answered parameter standing before a value is
+                        // written correctly.
                         answerCount = 0;
+                        const LiftedParameters calleePlaces = liftedParametersOf(
+                            callee->funcType(), callee->liftedFrom() != rt::kInvalidGraphId);
                         for (size_t i = 0; i < calleeParams; ++i) {
-                            const camel::core::TangentSpaceAnswer space =
-                                camel::core::tangentSpaceOf(callee->funcType()->normTypeAt(i));
-                            if (space.hasSpace() && space.space != nullptr) {
+                            if (calleePlaces.answers(i)) {
                                 answerAt.push_back(i);
                                 ++answerCount;
                             } else {
@@ -3127,7 +3140,8 @@ bool buildTransposeMember(
                         calleeToTranspose->funcType(),
                         participates,
                         nullptr,
-                        &state.calleeNeeds[calleeToTranspose]);
+                        &state.calleeNeeds[calleeToTranspose],
+                        calleeToTranspose->liftedFrom() != rt::kInvalidGraphId);
                     Type *const calleeExit =
                         calleeSignature != nullptr ? calleeSignature->exitType() : nullptr;
                     if (calleeExit == nullptr) {
@@ -5381,7 +5395,8 @@ bool buildTransposeMember(
                     callee->funcType(),
                     participates,
                     &answersOf,
-                    &state.calleeNeeds[callee]);
+                    &state.calleeNeeds[callee],
+                    callee->liftedFrom() != rt::kInvalidGraphId);
                 if (calleeType == nullptr || calleeType->normTypesCount() == 0) {
                     refuse(TransposeRefusalCause::CallNoTranspose);
                     os << " node=" << ref << " callee=" << callee->name() << " signature\n";
@@ -5425,15 +5440,16 @@ bool buildTransposeMember(
                     refuse(TransposeRefusalCause::CallValueMissing, param);
                 };
                 std::vector<gc_node_ref_t> arguments;
+                // Which of the callee's parameters this call hands a value for: the lift law's
+                // reading of the callee's signature, the same entry the member's own signature was
+                // built from -- including which of the law's two readings the callee graph's
+                // signature takes -- so the argument list and the ports cannot be decided
+                // differently.
+                const LiftedParameters calleePlaces = liftedParametersOf(
+                    callee->funcType(), callee->liftedFrom() != rt::kInvalidGraphId);
                 for (size_t i = 0; i < calleeParams; ++i) {
-                    bool answered = false;
-                    if (participates.empty()) {
-                        const camel::core::TangentSpaceAnswer space =
-                            camel::core::tangentSpaceOf(callee->funcType()->normTypeAt(i));
-                        answered = space.hasSpace() && space.space != nullptr;
-                    } else {
-                        answered = participates[i];
-                    }
+                    const bool answered =
+                        participates.empty() ? calleePlaces.answers(i) : participates[i];
                     if (answered) {
                         continue;
                     }
@@ -5862,23 +5878,31 @@ bool transposePairCall(
     // half is a linear input -- and it is the same query the member itself was built from, so the
     // call cannot hand it a list of a different length than its ports.
     std::vector<size_t> answersOf;
+    // Which of the law's two readings the second half's signature takes: the graph's own fact,
+    // asked once and read by both the signature above and the argument list below.
+    const bool memberLifted = cut.backward->liftedFrom() != rt::kInvalidGraphId;
     FunctionType *const memberType = transposeSignature(
         cut.backward->funcType(),
         {},
         &answersOf,
-        &state.calleeNeeds[cut.backward]);
+        &state.calleeNeeds[cut.backward],
+        memberLifted);
     if (memberType == nullptr || memberType->exitType() == nullptr) {
         return fail("the second half of the callee has no transposition signature");
     }
     // The values the member takes for the parameters it answers nothing for, and then the values
     // the member asked for (`calleeNeeds`), in that order: the order the signature wrote them in.
-    const size_t half        = call.callee->funcType()->normTypesCount() / 2;
-    const size_t memberCount = cut.backward->funcType()->normTypesCount();
+    // Which parameters those are is the lift law's reading of the second half's signature
+    // (`lift.h#liftedParametersOf`), the same entry `transposeSignature` above built the member's
+    // type from, so the list this loop writes and the ports it must fill are one reading.
+    const size_t half         = call.callee->funcType()->normTypesCount() / 2;
+    const size_t memberCount  = cut.backward->funcType()->normTypesCount();
+    const LiftedParameters memberPlaces =
+        liftedParametersOf(cut.backward->funcType(), memberLifted);
     std::vector<gc_node_ref_t> arguments;
     for (size_t at = 0; at < memberCount; ++at) {
-        Type *const parameter                       = cut.backward->funcType()->normTypeAt(at);
-        const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(parameter);
-        if (space.hasSpace() && space.space != nullptr) {
+        Type *const parameter = cut.backward->funcType()->normTypeAt(at);
+        if (memberPlaces.answers(at)) {
             continue; // answered: the caller passes no value for it
         }
         if (isUnitType(parameter)) {
@@ -5958,15 +5982,13 @@ TransposeGraph buildTransposeGraph(
         "transpose_of_" + std::string(function->name()),
         "transpose_of_" + std::string(function->name()));
     TransposeState state{group, program, {}, context};
-    // A graph whose signature is itself a `Lift` answers a cotangent for every parameter when its
-    // participating set is empty, which is this entrance's set. Read as the ordinary transposition
-    // that would be a member with no value port at all, and a body that reads one of those
-    // parameters would have nowhere to read it from (`#portOfParam`'s note); so the participating
-    // places take the ports their own arguments fill. `liftedFrom` is the record `jvp` writes on
-    // every graph it lifts, which is the fact this is read from -- not a guess from the name, and
-    // not the tangent-space test, which answers "yes" for every one of those parameters.
-    const bool valuesForParticipants = function->liftedFrom() != rt::kInvalidGraphId;
-    if (!buildTransposeMember(state, function, member, os, {}, nullptr, valuesForParticipants)) {
+    // What the member takes and what it answers is the signature's (`transposeSignature`, which
+    // reads the lift law), and this entrance adds nothing to it: the ports are the value places the
+    // law names and the answer is the cotangents of its tangent places. A graph whose signature is
+    // itself a `Lift` therefore comes out with the value half as ports and the tangent half as
+    // answer -- the same reading a cut makes of the same shape -- instead of one test here deciding
+    // that such a graph has no values at all.
+    if (!buildTransposeMember(state, function, member, os, {}, nullptr)) {
         // The cause the walk recorded, not a reading of the log: a null graph and the reason it is
         // null are one answer, handed back together.
         return TransposeGraph{state.refusal};
