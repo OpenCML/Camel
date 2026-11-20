@@ -6101,3 +6101,47 @@ first_with_as_param graph=411 → REINTERP jvp graph=412 → split forward=413 b
 3. **`split` 那条 not-reachable**：与 `transformer` 的负例同一个缺陷，一处在等你的裁定。
 
 ⇒ **我不建议为二阶新开一条车道**：它现在卡在一条**单点**上（`calleeIdOf` 不认 closure），而那一点修好后，`jvp(jvp)` 那一半已经是绿的，剩下的只是把 `grad(grad)` 接上。
+
+## 负责人回报（2026-11-20 11:00）：**package preparation** —— 本机可查、不可发；两件要你裁
+
+你两次点名 `package preparation` 没有可见车道。这是那条车道的读数与三件挡路的东西。
+
+### 一、它做到哪一步（全离线、不在 88 之外构建）
+
+```
+`PIP_NO_INDEX=1 CAMEL_PYPI_SKIP_BUILD=1 CAMEL_PYPI_PYTHON=… npm run pypi:rollup`
+⇒ 两只 0.2.45 wheel（24,944,520 / 24,825,989 B），`check_wheel_tags.py --ruling` 通过
+⇒ 新增 `scripts/check_wheel_contents.py --out out/latest`：把 wheel 与 `out/latest`+`stdlib`+`include` 逐条比，**431/430 文件、886 行、exit 0**，清单在主机 `/tmp/wheel-manifest-0.2.45.txt`
+```
+
+打包只有一处 `pypi/camel-lang/`：pyproject 0.2.45、`packages=["camel"]`+`py-modules camel_cli`、4 个入口、package-data `.cmlenv/*`、MANIFEST `recursive-include src/camel/.cmlenv **`。取料是 `out/<tag>` 整树，**必须进 wheel 的都在清单里**（bin 8 / libs 3 / stdlib 80 / include 329 / python 1 / build-info.json）。
+
+### 二、挡路三件，第 2、3 件要你裁
+
+**1）可发布 Linux tag 只能由 auditwheel 给出，88 上没装** —— 离线轮子在 `~/h597/bundle/wheels/auditwheel-6.8.2-py3-none-any.whl`。本机 tag 停在 `linux_x86_64`，**PyPI 必拒**，发布仍只走 CI manylinux。`build-pypi.yml` 确实跑成过（PyPI 最新 0.2.44，2026-11-05T19:10Z，cp310-abi3 + py3-none 双形态），**0.2.45 未发**。
+
+**2）★ ISA 基线不一致 —— 这条要你定**
+```
+88 的 `build/CMakeCache.txt` 是 `CAMEL_TARGET_ARCH=native`
+   ⇒ `cmake/Options.cmake` 的默认、`camel-remote.ps1` 不传
+而 `ci.yml` 传 `x86-64-v3`，design-principles 9.10 要求发布包是 `x86-64-v3`
+⇒ **⇒ 所以本机 wheel 内容可查、不可发**
+```
+⇒ 我不擅自改 `camel-remote.ps1` 去传 `x86-64-v3`，因为那会让**所有**车道的构建变慢或改变读数。**要的是你一句：闸门构建该不该固定 `x86-64-v3`？** 若该，我改 `camel-remote.ps1` 一处并重跑一轮九项作对照。
+
+**3）版本与 release note 由你定**
+```
+pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45]` **空着**
+⇒ `agents/branching.md` 明写：发布前版本、下一个开发版本、release-note 内容**须与你确认**
+⇒ **⇒ 所以这一条我按规矩不自己填**
+```
+
+### 三、它顺手堵掉的一个坑（值得记）
+
+```
+`.gitignore` 补 `pypi/camel-lang/src/camel/.cmlenv/` 与 `python.stash/`
+⇒ 理由：**一次失败的 rollup 会把整份 install 留在包目录里，`git add -A` 就能进历史**
+```
+⇒ 这正好撞在你定的「不往 git 历史里拉屎」上。**而它不是被要求做的 —— 是它自己在失败路径上看到的。**
+
+另修了 `docs/pypi-packaging.md` 两处过期（`wrapper-dist`/`script-files` 已不存在；无 SDK 回退不再用 `packaging.tags`）并补 §8.1 离线配方。本机 wheel 24.9 MB vs 已发 0.2.44 linux 15.0 MB：差在 `libstdc++.so.6`（本机链接解析在 conda 工具链，manylinux 里解析在 `/usr/lib` 所以不打包）—— **这不是缺陷，是容器差异，但它说明「本机 wheel 与 CI wheel 不是同一种东西」。**
