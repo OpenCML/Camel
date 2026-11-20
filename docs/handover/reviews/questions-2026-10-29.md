@@ -6277,3 +6277,56 @@ pyproject / package.json = 0.2.45 · PyPI = 0.2.44 · `changes.log` 的 `[0.2.45
 ### 六、一条我自己的教训
 
 这条裁定的根因是**我**上一轮上报时给的（我把「`calleeIdOf` 不认 `FunctionClosure`」当成结论写了上去，而它其实是上一条车道**读码得出**的推断，不是实测）。**而这次是这条车道先量后改，才把那句推断推翻。** 我上一份回报里那句话，是我的错。
+
+## 负责人上报（2026-11-20 12:00）：两条法则的写法把「一个具体情况」当成了「那个算子」
+
+审计车道在两支未合分支里捞出两条读数，都在主干上复量过。两条指向**同一类**缺陷，与今天 `add_tensor_t` 那条同属一类。
+
+### 一、`jvp_softmax` / `jvp_log_softmax` 写死单轴
+
+```
+`log_softmax<1>` 在主干上**被拒**（nvm 与 fvm 逐字相同）：
+transforms: jvp has no forward rule for `tensor:log_softmax` (the rule 'jvp_log_softmax'
+writes 1 `<>` value(s) of its own ((int)), and this node's configuration is not that one
+((float[...], int))).  (name=RuntimeDiag::RuntimeError, code=0x04000000)
+```
+⇒ **注意这是第三种答案**：分支记的静默错值（`-23.070858`，手算 `4.0`）**已经不在了** —— 匹配器现在比对 `<>`，写死的 `log_softmax<0>` 不再答 `<1>` 的调用。**但它也不是「已修、现在给 4.0」**：轴 1 上前向**无律**，程序被拒。
+
+**⇒ 而梗在这里：`jvp_reshape`/`jvp_permute` 早已把轴做成参数（`dims`/`perm`），`jvp_softmax`/`jvp_log_softmax` 还写死单轴（`<1>`/`<0>`）。同一文件里两种写法并存。**
+
+### 二、后果：`attention` 的混合不能整段提升
+
+```
+`reshape<[8, 2, 8]>` → `permute<[1, 0, 2]>` → `softmax<2>`
+REINTERP jvp function=mix skip=rule uri=tensor:softmax reason=the rule 'jvp_softmax' writes
+1 `<>` value(s) of its own ((int)), and this node's configuration is not that one ((float[2, 8, 8], int))
+READING_REFUSAL {"transform":"jvp","function":"mix","cause":"rule","uri":"tensor:softmax"}
+```
+⇒ **`permute` 确实在名单里、且把调用的角度绑进去了**（拒绝里那个 `float[2, 8, 8]` 只有在 `reshape` 再 `permute` 之后才会出现）——**走法是被 `softmax<2>` 挡住的**。
+⇒ 所以主干上 `attention` 的混合**不能整段提升**，与分支记的 `mix value=2.000000` **相反**（那是旧基线的形状）。
+
+### 三、这一类缺陷的名字
+
+今天三条（`add_tensor_t`、`subtract_t`、`jvp_softmax`/`jvp_log_softmax`）是**同一个错法**：
+
+> **法则的写法把「一个具体情况」当成了「那个算子」。**
+
+```
+`add_tensor_t` 的 `(ct, ct)` 把「同形状加法」当成了「加法」
+`jvp_softmax` 的 `<1>` 把「沿最后一轴」当成了「softmax」
+⇒ **⇒ 而两处都**不响**：一处答错的形状、一处拒**
+⇒ **⇒ 而 `jvp_reshape`/`jvp_permute` 的做法是对的样本 —— 把变化的那部分**做成参数**，而不是复制法则**
+```
+
+### 四、我建议的处置（要你裁）
+
+1. **`jvp_softmax`/`jvp_log_softmax` 把轴做成参数**，照 `jvp_reshape`/`jvp_permute` 的写法。这一条**不需要新机制**，只是把既有的正确样本推广过去。
+2. **一条一般判据**：新写的法则若在名字后面跟上特定配置（`<1>`、`<0>`），它就该把那个配置做成参数。**这条可以查**（法则名带尖括号 ⇒ 必有参数），比「记得别写死」硬。
+3. **`attention` 的整段提升**作为这条修完的验收：`reshape` → `permute` → `softmax<2>` 那条链应当绿。
+
+⇒ 而**它现在与 `(b)`（pullback 类型核对）是同一根**：`(b)` 拦「答案与操作数形状不符」，这条拦「法则只答一个配置」。**两条都是「法则的适用范围被写小了」。**
+
+### 五、附：一条检查该改
+
+`frontend.ast_snapshot` 失败时**不点名**，只报 `1 not in the snapshot yet`，而 `frontend.plan.toml` 的 `expect_stdout_contains` 就是 `files read as recorded, 0 not in the snapshot yet`。
+⇒ 今晚它**两次**都是靠人肉集合差才定位的（`cf6ccbf25` 三行、`c6f37779c` 一行）。**⇒ 建议让它点名**：「`X` not in the snapshot yet: `<path>`」。
