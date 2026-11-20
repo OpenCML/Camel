@@ -490,9 +490,13 @@ echo "#                    compared against one taken with another --arg set is 
 echo "#   the run       -- the program actually runs, with the arguments each program documents."
 echo "#                    The MLP's data comes from probes/gen_mlp_data.py (same seed, same shapes),"
 echo "#                    64 train / 16 val, 2 epochs; the transformer's is its own committed corpus."
-echo "# The transformer cannot run on this build: its loss goes through the library's vjp, and that"
-echo "# stops at 'jvp has no forward transform'. Its run row therefore shows the diagnostic once per"
-echo "# pass, and its table row is the document alone. That is the reading, not a gap."
+echo "# The transformer cannot run on this build: its loss goes through the library's vjp, which stops"
+echo "# at a missing forward rule -- the diagnostic names \`tensor:layer_norm\` on this pin, and it is"
+echo "# quoted where it is printed below rather than here, because a diagnostic's text moves between"
+echo "# pins and a sentence that quotes it from memory goes stale without saying so. Its run row shows"
+echo "# the diagnostic once per pass, and its table row is the document alone. That is the reading."
+echo "# (This note said \`jvp has no forward transform\` until 2026-11-20; that is the wording of an"
+echo "# earlier pin, and the run below has printed the newer one since the forward-rule work landed.)"
 echo
 echo "# --- the MLP: showcase/c2-mlp-mnist/train.cml ---"
 for p in "" opt::cse opt::fold opt::dce opt::saturate; do
@@ -547,9 +551,10 @@ echo "#               runs, this is the column to quote and the raw one will par
 echo "#   document    the canonical document of the program with the pass and without it: the pass's"
 echo "#               output in the sense the rest of this section uses, and it is deterministic."
 echo "# The section [5] note above stands: the transformer cannot run on this build (its loss goes"
-echo "# through the library's vjp, which stops at 'jvp has no forward transform'), so the run rows are"
+echo "# through the library's vjp, which stops at a missing forward rule), so the run rows are"
 echo "# equal because the same refusal is printed both times -- that is the fact, not an assumption"
-echo "# that the pass changes nothing at runtime."
+echo "# that the pass changes nothing at runtime. The two lines above the row say which diagnostic"
+echo "# was printed, so a reader does not have to take this sentence's word for what it said."
 for p in opt::cse opt::fold opt::dce opt::saturate; do
     l=$(leaf "$p")
     printf '%-14s run raw  %-36s run masked  %-36s document  %s\n' "$p" \
