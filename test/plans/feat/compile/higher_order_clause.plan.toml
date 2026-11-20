@@ -8,8 +8,9 @@ tags = ["feat", "compile", "effects", "hof"]
 # (design principles 3.3; author 2026-11-19), so the declaration names the operand
 # (`sem::ResourceSpec::functionOperand`) and every reader takes the clause from that value's type:
 # the builder's ordering (`Builder::reachOfOper`, `Builder::isEffectNode`), the node-role registry
-# and the effect summary (`EffectWalk::ofNodes`), all through
-# `camel::core::functionOperandClause`. The runtime's resource footprint reads the same clause one
+# and the effect summary (`EffectWalk::ofNodes`), all through the builder's one operand lookup
+# (`Builder::functionValueAt`) and `camel::core::functionValueClauseAt` under it. The runtime's
+# resource footprint reads the same clause one
 # step further down, in `Resolver::oper` (src/runtime/resources.cpp): it binds the clause's
 # parameters where a call through a value binds them, so the `map` node carries the callback's
 # write and a body holding it is not measured as touching nothing. Before that, the declaration said
