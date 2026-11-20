@@ -935,16 +935,20 @@ std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
     return id;
 }
 
+std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionType *value) {
+    if (value == nullptr || value->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+        return std::nullopt;
+    }
+    return value->resources();
+}
+
 std::optional<sem::ResourceSignature> functionOperandClause(
     const OperatorTable &table, OperId id, const type::FunctionType *value) {
     const sem::OperatorSemantics *facts = table.semantics(id);
     if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
         return std::nullopt;
     }
-    if (value == nullptr || value->resources().mode != sem::ResourceSignature::Mode::Concrete) {
-        return std::nullopt;
-    }
-    return value->resources();
+    return functionValueClause(value);
 }
 
 } // namespace camel::core

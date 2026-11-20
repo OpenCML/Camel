@@ -480,7 +480,8 @@ Builder::OperandReach Builder::readFunctionOperandReach(
         return OperandReach::Unreadable;
     }
     const auto *fn = tt::as_ptr<FunctionType>(type);
-    if (fn->resources().mode != ResourceSignature::Mode::Concrete) {
+    const auto clause = camel::core::functionValueClause(fn);
+    if (!clause.has_value()) {
         // A parameter of function type that writes no clause promises nothing (`Generic`).
         return OperandReach::Unreadable;
     }
@@ -490,7 +491,7 @@ Builder::OperandReach Builder::readFunctionOperandReach(
             walk,
             graph,
             transaction,
-            fn->resources(),
+            *clause,
             fn->withTypesCount(),
             true,
             id,
@@ -826,7 +827,10 @@ bool Builder::reachOfCall(
         return false;
     }
     const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
-    if (calleeFunc->resources().mode != ResourceSignature::Mode::Concrete) {
+    // The clause is read in one place (`core::functionValueClause`), so a call through a value and
+    // a higher-order operator's operand cannot come to different answers about the same type.
+    const auto clause = camel::core::functionValueClause(calleeFunc);
+    if (!clause.has_value()) {
         readUnknownValue(walk);
         return true;
     }
@@ -834,7 +838,7 @@ bool Builder::reachOfCall(
         walk,
         graph,
         transaction,
-        calleeFunc->resources(),
+        *clause,
         calleeFunc->withTypesCount(),
         true,
         id,

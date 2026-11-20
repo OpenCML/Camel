@@ -841,17 +841,32 @@ void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector
 }
 
 /**
+ * The clause a function value's type writes: what a call through that value reaches, which is also
+ * what a higher-order operator reaches through the value at the operand its declaration names.
+ *
+ * A clause is present iff the type writes one (`Concrete`); a type that writes none (`Generic`)
+ * answers nullopt, and every caller keeps the conservative reading there -- never "touches
+ * nothing", because an unread clause is not an empty one. `pure` is not an absence: it is the clause
+ * that names nothing, so it comes back as a `Concrete` signature whose `pure()` is true and whose
+ * reach is the empty set. That distinction is the whole point of this one function, and it is why
+ * the two answers are `has_value()` and `->pure()` rather than a single bool.
+ */
+std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionType *value);
+
+/**
  * The clause of the function value a declaration takes its accesses from: the operator names the
  * operand (`sem::ResourceSpec::functionOperand`) and `value` is the function the program put there.
  * Nullopt when the operator names no operand, or the type writes no clause (`Generic`) -- the caller
  * then keeps the conservative reading, never "touches nothing".
  *
- * One rule, read wherever a call stands (design principles 3.3; author 2026-11-19): a call through
- * a function value takes its accesses from the value's type (`Builder::reachOfCall`), and a
- * higher-order operator's call is that same reading with the value at the operand its declaration
- * names -- the builder's ordering (`Builder::reachOfOper`), what a node is worth
- * (`Builder::isEffectNode`), the node-role registry and the effect summary (`EffectWalk::ofNodes`)
- * all answer from it.
+ * One rule, read wherever a call stands (design principles 3.3; author 2026-11-19, 2026-11-20): a
+ * call through a function value takes its accesses from the value's type (`Builder::reachOfCall`,
+ * `Builder::isEffectNode`'s `Call` case, `Resolver::call`, `declaredClauseAt`), and a higher-order
+ * operator's call is that same reading with the value at the operand its declaration names --
+ * `Builder::reachOfOper` (`readFunctionOperandReach`), `Builder::isEffectNode`'s operator case, the
+ * node-role registry, the effect summary (`EffectWalk::ofNodes`) and `Resolver::fromFunctionOperand`.
+ * The clause itself is read here, once: a reader that has the value asks `functionValueClause`, and
+ * this overload only adds the operand the declaration names.
  */
 std::optional<sem::ResourceSignature> functionOperandClause(
     const OperatorTable &table, OperId id, const type::FunctionType *value);

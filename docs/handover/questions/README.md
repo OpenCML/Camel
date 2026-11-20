@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：59 页
+## 现在在等作者：60 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -59,6 +59,7 @@
 | [`2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit`](2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md) | 写明降维结果秩的函数，为什么把 `vjp` 挡在「反向半边的出口类型」上 |
 | [`2026-11-20-parked-means-paused-or-deleted`](2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
+| [`2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread`](2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread.cn.md) | 条目（1）那三颗判据：①成立，②③被同一个事实挡住 —— 库侧的值类型没写子句 |
 | [`2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader`](2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader.cn.md) | The higher-order footprint has a place to be written and a reader; what is left is the two shapes it cannot place |
 | [`2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p`](2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p.cn.md) | 一次读错「哪棵树」的上报，以及它教会的两件事 |
 | [`2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint`](2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md) | The optimizer calls a spent growth budget a fixpoint, and the budget is reset on every call |

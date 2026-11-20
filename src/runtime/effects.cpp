@@ -13,6 +13,7 @@
 #include "camel/runtime/draft.h"
 
 #include <algorithm>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
@@ -31,35 +32,15 @@ struct OperandClause {
     bool writesVariables = true;
 };
 
-OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
-    OperandClause out;
-    const auto &table = camel::core::OperatorTable::instance();
-    const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-    const auto *facts = table.semantics(oper);
-    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
-        return out;
-    }
-    const core::sem::ResourceBinding &where = *facts->resources->functionOperand;
-    if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
-        where.kind != core::sem::ResourceBinding::Kind::With) {
-        return out;
-    }
-    const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
-                              ? graph.normInputsOf(ref)
-                              : graph.withInputsOf(ref);
-    if (size_t(where.index) >= operands.size()) {
-        return out;
-    }
-    const GCNode *value = graph.node(operands[where.index]);
-    const auto *type =
-        value != nullptr && value->dataType() != nullptr &&
-                value->dataType()->code() == core::type::TypeCode::Function
-            ? static_cast<const core::type::FunctionType *>(value->dataType())
-            : nullptr;
-    const auto clause = core::functionOperandClause(table, oper, type);
+/// What a clause amounts to in the two answers this summary can speak: whether it reaches outside
+/// the program, and whether a parameter it writes is program state. `pure` is a clause -- the one
+/// that names nothing -- so it answers "no" to both; an absent clause (`Generic`, or a value the
+/// walk cannot read) answers "yes" to both, because a clause nobody wrote is not an empty one.
+OperandClause clauseReach(const std::optional<core::sem::ResourceSignature> &clause) {
     if (!clause.has_value()) {
-        return out;
+        return OperandClause{};
     }
+    OperandClause out;
     out.external        = clause->external;
     out.writesVariables = false;
     for (const auto &use : clause->params) {
@@ -71,6 +52,47 @@ OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
         }
     }
     return out;
+}
+
+/// The type of the function value at operand `at`, or nullptr when that value carries no function
+/// type. The one place this file reads a value's type, for the two readers below.
+const core::type::FunctionType *valueTypeAt(const GCGraph &graph, gc_node_ref_t at) {
+    const GCNode *value = graph.node(at);
+    return value != nullptr && value->dataType() != nullptr &&
+                   value->dataType()->code() == core::type::TypeCode::Function
+               ? static_cast<const core::type::FunctionType *>(value->dataType())
+               : nullptr;
+}
+
+OperandClause functionOperandClause(const GCGraph &graph, gc_node_ref_t ref) {
+    const auto &table = camel::core::OperatorTable::instance();
+    const core::OperId oper = graph.nodeBodyAs<GCOperBody>(ref)->oper;
+    const auto *facts = table.semantics(oper);
+    if (facts == nullptr || !facts->resources || !facts->resources->functionOperand) {
+        return OperandClause{};
+    }
+    const core::sem::ResourceBinding &where = *facts->resources->functionOperand;
+    if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
+        where.kind != core::sem::ResourceBinding::Kind::With) {
+        return OperandClause{};
+    }
+    const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
+                              ? graph.normInputsOf(ref)
+                              : graph.withInputsOf(ref);
+    if (size_t(where.index) >= operands.size()) {
+        return OperandClause{};
+    }
+    return clauseReach(core::functionValueClause(valueTypeAt(graph, operands[where.index])));
+}
+
+/// The same reading for a call through a function value: the callee is `with` input 0, and its
+/// clause is what the call reaches.
+OperandClause callClause(const GCGraph &graph, gc_node_ref_t ref) {
+    const auto with = graph.withInputsOf(ref);
+    if (with.empty()) {
+        return OperandClause{};
+    }
+    return clauseReach(core::functionValueClause(valueTypeAt(graph, with[0])));
 }
 
 struct EffectWalk {
@@ -143,7 +165,13 @@ struct EffectWalk {
                 break;
             }
             case GCNodeKind::Call:
-                summary.external        = true;
+                // A call through a function value: its reach is the value's clause, read the same
+                // way `Resolver::call` reads it for the footprint (design principles 3.3; author
+                // 2026-11-20). `pure` is the clause that names nothing, so a call through a pure
+                // value is not an external effect. This was the one reader in the tree that read no
+                // type at all and answered "external" for every call, `pure` included, which is what
+                // made a pure call look like a write nobody could name.
+                summary.external |= callClause(*graph, ref).external;
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
                 break;
