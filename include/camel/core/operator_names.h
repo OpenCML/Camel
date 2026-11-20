@@ -46,8 +46,7 @@ std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol);
 /// The group `x = e` writes through: the group `=` maps to in `binaryOperatorGroup`, and the name a
 /// reference to it is built with. A write has no single operator id -- the group holds one overload
 /// per type (design principles 3.5) -- so the reference stays a name, and this constant is where
-/// that name is stated: code that spells `"__assn__"` itself is a second copy of this table (daily
-/// review 2026-11-18, item 4).
+/// that name is stated: code that spells `"__assn__"` itself is a second copy of this table.
 inline constexpr std::string_view kAssignmentGroup = "__assn__";
 
 /// Whether `uri` names an assignment operator: `:op/assn`, `:op/assn_i`, `:op/assn_owned` and the
@@ -65,7 +64,7 @@ inline constexpr std::string_view kBuiltinPrefix = "$builtin::";
 /// The name the compiler writes for the built-in operator `plain`: the one place a compiler-made
 /// operator name is built, so the three builders that need one -- a list comprehension's `filter`
 /// and `map`, and the `range` an interval `a..b` is -- do not each paste the prefix in front of a
-/// word (daily review 2026-11-18, item 4; the author made this follow-up O's on 2026-11-19).
+/// word.
 inline std::string compilerNamedOperator(std::string_view plain) {
     return std::string(kBuiltinPrefix) + std::string(plain);
 }

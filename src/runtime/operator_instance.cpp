@@ -48,8 +48,8 @@ bool isPlainScalar(type::Type *t) {
 /// The value of `ref` when it is a constant: a static DATA node, also behind GATEs. An object
 /// (an int array) counts only when every user of the DATA node is a pure operator.
 ///
-/// A GATE forwards the value it is given as its first normal input (design principles 3.1, the
-/// author's ruling of 2026-11-17); the inputs after it are the reads of a region's writes, which are
+/// A GATE forwards the value it is given as its first normal input (design principles 3.1);
+/// the inputs after it are the reads of a region's writes, which are
 /// not the value and may well be nodes of another type.
 std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
     for (gc_cnt_t hops = 0; hops < graph.nodeCount(); ++hops) {

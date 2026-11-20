@@ -1160,7 +1160,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
         // stands in a frame that the frames it still holds are *above*. The pool is a stack, so the
         // order is the pool's -- the highest frame first -- and releasing `cur` first released a
         // frame that was not the top whenever the fault came back out of a call the driver had
-        // already pushed (`stream.generator_body_fault_ends_stream` on `std::jit`, 2026-11-02,
+        // already pushed (`stream.generator_body_fault_ends_stream` on `std::jit`,
         // where `main` was released under the still-active closure frame).
         Frame *siteFrame = cur;
         std::vector<Frame *> mine;

@@ -272,12 +272,11 @@ struct RewriteErrorBound {
  * about an integer or a boolean is asking the wrong question, and a silent f32 answer would be
  * the one thing this table exists to prevent.
  *
- * This is a *declaration* of a type fact, not the tolerance every comparison has always used:
+ * This is a *declaration* of a type fact, not the tolerance every comparison uses:
  * `agreeFloat` in modules/rewrite/module.cpp keeps the two constants its f32 and f64 verdicts
  * were measured with (1.2e-7 and 2.3e-16, one full ulp of the type where this is the half of it,
- * rounded to two digits). Changing those halves every f32 bound and moves readings this lane is
- * required to leave alone, so it is a numeric-contract change of its own and is filed as a
- * question for the language author, not made here.
+ * rounded to two digits). Changing those halves every f32 bound and moves existing readings, so it
+ * is a numeric-contract change of its own.
  */
 double elementEpsilon(type::TypeCode element);
 
@@ -520,7 +519,7 @@ struct OperatorSemantics {
     /// reader here" proves nothing), or the conservative reading of an operator that declares no
     /// effect at all and of one that says an effect exists without itemizing an access -- 3.3's
     /// "写全局资源", which is a write. `Variable` is not one of them: assigning to a `var` is not an
-    /// effect (the ruling of 2026-11-15). This is the narrower half of `external()`, and the two are
+    /// effect. This is the narrower half of `external()`, and the two are
     /// asked by different readers: "does anything outside see it" (the effect summary) and "does the
     /// region that runs it owe its running" (the region's roots, camel/runtime/region_roots.h).
     /// Reading `console` or `env` is the first without being the second; writing a `Ref` is the
@@ -528,7 +527,7 @@ struct OperatorSemantics {
     ///
     /// The test itself is `sem::writesForTheRegion` (resource_semantics.h): a declaration is
     /// stated as the signature a measured body also gives (`signatureOf`), so a declaration and a
-    /// measurement cannot disagree about what a write is (daily review 2026-11-18, item 3).
+    /// measurement cannot disagree about what a write is.
     bool writesForTheRegion() const;
     /// It can raise a fault. The fault table decides: a declared empty table is an operator with
     /// no fault path at all, and an operator that declares none may fault (design principles

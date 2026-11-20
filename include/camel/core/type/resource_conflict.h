@@ -14,7 +14,7 @@
  * clause has its resources measured from its own body, and a body may be written after the place
  * it is used in. The type layer therefore does not judge the pair where it meets it. It asks the
  * compiler in hand to record it (this sink), and the answer is given once every body has been
- * measured (the ruling of 2026-11-15, design principles 3.3).
+ * measured (design principles 3.3).
  *
  * The sink answers whether it recorded the pair: false leaves the type layer to decide the pair
  * itself, which is what a build without a compiler in hand (`typeEquals` on its own) needs.

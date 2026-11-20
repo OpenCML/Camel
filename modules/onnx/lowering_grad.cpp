@@ -92,7 +92,7 @@ std::string shapeOperand(const LowerContext &ctx, size_t index) {
     return ctx.emitter().node("Shape", {ctx.input(index)});
 }
 
-/// `g` summed down to the extents `target`: a leading-axis reduction (ruling 甲), with the target
+/// `g` summed down to the extents `target`: a leading-axis reduction, with the target
 /// given by the caller rather than read off another value.
 std::string sumTo(
     const LowerContext &ctx,
@@ -178,7 +178,7 @@ std::optional<int64_t> targetLength(const TensorFacts &atFacts) {
 }
 
 /// `g` summed down to a target that is a **value** of the graph: the leading axes its rank leaves
-/// are reduced (that is what 甲 says the operator does), and the reshape target is the list
+/// are reduced (that is what the operator does), and the reshape target is the list
 /// itself. The list's values are never read here -- they are what the model computes -- so an axis
 /// the list states 1 can only be found in the gradient, which is the same question the static path
 /// asks and the same one it leaves open when the extent is not stated.
@@ -433,7 +433,7 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
     }
     std::string product;
     tensor::StaticShape productShape = dyShape;
-    // A transposed product on doubles has to avoid the pair the target fuses (ruling 2026-10-26):
+    // A transposed product on doubles has to avoid the pair the target fuses:
     // one answer for both sites, read from the lowering's target table.
     const bool avoidFusion = transposedProductNeedsGemmOrEinsum(ctx.target(), dtype);
     if (Lhs) {
@@ -462,7 +462,7 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
         }
     }
     // The reduction's target is the extents of the operand this gradient belongs to, handed to
-    // `sum_to` as the list it takes (ruling 甲) rather than as the operand read for its shape.
+    // `sum_to` as the list it takes rather than as the operand read for its shape.
     const tensor::StaticShape target = staticShape(ctx.facts(Lhs ? 1 : 2), ctx.uri());
     if (!fullyKnown(target)) {
         throw ExportError(std::format(

@@ -1201,7 +1201,7 @@ void ParserImpl::parseFuncData() {
     lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         // A pack among the `with` parameters is the same rule on a lambda as on a declaration
-        // (design principles 5.6, and the author's ruling of 2026-11-03 13:50): `<...ws> (...xs) => ...`
+        // (design principles 5.6): `<...ws> (...xs) => ...`
         // names the `with` list the position gives the value, so the lambda's body can forward it.
         parseAngledParams(true);
     }
@@ -1306,7 +1306,7 @@ void ParserImpl::parseMatchType() {
 
 /// typeCase : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
 /// The optional `when` is the guard of the case, the same clause a value-level `match` case
-/// carries (design principles 5.5, ruling of 2026-11-14): the case is taken when its pattern
+/// carries (design principles 5.5): the case is taken when its pattern
 /// matches *and* the condition holds, so a type function can divide by structure and then by
 /// property.
 void ParserImpl::parseTypeCase() {

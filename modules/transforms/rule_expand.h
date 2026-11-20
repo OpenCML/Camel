@@ -151,7 +151,7 @@ struct RuleChoiceWords {
 /// order as `operandTypes`, with `std::nullopt` for a port the node passes as a value. It is what
 /// makes a law that writes its own `<>` value answerable at all: without it such a law fits every
 /// node of that operator, because the type does not carry the value (`reshape<[2, 2]>` and
-/// `reshape<[2, 1, 2]>` are assignable to one another -- measured 2026-11-20, the extents are not in
+/// `reshape<[2, 1, 2]>` are assignable to one another -- the extents are not in
 /// the type). Null means the caller cannot answer, and a law that writes a `<>` value is then
 /// refused rather than guessed: answering with the law's own constant is how the tangent of a
 /// `reshape<[8, 2, 8]>` came out `[2, 2]`.
@@ -186,8 +186,8 @@ RuleChoice chooseRuleAmong(
 /// The right side's products are then read as products: a product that multiplies one of them is
 /// nothing, so it is written as the zero of its own type and none of the values it multiplied are
 /// copied at all -- the term is *omitted*, not computed and multiplied by zero. That distinction is
-/// the author's ruling of 2026-11-04 ("零切向量是结构上已知的（常量没有切向），不是按值判断的"): a
-/// right side may not branch on a tangent's value, and a coefficient that has no real value there
+/// the rule that a zero tangent is structurally known (a constant has no tangent), not judged by
+/// value: a right side may not branch on a tangent's value, and a coefficient that has no real value there
 /// (`log(-3.0)`) must never be evaluated, because `NaN * 0.0` is `NaN`. `omitted` receives the
 /// operators (and calls) that this reading kept out of the answer, so the expansion can be counted.
 ///

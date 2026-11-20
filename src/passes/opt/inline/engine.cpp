@@ -1146,8 +1146,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
             // call that names its callee and one the effect resolver has to read as "writes
             // everything", and a differentiated body's two calls both land in one region.
             //
-            // That they do not write is a rule and not an assumption (design principles 9.9, author
-            // 2026-11-19): a reverse half only computes the transposed rules over the values its
+            // That they do not write is a rule and not an assumption (design principles 9.9):
+            // a reverse half only computes the transposed rules over the values its
             // forward recorded, and its type says so -- `modules/autodiff/pullback.cpp#pureClause`
             // publishes `pure` on every pullback and on the function value the forward hands out.
             // So naming them costs nothing, while leaving them unnamed costs the graph the order
@@ -1429,10 +1429,10 @@ const camel::runtime::Program *applyOptimizeRewritePass(
             break;
         }
         // The boundary check every optimization step ends with, asked here as the other steps ask
-        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp, since 2026-11-02): the
-        // engine's own steps -- devirtualize, specialize, inline -- went unchecked, so a splice
-        // that dropped an effect or moved one past another on the same resource was found only by
-        // comparing the output of the whole pipeline, one step after the one that broke it. Asked
+        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp): the engine's own steps
+        // -- devirtualize, specialize, inline -- are checked too: a splice
+        // that dropped an effect or moved one past another on the same resource is found at the step
+        // that broke it and not one step later in the output of the whole pipeline. Asked
         // per session and on the whole program the session returned, for the reason the sibling
         // site gives: a rewrite's edges are not the only ones it moves, so the graph is judged once
         // it is written, not predicted from the node pair the rewrite named. A refusal records the

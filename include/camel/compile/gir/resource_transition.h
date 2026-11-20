@@ -8,9 +8,8 @@
  * stays inside the call is not either (design principles 3.3, "效应遮蔽") -- is implemented twice
  * today: in the builder's walk (builder_resources.cpp#placeCapturedUse, #placeCalleeCapture) and in
  * the runtime's walk (runtime/resources.cpp#FootprintWalk, which drops an access whose origin is
- * `Fresh`, and #call). R3 replaces both with one analysis, and the author's review of 2026-11-14
- * (f3be47bf3) asks for a case that asks both sides meanwhile, so the two cannot drift apart unseen:
- * "with a case that asks both sides meanwhile".
+ * `Fresh`, and #call). One analysis is meant to replace both; until then a case that asks both sides
+ * keeps the two from drifting apart unseen.
  *
  * Such a case needs one thing neither side publishes today. The runtime's answer is a fact about a
  * frozen graph (runtime::footprintOf), which does not exist while the bodies are built, and the

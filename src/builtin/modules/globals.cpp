@@ -2073,8 +2073,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create("print", {}),
         // The rules of `println` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("println", {}),
-        // `println` on the standard error stream, with the same declaration shape (the author's
-        // rule on question 2: it is in the prelude, so no import).
+        // `println` on the standard error stream, with the same declaration shape
+        // it is in the prelude, so no import.
         // The rules of `eprintln` are the declarations of stdlib/prelude.cml.
         OperatorGroup::create("eprintln", {}),
         // ======= string =======

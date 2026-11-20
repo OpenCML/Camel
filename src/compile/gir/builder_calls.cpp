@@ -504,8 +504,8 @@ node_handle_t Builder::partialApplicationOf(
     // A `with` parameter declared `var` is a variable the function writes: the call passes it in,
     // the body writes it, and the call hands the new value back (design principles 3.5). The
     // function value a partial application makes has no call of its own to write it back to, so
-    // binding one here is a compile error (design principles 3.5, the author's ruling of
-    // 2026-11-15: a partial application cannot bind a `var` context parameter).
+    // binding one here is a compile error (design principles 3.5):
+    // a partial application cannot bind a `var` context parameter.
     //
     // It is refused here, at the binding, because the binding is what the rule is about. Until
     // this check existed the rule had no report of its own and the closure rule refused the

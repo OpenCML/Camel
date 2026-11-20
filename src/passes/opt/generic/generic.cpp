@@ -2102,7 +2102,7 @@ const camel::runtime::Program *simplifyGraph(
             // A round that leaves every count at zero is the end of the pass only when nothing was
             // left undone. A call the inliner left for the growth budget is something left undone,
             // and the budget is the reason the round changed nothing: reporting that as a fixed
-            // point was the silence this reads instead (the ruling of 2026-11-20, (b)). The pass
+            // point was the silence this reads instead. The pass
             // still stops -- the budget is the caller's to raise -- and ends with the program as it
             // stands, exactly as the fixed point does; what changes is the sentence and that the
             // spent budget is now a warning the default log level prints.

@@ -882,8 +882,8 @@ namespace {
 /// that takes none.
 ///
 /// This is the part of a rule's signature the head cannot answer -- the head is the operator, and
-/// two laws of one operator with different parameter types are two laws (the author's ruling of
-/// 2026-11-03 11:10; design principles 5.4, 9.11) -- and it is read here, where the declaration is
+/// two laws of one operator with different parameter types are two laws (design principles 5.4,
+/// 9.11) -- and it is read here, where the declaration is
 /// still syntax, for the same reason the head is: at the stage a module's declarations are read a
 /// rule's `__lhs` has no body, so nothing later has these types as they were written.
 std::string parameterTypesOf(cst::ParentParams params) {
@@ -950,7 +950,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const auto conditionClause = context->get<cst::WhenClause>();
         std::string condition      = conditionClause ? conditionClause->text() : std::string();
         // The type of each parameter, in order: the other half of what a duplicate is. A key holds
-        // one rule per parameter-type list (the author's ruling of 2026-11-03 11:10), so the two
+        // one rule per parameter-type list, so the two
         // laws of `T[...]` and `T` are filed under one key and the engine picks the one the
         // operand's own type enters -- the declaration is not refused for writing the same
         // `is_float::<T>()` twice.
@@ -3381,8 +3381,8 @@ Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
 typeCase
     : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
     ;
-A case may carry the guard a value-level `match` case carries (design principles 5.5, ruling of
-2026-11-14): `case p when c => body`, kept as child [1] after the body so the body stays child
+A case may carry the guard a value-level `match` case carries (design principles 5.5):
+`case p when c => body`, kept as child [1] after the body so the body stays child
 [0] for the reader that builds it.
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
@@ -4783,7 +4783,7 @@ std::string decodeFStringText(std::string_view text) {
 }
 
 /// An interpolation is empty when it holds no token that is neither white space nor a comment
-/// (the author's criterion). White space is never a token, so this is: every token
+///  White space is never a token, so this is: every token
 /// is Eof or a comment. `Command` (the ignored `#!` line) and `Error` are not comments, and either
 /// leaves the interpolation non-empty.
 bool isEmptyInterpolation(const syn::TokenBuffer &tokens) {

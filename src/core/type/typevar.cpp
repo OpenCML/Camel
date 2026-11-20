@@ -359,9 +359,9 @@ FunctionTypeFactory rebuildFunctionType(
         // members and not the pack. Written the other way round, `<...WithOf<F>>` with one member
         // kept the rest slot as well as the member, the signature said one `with` parameter while
         // `StaticFuncTypeResolver::resolve` counted the rest slot away, and every call of
-        // `GradientOf<F>` was refused one argument short: measured 2026-11-20,
+        // `GradientOf<F>` was refused one argument short:
         // `'<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)`
-        // (language author's ruling of 2026-11-20 on `6b5b5bd9b`: an empty rest pack is a value in
+        // (an empty rest pack is a value in
         // the body, an empty tuple, and it enters neither the parameter list nor the function type).
         if (TypeCallType::isExpand(func->withTypeAt(i))) {
             std::vector<Type *> members;
@@ -405,7 +405,7 @@ FunctionTypeFactory rebuildFunctionType(
         const std::string name = paramNameOf(func, func->withTypesCount() + i, "__n", i);
         // The same reading as the `with` list above, on the ordinary parameters: `(...ParamsOf<F>)`
         // is the members the substitution settles, and a function of none of them declares none --
-        // measured 2026-11-20, `GradientOf<F>` of a function with no ordinary parameter kept a rest
+        // written the other way round, `GradientOf<F>` of a function with no ordinary parameter kept a rest
         // slot the call never fills, and `<> (float)` was refused for it.
         if (TypeCallType::isExpand(func->normTypeAt(i))) {
             std::vector<Type *> members;
@@ -788,8 +788,8 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         }
         if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
-            // A case may carry a guard (`case p when pred => ...`, design principles 5.5, ruling
-            // of 2026-11-14). A case is taken when its pattern selects the subject *and* the
+            // A case may carry a guard (`case p when pred => ...`, design principles 5.5).
+            // A case is taken when its pattern selects the subject *and* the
             // predicate holds; a predicate that does not hold sends the subject on to the case
             // written after it. A predicate nobody has answered yet is neither of those: it takes
             // no case at all and the match waits, because an answer this build does not have is

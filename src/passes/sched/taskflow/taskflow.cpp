@@ -2886,7 +2886,7 @@ bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
 
 // The faults of the element calls of one unordered operator (map, apply, filter,
 // unordered_foreach; the chunks of unordered_reduce), which run concurrently and can fault
-// together. Design principles 3.6 (ruled 2026-10-31): elements that have started run to their
+// together. Design principles 3.6: elements that have started run to their
 // end; of the elements that have not started, those above the smallest fault known do not
 // start and those below it still do; the fault of the smallest index is reported. So "do not
 // start" is applied to the elements *after* the smallest faulting index known: an element

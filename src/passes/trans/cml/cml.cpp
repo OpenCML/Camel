@@ -1,9 +1,9 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// `std::cml`: print the runtime program as Camel source. S1 covered the straight-line subset:
+// `std::cml`: print the runtime program as Camel source. It covers the straight-line subset:
 // module values, functions, literals, accesses, casts, operators, direct calls, `let`/`var`,
-// assignment, `return` and straight-line `sync`. S2 adds branches (`if`, `match`, the join that
+// assignment, `return` and straight-line `sync`, and branches (`if`, `match`, the join that
 // gives their value), loops (`for`, `while`, `for ... while`, their state and their regions),
 // closures (a lambda as a value, its captures, a body that is a sync block), and `with` and
 // `var` parameters. A construct outside that subset is refused by name instead of being printed
@@ -2755,8 +2755,8 @@ class CmlPrinter {
             return;
         case camel::runtime::GCNodeKind::Copy:
             // A copy the source named is the value a `var` was *declared* with, and it is the
-            // declaration: a `var` the builder makes a value rather than a cell (stage S1,
-            // `builder_expr.cpp`'s NREF) gives the name its own copy of the initializer, and no
+            // declaration: a `var` the builder makes a value rather than a cell
+            // (`builder_expr.cpp`'s NREF) gives the name its own copy of the initializer, and no
             // `:var/new` exists for `emitVariable` to write. Printing it away -- which is what
             // `expression` does with every other copy -- writes the initializer where the source
             // had a name, and the printed program comes back one node short: `trans/cml/linear.cml`
@@ -2980,7 +2980,7 @@ class CmlPrinter {
         }
     }
 
-    /// A `var` the builder made a value rather than a cell (stage S1): there is no `:var/new` node,
+    /// A `var` the builder made a value rather than a cell: there is no `:var/new` node,
     /// and the declaration is the copy of the initializer that carries the source name, so
     /// `emitVariable` is never reached for it and a declaration has to be written here. The name is
     /// what the reads below take (`expression` answers with it), and `var` is what rebuilds the
@@ -4090,7 +4090,7 @@ class CmlPrinter {
             // (`shl` is exported with no body, and `1->shl<4>` is what the source writes), so the
             // test is the export and not the body: "body-less" says where the implementation is,
             // "private" says whether a program may write the name, and they are different facts
-            // (the author's ruling of 2026-11-03; design principles 6.4).
+            // ( design principles 6.4).
             fail(
                 ref,
                 std::format(

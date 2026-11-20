@@ -1691,10 +1691,8 @@ conversion: the type after `as` takes a `..` that stands on its line as a mark -
 `x as int..5` is not the interval from `x as int` to `5`: it is a `..` written where a type
 stands, which SyntaxDiag::AsRightSideIsType reports (test/cases/parse/rulings/
 stream_type_as_interval.cml says why, and names the spelling `(a..b)`). An input that writes
-`let r = n as int` and `..5` on the next line is a range, and this function used to write it back
-as `let r = n as int..5`, which the parser refuses -- the formatter had turned an accepted
-program into text that does not parse. `camel-parsecheck fuzz` met it at iteration 929, on a
-mutation of that ruling case, and the input is written down as
+`let r = n as int` and `..5` on the next line is a range, and writing it back as
+`let r = n as int..5` would turn an accepted program into text the parser refuses; the input is
 test/cases/parse/rulings/dotdot_after_cast.cml. A conversion that a `..` follows is written in
 parentheses, the spelling the diagnostic names, which reads back as the same tree.
 */

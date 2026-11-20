@@ -118,7 +118,7 @@ node_handle_t Builder::captureInto(
     // A name the program declares with `var` is a name even where it stands for a value and not a
     // cell: design principles 3.5 (198) refuses assigning it from the making of this closure to its
     // last use, and that rule is about the name, not about where its value is kept. A `var` whose
-    // value is a handle is a value and its cell is gone (`9d29939c4`), so the record is kept for the
+    // value is a handle is a value and its cell is gone, so the record is kept for the
     // value the name stood for where the capture is written -- that value is what the closure holds.
     const bool namedVar = isVar || isSsaValue(origin, name);
     // A function value holds the captures its graph had when it was made; a direct call is
@@ -288,10 +288,8 @@ bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle
     // legal. `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read` is that shape:
     // `var w = 0; write_then_read(w, (): int => w)` prints 0, because the closure captured the
     // value `w` had when it was made and `w = 7` in the callee only changes the callee's own name
-    // until the call returns. The author's ruling of 2026-11-16 settles that reading: 0 is the new
-    // semantics, not a wrong value. The conservative gate this step used to carry -- keep the cell
-    // of every name handed to a call until 198 covered the shape -- is therefore gone, and so is
-    // the name table (`handedOver_`) that backed it.
+    // until the call returns. 0 is the semantics, not a wrong value, so a name handed to a call
+    // does not keep its cell on that account.
 
     // The cell is kept where the rule above is not the one that governs the write. Design
     // principles 3.5 (197) makes a name a closure mentions unassignable, and the write a closure

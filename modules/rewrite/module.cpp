@@ -515,8 +515,8 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
             // The type of the value, not the cell a `var` parameter is held in: a law is
             // instantiated at the type of the value it applies to (`float`, not `var float`),
             // and built for `var float` its guard would pass a reference where the guard's own
-            // instance takes the value (measured 2026-10-24: `float_combine__when<var float>`
-            // passes a `var float` to `combineSameSign<float>`).
+            // instance takes the value (`float_combine__when<var float>`
+            // would pass a `var float` to `combineSameSign<float>`).
             Type *type = camel::core::type::valueTypeOf(graph->node(it.ref())->dataType());
             // A value of `never` never exists (design principles 3.9): the node that has the type
             // ends the run, and no law is written for the value it does not give.
@@ -1311,14 +1311,13 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // Everything else this kernel reads lives on the GC heap, and every call below can collect -- a
     // generic rule's instance is made here and a rule's `when` condition runs here -- so each is
     // read again from where the collector keeps it, which is rule 2 of
-    // docs/technical/36_gc_handle_rules.md. The rule is the address this kernel used to keep, and
-    // the one the fix in `callWhen` did not reach (6e0eb52e4): under `--gc-check poison` the
-    // collector wrote its poison word where the rule had been, and `rule->name()` in the answer at
-    // the end of this function read that word -- SIGSEGV with `nameId` 0xf3900000, measured
-    // 2026-10-24 on rules.why_not_names_the_false_condition. The rule is rooted for the length of
-    // the kernel now and read from the handle at every use; the program and its graphs are read
-    // from the frame again wherever a collecting call stands between the read and the use; and the
-    // value's graph and index are read once, as numbers.
+    // docs/technical/36_gc_handle_rules.md. The rule is the address most exposed to this: under
+    // `--gc-check poison` the collector writes its poison word where the rule had been, and
+    // `rule->name()` in the answer at the end of this function would read that word -- SIGSEGV with
+    // `nameId` 0xf3900000. The rule is rooted for the length of the kernel and read from the
+    // handle at every use; the program and its graphs are read from the frame again wherever a
+    // collecting call stands between the read and the use; and the value's graph and index are
+    // read once, as numbers.
     mm::RootHandle ruleRoot(
         mm::autoSpace(),
         const_cast<RuleObject *>(rule),
@@ -1816,10 +1815,10 @@ double smallestSubnormalOf(TypeCode dtype) {
 
 /// The epsilon two floating sides of an element type are compared with. It is the element type's
 /// own (camel::core::sem::elementEpsilon: bf16 2^-8, f16 2^-10, and the reduced types' instances
-/// are what this lane exists to make checkable), except that f32 and f64 keep the two constants
+/// are what this comparison exists to make checkable), except that f32 and f64 keep the two constants
 /// the check has always measured their verdicts with. Those two are one *full* ulp of the type
 /// (1.2e-7 = 2^-23, 2.3e-16 = 2^-52) where `elementEpsilon` declares the half of it (2^-24,
-/// 2^-53), and a lane may neither loosen an f32 bound nor move an f32 or f64 reading: changing
+/// 2^-53), and a change may neither loosen an f32 bound nor move an f32 or f64 reading: changing
 /// them halves every f32 bound and belongs to a numeric-contract change of its own.
 double checkEpsilon(TypeCode dtype) {
     switch (dtype) {
@@ -3387,11 +3386,10 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// its place in the array.
 ///
 /// The rows this appends are the verdict table `check` answers
-/// (docs/design/rewrite/plan-verification.cn.md, S0): the verdict, what it is about, and the
+/// (docs/design/rewrite/plan-verification.cn.md): the verdict, what it is about, and the
 /// evidence or the reason it is what it is. With no solver in the build a rule
 /// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
-/// and `proved` is reserved for a licence's proposition being established (the rule on
-/// `verification-licence-to-precondition`).
+/// and `proved` is reserved for a licence's proposition being established.
 void checkOneRule(
     Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream,
     std::string_view instance, std::vector<CheckRow> &rows) {
@@ -3408,10 +3406,9 @@ void checkOneRule(
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
     // What the translation layer made of this rule's two sides
-    // (docs/design/rewrite/plan-verification.cn.md, S1). The sides are read once, here: the same
+    // (docs/design/rewrite/plan-verification.cn.md). The sides are read once, here: the same
     // two sides are the rule's own graphs, whatever the instance. A rule the
-    // layer cannot translate is `sampled` with the reason written in the coverage column (the rule
-    // on `verification-verdict-surface`, 3).
+    // layer cannot translate is `sampled` with the reason written in the coverage column.
     const std::string coverage = camel::verify::translate(source).column();
     const auto addRow          = [&](std::string_view verdict,
                                      std::string evidence,
@@ -4054,11 +4051,10 @@ std::vector<CheckRow> rowsOfReport(const Struct *report) {
 /// A generic rule is checked once per instance its condition admits over the types the operator
 /// groups registered.
 ///
-/// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md, S0): the verdict
+/// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md): the verdict
 /// table, one row per rule or per instance of a generic law, each row carrying the rule, the
-/// instance, the verdict, what the verdict is about and the evidence or the reason (the rule on
-/// `verification-verdict-surface`, 2: the verdict is published by `check` and the text output is
-/// the fixed rendering of that table, which is what a reader -- and the acceptance -- reads).
+/// instance, the verdict, what the verdict is about and the evidence or the reason. The verdict is published by `check` and the text output is
+/// the fixed rendering of that table, which is what a reader reads.
 slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
     // `samples` and `seed` are the whole `with` list of both overloads of `check`, in that order:
     // the two declarations name each `with` position the same way, which is what lets a named
@@ -4087,8 +4083,7 @@ slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         if (made->ruleId() != 0) {
             // A generic rule has no two sides of its own: it is checked once per instance its
-            // condition admits over the types the operator groups registered (the rule on
-            // `generic-rule-check-surface-and-multi-parameter-instances`). The index is not passed:
+            // condition admits over the types the operator groups registered. The index is not passed:
             // the seed of a rule follows its identity, not its place in this array.
             checkGenericRule(ctx, *made, samples, seed, programTypes, rows);
             continue;

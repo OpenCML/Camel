@@ -22,7 +22,7 @@ namespace camel::runtime {
 namespace {
 
 /// What a higher-order operator's function operand amounts to, when its declaration takes the
-/// accesses from there (design principles 3.3; author 2026-11-19): the clause of the function value
+/// accesses from there (design principles 3.3): the clause of the function value
 /// that arrives in `with` operand `functionOperand` -- the rule a call through a value follows. The
 /// conservative answer is the default, and it is what an absent or unreadable value gets: the walk
 /// must never report "touches nothing" because it could not read something.
@@ -125,7 +125,7 @@ struct EffectWalk {
                 summary.mayFault |= !traits || traits->mayFault;
                 if (traits && traits->callsGraphs) {
                     // It runs a function the program hands it, and its accesses are that
-                    // function's (design principles 3.3; author 2026-11-19): the same reading a
+                    // function's (design principles 3.3): the same reading a
                     // call through a value follows reads the clause off the value's type, so a
                     // `map` over a pure function is not an external effect. What the declaration
                     // cannot narrow -- a type that writes no clause -- keeps the conservative

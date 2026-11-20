@@ -128,7 +128,7 @@ struct ExecLoop {
 /// operator's own claim about reusing an operand makes (camel/runtime/storage_reuse.h) -- is the
 /// tool's vocabulary and is written where the tool is: a member nobody can write into the column is
 /// a fourth answer the plan does not have, and a reader of this enum would have to be told so every
-/// time it is used (author review 2026-11-17, item 11).
+/// time it is used.
 enum class StorageReuse : uint8_t {
     /// Not an update node: the plan decided nothing about it.
     None = 0,
@@ -244,8 +244,7 @@ class ExecPlan {
     // names the in-place form of an operator and takes its array from `:var/take` of a variable's
     // cell (Builder::pathAssignmentOf, Builder::inPlaceRebindingOf), or it names the *copying*
     // form of an operator that has one (`v = v->append(x)`, `xs = xs->sort`, `xs[i] = v` on a
-    // value -- where a same-region local `var` has been a value and not a cell since stage S1 of
-    // the direct-SSA construction plan). The plan decides, once, whether the update reuses the
+    // value -- where a same-region local `var` is a value and not a cell). The plan decides, once, whether the update reuses the
     // storage of the value it is given (StorageReuse), and every back end follows: a node the plan
     // marks Copy runs the plain form of the operator (operatorUriFor), which copies; the two
     // forms that reuse the storage run the in-place form, which asks the array itself where the
@@ -272,8 +271,7 @@ class ExecPlan {
     // What a count releases is the *resource*: the block's memory still belongs to the wrappers
     // that name it (see the note on `ForeignResourceControlBlock::releaseCountNow`).
     //
-    // The rule is the author's ruling of 2026-11-15 (docs/handover/reviews/
-    // 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md): the output of a
+    // The rule: the output of a
     // value node is held by each of its uses, the last use takes the producing reference over, and
     // every other use is a copy. Said in references: a value is born with one (its producer's),
     // takes `copies` more (one per copy), and one comes back after each use -- so
@@ -289,18 +287,12 @@ class ExecPlan {
     // holder* of it, and its operator takes no reference for it. The count is the number of holders
     // (design principles 10.5), so the reference is the plan's to take: one hold at the node's
     // position, given back where that value is last read, with every other producer's rows
-    // (`refTakesAt`). An element read of a counted value is the shape the author ruled on
-    // (2026-11-18, `812afad5c`): "an element read of a counted value is a further holder, so the
-    // plan retains there and the run-time skip goes". `reduce` is the other one -- it returns its
+    // (`refTakesAt`). An element read of a counted value is such a shape: it is a further
+    // holder, so the plan retains there and no run-time skip is needed. `reduce` is the other one -- it returns its
     // accumulator, so a `state::Ref` as its `initial` makes the node's value the initial's box.
     //
-    // There used to be a rule applied when the rows ran instead: a give-back row whose object was
-    // the very object the node's own value held was skipped, because the node's value was read as
-    // taking that reference over. It answered the same question at run time, in one place, with an
-    // object comparison -- and it was the only thing keeping `ref.reduce_takes_its_initial` green,
-    // while the fact it stood for (the box read out of an array is held by the read too) had no
-    // plan-side answer at all. Both are the plan's now, and `applyRefEntriesAtPosition` skips
-    // nothing.
+    // Whether a node's value is a further holder is the plan's answer and not a run-time object
+    // comparison, so `applyRefEntriesAtPosition` skips nothing.
     //
     // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
     // aggregate out of the values it is given -- does not end when the FILL has run: the packing
@@ -316,9 +308,8 @@ class ExecPlan {
     // sight, not where it dies; the row is not laid, and the packed value is kept.
     // What is *not* this case: a value read by a call and packed into nothing. Each of its uses
     // holds a reference of its own while the call runs, and that reference comes back at the call.
-    // This is the class that made the half count of 2026-11-15 release live boxes: a closure
-    // captured a handle, the slot that made it was cleared, and the count reached zero while the
-    // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
+    // This is the class that would release live boxes: a closure captured a handle, the slot that
+    // made it was cleared, and the count reached zero while the closure still held it.
     //
     // What this table does decide: where each row runs. A row is written at the position it is due
     // at and is never moved from there -- the node that makes the value for the reference nothing
@@ -329,8 +320,7 @@ class ExecPlan {
     // nodes of that kind: they make values and they read values, so their positions carry rows
     // as an operator's do. The holds are the producer's, because the edge from a producer to
     // each of its readers is the only edge that orders a hold before every reader; a row moved
-    // to "the next operator" has no such edge and a parallel back end may run it early, which is
-    // what the rework of 2026-11-17 removed.
+    // to "the next operator" has no such edge and a parallel back end may run it early.
     //
     // A position with no instruction of its own in a bytecode back end is a port or a GATE:
     // both only carry another value's slot and are not where the plan's rows for a counted value
@@ -350,8 +340,7 @@ class ExecPlan {
     /// By topo index: the node makes a value that is a *further holder* of an object an operand
     /// already holds, and its operator took no reference for it -- so the plan takes that reference
     /// at this node's position (`takesTheReferenceForItsValue`, src/execute/exec_plan.cpp). The
-    /// author's ruling of 2026-11-18 (`812afad5c`): "an element read of a counted value is a further
-    /// holder, so the plan retains there and the run-time skip goes". It is a column of its own and
+    /// An element read of a counted value is a further holder, so the plan retains there. It is a column of its own and
     /// not `refProducedAt` because the two say different things about the count: a value made this
     /// way is not born with a reference of its own, so it is not one of the `1 + copies` the balance
     /// is read from, while it does have rows a back end runs.
@@ -359,7 +348,7 @@ class ExecPlan {
     /// By topo index: how many holds a back end takes when this node has run -- keyed the way an
     /// instruction is, as `refGiveBackAt` is for the references that come back, so that these two
     /// columns are the whole schedule a back end reads. The holds are always taken at the node that
-    /// makes the value (author review 2026-11-17): that node has a data edge to every reader, so
+    /// makes the value: that node has a data edge to every reader, so
     /// its position is the one place a hold is ordered before all of them, whatever order a
     /// parallel back end runs the readers in. A reader that wants one value's holds sums the
     /// `Retain` entries that name it (`refEntries`).
@@ -402,9 +391,8 @@ class ExecPlan {
 
     /// ---- The position of the last use: route 4's column -------------------------------------
     //
-    // The author's ruling of 2026-11-15 puts the last use on the walk that already decides storage
-    // reuse -- it "carries the execution order and who reads what" -- and says it is computed there
-    // and not written a second time. So `planStorageReuse` fills this column, and the references
+    // The last use is computed on the walk that already decides storage reuse -- it carries the
+    // execution order and who reads what -- and not written a second time. So `planStorageReuse` fills this column, and the references
     // that come back are placed from it: a value is never read again after `lastUseAt`, which is
     // the moment its producing reference is handed over (unless the program keeps it).
     //
@@ -469,7 +457,7 @@ class ExecPlan {
     ///     (copying) form, which allocates;
     ///   * the node names the *copying* form of an operator that has an in-place one and the plan
     ///     marked it Input or ByArrayCount: it runs the in-place form, which is the one that writes
-    ///     where the plan handed the storage (stage S3b of the direct-SSA construction plan: the
+    ///     where the plan handed the storage (the
     ///     value an update is given at its last use is handed over, so `v = v->append(x)` on a value
     ///     runs the form that appends in the storage instead of making a new array).
     ///
@@ -585,10 +573,9 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 // It runs the `Retain` rows through `retainCountNow` (one holder more) and the `GiveBack` rows
 // through `giveBackCountNow` (one holder less, and the resource goes when that was the last). One
 // filter decides which rows run: a row is skipped whole when the value it names is not a slot of
-// that reference type. The other filter the earlier version had -- a value's rows ran only when the
-// node that made it was an OPERATOR -- is gone (author review 2026-11-16, item 5): a CALL and a
-// FILL make values too, their rows were laid out and never run, and the box a call made kept its
-// count for ever while the plan read balanced. `rowsOfValueAreExecuted` now asks only whether the
+// that reference type. A value's rows do not depend on the node that made it being an OPERATOR: a
+// CALL and a FILL make values too, and rows that were laid out and never run would leave the box a
+// call made with its count for ever while the plan read balanced. `rowsOfValueAreExecuted` asks only whether the
 // plan counts the value at all, so the rows of every value the plan counts run wherever they were
 // laid.
 //

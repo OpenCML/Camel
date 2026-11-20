@@ -62,7 +62,7 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // The shape is a fact the parameter's type may write down (`func pick(x: float[3])`), and until
 // this builtin there was no way to read that fact as a value: a law can name the operand's value
 // and nothing of its type, and the value of a parameter whose cotangent is what the transposed
-// function takes is a value nobody has (author, 2026-11-03 17:55).
+// function takes is a value nobody has.
 //
 // So the language gets one function whose answer is a fact of its **type argument** and of nothing
 // else: `extent_of::<float[2, 3]>()` is `[2, 3]`, an `int[]`. The extents are the type's own, one
