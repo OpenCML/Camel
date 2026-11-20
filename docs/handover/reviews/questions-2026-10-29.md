@@ -6523,3 +6523,17 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 ## 下发（2026-11-20 17:50，经论文一侧转负责人：能跑的读数现在先跑）：在当前 develop 头上跑一次 capture-all.sh
 
 决策者。负责人定：定版不急，能跑的读数**现在就跑**。合并位立即在 develop 当前头（`c7795907e` 或此刻更新的那一笔，报告第一行写哈希）上、Release 构建，跑一次完整的 `capture-all.sh`，原始记录合入 `docs/handover/reports/eval-round10/` 并在本页回一行哈希与路径；决策者转论文。之后负责人选定 P\* 时，只对受影响的项补跑（二阶导、transformer 修好后的那几行、条目（1）改选点后的那一行），其余沿用这一次。跑读数不停其他格：二阶导、transformer、条目（1）照常推进。
+
+## 每日审查（2026-11-20）
+
+决策者。范围：develop 过去 24 小时的非合并提交 114 笔，动代码 30 笔（26%）；代码面 64 文件 +2164/−334。三个只读子代理按领域审，下列各条我已对照代码核实。**排期**：ECOOP 八格优先不变；以下返工排在 ECOOP 之后的收敛车道（N/O/P），**R1、R2 先于其余**。
+
+**R1 足迹规则写了四份，两份答案相反（第二份真相）。** "声明的访问 ∪ 函数实参类型的效应"本应只有一处。现状：运行时 `Resolver::fromFunctionOperand`（`src/runtime/resources.cpp`）手抄了 `fromSignature` 的参数/环境/anyOf/捕获循环；构建器 `reachOfOper`/`readFunctionOperandReach`（`src/compile/gir/builder_resources.cpp`）自己走；`src/runtime/effects.cpp` 的 `functionOperandClause` 压成两个布尔；`builder_diagnostics.cpp` 又一份实参查找。with 实参的基址也两份（运行时 `withArgBase`，构建器仍是 `isWith && isCall ? 1 : 0`）。**同一情况两边答案不同**：放不下的使用，构建器 `case OperandReach::CannotPlace: break;`（`builder_resources.cpp:705`）什么都不加，运行时加 `anyValue`——前者违反 c6f37779c 自己写的"放不下的使用是该类的某个资源，不是没有"。修法：在 core 立一个函数"某节点某操作数的效应子句"（含穿门、Norm/With 下标、基址），四处只调它；`CannotPlace` 与运行时同答。
+**R2 捕获表排序不全序，根因未动。** f26529338 按 `{id, epoch}` 排，注释自认表里可有两张图的句柄；两图的句柄可能 id 与 epoch 都相同，`std::sort` 不稳定，次序落回按地址散列的原序。根因是 `std::hash<DraftNodeRef>` 以地址为键（`runtime/node_ref.h`），其他遍历这类表的地方照样可达输出。修法：排序键加图的身份（建图序号），并查一遍以地址散列的容器被遍历后进输出的其余位置；10 次×2 程序的复测不足以证明，改用打乱插入序的自检。
+**R3 值调用捕获用 `nullptr` 占位。** beea20ad6 在 `CallValue::variables` 里放 `nullptr` 以保槽位，读者（`builder_expr.cpp:857` 等）要各自容忍；"本图是否包住来源"成了 `addArgumentCaptures` 之外第二处回答。修法：直接调用与经值调用在表示上分开（调用节点知道自己是哪种），掩码按实际捕获生成，不留空槽。Windows 读数补上。
+**R4 广播转置两套法则。** `add_stated_t`/`subtract_stated_t`（`stdlib/rulesets/transpose.cml:255` 起）与 `add_tensor_broadcast_t`（:236）是同一条法则，只是形状从操作数还是端口读；另有 `add_stated`/`subtract_stated`/`mul_stated` 三个算子各带前向、反向、引擎 VJP 与文档。同型的 `add_tensor_t` 仍答 `(ct, ct)`，开秩类型下照样丢形状（2e78f29c0 的测试文字自己承认）。修法：一条"`sum_to(ct, shape(operand))`"法则覆盖同型与广播，`*_stated` 族删掉；`shape` 读不出就拒，不答 `(ct, ct)`。若删族要动语言（右边写 `<>` 被拒），列成问题给我，不再加私有包装（`reshape_jvp`、`permute_jvp`、`softmax_jvp`…已有五个）。
+**R5 模块集合写在六处。** `CMakeLists.txt:288` 起 `CAMEL_MODULE_LINKS_*` 手抄各模块 `EXTRA_LIBS`，`CAMEL_MINIMAL_DROPS` 又一份，`cmake/Options.cmake`、`options.json`、两份 build-minimal 文档、`REPRODUCE.md` 各写一遍，连"23 个 .cmo"这种计数也手写。修法：依赖从各模块 CMakeLists 收集（模块声明自己的链接，顶层读），文档只引变量名不抄清单与计数。
+**R6 脚本重复。** `scripts/check_wheel_contents.py` 与既有 `check_wheel_tags.py`、`check-wheel-tags.mjs` 并存，提交自称"探针、不是本车道交付"——探针不进主干，删或并入一个；`scripts/source-package.mjs` 的七类手写清单与 `clean.js`、`check-source-artifacts.mjs` 重叠，改为读它们。
+**R7 测试钉子放松与台账。** 063038483 把 `nested.plan.toml` 的 `first_with_as_param` 从 negative 改成 behavior+known_fail（错误原文也换了），known_fail 只有散文说明没有可检查的移除条件——补"哪个提交/哪条读数出现时移除"。ba4852022 台账收三名常驻，其中 `draft_erase_unread.cpp` 是前一笔新写的测试，应改写避开而不是登记；`rules.cpp` 把 7 处形参改 `auto &` 只为过检查，改回并让检查按语义判。
+**小项**：`cml.cpp`（4699 行，+101）继续按 `:op/assn`、`:var/peek` 等 uri 前缀分支，下次动它时改按算子声明；`generic.cpp` 的 `growthBudgetRefusal` 从事实回读 inliner 的结论，无上下文时静默当不动点——改成 inliner 直接回报；`transpose.cpp`（5996 行）本日 +228。
+**闸门**：今天没看到 CI 读数。合并位跑完采集后补一次 linux 闸门，读数写本页。
