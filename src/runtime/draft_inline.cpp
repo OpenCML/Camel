@@ -1177,7 +1177,6 @@ gc_node_ref_t resolveInlineValueExit(
     const GraphTransaction &transaction, const DraftGraphCloneResult &cloned,
     const GCGraph *calleeGraph, const GraphTransaction *calleeTransaction,
     std::span<const gc_node_ref_t> boundActualInputs) {
-    const auto &draft = transaction.graph();
     std::array<gc_node_ref_t, 3> candidates{
         cloned.returnNode,
         cloned.outputNode,
