@@ -616,6 +616,13 @@ Builder::arm_ptr_t Builder::buildArm(
     return arm;
 }
 
+node_handle_t Builder::behindSyncGate(node_handle_t value) {
+    if (!nodeIsKind(value, runtime::GCNodeKind::Gate) || normInputsOf(value).empty()) {
+        return value;
+    }
+    return nodeDraftOf(value)->ref(normInputsOf(value).front());
+}
+
 void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
     if (arm.returned) {
         return;
@@ -627,12 +634,8 @@ void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
         arm.type   = Type::Void();
         return;
     }
-    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
-    // GATE is what the arm gives, the value it forwards is the arm's value.
-    node_handle_t value = result;
-    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
-    }
+    // The arm gives the GATE a sync block ends with; its value is what the GATE forwards.
+    node_handle_t value = behindSyncGate(result);
     arm.output = result;
     arm.value  = value;
     arm.type   = nodeTypeOf(value);
@@ -754,10 +757,7 @@ node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle
     arms[1]          = buildArm(call, [&] {
         insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
         ExpectedValueScope noPosition(expectedValueType_, nullptr);
-        node_handle_t result = visitPipeLink(call, passed);
-        if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-            result = nodeDraftOf(result)->ref(normInputsOf(result).front());
-        }
+        node_handle_t result = behindSyncGate(visitPipeLink(call, passed));
         Type *type = valueTypeOf(nodeTypeOf(result));
         if (onNull) {
             resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
@@ -1418,30 +1418,23 @@ bool Builder::hasGuardedCase(const GCT::node_ptr_t &gct, size_t first) {
     return false;
 }
 
+node_handle_t Builder::staticBool(bool value, const GCT::node_ptr_t &origin) {
+    node_handle_t node = currGraph_->addStaticDataNode(
+        tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(value)));
+    registerNodeOrigin(context_, node, origin, "gir.data");
+    return node;
+}
+
 node_handle_t Builder::negateCondition(node_handle_t value, const GCT::node_ptr_t &origin) {
     // `!b` is the branch `if b then false else true`: `not` over a bool, with no new node kind.
-    const auto constant = [&](bool each) {
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
-        registerNodeOrigin(context_, node, origin, "gir.data");
-        return node;
-    };
     std::vector<arm_ptr_t> two(2);
-    two[0] = buildArm(origin, [&] { return constant(false); });
-    two[1] = buildArm(origin, [&] { return constant(true); });
+    two[0] = buildArm(origin, [&] { return staticBool(false, origin); });
+    two[1] = buildArm(origin, [&] { return staticBool(true, origin); });
     return buildBranch(origin, value, &two);
 }
 
 node_handle_t Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin) {
-    node_handle_t always = currGraph_->addStaticDataNode(
-        tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
-    registerNodeOrigin(context_, always, origin, "gir.data");
-    const auto boolConstant = [&](bool value) {
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(value)));
-        registerNodeOrigin(context_, node, origin, "gir.data");
-        return node;
-    };
+    node_handle_t always = staticBool(true, origin);
     // The condition of a case: the test of its pattern and, when it has a guard, that guard as
     // well. The guard is read in the arm the pattern's test enters, so it sees the names the
     // pattern binds and is not evaluated at all for a value the pattern does not match
@@ -1473,7 +1466,7 @@ node_handle_t Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::n
             step.bind();
             return guardValue();
         });
-        held[1] = buildArm(step.exec, [&] { return boolConstant(false); });
+        held[1] = buildArm(step.exec, [&] { return staticBool(false, origin); });
         return buildBranch(origin, step.condition, &held);
     };
 
@@ -3550,12 +3543,7 @@ node_handle_t Builder::buildStreamLoop(
         registerNodeOrigin(context_, fill, gct, "gir.loop.state");
         return fill;
     };
-    const auto booleanConstant = [&](bool each) {
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
-        registerNodeOrigin(context_, node, gct, "gir.data");
-        return node;
-    };
+    const auto booleanConstant = [&](bool each) { return staticBool(each, gct); };
 
     // Entering the loop takes the stream as it is: the first pull waits for the first round, so a
     // loop whose condition refuses every round reads nothing at all.
@@ -4445,12 +4433,8 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
         setGraphReturnFromResult(graph, nodeIdOf(anchor), nodeIdOf(result), Type::Void());
         return;
     }
-    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
-    // GATE is the output anchor, the value it forwards is what the graph returns.
-    node_handle_t value = result;
-    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
-    }
+    // The graph returns what the GATE a sync block ends with forwards, not the GATE itself.
+    node_handle_t value = behindSyncGate(result);
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(
         graph,

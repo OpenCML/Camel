@@ -597,9 +597,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
     if (arms.empty()) {
         // `match e { case _ => ... }`: nothing is tested; the only arm is the value. The
         // branch has one arm and no case value, so the arm the runtime chooses is that one.
-        node_handle_t always = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
-        registerNodeOrigin(context_, always, gct, "gir.data");
+        node_handle_t always = staticBool(true, gct);
         std::vector<arm_ptr_t> one(1);
         one[0] = buildArm(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
         return buildBranch(gct, always, &one);
