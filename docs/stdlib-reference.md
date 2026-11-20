@@ -7819,11 +7819,12 @@ as one function and not in the rule's right side for the reason `reshape_jvp` gi
 log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
 ```
 
-The tangent the rule above writes: `exp` of the recomputed `log_softmax` (`p`), the tangent's sum
-over the axis, and the product subtracted from the tangent element by element.
+The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
+over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
+which is what makes this the forward reading and not `log_softmax_t`'s.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `log_softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.5, -0.5]`
+- Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
 
 ### The forward rule of `^` (a power)
 

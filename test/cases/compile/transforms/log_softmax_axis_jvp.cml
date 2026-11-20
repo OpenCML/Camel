@@ -8,10 +8,10 @@
  * now and hands it to `log_softmax_jvp`.
  *
  * The tangents are derived by hand and are exact. `x` is `float[2, 2, 2]` of zeros, so `y` is
- * `-log(2)` in every position and `exp(y)` is `1/2`; with `W = dx` the tangent of a lane pair
- * `(e, p)` is
+ * `-log(2)` in every position and `exp(y) = p` is `1/2` everywhere; with `W = dx` the tangent of a
+ * lane pair `(e, p)` is
  *
- *   t_e = dx_e - exp(y_e) * sum<axis,true>(dx)_e = dx_e - (dx_e + dx_p) / 2
+ *   t_e = dx_e - sum<axis,true>(exp(y) * dx)_e = dx_e - (dx_e + dx_p) / 2
  *       = (dx_e - dx_p) / 2
  *
  * so the whole derivative is `(1/2) * sum over pairs of (dx_e - dx_p)^2` -- twice the softmax's,
@@ -24,6 +24,12 @@
  *
  * The value is `sum(W * log_softmax(x))` = `-log(2) * 36`, which is not a binary fraction, so it is
  * not pinned; the three tangents are, and they are what tells the three axes apart.
+ *
+ * **What this case cannot say.** Because `p` is uniform here, it cannot tell the forward law from the
+ * transposition's shape: `sum(p * dx)` and `p * sum(dx)` are the same number when every `p_j` is equal,
+ * which is why the input is all zeros and why this derivation only has to divide by two. The case that
+ * separates them is `log_softmax_jvp_on_a_non_uniform_lane.cml`, on `x = [1, 2, 3]`; this one is about
+ * the axis, and it holds for either spelling.
  */
 import rulesets.jvp
 import { jvp } from transforms

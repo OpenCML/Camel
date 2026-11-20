@@ -519,9 +519,17 @@ export func softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_f
 }
 
 /// `d(log_softmax<axis>(x)) = dx - sum<axis, true>(exp(y) * dx)` with `y = log_softmax<axis>(x)`:
-/// the jacobian is `I - 1 pᵀ` with `p = softmax(x)`, so the tangent loses its own axis sum
-/// broadcast back over the axis. `exp(y)` is `p` and is an x-only value, the shape `exp` proved the
-/// cut carries.
+/// the jacobian is `I - 1 pᵀ` with `p = softmax(x)`, so `dy_i = dx_i - sum over j of p_j * dx_j` --
+/// the sum runs over the **product** `p * dx`, and `p` multiplies the tangent inside it.
+///
+/// Do not write it as `dx - p * sum<axis, true>(dx)`: that is the **transpose**'s shape
+/// (`stdlib/rulesets/transpose.cml#log_softmax_t` answers `ct - p * sum(ct)`, because the reverse
+/// direction's sum runs over the cotangent alone). The two differ by a broadcast, and they agree only
+/// where `p` is uniform along the axis: `sum(p * dx) = p_i * sum(dx)` holds when every `p_j` is `1/n`,
+/// which is exactly the program whose `x` is constant -- so a case written on a constant lane cannot
+/// tell them apart and every wrong number looks right. `log_softmax_jvp_on_a_non_uniform_lane` is the
+/// case that separates them (`x = [1, 2, 3]`, `dx = [1, 1, 1]`: this law answers zero, the other
+/// answers `1 - 3p = [0.7299082804888587, 0.2658145868356071, -0.9957228673244654]`).
 ///
 /// The axis is the operator's second port and this law names it, exactly as `jvp_softmax` above
 /// does; it used to write `<0>`, so it answered the first axis of a rank-1 input and nothing else.
@@ -529,11 +537,12 @@ export rule jvp_log_softmax::<T>(x: T[...], axis: int) when is_float::<T>() {
     log_softmax<axis>(x) => (dx: T[...]) => log_softmax_jvp(x, dx, axis)
 }
 
-/// The tangent the rule above writes: `exp` of the recomputed `log_softmax` (`p`), the tangent's sum
-/// over the axis, and the product subtracted from the tangent element by element.
-/// @example log_softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)    // [0.5, -0.5]
+/// The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
+/// over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
+/// which is what makes this the forward reading and not `log_softmax_t`'s.
+/// @example log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)    // [0.7310585786300049, -0.2689414213699951]
 export func log_softmax_jvp::<T>(x: T[...], dx: T[...], axis: int): T[...] when is_float::<T>() {
-    return dx - exp(log_softmax<axis>(x)) * sum<axis, true>(dx)
+    return dx - sum<axis, true>(exp(log_softmax<axis>(x)) * dx)
 }
 
 /// `d(relu(x)) = dx` where `x > 0`, and zero where it is not: the tangent is the mask multiplied by
