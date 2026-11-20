@@ -1379,7 +1379,8 @@ gc_node_ref_t buildLinearClosure(
     return value;
 }
 
-std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *program) {
+std::vector<Residual> residualsOf(
+    const rt::GCGraph &lifted, const rt::Program *program, std::string *why) {
     std::vector<Residual> residuals;
     if (lifted.funcType() == nullptr) {
         return residuals;
@@ -1561,8 +1562,36 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 const size_t ordinary =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
                 if (answersAPair(lateCallee) || answersAPairByValueAt(lifted, ref)) {
-                    for (size_t i = 0; i < ordinary / 2; ++i) {
-                        onward.push_back(arguments[i]);
+                    // Which of the call's ordinary arguments are values is the callee's
+                    // signature's answer, read from its type by the one reader of that law
+                    // (`valuePortsOf`): the arguments the second half walks into are those ports,
+                    // and the call's `with` arguments come after them. This is the same reading
+                    // `Half::halfInputsOf` makes at the call it places, so one callee's value
+                    // ports are numbered one way in the cut and in the walk over it. A count is
+                    // not a reading here: a signature whose second half is not the first half's
+                    // tangent spaces is not a lift, and the walk then stops with a name rather
+                    // than halving the list.
+                    const camel::core::type::FunctionType *lateType =
+                        callValueSignatureOf(lifted, ref);
+                    if (lateType == nullptr && lateCallee != nullptr) {
+                        lateType = lateCallee->funcType();
+                    }
+                    const std::vector<size_t> valuePorts = valuePortsOf(lateType);
+                    if (valuePorts.empty() && ordinary > 0) {
+                        if (why != nullptr) {
+                            *why = "a call the backward half computes after the cut passes " +
+                                   std::to_string(ordinary) +
+                                   " ordinary arguments, and its callee's type does not state the "
+                                   "seam the tangents stand behind: " +
+                                   (lateCallee != nullptr ? lateCallee->name()
+                                                          : std::string("a function value"));
+                        }
+                        return {};
+                    }
+                    for (size_t port : valuePorts) {
+                        if (port < ordinary) {
+                            onward.push_back(arguments[port]);
+                        }
                     }
                     for (size_t i = ordinary; i < arguments.size(); ++i) {
                         onward.push_back(arguments[i]);
@@ -3706,7 +3735,17 @@ SplitGraph buildSplitGraph(
     // asks a signature how many residuals there are -- a signature is computed from types, and
     // types cannot tell `f(x) = x` (no residuals) from `f(x) = x*x` (one), which have the same
     // lifted type.
-    const std::vector<Residual> graphResiduals = residualsOf(*function, program);
+    std::string residualWhy;
+    const std::vector<Residual> graphResiduals = residualsOf(*function, program, &residualWhy);
+    if (!residualWhy.empty()) {
+        // The walk could not answer, and said why: a call after the cut whose callee's type does
+        // not state the seam. The cut stops here by name rather than reading an empty list as "no
+        // residuals" -- the two are different answers and only one of them has a graph behind it.
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Tangent) << " (" << residualWhy << ")\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Tangent));
+        return SplitGraph{};
+    }
     std::vector<Type *> residualTypes;
     residualTypes.reserve(graphResiduals.size());
     for (const Residual &residual : graphResiduals) {
