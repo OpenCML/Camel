@@ -6697,7 +6697,9 @@ into a host number) downloads it, and the reports of a run list every such trans
 What a program does by hand is small: ask whether a device is there (`available`, `device`), move
 a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
 `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
-written order against the others and is never folded, merged or dropped. The functions to look
+written order against the others and is never folded, merged or dropped -- `regions` excepted:
+it reads the graph of the function it is given and touches no resource, so it writes no `uses`
+clause and needs no place in that order (it is still never folded). The functions to look
 at are the `with` argument and the data is the example input, as for `map`:
 `inputs->inspect<fn>`.
 
@@ -6778,11 +6780,14 @@ text.
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
-the device and why the others would not.
+the device and why the others would not. It reads the graph of the function and touches no
+resource -- it neither executes the graph nor initializes CUDA -- so it writes no `uses`
+clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
+through.
 
 - Example: `regions<(a: f32, b: f32): f32 => a + b>()`
 

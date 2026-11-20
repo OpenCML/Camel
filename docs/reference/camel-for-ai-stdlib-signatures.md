@@ -219,7 +219,7 @@ grad: (f: F) => GradientOf<F> when is_function::<F>()
 has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 
-**`tensor`** — import { ... } from tensor — 76 name(s)
+**`tensor`** — import { ... } from tensor — 78 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -286,6 +286,8 @@ save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
 mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
 sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
@@ -720,7 +722,7 @@ run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => De
 source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
-regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
 available: () => bool uses var driver
 device: () => string! uses var driver
 ```

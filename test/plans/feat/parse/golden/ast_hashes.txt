@@ -551,7 +551,7 @@ f7f0891360ac5588 ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
 7412e62e8d9372be ok stdlib/test_support.cml
 3c4d85f022206889 ok stdlib/this.cml
-6a4fb7f37be2ed14 ok stdlib/tiles.cml
+b0da3dbb545728a6 ok stdlib/tiles.cml
 0ff92f7d01468e66 ok stdlib/time.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
@@ -566,7 +566,7 @@ f3e1daeaada48d18 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
 35d642977d64e5c6 no stdlib/signatures/nn.cml
 7538e65de08c615d no stdlib/signatures/tensor.cml
-40d18bc9819aa6a3 ok stdlib/signatures/tiles.cml
+7c95be3078af6b10 ok stdlib/signatures/tiles.cml
 c51f0abf60dccb4c no stdlib/signatures/transforms.cml
 3ae1e21dae3605cf ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
 8e324ad300fa728e ok test/cases/compile/closed_rank_rejects_rank_zero.cml

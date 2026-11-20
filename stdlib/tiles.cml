@@ -14,7 +14,9 @@
  * What a program does by hand is small: ask whether a device is there (`available`, `device`), move
  * a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
  * `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
- * written order against the others and is never folded, merged or dropped. The functions to look
+ * written order against the others and is never folded, merged or dropped -- `regions` excepted:
+ * it reads the graph of the function it is given and touches no resource, so it writes no `uses`
+ * clause and needs no place in that order (it is still never folded). The functions to look
  * at are the `with` argument and the data is the example input, as for `map`:
  * `inputs->inspect<fn>`.
  *

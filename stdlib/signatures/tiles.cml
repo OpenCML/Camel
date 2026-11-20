@@ -63,7 +63,10 @@ with <fn: (a: f32, b: f32) => f32>
 export func benchmark(inputs: (f32, f32)): string uses var driver
 
 /// The regions the compiler would take for the whole program, as text: which nodes would run on
-/// the device and why the others would not.
+/// the device and why the others would not. It reads the graph of the function and touches no
+/// resource -- it neither executes the graph nor initializes CUDA -- so it writes no `uses`
+/// clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
+/// through.
 /// @example regions<(a: f32, b: f32): f32 => a + b>()
 with <fn: (a: f32, b: f32) => f32>
-export func regions(): string uses var driver
+export func regions(): string
