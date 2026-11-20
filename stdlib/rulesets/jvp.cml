@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, add_stated, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, permute, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, subtract_stated, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -446,13 +446,23 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// difference is the difference of the tangents -- and the two shapes may differ, which is the same
 /// broadcast the operator itself does to the value.
 ///
+/// The tangent is `subtract_stated` and not `-`, for the reason `jvp_mul_tensor` states for its two
+/// products: the reverse law has to reduce each cotangent to the shape of the operand it answers,
+/// and on the reverse side that operand is a **tangent** -- `float[...]`, which states no extents
+/// (design principles 5.4) -- so the shape must travel as a known operand. Here both operands are
+/// values, so `shape(...)` of each is a value of the primal the cut carries, and
+/// `stdlib/rulesets/transpose.cml#subtract_stated_t` reads the two lists and nothing of the position
+/// it answers. Both lists are the **primal** operands' shapes and not the tangents', for the same
+/// reason: a `shape(dx)` node would be a value derived from a tangent, which the cut cannot put on
+/// either side of itself.
+///
 /// The operands are both `T[...]`. The other shape `tensor:subtract` is called with -- an array minus
 /// a number, `(T[...], T)` -- cannot be spelled here: a union in a parameter list is a syntax error
 /// (`Expected ',' or ')' before '|'`), so one key cannot hold both shapes with one rule, and this
 /// rule is the array-to-array one, which is the shape a layer norm writes. The gap and its
 /// measurements are `docs/handover/reviews/2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md`.
 export rule jvp_subtract::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    subtract(x, w) => (dx: T[...], dw: T[...]) => dx - dw
+    subtract(x, w) => (dx: T[...], dw: T[...]) => subtract_stated(dx, dw, shape(x), shape(w))
 }
 
 // ---- the forward rule of the array product ----
@@ -1208,6 +1218,24 @@ export rule jvp_mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) when
         mul_stated(dx, w, ax, aw) + mul_stated(x, dw, ax, aw)
 }
 
+/// `d(add_stated(x, w, ax, aw)) = add_stated(dx, dw, ax, aw)`: the sum's tangent is the sum of the
+/// tangents, and the two extent lists are the call's -- a tangent has its value's shape, so the lists
+/// the call states are the lists its tangent states.
+///
+/// The twin of `jvp_add_tensor` below, for the spelling that carries the shapes as operands, and it
+/// exists for the reason `jvp_mul_stated` above does: a backward law with no forward law is a gap the
+/// closure check names (`vjp_api.the_forward_half_closes_over_the_backward_half`), and the forward
+/// law is the reading that says what the operator's tangent means rather than a formality beside it.
+export rule jvp_add_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) when is_float::<T>() {
+    add_stated(x, w, ax, aw) => (dx: T[...], dw: T[...]) => add_stated(dx, dw, ax, aw)
+}
+
+/// `d(subtract_stated(x, w, ax, aw)) = subtract_stated(dx, dw, ax, aw)`: the mirror of
+/// `jvp_add_stated` above, with the difference's own kernel doing the subtraction of the tangents.
+export rule jvp_subtract_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]) when is_float::<T>() {
+    subtract_stated(x, w, ax, aw) => (dx: T[...], dw: T[...]) => subtract_stated(dx, dw, ax, aw)
+}
+
 /// `d(a · b) = da · b + a · db`, with the two extent lists the call carries.
 export rule jvp_matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]) when is_float::<T>() {
     matmul_stated(a, b, sa, sb) => (da: T[...], db: T[...]) =>
@@ -1238,8 +1266,14 @@ func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 
 /// `d(x + w) = dx + dw`: a sum passes both tangents through, the forward reading of the backward
 /// law's `(ct, ct)`.
+///
+/// The tangent is `add_stated` with the two operands' shapes beside it, and not `+`, for the reason
+/// its mirror `jvp_subtract` above states: the reverse law reduces each cotangent to the shape of
+/// the operand it answers, that operand is a tangent on the reverse side, and a tangent's type
+/// states no extents. `stdlib/rulesets/transpose.cml#add_stated_t` reads the two lists, so the
+/// shapes travel as known operands of the value half instead of being guessed.
 export rule jvp_add_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    add(x, w) => (dx: T[...], dw: T[...]) => dx + dw
+    add(x, w) => (dx: T[...], dw: T[...]) => add_stated(dx, dw, shape(x), shape(w))
 }
 
 /// `log(x)`: what `math:log_d` means, and the left side `log_d_t` files in the backward half. The

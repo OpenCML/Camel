@@ -33,6 +33,7 @@
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/deadwrite.h"
 #include "camel/passes/test/derivatives.h"
+#include "camel/passes/test/draft_erase_unread.h"
 #include "camel/passes/test/draft_node_owner.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/exec_plan.h"
@@ -1055,6 +1056,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
     static const std::vector<std::pair<std::string, PassFactory>> table = {
         TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
         TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
+        TEST_PASS(kDraftEraseUnreadTestPass, DraftEraseUnreadTestPass),
         TEST_PASS(kDraftNodeOwnerTestPass, DraftNodeOwnerTestPass),
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
