@@ -1048,15 +1048,16 @@ struct Half {
                 if (!tangent) {
                     // The value half's copy of that call answers `(result, lin)`, and the source's
                     // read of component 1 is a read of the **lifted** linear half -- `Lift<lin>`,
-                    // which is what `jvp(lin)` denotes (`Lift<A => B> = Lift<A> => Lift<B>`, the
-                    // author's ruling of 2026-11-20 16:00: the direction is a parameter of the
-                    // lifted function, so the second order is fed twice and never captured).
+                    // which is what `jvp(lin)` denotes (`Lift<A => B> = Lift<A> => Lift<B>`; the
+                    // direction is a parameter of the lifted function, so the second order is fed
+                    // twice and never captured).
                     //
-                    // That this is the value the source asked for is measured, not assumed: the type
-                    // the source's read has and `jvpSignature` of the linear half are the **same
-                    // type object** (measured 2026-11-20, `equal=yes` by pointer, on
-                    // `(float, float) => (float, float) pure`). Where they differ, the read asks for
-                    // something that is no component's lift, and it is refused below by name.
+                    // That this is the value the source asked for is a reading and not an
+                    // assumption: the type the source's read has and `jvpSignature` of the linear
+                    // half are the **same type object**, compared by pointer, which is the same
+                    // object for `(float, float) => (float, float) pure`. Where they differ, the
+                    // read asks for something that is no component's lift, and it is refused below
+                    // by name.
                     FunctionType *calleeType = nullptr;
                     if (source->node(call) != nullptr &&
                         source->node(call)->kind == rt::GCNodeKind::Call) {
@@ -1875,8 +1876,8 @@ SplitHalves splitHalvesWith(FunctionType *function, Type *residuals) {
         }
         // The forward half answers one member per component; the backward half takes the cotangent
         // of what the forward half answers, which is one member per **value** component -- a
-        // function component takes no cotangent, the same rule `transpose` already applies to a
-        // closure member (author, 2026-11-03 19:55).
+        // function component takes no cotangent, the same rule `transpose` applies to a closure
+        // member.
         result = forwardMembers.size() == 1 ? forwardMembers.front()
                                             : TupleType::create(std::move(forwardMembers));
         if (tangentMembers.empty()) {

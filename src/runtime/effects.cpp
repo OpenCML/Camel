@@ -144,11 +144,11 @@ struct EffectWalk {
             }
             case GCNodeKind::Call:
                 // A call through a function value: its reach is the value's clause, read the same
-                // way `Resolver::call` reads it for the footprint (design principles 3.3; author
-                // 2026-11-20). `pure` is the clause that names nothing, so a call through a pure
-                // value is not an external effect. This was the one reader in the tree that read no
-                // type at all and answered "external" for every call, `pure` included, which is what
-                // made a pure call look like a write nobody could name.
+                // way `Resolver::call` reads it for the footprint (design principles 3.3). `pure` is
+                // the clause that names nothing, so a call through a pure value is not an external
+                // effect. A reader that answers from no type at all calls every call "external",
+                // `pure` included, which is what makes a pure call look like a write nobody can
+                // name.
                 summary.external |= callClause(*graph, ref).external;
                 summary.mayFault        = true;
                 summary.mayNotTerminate = true;
