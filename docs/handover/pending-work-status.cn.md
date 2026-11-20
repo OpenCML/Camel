@@ -70,6 +70,10 @@
 
 这张表不改 `pending-work.cn.md`：那是决策者的账，本表只是它的状态列。`docs/handover/` 下没有列这些文件的 README 索引（`README.cn.md` 是接手说明，不是文件清单），所以没有索引可更新；`questions/` 的索引是另一个生成器的范围。
 
+## 附：一次有记录的例外（合并主题只写了动作，没写内容）
+
+**`743186814` 的合并主题只写了动作（`merge origin/develop into lane-nn-restore`），正文空 —— 合进来的是 `ba4852022`（`ledger: three residents recorded and one spelling taken out, so never_rises is green again`）+ 它的合并 `d69da02be`；`lane-nn-restore` 当时漏写，按 `AGENTS.md`「合并提交必须概述被合进来的内容」应写那句。已推的 `develop` 不重写，所以这一笔算「有记录的例外」，不算静默违规。**
+
 ## 附：两条被取代的分支，以及凭什么说它们被取代
 
 两条分支都量过、判定「内容被取代」，于是从本地删掉。删的顺序是**先打 `archive/*` 标签并推成功，再删分支**——`git branch -d` 会因 `ahead>0` 被拒，所以只能用 `-D`，而 `-D` 唯一的前提是标签已经在远端。理由照抄合并车道量出来的那两句，没重查。**一条删成了、一条被拒，结果写在下面，删不掉的那条没有绕过。**
