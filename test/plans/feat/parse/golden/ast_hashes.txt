@@ -557,7 +557,7 @@ b0da3dbb545728a6 ok stdlib/tiles.cml
 b2579aff6f390432 ok stdlib/tree.cml
 f998300d401777db ok stdlib/types.cml
 095693f2d829fcda ok stdlib/vjp.cml
-c5e1dec41f073a21 ok stdlib/rulesets/jvp.cml
+75b4c5ff5672d671 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
 ba29caddff8b6ee6 ok stdlib/rulesets/transpose.cml
@@ -565,7 +565,7 @@ f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f08b2a93a3c13b34 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
 35d642977d64e5c6 no stdlib/signatures/nn.cml
-7538e65de08c615d no stdlib/signatures/tensor.cml
+0c368faaef090af5 no stdlib/signatures/tensor.cml
 7c95be3078af6b10 ok stdlib/signatures/tiles.cml
 58abbc3d75abc82c no stdlib/signatures/transforms.cml
 3ae1e21dae3605cf ok test/cases/compile/broadcast_like_spreads_rank_zero.cml
@@ -1953,6 +1953,7 @@ af4075fd424ca648 ok test/cases/compile/transforms/jvp_rule_at_the_operand_type.c
 830ab7367110d6e9 ok test/cases/compile/transforms/jvp_structural_zero_at_the_half_widths.cml
 4ae622aaac3d19b1 ok test/cases/compile/transforms/jvp_structural_zero_at_the_wide_widths.cml
 1e9b3130caf8cede ok test/cases/compile/transforms/jvp_vjp_array_product_cross.cml
+5fdab9c3c7850474 ok test/cases/compile/transforms/layer_norm_jvp.cml
 3944c8beac473005 ok test/cases/compile/transforms/library_grad_carries_the_second_with_value.cml
 2c500d5f2cfdbd4b ok test/cases/compile/transforms/library_grad_is_the_composition.cml
 d227bd95f5eb3e45 ok test/cases/compile/transforms/library_grad_of_a_with_weight.cml
