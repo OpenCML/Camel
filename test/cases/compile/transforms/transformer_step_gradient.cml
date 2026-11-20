@@ -1,0 +1,150 @@
+// A transformer training step's gradient, through the engine: one head of self attention (two heads,
+// sequence 2, hidden 4) and one FFN, with softmax, a layer norm written from `mean<-1, true>` and a
+// residual, read as the gradient of one step.
+//
+// The model is the smallest one that has the shape of a real step:
+//
+//     x     = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]]          two positions, d = 4
+//     s_h   = (x @ wq_h) @ (x @ wk_h)^T / 2                              one score matrix per head
+//     a_h   = softmax<1>(s_h)                                            over the keys of each row
+//     o_h   = a_h @ (x @ wv_h)                                           [2, 2] per head
+//     z     = x + o_1 @ wo_1 + o_2 @ wo_2                                the heads' outputs, residual
+//     mu    = mean<-1, true>(z);  c = z - mu;  n = c / sqrt(mean<-1, true>(c * c))
+//     ln    = n * g                                                      layer norm, gain applied after
+//     h     = relu(ln @ w1 + b1)
+//     y     = ln + (h @ w2 + b2)                                         the FFN, residual
+//     loss  = sum(y * T)                                                 T = [[1, 2, 4, 8], [1, 3, 5, 7]]
+//
+// and the numbers below are its gradient at that point, derived again outside this file (float64,
+// the same arithmetic) and answered here digit for digit:
+//
+//     loss      = 165.23036383453388
+//     dL/db2    = [2.0, 5.0, 9.0, 15.0]                  the loss's own cotangent summed down the batch
+//     dL/db1    = [8.75, 6.0, 5.25, 11.0]
+//     dL/dw2    = [[4.38858824941554, ...], ...]         row 0 printed
+//     dL/dwq1   = [[2.6228809748826416, -2.760927341981728], ...]
+//
+// Every element above is distinct from its neighbours on purpose: a law that spread one scalar over a
+// whole tensor, or that dropped the softmax's own pullback, would agree with none of them.
+//
+// The second leg is the library's **forward** transform, seeded one direction at a time, and it
+// answers the same digits (`dL/db2[0] = 2.0`, `dL/dwq1[0][0] = 2.6228809748826416`). The library's
+// **reverse** transform -- what a training loop actually uses -- does not build this program at all:
+// it stops at the cut, and `transformer_step_gradient_stops_at_split.cml` records that refusal with
+// the sentence it answered. The lift itself is complete: every operator of this body has a forward
+// law (`rules=jvp_matmul,jvp_transpose,jvp_divide,jvp_softmax,jvp_add_tensor,jvp_mean_axis,
+// jvp_subtract,jvp_mul_tensor,jvp_sqrt,jvp_relu,jvp_sum`), so what is missing is not a law here.
+//
+//     camel test/cases/compile/transforms/transformer_step_gradient.cml
+import { matmul, mean, relu, softmax, sqrt, sum, transpose } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+import { with_grad } from autodiff
+
+type Params = {
+    wq1: float[4, 2],
+    wk1: float[4, 2],
+    wv1: float[4, 2],
+    wq2: float[4, 2],
+    wk2: float[4, 2],
+    wv2: float[4, 2],
+    wo1: float[2, 4],
+    wo2: float[2, 4],
+    g: float[4],
+    w1: float[4, 4],
+    b1: float[4],
+    w2: float[4, 4],
+    b2: float[4]
+}
+
+with <p: Params>
+func loss(x: float[2, 4]): float {
+    let s1 = ((x @ p.wq1) @ transpose(x @ p.wk1)) / 2.0
+    let s2 = ((x @ p.wq2) @ transpose(x @ p.wk2)) / 2.0
+    let a1 = softmax<1>(s1)
+    let a2 = softmax<1>(s2)
+    let o1 = a1 @ (x @ p.wv1)
+    let o2 = a2 @ (x @ p.wv2)
+    let z = x + o1 @ p.wo1 + o2 @ p.wo2
+    let mu = mean<-1, true>(z)
+    let c = z - mu
+    let n = c / sqrt(mean<-1, true>(c * c))
+    let ln = n * p.g
+    let h = relu(ln @ p.w1 + p.b1)
+    return sum((ln + (h @ p.w2 + p.b2)) * [[1.0, 2.0, 4.0, 8.0], [1.0, 3.0, 5.0, 7.0]] as float[2, 4])
+}
+
+/// The same model with the parameters on the ordinary list, which is the list the transforms
+/// differentiate (design principles 9.9) -- the body is the same arithmetic, so the two legs
+/// differentiate one function and not two.
+func loss_plain(wq1: float[4, 2], wk1: float[4, 2], wv1: float[4, 2],
+                wq2: float[4, 2], wk2: float[4, 2], wv2: float[4, 2],
+                wo1: float[2, 4], wo2: float[2, 4], g: float[4],
+                w1: float[4, 4], b1: float[4], w2: float[4, 4], b2: float[4]): float {
+    let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
+    let s1 = ((x @ wq1) @ transpose(x @ wk1)) / 2.0
+    let s2 = ((x @ wq2) @ transpose(x @ wk2)) / 2.0
+    let a1 = softmax<1>(s1)
+    let a2 = softmax<1>(s2)
+    let o1 = a1 @ (x @ wv1)
+    let o2 = a2 @ (x @ wv2)
+    let z = x + o1 @ wo1 + o2 @ wo2
+    let mu = mean<-1, true>(z)
+    let c = z - mu
+    let n = c / sqrt(mean<-1, true>(c * c))
+    let ln = n * g
+    let h = relu(ln @ w1 + b1)
+    return sum((ln + (h @ w2 + b2)) * [[1.0, 2.0, 4.0, 8.0], [1.0, 3.0, 5.0, 7.0]] as float[2, 4])
+}
+
+func init(): Params {
+    return {
+        wq1: [[0.25, 0.0], [0.0, 0.25], [-0.25, 0.5], [0.5, -0.25]] as float[4, 2],
+        wk1: [[0.5, -0.25], [0.25, 0.0], [0.0, -0.25], [-0.25, 0.5]] as float[4, 2],
+        wv1: [[0.0, 0.5], [0.25, -0.25], [-0.5, 0.0], [0.25, 0.75]] as float[4, 2],
+        wq2: [[-0.5, 0.5], [0.0, 0.25], [0.25, 0.0], [0.75, -0.25]] as float[4, 2],
+        wk2: [[0.25, 0.75], [-0.5, 0.0], [0.0, 0.5], [0.25, -0.25]] as float[4, 2],
+        wv2: [[0.75, 0.0], [0.25, 0.5], [-0.5, 0.25], [0.0, -0.25]] as float[4, 2],
+        wo1: [[0.25, 0.5, 0.0, -0.25], [0.5, 0.25, -0.25, 0.0]] as float[2, 4],
+        wo2: [[0.0, -0.25, 0.75, 0.25], [0.25, 0.0, 0.25, -0.5]] as float[2, 4],
+        g: [1.0, 2.0, 3.0, 4.0] as float[4],
+        w1: [[0.25, 0.5, 0.0, 0.25], [0.0, 0.25, 0.5, 0.25], [0.5, 0.0, 0.25, 0.25], [0.25, 0.25, 0.0, 0.5]] as float[4, 4],
+        b1: [1.0, 1.5, 2.0, 2.5] as float[4],
+        w2: [[0.25, 0.0, 0.5, 0.25], [0.5, 0.25, 0.0, 0.25], [0.25, 0.5, 0.25, 0.0], [0.0, 0.25, 0.25, 0.5]] as float[4, 4],
+        b2: [1.0, 2.0, 3.0, 4.0] as float[4]
+    }
+}
+
+func main(): int sync {
+    let x = [[0.25, 0.5, 0.75, 1.0], [2.0, 0.5, 1.5, -0.25]] as float[2, 4]
+    let p = init()
+
+    let (value, grad) = with_grad(loss)<p>(x)
+    `transformer step engine loss={}`->format<value>->println
+    `transformer step engine dL/db2={}`->format<grad.b2>->println
+    `transformer step engine dL/db1={}`->format<grad.b1>->println
+    `transformer step engine dL/dw2={}`->format<grad.w2>->println
+    `transformer step engine dL/dwq1={}`->format<grad.wq1>->println
+
+    // The forward transform, seeded twice: the tangent of a ones seed at one element of the gradient
+    // is that element, so the two numbers below are `dL/db2[0]` and `dL/dwq1[0][0]` read by a route
+    // the engine does not take.
+    let z42 = [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[4, 2]
+    let z24 = [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]] as float[2, 4]
+    let z4 = [0.0, 0.0, 0.0, 0.0] as float[4]
+    let z44 = [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]] as float[4, 4]
+
+    let (_l0, d_b2_0) = jvp(loss_plain)(p.wq1, p.wk1, p.wv1, p.wq2, p.wk2, p.wv2, p.wo1, p.wo2,
+                                        p.g, p.w1, p.b1, p.w2, p.b2,
+                                        z42, z42, z42, z42, z42, z42, z24, z24, z4, z44, z4, z44,
+                                        [1.0, 0.0, 0.0, 0.0] as float[4])
+    `transformer step library dL/db2[0]={}`->format<d_b2_0>->println
+
+    let (_l1, d_wq1_00) = jvp(loss_plain)(p.wq1, p.wk1, p.wv1, p.wq2, p.wk2, p.wv2, p.wo1, p.wo2,
+                                          p.g, p.w1, p.b1, p.w2, p.b2,
+                                          [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]] as float[4, 2],
+                                          z42, z42, z42, z42, z42,
+                                          z24, z24, z4, z44, z4, z44, z4)
+    `transformer step library dL/dwq1[0][0]={}`->format<d_wq1_00>->println
+    return 0
+}
