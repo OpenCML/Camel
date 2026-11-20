@@ -2040,57 +2040,11 @@ node_handle_t Builder::buildBranch(
     // graph reads which arm a read stands in from the region of the BRCH node, so nothing is
     // recorded here.
 
-    // The branch is the user of the variables its arms used, and the writer of those they
-    // wrote. It begins at BRCH and is complete at JOIN.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(armList, joinNode, capturedWrites);
-    if (mergeVariable != nullptr) {
-        // The join is this variable's version, not only the node its write was recorded through.
-        // mergeArmVariables records the write through the callee path, which leaves the variable's
-        // modifier alone, so a read written after the branch would still ask for the cell and take
-        // the value the cell was made with (`[DBG-I] var=3 read=13 at-read-time=3` while
-        // `[DBG-H] var=3 recorded=4` says the join was recorded). The join carries the value now,
-        // so it is the version, and what the read takes is what the branch gives.
-        setModifier(mergeVariable, joinNode);
-        // The write is what marked this variable as escaping (requireMutableArgument: the first
-        // parameter of `__assn__` is a `var` parameter). Here the write is the branch's own value
-        // and the cell never leaves the graph, so the mark is taken back for this one variable --
-        // not for assignments in general, which is what broke a write inside a loop (carried state,
-        // the third item of the schedule).
-        escapingVariables_.erase(mergeVariable);
-    }
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> armCallees;
-    for (const arm_ptr_t &arm : armList) {
-        armCallees.insert(armCallees.end(), arm->callees.begin(), arm->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        // The arms of this branch are part of the arm it is in.
-        outer->callees.insert(outer->callees.end(), armCallees.begin(), armCallees.end());
-    }
-    // A `var` an arm writes is the branch's value, not an effect (design principles 3.1): a write
-    // to a `var` is a value, so the arm does not report one. What is reported here is a write by a
-    // callee an arm calls to a variable that callee captured -- that write is not handed back where
-    // the call stands (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {armCallees, origins, gct->origin(), "The branch", "an arm writes"});
-    }
-
-    if (synced_) {
-        // A branch is one statement: the chain enters its owning BRCH and continues from its JOIN.
-        linkSyncStatement(lastSyncedNode_, brchNode);
-        lastSyncedNode_ = joinNode;
-        chainedNodes_.insert(brchNode);
-        chainedNodes_.insert(joinNode);
-    }
+    // The branch is the user of the variables its arms used, and the writer of those they wrote;
+    // it begins at BRCH and is complete at JOIN, and the JOIN is the version of the variable an
+    // arm wrote through its own value.
+    attachRegionStatement(
+        joinNode, armList, gct, brchNode, joinNode, "The branch", "an arm writes", mergeVariable);
 
     return joinNode;
 }
@@ -2186,6 +2140,65 @@ Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::
     return result;
 }
 
+void Builder::attachRegionStatement(
+    node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
+    node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
+    const char *verb, node_handle_t versionOf) {
+    std::vector<node_handle_t> capturedWrites;
+    mergeArmVariables(parts, node, capturedWrites);
+    if (versionOf != nullptr) {
+        // The JOIN is this variable's version, not only the node its write was recorded through.
+        // mergeArmVariables records the write through the callee path, which leaves the variable's
+        // modifier alone, so a read written after the branch would still ask for the cell and take
+        // the value the cell was made with (`[DBG-I] var=3 read=13 at-read-time=3` while
+        // `[DBG-H] var=3 recorded=4` says the JOIN was recorded). The JOIN carries the value now,
+        // so it is the version, and what the read takes is what the branch gives.
+        setModifier(versionOf, node);
+        // The write is what marked this variable as escaping (requireMutableArgument: the first
+        // parameter of `__assn__` is a `var` parameter). Here the write is the branch's own value
+        // and the cell never leaves the graph, so the mark is taken back for this one variable --
+        // not for assignments in general, which is what broke a write inside a loop (carried state,
+        // the third item of the schedule).
+        escapingVariables_.erase(versionOf);
+    }
+    // The name the program wrote, for a variable a closure captured: the port stands for the
+    // value the name had where the closure was made, and what the report names is the variable.
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> callees;
+    for (const arm_ptr_t &part : parts) {
+        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
+    }
+    if (ArmBuild *outer = activeArm()) {
+        // The parts of this statement are part of the arm it is in.
+        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
+    }
+    // What the parts write is not an effect: a write to a `var` is a value (design principles
+    // 3.1) -- the branch's value, or the states a loop hands to its next round -- so no part
+    // reports one. What is reported here is a write by a callee a part calls to a variable that
+    // callee captured: that write is not handed back where the call stands
+    // (reportIgnoredCapturedWrites).
+    if (!capturedWrites.empty() && !synced_) {
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {std::move(callees), origins, gct->origin(), subject, verb});
+    }
+    if (synced_) {
+        // The statement is one statement of the block: the chain enters it and continues from the
+        // node it is complete at, and the control edge the kind names the same pair with goes
+        // beside the sync edge (linkSyncStatement writes them as one pair).
+        linkSyncStatement(lastSyncedNode_, chainEntry);
+        lastSyncedNode_ = chainExit;
+        chainedNodes_.insert(chainEntry);
+        chainedNodes_.insert(chainExit);
+    }
+}
+
 void Builder::attachLoopParts(
     node_handle_t loopNode, const arm_ptr_t &bodyPart, const arm_ptr_t &condPart,
     const GCT::node_ptr_t &gct) {
@@ -2206,43 +2219,8 @@ void Builder::attachLoopParts(
         draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
     }
 
-    // Running the loop is like entering an arm: it uses every variable its parts used and
-    // writes those they wrote.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(parts, loopNode, capturedWrites);
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> callees;
-    for (const arm_ptr_t &part : parts) {
-        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        // The parts of this loop are part of the arm it is in.
-        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-    }
-    // What the loop's parts write is not an effect: a write to a `var` is a value (design
-    // principles 3.1), and the body's writes are the states the LOOP hands on. What is left to
-    // report here is a write by a callee the parts call to a variable that callee captured: that
-    // write is not handed back where the call stands (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, gct->origin(), "The loop", "its body writes"});
-    }
-
-    if (synced_) {
-        // The loop is a statement of the block, like a call: the statement written before it
-        // follows into it by a sync edge (the control edge the kind names the same pair with goes
-        // beside it).
-        linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
-        chainedNodes_.insert(loopNode);
-    }
+    // Running the loop is like entering an arm, and the LOOP is one statement of the block.
+    attachRegionStatement(loopNode, parts, gct, loopNode, loopNode, "The loop", "its body writes");
 }
 
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
