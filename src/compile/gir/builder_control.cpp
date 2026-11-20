@@ -2186,6 +2186,65 @@ Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::
     return result;
 }
 
+void Builder::attachLoopParts(
+    node_handle_t loopNode, const arm_ptr_t &bodyPart, const arm_ptr_t &condPart,
+    const GCT::node_ptr_t &gct) {
+    // The With inputs of the node are the results of its parts (the body's, then the
+    // condition's) and the slot the rounds are counted in; the parts are its regions.
+    std::vector<arm_ptr_t> parts{bodyPart};
+    linkNodes(LinkType::With, bodyPart->output, loopNode);
+    if (condPart) {
+        parts.push_back(condPart);
+        linkNodes(LinkType::With, condPart->output, loopNode);
+    }
+    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
+    auto &draft = currGraph_->transaction().edit();
+    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
+    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
+    if (condPart) {
+        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
+        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
+    }
+
+    // Running the loop is like entering an arm: it uses every variable its parts used and
+    // writes those they wrote.
+    std::vector<node_handle_t> capturedWrites;
+    mergeArmVariables(parts, loopNode, capturedWrites);
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> callees;
+    for (const arm_ptr_t &part : parts) {
+        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
+    }
+    if (ArmBuild *outer = activeArm()) {
+        // The parts of this loop are part of the arm it is in.
+        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
+    }
+    // What the loop's parts write is not an effect: a write to a `var` is a value (design
+    // principles 3.1), and the body's writes are the states the LOOP hands on. What is left to
+    // report here is a write by a callee the parts call to a variable that callee captured: that
+    // write is not handed back where the call stands (reportIgnoredCapturedWrites).
+    if (!capturedWrites.empty() && !synced_) {
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {callees, origins, gct->origin(), "The loop", "its body writes"});
+    }
+
+    if (synced_) {
+        // The loop is a statement of the block, like a call: the statement written before it
+        // follows into it by a sync edge (the control edge the kind names the same pair with goes
+        // beside it).
+        linkSyncStatement(lastSyncedNode_, loopNode);
+        lastSyncedNode_ = loopNode;
+        chainedNodes_.insert(loopNode);
+    }
+}
+
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     ENTER("LOOP");
     using camel::core::LoopKind;
@@ -3282,60 +3341,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     for (node_handle_t node : initial) {
         linkNodes(LinkType::Norm, node, loopNode);
     }
-    // The With inputs of the node are the results of its parts (the body's, then the
-    // condition's) and the slot the rounds are counted in; the parts are its regions.
-    std::vector<arm_ptr_t> parts{bodyPart};
-    linkNodes(LinkType::With, bodyPart->output, loopNode);
-    if (condPart) {
-        parts.push_back(condPart);
-        linkNodes(LinkType::With, condPart->output, loopNode);
-    }
-    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
-    auto &draft = currGraph_->transaction().edit();
-    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
-    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
-    if (condPart) {
-        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
-        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
-    }
+    attachLoopParts(loopNode, bodyPart, condPart, gct);
 
-    // Running the loop is like entering an arm: it uses every variable its parts used and
-    // writes those they wrote.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(parts, loopNode, capturedWrites);
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> callees;
-    for (const arm_ptr_t &part : parts) {
-        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        // The parts of this loop are part of the arm it is in.
-        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-    }
-    // What the loop's parts write is not an effect: a write to a `var` is a value (design
-    // principles 3.1), and the body's writes are the states the LOOP hands on. What is left to
-    // report here is a write by a callee the parts call to a variable that callee captured: that
-    // write is not handed back where the call stands (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, gct->origin(), "The loop", "its body writes"});
-    }
-
-    if (synced_) {
-        // The loop is a statement of the block, like a call: the statement written before it
-        // follows into it by a sync edge (the control edge the kind names the same pair with goes
-        // beside it).
-        linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
-        chainedNodes_.insert(loopNode);
-    }
     // The program sees the states its head declares: not the collection slots beside them, and not
     // the `var`s the body wrote, which are the loop's own state and no value of the program's (a
     // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`). One state is
@@ -3722,57 +3729,7 @@ node_handle_t Builder::buildStreamLoop(
     for (node_handle_t value : machineInitial) {
         linkNodes(LinkType::Norm, value, loopNode);
     }
-    // The With inputs of the node are the results of its parts (the body's, then the
-    // condition's) and the slot the rounds are counted in; the parts are its regions.
-    std::vector<arm_ptr_t> parts{bodyPart};
-    linkNodes(LinkType::With, bodyPart->output, loopNode);
-    if (condPart) {
-        parts.push_back(condPart);
-        linkNodes(LinkType::With, condPart->output, loopNode);
-    }
-    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
-    auto &draft = currGraph_->transaction().edit();
-    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
-    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
-    if (condPart) {
-        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
-        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
-    }
-
-    // Running the loop is like entering an arm: it uses every variable its parts used and
-    // writes those they wrote.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(parts, loopNode, capturedWrites);
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> callees;
-    for (const arm_ptr_t &part : parts) {
-        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-    }
-    // What the loop's parts write is not an effect (design principles 3.1): a write to a `var` is
-    // a value, so only a write by a callee the parts call to a variable that callee captured is
-    // reported here (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, gct->origin(), "The loop", "its body writes"});
-    }
-    if (synced_) {
-        // The loop is a statement of the block, like a call: the statement written before it
-        // follows into it by a sync edge (the control edge the kind names the same pair with goes
-        // beside it).
-        linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
-        chainedNodes_.insert(loopNode);
-    }
+    attachLoopParts(loopNode, bodyPart, condPart, gct);
 
     // The program sees the state it wrote, not the stream and the flag beside it: one state is
     // its own value, several are a tuple of them.
