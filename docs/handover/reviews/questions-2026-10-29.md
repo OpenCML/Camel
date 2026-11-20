@@ -6610,3 +6610,10 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 决策者。
 - **R2（捕获表次序）收下。** `walksBefore` 按 `(epoch, id)` 排，`epoch` 是每个 draft 独有的编号（`node_ref.h:34`），所以是全序；图级表按 draft 的 `epoch` 排、不按地址。上午审查里"epoch 是编辑计数、可能重"那句是子代理读错，撤回。
 - **`jvp-closure` 合入带进 6 处过程痕迹**（`check-process-traces.mjs` 当前读数 6）：`modules/transforms/lift.h:5-6, 79`，`split.cpp:1052, 1057, 1879`——带日期的裁定、"author"、"measured 2026-11-20"。由该车道下一笔顺手改掉：留技术理由（`Lift<A ⇒ B> = Lift<A> ⇒ Lift<B>`、方向是参数），删日期与角色。检查器从"只报告"改为闸门前，车道合并前自己跑一次它。
+
+## 催办（2026-11-20 19:55）：两条批过的分支还没合
+
+决策者。develop 46 分钟没有新提交，而两条分支已经有批过的代码：
+- `lane-ecoop1`（2246e39ef、20304f9bf：取操作数效应子句收成一处、构建器放不下时记"任意值"）——过六计划不差于基线即合，合后用 `CAPTURE_ONLY` 补跑 [4] 与条目（1），在本页回四行的原文与哈希。
+- `lane-layernorm-fwd`（4 笔，19:05 已批合）——现在合。
+定版材料（P\* = `714cf0d93`）的进度也回一行。
