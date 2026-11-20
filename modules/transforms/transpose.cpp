@@ -734,7 +734,7 @@ bool isUnitType(const Type *type) {
 
 FunctionType *transposeSignature(
     FunctionType *function, const std::vector<bool> &participates, std::vector<size_t> *answersOf,
-    const std::vector<size_t> *captures) {
+    const std::vector<size_t> *captures, bool valuesForParticipants) {
     if (answersOf != nullptr) {
         answersOf->clear();
     }
@@ -861,6 +861,17 @@ FunctionType *transposeSignature(
         if (answersOf != nullptr) {
             answersOf->push_back(i);
         }
+        // A parameter whose cotangent is answered for normally takes no value port: the answer is
+        // *about* it and the caller holds no value for it. `valuesForParticipants` is the exception
+        // and it is a fact of the signature rather than of the answer: a graph whose signature is
+        // itself a `Lift` has a tangent space behind every one of its ports, so the participating
+        // test answers for all of them and the parameter can no longer mean "this place appears
+        // only as a tangent". It keeps its cotangent in the answer *and* takes the value the call
+        // passed for it, which is what the body may read -- a value, whichever direction it is the
+        // direction of one level up, and never a cotangent in place of one.
+        if (valuesForParticipants) {
+            params.emplace_back(parameter, false);
+        }
     }
     if (cotangentsOfParticipants.empty()) {
         return nullptr;
@@ -886,7 +897,7 @@ FunctionType *transposeSignature(
             const bool answeredHere = participates.empty()
                                           ? (space.hasSpace() && space.space != nullptr)
                                           : participates[at];
-            if (answeredHere) {
+            if (answeredHere && !valuesForParticipants) {
                 params.emplace_back(parameter, false);
             }
         }
@@ -1254,7 +1265,7 @@ bool transposePairCall(
 bool buildTransposeMember(
     TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,
     std::ostream &os, const std::vector<bool> &participates = {},
-    std::vector<size_t> *needs = nullptr) {
+    std::vector<size_t> *needs = nullptr, bool valuesForParticipants = false) {
     camel::runtime::GraphDraftGroup &group = state.group;
     if (state.program == nullptr || function == nullptr) {
         return false;
@@ -1313,7 +1324,8 @@ bool buildTransposeMember(
         std::ostringstream probeLog;
         const GraphId probeMember = scratch.reserve("transpose_probe", "transpose_probe");
         std::vector<size_t> found;
-        (void)buildTransposeMember(probe, function, probeMember, probeLog, participates, &found);
+        (void)buildTransposeMember(
+            probe, function, probeMember, probeLog, participates, &found, valuesForParticipants);
         // `found` is what this half needs and is recorded on the state; nothing prints it. A
         // probe line here would make every reading carry a line no cause asked for.
         state.calleeNeeds[function] = found;
@@ -1337,8 +1349,8 @@ bool buildTransposeMember(
     // written, not after the build that reads it. The probe above is the one that found it, and its
     // answer is read here rather than decided a second time.
     const std::vector<size_t> &capturesOf = state.calleeNeeds[function];
-    FunctionType *signature =
-        transposeSignature(function->funcType(), participates, nullptr, &capturesOf);
+    FunctionType *signature = transposeSignature(
+        function->funcType(), participates, nullptr, &capturesOf, valuesForParticipants);
     if (signature == nullptr) {
         refuse(TransposeRefusalCause::Signature);
         os << '\n';
@@ -1419,10 +1431,24 @@ bool buildTransposeMember(
         // fixed value is written with that value captured, which is the caller's spelling and no
         // business of this port list. So the parameters of an ordinary transposition take no ports
         // at all, and the transposed function's only port is the cotangent below.
+        //
+        // That reading rests on the participating flag meaning "this place appears **only as a
+        // tangent**": the shape a rule kernel has, and the shape a cut's backward half has, where
+        // the values its body reads travel in the closure. A graph whose signature is itself a
+        // `Lift` is not that shape. Every port of it has a tangent space behind it, so "has a
+        // tangent space" and "appears only as a tangent" stop saying the same thing: the test above
+        // answers for every parameter, every one of them `continue`s, and a member that answers a
+        // cotangent for all of them and takes no port at all is not a member that has answered for
+        // them -- it is one nothing can be handed to. Its body asks for the value of a parameter
+        // (a call it stands on reads that value as an operand) and the request has no source, while
+        // the call site holds exactly that value among the arguments the call already passes. So
+        // for such a graph a participating place takes a value port as well and keeps its cotangent
+        // in the answer; what fills the port is the argument the call made, never a cotangent and
+        // never a direction this transform invented.
         std::vector<gc_node_ref_t> portOfParam(paramCount, rt::kInvalidNodeRef);
         {
             for (size_t i = 0; i < paramCount; ++i) {
-                if (participatesOf(i)) {
+                if (participatesOf(i) && !valuesForParticipants) {
                     continue;
                 }
                 Type *const portType = function->funcType()->normTypeAt(i);
@@ -2393,6 +2419,11 @@ bool buildTransposeMember(
                         // expanding
                         // (`pick_at(dxs, [i, len(xs)])` states the length), so the value is a slot
                         // of that call rather than a member of this closure picked by position.
+                        // The one exception is a member whose signature is itself a `Lift`
+                        // (`valuesForParticipants`, and `#portOfParam`'s note says why): there the
+                        // participating places take ports, and the port stands for the argument the
+                        // call made -- so a body that reads such a parameter's value is answered
+                        // with the value the caller passed, not with a number this walk made up.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
@@ -3364,6 +3395,134 @@ bool buildTransposeMember(
             return back.empty() ? rt::kInvalidNodeRef : back.front();
         };
 
+        // The adjoint of reading a value **member by member** (`q.0` by place, `qq.a` by name) is
+        // that value's own cotangent, assembled member by member -- `Tangent<(float, float)>` is the
+        // tuple of the members' tangents and `Tangent<Point>` the struct of them, in the
+        // declaration's order (design principles 9.9). Such a value never receives a whole cotangent
+        // from anywhere else: the `Accs` case below files each member's cotangent in
+        // `memberCotangents` and marks the value answered, and this is the join that turns those
+        // places back into the value the answer, or a call's cotangent port, needs.
+        //
+        // Two readers ask it, so it is written once: a **parameter** the body read that way
+        // (`Port`'s case), and a **call's answer** the body read that way -- the member of that call
+        // is handed the whole cotangent of what the call answered, and a component's cotangent is
+        // not that whole.
+        //
+        // Before the join existed for a parameter, the answer tuple of a **tuple** parameter held an
+        // empty reference: the encoder then used `kInvalidNodeRef` (0xffffffff) as an index into its
+        // table and the run died on a signal with nothing on stdout, while the same program written
+        // with a struct parameter refused one step earlier at the zero this file could not write. A
+        // member nobody read gets that zero now -- the zero of the member's own tangent space, which
+        // says "read, not differentiated" the same way the `Fill` case below says it for a tuple
+        // literal -- so neither a parameter's answer nor a call's argument list reaches the encoder
+        // with a hole in it.
+        const auto joinMemberRead = [&](gc_node_ref_t ref,
+                                        const std::vector<gc_node_ref_t> &slots) -> bool {
+            const camel::runtime::GCNode *const joinNode = function->node(ref);
+            const Type *const joinPrimal = joinNode != nullptr ? joinNode->dataType() : nullptr;
+            const gc_node_ref_t whole    = cotangent[ref];
+            if (joinPrimal == nullptr ||
+                (joinPrimal->code() != camel::core::type::TypeCode::Tuple &&
+                 joinPrimal->code() != camel::core::type::TypeCode::Struct)) {
+                refuse(TransposeRefusalCause::Component);
+                os << " node=" << ref
+                   << " type=" << (joinPrimal != nullptr ? joinPrimal->toString() : "?")
+                   << " why=a-member-read-of-a-value-that-is-not-an-aggregate\n";
+                return false;
+            }
+            // The value the fill is written at: the value's own tangent space, which for a tuple of
+            // numbers and for a struct of them is the value's type itself (`tangentSpaceOf`: `self`),
+            // and for a struct whose members are `f32` is a struct of `f32` -- not one of `float`
+            // (design principles 9.9).
+            const camel::core::TangentSpaceAnswer joinSpace =
+                camel::core::tangentSpaceOf(joinPrimal);
+            if (!joinSpace.hasSpace() || joinSpace.space == nullptr) {
+                refuse(TransposeRefusalCause::Component);
+                os << " node=" << ref << " type=" << joinPrimal->toString()
+                   << " why=no-tangent-space-for-the-parameter\n";
+                return false;
+            }
+            const auto memberCount = camel::core::type::tree::arity(joinPrimal);
+            if (!memberCount) {
+                refuse(TransposeRefusalCause::Component);
+                os << " node=" << ref << " type=" << joinPrimal->toString()
+                   << " why=not-a-type-with-members\n";
+                return false;
+            }
+            if (slots.size() > *memberCount) {
+                refuse(TransposeRefusalCause::Component);
+                os << " node=" << ref << " slots=" << slots.size() << " arity=" << *memberCount
+                   << '\n';
+                return false;
+            }
+            std::vector<gc_node_ref_t> parts;
+            for (size_t i = 0; i < *memberCount; ++i) {
+                Type *const memberType = camel::core::type::tree::childType(joinPrimal, i);
+                const camel::core::TangentSpaceAnswer memberSpace =
+                    memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
+                                          : camel::core::TangentSpaceAnswer{};
+                if (!memberSpace.hasSpace() || memberSpace.space == nullptr) {
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref << " member=" << i
+                       << " type=" << (memberType != nullptr ? memberType->toString() : "?")
+                       << " why=no-tangent-space\n";
+                    return false;
+                }
+                gc_node_ref_t part = i < slots.size() ? slots[i] : rt::kInvalidNodeRef;
+                if (part == rt::kInvalidNodeRef) {
+                    // The member nobody read: the zero of its own space, asked the same way the
+                    // answer assembly asks for an unread parameter's (`zeroOfSpaceOf`, then the zero
+                    // the type itself states). A space with neither is a zero this file cannot
+                    // write, and saying so is the refusal rather than a `float` where the member's
+                    // own shape belongs.
+                    part = zeroOfSpaceOf(
+                        draft,
+                        memberSpace.space,
+                        ref < forwardOf.size() ? forwardOf[ref] : rt::kInvalidNodeRef);
+                    if (part == rt::kInvalidNodeRef) {
+                        part = zeroOfType(memberType, memberSpace.space);
+                    }
+                    if (part == rt::kInvalidNodeRef) {
+                        refuse(TransposeRefusalCause::Component);
+                        os << " node=" << ref << " member=" << i << " memberType="
+                           << (memberType != nullptr ? memberType->toString() : "?")
+                           << " space=" << memberSpace.space->toString()
+                           << " why=no-zero-for-an-unread-member\n";
+                        return false;
+                    }
+                }
+                parts.push_back(part);
+            }
+            const gc_node_ref_t joined = aggregateOf(joinSpace.space, parts);
+            if (joined == rt::kInvalidNodeRef) {
+                refuse(TransposeRefusalCause::Component);
+                os << " node=" << ref << " type=" << joinPrimal->toString()
+                   << " why=the-member-join-built-nothing\n";
+                return false;
+            }
+            if (whole != rt::kInvalidNodeRef) {
+                // The value was read **both whole and by member**, and the adjoint of the two uses
+                // is their sum (`f(q) = q.0 * 2.0 + g(q)`). That sum is the aggregate's addition,
+                // which is its members' addition one place at a time -- derived from the type, not
+                // registered (design principles 9.9) -- so this is a sum and not a refusal (the
+                // aggregate's addition is derived from its type; refusing would judge the registry's
+                // completeness and call it the type's ability).
+                const gc_node_ref_t summed = accumulate(joinSpace.space, whole, joined);
+                if (summed == rt::kInvalidNodeRef) {
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref << " type=" << joinPrimal->toString()
+                       << " whole-and-member slots=" << slots.size()
+                       << " why=no-addition-for-a-member-of-the-parameter\n";
+                    return false;
+                }
+                cotangent[ref] = summed;
+            } else {
+                cotangent[ref] = joined;
+            }
+            hasCotangent[ref] = true;
+            return true;
+        };
+
         // The walk runs the graph backwards in the graph's own order: every node after the nodes
         // that read it (`cotangentWalkOrder`), which is the order the ids give for a graph the
         // front end built and is not what the ids give for a graph a rewrite has changed. A
@@ -3389,127 +3548,15 @@ bool buildTransposeMember(
                 // name) never gets a cotangent of its own anywhere else: the `Accs` case below
                 // files each member's cotangent in the `memberCotangents` table and marks this port
                 // answered, and nothing joined those places back into the value the answer needs.
-                // The adjoint of reading a parameter by member **is** the parameter's cotangent,
-                // assembled member by member -- `Tangent<(float, float)>` is the tuple of the
-                // members' tangents and `Tangent<Point>` the struct of them, in the declaration's
-                // order (design principles 9.9) -- so this case is that join (a
-                // member read accumulates onto the parameter).
-                //
-                // Before the join the answer tuple of a **tuple** parameter held an empty
-                // reference: the encoder then used `kInvalidNodeRef` (0xffffffff) as an index into
-                // its table and the run died on a signal with nothing on stdout, while the same
-                // program written with a struct parameter refused one step earlier at the zero this
-                // file could not write. A member nobody read gets that zero now -- the zero of the
-                // member's own tangent space, which says "read, not differentiated" the same way
-                // the `Fill` case below says it for a tuple literal.
+                // So this case is that join (`joinMemberRead`, above the walk), asked here for a
+                // parameter and there for a call's answer.
                 const auto slots = memberCotangents.find(ref);
                 if (slots == memberCotangents.end()) {
                     break;
                 }
-                const camel::runtime::GCNode *const joinNode = function->node(ref);
-                const Type *const joinPrimal = joinNode != nullptr ? joinNode->dataType() : nullptr;
-                const gc_node_ref_t whole    = cotangent[ref];
-                if (joinPrimal == nullptr ||
-                    (joinPrimal->code() != camel::core::type::TypeCode::Tuple &&
-                     joinPrimal->code() != camel::core::type::TypeCode::Struct)) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref
-                       << " type=" << (joinPrimal != nullptr ? joinPrimal->toString() : "?")
-                       << " why=a-member-read-of-a-value-that-is-not-an-aggregate\n";
+                if (!joinMemberRead(ref, slots->second)) {
                     return false;
                 }
-                // The value the fill is written at: the parameter's own tangent space, which for a
-                // tuple of numbers and for a struct of them is the value's type itself
-                // (`tangentSpaceOf`: `self`), and for a struct whose members are `f32` is a struct
-                // of `f32` -- not one of `float` (design principles 9.9).
-                const camel::core::TangentSpaceAnswer joinSpace =
-                    camel::core::tangentSpaceOf(joinPrimal);
-                if (!joinSpace.hasSpace() || joinSpace.space == nullptr) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " type=" << joinPrimal->toString()
-                       << " why=no-tangent-space-for-the-parameter\n";
-                    return false;
-                }
-                const auto memberCount = camel::core::type::tree::arity(joinPrimal);
-                if (!memberCount) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " type=" << joinPrimal->toString()
-                       << " why=not-a-type-with-members\n";
-                    return false;
-                }
-                if (slots->second.size() > *memberCount) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " slots=" << slots->second.size()
-                       << " arity=" << *memberCount << '\n';
-                    return false;
-                }
-                std::vector<gc_node_ref_t> parts;
-                for (size_t i = 0; i < *memberCount; ++i) {
-                    Type *const memberType = camel::core::type::tree::childType(joinPrimal, i);
-                    const camel::core::TangentSpaceAnswer memberSpace =
-                        memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
-                                              : camel::core::TangentSpaceAnswer{};
-                    if (!memberSpace.hasSpace() || memberSpace.space == nullptr) {
-                        refuse(TransposeRefusalCause::Component);
-                        os << " node=" << ref << " member=" << i
-                           << " type=" << (memberType != nullptr ? memberType->toString() : "?")
-                           << " why=no-tangent-space\n";
-                        return false;
-                    }
-                    gc_node_ref_t part =
-                        i < slots->second.size() ? slots->second[i] : rt::kInvalidNodeRef;
-                    if (part == rt::kInvalidNodeRef) {
-                        // The member nobody read: the zero of its own space, asked the same way the
-                        // answer assembly asks for an unread parameter's (`zeroOfSpaceOf`, then the
-                        // zero the type itself states). A space with neither is a zero this file
-                        // cannot write, and saying so is the refusal rather than a `float` where
-                        // the member's own shape belongs.
-                        part = zeroOfSpaceOf(
-                            draft,
-                            memberSpace.space,
-                            ref < forwardOf.size() ? forwardOf[ref] : rt::kInvalidNodeRef);
-                        if (part == rt::kInvalidNodeRef) {
-                            part = zeroOfType(memberType, memberSpace.space);
-                        }
-                        if (part == rt::kInvalidNodeRef) {
-                            refuse(TransposeRefusalCause::Component);
-                            os << " node=" << ref << " member=" << i << " memberType="
-                               << (memberType != nullptr ? memberType->toString() : "?")
-                               << " space=" << memberSpace.space->toString()
-                               << " why=no-zero-for-an-unread-member\n";
-                            return false;
-                        }
-                    }
-                    parts.push_back(part);
-                }
-                const gc_node_ref_t joined = aggregateOf(joinSpace.space, parts);
-                if (joined == rt::kInvalidNodeRef) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " type=" << joinPrimal->toString()
-                       << " why=the-member-join-built-nothing\n";
-                    return false;
-                }
-                if (whole != rt::kInvalidNodeRef) {
-                    // The parameter was read **both whole and by member**, and the adjoint of the
-                    // two uses is their sum (`f(q) = q.0 * 2.0 + g(q)`). That sum is the
-                    // aggregate's addition, which is its members' addition one place at a time --
-                    // derived from the type, not registered (design principles 9.9) -- so this is a
-                    // sum and not a refusal (the aggregate's addition is
-                    // derived from its type; refusing would judge the registry's completeness and call it the
-                    // type's ability).
-                    const gc_node_ref_t summed = accumulate(joinSpace.space, whole, joined);
-                    if (summed == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::Component);
-                        os << " node=" << ref << " type=" << joinPrimal->toString()
-                           << " whole-and-member slots=" << slots->second.size()
-                           << " why=no-addition-for-a-member-of-the-parameter\n";
-                        return false;
-                    }
-                    cotangent[ref] = summed;
-                } else {
-                    cotangent[ref] = joined;
-                }
-                hasCotangent[ref] = true;
                 break;
             }
             case rt::GCNodeKind::Data:
@@ -5286,6 +5333,28 @@ bool buildTransposeMember(
                     }
                     break;
                 }
+                // The cotangent this call's answer carries, before it is named below. A call whose
+                // answer the body read **one member at a time** (`p.0`, `p.1`) has no whole
+                // cotangent anywhere: the component reads filed their cotangents in
+                // `memberCotangents` and marked the call answered, and the member this step builds
+                // is handed the whole of what the call answered. So the parts are joined back into
+                // that whole here -- the same join a parameter read by member gets
+                // (`joinMemberRead`) -- rather than left as the hole an unassembled aggregate would
+                // put in the member's argument list.
+                if (cotangent[ref] == rt::kInvalidNodeRef) {
+                    const auto answerSlots = memberCotangents.find(ref);
+                    if (answerSlots == memberCotangents.end()) {
+                        // Nothing read the answer: no cotangent reaches the member, and a call with
+                        // a missing argument is not a shape the encoder has. Named, not built.
+                        refuse(TransposeRefusalCause::Component);
+                        os << " node=" << ref << " callee=" << callee->name()
+                           << " why=no-cotangent-for-the-answer\n";
+                        return false;
+                    }
+                    if (!joinMemberRead(ref, answerSlots->second)) {
+                        return false;
+                    }
+                }
                 // The member, built as the shape the participating set names -- the same build the
                 // arm path asks for, one graph per callee. It is built **before** the signature is
                 // asked for, because the build is what discovers the values the member needs
@@ -5889,7 +5958,15 @@ TransposeGraph buildTransposeGraph(
         "transpose_of_" + std::string(function->name()),
         "transpose_of_" + std::string(function->name()));
     TransposeState state{group, program, {}, context};
-    if (!buildTransposeMember(state, function, member, os)) {
+    // A graph whose signature is itself a `Lift` answers a cotangent for every parameter when its
+    // participating set is empty, which is this entrance's set. Read as the ordinary transposition
+    // that would be a member with no value port at all, and a body that reads one of those
+    // parameters would have nowhere to read it from (`#portOfParam`'s note); so the participating
+    // places take the ports their own arguments fill. `liftedFrom` is the record `jvp` writes on
+    // every graph it lifts, which is the fact this is read from -- not a guess from the name, and
+    // not the tangent-space test, which answers "yes" for every one of those parameters.
+    const bool valuesForParticipants = function->liftedFrom() != rt::kInvalidGraphId;
+    if (!buildTransposeMember(state, function, member, os, {}, nullptr, valuesForParticipants)) {
         // The cause the walk recorded, not a reading of the log: a null graph and the reason it is
         // null are one answer, handed back together.
         return TransposeGraph{state.refusal};
