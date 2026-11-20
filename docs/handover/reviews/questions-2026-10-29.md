@@ -6660,3 +6660,7 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 ## 02:45 检查：警告清理收下，一处小返工
 
 决策者。646766970 收下（547→134，关掉的那一类读过二十处、理由写在旁边）。一处小返工：它自己写"警告集合写在三处"（`CMakeLists.txt`、`modules/camel_module.cmake`、`tools/libcamel_tool.cmake`），同一份编译选项三处手抄，和 11-20/R5 是同一种病。收成一个 CMake 函数或一个接口目标（例如 `camel_warnings`），三处只链接它。
+
+## 催办（2026-11-21 04:55）
+
+决策者。`fix/jvp-vjp-f-invariant` 的修复 991ee512c（"按被调方的类型分辨提升后的调用与提升后的函数值"，02:57）修的是 `compositions.jvp_vjp_f` 的**内部错误**——按 02:20 的答，内部错误优先于记账。它两个小时没进 develop。过合并条件就当轮合，合不了回一行卡在哪。收敛 P5 收下（净减 26 行）。
