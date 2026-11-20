@@ -4219,6 +4219,7 @@ f757a0c455d36e73 ok test/cases/resources/effects.cml
 c75fdfd9be82e8ac ok test/cases/runtime/adopt_chain/grad_three_calls.cml
 cdd20b2a7df9feda ok test/cases/runtime/adopt_chain/jvp_three_calls.cml
 6c9e1b98a585226b ok test/cases/runtime/adopt_chain/split_three_calls.cml
+8b71fcb3b60d3b88 ok test/cases/runtime/draft_erase_unread/refusal_keeps_the_set.cml
 8257cccf10a8ca77 ok test/cases/runtime/draft_node_owner/owner_after_the_graph.cml
 d562d5657f8692b4 ok test/cases/runtime/exit_type/float_declared_array_returned.cml
 59487eeceac99fa6 ok test/cases/runtime/exit_type/int_declared_float_returned.cml
