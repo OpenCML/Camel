@@ -274,27 +274,22 @@ endif()
 #
 # Every module is a separate `<name>.cmo` that a Camel program imports by name, so the set decides
 # what an install can run and nothing else does -- except the one relation CMake cannot discover,
-# a module that *links* another one's target. `EXTRA_LIBS` in a module's CMakeLists names it
-# (onnx links nn and tensor, tiles and ckpt link tensor, rewrite links graph), so a subset that
-# drops a dependency fails here, by name, instead of at the link of a target several minutes later.
+# a module that *links* another one's target. A module names that relation beside its own sources
+# (LINK_MODULES in modules/<name>/CMakeLists.txt) and the check below reads the pairs back, so no
+# list of links is kept here; a subset that drops a dependency fails at configure, by name, instead
+# of at the link of a target several minutes later.
 #
 # CAMEL_MODULES (cmake/Options.cmake) selects a subset; empty means the full list below, or -- with
-# CAMEL_PACKAGE_MINIMAL -- the full list minus the AI-deployment and Python-host sets.
+# CAMEL_PACKAGE_MINIMAL -- the full list minus the modules CAMEL_MINIMAL_DROPS names.
 set(CAMEL_ALL_MODULES
     io process math time random this fs hash re str env json para test_support
     sim tensor tiles nn transforms autodiff ckpt bytes graph state verify rewrite onnx
 )
-# module -> the modules its .cmo is linked against (EXTRA_LIBS in modules/<name>/CMakeLists.txt).
-set(CAMEL_MODULE_LINKS_onnx "nn;tensor")
-set(CAMEL_MODULE_LINKS_tiles "tensor")
-set(CAMEL_MODULE_LINKS_nn "tensor")
-set(CAMEL_MODULE_LINKS_ckpt "tensor")
-set(CAMEL_MODULE_LINKS_random "tensor")
-set(CAMEL_MODULE_LINKS_rewrite "graph")
-# What a minimal package leaves out: the GPU back end, the deployment exporter, and the checkpoint
-# library built on tensor, plus the two Python directions (in/bindings above). Of the four modules
-# this switch chooses between -- tiles, onnx, nn, ckpt -- three go and `nn` stays, because the case
-# study and the MLP/transformer training steps import it for `sgd` and `save_params`.
+# The only place the minimal package's module set is written: what a minimal package leaves out is
+# the GPU back end, the deployment exporter, and the checkpoint library built on tensor, plus the
+# two Python directions (in/bindings above). Of the four modules this switch chooses between --
+# tiles, onnx, nn, ckpt -- three go and `nn` stays, because the case study and the MLP/transformer
+# training steps import it for `sgd` and `save_params`.
 set(CAMEL_MINIMAL_DROPS tiles onnx ckpt)
 
 if(CAMEL_PACKAGE_MINIMAL)
@@ -319,15 +314,22 @@ if(NOT "${CAMEL_MODULES}" STREQUAL "")
 endif()
 
 foreach(_module IN LISTS _camel_modules)
-    set(_links "${CAMEL_MODULE_LINKS_${_module}}")
-    foreach(_needed IN LISTS _links)
-        if(NOT _needed IN_LIST _camel_modules)
-            message(FATAL_ERROR
-                "modules/${_module} links modules/${_needed} (EXTRA_LIBS in modules/${_module}/CMakeLists.txt), "
-                "and CAMEL_MODULES did not select it. Add ${_needed}, or drop ${_module} as well.")
-        endif()
-    endforeach()
     add_subdirectory(modules/${_module})
+endforeach()
+
+# The link relations the modules declared, checked against the selected set. Each entry is
+# "<module>|<module it links>"; a dependent whose dependency is missing is a configure error naming
+# both, which is earlier than the link that would otherwise fail.
+get_property(_camel_module_links GLOBAL PROPERTY CAMEL_MODULE_LINKS)
+foreach(_entry IN LISTS _camel_module_links)
+    string(REPLACE "|" ";" _linked_pair "${_entry}")
+    list(GET _linked_pair 0 _dependent)
+    list(GET _linked_pair 1 _needed)
+    if(NOT _needed IN_LIST _camel_modules)
+        message(FATAL_ERROR
+            "modules/${_dependent} links modules/${_needed} (LINK_MODULES in modules/${_dependent}/CMakeLists.txt), "
+            "and CAMEL_MODULES did not select it. Add ${_needed}, or drop ${_dependent} as well.")
+    endif()
 endforeach()
 
 # The Python binding: the CPython extension `camel._camel`, a host of libcamel that a

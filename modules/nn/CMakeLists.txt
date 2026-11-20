@@ -9,6 +9,6 @@ add_camel_module(
     optim.cpp
     state.cpp
     tensor_ops.cpp
-  EXTRA_LIBS
-    tensor_cmo
+  LINK_MODULES
+    tensor
 )
