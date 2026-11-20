@@ -9,15 +9,22 @@
 // separately because a reader asking "does the nest work" writes it this way as often as the
 // one-expression form, and the two must answer the same kind of number.
 //
-// Bound or inline changes nothing about where it stops: the next wall is `jvp`'s, as in
-// `nested_grad_min.cml` -- `jvp has no forward transform for this function`, written in `grad`'s own
-// doc (`stdlib/vjp.cml#grad`) -- because the inner answer is a function value computed at run time,
-// and `jvp` lifts only an evident callee. The weight in the `with` list is what makes the nest build
-// at all.
+// Bound or inline changes nothing: the same composition twice, and the same wall, which is past both
+// lifts now and has moved twice since this file was written. Read 2026-11-21 on `b74edf66c`,
+// `std::nvm`, the nest stops at
+//
+//   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
+//   callee's transpose was built, but the parameter at position 3 reads a value this call does not
+//   carry.
+//
+// after `split`'s `the value half reads the tangent of parameter 0` (`2a2cf31a8` removed it) and
+// `jvp`'s `no forward transform for this function` (`2da9735da` lifted the answer type). The weight
+// in the `with` list is what makes the nest build at all; none of the three sentences is pinned, and
+// the plan entry is a `known_fail` on the number.
 //
 //   f(x) = x*x*x,  f'(x) = 3x^2,  f''(x) = 6x,  so the second derivative at 2 is 12.0
 //
-// 12.0 is pinned and not 6.0: 6.0 is `f'(2)` read once, which is what a nest that answered the
+// 12.0 is the target and not 6.0: 6.0 is `f'(2)` read once, which is what a nest that answered the
 // first derivative -- and only differentiated the outer name's body once -- would print.
 import { grad } from vjp
 
