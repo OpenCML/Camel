@@ -2166,8 +2166,7 @@ void GraphDraftGroup::encode() {
     }
     for (GraphId id : order_) {
         const Member &m = member(id);
-        auto &draft     = m.transaction->edit();
-        GCGraph *graph  = encodeDraftGraph(
+        GCGraph *graph = encodeDraftGraph(
             context_,
             m.identity,
             *m.transaction,

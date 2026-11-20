@@ -4179,8 +4179,7 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
     const bool isAggregate =
         targetType->code() == TypeCode::Tuple || targetType->code() == TypeCode::Struct;
     std::vector<Value> values(refs.size());
-    bool allConst    = true;
-    bool sawDeferred = false;
+    bool allConst = true;
     for (size_t k = 0; k < refs.size(); ++k) {
         // A closure element of a tuple or struct that simplification did not fold captures a
         // value that depends on the model input (e.g. a branch arm's (value, pullback) tuple
@@ -4204,7 +4203,6 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
                 continue;
             }
             values[k]   = Value::constant(NullSlot, elemType);
-            sawDeferred = true;
             continue;
         }
         values[k] = eval(act, refs[k]);

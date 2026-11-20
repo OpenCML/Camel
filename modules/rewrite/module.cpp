@@ -285,7 +285,6 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         const RuleObject *current = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
         return current != nullptr ? current->name() : std::string_view(call.name);
     };
-    auto &draft    = match.writings.transaction().edit();
     auto &writings = match.writings;
     // One slot per parameter: a rooted Node handle for a node parameter, a rooted object for a
     // constant the collector can move, and nothing for a constant whose bits are copied below.
@@ -900,7 +899,6 @@ Application applyRewrite(
             continue;
         }
         auto &transaction = session.edit(graph);
-        auto &draft       = transaction.edit();
         camel::runtime::DraftWritings writings(transaction, policy, protection, ordered);
         const size_t from                        = log != nullptr ? log->size() : 0;
         const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds, log);
@@ -1457,7 +1455,6 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                     programNow());
                 auto &transaction = session.edit(
                     const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
-                auto &draft = transaction.edit();
                 camel::runtime::DraftWritings writings(
                     transaction,
                     record.strict ? camel::core::sem::NumericPolicy::strict()
@@ -1522,7 +1519,6 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
         auto &transaction =
             session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
-        auto &draft = transaction.edit();
         camel::runtime::DraftWritings writings(
             transaction,
             record.strict ? camel::core::sem::NumericPolicy::strict()
@@ -1572,7 +1568,6 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 continue;
             }
             auto &transaction = session.edit(graph);
-            auto &draft       = transaction.edit();
             camel::runtime::DraftWritings writings(
                 transaction,
                 strict ? camel::core::sem::NumericPolicy::strict()

@@ -298,7 +298,6 @@ void replaceFoldResult(
 
 std::optional<StaticArgsView> staticArgs(
     const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs) {
-    const auto &draft = transaction.graph();
     std::vector<slot_t> slots;
     std::vector<type::Type *> types;
     for (gc_node_ref_t in : inputs) {
@@ -1867,7 +1866,6 @@ ConstantFoldPass::apply(const camel::runtime::Program *program, std::ostream &) 
         program,
         "std::cxx::fold",
         [&](camel::runtime::GraphTransaction &transaction) {
-            auto &draft = transaction.edit();
             return foldDraft(transaction, *context_, roots, constantBudgetBytes_);
         },
         nullptr,
@@ -1937,7 +1935,6 @@ DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
         program,
         "std::cxx::dce",
         [&](camel::runtime::GraphTransaction &transaction) {
-            auto &draft = transaction.edit();
             return dceDraft(transaction, valuesOnly_);
         },
         nullptr,
@@ -1952,7 +1949,6 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
         program,
         "std::cxx::order",
         [](camel::runtime::GraphTransaction &transaction) {
-            auto &draft = transaction.edit();
             return camel::runtime::reduceOrderDependencies(transaction) +
                    camel::runtime::reduceControlDependencies(transaction);
         },
@@ -2006,7 +2002,6 @@ const camel::runtime::Program *simplifyGraph(
             result,
             "std::cxx::order",
             [](camel::runtime::GraphTransaction &transaction) {
-                auto &draft = transaction.edit();
                 return camel::runtime::reduceOrderDependencies(transaction) +
                        camel::runtime::reduceControlDependencies(transaction);
             },
@@ -2058,7 +2053,6 @@ const camel::runtime::Program *simplifyGraph(
             program,
             "std::cxx::fold",
             [&](camel::runtime::GraphTransaction &transaction) {
-                auto &draft = transaction.edit();
                 return foldDraft(transaction, *context, roots, config.constantBudgetBytes);
             },
             &folded,

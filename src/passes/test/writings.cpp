@@ -451,7 +451,6 @@ void chains(Report &r, const Program &program) {
         return;
     }
     const auto transaction = GraphTransaction::decode(program, graph);
-    auto &draft            = transaction->edit();
     DraftWritings writings(*transaction);
     writings.build();
     const auto ports = portsOf(*transaction);

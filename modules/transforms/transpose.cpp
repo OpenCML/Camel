@@ -2676,8 +2676,7 @@ bool buildTransposeMember(
                     if (stops[i] != target) {
                         continue;
                     }
-                    portCotangents[i] =
-                        accumulate(cotangentTypeOf(stops[i]), portCotangents[i], node);
+                    portCotangents[i] = accumulate(ctSpace, portCotangents[i], node);
                     return;
                 }
                 // A residual the arm read: the cotangent goes back into the slot it came from,
@@ -2694,7 +2693,7 @@ bool buildTransposeMember(
                         });
                     if (body != nullptr && onAResidualPort) {
                         auto &slot = residualBack[body->value];
-                        slot       = accumulate(cotangentTypeOf(target), slot, node);
+                        slot       = accumulate(ctSpace, slot, node);
                         os << "TRANSPOSE function=" << function->name()
                            << " residual-return slot=" << body->value << " region=" << oldRegion
                            << '\n';
@@ -2708,7 +2707,7 @@ bool buildTransposeMember(
                     if (slot.cotangent == rt::kInvalidNodeRef) {
                         slot = Escape{node, from};
                     } else {
-                        slot.cotangent = accumulate(cotangentTypeOf(target), slot.cotangent, node);
+                        slot.cotangent = accumulate(ctSpace, slot.cotangent, node);
                     }
                     return;
                 }
