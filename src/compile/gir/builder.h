@@ -3334,6 +3334,9 @@ class Builder {
     /// be told to try the next when a guard refuses -- so it is one decision list over the cases
     /// in written order.
     node_handle_t buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle_t condNode);
+    /// The `bool` constant `value`, as a static data node registered against `origin`: the value
+    /// a branch arm and a loop's condition both hand out where the program wrote none.
+    node_handle_t staticBool(bool value, const GCT::node_ptr_t &origin);
     /// `!value`: a branch that gives true where the value is false, and false where it is true.
     node_handle_t negateCondition(node_handle_t value, const GCT::node_ptr_t &origin);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
@@ -3347,6 +3350,10 @@ class Builder {
         const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {},
         runtime::GCRegionKind kind                     = runtime::GCRegionKind::Arm,
         const std::function<void(ArmBuild &)> &declare = {});
+    /// The value a sync block hands back: a block that ends in a value gives it behind a `GATE`
+    /// (visitExecNode), so the value the block is worth is the one the `GATE` forwards. Anything
+    /// that is not a `GATE`, and a `GATE` with no input, is itself (design principles 3.4).
+    node_handle_t behindSyncGate(node_handle_t value);
     /// Gives the arm `arm` the value `result` (the last expression of its body) unless a
     /// `return` has given one.
     void setArmResult(ArmBuild &arm, node_handle_t result);
