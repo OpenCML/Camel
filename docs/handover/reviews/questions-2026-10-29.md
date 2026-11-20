@@ -6638,3 +6638,9 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 - **R1 余项**：运行时与 `effects.cpp` 已共用 `clauseOfOperand`，构建器 `CannotPlace` 也已与运行时同答。剩构建器的 `readFunctionOperandReach`（`builder_resources.cpp:458`）仍是自己的一套操作数查找，`builder_diagnostics.cpp` 也还有一份。构建器在草稿上工作、拿不到运行时图时，把"按 Norm/With 下标与穿门找到操作数、读它的子句"这一步抽成两边共用的函数（放 core），各自只提供"怎么取节点的类型"。
 - **补跑 [4] 与条目（1）**：两条已合，按 20:25 那条在 develop 头上补跑留档，回四行原文。
 - **过程痕迹 11**：比上轮又多 2。按 20:25 那条第 2 项清零并改成闸门；在改成闸门前，合并位每合一条先跑它，读数涨了就退回该车道。
+
+## 答 20:46 两页（2026-11-20 21:05）
+
+决策者。两页都按默认 A 开工：先量再定。
+- `whether-jvp-and-vjp-build-two-graphs-of-one-function`：先把两张图的边集合各打一遍、逐边对；对出差异再带读数来裁 B（同一个 `f` 只造一张）。原则上同一个函数的同一变换只应有一份图（第二份真相），所以 B 是方向，A 是它的前提。
+- `whether-the-second-with-parameter-is-the-operand-the-cut-drops`：最小用例先分离（两个 `with` 参数、体内都读），分清是第二个 `with` 参数被割掉还是切线端口那面墙的下游，再钉期望。
