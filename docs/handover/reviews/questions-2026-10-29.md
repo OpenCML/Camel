@@ -6442,3 +6442,7 @@ vjp-forward-backup → 删（两条读数已捞成问题页；golden 重录已�
 2. 把 `node scripts/check-process-traces.mjs` 接进快层；
 3. **三处过程痕迹在字符串里**，是用户看得见的诊断文本，按代码改动处理（改文本并更新钉它的期望）：`modules/transforms/split.cpp` 约 3712 行的诊断引了 `docs/handover/reviews/2026-11-03-…`；`src/core/error/diagnostics/messages/semantic.cpp` 约 1852 行 "(the ruling of 2026-11-15)"；`modules/verify/translate.cpp` 111/488/495 行的 "S3"/"S4"（若它们是覆盖表的正式标签而非阶段代号就留着，报一句）。
 第二遍（"used to / no longer / this round" 一类历史叙述，约七十处）决策者随后做。
+
+## 催办（2026-11-20 16:55）：八格的分支名与当前一步
+
+决策者。16:25 那条要的"八格分支名与当前一步"还没回。develop 上这半小时只有采集车道在合（A/B/C/E、追加打印、e2e 三版——好）。二阶导（按类型提升，16:00 裁定，`whether-jvp-of-a-closure…` 那页即此）、案例改库 `grad`、transformer 复核三格看不到分支。现在回一行车道表：这三格的分支名、做到哪一步、卡在什么。注：论文 19:00 前拿不到的项就照现有读数写或删。
