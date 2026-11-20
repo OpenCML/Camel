@@ -292,6 +292,10 @@ print("#   %-12s cmake %s" % ("", json.dumps(opt.get("cmake", {}), sort_keys=Tru
 print("#   %-12s env   %s" % ("", json.dumps(opt.get("env", {}), sort_keys=True)))
 PY
 echo "#   version    $("$CAMEL" --version 2>&1)"
+echo "#   note       the footprint's NAME is not this run's sha: it is stamped once per fingerprint and"
+echo "#              keeps the sha of the build that first produced it, so a docs-only commit moves"
+echo "#              \`revision\` and leaves the name alone. The sha to read is \`revision\`, and \`linked at\`"
+echo "#              compares against that one and not against the name."
 # The reading is only reproducible if this tree is the sources the binary was linked from, so the
 # difference between those sources and HEAD is printed. The sha to compare against is `revision`,
 # which the build writes as the tree it actually linked; it is NOT the sha inside the footprint name
