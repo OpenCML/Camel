@@ -27,21 +27,23 @@
 #   sh docs/handover/reports/eval-round10/capture-all.sh \
 #       > docs/handover/reports/eval-round10/capture-all.raw.txt 2>&1
 #
-# Repeatability: two runs of this script on one build differ only in section [7]. That section is
-# time (wall and CPU per probe, which is what it reads) plus the host's load line beside it, because
-# a time with no load beside it cannot be read. Everything else is byte for byte the same: the MLP's
-# own `seconds=` field is masked below because every run moves it, and the scratch directory is a
-# fixed path rather than a fresh temp one because a diagnostic quotes it -- a path that changed per
-# run would make two runs differ. PYTHONHASHSEED is pinned so tools that walk sets print in one order.
+# Repeatability: two runs of this script on one build differ in section [7] and in the scratch path.
+# Section [7] is time (wall and CPU per probe, which is what it reads) plus the host's load line
+# beside it, because a time with no load beside it cannot be read. The scratch path is per run
+# because it used to be one fixed directory (`/tmp/camel-capture-all`) and that made two runs share
+# state: two lanes running this script at once wrote into it, and a run whose scratch another run had
+# emptied printed readings that were wrong and said nothing about it. The path carries the run's own
+# pid, and the record names it, so a reading that quotes a path says which run it came from.
+# Everything else is byte for byte the same: the MLP's own `seconds=` field is masked below because
+# every run moves it. PYTHONHASHSEED is pinned so tools that walk sets print in one order.
 set -u
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../../../.." && pwd)
 cd "$ROOT" || exit 1
 
-SCRATCH=/tmp/camel-capture-all
-rm -rf "$SCRATCH"
-mkdir -p "$SCRATCH" || exit 1
+SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/camel-capture-all.$$.XXXXXX") || exit 1
+trap 'rm -rf "$SCRATCH"' EXIT HUP INT TERM
 
 export CAMEL_HOME="$ROOT/out/latest"
 export LD_LIBRARY_PATH="$HOME/camel-eval/conda/envs/clang/lib:$CAMEL_HOME/libs:$CAMEL_HOME/lib"
@@ -186,8 +188,8 @@ fi
 echo "#"
 echo "# No reading below came from another build. A row that could only be taken on an older pin"
 echo "# would say so on the row; there is none in this run."
-echo "# The scratch directory the module roots and the pass copies live in is $SCRATCH, fixed on"
-echo "# purpose: a diagnostic quotes it, and a path that changed per run would make two runs differ."
+echo "# The scratch directory the module roots and the pass copies live in is $SCRATCH: this run's own,"
+echo "# named here because a diagnostic quotes it and because two runs would otherwise share one."
 
 # ---------------------------------------------------------------------------------------------
 banner 1 "the six writings of the case-study program, and the counterexample"
