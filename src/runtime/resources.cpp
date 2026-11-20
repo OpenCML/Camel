@@ -546,18 +546,9 @@ NodeResources Resolver::fromFunctionOperand(
     // What the operator runs is the value in the operand the declaration names, or nothing this
     // reading can see: an absent operand, a value that is not a function, and a type that writes
     // no clause (`Generic`) are the same answer as an unreadable callee gets in `call`.
-    const core::type::FunctionType *type = nullptr;
-    if (where.kind == sem::ResourceBinding::Kind::Norm ||
-        where.kind == sem::ResourceBinding::Kind::With) {
-        const auto operands = where.kind == sem::ResourceBinding::Kind::Norm
-                                  ? graph.normInputsOf(ref)
-                                  : graph.withInputsOf(ref);
-        if (size_t(where.index) < operands.size()) {
-            type = functionTypeOfValue(graph, valueBehindGates(graph, operands[where.index]));
-        }
-    }
+    const core::FunctionValueClause site = clauseOfOperand(graph, ref, where);
     NodeResources r;
-    if (type == nullptr || type->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+    if (!site.clause.has_value()) {
         r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
         r.result   = ResultAlias{.kind = ResultAlias::Kind::Unknown};
         r.external = true;
@@ -566,17 +557,17 @@ NodeResources Resolver::fromFunctionOperand(
     }
     // The clause is read where a call through a value reads it, and its parameters are placed on
     // the operand the call would pass: the function value stands where a callee stands, so the
-    // clause's `with` parameters start one past it. An operator that takes the function as an
-    // ordinary operand, or one whose shape (`ElementCalls`) makes the callback's parameters
-    // something other than the node's operands, cannot place them -- and a use that cannot be
-    // placed is "some resource of its class", the reading `fromSignature` gives a capture, never a
-    // dropped one.
+    // clause's `with` parameters start one past it -- the base is the shared reading's, not this
+    // site's. An operator that takes the function as an ordinary operand, or one whose shape
+    // (`ElementCalls`) makes the callback's parameters something other than the node's operands,
+    // cannot place them -- and a use that cannot be placed is "some resource of its class", the
+    // reading `fromSignature` gives a capture, never a dropped one.
     const bool folds = facts != nullptr && facts->elementCalls &&
                        facts->elementCalls->shape == sem::ElementShape::Fold;
-    const sem::ResourceSignature &signature = type->resources();
     if (where.kind == sem::ResourceBinding::Kind::With && !folds) {
-        r = fromSignature(signature, type->withTypesCount(), graph, ref, size_t(where.index) + 1);
+        r = fromSignature(*site.clause, site.withCount, graph, ref, site.withArgBase);
     } else {
+        const sem::ResourceSignature &signature = *site.clause;
         r.result    = signature.result;
         r.allocates = signature.allocates;
         r.external  = signature.external;
@@ -641,21 +632,24 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     if (callee == nullptr) {
         // A call through a value: the value's function type is where its effect is written, and it
         // is the one thing a call site can read when the callee's body is not statically known --
-        // `declaredClauseAt` reads the same place. A type that writes a clause and names no capture
-        // is read as written. A type that promises nothing (a `Generic` clause: no clause written,
-        // `docs/design/effects/plan.cn.md` 2.2) is not a reading at all, so the call keeps the
-        // conservative one: recording it as `unknown` is the honest answer about a value whose reach
-        // the program does not state. Reaching that fallback is a fact about the type, not about the
-        // call site; one type that lands there is the one
+// `declaredClauseAt` reads the same place, through the same reading. A type that writes a
+        // clause is read as written, `pure` included: `pure` is the clause that names nothing, so
+        // the call reaches nothing and is not an effect. A type that promises nothing (a `Generic`
+        // clause: no clause written, `docs/design/effects/plan.cn.md` 2.2) is not a reading at all,
+        // so the call keeps the conservative one: recording it as `unknown` is the honest answer
+        // about a value whose reach the program does not state. Reaching that fallback is a fact
+        // about the type, not about the call site; one type that lands there is the one
         // `autodiff`'s `grad` answers with.
         if (!with.empty()) {
-            if (const core::type::FunctionType *type =
-                    functionTypeOfValue(graph, valueBehindGates(graph, with[0]));
-                type != nullptr &&
-                type->resources().mode == sem::ResourceSignature::Mode::Concrete &&
-                type->resources().captures.empty()) {
+            const core::FunctionValueClause site = clauseOfCall(graph, ref);
+            // The clause is read in one place (`core::functionValueClause`, through the one lookup
+            // below), together with the base its `with` parameters land at; a `captures` list is not
+            // a reason to refuse the reading, because `fromSignature` places a capture as "some
+            // resource of its class" and never drops it. What the type cannot say is what an absent
+            // clause (`Generic`) says, and that keeps the conservative answer below.
+            if (site.clause.has_value()) {
                 return fromSignature(
-                    type->resources(), type->withTypesCount(), graph, ref, /*withArgBase=*/1);
+                    *site.clause, site.withCount, graph, ref, site.withArgBase);
             }
         }
         // No clause to read: anything may happen.
@@ -1394,6 +1388,12 @@ CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_
     if (type == nullptr) {
         return {};
     }
+    // A call site whose value type writes no clause is *judged*, not declined: "no promise, no
+    // breach" is a different sentence from "a reading the checker could not name", and the two must
+    // not collapse into one branch (`commit_checks.a_type_that_promises_nothing` pins the counts
+    // apart). So this site hands the clause on as it is and `beyondCoverage` is what answers -- the
+    // shared `functionValueClause` could only turn a `Generic` type into "declined" here, which is
+    // the answer `Resolver::call` needs and this check must not give.
     site.declared  = &type->resources();
     site.withCount = type->withTypesCount();
     // The body behind it, when the value names a function statically: without it there is no
@@ -2113,6 +2113,41 @@ bool commitChecksEnabled() { return commitChecksCell.load(std::memory_order_rela
 
 void setCommitChecksEnabled(bool enabled) {
     commitChecksCell.store(enabled, std::memory_order_relaxed);
+}
+
+// ---- The clause of a function value at an operand ----------------------------------------------
+//
+// One reading for the two ways a node's accesses come from a function value: a higher-order
+// operator's function operand (the declaration names where it is), and the value a call node calls
+// (its first `with` input). Both find the value behind the gates the graph put in front of it, and
+// both ask `core::functionValueClauseAt` for the clause, the base its `with` parameters land at and
+// how many there are, so the runtime footprint and the effect summary cannot disagree.
+
+core::FunctionValueClause clauseOfOperand(
+    const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where) {
+    if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
+        where.kind != core::sem::ResourceBinding::Kind::With) {
+        return core::FunctionValueClause{};
+    }
+    const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
+                              ? graph.normInputsOf(node)
+                              : graph.withInputsOf(node);
+    if (size_t(where.index) >= operands.size()) {
+        return core::FunctionValueClause{};
+    }
+    const gc_node_ref_t value = valueBehindGates(graph, operands[where.index]);
+    return core::functionValueClauseAt(
+        functionTypeOfValue(graph, value), where.kind, size_t(where.index));
+}
+
+core::FunctionValueClause clauseOfCall(const GCGraph &graph, gc_node_ref_t node) {
+    const auto with = graph.withInputsOf(node);
+    if (with.empty()) {
+        return core::FunctionValueClause{};
+    }
+    const gc_node_ref_t value = valueBehindGates(graph, with[0]);
+    return core::functionValueClauseAt(
+        functionTypeOfValue(graph, value), core::sem::ResourceBinding::Kind::With, 0);
 }
 
 } // namespace camel::runtime
