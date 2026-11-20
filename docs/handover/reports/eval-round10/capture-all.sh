@@ -251,7 +251,16 @@ echo "# \`edits-ecoop.cml\` is copied into the scratch root as \`eco.cml\`: a mo
 echo "# stem, so a pass library reaches a command under that name. The file in the tree is not renamed"
 echo "# and not edited. The program is the six writings' baseline."
 echo "#   print_unordered  a print spliced at a pure node of main -- expected refused (order check)"
-echo "#   print_ordered    the same body spliced at a statement of the chain -- expected accepted"
+echo "#   print_ordered    the same body spliced at a statement of the chain -- expected accepted, and"
+echo "#                    the announcement takes that line's place, so main still prints three lines"
+echo "#   print_appended   the same body at the same pure node as print_unordered, then ordered *after*"
+echo "#                    the third print -- expected accepted, and main prints four lines (the"
+echo "#                    additive form the take-over row above cannot show)"
+echo "#   print_appended_reversed  the same edge anchored at the third print instead -- refused: the"
+echo "#                    line lands between two prints and nothing orders it against the earlier one"
+echo "#   print_prepended  the same splice ordered *before* the first print of the chain -- expected"
+echo "#                    accepted, with the new line first (the reverse edge anchored where it can"
+echo "#                    be complete: against the head, not against the third)"
 echo "#   loss_print       the same print in loss, whose body has no call the analysis cannot name --"
 echo "#                    expected refused (effect check, PassEffectBeyondType)"
 echo "#   drop_print       every println erased -- expected accepted, and nothing printed"
@@ -264,7 +273,7 @@ echo "# record shows which of the two happened."
 cp "$VARIANTS/edits-ecoop.cml" "$SCRATCH/eco.cml"
 cp "$VARIANTS/train.cml" "$SCRATCH/train.cml"
 echo
-for p in eco::print_unordered eco::print_ordered eco::loss_print eco::drop_print eco::break_rate; do
+for p in eco::print_unordered eco::print_ordered eco::print_appended eco::print_appended_reversed eco::print_prepended eco::loss_print eco::drop_print eco::break_rate; do
     runp "$SCRATCH" "$SCRATCH/train.cml" "$p" std::nvm
 done
 
@@ -428,9 +437,15 @@ echo
 banner 9 "the e2e lane: all of e2e/capture.sh, run unchanged"
 echo "# This is that script, not a copy of its commands: if the two ever drift, this section says so."
 echo "# It moves to the worktree root and to the e2e directory itself, which is where \`passes\` is"
-echo "# found beside the program. Its own header prints the build it ran on, and its two readings that"
-echo "# the paper quotes verbatim are in it: the forward edit refused, and the reverse one accepted"
-echo "# with the marker never printing."
+echo "# found beside the program. Its own header prints the build it ran on. The three versions of the"
+echo "# instrumentation -- every one of them \`inline\` + \`order\` on the same program, differing in the"
+echo "# edge alone -- are the three sections that run them, and their readings are these:"
+echo "#   instrument_ordered   \`inline\` beside the closure's print, then \`order(before, added)\`: the"
+echo "#                        accepted form, the five lines with \`# tick\` after each of the four"
+echo "#   instrument_unordered the same edit with no order edge: refused, \`PassEffectOrder\`, the message"
+echo "#                        quoted verbatim in NOTES.md's 'Item 4' (same two nodes, same position)"
+echo "#   instrument_reversed  the same edge the other way round: accepted, and the marker runs in front"
+echo "#                        of each line (before \`3fd76e564\` it was accepted and never ran)"
 echo
 sh "$E2E/capture.sh" 2>&1
 echo "### e2e capture.sh exit=$?"
