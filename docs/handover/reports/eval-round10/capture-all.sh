@@ -65,6 +65,13 @@ VARIANTS=docs/handover/reports/eval-round10/case-study-variants
 PROBES=docs/handover/reports/eval-round10/probes
 PROBES_ROOT=$ROOT/$PROBES
 E2E=docs/handover/reports/eval-round10/e2e
+# The benchmark programs import `camel_bench` out of this directory, so it is a module root for the
+# two big rows of section [7]. It is passed absolute on purpose: a module root in CAMEL_PACKAGES is
+# resolved against the *entry program's* directory, not against the worktree root, so the relative
+# `benchmarks/common` resolves to `benchmarks/resnetbn/benchmarks/common` and the import fails with
+# `ModuleNotFound: Module 'camel_bench' not found` -- a failure that writes its diagnostic to
+# *stdout*, which the document path would then store as a 1451-byte "document".
+BENCH_ROOT=$ROOT/benchmarks/common
 MLP=showcase/c2-mlp-mnist/train.cml
 TRANSFORMER=showcase/c3-char-transformer/train.cml
 CASE=examples/case-study/train.cml
@@ -647,16 +654,19 @@ echo "# commit of a change is read against. It includes \`open\` -- the pass win
 echo "# the recorder has, and there is no scope inside a pass -- and the row below it pays the same"
 echo "# \`open\`, so the pair still isolates the edit."
 echo "# Five sizes, nine fresh processes each, with the program's own node count on the row so the"
-echo "# sizes are read and not assumed: the three the paper names, then the two bigger ones."
+echo "# sizes are read and not assumed: the three the paper names, then the two bigger ones. The two"
+echo "# bigger ones are the benchmark models, which import \`camel_bench\` and so take benchmarks/common"
+echo "# as a module root (see its definition at the top); neither is a showcase, so their entry point"
+echo "# is a model rather than a training loop -- the reading is the commit path, which does not care."
 echo "#   /proc/loadavg $(cat /proc/loadavg)"
-doc "scale-resnet" "benchmarks/resnetbn/model.cml" std::jgir canonical=true
-doc "scale-mcts" "showcase/d4-mcts/search.cml" std::jgir canonical=true
+docp "$BENCH_ROOT" "scale-resnetbn" "benchmarks/resnetbn/model.cml" std::jgir canonical=true
+docp "$BENCH_ROOT" "scale-resnet" "benchmarks/resnet/model.cml" std::jgir canonical=true
 echo
 timed commit-case "$CASE" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/case.json")"
 timed commit-mlp "$MLP" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/mlp-baseline.json")"
 timed commit-tr "$TRANSFORMER" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/tr-baseline.json")"
-timed commit-resnet "benchmarks/resnetbn/model.cml" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-resnet.json")"
-timed commit-mcts "showcase/d4-mcts/search.cml" commit_only::touch "$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-mcts.json")"
+timed commit-resnetbn "benchmarks/resnetbn/model.cml" commit_only::touch "$BENCH_ROOT:$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-resnetbn.json")"
+timed commit-resnet "benchmarks/resnet/model.cml" commit_only::touch "$BENCH_ROOT:$PROBES_ROOT" "nodes=$(nodes_of "$SCRATCH/scale-resnet.json")"
 
 echo
 echo "# --- the same commit with ONE node changed, on the char-transformer ---"
