@@ -1,0 +1,50 @@
+# 注释清理（fsh-dev 两遍）合进 develop：三处字符串、快层接线、以及「只动注释」仍会动的两个读数
+
+## 合了什么
+
+- `f9435e821`（第一遍，191 文件）与 `9b1a7d7ff`（第二遍，97 文件）从 `origin/fsh-dev` 取到 `develop`。
+  `modules/transforms/jvp.cpp` 与 `src/passes/opt/inline/engine.cpp` 按红线段**未碰**（两条活跃车道的地盘），
+  所以实入 189 + 95 文件。
+- 判据「只动注释」复验：两笔文件取并集 224 个，逐文件剥注释后与 `ee8d76645` 比对 —— **218 个全等**，
+  只有 `split.cpp`、`verify/translate.cpp` 不等（那两处就是要改的字符串）；`semantic.cpp` 是生成的字符串。
+  四个 `modules/*.md` 是散文。
+
+## 「只动注释」不等于「读数不动」——两个读数会动，都补了
+
+1. **`.cml` 的 `///` 注释在 AST 里**（`rulings.doc_comment_in_ast` 读的就是它）。11 个 `stdlib/*.cml` 的文档注释被改写，
+   ⇒ `frontend.ast_snapshot` 从 126 pass / 0 fail 变 125 / 1，报 26 个文件读法不同。
+   在主机上用 `-UpdateAstHashes -AstOnly` 只重录那 11 个路径（`ast_hashes.txt` 变 22 行，别的行没动）。
+2. **`docs/stdlib-reference.md` 是同一批注释生成的**，`--verify-doc` 当场答 `out of date`；重生成（558 条，`--verify-doc` 绿）。
+3. 另有一处**钉位置的期望**：`nested.nest_quartic` 钉 `stdlib/vjp.cml:190:25`，清扫把该文件减了 5 行 ⇒ 现在打 `185:25`。
+   改的是行号，不是读数。这是六计划里唯一一处「期望变」，也是作者说「期望一字未动」漏掉的那种：行号会随注释移动。
+
+## 二十条在哪（这是债，不是零）
+
+`check-process-traces` 起点（`ee8d76645`）**696** 条，本树 **20** 条，全在两条活跃车道的地盘：
+`modules/transforms/jvp.cpp` **18** 条、`src/passes/opt/inline/engine.cpp` **2** 条。
+作者报的「本树读数 0」指的是他们那棵树；之后的 `develop` 上这两处仍被改。
+**所以快层接的是 `reportOnly`**（`internal/tools/camel-remote.ps1:554` 的 `process-traces` 行）：
+读数归 0 时去掉这个标记，该行立刻是墙（脚本本来就在命中时 exit 1）。
+**不要现在去清这两处**：清掉再被改回来说不清是谁写的；要清就与那两条车道同时做。
+
+## 三处字符串（按代码改动处理）
+
+1. `modules/transforms/split.cpp`：`Exit` 拒绝的文本原本指向交接页（`docs/handover/reviews/2026-11-03-…`），
+   现在写出那页给的**理由**：出口的形状是 lowering 的产物，这个 switch 是语义不变式。
+2. `semantic.cpp` 是生成物，源在 `diagnostics/registry.tsv`（`ResourceInferenceConflict`）：删掉 `(the ruling of 2026-11-15)`。
+3. `modules/verify/translate.cpp` 111/488/495：`S3`/`S4` 是设计文档「七片」的交付代号，**不是覆盖表的正式标签**，
+   改成 `(only the integer theory is translated)`，条件那句去掉 `(S4)`。跟着改的期望 3 条，都在
+   `test/plans/feat/modules/rules.plan.toml`。
+
+## 生成的表头也清不到（新发现）
+
+`scripts/diagnostics-catalog.mjs --write` 把 `diagnostics/registry.tsv` 的注释块重发进 `include/.../messages/*.h`。
+两遍清扫只改生成物，重生成一次就把 7 处带日期裁定/交接页路径的注释放了回来 ⇒ 在源上清掉再重生成；`--check` 绿（327 codes）。
+
+## 六计划（改前 = `d8ceb1d3b`，改后 = 本轮终点，均在 `mrg2b` 主机检出）
+
+见报告正文；`skip` 六条都为 0。
+
+## 树与撞车
+
+`mrg2` 当时被 `lane-merge-14` 占用，切回去会把它的量测变成我的树；本车道的树是 `D:\Projects\Camel-wt\mrg2b`。
