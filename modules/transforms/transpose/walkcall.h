@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The shape one node family
-'
-s transposition takes: the walk
-'
-s state, the draft the member is
+ * The shape one node family's transposition takes: the walk's state, the draft the member is
  * being built in, the source graph and the node. One struct for all four families, because the
  * families differ in what they do and not in what they are handed -- and because a second struct
  * per family would be four copies of the same five fields.
@@ -36,7 +32,7 @@ struct WalkCall {
     TransposeState &state;
     rt::GraphDraft &draft;
     rt::GCGraph *function = nullptr;
-    gc_node_ref_t ref = rt::kInvalidNodeRef;
+    gc_node_ref_t ref     = rt::kInvalidNodeRef;
     std::ostream &os;
 };
 
@@ -50,9 +46,7 @@ bool buildRegionFamily(WalkCall &call);
 /// `Oper`: one operator instance, its law, and the arguments that law is handed.
 bool buildArrayFamily(WalkCall &call);
 
-/// `Fill` and `Accs`: a closure
-'
-s construction and the member its answer is read from.
+/// `Fill` and `Accs`: a closure's construction and the member its answer is read from.
 bool buildClosureFamily(WalkCall &call);
 
 } // namespace camel::transforms
