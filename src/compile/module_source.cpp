@@ -2,24 +2,29 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The front end of a module written in Camel: its source read into a parse tree, its graph
- * construction tree, and the graph the program built from it.
+ * The loader of modules written in Camel: the compiler's half of the dependency the kernel
+ * inverted (`camel/core/module/source_loader.h`).
  *
- * It lives here, beside the compiler, because the kernel does not read source and does not
- * compile (design principles 9: a pass sees graphs, and what it is handed is a graph).
- * `include/camel/core/module/userdef.h` declares the module and the steps it takes; the state
- * those steps keep between them is `UserDefinedModuleFrontEnd`, below, and every member of the
- * module that is a parser, a tree or a graph is in it. What the kernel keeps of its own is the
- * stage the module reached (`CompileStage`) and the graph it hands out.
+ * The kernel owns the module object (`UserDefinedModule`) and the stage machine that loads it;
+ * this file owns what reading the source and compiling it means -- the parse tree, the graph
+ * construction tree, the graph a program built -- and it lives here, beside the compiler, because
+ * the kernel does not read source and does not compile (design principles 9: a pass sees graphs,
+ * and what it is handed is a graph).
  *
- * The steps, in order (compile()): read the source (`parse`), build the construction tree
- * (`gct`), declare the module into its program (`declare`), build and link that program (`gir`).
+ * `SourceModuleFrontEnd` is the one object the kernel reaches through its loader slot; it is
+ * registered when the library loads, from the bottom of this file. Its state per module is
+ * `UserDefinedModuleFrontEnd`, held by the module as an opaque handle.
+ *
+ * The steps, in order: read the source (`readSource`), build the construction tree
+ * (`buildConstructionTree`), declare the module into its program (`declare`), build and link that
+ * program (`buildProgram`).
  */
 
 #include <sstream>
 
 #include "camel/utils/windows_parser_guard.h"
 
+#include "camel/core/module/source_loader.h"
 #include "camel/core/module/userdef.h"
 #include "core/module/entity_internal.h"
 #include "core/module/userdef_internal.h"
@@ -62,7 +67,8 @@ namespace camel::core::module::detail {
 
 /// What the compiler keeps of one module between the steps of loading it: the reader of its
 /// source, the tree it is built from, and the graphs made out of it. Declared opaquely in
-/// userdef.h and defined here, so the kernel's header names none of these types.
+/// userdef.h and held by the module as a `std::shared_ptr<void>`, so the kernel names none of
+/// these types.
 struct UserDefinedModuleFrontEnd {
     /// The reader of the module's source: its abstract syntax tree, its concrete tree and the
     /// positions of its tokens. Null until the source is read, and for a module that has none.
@@ -70,23 +76,23 @@ struct UserDefinedModuleFrontEnd {
     /// The graph construction tree of the module. It is kept for as long as the module: generic
     /// functions are lowered again from it, also by modules that import this one.
     std::unique_ptr<GCT::Tree> tree;
-    /// The root graph of the program this module is the entry of (setProgramGraph).
-    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> compileGraph;
     /// compileAsLibrary(): the graph builder the module was built by, kept with it. It is the
     /// program's builder (Context::graphBuildSession), shared rather than owned: see
-    /// compileAsLibrary.
+    /// buildLibrary.
     std::shared_ptr<void> libraryBuilder;
     /// compileAsProgram(): the graph builder of each program of its own, one per entry function,
     /// kept with the module for as long as the graphs it made are used.
     std::vector<std::shared_ptr<void>> programBuilders;
-    /// Set while compileAsProgram() builds: the graph of that program is not the graph the
-    /// module was loaded as part of, so setProgramGraph must not replace it.
-    bool buildingProgramOfItsOwn = false;
 };
 
-} // namespace camel::core::module::detail
-
 namespace {
+
+/// The front end of `module`, made by this loader. Null when no loader ever attached one, which
+/// is the case of every module built before the loader ran and of a build with none.
+UserDefinedModuleFrontEnd *frontEndOf(const UserDefinedModule &module) {
+    return static_cast<UserDefinedModuleFrontEnd *>(
+        UserDefinedModuleAccess::frontEnd(module).get());
+}
 
 /// Number of nodes of an AST, for the phase report.
 template <typename NodePtr> uint64_t countNodes(const NodePtr &root) {
@@ -97,455 +103,380 @@ template <typename NodePtr> uint64_t countNodes(const NodePtr &root) {
     return count;
 }
 
+/// The module as the graph builder takes it: the same object, and the builder's own signature
+/// names the kernel's pointer type.
+module_ptr_t asModule(UserDefinedModule &module) { return module.shared_from_this(); }
+
 } // namespace
 
-UserDefinedModule::UserDefinedModule(
-    const std::string &name, const std::string &path, context_ptr_t ctx,
-    const std::shared_ptr<void> &source)
-    : Module(name, path, ctx), frontEnd_(std::make_shared<camel::core::module::detail::UserDefinedModuleFrontEnd>()) {
-    const auto reader = std::static_pointer_cast<CamelParser>(source);
-    if (reader) {
-        frontEnd_->parser = reader;
-        diagnostics_      = reader->diagnostics();
-        frontEnd_->parser->setSourceContext(ctx->sourceContext());
-    } else {
-        diagnostics_ = std::make_shared<Diagnostics>(
-            name,
-            path.empty()
-                ? "<in-memory>"
-                : camel::utils::pathToUtf8(fs::absolute(camel::utils::pathFromUtf8(path))),
-            ctx->sourceContext());
-        diagnostics_->setConfig(ctx->diagConfig());
-        frontEnd_->parser = std::make_shared<CamelParser>(diagnostics_);
-        frontEnd_->parser->setSourceContext(ctx->sourceContext());
-    }
-    // Automatically import the built-in module
-    importAllRefsFromMod(ctx->importModule(""));
-}
+/// The loader the kernel reaches: one object, registered at load time. Everything it does is a
+/// step of loading a module written in Camel, and the module's own state -- the stage, the
+/// diagnostics, the graph -- stays the kernel's.
+class SourceModuleFrontEnd final : public SourceModuleLoader {
+  public:
+    SourceModuleFrontEnd() { registerSourceModuleLoader(this); }
 
-UserDefinedModule::~UserDefinedModule() = default;
-
-module_ptr_t
-UserDefinedModule::fromFile(const std::string &name, const std::string &path, context_ptr_t ctx) {
-    return std::make_shared<UserDefinedModule>(name, path, ctx);
-}
-
-const camel::core::error::TokenPositions *
-UserDefinedModule::tokenPositions() const {
-    if (!frontEnd_ || !frontEnd_->parser) {
-        return nullptr;
-    }
-    return &frontEnd_->parser->tokenPositions();
-}
-
-const void *camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(
-    const UserDefinedModule &module) {
-    return camel::compile::gir::compileGraphOpaque(module.frontEnd_->compileGraph);
-}
-
-void camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeProgram(
-    const UserDefinedModule &module, camel::runtime::Program &program) {
-    camel::compile::gir::encodeToRuntimeProgram(module.frontEnd_->compileGraph, program);
-}
-
-std::shared_ptr<void> camel::core::module::detail::UserDefinedModuleAccess::sourceReader(
-    const UserDefinedModule &module) {
-    return module.frontEnd_ ? module.frontEnd_->parser : nullptr;
-}
-
-const void *camel::core::module::detail::UserDefinedModuleAccess::constructionTree(
-    const UserDefinedModule &module) {
-    return module.frontEnd_ ? module.frontEnd_->tree.get() : nullptr;
-}
-
-bool UserDefinedModule::compile(CompileStage till) {
-    if (till <= stage_) {
-        return true;
-    }
-    if (compiling_) {
-        // Asked for while it is being compiled: a module it imports imports it back (design
-        // principles 10.1 allows that). It has what it has declared so far; the rest of it is
-        // there before any function body of the program is built.
-        return true;
-    }
-    struct Compiling {
-        bool &flag;
-        explicit Compiling(bool &f) : flag(f) { flag = true; }
-        ~Compiling() { flag = false; }
-    } compiling(compiling_);
-    if (stage_ == CompileStage::None) {
-        CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
+    Attached attach(UserDefinedModule &module, const std::shared_ptr<void> &source) override {
+        auto frontEnd = std::make_shared<UserDefinedModuleFrontEnd>();
+        Attached attached;
+        attached.frontEnd = frontEnd;
+        if (const auto reader = std::static_pointer_cast<CamelParser>(source)) {
+            frontEnd->parser     = reader;
+            attached.diagnostics = reader->diagnostics();
+            reader->setSourceContext(module.context()->sourceContext());
+        } else {
+            attached.diagnostics = std::make_shared<Diagnostics>(
+                module.name(),
+                module.path().empty()
+                    ? "<in-memory>"
+                    : camel::utils::pathToUtf8(
+                          fs::absolute(camel::utils::pathFromUtf8(module.path()))),
+                module.context()->sourceContext());
+            attached.diagnostics->setConfig(module.context()->diagConfig());
+            frontEnd->parser = std::make_shared<CamelParser>(attached.diagnostics);
+            frontEnd->parser->setSourceContext(module.context()->sourceContext());
+        }
+        return attached;
     }
 
-    if (stage_ == CompileStage::None) {
-        // The built-in signatures are read with every program (the prelude's declaration file): by
-        // the first module of the context that is compiled, whichever it is -- a session of the
-        // Python binding has no entry module.
-        if (const std::string broken = context_->checkPreludeDeclarations(); !broken.empty()) {
-            diagnostics_->of(SemanticDiag::ImportedModuleHasErrors).commit("prelude", broken);
+    bool readSource(UserDefinedModule &module) override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr) {
             return false;
         }
-    }
-
-    if (stage_ < CompileStage::AST) {
-        if (!frontEnd_->parser->ast()) {
-            camel::utils::phase::Scope phaseScope("parse", name_);
-            const auto override = context_->sourceOverride(path_);
+        const diagnostics_ptr_t &diagnostics = module.diagnostics();
+        if (!frontEnd->parser->ast()) {
+            camel::utils::phase::Scope phaseScope("parse", module.name());
+            const auto override = module.context()->sourceOverride(module.path());
             std::istringstream buffer(override.value_or(""));
             std::ifstream ifs;
             if (!override)
-                ifs.open(camel::utils::pathFromUtf8(path_));
+                ifs.open(camel::utils::pathFromUtf8(module.path()));
             if (!override && !ifs.good()) {
                 throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
-                    .commit(name_, "module file not found or unreadable: " + path_);
+                    .commit(module.name(), "module file not found or unreadable: " + module.path());
             }
-            if (!frontEnd_->parser->parse(
+            if (!frontEnd->parser->parse(
                     override ? static_cast<std::istream &>(buffer)
                              : static_cast<std::istream &>(ifs))) {
-                throw DiagnosticBuilder::of(SemanticDiag::ModuleParseFailed).commit(path_);
+                throw DiagnosticBuilder::of(SemanticDiag::ModuleParseFailed).commit(module.path());
             }
         }
-        if (diagnostics_->hasErrors()) {
-            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to parse", name_);
-            return false;
-        }
-        stage_ = CompileStage::AST;
+        return !diagnostics->hasErrors();
     }
 
-    if (till > CompileStage::AST && stage_ < CompileStage::GCT) {
-        auto ast = frontEnd_->parser->ast();
+    bool buildConstructionTree(UserDefinedModule &module) override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr) {
+            return false;
+        }
+        const diagnostics_ptr_t &diagnostics = module.diagnostics();
+        auto ast                             = frontEnd->parser->ast();
         {
-            camel::utils::phase::Scope phaseScope("gct", name_);
-            auto gctBuilder    = GCT::Builder(context_, shared_from_this());
-            frontEnd_->tree    = gctBuilder.build(ast, diagnostics_);
+            camel::utils::phase::Scope phaseScope("gct", module.name());
+            auto gctBuilder    = GCT::Builder(module.context(), asModule(module));
+            frontEnd->tree     = gctBuilder.build(ast, diagnostics);
         }
         if (camel::utils::phase::enabled()) {
-            // Counting walks both trees: a phase of its own, so that the cost of
-            // measuring is not read as a cost of compiling.
+            // Counting walks both trees: a phase of its own, so that the cost of measuring is not
+            // read as a cost of compiling.
             camel::utils::phase::Scope phaseScope("(counting)");
             camel::utils::phase::count("modules", 1);
             camel::utils::phase::count("ast.nodes", countNodes(ast));
-            camel::utils::phase::count(
-                "gct.nodes", frontEnd_->tree ? frontEnd_->tree->nodeCount() : 0);
+            camel::utils::phase::count("gct.nodes", frontEnd->tree ? frontEnd->tree->nodeCount() : 0);
         }
         EXEC_WHEN_DEBUG(
-            { camel::DebugBreakpoint::Hit("GCT", frontEnd_->tree ? frontEnd_->tree->root() : nullptr); });
-        if (!frontEnd_->tree || diagnostics_->hasErrors()) {
-            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
+            { camel::DebugBreakpoint::Hit("GCT", frontEnd->tree ? frontEnd->tree->root() : nullptr); });
+        return frontEnd->tree != nullptr && !diagnostics->hasErrors();
+    }
+
+    bool declare(UserDefinedModule &module) override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr || !frontEnd->tree) {
             return false;
         }
-        stage_ = CompileStage::GCT;
+        // No phase of its own: the kernel opens `declare` around this call where the loading of a
+        // module measures it, and `library` where a library declares its imports, so the phase
+        // report keeps saying what it said before the compiler became a step behind a loader.
+        camel::compile::gir::Builder::of(module.context())
+            .declareModule(asModule(module), *frontEnd->tree, module.diagnostics());
+        return !module.diagnostics()->hasErrors();
     }
 
-    if (till > CompileStage::GCT && stage_ < CompileStage::Declared) {
-        // The first of the three steps of loading (the graph model, 3.9.4): what the module
-        // declares (its functions, its top-level values, its types) becomes known to the
-        // program, and its exports readable, before any function body is built.
-        camel::utils::phase::Scope phaseScope("declare", name_);
-        camel::compile::gir::Builder::of(context_).declareModule(
-            shared_from_this(),
-            *frontEnd_->tree,
-            diagnostics_);
-        if (diagnostics_->hasErrors()) {
-            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to declare", name_);
+    bool buildProgram(UserDefinedModule &module) override {
+        camel::utils::phase::Scope phaseScope("gir", module.name());
+        const bool ok = camel::compile::gir::Builder::of(module.context()).buildProgram();
+        return ok && !module.diagnostics()->hasErrors();
+    }
+
+    bool buildLibrary(UserDefinedModule &module) override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr) {
             return false;
         }
-        stage_ = CompileStage::Declared;
-    }
-
-    if (till > CompileStage::Declared && stage_ < CompileStage::Done) {
-        if (context_->mainModule().get() != this) {
-            // A module is built with the program it belongs to, when its entry module is.
-            return true;
-        }
-        // The other two steps for the whole program: build, then link.
-        camel::utils::phase::Scope phaseScope("gir", name_);
-        if (!camel::compile::gir::Builder::of(context_).buildProgram() ||
-            diagnostics_->hasErrors()) {
-            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GIR", name_);
+        // The `library` phase is the kernel's: it opens around the declaration and this build
+        // together, as the one function that did both used to.
+        // The module is built by the graph builder of its program, not one of its own: the
+        // modules written in Camel it imports are declared there already, by compileImportedModules
+        // when this module's construction tree was built (each of them had to be declared before a
+        // body could name what it exports). Building the library on the same builder keeps the
+        // graphs those modules export the ones their importer names, and the whole import closure
+        // is in one place, so buildLibrary builds the imported bodies too.
+        auto &builder = camel::compile::gir::Builder::of(module.context());
+        if (!builder.buildLibrary(asModule(module)) || module.diagnostics()->hasErrors()) {
             return false;
         }
-    }
-    CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
-    return true;
-}
-
-bool camel::core::module::compileForLoad(
-    const std::shared_ptr<Module> &module, CompileStage till) {
-    const auto user = std::dynamic_pointer_cast<UserDefinedModule>(module);
-    if (!user) {
-        return false;
-    }
-    try {
-        return user->compile(till);
-    } catch (const Diagnostic &failure) {
-        // The module's own diagnostics already say what is wrong with it -- the parser writes them
-        // as it gives up -- and they are the ones an entry file's compile would have left behind.
-        // The throw only adds the sentence an import site prints for the module it could not load
-        // ("failed to parse module file: <path>", "module file not found or unreadable"), which
-        // has no place of its own here and must not be lost: it is recorded on the module when it
-        // is the whole of the failure.
-        const diagnostics_ptr_t &diagnostics = user->diagnostics();
-        if (diagnostics && !diagnostics->hasErrors()) {
-            Diagnostic recorded = failure;
-            recorded.persisted  = false;
-            diagnostics->add(std::move(recorded));
-        }
-        return false;
-    }
-}
-
-bool UserDefinedModule::compileAsLibrary() {
-    if (stage_ == CompileStage::Done) {
+        // buildLibrary set the program graph (the kernel's stage is Done now); the builder owns
+        // what the graphs of the module refer to and lives as long as the module.
+        frontEnd->libraryBuilder = module.context()->graphBuildSession();
         return true;
     }
-    if (compiling_) {
-        return false;
-    }
-    if (stage_ < CompileStage::GCT && !compileForLoad(shared_from_this(), CompileStage::GCT)) {
-        return false;
-    }
-    struct Compiling {
-        bool &flag;
-        explicit Compiling(bool &f) : flag(f) { flag = true; }
-        ~Compiling() { flag = false; }
-    } compiling(compiling_);
-    camel::utils::phase::Scope phaseScope("library", name_);
-    // The module is built by the graph builder of its program, not one of its own: the modules
-    // written in Camel it imports are declared there already, by compileImportedModules when
-    // this module's construction tree was built (each of them had to be declared before a body
-    // could name what it exports). Building the library on the same builder keeps the graphs
-    // those modules export the ones their importer names, and the whole import closure is in
-    // one place, so buildLibrary builds the imported bodies too.
-    auto &builder = camel::compile::gir::Builder::of(context_);
-    if (stage_ != CompileStage::Declared) {
-        builder.declareModule(shared_from_this(), *frontEnd_->tree, diagnostics_);
-        if (diagnostics_->hasErrors()) {
-            return false;
-        }
-        stage_ = CompileStage::Declared;
-    }
-    if (!builder.buildLibrary(shared_from_this()) || diagnostics_->hasErrors()) {
-        return false;
-    }
-    // buildLibrary set the program graph (stage Done); the builder owns what the graphs of
-    // the module refer to and lives as long as the module.
-    frontEnd_->libraryBuilder = context_->graphBuildSession();
-    return stage_ == CompileStage::Done;
-}
 
-void UserDefinedModule::setProgramGraph(
-    const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
-    if (frontEnd_->buildingProgramOfItsOwn) {
-        // compileAsProgram() builds a program of its own from this module: its root graph is
-        // kept with that program's builder, and the graph this module was loaded as part of
-        // (the program that uses it, or the library of compileAsLibrary) stays as it was.
-        //
-        // The module is not marked built here. What it exports in this program is this
-        // program's, and a module is declared once per program: the program being compiled
-        // (or another tool program) that loads the module later must declare it into its own
-        // export table (task). Marking it Done would skip that declaration and leave the
-        // names of this program as the module's only ones.
-        return;
-    }
-    frontEnd_->compileGraph = root;
-    stage_                  = CompileStage::Done;
-    loaded_                 = true;
-}
-
-std::vector<UserDefinedModule::ExportedFunction> UserDefinedModule::exportedFunctions() const {
-    std::vector<ExportedFunction> functions;
-    if (!frontEnd_ || !frontEnd_->tree) {
-        return functions;
-    }
-    const auto root = frontEnd_->tree->root();
-    if (root == nullptr) {
-        return functions;
-    }
-    // The export list says what the module offers; the declarations say which of those names are
-    // functions and with which type. Both are read from the construction tree: no graph is built,
-    // so a module that is parsed answers this even when it does not compile.
-    std::unordered_set<std::string> exported;
-    for (size_t i = 0; i < root->size(); ++i) {
-        const auto &child = root->at(i);
-        if (child->type() != GCT::NodeKind::EXPT) {
-            continue;
+    UserDefinedModule::ProgramStatus buildProgramOfItsOwn(
+        UserDefinedModule &module, const std::string &entryFunction, std::string &problem,
+        std::shared_ptr<void> &root, camel::core::type::FunctionType *expected) override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr) {
+            return UserDefinedModule::ProgramStatus::Failed;
         }
-        for (size_t name = 0; name < child->exportCount(); ++name) {
-            exported.insert(child->exportName(name));
-        }
-    }
-    for (size_t i = 0; i < root->size(); ++i) {
-        const auto &child = root->at(i);
-        if (child->type() != GCT::NodeKind::DECL || !child->isFunc() ||
-            !exported.contains(child->name()) || child->at(0) == nullptr) {
-            continue;
-        }
-        functions.push_back(ExportedFunction{
-            child->name(),
-            tt::as_ptr<camel::core::type::FunctionType>(child->at(0)->dataType())});
-    }
-    return functions;
-}
-
-bool UserDefinedModule::declaresFunction(const std::string &name) const {
-    if (!frontEnd_ || !frontEnd_->tree) {
-        return false;
-    }
-    const auto root = frontEnd_->tree->root();
-    if (root == nullptr) {
-        return false;
-    }
-    for (size_t i = 0; i < root->size(); ++i) {
-        const auto &child = root->at(i);
-        if (child->type() == GCT::NodeKind::DECL && child->isFunc() && child->name() == name) {
+        using Status = UserDefinedModule::ProgramStatus;
+        struct BuildingProgramOfItsOwn {
+            UserDefinedModule &module;
+            explicit BuildingProgramOfItsOwn(UserDefinedModule &m) : module(m) {
+                UserDefinedModuleAccess::setBuildingAProgramOfItsOwn(module, true);
+            }
+            ~BuildingProgramOfItsOwn() {
+                UserDefinedModuleAccess::setBuildingAProgramOfItsOwn(module, false);
+            }
+        } buildingProgramOfItsOwn(module);
+        camel::utils::phase::Scope phaseScope("library", module.name());
+        auto builder = std::make_shared<camel::compile::gir::Builder>(module.context());
+        // A module written in Camel may import a library written in Camel (item 1): the pass
+        // module is a program of its own, so its builder needs those imports declared and built
+        // too. They are declared here, in import order, and built by buildFrom before this
+        // module. Their graphs in this program are separate from the graphs the same module has
+        // in the program that loaded it; the builder keeps them, and the export table of the
+        // imported module is filled by this declaration, as it is whenever a library is compiled.
+        std::vector<std::shared_ptr<UserDefinedModule>> imported;
+        std::unordered_set<const UserDefinedModule *> seen;
+        std::function<bool(const std::shared_ptr<UserDefinedModule> &)> collectImports =
+            [&](const std::shared_ptr<UserDefinedModule> &mod) -> bool {
+            if (mod.get() == &module || !seen.insert(mod.get()).second) {
+                return true;
+            }
+            if (!compileForLoad(mod, CompileStage::GCT)) {
+                return false;
+            }
+            for (const auto &site : mod->importSites()) {
+                if (auto other = std::dynamic_pointer_cast<UserDefinedModule>(site.mod)) {
+                    if (!collectImports(other)) {
+                        return false;
+                    }
+                }
+            }
+            imported.push_back(mod);
             return true;
-        }
-    }
-    return false;
-}
-
-UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
-    const std::string &entryFunction, std::string &problem,
-    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root,
-    camel::core::type::FunctionType *expected) {
-    if (compiling_) {
-        return ProgramStatus::Failed;
-    }
-    // A module that does not parse is a diagnostic against that module, and this load is one of
-    // the programmatic ones: compileForLoad is the one place that decides it, and the caller
-    // turns a failed program into the reason a pass is not available. A pass module the user is
-    // still editing is a problem of that pass specification, not an exception out of the
-    // pipeline.
-    if (!compileForLoad(shared_from_this(), CompileStage::GCT)) {
-        return ProgramStatus::Failed;
-    }
-    struct Compiling {
-        bool &flag;
-        explicit Compiling(bool &f) : flag(f) { flag = true; }
-        ~Compiling() { flag = false; }
-    } compiling(compiling_);
-    struct BuildingProgramOfItsOwn {
-        bool &flag;
-        explicit BuildingProgramOfItsOwn(bool &f) : flag(f) { flag = true; }
-        ~BuildingProgramOfItsOwn() { flag = false; }
-    } buildingProgramOfItsOwn(frontEnd_->buildingProgramOfItsOwn);
-    camel::utils::phase::Scope phaseScope("library", name_);
-    auto builder = std::make_shared<camel::compile::gir::Builder>(context_);
-    // A module written in Camel may import a library written in Camel (item 1): the
-    // pass module is a program of its own, so its builder needs those imports declared and built
-    // too. They are declared here, in import order, and built by buildFrom before this module.
-    // Their graphs in this program are separate from the graphs the same module has in the
-    // program that loaded it; the builder keeps them, and the export table of the imported
-    // module is filled by this declaration, as it is whenever a library is compiled.
-    std::vector<std::shared_ptr<UserDefinedModule>> imported;
-    std::unordered_set<const UserDefinedModule *> seen;
-    std::function<bool(const std::shared_ptr<UserDefinedModule> &)> collectImports =
-        [&](const std::shared_ptr<UserDefinedModule> &mod) -> bool {
-        if (mod.get() == this || !seen.insert(mod.get()).second) {
-            return true;
-        }
-        if (!compileForLoad(mod, CompileStage::GCT)) {
-            return false;
-        }
-        for (const auto &site : mod->importSites()) {
+        };
+        for (const auto &site : module.importSites()) {
             if (auto other = std::dynamic_pointer_cast<UserDefinedModule>(site.mod)) {
                 if (!collectImports(other)) {
-                    return false;
+                    return Status::Failed;
                 }
             }
         }
-        imported.push_back(mod);
-        return true;
-    };
-    for (const auto &site : importSites()) {
-        if (auto other = std::dynamic_pointer_cast<UserDefinedModule>(site.mod)) {
-            if (!collectImports(other)) {
-                return ProgramStatus::Failed;
+        // The flag is only for this build: these modules may be built again as part of another
+        // program, and then their root graph must be recorded again.
+        auto restoreImported = std::unique_ptr<void, std::function<void(void *)>>(
+            reinterpret_cast<void *>(1), [&imported](void *) {
+                for (const auto &mod : imported) {
+                    UserDefinedModuleAccess::setBuildingAProgramOfItsOwn(*mod, false);
+                }
+            });
+        for (const auto &mod : imported) {
+            // The module object may already export names for the program that loaded it. Those
+            // names are that program's, and they stay there: this builder has its own export
+            // table (Builder::exports), so declaring the module again records this program's
+            // graphs (task).
+            UserDefinedModuleFrontEnd *importedFrontEnd = frontEndOf(*mod);
+            if (importedFrontEnd == nullptr || !importedFrontEnd->tree) {
+                return Status::Failed;
+            }
+            builder->declareModule(mod, *importedFrontEnd->tree, mod->diagnostics());
+            if (mod->diagnostics()->hasErrors()) {
+                return Status::Failed;
+            }
+            // Its graphs belong to this program's builder, not to the program it was loaded as
+            // part of: setProgramGraph must not replace the graph it had there.
+            UserDefinedModuleAccess::setBuildingAProgramOfItsOwn(*mod, true);
+        }
+        if (!frontEnd->tree) {
+            return Status::Failed;
+        }
+        builder->declareModule(asModule(module), *frontEnd->tree, module.diagnostics());
+        if (module.diagnostics()->hasErrors()) {
+            return Status::Failed;
+        }
+        // The export table is filled by the declaration: the function the program runs must be one
+        // non-generic function of this module, exactly as registerCamelPass demands of a pass.
+        const auto entity =
+            builder->exports().exportedEntity(module, Reference(entryFunction));
+        if (!entity) {
+            // A function that is there but not exported is the mistake `module::name` cannot tell
+            // from a name that is not there; only the construction tree can.
+            problem = module.declaresFunction(entryFunction)
+                          ? std::format(
+                                "'{}' declares '{}' but does not export it", module.name(),
+                                entryFunction)
+                          : std::format("'{}' exports no '{}'", module.name(), entryFunction);
+            return Status::NoSuchFunction;
+        }
+        using Access = camel::core::module::detail::EntityAccess;
+        if (expected != nullptr) {
+            // A pass over the function `expected` is the instance of a generic function (design
+            // principles 9.1).
+            if (!Access::isGenericTemplate(*entity)) {
+                problem = std::format(
+                    "'{}::{}' is not a generic function", module.name(), entryFunction);
+                return Status::NotAFunction;
+            }
+        } else if (
+            Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
+            !Access::graphSet(*entity) || Access::graphSet(*entity)->size() != 1) {
+            problem = std::format(
+                "'{}::{}' is not one non-generic function", module.name(), entryFunction);
+            return Status::NotAFunction;
+        }
+        if (!builder->buildLibraryEntry(asModule(module), entryFunction, expected) ||
+            module.diagnostics()->hasErrors()) {
+            if (!builder->libraryEntryProblem().empty()) {
+                problem = builder->libraryEntryProblem();
+            }
+            return Status::Failed;
+        }
+        auto built = builder->rootGraph();
+        if (built == nullptr) {
+            return Status::Failed;
+        }
+        root = built;
+        // The builder owns what the graphs of the program refer to and lives as long as the
+        // module.
+        frontEnd->programBuilders.push_back(builder);
+        // The module is not marked built: this program's exports are this program's, and another
+        // program that loads the module (the one being transformed, another pass) declares it into
+        // its own export table (task). The front end (parse, GCT) is done, which is what the
+        // module object shares with every program.
+        return Status::Built;
+    }
+
+    std::vector<UserDefinedModule::ExportedFunction>
+    exportedFunctions(const UserDefinedModule &module) const override {
+        std::vector<UserDefinedModule::ExportedFunction> functions;
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr || !frontEnd->tree) {
+            return functions;
+        }
+        const auto root = frontEnd->tree->root();
+        if (root == nullptr) {
+            return functions;
+        }
+        // The export list says what the module offers; the declarations say which of those names
+        // are functions and with which type. Both are read from the construction tree: no graph is
+        // built, so a module that is parsed answers this even when it does not compile.
+        std::unordered_set<std::string> exported;
+        for (size_t i = 0; i < root->size(); ++i) {
+            const auto &child = root->at(i);
+            if (child->type() != GCT::NodeKind::EXPT) {
+                continue;
+            }
+            for (size_t name = 0; name < child->exportCount(); ++name) {
+                exported.insert(child->exportName(name));
             }
         }
-    }
-    // The flag is only for this build: these modules may be built again as part of another
-    // program, and then their root graph must be recorded again.
-    auto restoreImported = std::unique_ptr<void, std::function<void(void *)>>(
-        reinterpret_cast<void *>(1), [&imported](void *) {
-            for (const auto &mod : imported) {
-                mod->frontEnd_->buildingProgramOfItsOwn = false;
+        for (size_t i = 0; i < root->size(); ++i) {
+            const auto &child = root->at(i);
+            if (child->type() != GCT::NodeKind::DECL || !child->isFunc() ||
+                !exported.contains(child->name()) || child->at(0) == nullptr) {
+                continue;
             }
-        });
-    for (const auto &mod : imported) {
-        // The module object may already export names for the program that loaded it. Those
-        // names are that program's, and they stay there: this builder has its own export table
-        // (Builder::exports), so declaring the module again records this program's graphs
-        // (task).
-        builder->declareModule(mod, *mod->frontEnd_->tree, mod->diagnostics_);
-        if (mod->diagnostics_->hasErrors()) {
-            return ProgramStatus::Failed;
+            functions.push_back(UserDefinedModule::ExportedFunction{
+                child->name(),
+                tt::as_ptr<camel::core::type::FunctionType>(child->at(0)->dataType())});
         }
-        // Its graphs belong to this program's builder, not to the program it was loaded as
-        // part of: setProgramGraph must not replace the graph it had there.
-        mod->frontEnd_->buildingProgramOfItsOwn = true;
+        return functions;
     }
-    builder->declareModule(shared_from_this(), *frontEnd_->tree, diagnostics_);
-    if (diagnostics_->hasErrors()) {
-        return ProgramStatus::Failed;
-    }
-    // The export table is filled by the declaration: the function the program runs must be one
-    // non-generic function of this module, exactly as registerCamelPass demands of a pass.
-    const auto entity = builder->exports().exportedEntity(*this, Reference(entryFunction));
-    if (!entity) {
-        // A function that is there but not exported is the mistake `module::name` cannot tell
-        // from a name that is not there; only the construction tree can.
-        problem = declaresFunction(entryFunction)
-                      ? std::format("'{}' declares '{}' but does not export it", name_, entryFunction)
-                      : std::format("'{}' exports no '{}'", name_, entryFunction);
-        return ProgramStatus::NoSuchFunction;
-    }
-    using Access = camel::core::module::detail::EntityAccess;
-    if (expected != nullptr) {
-        // A pass over the function `expected` is the instance of a generic function (design
-        // principles 9.1).
-        if (!Access::isGenericTemplate(*entity)) {
-            problem = std::format("'{}::{}' is not a generic function", name_, entryFunction);
-            return ProgramStatus::NotAFunction;
+
+    bool declaresFunction(
+        const UserDefinedModule &module, const std::string &name) const override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr || !frontEnd->tree) {
+            return false;
         }
-    } else if (
-        Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
-        !Access::graphSet(*entity) || Access::graphSet(*entity)->size() != 1) {
-        problem = std::format("'{}::{}' is not one non-generic function", name_, entryFunction);
-        return ProgramStatus::NotAFunction;
-    }
-    if (!builder->buildLibraryEntry(shared_from_this(), entryFunction, expected) ||
-        diagnostics_->hasErrors()) {
-        if (!builder->libraryEntryProblem().empty()) {
-            problem = builder->libraryEntryProblem();
+        const auto root = frontEnd->tree->root();
+        if (root == nullptr) {
+            return false;
         }
-        return ProgramStatus::Failed;
+        for (size_t i = 0; i < root->size(); ++i) {
+            const auto &child = root->at(i);
+            if (child->type() == GCT::NodeKind::DECL && child->isFunc() &&
+                child->name() == name) {
+                return true;
+            }
+        }
+        return false;
     }
-    root = builder->rootGraph();
-    if (root == nullptr) {
-        return ProgramStatus::Failed;
+
+    const camel::core::error::TokenPositions *
+    tokenPositions(const UserDefinedModule &module) const override {
+        UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+        if (frontEnd == nullptr || !frontEnd->parser) {
+            return nullptr;
+        }
+        return &frontEnd->parser->tokenPositions();
     }
-    // The builder owns what the graphs of the program refer to and lives as long as the module.
-    frontEnd_->programBuilders.push_back(builder);
-    // The module is not marked built: this program's exports are this program's, and another
-    // program that loads the module (the one being transformed, another pass) declares it into
-    // its own export table (task). The front end (parse, GCT) is done, which is what the
-    // module object shares with every program.
-    return ProgramStatus::Built;
+
+    void encodeProgram(
+        const std::shared_ptr<void> &graph, UserDefinedModule &module,
+        camel::runtime::Program &program, bool freshIds) override {
+        const auto root =
+            std::static_pointer_cast<camel::compile::gir::DraftGraphBuilder>(graph);
+        camel::compile::gir::encodeToRuntimeProgram(
+            root, program, freshIds ? &module.context()->graphIds() : nullptr);
+    }
+
+    std::shared_ptr<void> definitionGraph(
+        const module_ptr_t &module, const Reference &name, size_t params) override {
+        using Access = camel::core::module::detail::EntityAccess;
+        const auto entity =
+            module->context()->programExports().exportedEntity(*module, name);
+        if (!entity) {
+            return nullptr;
+        }
+        const auto graphs = Access::graphSet(*entity);
+        if (!graphs) {
+            return nullptr;
+        }
+        // The signature (design 9.2) says which overload the definition is: its operands are the
+        // function's ordinary parameters, and a definition has no `with` parameter.
+        for (const auto &candidate : *graphs) {
+            const auto *type = candidate ? candidate->funcType() : nullptr;
+            if (type != nullptr && type->normTypesCount() == params && type->withTypesCount() == 0) {
+                return candidate;
+            }
+        }
+        return nullptr;
+    }
+};
+
+/// The registration, made while the program loads: every module written in Camel is loaded
+/// through this object, and no kernel file names it.
+SourceModuleFrontEnd theSourceModuleLoader;
+
+const void *UserDefinedModuleAccess::constructionTree(const UserDefinedModule &module) {
+    UserDefinedModuleFrontEnd *frontEnd = frontEndOf(module);
+    return frontEnd == nullptr ? nullptr : frontEnd->tree.get();
 }
 
-void UserDefinedModule::declareTypes() {
-    (void)compileForLoad(shared_from_this(), CompileStage::GCT);
-}
-
-void UserDefinedModule::declareEntities() {
-    (void)compileForLoad(shared_from_this(), CompileStage::Declared);
-}
-
-std::vector<std::string> UserDefinedModule::operatorProtocols() const {
-    return implementation_ ? implementation_->operatorProtocols() : Module::operatorProtocols();
-}
+} // namespace camel::core::module::detail
 
 // ---- What the tools read of a module's front end ------------------------------------------
 
@@ -553,8 +484,12 @@ namespace camel::compile {
 
 std::shared_ptr<camel::parse::CamelParser>
 parserOf(const camel::core::module::UserDefinedModule &module) {
-    return std::static_pointer_cast<camel::parse::CamelParser>(
-        camel::core::module::detail::UserDefinedModuleAccess::sourceReader(module));
+    const auto frontEnd = camel::core::module::detail::UserDefinedModuleAccess::frontEnd(module);
+    const auto state =
+        static_cast<camel::core::module::detail::UserDefinedModuleFrontEnd *>(frontEnd.get());
+    return state == nullptr
+               ? nullptr
+               : std::static_pointer_cast<camel::parse::CamelParser>(state->parser);
 }
 
 const camel::compile::gct::Tree *
