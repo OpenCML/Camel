@@ -237,6 +237,9 @@ class Module : public std::enable_shared_from_this<Module> {
 
     const std::string &name() const { return name_; }
     const std::string &path() const { return path_; }
+    /// The context this module was loaded in: the programs, the operator table, and the
+    /// diagnostics configuration everything read from the module is written against.
+    const context_ptr_t &context() const { return context_; }
     /// The name the module gives itself (`module shapes`), empty when it has no declaration.
     /// The module may qualify its own names with it, as with name() (design principles 10.2).
     const std::string &declaredName() const { return declaredName_; }

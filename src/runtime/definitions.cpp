@@ -9,10 +9,9 @@
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/operator_instance.h"
 
-#include "camel/compile/gir/draft_graph_builder.h"
-#include "camel/compile/gir/encode.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/module/source_loader.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
@@ -25,6 +24,7 @@
 #include "camel/runtime/loop.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
+#include "camel/utils/assert.h"
 #include "core/module/entity_internal.h"
 
 #include <format>
@@ -294,7 +294,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     // graph computes the module-level values and calls the function, so the function's capture
     // ports are bound from values that were computed (design principles 10.1). The graph the
     // caller runs is that program's root; its signature is the function's.
-    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rootGraph;
+    std::shared_ptr<void> rootGraph;
     UserDefinedModule::ProgramStatus status = UserDefinedModule::ProgramStatus::Failed;
     try {
         status = module->compileAsProgram(functionName, problem, rootGraph, expected);
@@ -339,7 +339,12 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         return remember(std::nullopt, false, std::move(location), what);
     }
     Program *program = context_.reserveProgram();
-    camel::compile::gir::encodeToRuntimeProgram(rootGraph, *program, &context_.graphIds());
+    // Encoding a compiled graph into a runtime program is the compiler's, and the kernel reaches
+    // it through the registered loader: this file names no compile graph.
+    camel::core::module::SourceModuleLoader *loader =
+        camel::core::module::sourceModuleLoader();
+    GUARD(loader != nullptr, "No source module loader is registered to encode a library.");
+    loader->encodeProgram(rootGraph, *module, *program, true);
     context_.pinRuntimeProgram(program);
     if (program->root() == nullptr) {
         problem = std::format("'{}::{}' could not be encoded", moduleName, functionName);
@@ -399,15 +404,12 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     if (!Access::isGraphSet(*entity) || !Access::graphSet(*entity)) {
         return refuse(std::format("'{}::{}' is not a function", d.module, d.function));
     }
-    camel::compile::gir::graph_ptr_t function;
-    for (const auto &candidate : *Access::graphSet(*entity)) {
-        const auto *type = candidate ? candidate->funcType() : nullptr;
-        if (type != nullptr && type->normTypesCount() == d.params.size() &&
-            type->withTypesCount() == 0) {
-            function = candidate;
-            break;
-        }
-    }
+    camel::core::module::SourceModuleLoader *definitionLoader =
+        camel::core::module::sourceModuleLoader();
+    const std::shared_ptr<void> function =
+        definitionLoader != nullptr
+            ? definitionLoader->definitionGraph(module, Reference(d.function), d.params.size())
+            : nullptr;
     if (!function) {
         return refuse(
             std::format(
@@ -418,7 +420,8 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     }
     // Kept for as long as the context, refused or not: nothing else owns them.
     Program *program = context_.reserveProgram();
-    camel::compile::gir::encodeToRuntimeProgram(function, *program, &context_.graphIds());
+    GUARD(definitionLoader != nullptr, "No source module loader is registered to encode a graph.");
+    definitionLoader->encodeProgram(function, *module, *program, true);
     context_.pinRuntimeProgram(program);
     GCGraph *graph = program->root();
     if (graph == nullptr) {
