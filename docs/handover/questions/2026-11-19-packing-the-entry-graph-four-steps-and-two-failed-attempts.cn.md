@@ -38,3 +38,13 @@
 ## 4. 给下一个人
 
 这一笔只需要**三次编辑**（`builder.cpp` 两处各一行、两处呈现各取第 0 份），方案已经定死，判断部分为零；**若你也在长上下文里，先开一个新的，不必从头查**。设计依据在 `2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md`（默认甲：包内部存在、呈现取第 0 份）与作者的 `b69635919`。
+
+## 默认建议（写死）
+
+**默认建议**：按 §1 的四步落笔，方案不再讨论 —— `src/compile/gir/builder.cpp` 那两处各加一行
+`withExitType(graphExitTypeOf(t))`，`src/passes/trans/cpp/program_emitter.cpp` 的入口与
+`src/execute/entry_args.cpp` 各取元组**第 0 份**；§1 第 4 条的四处在红线名单上，**一处不动**。
+**判据**：① 改完先看 `git diff --stat` **非空**（§3① 说的那种「看起来像成功」只由这一行读数否掉）；
+② `-Plan feat/linear -Jobs 8` 的 **113 必须减少**、`killed`/`timeout` 为 **0**，涨了或出现 `killed` 立刻回滚；
+③ `opt 4`/`tools 1` 不许涨；④ `compile` 那 5 条 `(0,1)` 逐条报（变绿，或换成另一种红并贴原文），
+走 `fastvm` 而没绿的那几条写进提交信息。

@@ -92,3 +92,14 @@ C. 出处（不是 S3b 引入的）：这两句分别来自 `874f0507a`（"decli
 ② 删除并入 S5 之后一次性纯删；那时 `pathAssignmentOf:1661` 与 `inPlaceCalls_` 要按「谁还在读 4140」一起算。
 ③ 六计划没有跑：没有删除，就没有可比的改动（也避免占用 `opt` 的单跑位）。
 ```
+
+## 默认建议（写死）
+
+**默认建议**：按页首已经写死的那条开工 —— **现在不删** `Builder::inPlaceRebindingOf` 与 `inPlaceCalls_`，
+也不先改 §三 A/B 那两段注释；删除并入 S5 之后做**一次纯删**，且 `pathAssignmentOf` 里 `1661` 那一支
+（元素赋值的原地写）**单独算**。
+**判据**：这一轮的可比读数是「什么都没动」，所以六计划逐条不变就是通过；真要动，前置两条必须先成立 ——
+① `var` 形参不再是 cell（`sort_rebinding.cml` 上 `std::gir` 里不再出现 `:var/take` + `:op/assn_owned`）、
+② 模块级 `var` 随 S5 变成值（`builder_expr.cpp` 那句 "until stage S5" 兑现）；并且
+`git grep "inPlaceRebindingOf\|inPlaceCalls_" -- src include test` 的活动读写（1441/1661/2213/2230/2231/3365/4140）
+全部归零。在那之前删，断的是两条腿。

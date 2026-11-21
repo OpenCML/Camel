@@ -76,3 +76,15 @@
 
 **⇒ 下一条动这条用例的车道，判据里要写清在哪棵树上量的**：`6c88be5cd` 与 `6a10f0f87` 上的第一条红不是
 同一条，而「第一条红不同」正是 ② 与 ③ 两段各自要点出来的那件事。
+
+## 默认建议（写死）
+
+**默认建议**：按 **甲** 开工 —— 把 `test/cases/trans/cml_contract.py` 那个 `write_value` 的 `var ` marker
+换成「**这次写的结果**」（`counted()` 与 `counted_returned()` 的体都是 `2`），`var_param` 那条 `var ` marker
+**不动**（它钉的对象是对的）。
+**判据**：`-Plan test/plans/feat/trans/cml.plan.toml -Jobs 8` 打出 `cml round trip: PASS`，且语料里
+`write_value.cml` 之后的五个程序（`string_conversion` / `named_type` / `map_with_closure` / `jgir_duplicate`
+/ `hello`）这次**真的跑到了** —— §⑤ 说「只剩这一条」只表示检查器在这格停下。账上必须写清在哪棵树上量的：
+`6c88be5cd` 及之前的第一条红是 `arm_read`，`6a10f0f87` 起才是这一格，**两棵树上的读数不许跨树相加**。
+代价写死：换过之后这个 marker 只证「写的结果出现在该出现的位置」，不再证「`var` 构造被走到过」，
+页里不许把它说成同一句。

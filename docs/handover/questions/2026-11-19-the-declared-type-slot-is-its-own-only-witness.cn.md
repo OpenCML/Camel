@@ -69,3 +69,13 @@ src/compile/gir/draft_graph_builder.cpp:87-97
 ## 6. 要作者回答的一句话
 
 判据不冗余（有可达的单独不等），但它唯一能判的对象就是它自己；A 删掉的是「状态 + 自指的见证」，不是任何别的检查。若认可这一点，我按 A 执行：字段/访问器/setter/钩子调用、builder 写入与注释、`draft_undo.cpp` 那 6 处（138/190/370/488 与 `draft.h:1327/1528`）、探针支改 `nullopt`；顺带改 `2026-11-19-the-packing-slot-came-back-under-another-name.cn.md:30,35` 并记下本节这句。
+
+## 默认建议（写死）
+
+**默认建议**：按 §6 的 **A** 执行 —— 删 `declaredFuncType` 的字段/访问器/setter/钩子调用、`builder` 的写入
+与那两处注释、`src/runtime/draft_undo.cpp` 那 6 处（138/190/370/488 与 `draft.h` 的 1327/1528），
+并把 `undo_selfcheck.cpp` 的 Types 探针那一支改 `nullopt`（**不新造非空签名去补**）。
+**判据**：`sameTypes` 其余五项（`funcType`/`closureType`/`captureNames`/`runtimeSlotTypes`/`staticSlotTypes`）
+覆盖一字不减；`git grep declaredFuncType -- src include test` 归零；`-Plan feat/linear,feat/compile -Jobs 8`
+逐条与 `3217f0312` 相同。§3 那件「open 签名原地改型、快照只存指针、自检抓不到」**单列另修**，
+不在这一笔里顺手改（它要改快照的形状，不是删一个字段）。

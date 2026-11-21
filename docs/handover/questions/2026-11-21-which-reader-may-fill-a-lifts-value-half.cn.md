@@ -59,3 +59,15 @@ transforms: transpose has no transpose for this function: the signature is a lif
 
 - `Jvp<F>`/`Vjp<F>` 要不要同样加格（上一页 §七把这条留在外面）。
 - R2 若成立，`vjp` 的 pullback 类型（`Pullback<F>`）要不要跟着变。
+
+## 默认建议（写死）
+
+**默认建议**：按 §四 的 **R1** 开工（本轮已按它落地）—— 承认这一格**写不进签名、保持拒绝**：
+`modules/transforms/transpose_operator.cpp#transposeKernel` 继续拿 `Transpose<F>`（`resolver` 的 exit 类型）
+的**端口数**去比成员的端口数，`!=` 即拒，句子里报**两个数**，并说清多出来的是**提升签名的 value half**
+而不是 body 读到的值。
+**判据**：`feat/transforms` 的 `compositions.jvp_vjp_f` 仍红，但报的必须是那一句带 `ports=2 promised=1`
+的拒绝，**不再**出现 `cause=needs-a-value-outside-the-closure`（那个词说的是 capture，而 capture 是 0）；
+`floatgate.f32_closure_member_ports`、`floatgate.f32_array_zero_carrier`、`residuals_in_the_closure`
+三条读数逐字不动。§三.4 已经把代价挪到 `jvp` 把线性函数值提升成 `Lift` 的那一步 —— 那一步**单列另修**，
+不在这条上动；**R2 先不做**，它要先重读那三例。

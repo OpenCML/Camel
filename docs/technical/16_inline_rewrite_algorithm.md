@@ -416,6 +416,11 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 直接调用及其原因（`InlineDecline`）记录在 `InlineReport` 中，作为 pass fact `kInlineReportFactKey`
 挂在 `Context` 上，供后续遍解释某个调用为何仍是调用。
 
+运行引擎的那一次调用不从这里回读：`applyOptimizeRewritePass` 把这一轮因预算触顶而留下的调用经
+`growthBudgetLeft` 直接交回给调用者（`std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，
+而不是「到了不动点」）。答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 也就没有 pass
+fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束之后再问的读者（`onnx::export`）。
+
 ### 8.2 提交时的收口与结构检查
 
 `session.commit()` 在编码前对闭包内每个 draft（以及还没被提交看过 `GATE` 的图）调用 `GraphDraft::dissolveUnorderedGates`：没有控制输入

@@ -141,3 +141,16 @@ modules/transforms/jvp.cpp:1037  const GraphId calleeId = function.calleeIdOf(re
 ⇒ 附带读数：`c74e59759`（`grad-form`）把 `grad` 的调用写法恢复成 `grad(f)<w, ...ws>(...xs)` 之后，
 **`grad(grad(square))<2.0>()` 不再撞 9.9 的那条 `first_with_as_param` 拒绝** —— 内层 `grad` 现在交出的是 `<w: float>() => float`，
 有 `with` 参数可移。六条 nest 用例因此**全部落到同一堵墙**上，`test/plans/feat/transforms/nested.plan.toml` 已按此改写（六条 `known_fail`、两条 negative）。
+
+## 默认建议（写死）
+
+**默认建议**：按 §五 已经到的裁定（`36f91f6a4` 第 2 条 / `ea05b6826`）开工 —— **本页页首原先的默认
+（「不在 0.2.45 范围、降级成已知限制」）已被作者否掉**：`split` 侧保持现状（反向图本来就是静态的，
+§六① 逐条列了它已经是静态的四样），要补的是 `modules/transforms/` 的**读法** —— 让 `jvp` 的 lift 与
+`transpose` 认识 `FILL(FunctionClosure)`：静态源 → `Function` → `GraphId` 走与 `Func` 节点同一条 lift 路径，
+`with` 残差成为这次 lift 的参数。
+**判据**：`--trace transforms` 下 `nest_named`／`nest_lambda`／`hessian`／`confusion` 四种写法的**外层**那次
+`jvp` 逐条打出 `REINTERP jvp` 行，不再打 `jvp has no forward transform for this function`；
+`test/plans/feat/transforms/compositions.plan.toml` 的 `jvp_vjp_f` 与 `nested.plan.toml` 那六条 `known_fail`
+逐条重定（变绿，或换成带 cause 的拒绝并贴原文）；六计划不涨。普通参数写法（`grad(grad(square))(2.0)`）
+继续按 9.9 拒绝，不在这一笔里动。
