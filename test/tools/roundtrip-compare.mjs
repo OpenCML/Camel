@@ -117,7 +117,11 @@ function normalize(text) {
     // becomes `:<AT>`: the origin is `test/cases/...`, the printed body is `tmp/print_...` or an
     // absolute scratch path, and all three name the same program at a different line. Nothing else
     // about the line is touched, so a change of message, code or wording still shows.
-    out = out.replace(/[^\s:()'"|]+\.cml/g, '<PATH>')
+    // A drive letter is part of the path. `[^\s:()'"|]` excludes `:`, so a bare run of characters
+    // stopped at the letter and left it outside the match: the origin (`D:\...`) and the printed copy
+    // in `%TEMP%` (`C:\...`, a different drive) normalized to `D:<PATH>` and `C:<PATH>`, and a
+    // difference in where the file lives was reported as a difference in behaviour.
+    out = out.replace(/(?:[A-Za-z]:)?[^\s:()'"|]+\.cml/g, '<PATH>')
     out = out.replace(/<PATH>:\d+:\d+/g, '<PATH>:<AT>')
     out = out
         .split('\n')
