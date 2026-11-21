@@ -1084,7 +1084,17 @@ bool liftGraph(
             // `Lift<T>`, so a copy that holds the plain value still takes the leg below.
             if (type != nullptr && copyOf[ref] != rt::kInvalidNodeRef) {
                 const LiftedShape copiedShape = liftedShapeOf(type);
-                if (copiedShape.type != nullptr && copiedShape.pair) {
+                // The copy already *is* the lifted value, and that is one test for **both** shapes
+                // the law answers with: the pair `(value, tangent)`, and the function whose lifted
+                // self is its own lifted graph. The shape condition used to name only the pair, so
+                // a function value that had already been lifted fell through to the operator below
+                // and was lifted a second time -- `jvp(jvp(f))` where the call needed `jvp(f)`. The
+                // judgement itself is unchanged (the copy's type == what this type lifts to):
+                // a value that has **not** been lifted still carries its own type, still fails it,
+                // and still takes the operator.
+                if (copiedShape.type != nullptr &&
+                    (copiedShape.pair ||
+                     type->code() == camel::core::type::TypeCode::Function)) {
                     const auto *copiedNode = draft.node(copyOf[ref]);
                     if (copiedNode != nullptr && copiedNode->header.dataType == copiedShape.type) {
                         return copyOf[ref];
