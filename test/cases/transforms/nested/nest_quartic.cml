@@ -31,7 +31,7 @@
 // That sentence is **not** pinned anywhere, and this file is not written against it: the plan entry
 // is a `known_fail` on `d2=48.0`, so the wall may move again without touching this case. The ruling
 // that turned it from a negative into a positive is
-// `docs/handover/questions/2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md`.
+// `docs/handover/reviews/2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md`.
 import { grad } from vjp
 
 with <x: float>

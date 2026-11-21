@@ -7,7 +7,7 @@
 //
 // The shape that zero array needs is not a value: it is a fact `x: float[3]` states, and the walk
 // fills the port `rulesets/transpose.cml#idx_arr_t` names with the shape it reads off that type
-// (`modules/transforms/transpose.cpp#shapeFromTypeOf`, the one reading of
+// (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`, the one reading of
 // `camel::core::type::statedExtentsOf`), so the law builds its zeros with `zeros_of(ct,
 // extent_product(at))` and the answer is `([0.0, 1.0, 0.0])` on both back ends -- the adjoint of
 // `x[1]` at ct = 1 fills slot 1 and every other slot is zero.
