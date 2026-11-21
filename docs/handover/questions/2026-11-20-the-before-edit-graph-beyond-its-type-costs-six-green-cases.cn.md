@@ -153,3 +153,14 @@ src/runtime/draft_session.cpp:2013      调用处传 program_（`graph` 正是�
 
 它**本来就合法**；`tiles` 那一遍**已经**在建图时把 `uses var tiles::driver` 写进了 `__g_49__` 的型。
 初版 §7.5 里「会变合法（5 条转绿）」这个答案方向对，但归因错了：不是「修了才合法」，是**一直合法**。
+
+## 默认建议（写死）
+
+**默认建议**：按 §6/§7 的结论（即初版那个**甲**）办 —— **保留下发的那一支**：编辑前的图若已越界就报
+内部错误、不再跳过；同时坚持 §7.3 那处修正（`commitViolation` 收 `beforeProgram`，量 `before` 用它自己的
+程序版本），**乙（收窄到只问前端建的那张图）不采用**（它要一张图的「谁建的」标记，而遍造的图越界就继续不报，
+正是下发要堵的那类）。
+**判据**：全量 Release 主机 `-Jobs 8` 读数是 `total 7179 / pass 7143 / fail 2 / skip 9 / known 25`，
+六条（`pass_boundary.orphan_effect_refused` + `tiles` 五条）全绿，两条既有 consistency 红
+（`runner.backend_matrix`、`new_values.sort_rebinding.graph`）不动；`beforeProgram == nullptr` 时回落读 `program`
+是两个程序是同一对象的那种调用者的完整答案，不许另立第二套判据。

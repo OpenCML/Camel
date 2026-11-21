@@ -83,3 +83,14 @@ fib_new    1p=604    1p@8192= 918   1p@16384=2959   2p=4377
   `stdlib/perf.cml` 的 `timeit` 之后，那个程序**已不再被编译**；基线同一读数是 `1082 / 10857`。
 - **每次 rewrite 的代价（0.063 → 0.44 ms）没有复现**：在同一规模图上第二遍只贵 1.14×。它要么是另一个
   原因，要么是图更大时的表现，**本条不拿它当结论**。
+
+## 默认建议（写死）
+
+**默认建议**：按 **（b）** 开工 —— 不动预算作用域，只改这件事的报法：`InlineDecline::GrowthBudget`
+（`src/passes/opt/inline/engine.cpp`）改成**显式警告 + 停止**，`src/passes/opt/generic/generic.cpp` 那行终止判据
+在预算用尽时**不许再打 `std::opt: fixpoint after N round(s)`**。
+**判据**：① `-Plan feat/opt,...` 六计划 `-Jobs 8` 的 `total/pass/fail` 与改前**逐字相同**（（b）不动产出图，
+一个字节都不该变）；② 同一轮数出「这个警告出现在多少条计划、各多少次」，把那个数列出来 ——
+**有了那个数，（a）才有依据**。反过来说死：（b）**不修成本**，`opt_twice` 仍然慢，它慢这件事只是从此有一句
+自己的话；`perf_fib_smoke.opt_twice` 的 `cpu_budget_ms` 在幂等性修好之前**不许重定**（§⑤：那只是把红线
+挪到今天的病态值上）。
