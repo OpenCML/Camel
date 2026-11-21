@@ -673,7 +673,7 @@ camel::source::origin_id_t leftCallOrigin(
     if (!source) {
         return camel::source::kInvalidOriginId;
     }
-    const uint64_t definition = source->debugMap().graphOrigin(callee->graphId());
+    const uint64_t definition = source->debugMap().graphOrigin(callee->id());
     return definition != camel::source::kInvalidOriginId ? definition
                                                          : camel::source::kInvalidOriginId;
 }
