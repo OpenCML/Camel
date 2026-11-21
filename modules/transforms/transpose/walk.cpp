@@ -189,11 +189,10 @@ bool buildTransposeMember(
     // The graph is part of the where and is recorded here rather than at the sites, because every
     // refusal is met inside a graph and the lambda is the one place that has it: the sentence keeps
     // saying "this function" only because the name never left the log before.
+    WalkContext walkCtx{state, function, os};
     const auto refuse = [&](TransposeRefusalCause cause,
                             std::optional<size_t> param = std::nullopt) -> void {
-        state.refusal       = TransposeRefusal{cause, param};
-        state.refusal.graph = function->name();
-        os << "TRANSPOSE function=" << function->name() << " skip=" << transposeRefusalWord(cause);
+        refuseMember(walkCtx, cause, param);
     };
     // The spelling a `ParameterShape` sentence hands a reader: the parameter's place, the name its
     // signature gives it, and the declared type whose extents are missing. Written in one place and
@@ -201,26 +200,7 @@ bool buildTransposeMember(
     // below) and the rule-expansion path that met the same fact through `vjp`/`split` -- so the two
     // cannot name different parameters or spell the same declaration two ways.
     const auto noteUnstatedParameter = [&](size_t param) -> void {
-        Type *const paramType  = function->funcType()->normTypeAt(param);
-        const std::string type = paramType != nullptr ? paramType->toString() : std::string();
-        std::string name;
-        const FunctionType *const signatureType = function->funcType();
-        if (signatureType->hasArgNames()) {
-            // One-based place in the written signature, past the `with` types: the same arithmetic
-            // the refusal record uses, so the name is the parameter's and not its neighbour's.
-            const size_t named = signatureType->withTypesCount() + param;
-            if (named < signatureType->argNamesCount()) {
-                name = std::string(signatureType->argNameAt(named));
-            }
-        }
-        if (!state.shapeWanted) {
-            state.shapeWanted = true;
-            state.shapeParam  = param;
-            state.shapeType   = type;
-            state.shapeName   = name;
-        }
-        state.refusal.paramName = name;
-        state.refusal.paramType = type;
+        noteUnstatedParameterOf(walkCtx, param);
     };
     // What this member needs is discovered by asking: the body decides which parameters it reads by
     // asking for their values, and nothing in the type says which. The ask is itself a build, so it
