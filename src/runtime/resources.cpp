@@ -413,6 +413,51 @@ Resolver::fromFootprint(const GraphFootprint &fp, size_t normCount, Bind &&bind)
     return r;
 }
 
+/// The closure a node runs, when it is one this graph holds: the function value stands at With
+/// `withArgBase - 1` (`core::functionValueWithBase`: the callee for a call through a value, the
+/// operand the declaration names for an operator that runs one), and a closure built here is a
+/// FILL of a function constant whose trailing `with` inputs hold the captured values, in capture
+/// order (design principles 2.1; `Builder::captureInto`).
+struct ClosureAt {
+    /// The body behind the value, when the program names one statically.
+    const ::Function *function = nullptr;
+    /// The captured values, by capture position; kInvalidNodeRef for a position this graph does
+    /// not hand over. Empty for a function constant, which captures nothing.
+    std::vector<gc_node_ref_t> captures;
+};
+
+ClosureAt closureAt(const GCGraph &graph, gc_node_ref_t ref, size_t withArgBase) {
+    ClosureAt out;
+    const auto with = graph.withInputsOf(ref);
+    if (withArgBase == 0 || withArgBase > with.size()) {
+        return out;
+    }
+    const gc_node_ref_t value = valueBehindGates(graph, with[withArgBase - 1]);
+    if (const ::Function *fn = staticFunctionOf(graph, value)) {
+        return ClosureAt{.function = fn};
+    }
+    const GCNode *node = graph.node(value);
+    if (node == nullptr || node->kind != GCNodeKind::Fill || graph.normInputsOf(value).empty()) {
+        return out;
+    }
+    const ::Function *fn = staticFunctionOf(graph, graph.normInputsOf(value)[0]);
+    const auto *body     = graph.nodeBodyAs<GCFillBody>(value);
+    if (fn == nullptr || body == nullptr) {
+        return out;
+    }
+    out.function      = fn;
+    const auto slots  = body->slots();
+    const auto inputs = graph.withInputsOf(value);
+    for (size_t i = 0; i < slots.size() && i < inputs.size(); ++i) {
+        const size_t position = static_cast<size_t>(slots[i]);
+        if (out.captures.size() <= position) {
+            out.captures.resize(position + 1, kInvalidNodeRef);
+        }
+        out.captures[position] = inputs[i];
+    }
+    return out;
+}
+
 NodeResources Resolver::node(const GCGraph &graph, gc_node_ref_t ref) const {
     NodeResources r = accessesOf(graph, ref);
     // An effect outside the program that names no resource at all -- an operator whose declaration
@@ -613,29 +658,9 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     const auto with = graph.withInputsOf(ref);
     // The callee is With input 0: a known function when it is a constant, or a closure this
     // graph builds from one (a FILL of a constant function and the captured values).
-    const GCGraph *callee = nullptr;
-    std::vector<gc_node_ref_t> captures; // by capture position, kInvalidNodeRef when unknown
-    if (!with.empty()) {
-        const gc_node_ref_t value = valueBehindGates(graph, with[0]);
-        if (const ::Function *fn = staticFunctionOf(graph, value)) {
-            callee = fn->graph();
-        } else if (
-            graph.node(value)->kind == GCNodeKind::Fill && !graph.normInputsOf(value).empty()) {
-            if (const ::Function *fn = staticFunctionOf(graph, graph.normInputsOf(value)[0])) {
-                callee            = fn->graph();
-                const auto *body  = graph.nodeBodyAs<GCFillBody>(value);
-                const auto slots  = body->slots();
-                const auto inputs = graph.withInputsOf(value);
-                for (size_t i = 0; i < slots.size() && i < inputs.size(); ++i) {
-                    const size_t position = static_cast<size_t>(slots[i]);
-                    if (captures.size() <= position) {
-                        captures.resize(position + 1, kInvalidNodeRef);
-                    }
-                    captures[position] = inputs[i];
-                }
-            }
-        }
-    }
+    const ClosureAt closure = closureAt(graph, ref, /*withArgBase=*/1);
+    const GCGraph *callee   = closure.function != nullptr ? closure.function->graph() : nullptr;
+    const std::vector<gc_node_ref_t> &captures = closure.captures;
     if (callee == nullptr) {
         // A call through a value: the value's function type is where its effect is written, and it
         // is the one thing a call site can read when the callee's body is not statically known --
@@ -651,9 +676,10 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
             const core::FunctionValueClause site = clauseOfCall(graph, ref);
             // The clause is read in one place (`core::functionValueClause`, through the one lookup
             // below), together with the base its `with` parameters land at; a `captures` list is
-            // not a reason to refuse the reading, because `fromSignature` places a capture as "some
-            // resource of its class" and never drops it. What the type cannot say is what an absent
-            // clause (`Generic`) says, and that keeps the conservative answer below.
+            // not a reason to refuse the reading, because `fromSignature` reads each capture's
+            // class off the value's own type and never drops the access it stands for. What the
+            // type cannot say is what an absent clause (`Generic`) says, and that keeps the
+            // conservative answer below.
             if (site.clause.has_value()) {
                 return fromSignature(*site.clause, site.withCount, graph, ref, site.withArgBase);
             }
@@ -668,11 +694,11 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     }
     // A callee whose type publishes its resources: the call takes its footprint from the type
     // (design effects plan 2.3), not by walking the body. A Generic type (a Camel body, until
-    // its signature is inferred) keeps the body walk. So does a signature that names a capture: the
-    // position says which value the callee captured but not what the resource is, and only the
-    // walk reads that use back onto the value this graph handed over (design principles 3.3, effect
-    // masking). A closure that writes a `var` it captured carries the capture in its type, so this
-    // is the common case for one.
+    // its signature is inferred) keeps the body walk. So does a signature that names a capture: it
+    // says which value the callee captured, and the walk reads that use back onto the very value
+    // this graph handed over (design principles 3.3, effect masking) -- one resource per value,
+    // where the type alone would have had to settle for the class. A closure that writes a `var`
+    // it captured carries the capture in its type, so this is the common case for one.
     if (callee->funcType() != nullptr &&
         callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete &&
         callee->funcType()->resources().captures.empty()) {
@@ -741,11 +767,88 @@ NodeResources Resolver::fromSignature(
     for (ResourceClass cls : signature.anyOf) {
         r.accesses.push_back(NodeAccess{.resource = {.cls = cls}, .anyValue = true});
     }
-    for ([[maybe_unused]] uint8_t capture : signature.captures) {
-        // A directly called graph has no capture slot among the node's inputs: the class is not
-        // known here, so the conservative reading is the only sound one.
-        r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
-        r.declared = false;
+    // A capture is an extra argument the type names by position and nothing else
+    // (`ResourceSignature::captures` is a list of positions; design effects plan 3.4's table of the
+    // graph data model: after a direct call's `with` arguments, and inside the FILL that builds the
+    // closure when it is a function value). Its class therefore comes from *the captured value's
+    // type*, never from a guess:
+    //
+    //   * a handle (`Ref<T>`, a `#resource` declaration) is one resource per value (design effects
+    //     plan 3.2), so the class is the declaration's name for it and the value says which one.
+    //     When this graph hands that value over -- a direct call's `with` argument, a FILL's input
+    //     for a closure built here -- the access names it; when it does not, the access is "one
+    //     handle of that class", which is an unknown *of a class* and not the global unknown the
+    //     design keeps for state that names nothing (design principles 3.3);
+    //   * a function value's reach is its type's clause, read the way a function *argument* is
+    //     read: its parameters have no operand to land on here, because the call of it is inside
+    //     the closure's body;
+    //   * a value with no identity is no resource at all -- copying it into the closure is not an
+    //     effect a caller can observe (design principles 10.5), so it produces no access.
+    //
+    // Only a capture whose value this graph neither holds nor types keeps the conservative answer,
+    // and that is the opaque case: nothing says which resource it is.
+    const ClosureAt closure = closureAt(graph, ref, withArgBase);
+    const GCGraph *body     = closure.function != nullptr ? closure.function->graph() : nullptr;
+    for (uint8_t position : signature.captures) {
+        const gc_node_ref_t at = size_t(position) < closure.captures.size()
+                                     ? closure.captures[position]
+                                     : kInvalidNodeRef;
+        const GCNode *node       = at != kInvalidNodeRef ? graph.node(at) : nullptr;
+        const core::type::Type *type = node != nullptr ? node->dataType() : nullptr;
+        if (type == nullptr && body != nullptr) {
+            // The call site does not hand the value over (a closure called where it was not made):
+            // the capture port of its own body is the same value's type, read where it was built.
+            const auto ports = body->closureNodes();
+            if (size_t(position) < ports.size() && body->node(ports[position]) != nullptr) {
+                type = body->node(ports[position])->dataType();
+            }
+        }
+        if (type == nullptr) {
+            r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
+            r.declared = false;
+            continue;
+        }
+        if (sem::isHandleType(type)) {
+            NodeAccess access{
+                .resource = {.cls = ResourceClass::Handle, .name = sem::handleResourceName(type)},
+            };
+            access.value    = at;
+            access.anyValue = at == kInvalidNodeRef;
+            r.accesses.push_back(std::move(access));
+            continue;
+        }
+        if (type->code() == core::type::TypeCode::Function) {
+            const auto &captured = static_cast<const core::type::FunctionType *>(type)->resources();
+            if (captured.mode == sem::ResourceSignature::Mode::Concrete) {
+                for (const auto &use : captured.params) {
+                    r.accesses.push_back(
+                        NodeAccess{
+                            .resource = {.cls = use.cls, .name = use.name},
+                            .mode     = use.mode,
+                            .anyValue = true,
+                        });
+                }
+                for (const auto &use : captured.ambient) {
+                    r.accesses.push_back(
+                        NodeAccess{
+                            .resource  = {.cls = ResourceClass::Ambient, .name = use.name},
+                            .mode      = use.mode,
+                            .unordered = use.unordered,
+                        });
+                }
+                for (ResourceClass cls : captured.anyOf) {
+                    r.accesses.push_back(NodeAccess{.resource = {.cls = cls}, .anyValue = true});
+                }
+            }
+            // What that function captured is no value this graph holds, and its type does not say
+            // what it is: those positions keep the conservative answer, as they always did.
+            for ([[maybe_unused]] uint8_t nested : captured.captures) {
+                r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
+                r.declared = false;
+            }
+            continue;
+        }
+        // Any other type: a copy of it inside the closure reaches nothing its caller holds.
     }
     if ((r.result.kind == ResultAlias::Kind::Same || r.result.kind == ResultAlias::Kind::View) &&
         r.result.operand >= norm.size()) {
