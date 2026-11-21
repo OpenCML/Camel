@@ -109,23 +109,25 @@ function parseRows (table) {
   return table.rows.map(({ cells, line }) => {
     if (cells.length < 5) fail(`${MAP_REL}:${line}: a row must have 5 cells, it has ${cells.length}`)
     const [from, to, block, status, note] = cells
-    if (!['搬', '留', '不明确'].includes(status)) {
-      fail(`${MAP_REL}:${line}: unknown status "${status}" (the three are 搬, 留, 不明确)`)
+    if (!['搬', '留'].includes(status)) {
+      fail(`${MAP_REL}:${line}: unknown status "${status}" (the two are 搬, 留: every path is decided)`)
     }
     return { from, to, block, status, note, line }
   })
 }
 
-// `modules/<模块>/` and `stdlib/<模块>.cml` are rule rows: the placeholder expands to every
-// actual name, so the table stays one line per rule and the script does the enumerating.
+// `modules/<模块>/`, `stdlib/<模块>.cml` and `stdlib/signatures/<模块>.cml` are rule rows: the
+// placeholder expands to every actual name, so the table stays one line per rule and the script
+// does the enumerating. The names come from the directory the placeholder names, so a name added
+// there is a row the script refuses to guess about.
 function expandRow (row, root) {
-  const ph = row.from.includes('<模块>')
-  if (!ph) return [row]
-  const dir = row.from.startsWith('modules/') ? 'modules' : 'stdlib'
+  if (!row.from.includes('<模块>')) return [row]
+  const isModuleDir = row.from.startsWith('modules/')
+  const dir = path.posix.dirname(row.from)
   const names = fs
     .readdirSync(path.join(root, dir), { withFileTypes: true })
-    .filter((e) => (dir === 'modules' ? e.isDirectory() : e.isFile() && e.name.endsWith('.cml')))
-    .map((e) => (dir === 'modules' ? e.name : e.name.replace(/\.cml$/, '')))
+    .filter((e) => (isModuleDir ? e.isDirectory() : e.isFile() && e.name.endsWith('.cml')))
+    .map((e) => (isModuleDir ? e.name : e.name.replace(/\.cml$/, '')))
     .sort()
   const out = []
   for (const name of names) {
@@ -200,14 +202,51 @@ function checkExpansion (rowsB, root) {
   }
   need('src', 1)
   need('src/passes', 1) // `src/passes/trans/rulesets/` is a second level below `src/`
+  // The containers whose entries the decisions split by file or by hand: a file left out of the
+  // table would be a file the move silently leaves behind, so each is checked against the disk.
+  for (const dir of [
+    'src/execute',
+    'src/service',
+    'src/service/codegen',
+    'src/service/profiler',
+    'src/passes/sched',
+    'src/passes/trans',
+  ]) {
+    need(dir, 1)
+  }
   need('include/camel', 1)
+  for (const dir of ['include/camel/execute', 'include/camel/passes', 'include/camel/passes/trans']) {
+    need(dir, 1)
+  }
   need('modules', 1)
   need('stdlib', 1)
+  need('stdlib/signatures', 1)
   if (problems.length) {
     process.stdout.write(problems.join('\n') + '\n')
     fail('table B does not cover its container')
   }
   return readings
+}
+
+// ---------------------------------------------------------------------------------------------
+// table C: the decisions
+// ---------------------------------------------------------------------------------------------
+
+// Table C is the decision record, not a question list. Every item carries 已定 and the target the
+// decision named; the table A/B row for that path has to agree with it. Reading it here is what
+// keeps it from drifting back into a list of open questions: an item without a decision stops the
+// run instead of quietly waiting for a reader.
+function checkDecisions (table) {
+  const decided = []
+  for (const { cells, line } of table.rows) {
+    if (cells.length < 7) fail(`${MAP_REL}:${line}: a table C row must have 7 cells, it has ${cells.length}`)
+    const [id, , , , , status, target] = cells
+    if (!/^U\d+$/.test(id)) fail(`${MAP_REL}:${line}: a table C row has no U-number ("${id}")`)
+    if (status !== '已定') fail(`${MAP_REL}:${line}: ${id} is "${status}", not 已定`)
+    if (!target) fail(`${MAP_REL}:${line}: ${id} has no target`)
+    decided.push(id)
+  }
+  return decided
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -218,7 +257,7 @@ function planMoves (rowsA, rowsB) {
   const moves = []
   const push = (row) => {
     if (row.status !== '搬') return
-    if (row.to === '—' || row.to === '?') fail(`line ${row.line}: status 搬 but no target`)
+    if (row.to === '—') fail(`line ${row.line}: status 搬 but no target`)
     // A row whose target is prose ("拆到表 B", "拆到本表以下四行") names a container, not a move:
     // its children carry the real targets. Reading it as a path would move a directory to a name
     // that is not a path at all, which is how this was caught.
@@ -303,19 +342,26 @@ function deriveRoots (moves, root) {
     for (const sub of ['src', 'include']) if (fs.existsSync(path.join(root, 'tools', e.name, sub))) add('tools', `tools/${e.name}/${sub}`)
   }
   for (const m of moves) {
-    if (!m.row.from.endsWith('/')) continue
     const block = blockOfTarget(m.to)
+    // A single file moves like a one-file directory: what a block owns, and what answers a
+    // spelling, is its parent. `include/camel/execute/pass.h` lands at
+    // `kernel/include/camel/execute/pass.h`, and `camel/execute/pass.h` still resolves because the
+    // new root is `kernel/include`.
+    const isDir = m.row.from.endsWith('/')
+    const toDir = isDir ? m.to : path.posix.dirname(m.to)
+    const fromDir = isDir ? m.from : path.posix.dirname(m.from)
     // The block's own roots: the directory, and its `include/` tree when it has one. A module
     // declares `EXTRA_INCLUDES <module>/include` today (`tiles/program.h` is spelled from there),
-    // so the block-local include tree is what keeps that spelling working after the move.
-    add(block, m.to)
-    add(block, `${m.to}/include`)
+    // so the block-local include tree is what keeps that spelling working after the move. Only a
+    // directory that has one contributes it: `include/camel/parse` gains no `.../parse/include`,
+    // which would be a root nothing answers for.
+    add(block, toDir)
+    if (isDir && fs.existsSync(path.join(root, m.from, 'include'))) add(block, `${toDir}/include`)
     for (const R of OLD_ROOTS) {
       const prefix = `${R}/`
-      if (!m.from.startsWith(prefix)) continue
-      const oldSuffix = m.from.slice(prefix.length)
-      const to = m.to
-      add(block, to.endsWith(`/${oldSuffix}`) ? to.slice(0, to.length - oldSuffix.length - 1) : to)
+      if (!fromDir.startsWith(prefix)) continue
+      const oldSuffix = fromDir.slice(prefix.length)
+      add(block, toDir.endsWith(`/${oldSuffix}`) ? toDir.slice(0, toDir.length - oldSuffix.length - 1) : toDir)
     }
   }
   return roots
@@ -430,7 +476,7 @@ const CMAKE_HOOKS = [
   // earlier would answer `state.h` with another module's header before that. So the target is
   // recorded here and the catch-all is appended to it at the end, after every other root.
   [
-    'modules/camel_module.cmake',
+    'cmake/camel_module.cmake',
     '  target_include_directories(${_objects} PRIVATE\n    ${CMAKE_CURRENT_SOURCE_DIR}\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${ARG_EXTRA_INCLUDES}\n  )',
     '  set(_camel_module_roots\n    ${CMAKE_CURRENT_SOURCE_DIR}\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${ARG_EXTRA_INCLUDES})\n  target_include_directories(${_objects} PRIVATE ${_camel_module_roots})\n  set_property(GLOBAL APPEND PROPERTY CAMEL_LAYOUT_LATE_CATCHALL_TARGETS ${_objects})',
   ],
@@ -498,7 +544,14 @@ function buildBlocks (moves) {
     // 88 module sources into `libcamel` again would compile every module twice and give the
     // library include paths that only one module's build ever had.
     if (b === 'lib_module') return []
-    const own = moves.filter((m) => m.row.from.endsWith('/') && blockOfTarget(m.to) === b).map((m) => m.to)
+    // A directory brings its whole tree; a single file brings the directory it lands in, so the
+    // block that received `kernel/execute/pass.cpp` globs `kernel/execute/*.cpp` -- a split whose
+    // halves are files, not directories, still compiles. Only a source file brings a tree: a moved
+    // header names no translation unit and its parent has nothing to compile.
+    const own = moves
+      .filter((m) => blockOfTarget(m.to) === b)
+      .filter((m) => m.row.from.endsWith('/') || /\.(cpp|cc|cxx|c)$/i.test(m.to))
+      .map((m) => (m.row.from.endsWith('/') ? m.to : path.posix.dirname(m.to)))
     if (b === 'unplaced') own.push('src')
     if (b === 'third_party') own.push('third_party')
     return [...new Set(own)].sort()
@@ -733,11 +786,16 @@ function stage0Step (file, landed) {
   // tree is not a violation and must not be listed as one.
   if (/^(kernel_|lib_module)/.test(blockOfPath(file)) && landed.startsWith('parse/') && landed.includes('/ast/')) return '0.4'
   // 0.3: any other reach from the kernel into the parser or the compiler -- the kernel calling them
-  // to load a source module, which is the call 0.3 replaces with a registered loader.
-  if (/^(kernel\/|include\/camel\/(core|utils|runtime)\/)/.test(file) && /^(parse\/|compile\/)/.test(landed)) return '0.3'
-  // 0.2: the pass driver naming a concrete pass or a parser, instead of the registry.
-  if (/^src\/execute\/(pass|camel_pass|pass_declarations)\.cpp$/.test(file) &&
-      /^(src\/passes\/|include\/camel\/passes\/|parse\/|compile\/)/.test(landed)) return '0.2'
+  // to load a source module, which is the call 0.3 replaces with a registered loader. The kernel's
+  // headers are spelled against `kernel/include` after the move and against `include` before it;
+  // both spellings are read here, because the table is read before the move is applied.
+  if (/^(kernel\/|kernel\/include\/camel\/(core|utils|runtime)\/|include\/camel\/(core|utils|runtime)\/)/.test(file) &&
+      /^(parse\/|compile\/)/.test(landed)) return '0.3'
+  // 0.2: the pass driver naming a concrete pass or a parser, instead of the registry. U2 put the
+  // driver in `kernel/execute/`; the passes it must stop naming are the `lib/std/` ones, the test
+  // passes in `lib/test/`, and the two front-end blocks.
+  if (/^(kernel\/execute\/(pass|camel_pass|pass_declarations)\.cpp|src\/execute\/(pass|camel_pass|pass_declarations)\.cpp)$/.test(file) &&
+      /^(lib\/std\/|lib\/test\/|lib\/rulesets\/|parse\/|compile\/)/.test(landed)) return '0.2'
   return null
 }
 
@@ -802,7 +860,15 @@ function simulateIncludeScan (root, moves, blocksInfo) {
         const newTargetPath = postMove(oldTargetPath)
         if (newTargetPath !== oldTargetPath) rewritten = path.posix.relative(path.posix.dirname(target), newTargetPath)
       }
-      if (!rewritten) rewritten = rewriteSpelling(original, rules)
+      if (!rewritten) {
+        // A quoted spelling that answers beside the including file is that file's own neighbour,
+        // and the compiler asks that question first, so the answer wins over a head-prefix rewrite:
+        // `camel/core/error/diagnostics.h` says `diagnostics/arguments.h` about the directory
+        // beside it, not about the top-level `diagnostics/` that U17 moved. Reading it as a prefix
+        // left five headers answering nothing after the drill, which is how this was caught.
+        const sibling = quoted ? path.posix.normalize(path.posix.join(targetDir, original)) : null
+        if (!sibling || !bySpelling.has(sibling)) rewritten = rewriteSpelling(original, rules)
+      }
       // Only a spelling that actually changes is an edit. Two siblings that both move keep their
       // relative spelling (`../tensor/tensor.h`); counting those would report work that is not
       // there, and the first run of this scan did exactly that.
@@ -902,7 +968,7 @@ function applyMoves (tree, moves) {
 // The two build files a hook rewrites in place. They name the tree's include roots themselves and
 // the hook is what gives those roots their transitional stand-in, so the generic old-root rewrite
 // leaves them to it.
-const HOOK_OWNED_FILES = new Set(['modules/camel_module.cmake', 'tools/libcamel_tool.cmake'])
+const HOOK_OWNED_FILES = new Set(['cmake/camel_module.cmake', 'tools/libcamel_tool.cmake'])
 
 function applyRewrites (tree, moves, scan) {
   const edits = []
@@ -975,11 +1041,10 @@ function applyRewrites (tree, moves, scan) {
       for (const oldRoot of ['include', 'src']) {
         const token = `${prefix}/${oldRoot}`
         if (!text.includes(token)) continue
-        // A spelled path that still exists is a file the move did not touch --
-        // `${CMAKE_SOURCE_DIR}/src/execute/devices.cpp` names a source in `src/execute`, one of the
-        // directories the table leaves undecided -- so the root it names still holds it. The token
-        // on its own is the root itself (`.../include)` names the directory the kernel's headers
-        // left), and a directory that is still there but no longer holds them is not that root.
+        // A spelled path that still exists is a file the move did not touch, so the root it names
+        // still holds it. The token on its own is the root itself (`.../include)` names the
+        // directory the kernel's headers left), and a directory that is still there but no longer
+        // holds them is not that root.
         text = text.replace(new RegExp(`${escapeRe(token)}(?![\\w.-])`, 'g'), (match, offset) => {
           let j = offset + match.length
           while (j < text.length && !/[\s()"'`,;]/.test(text[j])) j++
@@ -996,12 +1061,12 @@ function applyRewrites (tree, moves, scan) {
       count += genericHits.length
       text = text.replace(/modules\/\$\{/g, 'lib/${')
     }
-    // `camel_module.cmake` is one of the two files the table leaves undecided (U16), so it stays
-    // where it is and the 29 moved modules reach it by an absolute path instead of `../`.
+    // U16 put `camel_module.cmake` in `cmake/`, so the 29 moved modules reach it by an absolute
+    // path instead of `../`.
     const anchor = 'include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)'
     if (text.includes(anchor)) {
       count += text.split(anchor).length - 1
-      text = text.split(anchor).join('include(${PROJECT_SOURCE_DIR}/modules/camel_module.cmake)')
+      text = text.split(anchor).join('include(${PROJECT_SOURCE_DIR}/cmake/camel_module.cmake)')
     }
     if (text !== before) fs.writeFileSync(file, text)
     edits.push({ file: rel, occurrences: count, build: true })
@@ -1120,7 +1185,7 @@ function main () {
   const tables = readTable(ROOT)
   const rowsA = parseRows(pickTable(tables, '表 A'))
   const rowsBraw = parseRows(pickTable(tables, '表 B'))
-  const rowsC = pickTable(tables, '表 C').rows
+  const rowsC = checkDecisions(pickTable(tables, '表 C'))
   const rowsB = rowsBraw.flatMap((r) => expandRow(r, ROOT))
 
   const coverage = checkCoverage(rowsA, ROOT)
@@ -1131,8 +1196,7 @@ function main () {
   process.stdout.write('layout-move: the table\n')
   for (const line of coverage) process.stdout.write(`  ${line}\n`)
   for (const line of expansion) process.stdout.write(`  ${line}\n`)
-  process.stdout.write(`  unclear rows: ${rowsA.concat(rowsB).filter((r) => r.status === '不明确').length}`)
-  process.stdout.write(` in table C as ${rowsC.length} numbered questions\n`)
+  process.stdout.write(`  table C: ${rowsC.length}/${rowsC.length} decided\n`)
   process.stdout.write(`  moves: ${moves.length} (${moves.filter((m) => m.row.from.endsWith('/')).length} directories)\n`)
   process.stdout.write(`  blocks: ${blocksInfo.blocks.length} (${blocksInfo.blocks.join(', ')})\n`)
 
@@ -1170,7 +1234,7 @@ function main () {
       [
         ...coverage,
         ...expansion,
-        `unclear: ${rowsC.length}`,
+        `table C: ${rowsC.length}/${rowsC.length} decided`,
         `moves: ${moves.length}`,
         `include rewrites: ${scan.includeRewrites.length}`,
         `cross-layer references: ${scan.violations.length}`,
