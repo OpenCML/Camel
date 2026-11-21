@@ -49,10 +49,10 @@
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/rules.h"
-#include "camel/passes/test/undo_selfcheck.h"
 #include "camel/passes/test/saturate.h"
 #include "camel/passes/test/tangent_space.h"
 #include "camel/passes/test/throw_bad_alloc.h"
+#include "camel/passes/test/undo_selfcheck.h"
 #include "camel/passes/test/writings.h"
 #include "camel/passes/trans/cml/cml.h"
 #include "camel/passes/trans/json/gir.h"
@@ -2032,8 +2032,8 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
 /// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
-/// so a place in it is a sync or control edge either way, read from the edges themselves.
+/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control
+/// one), so a place in it is a sync or control edge either way, read from the edges themselves.
 ///
 /// An order edge is not one of them: it orders two nodes that both run and makes neither of them
 /// run (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read
@@ -2718,8 +2718,8 @@ std::string describeNodeOf(
 /// The one-line text the effect-containment diagnostic carries: the call site, the type it
 /// declares as the declaration spells it, every access the type does not cover and -- when the
 /// footprint reaches a resource no clause can name -- the node inside the body that makes that
-/// reading and why it cannot be named (the ruling of 2026-11-20: an access the check cannot name is
-/// refused, so the diagnostic has to say which node and why).
+/// reading and why it cannot be named: an access the check cannot name is refused, so the
+/// diagnostic has to say which node and why.
 std::string effectContainmentText(
     const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
     const camel::runtime::EffectContainment &violation) {
@@ -2811,7 +2811,7 @@ bool passBoundaryViolation(
         // look at: the type is the promise a caller relies on. When the footprint reaches a
         // resource no clause can name, the message names the node inside the body that makes that
         // reading too, and says why it cannot be named: that reading is refused rather than
-        // counted (the ruling of 2026-11-20), so the node is what the reader has to go and fix.
+        // counted, so the node is what the reader has to go and fix.
         //
         // The check also says what it declined to judge. That reading is a diagnostic line on the
         // `Pass` scope and not an environment switch, because a count decides only how much is
@@ -2837,22 +2837,21 @@ bool passBoundaryViolation(
                 violation = std::move(found);
             }
         }
-            // A reading of the effect-containment summary, on the run's tracing channel
-            // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
-            // The text is that of a log line, down to the trailing newline.
-            camel::core::trace(camel::core::TraceArea::Effects)
-                << std::format(
-                       "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
-                       "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
-                       "other {})\n",
-                       report.checked,
-                       report.declined(),
-                       report.anyUnknown,
-                       report.anyObject,
-                       report.anyHandle,
-                       report.variableCell,
-                       report.unresolved,
-                       report.other);
+        // A reading of the effect-containment summary, on the run's tracing channel
+        // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
+        // The text is that of a log line, down to the trailing newline.
+        camel::core::trace(camel::core::TraceArea::Effects) << std::format(
+            "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
+            "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
+            "other {})\n",
+            report.checked,
+            report.declined(),
+            report.anyUnknown,
+            report.anyObject,
+            report.anyHandle,
+            report.variableCell,
+            report.unresolved,
+            report.other);
         if (violation.has_value()) {
             ctx->rtmDiags()
                 ->of(RuntimeDiag::PassEffectContainment)
