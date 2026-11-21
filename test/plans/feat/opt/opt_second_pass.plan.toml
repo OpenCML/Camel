@@ -57,6 +57,19 @@
 # The tool prints the build, the two pass times, their ratio and `result=PASS|FAIL`, and on a failure
 # it names the case, both values and the bound on standard output -- the stream the plan keeps -- so
 # a red log carries the reason rather than a bare exit 1.
+#
+# Why the expectation names no directory. The tool prints `case=` as this repository's own relative
+# path, and that path carries the host's separator: `test\cases\linear\jit\perf_fib_smoke.cml` on
+# win-x64, `test/cases/...` on Linux. An expectation holding one spelling is red on the other host
+# for a reason that is not a reading -- CI 44943488386 read `[FAIL] second_pass.perf_fib_smoke` over
+# a line that itself said `ratio=6.93 max_ratio=14 result=PASS`, and `second_pass.concat_chain` the
+# same way on macos-arm64. What this entry judges is that one reading holds, not how the path is
+# spelled, so the expectation carries the file name (the case), the backend, the two windows
+# (`pass=std::opt index=2 baseline_index=1`) and the verdict, and no separator anywhere. The bound
+# is repeated in the expectation on purpose: with `max_ratio=14` pinned here, a loosened `--max-ratio`
+# in `args` cannot leave the assertion green over a bound that moved. Both cases stay red on the old
+# helper (`stdlib/perf.cml` of 96d8c9ea3 reads 20.08-20.39 times) because that run prints
+# `result=FAIL` and exits 1, which this assertion and `expect_exit = 0` both refuse.
 
 id = "opt.second_pass"
 order = 342
@@ -72,7 +85,7 @@ tool = "node"
 case = "../../../tools/opt-cost/second_pass.mjs"
 args = ["${case}", "--case", "test/cases/linear/jit/perf_fib_smoke.cml", "--max-ratio", "14", "--index", "2", "--backend", "jit"]
 expect_exit = 0
-expect_stdout_contains = ["opt_second_pass case=test/cases/linear/jit/perf_fib_smoke.cml", "pass=std::opt index=2", "baseline_index=1", "ratio=", "result=PASS"]
+expect_stdout_contains = ["opt_second_pass case=", "perf_fib_smoke.cml backend=jit", "pass=std::opt index=2 baseline_index=1", "ratio=", "max_ratio=14", "result=PASS"]
 timeout_ms = 120000
 
 [[tests]]
@@ -84,5 +97,5 @@ tool = "node"
 case = "../../../tools/opt-cost/second_pass.mjs"
 args = ["${case}", "--case", "test/cases/opt/generic/concat_chain.cml", "--max-ratio", "14", "--index", "2", "--backend", "jit"]
 expect_exit = 0
-expect_stdout_contains = ["opt_second_pass case=test/cases/opt/generic/concat_chain.cml", "pass=std::opt index=2", "baseline_index=1", "ratio=", "result=PASS"]
+expect_stdout_contains = ["opt_second_pass case=", "concat_chain.cml backend=jit", "pass=std::opt index=2 baseline_index=1", "ratio=", "max_ratio=14", "result=PASS"]
 timeout_ms = 120000
