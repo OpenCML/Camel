@@ -443,14 +443,6 @@ const CMAKE_HOOKS = [
   // catch-all is appended to the recorded targets there: last, where it cannot shadow a header a
   // target names itself.
   ['add_subdirectory(tools)', 'add_subdirectory(tools)\ncamel_layout_append_catchall()'],
-  // Two modules gave their own object target something the top-level build never did: a version
-  // string (`ckpt`), and the CBLAS include directory with the defines that select it (`tensor`).
-  // The module target still compiles those sources and the block compiles them too, and a
-  // `target_...` call names a single target, so each goes through the helper that repeats it for
-  // the block. The hooks name the files where they are after the move.
-  ['lib/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'camel_layout_module_definitions(ckpt_cmo_objects PRIVATE '],
-  ['lib/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'camel_layout_module_definitions(tensor_cmo_objects PRIVATE ', 'all'],
-  ['lib/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'camel_layout_module_includes(tensor_cmo_objects PRIVATE '],
 ]
 
 // `BUILD_INFO_ROOTS` is what `-NoBuild` fingerprints. Left alone, every moved source falls out of
@@ -499,18 +491,25 @@ function buildBlocks (moves) {
   // Which directories a block compiles: every `src`-like tree that landed under it, plus what
   // stayed behind (`unplaced`).
   const treesFor = (b) => {
+    // A module is not part of `libcamel`: it is a shared library of its own, built by its
+    // `<name>_cmo` target, and the top-level build never had a module source in `LIBCAMEL_SRC`
+    // (`src/**` and `third_party/**`, nothing else). The `lib_module` block therefore owns the
+    // directories for the include scan and the ownership table, and compiles nothing: putting the
+    // 88 module sources into `libcamel` again would compile every module twice and give the
+    // library include paths that only one module's build ever had.
+    if (b === 'lib_module') return []
     const own = moves.filter((m) => m.row.from.endsWith('/') && blockOfTarget(m.to) === b).map((m) => m.to)
     if (b === 'unplaced') own.push('src')
     if (b === 'third_party') own.push('third_party')
     return [...new Set(own)].sort()
   }
-  // A block with no tree of its own is not a build target: `tools/` builds through
-  // `add_subdirectory(tools)`, and its block exists only so the include scan can attribute a
-  // reference that reaches into a tool. A target that globs nothing reports success for compiling
-  // no files, which is the shape of green this whole exercise is trying to stop trusting.
-  const blocks = [...roots.keys()]
-    .filter((b) => treesFor(b).length > 0)
-    .sort((a, b) => layerOf(a) - layerOf(b) || a.localeCompare(b))
+  // Every block keeps its include roots -- the catch-all is the union of all of them, and the
+  // block that compiles nothing still answers a spelling in the scan. A block with no source of
+  // its own gets no build target: `tools/` builds through `add_subdirectory(tools)` and the
+  // modules through their own `.cmo`, and a target that globs nothing reports success for
+  // compiling no files, which is the shape of green this whole exercise is trying to stop
+  // trusting.
+  const blocks = [...roots.keys()].sort((a, b) => layerOf(a) - layerOf(b) || a.localeCompare(b))
   return { blocks, roots, treesFor }
 }
 
@@ -643,19 +642,6 @@ function cmakeText (blocksInfo) {
   L.push('    foreach(_t IN LISTS _targets)')
   L.push('        camel_taskflow_with_worker_stack(${_t})')
   L.push('    endforeach()')
-  L.push('endfunction()')
-  L.push('')
-  // A module gave its own object target something the top-level build never did, and the block
-  // compiles the same sources, so the block has to see it too. `target_*` names one target, so a
-  // module's own call goes through these two, which repeat it for the block.
-  L.push('function(camel_layout_module_definitions _target _visibility)')
-  L.push('    target_compile_definitions(${_target} ${_visibility} ${ARGN})')
-  L.push('    target_compile_definitions(' + BLOCK_PREFIX + 'lib_module_objects ${_visibility} ${ARGN})')
-  L.push('endfunction()')
-  L.push('')
-  L.push('function(camel_layout_module_includes _target _visibility)')
-  L.push('    target_include_directories(${_target} ${_visibility} ${ARGN})')
-  L.push('    target_include_directories(' + BLOCK_PREFIX + 'lib_module_objects ${_visibility} ${ARGN})')
   L.push('endfunction()')
   L.push('')
   // The modules and tools are built by their own object targets, and a tool adds its own `src/`
@@ -1066,24 +1052,16 @@ function escapeRe (s) {
 
 function applyHooks (tree) {
   const applied = []
-  // A hook is `[from, to]` against the top-level `CMakeLists.txt`, `[file, from, to]` against a
-  // named build file, or `[file, from, to, 'all']` for a line that appears once per configuration
-  // branch and must be rewritten wherever it appears. Otherwise it must match exactly once.
+  // A hook is `[from, to]` against the top-level `CMakeLists.txt`, or `[file, from, to]` against a
+  // named build file. Either way it must match exactly once: a hook that is gone is a build file
+  // this script no longer understands, and guessing would move the wrong thing.
   for (const hook of CMAKE_HOOKS) {
-    const [rel, from, to, repeat] =
-      hook.length === 2 ? ['CMakeLists.txt', hook[0], hook[1], 1]
-      : hook.length === 3 ? [hook[0], hook[1], hook[2], 1]
-      : hook
+    const [rel, from, to] = hook.length === 3 ? hook : ['CMakeLists.txt', hook[0], hook[1]]
     const file = path.join(tree, rel)
     const text = fs.readFileSync(file, 'utf8')
     const count = text.split(from).length - 1
-    if (repeat === 'all') {
-      if (count < 1) fail(`${rel}: hook matched no line to rewrite:\n${from}`)
-      fs.writeFileSync(file, text.split(from).join(to))
-    } else {
-      if (count !== 1) fail(`${rel}: hook matched ${count} times, expected 1:\n${from}`)
-      fs.writeFileSync(file, text.replace(from, to))
-    }
+    if (count !== 1) fail(`${rel}: hook matched ${count} times, expected 1:\n${from}`)
+    fs.writeFileSync(file, text.replace(from, to))
     applied.push(`${rel}: ${from.split('\n')[0].trim()}`)
   }
   // The two JavaScript patches.
