@@ -6670,3 +6670,17 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 **`-Check all` 那 20 条**：`checks: 20 run, 2 failed`——`check-doc-links exit 1`（`--questions-index` 与 `--questions-defaults` 两项）、`gate-static exit 1`（static 6/14 `pending questions`、static 7/14 `56 of 76 pending page(s) give a default`）；其余 18 条 exit 0，`capture-census exit 2` 是 report-only（`ok=2797 refused=1163 crashed=1 timeout=1`，`2 file(s) did not give a reading`）。11-20 19:40 那次是三条（含 `export-matrix`），今天 `export-matrix exit 0`，剩这两条。
 
 **`node scripts/check-doc-links.mjs`（无参数，本机）**：`no broken links in 63 document(s)`，**exit 0**；本页追加后重跑仍 exit 0。
+
+---
+
+## 更正（2026-11-21）：`registry.docs_complete` 那笔账以截断输出为据，作废
+
+本节只作废上面「新的五条」里那条记录的**结论**，原记录一字未删——它是「当时读到了什么」的证据，删掉就看不出为什么会读错。
+
+原记录（上面「新的五条」里 `feat.modules.stdlib_registry / registry.docs_complete` 那一条）写：「`feat.modules.stdlib_registry / registry.docs_complete`（`1 documentation problem(s) in 598 compiled example(s)`，`stdlib/graph.cml` 一串 `binds n` 的例子行，另有 18 行被省略）」。
+
+- **那串 `binds n` 不是问题。** 它是 `scripts/stdlib-reference.mjs` 的 `announceExamples(coverage.bound, 'examples a marker calls not compiled that compile only with a name bound', (one) => \`binds ${one.bindings.join(', ')}\`)`（3854-3858）打的**信息段**：那些例子反而是**对的**——marker 说它们不是独立程序，绑上页面本该由外层程序提供的名字就能编译。`problems` 只在 3861 按 `problems.length` 计数，来源只有两处：`docProblems(entries)`（1706）与非 fragment 的 `@example` 编译失败（1713）。信息段一行都不进。
+- **「另有 18 行被省略」与代码常量矛盾。** 那句话是转抄 `test/tools/run-tests.mjs#printFailedOutput`（1369-1393）的截尾行 `[stdout] omitted N line(s) above`：它 `maxLines = 12`，只保留**末尾 12 行**，`18` 是「总行数 − 12」，与 `stdlib-reference.mjs` 的 `EXCEPTIONS_SHOWN = 12`（2081）**毫无关系**——两个 12 是巧合。脚本自己的省略写作 `, and N more`（3826），不是「N 行被省略」。
+- **真正的 1 处**（2026-11-21 从失败捕获的**首行**读出，不读截尾）：`stdlib/rulesets/jvp.cml:642: 'layer_norm_neutral' has no @example`——有描述、缺 `@example`，由 `e9d1d191d`（2026-11-20）引入。本格已补该 `@example` 并重录 AST 金标修好。
+- **结论：那笔账作废。** 它把「被截掉的 18 行」读成「问题所在的 18 行」，于是把一个具体的符号级缺陷，记成了一段与它无关的信息段。
+- **出处一句话**：那条「18 行」出自 11-20 那次闸门（本页记录自引基线树 `8fab0d3e1`）的 `feat.modules.stdlib_registry / registry.docs_complete` 失败捕获，是 `test/tools/run-tests.mjs#printFailedOutput` 的 `maxLines = 12` 截尾行，与 `EXCEPTIONS_SHOWN` 无关。
