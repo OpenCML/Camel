@@ -439,10 +439,11 @@ const CMAKE_HOOKS = [
   // Two modules gave their own object target something the top-level build never did: a version
   // string (`ckpt`), and the CBLAS include directory with the defines that select it (`tensor`).
   // The block compiles those sources now, so the settings go to the block -- the whole of
-  // `lib_module`, which is wider than the module and is the transition this drill states.
-  ['modules/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module '],
-  ['modules/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module ', 'all'],
-  ['modules/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'camel_layout_block_includes_of(lib_module '],
+  // `lib_module`, which is wider than the module and is the transition this drill states. The
+  // hooks name the files where they are after the move: the move runs first, then the rewrite.
+  ['lib/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module '],
+  ['lib/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module ', 'all'],
+  ['lib/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'camel_layout_block_includes_of(lib_module '],
 ]
 
 // `BUILD_INFO_ROOTS` is what `-NoBuild` fingerprints. Left alone, every moved source falls out of
