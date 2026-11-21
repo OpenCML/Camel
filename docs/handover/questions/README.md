@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：77 页
+## 现在在等作者：76 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -85,9 +85,8 @@
 | [`2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to`](2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md) | 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗 |
 | [`2026-11-21-whether-transpose-can-say-its-signature-is-lifted`](2026-11-21-whether-transpose-can-say-its-signature-is-lifted.cn.md) | `Transpose<F>` 说不出「我的参数里有一半是提升出来的」 |
 | [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 |
-| [`2026-11-21-who-supplies-the-primal-to-a-transposed-lift`](2026-11-21-who-supplies-the-primal-to-a-transposed-lift.cn.md) | 谁把原值交给「线性函数的提升」的转置 |
 
-## 生成器不会删的行：149 行（页已不在 `questions/` 里）
+## 生成器不会删的行：150 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -230,6 +229,7 @@
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](../reviews/2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ | 在 `reviews/` |
 | [`2026-11-18-typeof-of-machine-made-types`](../reviews/2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ | 在 `reviews/` |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](../reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ | 在 `reviews/` |
+| [`2026-11-21-who-supplies-the-primal-to-a-transposed-lift`](../reviews/2026-11-21-who-supplies-the-primal-to-a-transposed-lift.cn.md) | 谁把原值交给「线性函数的提升」的转置 | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |
