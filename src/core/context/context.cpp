@@ -468,8 +468,11 @@ namespace {
 /// A diagnostic placed by token range (the GCT builder's) only gets a line and column once the
 /// range is converted with the module's token stream; without this it prints as `?:?`.
 void resolveTokenRanges(const std::shared_ptr<UserDefinedModule> &module) {
-    if (module && module->diagnostics() && module->parser()) {
-        module->diagnostics()->fetchAll(module->parser()->tokenPositions());
+    if (!module || !module->diagnostics()) {
+        return;
+    }
+    if (const auto *positions = module->tokenPositions()) {
+        module->diagnostics()->fetchAll(*positions);
     }
 }
 

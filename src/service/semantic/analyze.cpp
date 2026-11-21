@@ -17,6 +17,7 @@
 
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/value_entity.h"
+#include "camel/compile/module_source.h"
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/abort.h"
@@ -563,10 +564,16 @@ class ModelBuilder {
         std::vector<std::shared_ptr<UserDefinedModule>> modules;
         for (const auto &mod : ctx->allUserModules()) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (!ud || ud == mainModule || !ud->parser()) {
+            if (!ud || ud == mainModule) {
                 continue;
             }
-            const auto fileId  = ud->parser()->sourceFileId();
+            // The reader the module's source was read with: the kernel's module keeps it behind
+            // an opaque handle, and this is the accessor that names it (compile/module_source.h).
+            const auto reader = camel::compile::parserOf(*ud);
+            if (!reader) {
+                continue;
+            }
+            const auto fileId  = reader->sourceFileId();
             const auto *source = sc_->sourceFile(fileId);
             if (source == nullptr) {
                 continue;
@@ -574,8 +581,8 @@ class ModelBuilder {
             const uint32_t index = addFile(
                 normalPath(ud->path()),
                 source->content,
-                ud->parser()->tree(),
-                ud->parser()->parsed(),
+                reader->tree(),
+                reader->parsed(),
                 fileId);
             model_->files_[index].compiled = ud->diagnostics() && !ud->diagnostics()->hasErrors();
             modules.push_back(ud);
@@ -593,12 +600,16 @@ class ModelBuilder {
         // Diagnostics: the parser's and the entry module's share one container.
         collectDiagnostics(*diagnostics, parser->tokenPositions(), 0);
         for (size_t i = 0; i < modules.size(); ++i) {
-            if (modules[i]->diagnostics()) {
-                collectDiagnostics(
-                    *modules[i]->diagnostics(),
-                    modules[i]->parser()->tokenPositions(),
-                    static_cast<uint32_t>(i + 1));
+            if (!modules[i]->diagnostics()) {
+                continue;
             }
+            const auto reader = camel::compile::parserOf(*modules[i]);
+            if (!reader) {
+                continue;
+            }
+            collectDiagnostics(
+                *modules[i]->diagnostics(), reader->tokenPositions(),
+                static_cast<uint32_t>(i + 1));
         }
         if (!failure.empty()) {
             internalError(failure);

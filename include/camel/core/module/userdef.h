@@ -5,19 +5,20 @@
 
 #include "module.h"
 
-#include "camel/compile/gct.h"
-
-#include "camel/parse/parse.h"
-
+#include <memory>
 #include <string>
 #include <vector>
+
+namespace camel::core::error {
+class TokenPositions;
+}
 
 namespace camel::core::type {
 class FunctionType;
 }
 
 namespace camel::runtime {
-class GCGraph;
+class Program;
 }
 
 namespace camel::compile::gir {
@@ -30,7 +31,8 @@ class UserDefinedModule;
 
 namespace detail {
 class UserDefinedModuleAccess;
-}
+struct UserDefinedModuleFrontEnd;
+} // namespace detail
 
 /// How far a module written in Camel is compiled. `Declared`: the program's graph builder
 /// knows its declarations and its exports are readable (the first of the three steps of
@@ -39,29 +41,23 @@ class UserDefinedModuleAccess;
 /// module's program is built.
 enum class CompileStage { None, AST, GCT, Declared, Done };
 
+/// A module read from source. What reading that source and compiling it means — the parse tree,
+/// the construction tree, the graph a program built — is the compiler's business: it lives in the
+/// `detail::UserDefinedModuleFrontEnd` this class holds opaquely and which is defined beside the
+/// compiler (`src/compile/`). The kernel names none of it, keeps the stage the loading reached,
+/// and hands the graph out once it has one (design principles 9: a pass sees graphs, not source).
 class UserDefinedModule : public Module {
     friend class detail::UserDefinedModuleAccess;
 
-    // The graph construction tree of the module. It is kept for as long as the module:
-    // generic functions are lowered again from it, also by modules that import this one.
-    std::unique_ptr<GCT::Tree> gct_;
-    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> compileGraph_;
+    /// The front end's state of this module: declared here, defined and used by the compiler. A
+    /// null one only during construction.
+    std::shared_ptr<detail::UserDefinedModuleFrontEnd> frontEnd_;
+
     camel::core::error::diagnostics_ptr_t diagnostics_;
-    camel::parse::parser_ptr_t parser_;
     CompileStage stage_ = CompileStage::None;
     // Set while compile() runs: a module imported back by a module it imports is not compiled
     // again from inside its own compilation.
     bool compiling_ = false;
-    // compileAsLibrary(): the graph builder the module was built by, kept with it. It is the
-    // program's builder (Context::graphBuildSession), shared rather than owned: see
-    // compileAsLibrary.
-    std::shared_ptr<void> libraryBuilder_;
-    // compileAsProgram(): the graph builder of each program of its own, one per entry function,
-    // kept with the module for as long as the graphs it made are used.
-    std::vector<std::shared_ptr<void>> programBuilders_;
-    // Set while compileAsProgram() builds: the graph of that program is not the graph the
-    // module was loaded as part of, so setProgramGraph must not replace it.
-    bool buildingProgramOfItsOwn_ = false;
     // A `.cml` found beside a `.cmo` of its name declares that C++ module's operators
     // (design principles 6.4, step 1): its top-level functions have no body and
     // `implementation_` is the C++ module, kept alive for its executors and operator traits.
@@ -69,13 +65,14 @@ class UserDefinedModule : public Module {
     module_ptr_t implementation_;
 
   public:
+    /// `source` is the reader the caller made for this file, handed over opaquely: a tool that
+    /// reads the source itself (`camel inspect`, the language server, `--timeit`) makes the
+    /// reader once and wants the module to report into it, and the kernel neither knows nor names
+    /// what a reader is. Null means "the compiler makes the one this module needs".
     UserDefinedModule(
         const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx,
-        camel::parse::parser_ptr_t parser = nullptr);
-    virtual ~UserDefinedModule() = default;
-
-    /// The graph construction tree, or null before the module reached that stage.
-    const GCT::Tree *gct() const { return gct_.get(); }
+        const std::shared_ptr<void> &source = nullptr);
+    ~UserDefinedModule() override;
 
     /// A function the module exports: the name it has and the type it was declared with.
     struct ExportedFunction {
@@ -93,7 +90,10 @@ class UserDefinedModule : public Module {
     /// difference is what the user has to change.
     bool declaresFunction(const std::string &name) const;
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
-    camel::parse::parser_ptr_t parser() const { return parser_; }
+    /// Where the tokens of the module's source are, for a diagnostic written as a token range
+    /// (the construction tree's are): null before the source was read, and for a module that has
+    /// no source. Read without naming the parser: the positions are the kernel's own type.
+    const camel::core::error::TokenPositions *tokenPositions() const;
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }
     CompileStage stage() const { return stage_; }
 
@@ -107,6 +107,9 @@ class UserDefinedModule : public Module {
         implementation_ = implementation;
     }
 
+    /// Reads the module's source and compiles it to `till`. The steps are the compiler's
+    /// (src/compile/module_source.cpp): parse, construction tree, declaration, the program's
+    /// build and link.
     bool compile(CompileStage till = CompileStage::Done);
     /// Whether compile() is running for this module.
     bool compiling() const { return compiling_; }
@@ -164,6 +167,9 @@ class UserDefinedModule : public Module {
     /// is the protocol of `random`'s operators, not a name of its own.
     std::vector<std::string> operatorProtocols() const override;
 
+    /// A module read from `path` under `name`: what the kernel asks for when a file it found is
+    /// written in Camel. The parser, the trees and the graph are made by the compiler
+    /// (src/compile/module_source.cpp), which is also where this is defined.
     static module_ptr_t fromFile(
         const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx);
 
