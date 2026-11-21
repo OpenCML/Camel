@@ -438,12 +438,12 @@ const CMAKE_HOOKS = [
   ],
   // Two modules gave their own object target something the top-level build never did: a version
   // string (`ckpt`), and the CBLAS include directory with the defines that select it (`tensor`).
-  // The module target still compiles those sources and the block compiles them too, so the call
-  // names both: a CMake `target_...` call takes a list of targets, and the settings stay exactly
-  // what the module wrote. The hooks name the files where they are after the move.
-  ['lib/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'target_compile_definitions(ckpt_cmo_objects camel_layout_lib_module_objects PRIVATE '],
-  ['lib/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'target_compile_definitions(tensor_cmo_objects camel_layout_lib_module_objects PRIVATE ', 'all'],
-  ['lib/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'target_include_directories(tensor_cmo_objects camel_layout_lib_module_objects PRIVATE '],
+  // The module target still compiles those sources and the block compiles them too, and a
+  // `target_...` call names a single target, so each goes through the helper that repeats it for
+  // the block. The hooks name the files where they are after the move.
+  ['lib/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'camel_layout_module_definitions(ckpt_cmo_objects PRIVATE '],
+  ['lib/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'camel_layout_module_definitions(tensor_cmo_objects PRIVATE ', 'all'],
+  ['lib/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'camel_layout_module_includes(tensor_cmo_objects PRIVATE '],
 ]
 
 // `BUILD_INFO_ROOTS` is what `-NoBuild` fingerprints. Left alone, every moved source falls out of
@@ -631,6 +631,19 @@ function cmakeText (blocksInfo) {
   L.push('    foreach(_t IN LISTS _targets)')
   L.push('        camel_taskflow_with_worker_stack(${_t})')
   L.push('    endforeach()')
+  L.push('endfunction()')
+  L.push('')
+  // A module gave its own object target something the top-level build never did, and the block
+  // compiles the same sources, so the block has to see it too. `target_*` names one target, so a
+  // module's own call goes through these two, which repeat it for the block.
+  L.push('function(camel_layout_module_definitions _target _visibility)')
+  L.push('    target_compile_definitions(${_target} ${_visibility} ${ARGN})')
+  L.push('    target_compile_definitions(' + BLOCK_PREFIX + 'lib_module_objects ${_visibility} ${ARGN})')
+  L.push('endfunction()')
+  L.push('')
+  L.push('function(camel_layout_module_includes _target _visibility)')
+  L.push('    target_include_directories(${_target} ${_visibility} ${ARGN})')
+  L.push('    target_include_directories(' + BLOCK_PREFIX + 'lib_module_objects ${_visibility} ${ARGN})')
   L.push('endfunction()')
   L.push('')
   return L.join('\n')
