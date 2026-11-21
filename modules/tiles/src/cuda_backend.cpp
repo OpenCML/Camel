@@ -421,11 +421,11 @@ ProbeOutcome probeBackend() {
     ProbeOutcome outcome;
     const auto &selection = camel::execute::selectedDevices();
     // The host-only selection needs no driver at all, and is answered before the probe: its
-    // fallback stays silent.
-    if (selection.given && (selection.cpu || selection.cuda.empty())) {
+    // fallback stays silent. The sentence is the module's one text for it (capability.cpp), so a
+    // build without the Toolkit headers answers a `--devices cpu` run the same way this one does.
+    if (selectedHostOnly()) {
         outcome.kind   = ProbeOutcome::Kind::Unavailable;
-        outcome.reason = "the run selected the host only (--devices cpu) and does not use a CUDA "
-                         "device";
+        outcome.reason = hostOnlySelectionReason();
         return outcome;
     }
     // One line per actual probe, and exactly one for the process:
