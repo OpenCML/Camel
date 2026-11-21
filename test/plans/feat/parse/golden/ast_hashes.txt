@@ -532,7 +532,7 @@ c3a2f3b71c811861 ok stdlib/graph.cml
 48925d265e2eefb5 ok stdlib/opt.cml
 2a0283eedb1877a0 ok stdlib/optim.cml
 9b35942b550de4e6 ok stdlib/para.cml
-9299492cb90b0081 ok stdlib/perf.cml
+fdf2fb65cea9e1db ok stdlib/perf.cml
 9e85f97db6af3694 ok stdlib/prelude.cml
 afdf7917f9dabed7 ok stdlib/process.cml
 aa72db8f6e84d419 ok stdlib/pyplot.cml
@@ -4040,6 +4040,7 @@ f19ac2bc4649887b ok test/cases/opt/generic/arm_tail_gate_regions.cml
 191e0833092d902c ok test/cases/opt/generic/arms_laid_out_whole_tensor.cml
 557360936c212027 ok test/cases/opt/generic/broken_branch.cml
 9b1744f83b1f8706 ok test/cases/opt/generic/broken_graph.cml
+ebc94b9df781fae2 ok test/cases/opt/generic/concat_chain.cml
 21f1717a5007fd19 ok test/cases/opt/generic/control_chain.cml
 d9dd773d5b3f0732 ok test/cases/opt/generic/control_data_paths.cml
 c7eeec50ef7ca63c ok test/cases/opt/generic/control_unused_argument.cml
