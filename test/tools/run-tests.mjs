@@ -2323,7 +2323,11 @@ async function validateTest(test, result, context) {
             // A golden file is text with LF line ends, also in a checkout that has CRLF (git's
             // core.autocrlf); what the program printed is compared as it is.
             const expected = fs.readFileSync(goldenPath, 'utf8').replace(/\r\n/g, '\n')
-            const expectedText = applyNormalizers(expected, test.normalizers)
+            // The recorded side takes the same install root as the read side above (runOneTest):
+            // one rule for both halves, so `normalize_paths` cannot normalize one and not the other.
+            const expectedText = applyNormalizers(expected, test.normalizers, {
+                installRoot: camelInstall(context.options),
+            })
             const cmp = snapshotCompare(actualText, expectedText, test.snapshot_compare || 'text_exact')
             if (!cmp.ok) failures.push(cmp.message)
         }
@@ -2500,8 +2504,11 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     }
     // Every test child reads the standard library and the runtime library of the install this run
     // measures: `CAMEL_HOME` is set to that install's root here, whichever way the install was
-    // named.
-    env.CAMEL_HOME = camelInstall(logContext.options)
+    // named. The same root is what `normalize_paths` reads below: it is the directory whose
+    // `stdlib/...` a diagnostic prints, and it need not be inside this checkout (a worktree that
+    // measures another tree's install, `--camel <other>/out/latest/bin/camel`).
+    const installRoot = camelInstall(logContext.options)
+    env.CAMEL_HOME = installRoot
     // Windows commonly inherits `Path`; a second `PATH` key would hide the compiler paths.
     const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
     env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
@@ -2564,9 +2571,9 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     raw.output = `${raw.stdout}${raw.stderr}`
 
     const normalized = {
-        stdout: applyNormalizers(raw.stdout, test.normalizers),
-        stderr: applyNormalizers(raw.stderr, test.normalizers),
-        output: applyNormalizers(raw.output, test.normalizers),
+        stdout: applyNormalizers(raw.stdout, test.normalizers, { installRoot }),
+        stderr: applyNormalizers(raw.stderr, test.normalizers, { installRoot }),
+        output: applyNormalizers(raw.output, test.normalizers, { installRoot }),
     }
 
     const costFields = costRecord({ cpuMs: cpuReading.cpuMs, timeoutMs, cpuBudgetMs })
