@@ -99,6 +99,34 @@ struct PairCall {
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
 };
 
+/// One escaped cotangent: the product it is (`from`, the node whose rule handed it out) and the value
+/// it landed on. Both are named because the refusal has to say which node escaped -- a value the
+/// round only read is the only thing that may stand for it, and a reader that has the count alone
+/// cannot tell that from a port that merely stands nearby.
+struct Escape {
+    gc_node_ref_t cotangent = rt::kInvalidNodeRef;
+    gc_node_ref_t from      = rt::kInvalidNodeRef;
+};
+
+/// One arm's own state, borrowed: the region it walks, the stops it hands a cotangent out to, the
+/// accumulators it fills inside that region (one per node, and one per stop), the slots a residual
+/// goes back into, the escapes it caught, and whether it could place every cotangent it was handed.
+/// The containers live in the arm's walk (`runSeeded`), because their length is a fact about the
+/// region being read.
+struct ArmWalk {
+    uint32_t oldRegion                     = 0;
+    const std::vector<gc_node_ref_t> *stops = nullptr;
+    std::vector<gc_node_ref_t> *local       = nullptr;
+    std::vector<bool> *hasLocal             = nullptr;
+    std::vector<gc_node_ref_t> *portCotangents = nullptr;
+    std::unordered_map<uint32_t, gc_node_ref_t> *residualBack = nullptr;
+    std::unordered_map<gc_node_ref_t, Escape> *escapes        = nullptr;
+    bool *armsOk                                              = nullptr;
+    /// Whether a cotangent on a value outside the region may leave it through the capture channel:
+    /// on while a loop's body runs, off for a branch arm, which has nowhere to put a capture.
+    bool allowEscapes = false;
+};
+
 /// One value an arm's backward walk starts from: the value the arm answered and the cotangent it is
 /// handed. A branch's arm is the walk seeded with one of these and stopped at the branch's own
 /// region; a loop's body is the same walk with one per state it carries.
@@ -353,6 +381,37 @@ gc_node_ref_t armCotangentOf(
                                    const std::vector<gc_node_ref_t> &)> &runSeeded,
     uint32_t oldRegion, gc_node_ref_t armResult, gc_node_ref_t armCotangent,
     const std::vector<gc_node_ref_t> &stops);
+
+/// What one arm does with the cotangents it meets, one at a time:
+///
+/// - `addLocalCotangent`: file a cotangent on a value the arm **computes inside its region**: the
+///   first one is what the place holds, and the next is the sum of the two (the space's own
+///   addition, `sumOfCotangents`).
+/// - `deliverCotangent`: hand a cotangent to `target`, which is one of four things -- a value the
+///   round read that cannot hold a cotangent (zero, named), a value of the arm's own region (an
+///   accumulator), one of the stops (the arm's answer for that value), a residual the arm read (the
+///   slot it came from, by the slot's number), or -- while escapes are allowed -- a value from
+///   outside the region, whose cotangent leaves the loop through the capture channel. Anything else
+///   is a cotangent the arm cannot place, and that is said rather than dropped.
+void addLocalCotangent(WalkContext &ctx, ArmWalk &arm, gc_node_ref_t ref, gc_node_ref_t node);
+
+void deliverCotangent(
+    WalkContext &ctx, ArmWalk &arm, gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from);
+
+/// An `int64` constant as a node of the new graph: the round count and the range's steps are
+/// ordinary values of the graph this member builds, not numbers written into a payload.
+gc_node_ref_t intConstantNode(WalkContext &ctx, int64_t value);
+
+/// Whether `what` is one of the values a loop's states start from.
+bool isStateInitialValue(const std::vector<gc_node_ref_t> &stateInitials, gc_node_ref_t what);
+
+/// One component of a loop's answer, read at the type the region states for it: a component read is
+/// typed like the member it reads (a sum over an array is an array), and an index this region has no
+/// type for is a count that disagrees with the parts the region returns -- the walk's own defect --
+/// so it answers no node rather than a `float` read.
+gc_node_ref_t componentReadOf(
+    WalkContext &ctx, const std::vector<Type *> &componentTypes, gc_node_ref_t loopNode,
+    uint32_t index);
 
 /// Builds the transposed member of one function into state's group and answers whether it did.
 bool buildTransposeMember(

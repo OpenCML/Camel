@@ -769,4 +769,108 @@ gc_node_ref_t armCotangentOf(
     return back.empty() ? rt::kInvalidNodeRef : back.front();
 }
 
+// What one arm does with the cotangents it meets (see `transpose/walk.h` for the four places a
+// cotangent can land). These were the innermost lambdas of the arm's walk, which is why they are the
+// last of the walk's bookkeeping to leave it: what they read is the arm's own state (`ArmWalk`).
+
+void addLocalCotangent(WalkContext &ctx, ArmWalk &arm, gc_node_ref_t ref, gc_node_ref_t node) {
+    std::vector<gc_node_ref_t> &local = *arm.local;
+    std::vector<bool> &hasLocal       = *arm.hasLocal;
+    if (!hasLocal[ref]) {
+        local[ref]    = node;
+        hasLocal[ref] = true;
+        return;
+    }
+    local[ref] = sumOfCotangents(ctx, cotangentTypeOfValue(ctx, ref), local[ref], node);
+}
+
+void deliverCotangent(
+    WalkContext &ctx, ArmWalk &arm, gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from) {
+    // A value the round read that cannot hold a cotangent contributes zero: the round's answer does
+    // not depend on it in a differentiable way, so there is nothing to carry out of the loop and no
+    // accumulator to grow. Dropped here rather than at the escape collection, which would otherwise
+    // build a float sum for an integer.
+    if (!holdsACotangent(ctx, target)) {
+        noteZeroContribution(ctx, target, from);
+        return;
+    }
+    if (ctx.function->nodeRegion(target) == arm.oldRegion) {
+        addLocalCotangent(ctx, arm, target, node);
+        return;
+    }
+    // The space every accumulation below fills: a state's cotangent for a stop, the member's for a
+    // component read, the escaped value's for an escape. One answer, asked once -- the place being
+    // filled is a node this build made, so it cannot be asked.
+    Type *const ctSpace = cotangentTypeOfValue(ctx, target);
+    const std::vector<gc_node_ref_t> &stops = *arm.stops;
+    std::vector<gc_node_ref_t> &portCotangents = *arm.portCotangents;
+    for (size_t i = 0; i < stops.size(); ++i) {
+        if (stops[i] != target) {
+            continue;
+        }
+        portCotangents[i] = sumOfCotangents(ctx, ctSpace, portCotangents[i], node);
+        return;
+    }
+    // A residual the arm read: the cotangent goes back into the slot it came from, named by the
+    // slot's number. Nothing inside the arm stands for it, so dropping it here would be a claim
+    // about the value rather than a rule about the cotangent.
+    if (const camel::runtime::GCNode *targetNode = ctx.function->node(target);
+        targetNode != nullptr && targetNode->kind == rt::GCNodeKind::Accs) {
+        const auto readFrom = ctx.function->normInputsOf(target);
+        const auto *body    = ctx.function->nodeBodyAs<rt::GCAccsBody>(target);
+        const bool onAResidualPort =
+            !readFrom.empty() && std::any_of(
+                                     stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
+                                         return stopRef == readFrom.front();
+                                     });
+        if (body != nullptr && onAResidualPort) {
+            auto &slot = (*arm.residualBack)[body->value];
+            slot       = sumOfCotangents(ctx, ctSpace, slot, node);
+            ctx.os << "TRANSPOSE function=" << ctx.function->name()
+                   << " residual-return slot=" << body->value << " region=" << arm.oldRegion
+                   << '\n';
+            return;
+        }
+    }
+    if (arm.allowEscapes) {
+        // The round read this value from outside: its cotangent leaves the loop through the capture
+        // channel, accumulated over the rounds.
+        auto &slot = (*arm.escapes)[target];
+        if (slot.cotangent == rt::kInvalidNodeRef) {
+            slot = Escape{node, from};
+        } else {
+            slot.cotangent = sumOfCotangents(ctx, ctSpace, slot.cotangent, node);
+        }
+        return;
+    }
+    // Named, not silent: a cotangent the arm cannot place -- a value from outside the region that is
+    // neither a stop nor a residual the arm read -- is the one failure this walk has no rule for, and
+    // the next reader needs to know which value it landed on.
+    ctx.os << "TRANSPOSE function=" << ctx.function->name() << " arm-unplaced region="
+           << arm.oldRegion << " target=" << target << " from=" << from << '\n';
+    *arm.armsOk = false;
+}
+
+gc_node_ref_t intConstantNode(WalkContext &ctx, int64_t value) {
+    return ctx.draft->materializeStaticValue(
+        camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(value), Type::Int64(),
+        rt::kGCNodeFlagConstant);
+}
+
+bool isStateInitialValue(const std::vector<gc_node_ref_t> &stateInitials, gc_node_ref_t what) {
+    return std::find(stateInitials.begin(), stateInitials.end(), what) != stateInitials.end();
+}
+
+gc_node_ref_t componentReadOf(
+    WalkContext &ctx, const std::vector<Type *> &componentTypes, gc_node_ref_t loopNode,
+    uint32_t index) {
+    Type *const componentType = index < componentTypes.size() ? componentTypes[index] : nullptr;
+    if (componentType == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    const gc_node_ref_t part = ctx.draft->addAccsNode(componentType, index);
+    ctx.draft->setNormInputs(part, std::span<const gc_node_ref_t>(&loopNode, 1));
+    return part;
+}
+
 } // namespace camel::transforms

@@ -554,16 +554,9 @@ bool buildTransposeMember(
         // A round's cotangent can land on a value the round only read: that cotangent has to
         // leave the loop, and this is where it is caught. `allowEscapes` is on while a LOOP's
         // body runs -- a branch arm has nowhere to put a capture, so there an outside target is
-        // still a refusal.
+        // still a refusal. One escaped cotangent is `Escape` (`transpose/walk.h`): the product it is
+        // and the value it landed on, both named, because the refusal has to say which node escaped.
         bool allowEscapes = false;
-        // One escaped cotangent: the product it is (`from`, the node whose rule handed it out) and
-        // the value it landed on. Both are named because the refusal below has to say which node
-        // escaped -- a value the round only read is the only thing that may stand for it, and a
-        // reader that has the count alone cannot tell that from a port that merely stands nearby.
-        struct Escape {
-            gc_node_ref_t cotangent = rt::kInvalidNodeRef;
-            gc_node_ref_t from      = rt::kInvalidNodeRef;
-        };
         std::unordered_map<gc_node_ref_t, Escape> escapes;
         // An aggregate value's cotangent, member by member. A member read puts its cotangent in
         // that member's place and leaves the rest empty; the value that holds the aggregate -- a
@@ -1034,82 +1027,26 @@ bool buildTransposeMember(
             std::vector<gc_node_ref_t> local(nodeCount, rt::kInvalidNodeRef);
             std::vector<bool> hasLocal(nodeCount, false);
             std::vector<gc_node_ref_t> portCotangents(stops.size(), rt::kInvalidNodeRef);
+            // What the arm does with the cotangents it meets, and the arm's own state: one
+            // accumulator per value inside the region, one per stop, the slots a residual goes back
+            // into, and the escapes it caught. The rules are on `ArmWalk`, `addLocalCotangent` and
+            // `deliverCotangent` in `transpose/walk.h`, applied in `transpose/walkmachinery.cpp`;
+            // what stays here is the spelling the arm's walk reads.
+            ArmWalk arm;
+            arm.oldRegion      = oldRegion;
+            arm.stops          = &stops;
+            arm.local          = &local;
+            arm.hasLocal       = &hasLocal;
+            arm.portCotangents = &portCotangents;
+            arm.residualBack   = &residualBack;
+            arm.escapes        = &escapes;
+            arm.armsOk         = &armsOk;
+            arm.allowEscapes   = allowEscapes;
             const auto addLocal = [&](gc_node_ref_t ref, gc_node_ref_t node) {
-                if (!hasLocal[ref]) {
-                    local[ref]    = node;
-                    hasLocal[ref] = true;
-                    return;
-                }
-                local[ref] = accumulate(cotangentTypeOf(ref), local[ref], node);
+                addLocalCotangent(walkCtx, arm, ref, node);
             };
-            // The arm's chain ends at the parameter, which lives outside the arm's region: the
-            // cotangent of that parameter for this arm is what the chain hands it. Anything else
-            // from outside the region is a residual this step does not have.
             const auto deliver = [&](gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from) {
-                // A value the round read that cannot hold a cotangent contributes zero: the round's
-                // answer does not depend on it in a differentiable way, so there is nothing to
-                // carry out of the loop and no accumulator to grow. Dropped here rather than at the
-                // escape collection, which would otherwise build a float sum for an integer.
-                if (!hasTangentSpace(target)) {
-                    noteZero(target, from);
-                    return;
-                }
-                if (function->nodeRegion(target) == oldRegion) {
-                    addLocal(target, node);
-                    return;
-                }
-                // The space every accumulation below fills: a state's cotangent for a stop, the
-                // member's for a component read, the escaped value's for an escape. One answer,
-                // asked once -- the place being filled is a node this build made, so it cannot be
-                // asked here.
-                Type *const ctSpace = cotangentTypeOf(target);
-                for (size_t i = 0; i < stops.size(); ++i) {
-                    if (stops[i] != target) {
-                        continue;
-                    }
-                    portCotangents[i] = accumulate(ctSpace, portCotangents[i], node);
-                    return;
-                }
-                // A residual the arm read: the cotangent goes back into the slot it came from,
-                // named by the slot's number. Nothing inside the arm stands for it, so dropping it
-                // here would be a claim about the value rather than a rule about the cotangent.
-                if (const camel::runtime::GCNode *targetNode = function->node(target);
-                    targetNode != nullptr && targetNode->kind == rt::GCNodeKind::Accs) {
-                    const auto readFrom = function->normInputsOf(target);
-                    const auto *body    = function->nodeBodyAs<rt::GCAccsBody>(target);
-                    const bool onAResidualPort =
-                        !readFrom.empty() &&
-                        std::any_of(stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
-                            return stopRef == readFrom.front();
-                        });
-                    if (body != nullptr && onAResidualPort) {
-                        auto &slot = residualBack[body->value];
-                        slot       = accumulate(ctSpace, slot, node);
-                        os << "TRANSPOSE function=" << function->name()
-                           << " residual-return slot=" << body->value << " region=" << oldRegion
-                           << '\n';
-                        return;
-                    }
-                }
-                if (allowEscapes) {
-                    // The round read this value from outside: its cotangent leaves the loop
-                    // through the capture channel, accumulated over the rounds.
-                    auto &slot = escapes[target];
-                    if (slot.cotangent == rt::kInvalidNodeRef) {
-                        slot = Escape{node, from};
-                    } else {
-                        slot.cotangent = accumulate(ctSpace, slot.cotangent, node);
-                    }
-                    return;
-                }
-                // Named, not silent: a cotangent the arm cannot place -- a value from outside the
-                // region that is neither a stop nor a residual the arm read -- is the one failure
-                // this walk has no rule for, and the next reader needs to know which value it
-                // landed on.
-                os << "TRANSPOSE function=" << function->name()
-                   << " arm-unplaced region=" << oldRegion << " target=" << target
-                   << " from=" << from << '\n';
-                armsOk = false;
+                deliverCotangent(walkCtx, arm, target, node, from);
             };
             for (const ArmSeed &seed : seeds) {
                 if (seed.at != rt::kInvalidNodeRef) {
@@ -2713,10 +2650,7 @@ bool buildTransposeMember(
                     intervalForm           = function->loopIterableFormOf(ref) ==
                                              camel::core::LoopIterableForm::Interval;
                     const auto intConstant = [&](int64_t value) {
-                        return draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(value),
-                            Type::Int64(),
-                            rt::kGCNodeFlagConstant);
+                        return intConstantNode(walkCtx, value);
                     };
                     // How many rounds the loop runs: the sequence's length, or `b - a` for an
                     // interval. An empty sequence makes an empty range, and the loop then runs no
@@ -2912,8 +2846,7 @@ bool buildTransposeMember(
                         at < oldNorm.size() ? oldNorm[at] : rt::kInvalidNodeRef);
                 }
                 const auto isStateInitial = [&](gc_node_ref_t what) {
-                    return std::find(stateInitials.begin(), stateInitials.end(), what) !=
-                           stateInitials.end();
+                    return isStateInitialValue(stateInitials, what);
                 };
                 // One accumulator per escaped value, beside one cotangent per state: the loop stays
                 // one loop -- not one loop per escape -- and grows a state for each value that
@@ -3121,19 +3054,11 @@ bool buildTransposeMember(
                     // cotangents of it -- that is `answer=summed`. Different values get different
                     // slots -- `answer=per-target` -- and nothing is added across values.
                     const auto component = [&](uint32_t index) {
-                        // The component read is typed like the member it reads: a sum over an array
-                        // is an array, and reading it as a float is the same read `add_d` made. A
-                        // component index this region has no type for is a count that disagrees
-                        // with the parts the region returns -- the walk's own defect -- so it
-                        // answers no node rather than a `float` read.
-                        Type *const componentType =
-                            index < componentTypes.size() ? componentTypes[index] : nullptr;
-                        if (componentType == nullptr) {
-                            return rt::kInvalidNodeRef;
-                        }
-                        const gc_node_ref_t part = draft.addAccsNode(componentType, index);
-                        draft.setNormInputs(part, std::span<const gc_node_ref_t>(&loopNode, 1));
-                        return part;
+                        // The component read is typed like the member it reads (a sum over an array
+                        // is an array, and reading it as a float is the same read `add_d` made).
+                        // The rule, the type it reads, and the defect an index with no type is, are
+                        // on `componentReadOf` in `transpose/walk.h`.
+                        return componentReadOf(walkCtx, componentTypes, loopNode, index);
                     };
                     for (size_t i = 0; i < stateCount; ++i) {
                         if (stateInitials[i] != rt::kInvalidNodeRef) {
