@@ -218,6 +218,11 @@
             "plans": ["feat/trans/same_graph.plan.toml"]
         },
         {
+            "comment": "The second-pass CPU reading (`test/tools/opt-cost/second_pass.mjs`) and the plan that owns it. Both of the plan's cases live in the tool's own directory and nowhere under test/cases, so the general test/tools rule below selects the runner plan and not this one: measured 2026-11-22, `test/plans/feat/opt/opt_second_pass.plan.toml` was selected by no case path at all and the runner self-test reported it as a plan `--changed` can never run. The directory holds that tool and nothing else, so the rule names the directory and the plan runs in full: its two entries are 120 s each and both read the same helper, so an edit to part of it is an edit to the reading. This rule comes before the general test/tools rule, which it replaces for this path.",
+            "paths": ["test/tools/opt-cost/"],
+            "plans": ["feat/opt/opt_second_pass.plan.toml"]
+        },
+        {
             "comment": "The other test harnesses (cppexec, parsecheck, jitcov, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
             "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
