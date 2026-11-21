@@ -55,12 +55,18 @@ add_camel_module(
 # (neg, abs, sqrt, rsqrt, relu) contain no multiply-add to contract.
 set_source_files_properties(kernels/unary_generic.cpp
   PROPERTIES COMPILE_OPTIONS "-ffp-contract=on")
-# The fused GELU gradient follows the same rule: its tangent is the unary unit's tangent, so the
-# units carry the unary units' contraction opt-in, and the polynomial and the slope around it opt
-# back out with a pragma in gradient_loops.inl (their products are the operator chain's, which ran
-# with the project's -ffp-contract=off).
-set_source_files_properties(kernels/gradient_generic.cpp
-  PROPERTIES COMPILE_OPTIONS "-ffp-contract=on")
+# The fused GELU gradient's AVX2 unit follows the same rule: its tangent is the unary unit's
+# tangent, so that unit carries the unary units' contraction opt-in, and the polynomial and the
+# slope around it opt back out with a pragma in gradient_loops.inl (their products are the operator
+# chain's, which ran with the project's -ffp-contract=off).
+#
+# The portable unit (kernels/gradient_generic.cpp) takes no opt-in of its own. It is the one
+# `--tensor-isa generic` selects, so its bits have to be the same on every machine (design
+# principles 11.5), and contraction is the one thing that would make them depend on the target: the
+# arm64 baseline has an FMA instruction and the x86-64 baseline does not, so a portable unit built
+# with the opt-in gave the vector unit's digests on arm64 and its own on x86-64. It is compiled with
+# the project's -ffp-contract=off like every other unit, and nothing about it names an instruction
+# set.
 
 # x86-64: add AVX2+FMA and AVX-512F GEMM and unary units, selected at runtime after a CPU check.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")

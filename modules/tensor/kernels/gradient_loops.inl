@@ -16,14 +16,14 @@
  *
  *   - the polynomial and the slope are rounded as written, in both units. The operator chain wrote
  *     them with the project's -ffp-contract=off, so the pragma below keeps them uncontracted
- *     inside a unit that is compiled with contraction on. Nothing here is a sum: there is no
- *     grouping to change and no chain to re-associate.
- *   - tanh is the same `vmath::tanh` the unary kernel inlines, contracted the same way: the unary
- *     units are the project's one place that opts into contraction (modules/tensor/
- *     CMakeLists.txt), and these units carry that setting for the tangent alone. The tangent's
- *     rounding is therefore the unary units' -- identical on the same build and the same CPU, and
- *     inside the function's declared error bound across processors with and without FMA, which is
- *     what design principles 7.1 promises of a transcendental.
+ *     inside the AVX2 unit, which is compiled with contraction on. Nothing here is a sum: there is
+ *     no grouping to change and no chain to re-associate.
+ *   - tanh is the same `vmath::tanh` the unary kernel inlines. The AVX2 unit carries the unary
+ *     units' contraction opt-in (modules/tensor/CMakeLists.txt) for the tangent alone, so its
+ *     rounding is the unary units' -- identical on the same build and the same CPU, and inside the
+ *     function's declared error bound across processors with and without FMA, which is what design
+ *     principles 7.1 promises of a transcendental. The portable unit takes no opt-in: its tangent
+ *     is uncontracted on every target, so its bits do not move with the processor.
  *
  * An element is independent of its neighbours, so which unit runs, and how the range is split
  * across threads, changes neither.
@@ -35,8 +35,9 @@
 
 // From here on, products are rounded before they meet an add: the polynomial and the slope are
 // the operator chain's arithmetic, and that chain ran with the project's -ffp-contract=off.
-// `vmath::tanh` above is parsed under the unit's own setting (contraction on), which is the
-// setting the unary unit that computed it before is compiled with.
+// `vmath::tanh` above is parsed under the unit's own setting: contraction on in the AVX2 unit,
+// which is what the unary kernel that computed it before is compiled with, and the project's
+// -ffp-contract=off in the portable unit, whose bits must not depend on the target's FMA.
 #pragma clang fp contract(off)
 
 namespace camel::tensor::kernels::detail {
