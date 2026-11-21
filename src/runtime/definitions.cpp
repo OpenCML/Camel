@@ -92,8 +92,8 @@ std::optional<core::error::DiagLabel> firstErrorLocation(const UserDefinedModule
         return std::nullopt;
     }
     core::error::Diagnostic first = *errors.front();
-    if (module.parser()) {
-        first.fetchRange(core::error::RangeConverter(module.parser()->tokenPositions()));
+    if (const auto *positions = module.tokenPositions()) {
+        first.fetchRange(core::error::RangeConverter(*positions));
     }
     const auto *range = std::get_if<core::error::CharRange>(&first.range);
     if (range == nullptr) {

@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/compile/module_source.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -451,8 +452,8 @@ int runCommand(int argc, char *argv[]) {
         }
 
         if (selectedCommand == Command::Inspect) {
-            if (Inspect::dumpGCT && mainModule->gct()) {
-                mainModule->gct()->print(os);
+            if (Inspect::dumpGCT && camel::compile::treeOf(*mainModule)) {
+                camel::compile::treeOf(*mainModule)->print(os);
             }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);
