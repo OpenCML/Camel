@@ -352,6 +352,25 @@ export func layer_norm(x: f32[...], gamma: f32[...], beta: f32[...], eps?: numbe
 #op('tensor:layer_norm')
 export func layer_norm(x: float[...], gamma: float[...], beta: float[...], eps?: number): float[...]
 
+/// The gradient of the `f32` layer normalization with respect to one of its three operands, chosen
+/// by `which` (0 the input, 1 gamma, 2 beta), from the input x, `gamma` and the incoming gradient
+/// dy of the normalization's result. `eps` is the normalization's own and is 1e-5 by default, the
+/// same default the forward call has. The result has the shape of the operand `which` names.
+/// @pure
+/// @fails fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input
+/// @fails fault `RuntimeError` when `which` is not 0, 1 or 2
+/// @example layer_norm_grad(x, gamma, dy, 0)
+export func layer_norm_grad(x: f32[...], gamma: f32[...], dy: f32[...], which: int, eps?: number): f32[...]
+
+/// The same gradient of `f64` operands, in `f64`: x, gamma and dy are `f64` and the result is one
+/// too.
+/// @pure
+/// @fails fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input
+/// @fails fault `RuntimeError` when `which` is not 0, 1 or 2
+/// @example layer_norm_grad(x, gamma, dy, 0)
+#op('tensor:layer_norm_grad')
+export func layer_norm_grad(x: float[...], gamma: float[...], dy: float[...], which: int, eps?: number): float[...]
+
 // ---- linear algebra ----
 
 /// The matrix product of lhs and rhs: per output element acc = +0, then acc = fma(a[i][k],

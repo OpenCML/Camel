@@ -112,7 +112,7 @@ enum class GCNodeKind : uint8_t {
     Func = 10,
     Oper = 11,
     // 12 was the SYNC node, deleted: a statement's place in its `sync` block is a sync edge, and
-    // the node it used to need is not part of the model (docs/design/effects/edges.cn.md 5.3).
+    // the node it would need is not part of the model (docs/design/effects/edges.cn.md 5.3).
     Gate = 13,
     Dref = 14, // build-time only, see above
     // A loop (design principles 3.10; docs/design/graph-model 3.5, the LOOP card):
@@ -290,9 +290,9 @@ uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
 /// lifetime cannot be judged here, because a member is a frame slot the payload names
 /// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary
 /// inputs
-/// -- an aggregate with two members has one input. The four guards that used to live here (a root,
-/// a member with readers, a reader of the last member, droppable) all judged "member = input",
-/// which that reading disproves; keeping them would let the next reader believe this was covered.
+/// -- an aggregate with two members has one input. Guards on a root,
+/// a member with readers, a reader of the last member, or droppable would all judge "member = input",
+/// which that reading disproves; they would let the next reader believe this was covered.
 enum class AggregateTailVerdict : uint8_t {
     NotAnAggregate,  // not an aggregate, or too few members to have a last one
     MappingMismatch, // the member count and the input count disagree: member i is not input i
@@ -797,7 +797,7 @@ class GCGraph : public camel::core::rtdata::Object {
     /// region's **exit** (`region.result`; a loop's condition region has one too).
     ///
     /// The owner's read is the rule's one exception and it is written on the port, not on the
-    /// reader's identity or on the exit's node kind (author ruling 2026-11-03 08:10): a `LOOP`
+    /// reader's identity or on the exit's node kind: a `LOOP`
     /// consumes its body's exit round by round, and a body written `do s` ends in the state port
     /// while one written `do s + 1` ends in an Oper -- the same thing to the loop, so a rule that
     /// told the two apart would be a special case. Any *other* port of the region is refused to the
@@ -1538,12 +1538,11 @@ class ProgramHold {
 ///
 /// This is **the** reading of a gate, stated once for every reader of a graph: a GATE orders the
 /// value it reads after other nodes -- an inlined call gates its arguments after what the call
-/// waited for -- and changes nothing else (design principles 3.1, author ruling 0780a83bd: a gate's
+/// waited for -- and changes nothing else (design principles 3.1: a gate's
 /// trailing input is a wait rather than a use). The value is the **first** ordinary input, and
 /// everything after it in that list is a wait. Resolving a forwarded value reference, emitting the
-/// draft payload and asking a node for its result type all read `front()`; the walkers that ask
-/// "what does this gate pass on" used to answer with `back()` -- the last wait -- and each carried
-/// its own copy of the loop (daily review 2026-11-18, item 5).
+/// draft payload and asking a node for its result type all read `front()`; `back()` is the last
+/// wait and answers nothing about the value a gate passes on.
 ///
 /// It is a template over the reader rather than a function of `GCGraph` because a draft hands out
 /// its own reader while it is being written, and the compile front end reads a graph through

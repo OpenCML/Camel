@@ -107,15 +107,11 @@ endfunction()
 # libcamel 工具的通用编译选项与 include
 function(target_libcamel_tool_options target)
   target_compile_features(${target} PRIVATE cxx_std_23)
-  target_compile_options(${target} PRIVATE
-    -Wall -Wextra -Wpedantic
-    -Wno-unused-parameter
-    -Wno-c99-extensions
-    -Wno-gnu-anonymous-struct
-    -Wno-nested-anon-types
-    -Wno-unused-private-field
-    -Wno-language-extension-token
-  )
+  # The warning set is not written here: cmake/Warnings.cmake holds it, and a tool has exactly the
+  # list it carries (`camel_warnings_tool` -- the set the core library gets, plus the one extension
+  # diagnostic only these sources raise). The CPython extension is built by camel_add_tool_objects
+  # above and carries the same list.
+  target_link_libraries(${target} PRIVATE camel_warnings_tool)
   target_include_directories(${target} PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src

@@ -9,11 +9,10 @@
  *   specType          T<arguments>
  *   primaryType       name, {struct}, (T), (tuple), function type, typeof e
  *
- * A type never continues with an operator. The type operators the grammar used to reserve here
- * (`A & B`, `A \ B`, `A + B`, `A ^ B`) are not in the language, so writing one where a type is
+ * A type never continues with an operator. The type operators (`A & B`, `A \ B`, `A + B`,
+ * `A ^ B`) are not in the language, so writing one where a type is
  * expected is an ordinary syntax error, and the operand of a cast ends at the type: `x as T + U`
- * is a cast to `T` and then the expression's `+ U`. While the operators were reserved the same
- * line read that the other way, keeping the operator for the type when a type could follow it.
+ * is a cast to `T` and then the expression's `+ U`.
  */
 
 #include "parser_impl.h"
@@ -66,9 +65,9 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
 /// SemanticDiag::StreamInContainer). Written without a stream mark nothing changes: `T?[3]` is
 /// still a syntax error, and only the mark that was just read reopens the bracket.
 ///
-/// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
-/// language, so the form is an ordinary syntax error. The type
-/// operators `A & B`, `A \ B`, `A + B` and `A ^ B` left the grammar the same way.
+/// `A of B` is not read here: `of` is not a keyword of the
+/// language, so the form is an ordinary syntax error, as are the type
+/// operators `A & B`, `A \ B`, `A + B` and `A ^ B`.
 void ParserImpl::parseType() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -256,7 +255,7 @@ void ParserImpl::parseMatchTypeType() {
 
 /// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
 /// A case of a type function's `match type` takes the guard a value-level `match` case takes
-/// (design principles 5.5, ruling of 2026-11-14): `case _ when is_numeric::<T>() => int[0]` is
+/// (design principles 5.5): `case _ when is_numeric::<T>() => int[0]` is
 /// taken only where the predicate holds, and a case whose guard does not hold falls through to
 /// the one written after it.
 void ParserImpl::parseTypeArm() {

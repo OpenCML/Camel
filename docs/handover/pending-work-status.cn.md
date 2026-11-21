@@ -69,3 +69,41 @@
 `done` 的每一条都附了证据，`unverified` 的每一条都写了缺什么：编号小节里 `unverified` 只有第 20 节一条（缺的是判据的树内载体与那次 46 红的可复算记录），表后三个不编号小节里另有 2 条，各自的缺处写在那一行里。
 
 这张表不改 `pending-work.cn.md`：那是决策者的账，本表只是它的状态列。`docs/handover/` 下没有列这些文件的 README 索引（`README.cn.md` 是接手说明，不是文件清单），所以没有索引可更新；`questions/` 的索引是另一个生成器的范围。
+
+## 附：一次有记录的例外（合并主题只写了动作，没写内容）
+
+**`743186814` 的合并主题只写了动作（`merge origin/develop into lane-nn-restore`），正文空 —— 合进来的是 `ba4852022`（`ledger: three residents recorded and one spelling taken out, so never_rises is green again`）+ 它的合并 `d69da02be`；`lane-nn-restore` 当时漏写，按 `AGENTS.md`「合并提交必须概述被合进来的内容」应写那句。已推的 `develop` 不重写，所以这一笔算「有记录的例外」，不算静默违规。**
+
+## 附：两条被取代的分支，以及凭什么说它们被取代
+
+两条分支都量过、判定「内容被取代」，于是从本地删掉。删的顺序是**先打 `archive/*` 标签并推成功，再删分支**——`git branch -d` 会因 `ahead>0` 被拒，所以只能用 `-D`，而 `-D` 唯一的前提是标签已经在远端。理由照抄合并车道量出来的那两句，没重查。**一条删成了、一条被拒，结果写在下面，删不掉的那条没有绕过。**
+
+**① `lane-win-s1-6`（ahead 2，behind 99，tip `bfd086d6b`）**
+
+净效果只有删 `test/plans/feat/compile/_s16_probe.plan.toml`；`e7e006d1e` 加的 `_s16_determinism` 又被 `bfd086d6b` 自己删掉
+⇒ **develop 上该文件已由 `1a0b8005c` 删掉**；`git merge-tree` 的结果树对 develop 的 diff **为空**；`git grep -rn '_s16_probe\|s16_probe' -- test docs scripts` **exit 1**
+⇒ **⇒ 所以没有内容可取。**
+
+**② `lane-win-s1-6-diag`（ahead 1，behind 87，tip `ea4b422e3`）**
+
+`ea4b422e3` 的内容**已在 `48156fcaa`**；`git diff origin/develop lane-win-s1-6-diag -- src/compile/gir/captures.cpp` 只剩 develop 多出的 `enclosesOrigin()`，`builder.h` 差异全是 develop 侧更新
+⇒ **`git cherry` 报 `+` 只因补丁带旧上下文，不是内容缺失**
+⇒ **⇒ 所以内容已在。**
+
+四条 sha 的关系是可以读出来的，不是判断：`1a0b8005c`（删 `_s16_probe.plan.toml`）与 `48156fcaa`（已带着 `ea4b422e3` 的内容）都在 `origin/develop` 上（`git merge-base --is-ancestor` → 0）；`e7e006d1e`、`bfd086d6b`、`ea4b422e3` 都不在（→ 1），只存在于这两条分支里——所以下面两个标签是它们唯一的落点。
+
+删之前先打标签归档（**标签推成功之后才许 `-D`**）：
+
+```powershell
+git -C D:\Projects\Camel tag -a archive/lane-win-s1-6 -m "superseded by 1a0b8005c: the probe plan it removes is already gone" lane-win-s1-6
+git -C D:\Projects\Camel tag -a archive/lane-win-s1-6-diag -m "content already in 48156fcaa" lane-win-s1-6-diag
+git -C D:\Projects\Camel push origin archive/lane-win-s1-6 archive/lane-win-s1-6-diag
+git -C D:\Projects\Camel branch -D lane-win-s1-6 lane-win-s1-6-diag
+```
+
+**这一轮的结果（`origin/develop` = `2cb6ab8`）**：两个标签都推上去了，远端读数是 `refs/tags/archive/lane-win-s1-6` = `7854d3599`（peeled `bfd086d6b`）、`refs/tags/archive/lane-win-s1-6-diag` = `76da6c35f`（peeled `ea4b422e3`）。于是：
+
+- `lane-win-s1-6-diag` 删掉了，`git branch -D` 回 `Deleted branch lane-win-s1-6-diag (was ea4b422e3).`
+- `lane-win-s1-6` **被拒**，原样回 `error: cannot delete branch 'lane-win-s1-6' used by worktree at 'D:/Projects/Camel-wt/wins1'`。它没被绕过：工作树 `D:\Projects\Camel-wt\wins1` 还停在 `bfd086d6b`，而按 SKILL §5.7，删树要先过三步——`ahead == 0`、`status --porcelain` 为空、**该车道当前不在 `list_agents` 里 `running`**——第三步子代理看不见（只看得见自己的子代理），所以「先删树再删分支」这一半留给协调者点名。标签已把 `bfd086d6b` 钉在远端，删树时不会有「只此一份」的风险。
+
+**同一刻的台账**：删之前 `U=9 maxBehind=99`，删之后 `U=8 maxBehind=99`。所以「删掉这两条就能把 `maxBehind` 从 99 压到 23」这个判据**不成立**，两处都有读数：`lane-win-s1-6`（behind 99）因为工作树占用还在账上；即使它删掉，红线里的 `lane-unknown-resource`（ahead 7）本身就是 behind 97。要压到 23 只能处理 `lane-unknown-resource`，而它这一轮明确不许删。

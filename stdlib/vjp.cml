@@ -27,18 +27,16 @@
  * value, and the linear one. `lin` is the backward graph with the residuals already in its closure,
  * so its parameters are the tangents and it reads nothing else. `transpose(lin)` is therefore the
  * shape that takes the cotangent and answers the cotangents -- `(ct) => (cotangents)`, one per
- * tangent -- which is the shape `transpose` has for every function since the author's ruling of
- * 2026-11-02 11:30: every parameter of the transposed function is a linear input, and a value its
+ * tangent -- which is the shape `transpose` has for every function: every parameter of the transposed function is a linear input, and a value its
  * body needs is captured by the function that is transposed, not passed to it.
  *
  * The `with` list is not one of those parameters: it is a residual like everything else the second
- * half reads (author's ruling of 2026-11-03 15:15: 带 `with` 的函数，pullback 带不带 `with` 列表——
- * 不带，闭包捕获). `split` captures the `with` value the backward half reads in `lin`'s closure, so
+ * half reads. `split` captures the `with` value the backward half reads in `lin`'s closure, so
  * `lin` is a function of the tangents alone and `transpose(lin)` is the declared `Pullback<F>`
  * `(ct) => (...Tangent<ParamsOf<F>>)` -- `stdlib/types.cml`. The `with` values are written once, in
  * the call that supplies them to `vjp`: `let (y, pb) = vjp(scale)<2.0>(3.0); pb(1.0)`.
  *
- * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
+ * The surface is JAX's: `vjp(f)(x)` is the pair `(y, pullback)` and
  * `pullback(ct)` is the cotangent of `f`'s parameters, so `grad` is that reading at the seed 1, its
  * first cotangent taken -- `grad(f)<w>(x)` for a function whose weight is the `with` value `w`.
  *
@@ -55,7 +53,7 @@
  * step), so `vjp` is declared once per arity rather than once for every `F` -- the same rule
  * `tensor` follows for a name that is declared once per type it accepts. The generic form replaces
  * these declarations, not their bodies, and the names stay in any case: a program says `grad`, and
- * which transforms answer it is the library's business (author, 2026-10-31).
+ * which transforms answer it is the library's business.
  */
 
 import rulesets.jvp
@@ -63,32 +61,32 @@ import rulesets.transpose
 import { is_function, GradientOf, Vjp } from types
 import { first_with_as_param, jvp, split, transpose } from transforms
 
-/// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+/// The reverse transform, in JAX's order: `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
 /// member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
-/// two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+/// two have the shape `(ct) => (cotangents)`, so nothing is
 /// wrapped around it.
 ///
 /// The pullback answers a tuple in every case, one member per parameter, so a function of one
 /// parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
 /// number a gradient is comes out of it by position: the first cotangent of the pullback read at
-/// `1.0` (author's ruling of 2026-11-01 14:30: one rule for every arity, no exception for one
-/// parameter, no type function that takes an element out of a one-long tuple).
+/// `1.0` (one rule for every arity, no exception for one parameter, no type function that takes
+/// an element out of a one-long tuple).
 /// The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
 /// `(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
-/// parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
-/// rule for every arity, no exception for one parameter, no type function that takes an element out of
-/// a one-long tuple).
+/// parameter, so a function of one parameter has a one-long tuple (one rule for every
+/// arity, no exception for one parameter, no type function that takes an element out of a
+/// one-long tuple).
 ///
 /// One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
 /// pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
 /// instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
-/// stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
+/// stands in. The packs are values in the
 /// body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
 /// `split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
 /// takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
 /// list, because the `with` value the backward half reads is a residual the cut captured in its
-/// closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
+/// closure (`Pullback<F>` in stdlib/types.cml is
 /// `(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
 /// lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
 /// writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
@@ -98,15 +96,15 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 /// program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 /// derivative there, one member per parameter.
 ///
-/// **Where the cut happens** (author, 2026-11-18: "`grad` hands back the differentiated graph, not a
-/// graph that transforms itself when it runs"). `split(jvp(f))` is written *here*, in the body of
+/// **Where the cut happens** (`grad` hands back the differentiated graph, not a graph that
+/// transforms itself when it runs). `split(jvp(f))` is written *here*, in the body of
 /// `vjp`, and not inside the lambda it answers: the cut is made once, when `vjp(f)` is evaluated,
 /// and every call of the reading calls the graph that cut handed back instead of cutting the lifted
-/// function again. Before this the body of the lambda opened with `split(jvp(f))<...ws>(...xs)`, so a
-/// training loop redid the whole lift and the whole cut on every step -- the cost the author named
-/// on 11-17, and the reason an outer transform met a derivative that was not a graph yet.
+/// function again. Cutting inside the lambda, as `split(jvp(f))<...ws>(...xs)`, would redo the whole lift and
+/// the whole cut on every step of a training loop, and an outer transform would meet a derivative
+/// that was not a graph yet.
 ///
-/// **Where the transposition happens** (author, 2026-11-19 15:40): the same reading, one step on.
+/// **Where the transposition happens**: the same reading, one step on.
 /// `transpose(lin)` is still written inside the lambda, because `lin` does not exist until the
 /// forward half has run -- but the *walk* is a function of the graph `lin` is of, and a call keeps
 /// asking about the same graph. So the module keeps the member it built for a graph version and a
@@ -122,12 +120,11 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 /// The design's next step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
 /// (`fwd: x => (y, residuals)`, `lin: (residuals, tangents) => tangent`), which needs the residual
 /// *list* in a type: it is a property of the body (`residualsOf`), not of the signature, and no
-/// declaration can write it -- the `ResidualsOf<F>` / `_`-position hole that used to try was removed
-/// for that reason. Measured 2026-11-18 on this tree: the operator resolver sees types only, so it
+/// declaration can write it -- the `ResidualsOf<F>` / `_`-position hole is not an option
+/// for that reason. The operator resolver sees types only, so it
 /// gives `lin` an empty residual list while the graph has as many as the body reads, and a call site
-/// typed by the resolver hands the callee the wrong number of values. That ordering is a question
-/// for the author (a typed hole, or the `std::macro` stage evaluating the cut where the graph *is* in
-/// hand), and the handover report of 2026-11-18 on nested transforms states it with the readings.
+/// typed by the resolver hands the callee the wrong number of values. That ordering is open: a typed
+/// hole, or the `std::macro` stage evaluating the cut where the graph *is* in hand.
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 #macro
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
@@ -161,13 +158,11 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// the weight is its first parameter: `forward<...ws>(w, ...xs)`. Written with one pack and no name
 /// (`<...ws> (...xs)`) the weight has nowhere to come out of the pack into the parameter list. A
 /// function with no ordinary parameter at all is `xs` with no member, and the line is the same one:
-/// a lambda's rest pack is a value in its body whether or not it has a member (bound on 2026-11-20;
-/// until then `xs` was `UnresolvedReference` for exactly that arity, while the same forwarding in a
-/// declaration answered).
+/// a lambda's rest pack is a value in its body whether or not it has a member.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let slope = grad(f)
 ///
-/// **The cut is made here, once** (author, 2026-11-18), for the reason `vjp` above states and with
+/// **The cut is made here, once**, for the reason `vjp` above states and with
 /// the same limit: `split(jvp(first_with_as_param(f)))` is written in `grad`'s own body, so a call of
 /// the gradient calls the graph the cut built instead of lifting and cutting the function again. The
 /// body is the composition written out (`split`, then `transpose`) rather than `vjp` read at the seed
@@ -179,8 +174,8 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// **A nest of this `grad` is this composition twice, and it is read one wall further on.** `grad(f)`
 /// answers a function that still takes its weight as a `with` value, so `grad(grad(f))` finds a first
 /// `with` parameter to differentiate and the second derivative is the same step again:
-/// `grad(grad(square))<2.0>()` typechecks and builds, where it used to be refused by
-/// `first_with_as_param` ("this function has no `with` parameter: there is no first one to move").
+/// `grad(grad(square))<2.0>()` typechecks and builds, with no refusal from
+/// `first_with_as_param` ("this function has no `with` parameter: there is no first one to move") for it.
 /// What it does not do yet is answer 2.0: the value the outer `jvp` is asked to lift is what the inner
 /// `grad` answered, a function computed at run time, and `jvp` lifts a callee only when it is evident
 /// -- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The
@@ -217,7 +212,7 @@ export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
 /// test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
 /// direction needs, so the composition that reads all three numbers is the one above.
 ///
-/// The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+/// The backward spelling of this body was tried and **refused by name**: `split(jvp(f))`
 /// read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
 /// the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
 /// member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph

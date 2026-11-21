@@ -9085,7 +9085,7 @@ The values '{0}' and '{1}' meet where one type is asked for, and the resources t
 **Help**
 
 ```text
-A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
 ```
 
 **Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
@@ -11813,7 +11813,7 @@ None: choice: how far to unroll a recursion of non-static depth is the writer's 
 **Help**
 
 ```text
-Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The round count is the pass's own bound, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.
+Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The pass has two bounds, and either one reports here. The round count is the pass's own, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. The growth budget (`growth_budget`, the nodes specializing and inlining may copy) is the caller's: past it the remaining calls stay calls. A round that changed nothing while the inliner had left a call for that budget reports here and is not a fixed point -- it used to be reported as one, which made a spent budget look like a settled optimizer. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.
 ```
 
 **Example** (`test/cases/opt/generic/rounds_exhausted.cml`, run as `camel test/cases/opt/generic/rounds_exhausted.cml std::opt std::fvm`)

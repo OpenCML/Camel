@@ -11,18 +11,21 @@
 //
 // With them the same program runs and the reading names them instead:
 //
-//     REINTERP jvp function=total graph=250 ... rules=jvp_relu,jvp_sum
-//     REINTERP split function=jvp_of_total forward=269 backward=270 ... residuals=2
+//     REINTERP jvp function=total graph=... rules=jvp_relu,jvp_sum
+//     REINTERP split function=jvp_of_total forward=... backward=... residuals=2
 //     TRANSPOSE function=split_of_jvp_of_total_backward contribution=0 node=6 type=bool[...] space=none from=7
-//     TRANSPOSE function=split_of_jvp_of_total_backward graph=271 type=(float) => (float[],) nodes=10 arms=0 rhs=sum_t,mul_tensor_t
+//     TRANSPOSE function=split_of_jvp_of_total_backward graph=... type=(float) => (float[],) nodes=13 arms=0 rhs=sum_stated_t,mul_stated_t
 //
 // The two `TRANSPOSE` lines are what makes the rules work, and they are the reason the forward rule
-// is written `where(x > 0, 1, 0) * dx` rather than `where(x > 0, dx, 0)`: the mask depends on `x`
-// alone, so `split` computes it in the forward half (the `contribution=0 node=6 type=bool[...]` line
-// is the comparison being carried as a value, not transposed), and the linear half is one
-// `mul_tensor` -- `rhs=sum_t,mul_tensor_t`, two primitive transposes that already existed. The
-// three-operand form puts `where` itself in the linear half, and the walk refuses any node with three
-// normal operands before it looks a rule up (`skip=arity uri=tensor:where operands=3`, measured).
+// is written `mul_stated(where(x > 0, 1, 0), dx, shape(x), shape(x))` rather than
+// `where(x > 0, dx, 0)`: the mask depends on `x` alone, so `split` computes it in the forward half
+// (the `contribution=0 node=6 type=bool[...]` line is the comparison being carried as a value, not
+// transposed), and the linear half is one `mul_stated`. The product is stated and not bare because
+// its second operand is the tangent: `float[]` states no extents, so `mul_tensor_t` cannot read the
+// shape of the position it answers for, and the walk refused exactly that step by name
+// (`skip=parameter-shape uri=tensor:multiply`). The three-operand form puts `where` itself in the
+// linear half, and the walk refuses any node with three normal operands before it looks a rule up
+// (`skip=arity uri=tensor:where operands=3`, measured).
 //
 // The number is the engine's, element for element (`relu_gradient_through_the_engine.cml`):
 //
@@ -32,27 +35,17 @@
 // `y > 0`, which are the same set, so the input zero has slope zero on both sides -- measured, not
 // argued.
 //
-// ---- where the walk stops now (measured 2026-11-04, with the closure-member rules) ----
+// ---- how the walk turns the product round ----
 //
-// The `sum` step turns around: its forward rule states the extents (`jvp_sum` calls `sum_stated(dxs,
-// shape(xs))`) and the walk applies `sum_stated_t`, which reads that list and nothing of `dxs`. That
-// is one more residual than before -- `residuals=3`, because `shape(relu(x))` is a value the
-// backward half reads. The mask is what the backward half computes from the closure member `x`, and
-// the closure-member rules settled that step (author, 2026-11-03 19:55): a closed-over member takes
-// no cotangent, and a value computed only from members is not asked for one -- so the walk no longer
-// asks the product's law for the mask's **own** cotangent, and stops at the position the answer does
-// need, the tangent's:
-//
-//     TRANSPOSE function=split_of_jvp_of_total_backward skip=parameter-shape uri=tensor:multiply node=9 position=1 param=0 param-type=float[]
-//
-// `mul_tensor_t` names each operand's shape in its answer -- `sum_to(ct * w, x)` reads `x`, and
-// `sum_to(ct * x, w)` reads `w` -- so the answer for the tangent's cotangent reads the tangent
-// itself. A transposition is handed the cotangent and known values, `float[...]` does not state the
-// shape a carrier would need (`shapeCarrierOf` answers only for a stated shape), and `sum_to` reads
-// that operand for nothing else. The one thing missing is therefore the rule layer's:
-// `mul_tensor_t` has to state the extents the way `sum_stated_t` and `take_stated_t` do. What a rule
-// can settle today is settled and pinned on the numbers instead: `stated_sum_gradient.cml`, beside
-// this file.
+// The `sum` step turns around because its forward rule states the extents (`jvp_sum` calls
+// `sum_stated(dxs, shape(xs))`) and the walk applies `sum_stated_t`, which reads that list and
+// nothing of `dxs`. The product turns around the same way, and that is what `mul_stated` is for:
+// `mul_stated_t` reads the two lists the forward rule wrote -- `shape(x)` twice here -- and reduces
+// each cotangent to its own operand's shape with `sum_to`, so neither answer has to ask a position
+// that has no value on this side for its shape. The mask is a value the backward half reads off the
+// close-over `x`, and the closure-member rules answer that step: a closed-over member takes no
+// cotangent, so the walk does not ask the product's law for the mask's **own** cotangent and only
+// the tangent's comes back.
 //
 //     camel test/cases/compile/transforms/relu_gradient_through_the_library.cml
 import { vjp } from vjp

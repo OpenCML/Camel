@@ -91,3 +91,40 @@ assert(input.normalized.stderr === '', 'no bound was reached: ' + input.normaliz
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 60000
+
+# The pass has a second bound, and it ends the pass the same way: a round that copies nothing
+# further leaves every count at zero, so `std::opt` reported that round as its fixed point even
+# when the inliner had just left calls as calls because the growth budget is reached (the ruling
+# of 2026-11-20, (b), page:
+# docs/handover/questions/2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md
+# The round now reports `RuntimeDiag::OptimizationStoppedShort`, the same
+# diagnostic the round count uses, naming the budget: `the growth_budget of 4096 node(s) is
+# reached and round 7 changed nothing -- inlining ... would copy 11 node(s), which does not fit
+# what is left of it`. Lowering the budget does not help the test -- it would report the same way
+# -- and raising it would make the case converge, so the entry reads the default: `perf_fib_smoke`
+# under `std::opt std::opt`, the `opt_twice` reading that used to print `fixpoint after 7` and
+# then `fixpoint after 3` on this very program.
+#
+# The assertions are deliberately narrow. What is pinned is that the round says "stopped short of
+# a fixed point" and names the budget; the call it names (`'perf::timeit$spec120'`), the nodes it
+# would have copied and the number of the round all follow the optimizer's own work and would make
+# a lock red on the first unrelated rewrite. What is pinned as absent is `fixpoint after` -- not
+# the whole sentence, and not one round number: any `fixpoint after N round(s)` on this program is
+# the defect returning. The log level is raised (and filtered to `Opt`) so that absence is a
+# reading and not a silence: at the default level the fixed-point line is not printed either way.
+
+[[tests]]
+name = "budget.spent_is_not_a_fixpoint"
+desc = "A program the growth budget stops (`perf_fib_smoke` under `std::opt` twice): the round that copies nothing further is the budget, not a fixed point, so the run says so with `RuntimeDiag::OptimizationStoppedShort` naming the budget and prints no `fixpoint after N round(s)` at all. The program still runs and still prints what it prints. Before this change the same run printed `std::opt: fixpoint after 7 round(s)` and `after 3`, and named no budget anywhere."
+kind = "behavior"
+case = "../../../cases/linear/jit/perf_fib_smoke.cml"
+args = ["-vv", "--log-include", "Opt", "${case}", "std::opt", "std::opt", "std::fvm"]
+expect_exit = 0
+expect_stderr_contains = ["stopped short of a fixed point", "the growth_budget of 4096 node(s) is reached"]
+expect_output_not_contains = ["fixpoint after"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
+verify_script = """
+assert(input.normalized.stdout.trim() !== '', 'the program still runs: ' + JSON.stringify(input.normalized.stdout))
+assert(!input.normalized.stderr.includes('fixpoint after'), 'a spent budget is not a fixed point: ' + input.normalized.stderr)
+"""

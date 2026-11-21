@@ -17,6 +17,6 @@ class PyplotModule : public camel::core::module::BuiltinModule {
 
 /// Called at the top of `plot`, before it takes the GIL. The first call creates the process's
 /// embedded interpreter (or attaches to the one `python` created) and every later call is a
-/// no-op; a fault is thrown here when CPython cannot be initialised. `import pyplot` no longer
-/// runs any of this (design principles 3.1).
+/// no-op; a fault is thrown here when CPython cannot be initialised. `import pyplot` does not
+/// run any of this (design principles 3.1).
 void ensurePyplotInterpreter();

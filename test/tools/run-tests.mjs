@@ -79,6 +79,7 @@ const TEST_FIELDS = new Set([
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
     'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
+    'known_fail_ends_when',
     'failure_note',
     'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
@@ -253,13 +254,29 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // reported a known failure). It is read off the entry itself -- `executePlans` compares against
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
+    //
+    // The mark may instead state the reading that ends it, and that is the shape the author's
+    // ruling of 2026-11-21 02:20 chose for a case whose target is a number and whose wall is being
+    // built: a sentence quoted from a refused run follows the implementation, so a pin on it has to
+    // be re-typed every time the wall moves -- which records the wall's progress as the case's debt
+    // and reads, in the plan, as "this case fails for this reason" long after that reason moved.
+    // `known_fail_ends_when` says what has to arrive instead: the line the entry prints when the
+    // computation is right, which no wall moves. The trade is stated where a reader will weigh it --
+    // the sentence is the only field the run *compares*, so a mark that states its ending reading
+    // accepts any failure as the expected one until the numbers arrive, and a different defect can
+    // wear the mark's name in the meantime. That is why the owner and the reason are still required
+    // on it, and why the reason has to keep naming the wall as it stands today.
     const expected = entry.known_fail_msg
     if (typeof expected !== 'string' || expected.trim().length === 0) {
-        throw new PlanSchemaError(
-            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg: quote the sentence this ` +
-                `case prints today on the entry itself -- without it the runner takes any failure as the ` +
-                `expected one, so another defect wears this mark's name and nothing ever re-reads it`,
-        )
+        const ends = entry.known_fail_ends_when
+        if (typeof ends !== 'string' || ends.trim().length === 0) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg or known_fail_ends_when: ` +
+                    `quote either the sentence this case prints today, or the reading that ends the mark -- a ` +
+                    `mark that names neither takes any failure as the expected one, so another defect wears this ` +
+                    `mark's name and nothing ever re-reads it`,
+            )
+        }
     }
 }
 
@@ -875,6 +892,14 @@ function parseArgs(argv) {
         // widening is what let `changed: 0 target(s)` run 336 plan files and print a green summary.
         // Only `test/runner.mjs` passes this flag, and it is refused beside a target.
         selectionEmpty: false,
+        // `--list-known` answers one question in one line per test, `{name, verdict}`: which named
+        // case came out which way. The question "is the known set the same set" was answered only
+        // by the `[XFAIL]` lines, so a before/after comparison had to be picked out of a full
+        // transcript by hand -- and two runs whose known *counts* agreed were read as "nothing
+        // moved" while one case had changed the way it fails. Off by default: unset, the run
+        // prints exactly what it printed before. `options.listKnownRows` is where `printResult`
+        // collects the verdicts while it prints them.
+        listKnown: false,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
@@ -882,6 +907,8 @@ function parseArgs(argv) {
             options.updateGolden = true
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
+        } else if (arg === '--list-known') {
+            options.listKnown = true
         } else if (arg === '--selection-layer' && i + 1 < argv.length) {
             for (const entry of argv[++i].split(',')) {
                 if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
@@ -1533,6 +1560,32 @@ function printTreeVerdict(verdict) {
         const why = verdict.failure || 'the walk watched no directory at all'
         console.log(`${COLORS.yellow}[TREE]${COLORS.reset} the path watcher is incomplete (${why})`)
     }
+}
+
+/**
+ * The name `--list-known` prints for one test: its plan id in front of the case name. A case name is
+ * unique inside its plan and nowhere else -- `backends` appends the back end, a `[[sweeps]]` entry
+ * copies another plan's names wholesale -- so the plan travels in the name. It is the same
+ * `<plan id>/<name>` pair the runner already keys dependency results by (`byPlanName`), and the part
+ * after the last `/` is exactly the name the `[XFAIL]` line prints.
+ */
+function listedName(plan, test) {
+    const planId = test.__planId || plan.id || path.basename(plan.__planPath, '.plan.toml')
+    return `${planId}/${test.name}`
+}
+
+/**
+ * Silence the run's own narration on stdout for the length of one `--list-known` run, and give back
+ * the function that ends it. `console.log` and not a flag inside every printer: the narration comes
+ * from a dozen places (this file and the helpers it calls), and a mode that had to be honoured at
+ * each of them would be one forgotten call away from mixing a `[PASS]` line into a list whose whole
+ * purpose is to be read by something other than a person. stderr is deliberately left alone: a
+ * refusal on it is a reason to act on, never a verdict about a test.
+ */
+function muteRunNarration() {
+    const narrate = console.log
+    console.log = () => {}
+    return () => { console.log = narrate }
 }
 
 function printRunSummary(summary) {
@@ -3775,6 +3828,17 @@ async function executePlans(plans, options, sharedVars, logDir) {
     const printResult = (entry) => {
         const { plan, test, outcome } = entry
         entry.logWriteMs = 0
+        // The one output `--list-known` has, recorded in the order the results are printed -- plan
+        // and test order, whichever test finished first -- and before the skip below returns, since
+        // a skipped case is one of the four verdicts this list exists to tell apart. `xfail` is
+        // printed as `known`: the run's own word for it is the plan's mark, and the list is a
+        // reading of the marks, not a second vocabulary.
+        if (options.listKnownRows) {
+            options.listKnownRows.push({
+                name: listedName(plan, test),
+                verdict: outcome.status === 'xfail' ? 'known' : outcome.status,
+            })
+        }
         if (plan !== printedPlan) {
             printPlanHeader(plan)
             printedPlan = plan
@@ -4126,6 +4190,18 @@ async function main() {
         process.exitCode = 1
         return 1
     }
+    // `--list-known` speaks from here on: one line per test, `{name, verdict}`, and the `[SUMMARY]`
+    // the run would have ended with. The narration between this line and the end -- the layer line,
+    // the plan headers, the status and detail lines, the timing lines -- is stdout, and every one
+    // of them is a line a per-name comparison would have to filter out, which is the work this mode
+    // exists to remove. It is switched off here and not at the top of this function so that the
+    // refusals above keep their own words: a target that names no plan, a plan whose argument the
+    // CLI does not take, a plan that starts nothing -- those exit before this line, print why, and
+    // are a selection error rather than a list of verdicts. Nothing else changes: the same tests
+    // run in the same order, the same log files and summary.json are written, and the exit code is
+    // decided by the same lines.
+    const restoreNarration = options.listKnown ? muteRunNarration() : null
+    if (options.listKnown) options.listKnownRows = []
     // What the layer declares against what this run starts. The two numbers differ for a reason
     // that is not a defect -- `backends` expands one entry into several tests, `compare_to` pulls a
     // companion in -- and for a whole night the layer's size was quoted as one of them while a run
@@ -4403,6 +4479,15 @@ async function main() {
     // carries to the host on the next run. A tree that could not be read at all counts as the
     // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
     const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    // The whole of `--list-known`'s output, emitted after everything else so that no narration can
+    // land between the lines: one `{name, verdict}` per test, then the `[SUMMARY]` a normal run ends
+    // with -- through the same function, so the two runs' summary lines are the same line and a
+    // list can be checked against the count beside it.
+    if (restoreNarration) {
+        restoreNarration()
+        for (const row of options.listKnownRows) console.log(JSON.stringify(row))
+        printRunSummary(outcome.summary)
+    }
     process.exit(exitCode)
 }
 

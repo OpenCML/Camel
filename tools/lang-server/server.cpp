@@ -3,7 +3,7 @@
 
 #include "camel/utils/windows_parser_guard.h"
 // protocol.h includes nlohmann/json before anything that defines or undefines the C macro EOF it
-// uses; the ANTLR headers that used to `#undef` it are gone (docs/technical/34_handwritten_parser.md).
+// uses; no header `#undef`s it (docs/technical/34_handwritten_parser.md).
 #include "server.h"
 
 #include "camel/core/error/diagnostics.h"
@@ -586,7 +586,7 @@ void Server::didClose(const json &params) {
     documents_.erase(uri);
     invalidateModels();
     if (pushDiagnostics_) {
-        // The problems of a closed document are no longer the server's to show.
+        // The problems of a closed document are not the server's to show.
         transport_.notify(
             "textDocument/publishDiagnostics",
             json{{"uri", uri}, {"diagnostics", json::array()}});

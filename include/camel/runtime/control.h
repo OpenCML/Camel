@@ -30,7 +30,7 @@ bool appendControlDependency(
     size_t maxWork = 32);
 
 /// Removes CTRL edges implied by mandatory data paths, and the ones a `sync` block's chain already
-/// orders for the kinds that no longer read the control kind themselves. Branch boundaries and arm
+/// orders for the kinds that do not read the control kind themselves. Branch boundaries and arm
 /// anchors are retained; JOIN/LOOP results may prove completion but their interiors are not
 /// traversed. One sweep can expose a proof the next one makes (a target's own list is read again),
 /// so a graph is swept until a sweep changes nothing. Work is limited per target, per graph size,

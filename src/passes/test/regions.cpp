@@ -597,8 +597,8 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         live.push_back(id);
     }
     // No early return here on a short list: a graph this pass cannot host the blocks on is a
-    // program the case must not hand it (author's review of A9, 2026-11-03: "a small graph should
-    // not be tested, so let the case not choose it"). A silent return made the case read as a pass
+    // program the case must not hand it: a small graph should
+    // not be tested, so the case must not choose it. A silent return made the case read as a pass
     // on a program it had not tested at all. The five nodes are taken with `at`, so a program that
     // cannot host the blocks fails here and says so instead of wordings blocks around whatever the
     // vector's memory held.

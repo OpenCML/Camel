@@ -373,7 +373,7 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
 bool Builder::branchTakesNoValue(const GCT::node_ptr_t &gct) const {
     // A `return` in a function declared `: void`, and the tail of such a body, stand in a
     // position whose type is `void`: nothing takes what the branch gives there (design
-    // principles 3.7, and the ruling on the arm of a branch at a position that takes no value).
+    // principles 3.7).
     if (expectedValueType_ != nullptr && expectedValueType_->code() == TypeCode::Void) {
         return true;
     }
@@ -388,7 +388,7 @@ void Builder::readArmCellValue(const arm_ptr_t &arm) {
         return;
     }
     // A cell is not a value: an arm that gives one gives the value the cell holds, and the
-    // cell's type never reaches the join (the ruling on the cell-typed arm of a branch). The
+    // cell's type never reaches the join. The
     // read takes the data edge every read has -- the version the last write made, or the cell
     // itself before any write (`valueVersionOf`), and the cell itself for a write that gives
     // the cell it wrote into (`__assn__`) -- and nothing else: it stands in the arm's region,
@@ -616,6 +616,13 @@ Builder::arm_ptr_t Builder::buildArm(
     return arm;
 }
 
+node_handle_t Builder::behindSyncGate(node_handle_t value) {
+    if (!nodeIsKind(value, runtime::GCNodeKind::Gate) || normInputsOf(value).empty()) {
+        return value;
+    }
+    return nodeDraftOf(value)->ref(normInputsOf(value).front());
+}
+
 void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
     if (arm.returned) {
         return;
@@ -627,12 +634,8 @@ void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
         arm.type   = Type::Void();
         return;
     }
-    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
-    // GATE is what the arm gives, the value it forwards is the arm's value.
-    node_handle_t value = result;
-    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
-    }
+    // The arm gives the GATE a sync block ends with; its value is what the GATE forwards.
+    node_handle_t value = behindSyncGate(result);
     arm.output = result;
     arm.value  = value;
     arm.type   = nodeTypeOf(value);
@@ -754,10 +757,7 @@ node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle
     arms[1]          = buildArm(call, [&] {
         insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
         ExpectedValueScope noPosition(expectedValueType_, nullptr);
-        node_handle_t result = visitPipeLink(call, passed);
-        if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-            result = nodeDraftOf(result)->ref(normInputsOf(result).front());
-        }
+        node_handle_t result = behindSyncGate(visitPipeLink(call, passed));
         Type *type = valueTypeOf(nodeTypeOf(result));
         if (onNull) {
             resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
@@ -1418,30 +1418,23 @@ bool Builder::hasGuardedCase(const GCT::node_ptr_t &gct, size_t first) {
     return false;
 }
 
+node_handle_t Builder::staticBool(bool value, const GCT::node_ptr_t &origin) {
+    node_handle_t node = currGraph_->addStaticDataNode(
+        tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(value)));
+    registerNodeOrigin(context_, node, origin, "gir.data");
+    return node;
+}
+
 node_handle_t Builder::negateCondition(node_handle_t value, const GCT::node_ptr_t &origin) {
     // `!b` is the branch `if b then false else true`: `not` over a bool, with no new node kind.
-    const auto constant = [&](bool each) {
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
-        registerNodeOrigin(context_, node, origin, "gir.data");
-        return node;
-    };
     std::vector<arm_ptr_t> two(2);
-    two[0] = buildArm(origin, [&] { return constant(false); });
-    two[1] = buildArm(origin, [&] { return constant(true); });
+    two[0] = buildArm(origin, [&] { return staticBool(false, origin); });
+    two[1] = buildArm(origin, [&] { return staticBool(true, origin); });
     return buildBranch(origin, value, &two);
 }
 
 node_handle_t Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin) {
-    node_handle_t always = currGraph_->addStaticDataNode(
-        tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
-    registerNodeOrigin(context_, always, origin, "gir.data");
-    const auto boolConstant = [&](bool value) {
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(value)));
-        registerNodeOrigin(context_, node, origin, "gir.data");
-        return node;
-    };
+    node_handle_t always = staticBool(true, origin);
     // The condition of a case: the test of its pattern and, when it has a guard, that guard as
     // well. The guard is read in the arm the pattern's test enters, so it sees the names the
     // pattern binds and is not evaluated at all for a value the pattern does not match
@@ -1473,7 +1466,7 @@ node_handle_t Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::n
             step.bind();
             return guardValue();
         });
-        held[1] = buildArm(step.exec, [&] { return boolConstant(false); });
+        held[1] = buildArm(step.exec, [&] { return staticBool(false, origin); });
         return buildBranch(origin, step.condition, &held);
     };
 
@@ -1619,8 +1612,8 @@ node_handle_t Builder::buildBranch(
     }
     // A position that takes no value joins nothing: an `if` without `else` is one (`valueless`,
     // `dropsArmValues`), and so is a branch at a `void` position or written as a statement whose
-    // value the block drops. One rule (design principles 3.7, and the ruling on the arm of a
-    // branch at a position that takes no value): the arms' effects happen, no value is joined,
+    // value the block drops. One rule (design principles 3.7):
+    // the arms' effects happen, no value is joined,
     // and what the arms give is dropped. It is known before the arms are added, and an `if` that
     // does write an `else` does not undo it.
     const bool joinsNoValue = dropsArmValues || branchTakesNoValue(gct);
@@ -1639,8 +1632,8 @@ node_handle_t Builder::buildBranch(
         armList.push_back(arm);
         if (!joinsNoValue && !absentElse) {
             // A position that takes a value reads a cell out before the arms are joined: an arm
-            // of `var T` joins as its `T` (design principles 3.8, and the ruling on the
-            // cell-typed arm). Nothing is read where the join takes no value.
+            // of `var T` joins as its `T` (design principles 3.8).
+            // Nothing is read where the join takes no value.
             readArmCellValue(arm);
         }
         Type *exitType = arm->exitType();
@@ -1771,7 +1764,7 @@ node_handle_t Builder::buildBranch(
     // records are the ones the joins above read, and the depth is what says whether a branch is
     // open at all.
     ssa_.endBranch();
-    // A `var` an arm writes as a value is carried by the branch's JOIN (stage S2). The join has one
+    // A `var` an arm writes as a value is carried by the branch's JOIN. The join has one
     // value slot, so the scan lets a branch write one declaration and no more; an arm that writes
     // nothing hands out the value the declaration had before the branch, which is why the
     // pre-branch value is taken while the arms are built (SsaEnv::rebind). What the arms wrote is
@@ -1858,16 +1851,16 @@ node_handle_t Builder::buildBranch(
     // branch joins no value, but the arms' writes are still that branch's value: each arm gives
     // what it wrote, which already stands in the join's WITH slot, and an arm that did not write
     // (`if c then { x = 1 }`) gives the value the `var` had before the branch. That is the shape
-    // the ruling names: `if c then { x = 1 }` is `x = if c then 1 else x`, and
+    // the rule names: `if c then { x = 1 }` is `x = if c then 1 else x`, and
     // `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else 2` (design principles 3.5,
-    // the ruling of 2026-11-15: `var` is lowered to SSA, a branch assignment is a result of the
+    //  `var` is lowered to SSA, a branch assignment is a result of the
     // branch).
     //
     // The carry is one variable per branch, because the WITH slots are one per arm and not one per
     // variable: a branch whose arms write two or more `var`s has no slot to merge them in and keeps
     // its cells. A `var` that escapes through a closure or a `var` argument keeps its cell too, and
     // so does a `var` parameter. A write inside a loop is carried state, the third of the places
-    // the ruling names: this path sees a JOIN, never a LOOP.
+    // the rule names: this path sees a JOIN, never a LOOP.
     node_handle_t mergeVariable{};
     if (joinsNoValue && joinWithInputs.size() == armList.size() && !armList.empty()) {
         // For each distinct `var` the arms wrote: one entry per arm, holding the value that arm's
@@ -2003,7 +1996,7 @@ node_handle_t Builder::buildBranch(
                 joinType      = valueType;
                 mergeVariable = variable;
                 // The branch is this variable's write from here on: a read written after it takes
-                // the join, and the `sync` block that used to order such a read is not needed.
+                // the join, so no `sync` block is needed to order such a read.
                 carriedVersions_[variable] = joinNode;
             }
         }
@@ -2030,7 +2023,7 @@ node_handle_t Builder::buildBranch(
     if (!ssaCarried.empty()) {
         // The join is the name's value from here on: an arm that wrote it hands that value out, and
         // the arm that wrote nothing hands out the value the name had before the branch. A loop
-        // head around this branch carries the name as a value too (stage S3), and the value it
+        // head around this branch carries the name as a value too, and the value it
         // carries is the join -- not the value of the arm that happened to be built last.
         ssa_.rebind(nodeScope_, ssaCarried, joinNode, armWritesHere());
         noteLoopStateWrite(ssaCarried, joinNode);
@@ -2040,57 +2033,11 @@ node_handle_t Builder::buildBranch(
     // graph reads which arm a read stands in from the region of the BRCH node, so nothing is
     // recorded here.
 
-    // The branch is the user of the variables its arms used, and the writer of those they
-    // wrote. It begins at BRCH and is complete at JOIN.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(armList, joinNode, capturedWrites);
-    if (mergeVariable != nullptr) {
-        // The join is this variable's version, not only the node its write was recorded through.
-        // mergeArmVariables records the write through the callee path, which leaves the variable's
-        // modifier alone, so a read written after the branch would still ask for the cell and take
-        // the value the cell was made with (`[DBG-I] var=3 read=13 at-read-time=3` while
-        // `[DBG-H] var=3 recorded=4` says the join was recorded). The join carries the value now,
-        // so it is the version, and what the read takes is what the branch gives.
-        setModifier(mergeVariable, joinNode);
-        // The write is what marked this variable as escaping (requireMutableArgument: the first
-        // parameter of `__assn__` is a `var` parameter). Here the write is the branch's own value
-        // and the cell never leaves the graph, so the mark is taken back for this one variable --
-        // not for assignments in general, which is what broke a write inside a loop (carried state,
-        // the third item of the schedule).
-        escapingVariables_.erase(mergeVariable);
-    }
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> armCallees;
-    for (const arm_ptr_t &arm : armList) {
-        armCallees.insert(armCallees.end(), arm->callees.begin(), arm->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        // The arms of this branch are part of the arm it is in.
-        outer->callees.insert(outer->callees.end(), armCallees.begin(), armCallees.end());
-    }
-    // A `var` an arm writes is the branch's value, not an effect (design principles 3.1): a write
-    // to a `var` is a value, so the arm does not report one. What is reported here is a write by a
-    // callee an arm calls to a variable that callee captured -- that write is not handed back where
-    // the call stands (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {armCallees, origins, gct->origin(), "The branch", "an arm writes"});
-    }
-
-    if (synced_) {
-        // A branch is one statement: the chain enters its owning BRCH and continues from its JOIN.
-        linkSyncStatement(lastSyncedNode_, brchNode);
-        lastSyncedNode_ = joinNode;
-        chainedNodes_.insert(brchNode);
-        chainedNodes_.insert(joinNode);
-    }
+    // The branch is the user of the variables its arms used, and the writer of those they wrote;
+    // it begins at BRCH and is complete at JOIN, and the JOIN is the version of the variable an
+    // arm wrote through its own value.
+    attachRegionStatement(
+        joinNode, armList, gct, brchNode, joinNode, "The branch", "an arm writes", mergeVariable);
 
     return joinNode;
 }
@@ -2184,6 +2131,124 @@ Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::
     linkNodes(LinkType::With, to, result);
     registerNodeOrigin(context_, result, expr, "gir.loop.interval");
     return result;
+}
+
+void Builder::attachRegionStatement(
+    node_handle_t node, const std::vector<arm_ptr_t> &parts, const GCT::node_ptr_t &gct,
+    node_handle_t chainEntry, node_handle_t chainExit, const std::string &subject,
+    const char *verb, node_handle_t versionOf) {
+    std::vector<node_handle_t> capturedWrites;
+    mergeArmVariables(parts, node, capturedWrites);
+    if (versionOf != nullptr) {
+        // The JOIN is this variable's version, not only the node its write was recorded through.
+        // mergeArmVariables records the write through the callee path, which leaves the variable's
+        // modifier alone, so a read written after the branch would still ask for the cell and take
+        // the value the cell was made with (`[DBG-I] var=3 read=13 at-read-time=3` while
+        // `[DBG-H] var=3 recorded=4` says the JOIN was recorded). The JOIN carries the value now,
+        // so it is the version, and what the read takes is what the branch gives.
+        setModifier(versionOf, node);
+        // The write is what marked this variable as escaping (requireMutableArgument: the first
+        // parameter of `__assn__` is a `var` parameter). Here the write is the branch's own value
+        // and the cell never leaves the graph, so the mark is taken back for this one variable --
+        // not for assignments in general, which is what broke a write inside a loop (carried state,
+        // the third item of the schedule).
+        escapingVariables_.erase(versionOf);
+    }
+    // The name the program wrote, for a variable a closure captured: the port stands for the
+    // value the name had where the closure was made, and what the report names is the variable.
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> callees;
+    for (const arm_ptr_t &part : parts) {
+        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
+    }
+    if (ArmBuild *outer = activeArm()) {
+        // The parts of this statement are part of the arm it is in.
+        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
+    }
+    // What the parts write is not an effect: a write to a `var` is a value (design principles
+    // 3.1) -- the branch's value, or the states a loop hands to its next round -- so no part
+    // reports one. What is reported here is a write by a callee a part calls to a variable that
+    // callee captured: that write is not handed back where the call stands
+    // (reportIgnoredCapturedWrites).
+    if (!capturedWrites.empty() && !synced_) {
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {std::move(callees), origins, gct->origin(), subject, verb});
+    }
+    if (synced_) {
+        // The statement is one statement of the block: the chain enters it and continues from the
+        // node it is complete at, and the control edge the kind names the same pair with goes
+        // beside the sync edge (linkSyncStatement writes them as one pair).
+        linkSyncStatement(lastSyncedNode_, chainEntry);
+        lastSyncedNode_ = chainExit;
+        chainedNodes_.insert(chainEntry);
+        chainedNodes_.insert(chainExit);
+    }
+}
+
+void Builder::attachLoopParts(
+    node_handle_t loopNode, const arm_ptr_t &bodyPart, const arm_ptr_t &condPart,
+    const GCT::node_ptr_t &gct) {
+    // The With inputs of the node are the results of its parts (the body's, then the
+    // condition's) and the slot the rounds are counted in; the parts are its regions.
+    std::vector<arm_ptr_t> parts{bodyPart};
+    linkNodes(LinkType::With, bodyPart->output, loopNode);
+    if (condPart) {
+        parts.push_back(condPart);
+        linkNodes(LinkType::With, condPart->output, loopNode);
+    }
+    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
+    auto &draft = currGraph_->transaction().edit();
+    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
+    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
+    if (condPart) {
+        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
+        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
+    }
+
+    // Running the loop is like entering an arm, and the LOOP is one statement of the block.
+    attachRegionStatement(loopNode, parts, gct, loopNode, loopNode, "The loop", "its body writes");
+}
+
+node_handle_t Builder::attachVisibleLoopState(
+    node_handle_t loopNode, const std::vector<Type *> &states, uint32_t firstState,
+    const GCT::node_ptr_t &gct) {
+    // One state is its own value; several are a tuple, and the FILL reads the components the
+    // program's states are.
+    const size_t count  = states.size();
+    node_handle_t value = nullptr;
+    if (count == 1) {
+        value = currGraph_->addAccsNode(states.front(), firstState);
+        linkNodes(LinkType::Norm, loopNode, value);
+    } else {
+        Type *valueType = static_cast<Type *>(TupleType::create(states));
+        std::vector<size_t> slots(count);
+        std::iota(slots.begin(), slots.end(), size_t{0});
+        value = currGraph_->addFillNode(
+            valueType,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty =
+            camel::core::rtdata::toSlot(::Tuple::create(count, camel::core::mm::autoSpace()));
+        // Two steps, because the two halves are not the same side: writing the static value is an
+        // edit, and reading the node it produced is a view.
+        const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, valueType);
+        node_handle_t source = currGraph_->view().ref(emptyNode);
+        linkNodes(LinkType::Norm, source, value);
+        for (size_t j = 0; j < count; ++j) {
+            node_handle_t component =
+                currGraph_->addAccsNode(states[j], static_cast<uint32_t>(firstState + j));
+            linkNodes(LinkType::Norm, loopNode, component);
+            linkNodes(LinkType::With, component, value);
+        }
+    }
+    registerNodeOrigin(context_, value, gct, "gir.loop.value");
+    return value;
 }
 
 node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
@@ -2326,7 +2391,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         node_handle_t start = nullptr;
         std::string name;
         node_handle_t port = nullptr;
-        /// The state is a value, not a cell (stage S3): the body's name is the port, a write
+        /// The state is a value, not a cell: the body's name is the port, a write
         /// rebinds it and is the round's next value, and the head's phi is the port.
         bool ssa = false;
     };
@@ -2334,7 +2399,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     {
         // The names assigned by a statement of the body's block, in the order they are written; the
         // names assigned below it in a region this loop can hand the value back out of -- an arm of
-        // a statement branch (S2's JOIN) or a loop body (that head's value, S3) -- in the order
+        // a statement branch (a JOIN) or a loop body (that head's value) -- in the order
         // they are first written there; and the names assigned in a region it cannot (a block of
         // its own, a closure's body, a static loop's), which are left to that region's own
         // lowering.
@@ -2417,7 +2482,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             }
         }
         // A name a region this loop cannot hand a value back out of writes keeps its cell: that is
-        // what the shape was before S2 and S3, and it is the cheap direction to be wrong in.
+        // the cheap direction to be wrong in.
         for (const std::string &name : carriedWrites) {
             if (outsideWrites.contains(name) || seenWrites.contains(name)) {
                 continue;
@@ -2452,14 +2517,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             const node_handle_t bound = resolved.value();
-            // A name the declaration built as a value (stages S1-S3) is carried as a value: the
+            // A name the declaration built as a value is carried as a value: the
             // body's name is the port, and the head carries whatever the body wrote. Nothing of it
             // is a cell, so none of the cell questions below apply.
             const SsaEnv::Entry *ssa = ssa_.find(nodeScope_, name);
             const node_handle_t value = ssa_.valueOf(ssa);
             const bool asValue        = ssa != nullptr && value != nullptr && !isVariable(bound);
             // A name that is still a cell is carried only when the body's block writes it and no
-            // region of its own does -- the rule this loop had before S2 and S3, and the reason a
+            // region of its own does, which is the reason a
             // write inside a block of the body is left to that block: the port is read where the
             // write stands, so a write the round may skip cannot be the state. A value has no cell
             // to fall back to, and the regions the scan lets such a name be used across (an arm,
@@ -2539,12 +2604,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // A `for` over an array of any rank is the core's, and no module takes part in it: `t[i]`
     // takes the i-th along the first dimension (design principles 5.4), so the round of a rank-1
     // array is its element and the round of a higher-rank one is the row one dimension shorter
-    // (ArrayType::firstDimensionElement). The tensor module used to declare `__iter__` for a
-    // numeric array (`tensor:iter`, sub-arrays along the first dimension), and asking it here
-    // made the iterable position an OPER node: that is what hid a constant array's row count
+    // (ArrayType::firstDimensionElement). The tensor module declares no `__iter__` for a
+    // numeric array (`tensor:iter`, sub-arrays along the first dimension): asking it here
+    // would make the iterable position an OPER node, which would hide a constant array's row count
     // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). Design principles 5.4
-    // states it once, in the core, for every array; the module's `iter` went with the P4 alias
-    // (one thing, one spelling).
+    // states it once, in the core, for every array (one thing, one spelling).
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
@@ -2746,7 +2810,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             buildArm(gct->loopBody(), {}, runtime::GCRegionKind::LoopBody, [&](ArmBuild &part) {
                 declarePorts(part, hasIterable, gct->loopBody());
                 // The name of a carried `var` is the port the body reads and writes. A state the
-                // declaration built as a value (stage S3) binds the name to the port as that value:
+                // declaration built as a value binds the name to the port as that value:
                 // a read takes the port, an assignment rebinds it, and the write is the round's
                 // next state (noteLoopStateWrite). A state that is still a cell hands the name to
                 // the port and the port stands for the cell (loopStateAssignmentOf).
@@ -3283,105 +3347,27 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     for (node_handle_t node : initial) {
         linkNodes(LinkType::Norm, node, loopNode);
     }
-    // The With inputs of the node are the results of its parts (the body's, then the
-    // condition's) and the slot the rounds are counted in; the parts are its regions.
-    std::vector<arm_ptr_t> parts{bodyPart};
-    linkNodes(LinkType::With, bodyPart->output, loopNode);
-    if (condPart) {
-        parts.push_back(condPart);
-        linkNodes(LinkType::With, condPart->output, loopNode);
-    }
-    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
-    auto &draft = currGraph_->transaction().edit();
-    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
-    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
-    if (condPart) {
-        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
-        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
-    }
+    attachLoopParts(loopNode, bodyPart, condPart, gct);
 
-    // Running the loop is like entering an arm: it uses every variable its parts used and
-    // writes those they wrote.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(parts, loopNode, capturedWrites);
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> callees;
-    for (const arm_ptr_t &part : parts) {
-        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        // The parts of this loop are part of the arm it is in.
-        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-    }
-    // What the loop's parts write is not an effect: a write to a `var` is a value (design
-    // principles 3.1), and the body's writes are the states the LOOP hands on. What is left to
-    // report here is a write by a callee the parts call to a variable that callee captured: that
-    // write is not handed back where the call stands (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, gct->origin(), "The loop", "its body writes"});
-    }
-
-    if (synced_) {
-        // The loop is a statement of the block, like a call: the statement written before it
-        // follows into it by a sync edge (the control edge the kind names the same pair with goes
-        // beside it).
-        linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
-        chainedNodes_.insert(loopNode);
-    }
     // The program sees the states its head declares: not the collection slots beside them, and not
     // the `var`s the body wrote, which are the loop's own state and no value of the program's (a
-    // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`). One state is
-    // its own value; several are a tuple, whose FILL reads the state components and leaves the
-    // rest to autodiff and the exporter.
-    std::vector<Type *> visibleStateTypes(stateTypes.begin(), stateTypes.begin() + declaredStates);
-    Type *visibleStateType  = declaredStates == 1
-                                  ? stateTypes.front()
-                                  : static_cast<Type *>(TupleType::create(visibleStateTypes));
+    // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`).
     node_handle_t loopValue = loopNode;
     if (!collected.empty() || !carried.empty()) {
-        if (declaredStates == 1) {
-            loopValue = currGraph_->addAccsNode(visibleStateType, 0);
-            linkNodes(LinkType::Norm, loopNode, loopValue);
-            registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-        } else {
-            std::vector<size_t> slots(declaredStates);
-            std::iota(slots.begin(), slots.end(), size_t{0});
-            loopValue = currGraph_->addFillNode(
-                visibleStateType,
-                runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-            const slot_t empty = camel::core::rtdata::toSlot(
-                ::Tuple::create(declaredStates, camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->view().ref(
-                currGraph_->edit().materializeStaticValue(empty, visibleStateType));
-            linkNodes(LinkType::Norm, source, loopValue);
-            for (size_t j = 0; j < declaredStates; ++j) {
-                node_handle_t component =
-                    currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                linkNodes(LinkType::Norm, loopNode, component);
-                linkNodes(LinkType::With, component, loopValue);
-            }
-            registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-        }
+        const std::vector<Type *> visible(
+            stateTypes.begin(), stateTypes.begin() + declaredStates);
+        loopValue = attachVisibleLoopState(loopNode, visible, 0, gct);
     }
     // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
     // state the loop hands out: the ACCS of the loop's value, which is what the `let` writing's
     // destructuring is. No `:var/get` is made, and nothing of the `var`'s unit is left to read
     // (dropCarriedVariableUnits).
     //
-    // A state the declaration built as a value (stage S3) is the head's phi for the name: the name
+    // A state the declaration built as a value is the head's phi for the name: the name
     // is rebound to what the head hands out, so every read after the loop takes that value and no
     // cell is involved anywhere. The rebinding is a write of the name in the region the loop is
     // written in, so the head of a loop *around* this one takes it too (noteLoopStateWrite), and an
-    // arm around it has the join carry it (S2).
+    // arm around it has the join carry it.
     for (size_t j = 0; j < carried.size(); ++j) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
@@ -3557,12 +3543,7 @@ node_handle_t Builder::buildStreamLoop(
         registerNodeOrigin(context_, fill, gct, "gir.loop.state");
         return fill;
     };
-    const auto booleanConstant = [&](bool each) {
-        node_handle_t node = currGraph_->addStaticDataNode(
-            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
-        registerNodeOrigin(context_, node, gct, "gir.data");
-        return node;
-    };
+    const auto booleanConstant = [&](bool each) { return staticBool(each, gct); };
 
     // Entering the loop takes the stream as it is: the first pull waits for the first round, so a
     // loop whose condition refuses every round reads nothing at all.
@@ -3723,87 +3704,10 @@ node_handle_t Builder::buildStreamLoop(
     for (node_handle_t value : machineInitial) {
         linkNodes(LinkType::Norm, value, loopNode);
     }
-    // The With inputs of the node are the results of its parts (the body's, then the
-    // condition's) and the slot the rounds are counted in; the parts are its regions.
-    std::vector<arm_ptr_t> parts{bodyPart};
-    linkNodes(LinkType::With, bodyPart->output, loopNode);
-    if (condPart) {
-        parts.push_back(condPart);
-        linkNodes(LinkType::With, condPart->output, loopNode);
-    }
-    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
-    auto &draft = currGraph_->transaction().edit();
-    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
-    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
-    if (condPart) {
-        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
-        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
-    }
+    attachLoopParts(loopNode, bodyPart, condPart, gct);
 
-    // Running the loop is like entering an arm: it uses every variable its parts used and
-    // writes those they wrote.
-    std::vector<node_handle_t> capturedWrites;
-    mergeArmVariables(parts, loopNode, capturedWrites);
-    const auto originOf = [&](node_handle_t variable) {
-        const auto origin = captureOriginOf_.find(variable);
-        return origin != captureOriginOf_.end() ? origin->second : variable;
-    };
-    std::vector<DraftGraphBuilder *> callees;
-    for (const arm_ptr_t &part : parts) {
-        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-    }
-    if (ArmBuild *outer = activeArm()) {
-        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-    }
-    // What the loop's parts write is not an effect (design principles 3.1): a write to a `var` is
-    // a value, so only a write by a callee the parts call to a variable that callee captured is
-    // reported here (reportIgnoredCapturedWrites).
-    if (!capturedWrites.empty() && !synced_) {
-        std::vector<node_handle_t> origins;
-        for (node_handle_t variable : capturedWrites) {
-            origins.push_back(originOf(variable));
-        }
-        unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, gct->origin(), "The loop", "its body writes"});
-    }
-    if (synced_) {
-        // The loop is a statement of the block, like a call: the statement written before it
-        // follows into it by a sync edge (the control edge the kind names the same pair with goes
-        // beside it).
-        linkSyncStatement(lastSyncedNode_, loopNode);
-        lastSyncedNode_ = loopNode;
-        chainedNodes_.insert(loopNode);
-    }
-
-    // The program sees the state it wrote, not the stream and the flag beside it: one state is
-    // its own value, several are a tuple of them.
-    node_handle_t loopValue = nullptr;
-    if (k == 1) {
-        loopValue = currGraph_->addAccsNode(stateTypes.front(), 2);
-        linkNodes(LinkType::Norm, loopNode, loopValue);
-        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-    } else {
-        std::vector<size_t> slots(k);
-        std::iota(slots.begin(), slots.end(), size_t{0});
-        loopValue = currGraph_->addFillNode(
-            stateType,
-            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-        const slot_t empty =
-            camel::core::rtdata::toSlot(::Tuple::create(k, camel::core::mm::autoSpace()));
-        // Two steps, because the two halves are not the same side: writing the static value is an
-        // edit, and reading the node it produced is a view.
-        const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, stateType);
-        node_handle_t source = currGraph_->view().ref(emptyNode);
-        linkNodes(LinkType::Norm, source, loopValue);
-        for (size_t j = 0; j < k; ++j) {
-            node_handle_t component =
-                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j + 2));
-            linkNodes(LinkType::Norm, loopNode, component);
-            linkNodes(LinkType::With, component, loopValue);
-        }
-        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
-    }
-    return loopValue;
+    // The program sees the state it wrote, not the stream and the flag beside it.
+    return attachVisibleLoopState(loopNode, stateTypes, 2, gct);
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
@@ -3816,15 +3720,15 @@ node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
-    // A `yield` is a node of the construction tree from 2026-11-18 (author's ruling: the generator
-    // body is built here, and the machine splits the body into arms at the `yield` it finds -- and
-    // it can only find what the tree holds). Exactly one machine claims such a node
+    // A `yield` is a node of the construction tree: the generator body is built here, and the
+    // machine splits the body into arms at the `yield` it finds -- and it can only find what the
+    // tree holds. Exactly one machine claims such a node
     // (`buildGeneratorBody`, `builder_generator.cpp`); one that arrives here is a `yield` nobody
-    // claimed, and the reading is the one the GCT statement builder kept until this seam opened:
+    // claimed, and the reading is:
     // "a `yield` reached the statement builder, so the generator machine did not claim it. Nothing
-    // in the program is wrong: the machine missed a shape it builds". It was an internal error
-    // there and it is one here: a refusal is not a defect of the program (author's ruling of
-    // 2026-11-02), so the text never asks the reader to send it.
+    // in the program is wrong: the machine missed a shape it builds". It is an internal error
+    // all the same: a refusal is not a defect of the program, so the text never asks the
+    // reader to send it.
     if (gct->exitType() != ExitType::Return) {
         diags_->of(InternalDiag::UnknownInternalError)
             .atOrigin(gct->origin())
@@ -4529,12 +4433,8 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
         setGraphReturnFromResult(graph, nodeIdOf(anchor), nodeIdOf(result), Type::Void());
         return;
     }
-    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
-    // GATE is the output anchor, the value it forwards is what the graph returns.
-    node_handle_t value = result;
-    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
-        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
-    }
+    // The graph returns what the GATE a sync block ends with forwards, not the GATE itself.
+    node_handle_t value = behindSyncGate(result);
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(
         graph,

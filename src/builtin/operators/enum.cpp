@@ -132,7 +132,7 @@ slot_t __enum_tag__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (value == nullptr) {
         // The value a tag is read from is null: it came from the program and the operator cannot
         // take it. A branch rather than an assert, because an assert's premise is not held in a
-        // release build (the assert audit of 2026-11-02: an assert that guards a dereference is
+        // release build (an assert that guards a dereference is
         // no guard at all there).
         throwRuntimeFault(
             camel::core::error::RuntimeDiag::InvalidArgument,
@@ -154,10 +154,10 @@ slot_t __enum_field__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // "applied to the other case they return the zero slot"), and the pass relies on it: a node
     // that cannot be replaced is still evaluated, to fault where it is written if it can fault
     // (generic.cpp, `foldDraft`), so an arm the constant's tag does not select is executed with a
-    // value of the other variant in hand. This used to be checked by two `ASSERT`s -- which are
-    // nothing in a release build -- and `Variant::get` then read an index the value does not have:
-    // `rc15_seed52` stopped the process with "reading field 0 of a Variant whose tag 1 declares 0
-    // field(s)" (include/camel/core/rtdata/variant.h).
+    // value of the other variant in hand. An `ASSERT` would not do here -- it is
+    // nothing in a release build -- and `Variant::get` would then read an index the value does not
+    // have ("reading field 0 of a Variant whose tag 1 declares 0 field(s)",
+    // include/camel/core/rtdata/variant.h).
     if (value->tag() != tag || index >= value->fieldCount()) {
         return NullSlot;
     }

@@ -38,7 +38,8 @@
 //
 // The tool judges nothing: it prints the reading and exits 1, the way the fixtures under
 // `test/tools/selftest/` do. `test/tools/opt-cost/measure.plan.toml` is the entry an explicit
-// `-Plan` runs; it declares `expect_exit = 0`, so a run of the plan reports the table it printed.
+// `-Plan` runs; it declares `expect_exit = 1`, the exit this file gives a reading, and its
+// verification refuses on purpose, so a run of the plan reports the table that was printed.
 // This file is not under `test/plans/`, so no tier selects it by itself.
 
 import fs from 'node:fs'

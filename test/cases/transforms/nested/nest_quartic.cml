@@ -1,31 +1,37 @@
-// The **reverse** half of the nest, recorded as a refusal: `grad(grad(f))` for f(x) = x^4.
+// The **reverse** half of the nest: `grad(grad(f))` for f(x) = x^4, a positive on the number now.
 //
-// The number worked out by hand, which the refusal does not reach:
+// The number worked out by hand:
 //
 //     f'(x) = 4x^3,  f''(x) = 12x^2   ->  f''(2) = 48,  f''(3) = 108
 //
-// What the nest answers instead, verbatim (2026-11-20 09:20, `std::nvm`, `--trace transforms`; the
-// raise site's absolute prefix is elided and the path is `stdlib/vjp.cml`, line 190, column 25):
+// so the program has to print `nested_quartic d2=48.0`. `nest_quartic_forward.cml` beside it is the
+// forward half and already answers the same 48 as `t1` from `jvp(jvp(f))`, which is a second reading
+// of the same second derivative and not a copy of this one.
 //
-//     error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward transform for this function.
-//         --> <install>/stdlib/vjp.cml (line 190, column 25)
-//          |
-//      190 |     let forward = split(jvp(first_with_as_param(f)))
-//          |                         ^^^
-//     help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+// This file used to be a negative, and the two walls it named are both gone. Read 2026-11-20 09:20:
 //
-// Why it is refused is measured, not guessed: the outer `jvp` must lift a function whose answer is
-// `(float, (float) => float)` -- the value together with the linear half's closure -- and that type
-// has no tangent space (a function has none, and a tuple has none when any member has none). The
-// language says so in its own words when the same shape is written directly:
+//     error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward
+//     transform for this function.
 //
-//     Invalid call to 'jvp' ...: `jvp` takes a function whose result has a tangent space, and this
-//     one's result is a `(float, (float) => float pure)`, which has none: the lifted signature
-//     answers the pair (value, tangent).
+// with the explanation that the outer `jvp` had to lift a function whose answer is
+// `(float, (float) => float)` and that type has no tangent space. That explanation stopped being true
+// at `2da9735da`, which added the law that lifts that answer type -- so the property this file was
+// written to pin ("a result type with no tangent space is refused") no longer holds, and the refusal
+// was not a property of the language but of how far the implementation had got. `2a2cf31a8` then
+// removed the next wall, `split does not build this function (the value half reads the tangent of
+// parameter 0, which the forward half does not take)`.
 //
-// So this case is a negative on the sentence and not on a number: the expectation is the refusal,
-// and it stops being a negative the moment the question page above is ruled on. `d2` is printed
-// only if the nest ever runs.
+// What the nest stops at today, measured 2026-11-21 on `b74edf66c` (`std::nvm`), is one step
+// further on, and it is neither of those:
+//
+//     [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
+//     callee's transpose was built, but the parameter at position 3 reads a value this call does not
+//     carry.
+//
+// That sentence is **not** pinned anywhere, and this file is not written against it: the plan entry
+// is a `known_fail` on `d2=48.0`, so the wall may move again without touching this case. The ruling
+// that turned it from a negative into a positive is
+// `docs/handover/questions/2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md`.
 import { grad } from vjp
 
 with <x: float>

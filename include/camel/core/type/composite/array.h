@@ -253,7 +253,7 @@ bool isElementTypeUnstated(const Type *type);
 /// an entrance. `Builder::coerceTo` asks it where a value takes the type of its position and
 /// `Builder::visitCall` where an argument enters a parameter; the transposition walk asks it where
 /// it hands a law the cotangent of that law's port
-/// (`modules/transforms/transpose.cpp#ruleCotangent`, the entrance that is not some position's
+/// (`modules/transforms/transpose/walk.cpp#ruleCotangent`, the entrance that is not some position's
 /// `coerceTo` because the port is filled by the caller and not by a builder). A second reading of
 /// the same rule somewhere else is the way the two ends start disagreeing about one value.
 inline bool isRankZeroEdge(Type *target, Type *source) {
@@ -296,7 +296,7 @@ inline bool isRankZeroEdge(Type *target, Type *source) {
 /// behind it, and both such readers go through here: the builtin `extent_of::<A>()`, which answers
 /// these extents as an `int[]` (`src/builtin/operators/struct.cpp#extentOfResolver`), and the
 /// transposition walk, which asks a bare `transpose` for the shape a law reads
-/// (`modules/transforms/transpose.cpp#statedExtentsNodeOf`). A second evaluation for that question
+/// (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`). A second evaluation for that question
 /// would be a second answer to one question. The literal conversion keeps its own reading
 /// (`src/core/data/composite/array.cpp#statedShapeOf`) because it asks something else: which
 /// written shape a literal's elements can fill, where a form that is an expression states none

@@ -5,16 +5,13 @@
 
 /**
  * @file checkreport.h
- * @brief What `check` answers: the verdict table (docs/design/rewrite/plan-verification.cn.md,
- * S0; the rule and on
- * `verification-licence-to-precondition`).
+ * @brief What `check` answers: the verdict table (docs/design/rewrite/plan-verification.cn.md).
  *
  * The verdict vocabulary is closed and has three words -- `proved`, `refuted`, `sampled` -- and
- * every line of the report wears one of them as its first word. The fourth word the check used to
- * write, `unchecked`, is not a verdict: a rule nothing could be examined on is `sampled` with the
- * reason written in its own column, kept apart from the `sampled` that says samples were drawn
- * (`verification-licence-to-precondition`, licence 3, option A: `sampled` and "not examined (why)"
- * are written separately and never mixed).
+ * every line of the report wears one of them as its first word. `unchecked` is not a verdict: a
+ * rule nothing could be examined on is `sampled` with the reason written in its own column, kept
+ * apart from the `sampled` that says samples were drawn (`sampled` and "not examined (why)" are
+ * written separately and never mixed).
  *
  * Each row carries the five things the rule asked a row to carry, plus the three a reader needs to
  * reproduce it: the `rule`, the `instance` (a generic law's type tuple, empty when the rule is not

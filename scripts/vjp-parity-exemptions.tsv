@@ -88,7 +88,8 @@ int	engine-autodiff	the conversion's destination is `int`, a discrete type with 
 # `erf`, `erfc`, `gelu`, `linear`, `log`, `max`, `max_axis`, `maximum`, `mean`, `min`, `min_axis`,
 # `minimum`, `neg`, `rsqrt`, `sqrt`, `sum_axis`, `transpose`, `where`, and the two axis markers
 # `argmax_axis`/`argmin_axis`, whose key now lands under `argmax`/`argmin`). The ones left are the
-# ones still owed.
+# ones still owed. `layer_norm` left it on 2026-11-20, when `rulesets/jvp.cml#jvp_layer_norm` landed
+# beside the reverse rule the engine already had, so `layer_norm` is now a key both tables answer.
 
 argmax	lane-rulesets	no `jvp_argmax`: the library's forward half stops a program before the reverse is asked
 argmin	lane-rulesets	no `jvp_argmin`: the library's forward half stops a program before the reverse is asked
@@ -97,7 +98,7 @@ erf_d	lane-rulesets	`math:erf_d` has no `jvp_erf_d`, and `math:` is a module the
 erf_f	lane-rulesets	`math:erf_f` has no `jvp_erf_f`, and `math:` is a module the rulesets do not file for
 erfc_d	lane-rulesets	`math:erfc_d` has no `jvp_erfc_d`, and `math:` is a module the rulesets do not file for
 erfc_f	lane-rulesets	`math:erfc_f` has no `jvp_erfc_f`, and `math:` is a module the rulesets do not file for
-layer_norm	lane-rulesets	no `jvp_layer_norm`: the library's forward half stops a program before the reverse is asked
+
 pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
 sqrt_d	lane-rulesets	`math:sqrt_d` has no `jvp_sqrt_d`, and `math:` is a module the rulesets do not file for

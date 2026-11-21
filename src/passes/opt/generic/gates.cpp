@@ -26,8 +26,8 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
     // a structural question, not the liveness answer: no gate is an effect of its own, so a gate
     // with a wait stands as `HasNoCredential` in `effectStandingOf` (camel/runtime/effect_liveness.h)
     // and that function cannot answer this. The wait is read here, in its two kinds, and the reading
-    // says what it is -- `effectLivenessFacts` used to carry it under a name four call sites spelled
-    // three ways, which is why it no longer does.
+    // says what it is -- `effectLivenessFacts` does not carry it, since one name spelled three ways
+    // at four call sites hid what it meant.
     //
     // A wait is read in either kind (docs/design/effects/edges.cn.md 5.3): the control edge the
     // kind still exists under, and the sync edge that replaces it -- a GATE's wait is the chain's
@@ -105,7 +105,7 @@ if (!gate || gate->kind != GCNodeKind::Gate || !edgeBudget || !isReplaceable(tra
         }
         // A wait the gate carried through the chain of its `sync` block is handed on in that kind:
         // the consumer that is a statement of the block follows the same predecessor through the
-        // sync edge (docs/handover/README.cn.md 5.21 item 4).
+        // sync edge.
         for (gc_node_ref_t predecessor : draft.syncInputsOf(id)) {
             handOverSyncWait(transaction, predecessor, user.id);
         }

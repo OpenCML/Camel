@@ -28,10 +28,10 @@
  * numbers below are this export's own), source origins and spans, parameter names, display
  * labels and mangled names.
  *
- * S0 does not normalise the entry yet: it marks the graph the root's entry call names and keeps
+ * It does not normalise the entry: it marks the graph the root's entry call names and keeps
  * the root's entry chain, which is what the comparison of two dumps of one program needs. The
- * hoisting of an inlined entry (plan 2.2 step 3) belongs with the printer that makes it
- * necessary (S1).
+ * hoisting of an inlined entry  belongs with the printer that makes it
+ * necessary.
  */
 
 #include "camel/core/node_attrs.h"
@@ -680,7 +680,7 @@ class CanonicalDocument {
         // order the modules were first registered (core/type/other.h,
         // OtherTypeRegistry::registerType), so two spellings of one pipeline that load different
         // modules -- `std::cxx::saturate` and `opt::saturate` -- wrote documents differing only in
-        // those numbers (defect B2 of the 2026-11-01 eval report: `Node<int>` as 2684354570 in one
+        // those numbers ( `Node<int>` as 2684354570 in one
         // and 2684354568 in the other). The code is a hash of what the program shows, the spelling,
         // so the document says the same thing whichever modules the run happened to load.
         // `canonical=false` keeps the registry's number: it is a reading for a person debugging a
@@ -913,7 +913,7 @@ class CanonicalDocument {
             }
         };
         // The writes a region's exit GATE keeps alive are siblings: nothing joins them (design
-        // principles 3.1, the author's ruling of 2026-11-17, "这些写之间不加边"), so their place in the
+        // principles 3.1), so their place in the
         // GATE's list after the value is the order the source wrote them in -- spelling, for the same
         // reason a capture table's order is. The slot the document prints is the node's rank in the
         // canonical order, which `CanonicalWalk` arranges as one tie group, so two writings that swap
@@ -1153,7 +1153,7 @@ class CanonicalDocument {
 
     // ---- graphs ---------------------------------------------------------------------------
 
-    /// The graph the root's entry call names: a best-effort read of the exit chain (S0 keeps the
+    /// The graph the root's entry call names: a best-effort read of the exit chain (it keeps the
     /// entry chain instead of hoisting it; see the file comment).
     json entryGraphJson() {
         if (root_ == nullptr)

@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：54 页
+## 现在在等作者：74 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -13,7 +13,6 @@
 | [`2026-11-18-specialization-carries-its-ports-one-place-over`](2026-11-18-specialization-carries-its-ports-one-place-over.cn.md) | Specialization publishes its ports one place over from its own signature |
 | [`2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch`](2026-11-18-the-citation-check-demands-a-page-that-lives-on-the-authors-branch.cn.md) | The citation check demands a design page that by design lives only on the author's branch |
 | [`2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why`](2026-11-18-the-exemption-list-accepts-a-reason-that-is-no-longer-why.cn.md) | 一条豁免该不该连「它记的那条原因」一起校验——原因不再成立时，它还是豁免吗？ |
-| [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ |
 | [`2026-11-19-a-rules-angle-argument-is-a-port`](2026-11-19-a-rules-angle-argument-is-a-port.cn.md) | A rule's `<>` argument is one of its operator's ports, and the value can be bound |
 | [`2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value`](2026-11-19-a-sync-body-takes-the-call-s-tuple-as-the-statement-s-value.cn.md) | `sync` 体里一个调用把元组当成了语句的值 |
 | [`2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal`](2026-11-19-a-tie-break-that-keeps-creation-order-when-fragments-are-equal.cn.md) | 一个未被触发的并列：`arrangeEqualKeyRun` 的 `stable_sort` 在片段相等时保留创建次序 |
@@ -42,7 +41,6 @@
 | [`2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters`](2026-11-19-the-front-end-in-place-path-is-reachable-for-var-parameters.cn.md) | 前端那条原地复用路径对 `var` 形参仍然可达 |
 | [`2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed`](2026-11-19-the-front-end-in-place-rewriting-is-unreachable-not-removed.cn.md) | 前端那条原地改写：它已经不可达，但还在 |
 | [`2026-11-19-the-gate-value-has-five-readings`](2026-11-19-the-gate-value-has-five-readings.cn.md) | `GATE` 的「值」有五个走法，而在空 gate 上它们并不一致：该统一成哪一种？ |
-| [`2026-11-19-the-join-does-not-record-which-var-it-carries`](2026-11-19-the-join-does-not-record-which-var-it-carries.cn.md) | JOIN 不记「自己是哪个 `var` 的版本」，打印器无法重述携带的分支 |
 | [`2026-11-19-the-open-loop-give-back-is-12-call-sites`](2026-11-19-the-open-loop-give-back-is-12-call-sites.cn.md) | 计数故障归还：12 个调用点 / 5 个后端文件，审查页记 16 —— 差额是 4 行注释，单点该落在哪一处？ |
 | [`2026-11-19-the-packing-overwrites-what-the-declaration-said`](2026-11-19-the-packing-overwrites-what-the-declaration-said.cn.md) | 打包把声明说的那一个盖掉了 |
 | [`2026-11-19-the-packing-slot-came-back-under-another-name`](2026-11-19-the-packing-slot-came-back-under-another-name.cn.md) | 打包位换了名字回来：删它拆掉一半功能，留它把作者撤掉的位放回 develop |
@@ -54,17 +52,39 @@
 | [`2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content`](2026-11-19-what-a-rollback-puts-back-the-pointer-or-the-content.cn.md) | 回滚要还原的是指针，还是内容？ |
 | [`2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes`](2026-11-19-what-the-user-sees-of-the-packing-the-entry-graph-makes.cn.md) | 入口图打的那个包，用户看见什么 |
 | [`2026-11-20-a-law-that-states-its-angle-answers-only-that-angle`](2026-11-20-a-law-that-states-its-angle-answers-only-that-angle.cn.md) | 写死一个轴的律只答那一个轴：`jvp_softmax<1>` 与 `jvp_log_softmax<0>` 要不要像 `jvp_reshape` 那样把轴当参数？ |
-| [`2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit`](2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md) | 写明降维结果秩的函数，为什么把 `vjp` 挡在「反向半边的出口类型」上 |
+| [`2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge`](2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge.cn.md) | 一本「只许降」的账本，遇到一次合法合并带进来的新住户：账本该涨吗？ |
+| [`2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away`](2026-11-20-a-marker-that-asks-for-a-var-the-compiler-folded-away.cn.md) | A marker that asks for a `var` the compiler folded away before the printer saw it |
+| [`2026-11-20-may-a-law-reduce-only-when-the-extents-are-readable`](2026-11-20-may-a-law-reduce-only-when-the-extents-are-readable.cn.md) | 一条法则能不能只在 extents 读得出时才归约？ |
 | [`2026-11-20-parked-means-paused-or-deleted`](2026-11-20-parked-means-paused-or-deleted.cn.md) | `parked/` 指的是「暂停」还是「已删」？两种含义并存时，读者该按哪个行动？ |
 | [`2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases`](2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md) | 编辑前的图越界报成内部错误之后，六条一直是绿的用例红了 |
+| [`2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread`](2026-11-20-the-ecoop-item-1-row-is-not-a-pure-call-misread.cn.md) | 条目（1）与三条打印判据：四条读数一字未动，挡住它们的是「没写子句」，不是读法 |
+| [`2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader`](2026-11-20-the-higher-order-footprint-has-a-place-and-a-reader.cn.md) | The higher-order footprint has a place to be written and a reader; what is left is the two shapes it cannot place |
 | [`2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p`](2026-11-20-the-log-softmax-tangent-the-comment-sums-p-dx-the-code-scales-by-p.cn.md) | 一次读错「哪棵树」的上报，以及它教会的两件事 |
+| [`2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint`](2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md) | The optimizer calls a spent growth budget a fixpoint, and the budget is reset on every call |
 | [`2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code`](2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md) | 外层 `jvp` 要 `split` 交出静态可读的答案代码，那一步在 0.2.45 的范围里吗 |
+| [`2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations`](2026-11-20-the-refusal-of-an-unnamed-access-waits-for-the-declarations.cn.md) | A refused access no clause can name: the ruling stands, the corpus cannot take it yet |
+| [`2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform`](2026-11-20-the-tangent-argument-record-is-not-written-by-the-transform.cn.md) | 「哪个实参是切向」这张位图，`jvp`/`vjp` 造的调用一张都没写 |
+| [`2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document`](2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document.cn.md) | 「两张导数图」这一项按 `std::jgir` 现在的读法比的不是导数图 —— 该改措辞，还是该换读法 |
+| [`2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program`](2026-11-20-the-v1-jgir-document-is-a-function-of-the-binary-not-of-the-program.cn.md) | v1 的 `std::jgir` 是二进制的函数，不是程序的函数 |
+| [`2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut`](2026-11-20-what-a-lifted-graph-s-second-segment-means-in-the-next-cut.cn.md) | 一张提升图的第 2 段，在下一刀 `split` 里是切向还是值 |
+| [`2026-11-20-what-transpose-reads-a-lifted-kernel-call-by`](2026-11-20-what-transpose-reads-a-lifted-kernel-call-by.cn.md) | `transpose` 转置一个提升过的法则核调用时，实参按什么读 |
 | [`2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree`](2026-11-20-when-a-laws-doc-formula-and-its-right-side-disagree.cn.md) | 律的文档公式与右端表达式不一致时，以哪条为准则？ |
 | [`2026-11-20-when-a-ruling-read-a-success-line-as-the-failure`](2026-11-20-when-a-ruling-read-a-success-line-as-the-failure.cn.md) | 当一条裁定把成功行读成了失败原因？ |
+| [`2026-11-20-where-is-the-rework-list-r3-through-r7`](2026-11-20-where-is-the-rework-list-r3-through-r7.cn.md) | 返工表 R3 到 R7 在哪：在 `questions-2026-10-29.md` 的 `.md` 那一半里 |
+| [`2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function`](2026-11-20-whether-jvp-and-vjp-build-two-graphs-of-one-function.cn.md) | `jvp` 与 `vjp` 对同一个 `f` 各造一张图 —— 两张图的边集合是不是不一致？ |
 | [`2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure`](2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md) | `Jvp<F>` 是「(value, tangent) 那对」，还是「一个提升后的闭包」 |
+| [`2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops`](2026-11-20-whether-the-second-with-parameter-is-the-operand-the-cut-drops.cn.md) | 割说「一个节点的操作数不在它这一半的出口可达集合里」—— 掉的是第二个 `with` 参数，还是切线端口那道墙的下游？ |
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
+| [`2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time`](2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time.cn.md) | 构建期怎么知道一张图已经是提升的结果 |
+| [`2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments`](2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments.cn.md) | 「规则把切向写在哪个实参上」这件事，被调方的类型说不出 |
+| [`2026-11-21-where-does-the-capture-tangent-get-its-value`](2026-11-21-where-does-the-capture-tangent-get-its-value.cn.md) | 捕获的切向从哪里拿到它的值 |
+| [`2026-11-21-where-is-a-fill-built-closures-layout-recorded`](2026-11-21-where-is-a-fill-built-closures-layout-recorded.cn.md) | 一个由 Fill 造出的函数值，闭包布局记在哪里 |
+| [`2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to`](2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md) | 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗 |
+| [`2026-11-21-whether-transpose-can-say-its-signature-is-lifted`](2026-11-21-whether-transpose-can-say-its-signature-is-lifted.cn.md) | `Transpose<F>` 说不出「我的参数里有一半是提升出来的」 |
+| [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 |
+| [`2026-11-21-who-pairs-the-captures-of-a-body-built-closure`](2026-11-21-who-pairs-the-captures-of-a-body-built-closure.cn.md) | 体内造出的闭包，谁负责把它的捕获配成对 |
 
-## 生成器不会删的行：149 行（页已不在 `questions/` 里）
+## 生成器不会删的行：156 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -203,10 +223,17 @@
 | [`2026-11-18-retract-rc23-two-orders`](../reviews/2026-11-18-retract-rc23-two-orders.cn.md) | 撤回：`questions-2026-11-18-rc23-two-orders.cn.md`（2026-11-18 00:35） | 在 `reviews/` |
 | [`2026-11-18-the-at-of-inline-says-a-region-not-a-place`](../reviews/2026-11-18-the-at-of-inline-says-a-region-not-a-place.cn.md) | `inline` 的 `at`：语句上「占据位置」，纯节点上「只选区域」——答复已给（`e55cd6157`） | 在 `reviews/` |
 | [`2026-11-18-the-state-slot-is-a-ruling-with-no-code`](../reviews/2026-11-18-the-state-slot-is-a-ruling-with-no-code.cn.md) | `T?` 状态槽只有裁定、没有代码，而问题问低了一层 | 在 `reviews/` |
+| [`2026-11-18-the-tiles-pass-publishes-a-body-before-its-type`](../reviews/2026-11-18-the-tiles-pass-publishes-a-body-before-its-type.cn.md) | 遍能不能在发布「体」的同一次 commit 里就把「型」补上，还是要一小块新 API？ | 在 `reviews/` |
 | [`2026-11-18-the-witness-a-transpose-needs-has-no-channel`](../reviews/2026-11-18-the-witness-a-transpose-needs-has-no-channel.cn.md) | 转置要一条残差当「零的见证」：那条通道 11-04 被删了，而它今天必须回来 —— 但回哪一半？ | 在 `reviews/` |
 | [`2026-11-18-the-zero-of-an-open-length-array-has-no-width`](../reviews/2026-11-18-the-zero-of-an-open-length-array-has-no-width.cn.md) | 开放长度数组的零没有宽度：是**拒绝**，还是**把前向实参交进来**？ | 在 `reviews/` |
 | [`2026-11-18-typeof-of-machine-made-types`](../reviews/2026-11-18-typeof-of-machine-made-types.cn.md) | `typeof` 对「机器造的型」（tuple / `T?`）要不要放开，只限生成器那条路？ | 在 `reviews/` |
 | [`2026-11-18-unwrapping-a-nullable-state-slot`](../reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md) | 拆 `T?` 的算子在 null 时，发诊断还是返回零槽？ | 在 `reviews/` |
+| [`2026-11-19-the-join-does-not-record-which-var-it-carries`](../reviews/2026-11-19-the-join-does-not-record-which-var-it-carries.cn.md) | JOIN 不记「自己是哪个 `var` 的版本」，打印器无法重述携带的分支 | 在 `reviews/` |
+| [`2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit`](../reviews/2026-11-20-a-stated-reduced-rank-is-the-backward-halves-declared-exit.cn.md) | 写明降维结果秩的函数，为什么把 `vjp` 挡在「反向半边的出口类型」上 | 在 `reviews/` |
+| [`2026-11-20-whether-splits-forward-half-takes-a-tangent-port`](../reviews/2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md) | `split` 割「结果含函数」的图时，前向半要不要收切向端口 | 在 `reviews/` |
+| [`2026-11-20-whether-the-value-half-takes-tangent-ports`](../reviews/2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md) | 值半要不要收一个切向端口 —— 割「提升过的函数」时的那条缝 | 在 `reviews/` |
+| [`2026-11-20-why-the-split-point-is-type-computable`](../reviews/2026-11-20-why-the-split-point-is-type-computable.cn.md) | （A）不必要：割点对「结果含函数」也是**类型可算**的 | 在 `reviews/` |
+| [`2026-11-21-who-supplies-the-primal-to-a-transposed-lift`](../reviews/2026-11-21-who-supplies-the-primal-to-a-transposed-lift.cn.md) | 谁把原值交给「线性函数的提升」的转置 | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |

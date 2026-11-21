@@ -77,6 +77,10 @@
  *                        cannot find its target
  *   label-without-check  `kind = "negative"` with neither `expect_exit` nor `expect_signal`
  *   kind-unread          `kind` is missing, or is a value no block in the runner reads
+ *   mark-without-end-trigger         a `known_fail` mark with no `known_fail_ends_when`: a debt with
+ *                        no reading that ends it
+ *   end-trigger-names-nothing        a trigger that quotes no reading
+ *   end-trigger-names-another-reading  a trigger that does not name this entry's own pinned line
  *
  * It is **ratcheted**: it prints the line `plan-fields fields=<n> findings=<n> mode=report`, then
  * compares the count with `test/tools/plan-fields-baseline.json`. Findings that grow past that file
@@ -374,6 +378,40 @@ function scanTree(rootDir) {
                         ? 'no kind is written and the schema does not require one: the entry runs as behavior'
                         : `no block in the runner reads kind '${kind}': the entry runs as behavior`,
                 )
+            }
+            // A mark records a red; `known_fail_owner` says who ends it and `known_fail_reason` where
+            // it is stuck, and neither says *what* would end it. A debt with no trigger reads as
+            // permanent, and the runner can only notice the two moments it already watches (the case
+            // starts passing; the refusal changes). `known_fail_ends_when` names the reading that
+            // removes the mark, so the next reader -- and the next lane -- can tell a mark that waits
+            // on a named wall from one that waits on nothing.
+            const marked =
+                entry.known_fail === true ||
+                (Array.isArray(entry.known_fail) && entry.known_fail.length > 0)
+            if (marked) {
+                const ends = entry.known_fail_ends_when
+                const pinned = Array.isArray(entry.expect_stdout_contains)
+                    ? entry.expect_stdout_contains.filter((line) => typeof line === 'string' && line !== '')
+                    : []
+                if (typeof ends !== 'string' || ends.trim() === '') {
+                    add(
+                        'mark-without-end-trigger',
+                        'known_fail_ends_when',
+                        'the mark records a red and no reading that ends it: name the refusal that must go and the line this entry must print',
+                    )
+                } else if (!/`[^`]+`/.test(ends)) {
+                    add(
+                        'end-trigger-names-nothing',
+                        'known_fail_ends_when',
+                        'the trigger quotes no reading: put the sentence that must stop appearing, and the line this entry must then print, in backticks',
+                    )
+                } else if (pinned.length > 0 && !pinned.some((line) => ends.includes(line))) {
+                    add(
+                        'end-trigger-names-another-reading',
+                        'known_fail_ends_when',
+                        `the trigger does not name this entry's own pinned line (${JSON.stringify(pinned[0])}): a mark ends when the entry prints what it pins`,
+                    )
+                }
             }
         }
     }

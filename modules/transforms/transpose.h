@@ -7,8 +7,8 @@
  * Where `jvp` builds a graph that runs the data flow forward with a tangent beside it, this builds
  * a graph that runs the data flow the other way: the caller passes the cotangent of the result, and
  * what comes out is the cotangent of the parameter. Nothing of `f`'s graph is changed -- the same
- * ruling (a824031aa) that makes `reinterp` produce a new function applies here, and for the same
- * reason: a published graph is never replaced.
+ * rule that makes `reinterp` produce a new function applies here, and for the same reason: a
+ * published graph is never replaced.
  *
  * Straight-line code only, for now. Every primitive on the path must have one operand that carries
  * the data and only constants beside it, which is what `is_linear` means for the rules the
@@ -73,8 +73,8 @@ enum class TransposeRefusalCause {
     /// walk never built anything. Here the pattern took them, the law was chosen, and the law's own
     /// body is what has nothing to say for these ranks. The two want different edits: `RuleShape`
     /// is answered by widening the pattern, and this one by writing the missing shape's law.
-    /// Measured 2026-11-03 on `matmul_t` at a rank-three operand: with the law serving ranks one
-    /// and two only, the refusal used to arrive as `cotangent-needs-a-value` carrying the builder's
+    /// On `matmul_t` at a rank-three operand, with the law serving ranks one
+    /// and two only, a refusal would arrive as `cotangent-needs-a-value` carrying the builder's
     /// own sentence ("No matching function found for argument types"), which names a helper instead
     /// of the law and says nothing about the rank a reader has to change.
     RuleRanks,
@@ -83,20 +83,19 @@ enum class TransposeRefusalCause {
     /// here, the shape that value carries -- a law's right side has to read. The transposed
     /// function is handed the cotangent and nothing else, so such a law can only be answered when
     /// the shape is in the type: `float[2, 3]` says how many positions the parameter has, and
-    /// `float[..]` does not. This is the language's rule about what a transposition is (author,
-    /// 2026-11-03 16:15) -- the adjoint of a linear map needs the shape of its domain -- not a
-    /// limit of this walk: the same thing is why JAX's `linear_transpose` asks the caller for the
+    /// `float[..]` does not. This is the language's rule about what a transposition is -- the adjoint of a linear
+    /// map needs the shape of its domain -- not a limit of this walk: the same thing is why JAX's `linear_transpose` asks the caller for the
     /// shape of the value it transposes. The refusal is raised as its own diagnostic
     /// (`RuntimeDiag::TransposeNeedsParameterShape`), so a reader is told to write the shape in the
     /// type instead of being told the compiler cannot do it.
     ///
-    /// **One class, one word: this is the word for "the declaration states no shape"** (author,
-    /// 2026-11-04). The same fact arrives at two entrances and used to be spelled two ways: the
+    /// **One class, one word: this is the word for "the declaration states no shape"**. The same
+    /// fact arrives at two entrances and must not be spelled two ways: the
     /// operator's own call site refused when the member came out with a port the promised type has
     /// no room for (`buildTransposeGraph`), and a law's right side that could not be handed an
     /// operand reached through `vjp`/`split` arrived as `cotangent-needs-a-value` ("a value is
-    /// missing"). The second spelling is what taught readers to look for a lost value while the
-    /// repair was an extents write, so the walk now asks the same question at that site and refuses
+    /// missing"). The second spelling would teach readers to look for a lost value while the
+    /// repair is an extents write, so the walk asks the same question at that site and refuses
     /// *this* cause: the operand the law read is an array whose declaration leaves its extents
     /// open, which is the shape this diagnostic names. A cause is one class of fact, and this class
     /// has one word.
@@ -104,15 +103,13 @@ enum class TransposeRefusalCause {
     /// A law's right side reads a **value** the walk cannot hand it, and no declaration of a shape
     /// supplies that value: the parameter's own value is the tangent's (a transposition answers the
     /// tangent, it is not handed one), or the operand is a number whose shape is already complete
-    /// (`float` needs no extents, so no edit to a declaration adds anything). Measured 2026-11-04:
+    /// (`float` needs no extents, so no edit to a declaration adds anything). For example
     /// `mul_tangent`'s law reads `w` and `dx`, both tangents, and `read_outer`'s `k = x*x` reads a
     /// `float` parameter -- `skip=law-reads-a-value uri=:op/mul_d position=0`.
     ///
     /// It is **not** `ParameterShape`, and the two must not be merged: there the repair is an edit
     /// to a declaration, and here there is no edit to make -- the value has to reach the member
-    /// some other way, which is the question
-    /// `docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`
-    /// asks. A reader who is told to write extents in a declaration that already states them all
+    /// some other way. A reader who is told to write extents in a declaration that already states them all
     /// has been told to do something that changes nothing.
     LawReadsAValue,
     /// A call whose answer is the `(value, tangent)` pair is read as a whole, and this step has no
@@ -121,9 +118,9 @@ enum class TransposeRefusalCause {
     /// Its own cause and not `LawReadsAValue`: nothing here reads a value the walk failed to reach
     /// -- the walk never reached a *cotangent*, and the sentence has to say so.
     ///
-    /// **No case in the tree reaches it** (measured 2026-11-04: the step's own log field,
+    /// **No case in the tree reaches it** (the step's own log field,
     /// `why=no-cotangent-on-the-tangent-component`, occurs at the site in
-    /// `transpose.cpp#buildTransposeMember` and in no case, plan or page). It is kept as a guard
+    /// `transpose/walk.cpp#buildTransposeMember` and in no case, plan or page). It is kept as a guard
     /// rather than deleted, the way `CallValueMissing` is: a pair read with a cotangent wanted on
     /// its second component is a state the walk can still enter, and answering it with a cause
     /// about a missing *value* is what sent a reader to the wrong edit. A program that reaches it
@@ -132,8 +129,8 @@ enum class TransposeRefusalCause {
     State,
     Range,
     CallNoTranspose,
-    /// No program can reach this one today: the shape that reached it is the one `34788b554`
-    /// fixed (a parameter's own value is carried into the closure), so it is kept to name a state
+    /// No program can reach this one today: the shape that reached it is the one fixed
+    /// by carrying a parameter's own value into the closure, so it is kept to name a state
     /// the walk can still enter, not because a live check guards it.
     CallValueMissing,
     /// Reachable today (`vjp_loop.rounds_are_undone_in_reverse` records it): the value is one the
@@ -152,14 +149,13 @@ enum class TransposeRefusalCause {
     /// value declares an addition); it exists so the state has a name instead of a `float` sum.
     NoCotangentArithmetic,
     /// The rule's cotangent port declares one type and the walk hands it another, with no
-    /// conversion between them: the comparison the author asked for on 2026-11-04 (compare the
-    /// port's declared type with the type of the value really handed, and refuse a disagreement). A
+    /// conversion between them: the comparison of the
+    /// port's declared type with the type of the value really handed, refusing a disagreement. A
     /// law is filed under its operator's head and its operand count, so nothing about the index
     /// ties the law's cotangent port to the shape the step has: `mul_tangent`'s law writes `(ct:
     /// T[..])`, and at a `float` step the cotangent the member is handed is the number itself.
     ///
-    /// **This is a compiler defect, not a language rule** (author, 2026-11-04, second ruling on the
-    /// item): no program reaches it, because the cotangent a program can hand a transposed function
+    /// **This is a compiler defect, not a language rule** : no program reaches it, because the cotangent a program can hand a transposed function
     /// is `Tangent<ResultOf<F>>` -- the type the declaration states -- so a port that disagrees
     /// with it is a law whose writing and whose instancing came apart inside the compiler. The
     /// cause stays as a guard against that inconsistency (the expansion reads the port's type to
@@ -169,14 +165,14 @@ enum class TransposeRefusalCause {
     /// cannot reach it, and a criterion nothing reaches is not a criterion.
     CotangentPortMismatch,
     /// The type a law's right side **answers** with is not the type of the operand whose cotangent
-    /// it claims to be (author, 2026-11-20: a transposition checks, as it runs, the type of each
-    /// law's right side against the type of the operand it answers for -- shape and rank -- and
-    /// names the law where the two disagree). A rule's right side answers one component per port, in
+    /// it claims to be (a transposition checks, as it runs, the type of each law's right side against
+    /// the type of the operand it answers for -- shape and rank -- and names the law where the two
+    /// disagree). A rule's right side answers one component per port, in
     /// the order its left side writes them, and nothing ties that component's shape to the
     /// operand's: the index files a law under its operator's head and its operand count and reads no
     /// operand types, so a law can hand back the whole broadcast result for an operand the broadcast
-    /// spread one element of. Measured before this cause existed (`add_tensor_t`, `subtract_t`):
-    /// `x: float[2, 3]`, `b: float[3]`, `y = x + b`, `pullback(1.0)` answered `dL/db` as a
+    /// spread one element of. Without this cause, in `add_tensor_t` and `subtract_t` with
+    /// `x: float[2, 3]`, `b: float[3]`, `y = x + b`, `pullback(1.0)` would answer `dL/db` as a
     /// `[[1, 2, 3], [4, 5, 6]]` tensor while the static type said `float[3]`, with exit 0 and no
     /// diagnostic -- a wrong number under a right type, which is the one reading the language
     /// forbids (design principles 9.9: give the correct derivative or refuse by name).
@@ -189,7 +185,7 @@ enum class TransposeRefusalCause {
     /// no instance at these operands): here the law was chosen, its body ran, and what it answered
     /// is a different shape from the one it is answering for.
     ///
-    /// What is compared is what the two types **state** (`statedShapeDisagreement`, `transpose.cpp`):
+    /// What is compared is what the two types **state** (`statedShapeDisagreement`, `transpose/walk.cpp`):
     /// an extent a type leaves open is not compared, and a side whose rank is open (`T[..]`, which
     /// includes rank 0) is not compared on rank. So a law that reduces with `sum_to` -- the repair
     /// this cause was added beside -- answers `T[..]` and says nothing here.
@@ -199,7 +195,7 @@ enum class TransposeRefusalCause {
     /// applies is `mk`'s answer, assembled from `x`. A bare `transpose(f)` treats every parameter
     /// of `f` as a linear input, and this call is not one: what it applies was *made* out of a
     /// parameter, which makes the call a second-order use of that parameter and `f` not linear in
-    /// it (author, 2026-11-04: a callee built from a linear input is a **linearity** refusal -- the
+    /// it (a callee built from a linear input is a **linearity** refusal -- the
     /// sentence names the parameter, because "the answer has no source" describes this walk and not
     /// the language). `param` is the parameter's index, so the sentence can name it.
     CalleeBuiltFromAParameter,
@@ -300,14 +296,22 @@ struct TransposeGraph {
 /// The signature `transpose(f)` has for `function`, or nullptr when the function has no transpose:
 /// `(ct: float) => (float)` for a function of one `float` parameter returning a `float`, and
 /// `(ct: float) => (float, float)` for one of two -- the cotangent of the result in, one cotangent
-/// per parameter out, always as a tuple, because the law states one shape for every arity (author,
-/// 2026-11-02 11:30). Every parameter of `f` is a linear input, so no parameter is a value the call
+/// per parameter out, always as a tuple, because the law states one shape for every arity. Every parameter of `f` is a linear input, so no parameter is a value the call
 /// passes; a value the body needs is captured by the function that is transposed.
 ///
 /// `participates` is the one exception, and it belongs to a call site rather than to a type: one
 /// flag per parameter, true where a cotangent is answered for. A parameter outside the set is a
 /// value the caller still passes, which is the shape a rule's tangent function has. Empty means
-/// every parameter participates, which is the ordinary transposition. `answersOf`, when given, is
+/// every place is read by the lift law (`lift.h#liftedParametersOf`): the ordinary transposition,
+/// where every parameter is a tangent, and the signature of a graph that is itself a `Lift`, where
+/// the law writes a value half and a tangent half and only the tangent half is answered for. Which
+/// places those are is never decided here -- the law says it, and this signature, the ports the
+/// member takes and the answer it gives are all that one answer.
+///
+/// `liftedSignature` is which of the law's two readings applies, and it is a fact about the *graph*
+/// the signature belongs to (`GCGraph::liftedFrom`): the two shapes are one type, so no type says
+/// it. False -- what a caller holding only a type passes -- reads the list the ordinary way.
+/// `answersOf`, when given, is
 /// filled with the position of the parameter each member of the answer tuple is the cotangent of,
 /// in the order the answer writes them. A caller that builds a call to this member reads the
 /// positions here instead of deciding them again from the parameter list: `xs[i]` has an `int`
@@ -315,7 +319,8 @@ struct TransposeGraph {
 /// the callee's parameters are not the same list.
 camel::core::type::FunctionType *transposeSignature(
     camel::core::type::FunctionType *function, const std::vector<bool> &participates = {},
-    std::vector<size_t> *answersOf = nullptr, const std::vector<size_t> *captures = nullptr);
+    std::vector<size_t> *answersOf = nullptr, const std::vector<size_t> *captures = nullptr,
+    bool liftedSignature = false);
 
 /// Why this transform has no cotangent for a result of type `result`, in the words the call site's
 /// diagnosis uses; empty when it has one. The call site asks this for its message and the gate asks

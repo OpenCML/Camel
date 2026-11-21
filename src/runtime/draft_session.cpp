@@ -1906,7 +1906,7 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
         // its own edit needs -- `tiles`, whose bodies now hold a device submission and so reach the
         // ambient `tiles:driver` -- reads the body here, through the same `bodySignature` the
         // commit's check reads, and states the widened type on the draft before the commit that
-        // judges it (the ruling of 2026-11-18, `f61196246`: the pass declares the widened type at
+        // judges it ( the pass declares the widened type at
         // the commit). A staged run delivers nothing and makes no revision: the program of this
         // session is still the one it was opened over, and only the encode's copies are new.
         staged_.reset();
@@ -1976,8 +1976,8 @@ const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     // both paths answer the same question. A rewrite through the draft API that splices nodes in
     // reaches it here too.
     //
-    // Asked by what the draft added, not by what the build is (the ruling of 2026-11-18, which
-    // replaces the one of 2026-11-16): a draft that added an access is asked the effect and order
+    // Asked by what the draft added, not by what the build is:
+    // a draft that added an access is asked the effect and order
     // checks in every build, and a draft that added none owes no answer about them in any build --
     // the public edits of the graph module (`replace`, `erase`, `add_constant`, `eval`) make no node
     // that carries an access, and `replace` promises that what the node it removed ordered stays
@@ -2166,8 +2166,7 @@ void GraphDraftGroup::encode() {
     }
     for (GraphId id : order_) {
         const Member &m = member(id);
-        auto &draft     = m.transaction->edit();
-        GCGraph *graph  = encodeDraftGraph(
+        GCGraph *graph = encodeDraftGraph(
             context_,
             m.identity,
             *m.transaction,

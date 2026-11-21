@@ -34,7 +34,7 @@ oper_group_ptr_t loadNpyOperatorGroup();
 /// `load_npy_i64` and `load_npy_bool`. A resource declaration has to name those five: the group's
 /// head, `tensor:load_npy`, answers a call but is no operator, so a declaration written there
 /// reaches none of them and they fall back to "writes the global resource"
-/// (`catalog.cpp#declareResourcesAndDefinitions`, 2026-11-19). The names are asked for instead of
+/// (`catalog.cpp#declareResourcesAndDefinitions`). The names are asked for instead of
 /// written a second time, so a sixth element type cannot be added without its declaration.
 std::span<const std::string_view> npyLoadOperatorNames();
 

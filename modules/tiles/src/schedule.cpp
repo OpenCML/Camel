@@ -72,9 +72,9 @@ std::vector<std::byte> hostStorage(const Node &node) {
 size_t bytes(const Node &node) {
     if (!node.results.empty())
         return 0; // Operation producers carry dependencies; only their results hold values.
-    // The width is the element's own: this used to read "eight bytes for f64, four otherwise",
-    // which would have made an i64 value four bytes per element and read half of it, and an "else"
-    // would make a bf16 value four bytes and read past it. dtypeWidth is exhaustive over the
+    // The width is the element's own: a fixed "eight bytes for f64, four otherwise" would make an
+    // i64 value four bytes per element and read half of it, and an "else" would make a bf16 value
+    // four bytes and read past it. dtypeWidth is exhaustive over the
     // element types, so a type added to the enum cannot fall through to a size that is not its own.
     const size_t width = dtypeWidth(node.dtype);
     const size_t count = elements(node.shape);

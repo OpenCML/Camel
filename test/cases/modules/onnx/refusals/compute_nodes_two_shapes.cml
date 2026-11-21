@@ -27,7 +27,10 @@ func spin(n: int): int sync {
 }
 
 func main(): int sync {
-    let _ = export_model<out: 'tmp/test/onnx/compute_nodes_two_shapes.onnx'>(double, reshape<[2]>([1.0, 2.0]))
+    // The refusal is what this case measures, and binding it would add compute nodes to the
+    // function whose size the refusal reports, so the value stays unbound: the compiler reports
+    // that with its own warning.
+    export_model<out: 'tmp/test/onnx/compute_nodes_two_shapes.onnx'>(double, reshape<[2]>([1.0, 2.0]))
     let x = cpu_count()
     println(x)
     println('before')

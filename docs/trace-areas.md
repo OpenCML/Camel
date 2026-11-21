@@ -14,8 +14,8 @@ through, so a row can be checked again after any change.
 |---|---|---|---|
 | `REINTERP ` | `transforms` | `modules/transforms/vmap_operator.cpp#vmapKernel` -> `modules/transforms/vmap.cpp#buildVmapGraph` | `readings()` |
 | `kinds=`, `asked=`, `found=`, `missing=`, `rules=` | `transforms` | the same line as `REINTERP` (`modules/transforms/vmap.cpp#askedFoundMissing` builds the fields) | `readings()` |
-| `TRANSPOSE ` | `transforms` | `modules/transforms/transpose_operator.cpp#transposeKernel`, `modules/transforms/transpose.cpp` | `readings()` |
-| `SPLIT `, `JVP ` | `transforms` | `modules/transforms/transpose.cpp` (the split/jvp half of the same walk) | `readings()` |
+| `TRANSPOSE ` | `transforms` | `modules/transforms/transpose_operator.cpp#transposeKernel`, `modules/transforms/transpose/walk.cpp` | `readings()` |
+| `SPLIT `, `JVP ` | `transforms` | `modules/transforms/transpose/walk.cpp` (the split/jvp half of the same walk) | `readings()` |
 | `in_recompute=`, `out_recompute=` | `transforms` | `modules/transforms/remat_operator.cpp` | `readings()` |
 | `PLAN_REF_SITES ` | `plan` | `src/passes/sched/fastvm/compile.cpp#compileRuntimeGraph` | `trace(TraceArea::Plan)` |
 | `effect containment: checked` | `effects` | `src/execute/pass.cpp#passBoundaryViolation` | `trace(TraceArea::Effects)` |

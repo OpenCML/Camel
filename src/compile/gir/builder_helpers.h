@@ -176,6 +176,37 @@ inline StaticFunction *createStaticFunction(
         staticFunctionAllocator(ownerGraph));
 }
 
+/// The order two nodes of a compile-time table are walked in, when that walk decides what the body
+/// builds: the graph the node belongs to first, then the node's own id.
+///
+/// `operator<` on a handle is not this order. The handle's `std::hash` and its ordering both reach
+/// the draft through a pointer (`include/camel/runtime/node_ref.h#DraftNodeRef`), so a table of them
+/// walked as it stands walks the allocator's order, and the compiled graph then depends on where the
+/// nodes happened to land. The node's id alone is not this order either: an id names a node **inside
+/// one graph**, and these tables hold nodes of several, so an id-first key orders two graphs' nodes
+/// by their numbering and interleaves them -- two entries whose ids are equal are then separated
+/// only by whatever their hash happened to be, which is the same defect one level down. The graph's
+/// identity is the draft's `epoch`, the number the draft was made with and that no other draft is
+/// ever given (`node_ref.h`), so `(epoch, id)` is one name per node and a total order over the whole
+/// table.
+inline bool walksBefore(const node_handle_t &left, const node_handle_t &right) {
+    if (left.epoch != right.epoch) {
+        return left.epoch < right.epoch;
+    }
+    return left.id < right.id;
+}
+
+/// The same order for the tables keyed by the graph itself: a graph's identity is the epoch of the
+/// draft it builds (`GraphDraft::epoch`), never the address of its builder.
+inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuilder *right) {
+    if (left == nullptr || right == nullptr) {
+        return left != nullptr;
+    }
+    const uint64_t leftEpoch  = left->transaction().graph().epoch();
+    const uint64_t rightEpoch = right->transaction().graph().epoch();
+    return leftEpoch < rightEpoch;
+}
+
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
 inline std::optional<slot_t> staticValueOf(node_handle_t node) {
     if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
@@ -1152,7 +1183,7 @@ inline ConditionSeparation separateWhenConditions(
 /// The rule itself is stated once, in the type layer
 /// (`camel/core/type/composite/array.h#isRankZeroEdge`), because the transposition walk asks it too
 /// where it hands a law the cotangent of that law's port, and that entrance is not a builder's
-/// (`modules/transforms/transpose.cpp#ruleCotangent`). One rule, and the entrances that ask it
+/// (`modules/transforms/transpose/walk.cpp#ruleCotangent`). One rule, and the entrances that ask it
 /// rather than a second reading each.
 using camel::core::type::isRankZeroEdge;
 
@@ -1166,5 +1197,31 @@ inline Type *rankZeroElementOf(Type *type) {
     const auto *array = tt::as_ptr<const ArrayType>(type);
     return array != nullptr ? array->rankZeroType() : nullptr;
 }
+
+// The group whose result `a != b` negates (design principles 4.2, 4.3): `==`. `!=` is not
+// overloaded itself -- an overload of `==` gives it -- so this is also the group the call
+// resolves in before the negation is built over its one result. Null for every other operator,
+// and for a call written by name. `!==` is not here: it is not an overloadable form, so no DREF
+// of it reaches these files -- the construction tree builds it as `!(===)` (gct/builder.cpp).
+inline const char *negatedWholeOf(const std::string &group) {
+    if (group == "__neq__") {
+        return "__eq__";
+    }
+    return nullptr;
+}
+
+/// Clears the "the statement being built has a value nobody takes" mark for the length of a
+/// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
+/// an argument written inside one is not a statement of its own.
+struct UnusedStatementScope {
+    const GCT::Node *&slot;
+    const GCT::Node *saved;
+    UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value) : slot(slot), saved(slot) {
+        slot = value;
+    }
+    ~UnusedStatementScope() { slot = saved; }
+    UnusedStatementScope(const UnusedStatementScope &)            = delete;
+    UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
+};
 
 } // namespace camel::compile::gir

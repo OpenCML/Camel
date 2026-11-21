@@ -175,7 +175,7 @@ bool OnnxModule::load() {
     // outside the program, as the traits above say. The graph it translates is a value it is
     // handed, not a resource. Left undeclared, every operand read conservatively, so a body that
     // called it reached a resource no clause could name and could prove nothing about its own
-    // effect (2026-11-20).
+    // effect.
     camel::core::OperatorTable::instance().declareResources(
         "onnx:export_model",
         camel::core::sem::externalAmbient(

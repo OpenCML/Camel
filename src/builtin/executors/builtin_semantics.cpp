@@ -189,7 +189,7 @@ void declareUnorderedReduce() {
         return inst;
     };
     // What the operator already has is kept and this declares the addition: its declared accesses
-    // (author 2026-11-19) and, on the second context that loads the module, the version the record
+    // and, on the second context that loads the module, the version the record
     // already carries. A record declared again from a fixed key is refused as a lower version, so
     // the key comes from the table the way `declareElementCalls` takes it.
     OperatorSemantics record{
@@ -260,8 +260,7 @@ void declareBuiltinOperatorFaults() {
     // floating-point arithmetic rounds and a comparison only compares; the predicates over a
     // collection walk one and build no value; `pow` of the scalar and complex types is the
     // library call of the same name, which returns inf or NaN outside its domain. Each entry
-    // is one operator of docs/handover/reports/faults-table-audit.md, which reads its
-    // implementation against this table.
+    // is one operator whose implementation is read against this table.
     static constexpr std::string_view kNoFaultPath[] = {
         "op/add_i",
         "op/add_l",
@@ -501,8 +500,8 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         }
         const std::string uri       = ":" + std::string(name);
         const std::string_view rest = name.substr(std::string_view("op/assn").size());
-        // Writing a variable is not an effect (design principles 3.1 and 3.5, the ruling of
-        // 2026-11-15): the cell is one of the program's own variables, so an assignment is
+        // Writing a variable is not an effect (design principles 3.1 and 3.5):
+        // the cell is one of the program's own variables, so an assignment is
         // state-only -- it changes what the program keeps and nothing outside it. The access list
         // below says the same thing one operand at a time; this is the word that keeps the reading
         // from falling back to "an effect was declared and nothing itemized, so it reaches
@@ -582,13 +581,13 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
             .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
             .externalEffect = true});
     // `:macro/cmp` is pure and declared in the pure list of `registerBuiltinOperatorTraits`: its
-    // executor answers the null slot and the compiler makes no node of it any more
+    // executor answers the null slot and the compiler makes no node of it
     // (src/compile/gct/builder.cpp, `ReservedDataOp::Comp`), and the two operands are function
     // values it never calls.
     // The operators that run a function the program hands them (`map`, `filter`, `foreach` and the
     // unordered loop of the same shape): what they touch is that function's, so the declaration
-    // names the operand the function arrives in and not a resource (design principles 3.3; author
-    // 2026-11-19). It is the same rule a call through a function value already follows
+    // names the operand the function arrives in and not a resource (design principles 3.3).
+    // It is the same rule a call through a function value already follows
     // (`Builder::reachOfCall`): a reader that has the value reads its function type, and `map` over
     // a pure function touches nothing at all -- itemizing "external" here made such a call enter
     // compare) would make such a call enter the sync chain and lose its freedom. A reader that has

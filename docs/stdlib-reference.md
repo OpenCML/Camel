@@ -1452,7 +1452,7 @@ residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/tran
 the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 graph too, so a body that needs a value it computed carries it instead of computing it again.
 
-The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+The cut: the front half
 takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
 residuals -- the values it reads -- and takes the tangents and nothing else.
 
@@ -1491,10 +1491,10 @@ same rule for a value the body computed, a value it read from outside, and a `wi
 the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 
 **`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
-that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+that makes it is `modules/transforms/transpose/signature.cpp#transposeSignature`. So `transpose(f)` is
 called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 
-The member is built once for a graph version and kept (author, 2026-11-19 15:40): the walk reads
+The member is built once for a graph version and kept: the walk reads
 the graph and the graphs it refers to and never the value of a call, so a second call about the
 same version names the member the first one built. `vjp`'s pullback and `grad`'s derivative are
 called once per step of a loop over one `lin` graph, and the transposition is what the transform
@@ -1531,8 +1531,7 @@ remat: (f: F) => F when is_function::<F>()
 ```
 
 Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
-property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
-of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+property "a call of it is recomputed on the backward pass instead of kept". The property is the graph's, not the call site's and not a tag's: the call
 answers with a new graph whose body is the body it was given, so a call through it is a call of
 the same function and no value changes -- what changes is what a step that cuts the graph in two
 has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
@@ -1586,32 +1585,32 @@ than a value).
 vjp: (f: F) => Vjp<F> when is_function::<F>()
 ```
 
-The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+The reverse transform, in JAX's order: `vjp(f)(x)` gives the pair
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
 member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
-two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+two have the shape `(ct) => (cotangents)`, so nothing is
 wrapped around it.
 
 The pullback answers a tuple in every case, one member per parameter, so a function of one
 parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
 number a gradient is comes out of it by position: the first cotangent of the pullback read at
-`1.0` (author's ruling of 2026-11-01 14:30: one rule for every arity, no exception for one
-parameter, no type function that takes an element out of a one-long tuple).
+`1.0` (one rule for every arity, no exception for one parameter, no type function that takes
+an element out of a one-long tuple).
 The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
 `(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
-parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
-rule for every arity, no exception for one parameter, no type function that takes an element out of
-a one-long tuple).
+parameter, so a function of one parameter has a one-long tuple (one rule for every
+arity, no exception for one parameter, no type function that takes an element out of a
+one-long tuple).
 
 One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
 pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
 instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
-stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
+stands in. The packs are values in the
 body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
 `split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
 takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
 list, because the `with` value the backward half reads is a residual the cut captured in its
-closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
+closure (`Pullback<F>` in stdlib/types.cml is
 `(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
 lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
 writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
@@ -1621,15 +1620,15 @@ The whole reading in one line: the function is written where the call is, so the
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.
 
-**Where the cut happens** (author, 2026-11-18: "`grad` hands back the differentiated graph, not a
-graph that transforms itself when it runs"). `split(jvp(f))` is written *here*, in the body of
+**Where the cut happens** (`grad` hands back the differentiated graph, not a graph that
+transforms itself when it runs). `split(jvp(f))` is written *here*, in the body of
 `vjp`, and not inside the lambda it answers: the cut is made once, when `vjp(f)` is evaluated,
 and every call of the reading calls the graph that cut handed back instead of cutting the lifted
-function again. Before this the body of the lambda opened with `split(jvp(f))<...ws>(...xs)`, so a
-training loop redid the whole lift and the whole cut on every step -- the cost the author named
-on 11-17, and the reason an outer transform met a derivative that was not a graph yet.
+function again. Cutting inside the lambda, as `split(jvp(f))<...ws>(...xs)`, would redo the whole lift and
+the whole cut on every step of a training loop, and an outer transform would meet a derivative
+that was not a graph yet.
 
-**Where the transposition happens** (author, 2026-11-19 15:40): the same reading, one step on.
+**Where the transposition happens**: the same reading, one step on.
 `transpose(lin)` is still written inside the lambda, because `lin` does not exist until the
 forward half has run -- but the *walk* is a function of the graph `lin` is of, and a call keeps
 asking about the same graph. So the module keeps the member it built for a graph version and a
@@ -1645,12 +1644,11 @@ closure, so the member is a fresh function value per call even though its graph 
 The design's next step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
 (`fwd: x => (y, residuals)`, `lin: (residuals, tangents) => tangent`), which needs the residual
 *list* in a type: it is a property of the body (`residualsOf`), not of the signature, and no
-declaration can write it -- the `ResidualsOf<F>` / `_`-position hole that used to try was removed
-for that reason. Measured 2026-11-18 on this tree: the operator resolver sees types only, so it
+declaration can write it -- the `ResidualsOf<F>` / `_`-position hole is not an option
+for that reason. The operator resolver sees types only, so it
 gives `lin` an empty residual list while the graph has as many as the body reads, and a call site
-typed by the resolver hands the callee the wrong number of values. That ordering is a question
-for the author (a typed hole, or the `std::macro` stage evaluating the cut where the graph *is* in
-hand), and the handover report of 2026-11-18 on nested transforms states it with the readings.
+typed by the resolver hands the callee the wrong number of values. That ordering is open: a typed
+hole, or the `std::macro` stage evaluating the cut where the graph *is* in hand.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
@@ -1685,11 +1683,9 @@ first member plus the rest (`<w, ...ws>`), because the moved function's own list
 the weight is its first parameter: `forward<...ws>(w, ...xs)`. Written with one pack and no name
 (`<...ws> (...xs)`) the weight has nowhere to come out of the pack into the parameter list. A
 function with no ordinary parameter at all is `xs` with no member, and the line is the same one:
-a lambda's rest pack is a value in its body whether or not it has a member (bound on 2026-11-20;
-until then `xs` was `UnresolvedReference` for exactly that arity, while the same forwarding in a
-declaration answered).
+a lambda's rest pack is a value in its body whether or not it has a member.
 
-**The cut is made here, once** (author, 2026-11-18), for the reason `vjp` above states and with
+**The cut is made here, once**, for the reason `vjp` above states and with
 the same limit: `split(jvp(first_with_as_param(f)))` is written in `grad`'s own body, so a call of
 the gradient calls the graph the cut built instead of lifting and cutting the function again. The
 body is the composition written out (`split`, then `transpose`) rather than `vjp` read at the seed
@@ -1701,8 +1697,8 @@ once for that graph version (`modules/transforms/transpose_operator.cpp#Transpos
 **A nest of this `grad` is this composition twice, and it is read one wall further on.** `grad(f)`
 answers a function that still takes its weight as a `with` value, so `grad(grad(f))` finds a first
 `with` parameter to differentiate and the second derivative is the same step again:
-`grad(grad(square))<2.0>()` typechecks and builds, where it used to be refused by
-`first_with_as_param` ("this function has no `with` parameter: there is no first one to move").
+`grad(grad(square))<2.0>()` typechecks and builds, with no refusal from
+`first_with_as_param` ("this function has no `with` parameter: there is no first one to move") for it.
 What it does not do yet is answer 2.0: the value the outer `jvp` is asked to lift is what the inner
 `grad` answered, a function computed at run time, and `jvp` lifts a callee only when it is evident
 -- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The
@@ -1740,7 +1736,7 @@ to `vjp` is refused rather than guessed at (`has_aux_vjp_pair` in
 test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
 direction needs, so the composition that reads all three numbers is the one above.
 
-The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+The backward spelling of this body was tried and **refused by name**: `split(jvp(f))`
 read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
 the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
 member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph
@@ -2121,7 +2117,7 @@ The element at `position` of a rank-1 tensor whose length is `length`: `t[positi
 length stated by whoever holds the value.
 
 The length is a **known operand**, and it is the reason this spelling exists beside the
-language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
+language's own `t[i]`. A transpose rule may read only known operands,
 and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
 cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
 to build the zeros from unless the value's length is handed to it. A forward half can state it --
@@ -2452,6 +2448,36 @@ is one too.
 - Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
 - Example: `layer_norm(x, gamma, beta)`
 
+#### `layer_norm_grad`
+
+```camel
+layer_norm_grad: (x: f32[...], gamma: f32[...], dy: f32[...], which: int, eps?: number) => f32[...]
+```
+
+The gradient of the `f32` layer normalization with respect to one of its three operands, chosen
+by `which` (0 the input, 1 gamma, 2 beta), from the input x, `gamma` and the incoming gradient
+dy of the normalization's result. `eps` is the normalization's own and is 1e-5 by default, the
+same default the forward call has. The result has the shape of the operand `which` names.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input.
+- Failure: fault `RuntimeError` when `which` is not 0, 1 or 2.
+- Example: `layer_norm_grad(x, gamma, dy, 0)`
+
+#### `layer_norm_grad`
+
+```camel
+layer_norm_grad: (x: float[...], gamma: float[...], dy: float[...], which: int, eps?: number) => float[...]
+```
+
+The same gradient of `f64` operands, in `f64`: x, gamma and dy are `f64` and the result is one
+too.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input.
+- Failure: fault `RuntimeError` when `which` is not 0, 1 or 2.
+- Example: `layer_norm_grad(x, gamma, dy, 0)`
+
 ### Linear algebra
 
 #### `matmul`
@@ -2609,8 +2635,7 @@ Writes a tensor to a NumPy `.npy` file, replacing it.
 A reduction and a gather both forget something a pullback has to put back: `sum` forgets how many
 elements it added, `take` forgets how many rows it read from, and `mean` over an axis forgets the
 lane. The reverse of each spreads one cotangent over *that* shape, and it cannot read the shape
-off the operand: a transpose rule may read only **known** operands (author, 2026-11-03 11:10 and
-17:35), and the operand a cotangent comes back through has no value on that side -- while `T[...]`
+off the operand: a transpose rule may read only **known** operands, and the operand a cotangent comes back through has no value on that side -- while `T[...]`
 carries no extents in its type (design principles 5.4).
 
 So the forward half states them, and these declarations are what it states them to. Each is the
@@ -2621,8 +2646,8 @@ reads instead of the array. `pick_at` is the same arrangement for the read: `len
 The extents travel in one list because that is the list the reverse law wants whole: the axis and
 the flag decide which extents are lanes and the extents decide where each lane's cotangent goes, so
 one argument holds the three facts the adjoint reads and the value spends on nothing. (The number
-of ordinary ports is not the constraint it once was: the walk used to refuse a third position before
-looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
+of ordinary ports is not a constraint: the walk does not refuse a third position before
+looking for a law, and `TransposeRefusalCause` has no such cause -- the two extrema below take
 a third port, their tie selection, which no extent list could carry.)
 
 #### `sum_stated`
@@ -2683,6 +2708,71 @@ operand that is one number states no extents, and its list is empty.
 - Pure.
 - Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
 - Example: `mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])` gives `[3.0, 8.0]`
+
+#### `add_stated`
+
+```camel
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the sum and spends nothing on the extents: the broadcast, the element type and the
+one rounding are `add`'s own. `rulesets.transpose`'s `add_stated_t` reads the two lists instead
+of the operand whose cotangent it is answering -- on the reverse side that operand is a tangent,
+and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+computes them is `rulesets.jvp`'s `jvp_add_tensor`, where both operands are values and
+`shape(...)` of each is one.
+
+Two lists and not one, for the reason `mul_stated` states: a sum broadcasts, so `[2, 2, 3] + [3]`
+has two different operand shapes and each cotangent comes back to its **own**. An operand that is
+one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `add_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[11.0, 22.0], [13.0, 24.0]]`
+
+#### `subtract_stated`
+
+```camel
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the difference through `subtract`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `subtract_stated_t` for the reason `add_stated` records: an answer that
+may not be the operand's shape is refused and not guessed, and a tangent's shape is not in its
+type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `subtract_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[-9.0, -18.0], [-7.0, -16.0]]`
+
+#### `div_stated`
+
+```camel
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The quotient of two tensors, with **both** operands' extents stated: `x / w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the quotient through `divide`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `div_stated_t` for the reason `mul_stated` records: a quotient broadcasts
+as a product does, so each cotangent comes back to its **own** operand's shape, and on the reverse
+side the operand a cotangent is answered for is a tangent -- `float[...]`, whose type states no
+extents (design principles 5.4). The forward half that computes the two lists is
+`rulesets.jvp`'s `jvp_divide` (and its `jvp_div_stated`, for a program that writes this operator
+itself), where both operands are values.
+
+An operand that is one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `div_stated([[1.0, 2.0], [2.0, 4.0]] as float[2, 2], [2.0, 4.0] as float[2], [2, 2], [2])` gives `[[0.5, 0.5], [1.0, 1.0]]`
 
 #### `matmul_stated`
 
@@ -2869,8 +2959,8 @@ an axis reduction are the operand's extents with one axis removed -- or kept as 
 a declaration's result is a type, not a function of two values. Written here as a declaration
 the name answered `T[...]`, which is a result that states no extent at all; the operator's own
 inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
-`support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` now reads a
-`float[3]` where it used to read a `float[...]`.
+`support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` reads a
+`float[3]`, not a `float[...]`.
 
 The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
 takes them as parameters of its own, so a call that leaves them to the run states no rank, and its
@@ -2891,10 +2981,9 @@ else.
 `at` is the target itself -- the extents the answer has, written where the call is. The length is
 therefore the caller's: it is not read off another value's shape (the older spelling passed a
 zero array whose shape stood in for the target) and not off a type, and no registry, context or
-expected result type supplies it -- the extents are the runtime shape the caller states, which is
-the layer the author's ruling of 2026-11-05 puts them on.
+expected result type supplies it -- the extents are the runtime shape the caller states.
 
-**The contract is 甲: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
+**The contract: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
 summed away, and an axis `at` states 1 against a longer one is summed too -- the adjoint of a
 broadcast that handed one element along that lane (design principles 5.4). Two equal shapes are
 the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
@@ -2925,10 +3014,10 @@ broadcast_like: (t: T, like: S) => S
 `t` spread out to the shape `like` states: the **other** direction of the same adjoint, and the
 operator that owns it.
 
-The two directions used to share `sum_to`, and they are not one move: a reduction reads a target
+The two directions do not share `sum_to`, because they are not one move: a reduction reads a target
 that is a suffix of its operand's shape and adds over the axes in front of it, while a spread
 writes an element into every lane a broadcast would have handed it out along -- the operation
-`broadcast_like` is named for. `sum_to` now takes the extents themselves (ruling 甲) and refuses
+`broadcast_like` is named for. `sum_to` takes the extents themselves and refuses
 a target *longer* than its operand by name; a law that needs a rank-one value in the lanes of a
 rank-two one says `broadcast_like(value, like)` and reads the shape off a value the cut carries.
 
@@ -6049,7 +6138,7 @@ tag_name: (t: Tag) => string
 ```
 
 The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
-not declared any more.
+not declared.
 
 - Example (a fragment, not compiled): `tag_name(t)` gives `'jvp'`
 - Why it is not compiled: t is a tag read from a declaration
@@ -6655,7 +6744,9 @@ into a host number) downloads it, and the reports of a run list every such trans
 What a program does by hand is small: ask whether a device is there (`available`, `device`), move
 a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
 `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
-written order against the others and is never folded, merged or dropped. The functions to look
+written order against the others and is never folded, merged or dropped -- `regions` excepted:
+it reads the graph of the function it is given and touches no resource, so it writes no `uses`
+clause and needs no place in that order (it is still never folded). The functions to look
 at are the `with` argument and the data is the example input, as for `map`:
 `inputs->inspect<fn>`.
 
@@ -6736,11 +6827,14 @@ text.
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
-the device and why the others would not.
+the device and why the others would not. It reads the graph of the function and touches no
+resource -- it neither executes the graph nor initializes CUDA -- so it writes no `uses`
+clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
+through.
 
 - Example: `regions<(a: f32, b: f32): f32 => a + b>()`
 
@@ -7755,20 +7849,19 @@ operation consumed. That is `shape(xs)` of them, a value of the primal which the
 carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
 that answers it (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
 that argument and nothing of the operand the cotangent comes back through. A transpose law may
-read only known operands (author, 2026-11-03 11:10 and 17:35), and `T[...]` carries no extents in
+read only known operands, and `T[...]` carries no extents in
 its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
 `tensor.pick_at` is the operator it states a length to.
 
-The extents used to ride inside one integer list with the axis and the flag, on the reading that
-the transpose walk refuses an operator with a third operand (`skip=arity
-uri=tensor:mean_axis operands=3`, measured 2026-11-03). That is true of a third *tensor*: the
-stated reductions take their axis, their flag and their extents as three parameters today
+The extents do not ride inside one integer list with the axis and the flag, although the
+transpose walk refuses an operator with a third *tensor* operand (`skip=arity
+uri=tensor:mean_axis operands=3`): the
+stated reductions take their axis, their flag and their extents as three parameters
 (`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
-node with five operands, and the laws read them by name. The plain axis form never needed the
-reading either: with the axis and the flag in angle brackets it carries one normal operand and two
-context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds (author's ruling,
-2026-11-05). A list would have needed a function to build it. Nothing builds a list for a
-call's arguments any more: every one of those parameters is a parameter of its own.
+node with five operands, and the laws read them by name. The plain axis form does not need the
+list either: with the axis and the flag in angle brackets it carries one normal operand and two
+context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds. A list would need a function to build it, and nothing builds a
+list for a call's arguments: every one of those parameters is a parameter of its own.
 
 #### `reshape_jvp`
 
@@ -7780,15 +7873,15 @@ reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
 
 `dims` is the operator's second port, and this law names it, so the call's own `<>` value reaches
 the right side as an ordinary value (the protocol stated over `jvp_sum`, and the one
-`vmap_rule_reshape` already uses). It used to be written for one constant -- `reshape<[2, 2]>` --
-which put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` answered
+`vmap_rule_reshape` already uses). It is not written for one constant -- `reshape<[2, 2]>` --
+which would put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` would answer
 `reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
 `showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
 lifted at all.
 
 The right side cannot write `reshape<dims>(dx)` itself. A rule's right side is a closure over
 the values its left side bound, and a `<>` position written there asks for something the closure
-does not carry -- measured 2026-11-20, it is refused by name: "jvp has no forward rule for
+does not carry -- it is refused by name: "jvp has no forward rule for
 `tensor:reshape` (the rule's right side passes a context argument it does not carry)". So `dims`
 is handed to a function that writes the reshape, which is the arrangement `rulesets.vmap`'s
 `vmap_reshape` already uses for the same argument.
@@ -7826,6 +7919,88 @@ which is what makes this the forward reading and not `log_softmax_t`'s.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
 
+### The forward rule of `layer_norm`
+
+`layer_norm` normalizes each lane of `gamma`'s element count -- the trailing block `gamma` and
+`beta` cover -- so its tangent is not the operator applied to the tangents, and it is not an
+arithmetic this ruleset can write either: the lane is a block of axes and every reduction the
+library declares (`mean_axis`, `sum_axis`, the stated forms beside them) takes **one** axis. A
+law written over `mean<axis>` would answer one rank and call that the operator, which is the
+defect `jvp_reshape` records one section up.
+
+So the tangent is written as the normalization's own derivative, which the library already holds
+once: `layer_norm_grad`, the operator the reverse half's rule emits. Two facts make that legal
+and they are the whole of this law:
+
+  * `y = gamma * xhat + beta` with `xhat = (x - mean) * inv`, so, per element,
+    `d(y) = gamma * (J dx) + dgamma * xhat + dbeta`, and the last two terms are the element-wise
+    products written in `layer_norm_tangent` below;
+  * `J = inv * (I - e eT / n - xhat xhatT / n)` is **symmetric** -- every term of it is -- and
+    `layer_norm_grad(x, g, dy, 0)` answers `J (g * dy)`. With `g` replaced by ones it therefore
+    answers `J dx` exactly, which is the forward half, from the same kernel the reverse half
+    reads. `dgamma` and `dbeta` need nothing of that kind: they multiply `xhat` and `1`.
+
+`xhat` is the forward call with a neutral gain rather than the call's own `gamma` and `beta`,
+because the call's output is not bound on a rule's right side (`softmax_jvp` recomputes its
+`y` for the same reason) and `gamma` and `beta` are what it must *not* carry: this factor is
+the normalized value alone.
+
+`eps` is the operator's fourth parameter and this law does not write it. The law names the three
+ports `layer_norm(x, gamma, beta)` carries, both of its calls inherit the declaration's own
+default, and no constant of the operator's appears anywhere here -- which is the point: a law
+that wrote `1e-5` would be a second writing of the declaration and could drift from it. A call
+that *states* the eps (`layer_norm(x, gamma, beta, eps)`) is a four-port node, and a law names
+the ports it names, so that spelling is refused at the port count rather than answered with a
+default it does not carry. That refusal is what keeps this law safe: a three-port law that also
+matched a four-port node would answer it with `1e-5` while the node stated another eps, which is
+a wrong number and not a missing one. `jvp_softmax` above records the same trade from the other
+side, where the spelling that leaves the axis out is the one refused; the difference is that
+`softmax`'s axis is a `<>` port, so a law there *can* answer a node that states no axis, while
+`layer_norm`'s eps is a data operand, so a node that states none has one port fewer and no law
+of three ports can describe a node of four. One arity per operator is also what
+`scripts/vjp-parity.mjs` requires when it reads the two derivative tables against each other
+("`the rulesets file 'layer_norm' at 3 and 4 operand(s)`"), so a second law for the eps
+spelling would be a second writing of this key and not a second reading of it.
+
+What this does not make work is `grad` of a function that holds a `layer_norm`: the linear half
+of this law holds `layer_norm_grad` with five operands and no transpose of its own, so the
+reverse walk stops there and names it. That is the `split` wall, and it is not this law's.
+
+#### `layer_norm_tangent`
+
+```camel
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
+```
+
+The three terms of `d(layer_norm)`, from the normalized value `xhat` and the input's tangent
+already through the normalization's jacobian (`jx = J dx`).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])` gives `[1.0, 2.0]`
+
+#### `layer_norm_neutral`
+
+```camel
+layer_norm_neutral: (t: T[...], v: float) => T[...] when is_float::<T>()
+```
+
+A tensor of `t`'s shape and element type filled with `v`: the neutral gain is this at `1.0` and
+the zero bias this at `0.0`. `zeros_like` carries the shape *and* the element type, so both
+operands of the neutral `layer_norm` below are built the same way and cannot answer different
+shapes; `full(shape(t), v)` would answer `float` and refuse a 32-bit lane.
+
+The inline spelling this replaces, `layer_norm(x, ones_like(gamma), zeros_like(beta))`, answered
+`Array shape mismatch in 'layer_norm': layer_norm: gamma and beta must share the normalized
+trailing shape` at run time, on nvm and fvm, for a function whose three parameters are all
+`float[...]` -- the shape the showcase's own `block` has. The same `ones_like`/`zeros_like` pair
+on the same two arrays is right outside a lift, and the same law is exact for parameters whose
+extents are declared, so the reading to keep is: which of the two spellings the lift answers
+correctly is what the case in `test/cases/compile/transforms/layer_norm_jvp.cml` holds, and the
+isolation of that difference is written up in the lane's report rather than guessed at here.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `layer_norm_neutral([1.0, 2.0] as float[], 1.0)` gives `[1.0, 1.0]`
+
 ### The forward rule of `^` (a power)
 
 #### `pow_tangent`
@@ -7842,9 +8017,8 @@ wherever `x ^ w` is. The second is the derivative with respect to the **exponent
 `x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
 exists only for integer exponents and has no derivative in the exponent there.
 
-**No branch on a tangent's value.** The author's ruling of 2026-11-04 (`docs/handover/reviews/
-2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md`) took the
-`if dw == T(0)` guard this helper used to carry away: the zero of a constant's tangent is
+**No branch on a tangent's value.** This helper carries no
+`if dw == T(0)` guard: the zero of a constant's tangent is
 **structurally known** -- a constant has no tangent -- and not a value a law computes and
 compares. What replaces it happens before anything runs: the rule's right side is expanded with
 the structurally-zero tangents named, and the product one of them multiplies is omitted rather

@@ -74,20 +74,20 @@ out/latest/bin/camel hello.cml std::gir
 { "CAMEL_PACKAGE_MINIMAL": "ON" }
 ```
 
-再 `node scripts/build.js`（先删 `build/` 会从零配置）。它少建 `tiles`、`onnx`、`nn`、`ckpt` 四个模块，
-以及两个方向的 Python 支持（`python`/`pyplot` 的嵌入与 `bindings/python` 的扩展）。结果：`stdlib`
-里 22 个 `.cmo` 而不是 28 个，`out/latest` 63 MB 而不是 68 MB，`out/latest/libs` 里只有 `libcamel.so`。
+再 `node scripts/build.js`（先删 `build/` 会从零配置）。裁掉哪些模块只写在一处，本页不抄：顶层
+`CMakeLists.txt` 的 `CAMEL_MINIMAL_DROPS` 点出这些模块，每个模块留或去的理由就写在它旁边；两个方向的
+Python 支持则是上面那两个开关。配置阶段会把这次要建的集合打出来（`CAMEL_PACKAGE_MINIMAL: building …`），
+安装里正好是这些模块的 `.cmo`，体积差从这次构建上量，不在本页写死。
 
-留下的 `tensor`、`random`、`autodiff`、`transforms` 是刻意的：它们是图与自动微分的演示面；
-`random` 链接 `tensor`，所以裁 `tensor` 会把 `random` 一起带走。少一个模块时，`import` 它的程序
-报错并且**指出是哪个模块没提供**：
+少一个模块时，`import` 它的程序报错并且**指出是哪个模块没提供**：
 
 ```
 error[SemanticDiag::NativeTypeNotProvided]: The type 'Device' is declared without a right side,
 so a C++ module has to provide it, and the module 'tiles' registered no type of that name.
 ```
 
-模块之间的链接依赖写在 `CMakeLists.txt` 的 `CAMEL_MODULE_LINKS_<name>` 里，配置阶段就校验，所以
-`-DCAMEL_MODULES=tiles` 这种「选了 tiles 却没选 tensor」的写法在 configure 就失败，并点名两个模块，
-不会拖到几分钟后的链接。默认两个开关都是关（`CAMEL_PACKAGE_MINIMAL=OFF`、
+模块之间的链接依赖同样不是顶层文件里的一张表：模块把自己链接的兄弟模块写在自己的源码旁边
+（`modules/<name>/CMakeLists.txt` 的 `LINK_MODULES`），顶层 `CMakeLists.txt` 把这些对读回来、对着所选
+集合校验。所以 `-DCAMEL_MODULES=tiles` 这种「选了 tiles 却没选 tensor」的写法在 configure 就失败，并
+点名两个模块，不会拖到几分钟后的链接。默认两个开关都是关（`CAMEL_PACKAGE_MINIMAL=OFF`、
 `CAMEL_ENABLE_PYTHON_BINDINGS=ON`），默认构建与以前完全一样。

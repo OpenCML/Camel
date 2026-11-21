@@ -33,6 +33,7 @@
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/deadwrite.h"
 #include "camel/passes/test/derivatives.h"
+#include "camel/passes/test/draft_erase_unread.h"
 #include "camel/passes/test/draft_node_owner.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/exec_plan.h"
@@ -633,10 +634,10 @@ void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false
 ///
 /// The optimization passes are registered under `std::cxx::`, because they are the C++
 /// implementations and the Camel ones are the module `opt`: the two sets are separated by their
-/// names so that a comparison can name both (docs/roadmap.cn.md section 0, P, 2026-11-18). The
+/// names so that a comparison can name both (docs/roadmap.cn.md section 0, P). The
 /// names they answered to before the separation are gone with the separation: `std::opt::fold` and
-/// the rest resolve to nothing, and a pipeline that still writes one is refused as an unknown pass
-/// (the author's rework of 2026-11-18, docs/handover/reviews/questions-2026-10-29.md). The one
+/// the rest resolve to nothing, and a pipeline that still writes one is refused as an unknown pass.
+/// The one
 /// name that stays is `std::opt` -- not an alias of a sub-pass but the default pipeline's own name,
 /// the choice "optimize by default", which today selects the C++ implementation.
 void registerCoreKernels() {
@@ -735,9 +736,7 @@ const std::map<std::string, std::string> passAliases = {
     // `std::opt::inline`, the four inline strategies and the standalone `std::inline` and the rest)
     // are **not**
     // aliases: a pipeline that writes one is refused as an unknown pass, which is the isolation's
-    // own judgement rather than compatibility debt (author's rework, 2026-11-18,
-    // docs/handover/reviews/questions-2026-10-29.md; internal testing, so the old writings are
-    // deleted, not carried).
+    // own judgement rather than compatibility debt(the old writings are deleted, not carried).
     //
     // `std::opt` stays, and it is the one entry here that is not a spelling of another pass: it is
     // the name of the default pipeline -- the choice "optimize by default". A program that names
@@ -768,7 +767,7 @@ const std::map<std::string, std::string> passAliases = {
     {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
     {"std::type::identity", "std::identitytype"},
-    // `std::cxx` used to be a shorthand of the C++ exporter, `std::cpp`. It is not one any more:
+    // `std::cxx` is not a shorthand of the C++ exporter, `std::cpp`:
     // `cxx` is the namespace the C++ optimization passes are named under (`std::cxx::opt`,
     // `std::cxx::fold`), and leaving the shorthand in place would answer `std::cxx` with a
     // translation pass while a reader who learned the namespace from docs/cli.md means the
@@ -1030,7 +1029,7 @@ namespace {
 /// The pass a written name resolves to: the core's table first, then the aliases the loaded
 /// modules registered. The core's table has one entry, `std::opt` -- the default pipeline's name,
 /// which is a choice rather than a spelling of another pass -- so no sub-pass of the optimizer is
-/// reachable under an old name any more; a module's short aliases (`registerPassAlias`) are the
+/// reachable under an old name; a module's short aliases (`registerPassAlias`) are the
 /// rest of what this answers.
 std::string resolveAlias(const std::string &name) {
     if (auto it = passAliases.find(name); it != passAliases.end()) {
@@ -1043,7 +1042,7 @@ std::string resolveAlias(const std::string &name) {
 }
 
 /// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (removed the variable that used to gate
+/// pipeline, so naming one is the whole switch (no variable gates
 /// them).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
 #define TEST_PASS(K, T)                                                                            \
@@ -1055,6 +1054,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
     static const std::vector<std::pair<std::string, PassFactory>> table = {
         TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
         TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
+        TEST_PASS(kDraftEraseUnreadTestPass, DraftEraseUnreadTestPass),
         TEST_PASS(kDraftNodeOwnerTestPass, DraftNodeOwnerTestPass),
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
@@ -1362,7 +1362,7 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
 }
 
 /// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (removed the variable that used to gate
+/// pipeline, so naming one is the whole switch (no variable gates
 /// them).
 std::optional<FoundPass> findTestPass(const std::string &name) {
     if (name == "test::params") {
@@ -2043,10 +2043,8 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 /// An effect with none of these is in the graph and in no chain: nothing makes it run, which is
 /// what a rewrite that removes its last reader and forgets to hand its place on leaves behind.
 ///
-/// There used to be a third credential beside these two: a write to a resource outside the program
-/// was held to stand on "the region it is written in", decided by reading the operator's resource
-/// class here (the author's ruling of 2026-11-15, "区域的根"). The author's ruling of 2026-11-17
-/// (`fd75209cc`, design principles 3.1) moved that promise to the front end: every region's exit is
+/// A write to a resource outside the program stands on the GATE of the region it is written in
+/// (design principles 3.1): every region's exit is
 /// a `GATE` whose inputs are the region's value and its writes, so such a write is read by the
 /// GATE and stands on it as it stands on any other read of its value. What is left here is the two
 /// edge readings, and the answer for a write is the graph's own: `Builder::layRegionWriteEdges` is
@@ -2138,9 +2136,7 @@ std::string effectKey(const EffectSite &site) {
 /// were copied into, and each pairs with the copy it came from. What is left out of every pair is
 /// a key the program has more than once on either side -- two nodes of one origin, one copy site
 /// and one operator, which is what a pass that clones a node in place leaves behind. There the
-/// order between the clones would be a guess, and this function does not guess. That is narrower
-/// than the audit's wording ("被内联复制过的不比较") and wider than the comment that stood here
-/// until 2026-11-02, which said copies were not compared at all.
+/// order between the clones would be a guess, and this function does not guess.
 std::vector<std::pair<size_t, size_t>>
 matchedEffects(const ProgramEffects &before, const ProgramEffects &after) {
     std::unordered_map<std::string, size_t> beforeOccurrences;
@@ -2478,7 +2474,7 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
 /// One half of the last case is not seen here. A port naming a node that does not exist at all is
 /// refused earlier, by the commit that would have to write it down
 /// (`RuntimeGraphDraftSession::validateDraftPorts`): the graph version cannot be encoded around a
-/// reference to nothing, and the encoder used to read through it and crash before this function
+/// reference to nothing, and the encoder would read through it and crash before this function
 /// ever ran. What reaches this function is a graph that exists, so it covers the node that is dead
 /// (erased, still referenced) and the node that has no type.
 ///
@@ -2752,7 +2748,7 @@ std::string effectContainmentText(
 ///
 /// The commit checks of docs/design/effects/analysis.cn.md 4.1 are asked when `commitChecks` is
 /// set: a pass that rewrites through the graph module alone cannot build an effectful node, so for
-/// it "no extra effect, no lost order" is a theorem (the ruling of 2026-11-15,
+/// it "no extra effect, no lost order" is a theorem(see
 /// GraphIRPass::rewritesThroughTheGraphModuleOnly). Whether that theorem is read as a theorem or
 /// checked is the caller's answer and it is a build's: `commitChecksAskedOf` below. Effect
 /// containment is the item of 4.1 this commit lands; order completeness is the other one and is not
@@ -2843,7 +2839,7 @@ bool passBoundaryViolation(
         }
             // A reading of the effect-containment summary, on the run's tracing channel
             // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
-            // The text is unchanged, down to the newline the log used to add.
+            // The text is that of a log line, down to the trailing newline.
             camel::core::trace(camel::core::TraceArea::Effects)
                 << std::format(
                        "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
@@ -2962,8 +2958,8 @@ namespace {
 /// Whether the commit checks of analysis 4.1 are asked of a pass that rewrites through the graph
 /// module alone. The pass answers a fact (`rewritesThroughTheGraphModuleOnly`, true for every pass
 /// written in Camel, src/execute/camel_pass.cpp); whether the two checks are asked of it is this
-/// question, and it is a build question: the ruling of 2026-11-15 stopped asking because such a
-/// pass cannot build the defect, and the ruling of 2026-11-16 keeps that saving only where it is
+/// question, and it is a build question: such a pass cannot build the defect, so the saving is
+/// kept only where it is
 /// paid for -- a shipped build does not ask, a debug build asks, and a test asks
 /// (`setCamelPassCommitChecksEnabled`). The theorem is why the shipped build may skip; reading it
 /// in the builds that have the suite is how anyone knows the theorem is still true.
@@ -3015,8 +3011,8 @@ PassRunResult applyRegisteredPass(
         } else {
             // A pass is `(f: F) => F!` (design principles 9.1): the value it ends with instead of a
             // program IS its answer, and handing it to the caller is how that answer travels. With
-            // no caller there is nobody to hand it to, and this line used to drop it -- the run
-            // went on as if the pass had succeeded. Nothing reaches this branch today (both call
+            // no caller there is nobody to hand it to, and dropping it would let the run
+            // go on as if the pass had succeeded. Nothing reaches this branch today (both call
             // sites pass `this`), and the branch is here so that a future one cannot be silent.
             if (ctx) {
                 ctx->rtmDiags()
@@ -3032,9 +3028,7 @@ PassRunResult applyRegisteredPass(
     if (produced == nullptr) {
         return {nullptr, true};
     }
-    // The check every pass ends with, for a pass a pass runs by name. Before 2026-11-02 this
-    // site had none: `std::cxx::saturate`, `rules::simplify` and the `std::opt` rounds came
-    // through here, and a graph they broke reached the next pass unchecked.
+    // The check every pass ends with, for a pass a pass runs by name.
     if (ctx != nullptr && passBoundaryViolation(
                               ctx,
                               spec,

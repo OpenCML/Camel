@@ -4,71 +4,79 @@
 
 // The autodiff migration ledger, as a command instead of a morning's arithmetic.
 //
-// The question the ledger answers is narrow: **how many of the old autodiff cases can run on the
-// `vjp` library today, and what stops the rest?** The page that holds the answer
+// The question the ledger answers is narrow: **which of the old autodiff cases can run on the `vjp`
+// library today, and which of them have stopped?** The page that holds the answer
 // (docs/handover/m4-autodiff-migration-table.cn.md) is written by hand, and every time it was
-// recounted by hand the count came out wrong -- once by 1 (a probe rewrote a whole import line and
-// took the helper names with it), once with a blind spot (measuring every case by exit 0, when 30 of
-// them guard an exit 1 on purpose). So the counting is here, and the page reads the number.
+// recounted by hand the count came out wrong -- once by one (a probe rewrote a whole import line and
+// took the helper names with it), once with a blind spot (measuring every case by exit 0, when some
+// of them guard an exit 1 on purpose). So the counting is here, and the page reads the number.
 //
-//   node scripts/autodiff-migration-ledger.mjs              the table and the one-line summary
-//   node scripts/autodiff-migration-ledger.mjs --quiet       only the `[LEDGER]` line
-//   node scripts/autodiff-migration-ledger.mjs --case NAME   one case, with its diagnostic
+//   node scripts/autodiff-migration-ledger.mjs                  the table and the one-line summary
+//   node scripts/autodiff-migration-ledger.mjs --quiet           only the `[LEDGER]` line
+//   node scripts/autodiff-migration-ledger.mjs --case NAME       one case, with its diagnostic
+//   node scripts/autodiff-migration-ledger.mjs --ledger-check    compare this run with the record
+//   node scripts/autodiff-migration-ledger.mjs --record          write the record from this run
+//   node scripts/autodiff-migration-ledger.mjs --record --force  ... including cases that fell
 //
-// **It reads, it does not write.** The page is a human's; this prints the numbers the human then
-// writes down. Nothing here edits a case, a plan or a document.
+// **The one file this writes is its own record**, and only under `--record`. Nothing here edits a
+// case, a plan or a document: the page is a human's, and this prints the numbers the human reads.
 //
-// How a case is measured -- three steps, each of which is where the hand count went wrong before:
+// --- how a case is measured ---------------------------------------------------------------------
 //
 // 1. The case is copied to a probe beside itself and its `import { ... } from autodiff` is **split in
 //    two**: the transform names the library owns (`vjp`, `grad`, `with_grad`) come from `vjp`, and
 //    every other name stays on `autodiff`, which still has them (`add_tangent`, `zero_tangent`, ...).
 //    Rewriting the whole line to `from vjp` is what turned `transform_rules` into a false failure.
 // 2. The case is run with the pass its plan runs it with, and **passes when the exit code is the one
-//    its own plan expects** -- not when it exits 0. `with_grad_old_name` guards that `value_and_grad`
-//    does not exist: its expectation is exit 1, so exit 0 would be the failure. The plan that is
-//    read is the one that actually declares the case, wherever under `test/plans` it lives -- see
-//    "where the expectation comes from", below.
-// 3. The three non-`pass` columns are counted **from the case sources and the rule files**, never
-//    from the wording of a diagnostic. `array` is a case whose source spells an array or tensor
-//    type (`[]`, `[...]`, `f32`, `f16`, `bf16`, `Model`, `Plain`); `with` is one whose source spells
-//    a function type carrying a `with` parameter (`<x: float> () => float`); `other` is the rest.
-//    **A comment is not a spelling**: both comment forms are stripped before either pattern is looked
-//    for, so an explanation that mentions a type no longer reclassifies the case (2026-11-05).
-//    The rule files are counted the same way and printed with `file:line` anchors beside the table.
+//    its own plan expects** -- not when it exits 0, and not when a diagnostic sounds like a refusal.
+//    `with_grad_old_name` guards that `value_and_grad` does not exist: its expectation is exit 1, so
+//    exit 0 would be the failure. When the plan also names output strings, every one must be there.
 //
-//    **What this contract is, and what it is not.** The columns classify all 118 library cases, so
-//    they sum to 118 whatever the run does; `pass` is a separate runtime column and the three do not
-//    add up with it. That is deliberate: a structure count and a run count answer different
-//    questions, and mixing them is how the previous version read 0/0/0.
+// A case that no `[[tests]]` table under `test/plans` names has no expectation: it is printed with
+// `want = none` and **is not counted as passing**. A ledger that guesses an expectation to keep its
+// count up is the defect this column exists to avoid.
 //
-//    Until 2026-11-02 the split was made from **the text of the first diagnostic** -- `[]`/`f32` or
-//    `<x: float>` appearing in the message. When the front-end transform table and its call-site
-//    refusal were withdrawn, the refusal point moved, the wording stopped matching, and all four
-//    columns collapsed into `other` (`pass=0 with=0 array=0 other=118`). A ruler that reads wording
-//    can only measure wording; that classifier is deleted, not tuned.
+// --- what this ledger no longer does ------------------------------------------------------------
 //
-//    **`pass` depends on the binary it runs.** It is measured by running `out/latest/bin/camel`, so
-//    the same tree reads differently under a different build of that file (the same tree read
-//    `pass=6` against the 2026-11-01 13:44 binary and `pass=0` where no binary was present). That
-//    column is not comparable across machines; the three source columns are, because they never run
-//    anything.
+// **It does not classify the cases, and it counts no classes.** The three columns -- an array or
+// tensor type in the source, a function type carrying a `with` parameter, everything else -- were
+// counted by spelling, and a comment is not a spelling: a case that explained itself in a doc comment
+// moved class with nothing rewritten and reded the old record (`05e1145a9`), and the sentence then had
+// to be reworded to get the reading back. That is the ruler bending the thing it measured, so the
+// classifier is deleted rather than tuned. What it was asked is not a run of anything either: the
+// array step is judged by `grad(f)([3.0, 2.0])` printing `[2.0, 3.0]` and `skip=body` gone.
 //
-//    **`array` is no longer this column's business.** What the array step needs is a program that
-//    differentiates: `grad(f)([3.0, 2.0])` printing `[2.0, 3.0]`, and `skip=body` gone. Read those
-//    two, not the `array` column; the column only counts how many cases are *written* with an array
-//    type in them, which does not move when the work lands.
+// --- the record ---------------------------------------------------------------------------------
 //
-// Where the expectation comes from (2026-11-04). It is the `[[tests]]` table that names the case, and
-// those tables are not all under `test/plans/feat/modules`: 114 of the 132 cases are declared there,
-// 14 elsewhere (`feat/linear/var_reference` 8, `feat/compile/rules_angle_args` 4, `feat/mm/gc` 1,
-// `feat/mm/process_state` 1), and 4 by no plan at all. Reading one directory was a ruler measuring
-// the wrong table for the 14: see the record below for what it cost and how the count moved when the
-// scan was widened to the whole plan tree.
+// `--ledger-check` compares this run against the last one recorded, and it compares **names**: the
+// record holds the case paths that passed, not a count of them. A count says *how many* fell; a list
+// says *which one* fell, and that is the only thing a reader can act on.
 //
-// The plan files are read with a small bracket scanner, not a TOML library: the repository has no
-// dependency for that, and the five keys this needs (`case`, `args`, `expect_exit`, and the test's
-// name to prefer the `nvm` run) sit in flat `[[tests]]` tables.
+// **One direction: a case that passed at the last record may not stop passing.** A case that starts
+// passing is progress -- it is printed and `--record` puts it in the record, but it is never red.
+// `--record` **refuses to drop a name** without `--force`, because a fall is the defect this record
+// exists to find: the diff of the record then shows the case that fell, for a reviewer to refuse, and
+// the commit that records it has to say why.
+//
+// This record used to be six numbers in a constant in this file, and every move in any of them was a
+// hand edit in the same commit that moved the reading. That shape cannot catch anything: whoever moves
+// a reading also moves the thing it is compared with, so the "ratchet" only ever catches the edits
+// nobody bothered to make twice, and a number moved by the wrong cause reads exactly like one moved by
+// the right cause. The record now lives where a diff can show it
+// (`test/cases/tools/autodiff_migration_ledger/baseline.json`) and states case paths.
+//
+// **The record is a run, so it belongs to a binary.** `pass` is measured by running
+// `out/latest/bin/camel`, so the same tree reads differently under a different build of that file: a
+// record taken on one host is a floor for that host. `recordedFrom` names the tree and the binary the
+// run was, is never compared, and exists for exactly that reason.
+//
+// Where the expectation comes from. It is the `[[tests]]` table that names the case, wherever under
+// `test/plans` it lives. The migration cases' home is `feat/modules`, but some of them are declared in
+// `feat/linear`, `feat/compile` and `feat/mm`: a hard-coded list of directories cannot stay complete
+// -- it did not, and cases were measured against a default `expect_exit = 0` that nobody had written
+// for them. The plan files are read with a small bracket scanner, not a TOML library: the repository
+// has no dependency for that, and the keys this needs (`case`, `args`, `expect_exit`, the output
+// strings) sit in flat `[[tests]]` tables.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -77,11 +85,9 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const CASE_DIR = path.join(ROOT, 'test', 'cases', 'modules', 'autodiff')
-// Where a case's expectation is read from. **Every** plan under `test/plans`, not one directory:
-// the migration cases' home is `feat/modules`, but 14 of the 132 are declared somewhere else
-// entirely (`feat/linear`, `feat/mm`, `feat/compile`), and a hard-coded list of directories cannot
-// stay complete -- it did not, and the cost was 5 cases measured against an expectation nobody wrote
-// (see the record below).
+// Where a case's expectation is read from. **Every** plan under `test/plans`, not one directory: the
+// migration cases' home is `feat/modules`, but more than a dozen of them are declared somewhere else
+// entirely, and a hard-coded list of directories cannot stay complete.
 const PLAN_ROOT = path.join(ROOT, 'test', 'plans')
 // The one directory whose plans are read first, so the cases it already covers keep the exact test
 // they had before this scan widened: the test to use is "the first one seen, unless a later one is
@@ -89,182 +95,45 @@ const PLAN_ROOT = path.join(ROOT, 'test', 'plans')
 const HOME_PLAN_DIR = path.join(PLAN_ROOT, 'feat', 'modules')
 const LIBRARY_NAMES = new Set(['vjp', 'grad', 'with_grad'])
 const OFF_PATH_DIR = 'jax_names'
+// The record `--ledger-check` compares against, written only by `--record`. It lives under
+// `test/cases` so that recording a new baseline selects the plan that runs this check.
+const RECORD_PATH = path.join(ROOT, 'test', 'cases', 'tools', 'autodiff_migration_ledger', 'baseline.json')
 
 const args = process.argv.slice(2)
 const quiet = args.includes('--quiet')
 const ledgerCheck = args.includes('--ledger-check')
+const record = args.includes('--record')
+const force = args.includes('--force')
 const onlyCase = args.includes('--case') ? args[args.indexOf('--case') + 1] : undefined
 let loaderFailure = ''
 
-// The ledger's own record, kept the way `diagnostics-catalog.mjs` keeps its name coverage: a constant
-// in the file, refused to move the wrong way. Two kinds of number live here, so the check reads them
-// in two directions --
-//
-//   `pass` may only go **up**: a case that starts doing what its plan expects is progress, and one
-//   that stops is a regression however the other lines move. It is a run of `out/latest/bin/camel`
-//   and therefore moves with that binary (see the header): it is not comparable across machines.
-//   `array`, `with` and `other` may only go **down**: they count, from the sources, how many cases
-//   are still written in a shape the library does not take. `total` and `library` are the
-//   denominator and may not move at all: a case appearing or leaving changes what the ledger means,
-//   which is a decision for a person, not a side effect.
-//
-// **What `pass` counts, and what it does not.** It counts cases that do what their own plan asks --
-// and some of them guard a refusal the library is supposed to make (`err_vjp_annotation`, the
-// `grad_function_value_*` family, `with_grad_old_name`). So this records "how many cases are green on
-// the library", **not** "how many cases can be differentiated".
-//
-// The record was re-read on 2026-11-02, after the withdrawal of the front-end transform table and its
-// call-site refusal. The three source columns were recounted from the sources rather than from
-// diagnostic wording (54/46/6 became 44/67/7 -- a different question asked of the same 118). `pass`
-// did **not** move: it is 12 before and after the withdrawal, and the first reading of it here said 6
-// for a reason that belongs in this file: the shell that ran the ledger had no `LD_LIBRARY_PATH`, so
-// the compiler could not load `libstdc++`, every run exited 1 with no diagnostic, and six cases read as
-// failing that pass when the binary can start. That is why the run now refuses to report a number when
-// the binary does not start (see `loaderFailure` below): a ruler that cannot see must say so, not print
-// a smaller number.
-// Re-read on 2026-11-03, after the transpose lanes added three library cases. `total`, `library` and
-// `array` moved by the same 3, which is the shape that says the corpus grew and nothing was
-// reclassified: the three new programs are all `vjp`/`grad` cases written with array types.
-//
-//   * `test/cases/compile/transforms/transpose_array_product.cml` and
-//     `.../jvp_vjp_array_product_cross.cml` (`fd964b750`, the array product's transpose needing the
-//     array sum's law), and
-//   * `test/cases/compile/transforms/transpose_product_fixed_shape.cml` (`910f49400`, the shape
-//     clause held from both sides).
-//
-// `array` is a ratchet and it went **up**, which the ratchet exists to notice: it is recorded here
-// rather than left to glare because the denominators are decisions, not side effects, and a
-// denominator that cannot follow its corpus makes every later reading meaningless. What it must not
-// do is hide a case that *stopped* being written with an array -- none did: `with` and `other` are
-// unchanged at 45 and 7, so the 3 are additions and not a shift between classes.
-//
-// `pass` stays at 12 although the run read 14: it is the one column that follows the host binary and
-// the file says it is not comparable across machines. Recording 14 here would fail the ledger on a
-// host where the same three cases do not pass, which is a red about the host and not about the
-// migration.
-//
-// The record moved a second time on `integ2/rules-batch2`, the batch of rules lanes merged onto
-// `c4391db57`: `total` 131 -> 140, `library` 122 -> 131, `with` 45 -> 50, `array` 70 -> 72,
-// `other` 7 -> 9. Eight of those nine are cases the batch added under `test/cases/modules/autodiff/`
-// -- seven `has_aux_*` (five `with`, two `other`) and `reshape_adjoint_shape` (`array`) -- and the
-// ninth was behind the record before the batch reached it: the same run on `545b24d92` reads
-// `total=132 library=123 with=45 array=71 other=7`, one `array` case more than this file recorded,
-// and no lane in the batch edited that case. So one of the nine is a debt being paid and not a case
-// arriving, and `with`/`array`/`other` moving up here is the corpus growing, which the file has to
-// follow or every later reading of it means nothing.
-//
-//
-// **2026-11-04: the expectation was read from the wrong table, and `pass` moves because of that.**
-// This is not a recount and no case, plan, rule or binary changed. The ledger used to read a case's
-// expectation from `test/plans/feat/modules/*.plan.toml` and nowhere else, so 14 of the 132 cases
-// were measured against a default `expect_exit = 0` that nobody had written:
-//
-//   * 5 of the 14 pin `expect_exit = 1` -- they guard a refusal, they exit 1 on purpose, and the
-//     ledger booked them as failing *for exiting 1*. Their own plans live elsewhere:
-//     `transpose_needs_parameter_shape` in `feat/compile/rules_angle_args.plan.toml` (it is the
-//     negative of `rules_angle_args_mean_transpose`, and the 2026-11-04 entry above is the case it
-//     guards), and `var_tensor_local`, `var_tensor_read_after_call`, `var_tensor_read_after_write`,
-//     `var_tensor_read_in_callee` in `feat/linear/var_reference.plan.toml`;
-//   * the other 9 pin exit 0, so the default happened to match -- the number was right and the reason
-//     was wrong, which is the same defect seen from its quiet side.
-//
-// Measured on one binary (`out/latest/bin/camel`, the 2026-11-03 build, host `88zjwei`), running the
-// before and the after of this file over the same tree: `pass=14` before, `pass=19` after, and the
-// per-case table differs on exactly 9 rows -- the 5 above turn from "not passing" to "passing"
-// because the expectation compared against is now the one their plan writes, and 4
-// (`probe_library_grad`, `vjp_lib`, `vjp_user_a`, `vjp_user_b`) stop being compared against an
-// invented zero and print `want = none` instead. No case's exit code moved: what moved is what it was
-// compared to.
-//
-// `probe_library_grad` is the one that was worth finding: it has a `func main`, no plan names it
-// anywhere, and it used to be counted as passing on an exit code nobody had asked for. The other
-// three have no `main` -- `vjp_cross_module` imports them and they are its modules -- so they were
-// never judged alone. A case nobody declares an expectation for is now printed with `want = none`
-// and is **not** counted as passing; a ledger that guesses an expectation to keep its count up is
-// the defect this whole column exists to avoid.
-//
-// No case carries its own expectation, so the plan is the only place it is written down: `expect_exit`,
-// `expect_stdout`, `@expect` and `vitest` appear 0 times across `test/cases/modules/autodiff`, and the
-// strings `expect_output_contains` names are read from the same `[[tests]]` table and are part of the
-// match (a case that exits 1 for some other reason does not pass).
-//
-// The fix is in `PLAN_ROOT`/`expectations`, not in these numbers: the scan is every `*.plan.toml`
-// under `test/plans`, home directory first, so the cases it already covered keep the exact test they
-// had (measured: 0 of them repicked) and a case declared by any plan is found (measured: 128 `.cml`
-// cases named by a plan, 128 found; two more entries name a `.py` twin with `tool = "python"`, and
-// those are keys with no row). There is no directory list left for a case to fall out of.
-//
-// The record carries 17 rather than the 19 this host reads, by the same rule the 12 was carried
-// under: `pass` follows the host binary, and the two readings above the old floor of 12 were the
-// host's. 17 = 12 + the 5 this fix turns over, and those 5 are the ruler's, so they are required
-// everywhere; the 2 that ride on the binary are not.
-// **2026-11-04, second move: three cases arrived and they are all `with`.** `total` 141 -> 144,
-// `library` 132 -> 135, `with` 50 -> 53; `array` and `other` do not move. The three are
-// `second_order_nest.cml`, `second_order_refused_captured.cml` and `second_order_refused_vjp.cml`
-// (`test/plans/feat/modules/autodiff.plan.toml`), added by the second-derivative lane: they ask what a
-// nested `jvp`/`vjp` can and cannot be handed, and each is written with a `with` parameter, which is
-// the class they land in. `pass` does not move: the record holds 23 and the host reads 23.
-// **2026-11-05, one case arrived and it is `with`. ** `total` 143 -> 144, `library` 134 -> 135,
-// `with` 53 -> 54; `array` and `other` do not move. The one is
-// `test/cases/modules/autodiff/has_aux_library_composition.cml`: it names `vjp` (the library's
-// `has_aux` it is about) and `with_grad` (the engine leg it is compared against), which is `library`,
-// and it is written with `with` parameters for that comparison -- `with <w: float> func loss_engine()`
-// is the engine's shape, and comparing the two legs is the whole point of the case, so the `with`
-// class rising here is arithmetic and not a case falling back. `pass` is a floor and does not move.
-// **2026-11-05, no case arrived and four changed class: a comment is not a spelling.** Both comment
-// forms are now stripped before the two patterns are looked for, and four cases were being counted by
-// the words of their explanation rather than by what they are written as: `array` 72 -> 69,
-// `with` 54 -> 55, `other` 9 -> 11. The three that leave `array` spell their array only in a doc
-// comment -- `jax_vmap.cml` (`T[]`), `loop_grad_iterable_length.cml` (`float[]`) and
-// `loop_grad_refuse_no_element_tangent.cml` (`string[]`) -- and the last two are `with` cases in code
-// (`with <w: float>`), which is where they land; `jax_vmap` lands in `other`, which is where the other
-// JAX cases are. The fourth, `has_aux_vjp_named.cml`, was `with` on the strength of a `<...>` in the
-// signature its comment quotes, and is `other` in code. **This is a measurement correction, not debt
-// moving**: the ratchet's "only down" is about a case being rewritten to a shape the library takes, and
-// none of these four was rewritten -- the ruler was reading the wrong sentence, so the record is
-// restated here (the same rule the denominators are restated under) rather than left to drift.
-// `total`, `library` and `pass` do not move.
-//
-// **Why the four are a correction and not a moved target: the spelling is not in their code.** One
-// reading each -- the line that carried the spelling, and what the file says once both comment forms are
-// cut out. A case whose spelling *is* in its code would make this paragraph a disguised retune, so the
-// reading is written down where a reviewer can repeat it:
-//
-//   - `jax_vmap.cml`: the comment says "the leading axis of a `T[]` is its elements"; the code part has
-//     no `[]`, no `[...]` and no `f32`/`f16`/`bf16`/`Model`/`Plain`, and no `with` spelling either.
-//   - `loop_grad_iterable_length.cml`: the comment says "only `float[]` is"; the code part has no array
-//     spelling, and has `with <w: float>` -- which is why the case is `with` and not `array`.
-//   - `loop_grad_refuse_no_element_tangent.cml`: the comment says "`string[]` has none"; the code part
-//     has no array spelling, and has `with <w: float>`, so it is `with`.
-//   - `has_aux_vjp_named.cml`: the comment quotes the instantiated signature
-//     `(f: F) => <__pack_0: ...WithOf<F>> (...)`; the code part has neither the `<...>` the class was
-//     read from nor an array spelling, so the case is `other`.
-//
-// So the old reading counted a comment: `array` was overstated by 3, `with` by 1, and `other` understated
-// by 2 -- which is the whole of the movement above.
-//
-// **2026-11-05, third move: no case arrived; one case is now written with a `with` parameter.** `with`
-// 55 -> 56, `other` 11 -> 10; `total`, `library`, `array` and `pass` do not move. The one is
-// `test/cases/modules/autodiff/has_aux_library_plain.cml`, and what moved it is the library's `grad`
-// landing as a composition on `first_with_as_param`: `grad` differentiates the first `with` parameter
-// (design principles 9.9), a reverse transform differentiates the ordinary ones, so the case now
-// declares the value it differentiates as a `with` function -- `with <x: float> func cube_at() = cube(x)`
-// -- instead of handing `grad` a lambda, which is the shape the deleted `with` promotion used to make
-// look differentiable and answered 0.0 for. The numbers the case reads are unchanged (`8.0`, `(12.0)`,
-// `12.0`); only the spelling of its subject moved, and the class it is counted in with it.
-const LEDGER_RECORDED = {
-    total: 144,
-    library: 135,
-    pass: 22,
-    with: 56,
-    array: 69,
-    other: 10,
+// `--case` narrows the run to one case, so the set it passes is not the set the record holds: a
+// comparison would report every other case as having fallen, and a record would replace the floor with
+// one name. Refused rather than narrowed, because both of those would look like an answer.
+if ((record || ledgerCheck) && onlyCase) {
+    console.error(
+        'ledger: --case runs one case, so it cannot be compared with the record or written into it; ' +
+            'drop one of the two.',
+    )
+    process.exit(2)
+}
+
+function relativeToRoot(file) {
+    return path.relative(ROOT, file).split(path.sep).join('/')
 }
 
 function camelBinary() {
     const home = process.env.CAMEL_HOME || path.join(ROOT, 'out', 'latest')
     const exe = process.platform === 'win32' ? 'camel.exe' : 'camel'
     return path.join(home, 'bin', exe)
+}
+
+function binaryStamp() {
+    try {
+        return fs.statSync(camelBinary()).mtime.toISOString()
+    } catch {
+        return 'absent'
+    }
 }
 
 // --- reading the expectations out of the plans ---------------------------------------------------
@@ -345,7 +214,7 @@ function passOf(test) {
     return 'std::nvm'
 }
 
-// --- the probe --------------------------------------------------------------------------------
+// --- the probe ------------------------------------------------------------------------------------
 //
 // The two-line import is the whole rewrite; a case that names none of the library's transforms (the
 // six that only use helpers, the JAX ones) is run untouched, because there is nothing to migrate.
@@ -370,7 +239,7 @@ function runCase(file, test) {
     const probe = file.replace(/\.cml$/, '.ledger-probe.cml')
     fs.writeFileSync(probe, rewritten, 'utf8')
     if (!fs.existsSync(camelBinary())) {
-        loaderFailure = `no binary at ${camelBinary()}`;
+        loaderFailure = `no binary at ${camelBinary()}`
     }
     try {
         const result = spawnSync(camelBinary(), [probe, passOf(test)], {
@@ -381,12 +250,14 @@ function runCase(file, test) {
         })
         const text = `${result.stdout || ''}${result.stderr || ''}`
         const first = text.split('\n').find((l) => l.includes(': [Error]: ')) || ''
-        // A binary that cannot start is not a case that failed. On this host the compiler needs the
+        // A binary that cannot start is not a case that failed. On the host the compiler needs the
         // newer `libstdc++` on `LD_LIBRARY_PATH`; without it every run exits 1 with a loader message
-        // and no diagnostic, and the ledger would report a pass count that measures the shell, not
-        // the tree. One such run marks the whole measure unusable.
+        // and no diagnostic, and the ledger would report a pass count that measures the shell, not the
+        // tree. One such run marks the whole measure unusable.
         if (/error while loading shared libraries|GLIBCXX_|version `GLIBC/.test(text)) {
-            loaderFailure = text.split('\n').find((l) => /error while loading shared libraries|GLIBCXX_/.test(l)) || text.split('\n')[0]
+            loaderFailure =
+                text.split('\n').find((l) => /error while loading shared libraries|GLIBCXX_/.test(l)) ||
+                text.split('\n')[0]
         }
         return { exit: result.status === null ? -1 : result.status, first: first.trim(), text }
     } finally {
@@ -394,95 +265,7 @@ function runCase(file, test) {
     }
 }
 
-// --- the classes ------------------------------------------------------------------------------
-//
-// Counted from the source, not from a diagnostic: see the header. `array` is an array or tensor type
-// spelled anywhere in the case; `with` is a function type carrying a `with` parameter; `other` is
-// what is left. The same two spellings are counted in the rule files, where the hits are printed with
-// `file:line` anchors so a reader can go and look.
-const ARRAY_SPELLING = /\[\]|\[\.\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
-const WITH_SPELLING = /<[A-Za-z_]\w*\s*:\s*[^>]+>/
-
-// **A comment is not a spelling.** The class is read from the source text, and it used to read the
-// explanation as readily as the code: `has_aux_vjp_pair.cml` said "a `float` or an `f32`" in its block
-// comment, the case moved from `other` to `array`, and the ratchet -- right to notice a
-// reclassification -- went red on `array=73 other=8` (`05e1145a9`). The sentence and the page both had
-// to be reworded to get the reading back, which is the ruler bending the thing it measures.
-//
-// So both comment forms are cut out before the two spellings are looked for. The stripper follows
-// string literals, because a `//` inside one is not a comment (`"http://..."`) and a type named in a
-// literal is a spelling of it. Newlines are kept, so a `file:line` anchor still points at the line the
-// reader should open.
-function stripComments(source) {
-    let out = ''
-    let quote = null
-    for (let i = 0; i < source.length; ) {
-        const ch = source[i]
-        const next = source[i + 1]
-        if (quote !== null) {
-            out += ch
-            if (ch === '\\' && i + 1 < source.length) {
-                out += next
-                i += 2
-                continue
-            }
-            if (ch === quote) quote = null
-            i += 1
-            continue
-        }
-        if (ch === '"' || ch === "'") {
-            quote = ch
-            out += ch
-            i += 1
-            continue
-        }
-        if (ch === '/' && next === '/') {
-            while (i < source.length && source[i] !== '\n') i += 1
-            continue
-        }
-        if (ch === '/' && next === '*') {
-            i += 2
-            while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) {
-                if (source[i] === '\n') out += '\n'
-                i += 1
-            }
-            i = Math.min(i + 2, source.length)
-            continue
-        }
-        out += ch
-        i += 1
-    }
-    return out
-}
-
-function classifySource(source) {
-    const text = stripComments(source)
-    if (ARRAY_SPELLING.test(text)) return 'array'
-    if (WITH_SPELLING.test(text)) return 'with'
-    return 'other'
-}
-
-const RULE_DIR = path.join(ROOT, 'stdlib', 'rulesets')
-function ruleSpellings() {
-    const hits = { array: [], with: [] }
-    let files = []
-    try {
-        files = fs.readdirSync(RULE_DIR).filter((f) => f.endsWith('.cml')).sort()
-    } catch {
-        return hits
-    }
-    for (const name of files) {
-        const lines = stripComments(fs.readFileSync(path.join(RULE_DIR, name), 'utf8')).split('\n')
-        lines.forEach((line, index) => {
-            const anchor = `stdlib/rulesets/${name}:${index + 1}`
-            if (ARRAY_SPELLING.test(line)) hits.array.push(anchor)
-            if (WITH_SPELLING.test(line)) hits.with.push(anchor)
-        })
-    }
-    return hits
-}
-
-// --- the run ----------------------------------------------------------------------------------
+// --- the run --------------------------------------------------------------------------------------
 const files = []
 function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -496,10 +279,10 @@ files.sort()
 
 const rows = []
 for (const file of files) {
-    const relative = path.relative(ROOT, file).replace(/\\/g, '/')
+    const relative = relativeToRoot(file)
     const entry = expectations.get(file)
     const test = entry ? entry.test : undefined
-    const planFile = entry ? path.relative(ROOT, entry.plan).replace(/\\/g, '/') : null
+    const planFile = entry ? relativeToRoot(entry.plan) : null
     const offPath = path.relative(CASE_DIR, file).split(path.sep)[0] === OFF_PATH_DIR
     if (onlyCase && !relative.includes(onlyCase)) continue
     const source = fs.readFileSync(file, 'utf8')
@@ -507,8 +290,8 @@ for (const file of files) {
     // A case with no `func main` is a library user, run through another case that imports it. Run
     // alone it reports `EntryModuleMissingMain`, which would be this tool's own noise reported as the
     // case's failure, so it is named for what it is.
-    // A case that expects exit 1 is run whether or not it has a main: rr_vjp_annotation fails
-    // at the parse, so it has none, and its refusal is exactly what it guards.
+    // A case that expects exit 1 is run whether or not it has a main: `err_vjp_annotation` fails at
+    // the parse, so it has none, and its refusal is exactly what it guards.
     const standalone = /^func\s+main\s*\(/m.test(source) || (test ? test.expectExit !== 0 : false)
     const { exit, first, text } = standalone
         ? runCase(file, test || { args: ['${case}'], expectExit: 0, contains: [] })
@@ -528,7 +311,6 @@ for (const file of files) {
         expected,
         exit,
         pass: matched,
-        kind: classifySource(source),
         missing,
         migrated,
         first,
@@ -540,14 +322,13 @@ for (const file of files) {
 }
 
 const library = rows.filter((r) => !r.offPath)
-// Two different questions, deliberately kept apart: `pass` is what the run did, the three classes are
-// what the sources are written as. The classes cover all 118 library cases, so they sum to 118
-// whether or not a binary is present.
-// Two different questions, deliberately kept apart: `pass` is what the run did, the three classes are
-// what the sources are written as. The classes cover all 118 library cases, so they sum to 118
-// whether or not a binary is present.
-const countKind = (kind) => library.filter((r) => r.kind === kind).length
+// `pass` is what the run did; it is a run of one binary and the record is a run of it.
 const passed = library.filter((r) => r.pass).length
+// The record's members: the case paths this run passes. `relative`, never a line number -- a line
+// moves with every edit above it, and a record that renames its own evidence on a one-line insertion
+// is a record people learn to ignore.
+const passingNow = new Set(library.filter((r) => r.pass).map((r) => r.relative))
+const rowByName = new Map(rows.map((row) => [row.relative, row]))
 
 // A run of nothing is not a run where nothing passes, and a dead binary looks exactly like a clean
 // refusal -- six cases that expect exit 1 and pin no output "pass" against a compiler that never
@@ -564,26 +345,24 @@ if (blind) {
             (loaderFailure
                 ? `The binary did not start: ${loaderFailure}. `
                 : `Nothing ran at all: there is no built tree at ` +
-                  `${path.relative(ROOT, path.dirname(camelBinary())).replace(/\\/g, '/') || 'out/latest'}. `) +
+                  `${relativeToRoot(path.dirname(camelBinary())) || 'out/latest'}. `) +
             'A run of nothing is not a run where nothing passes, and a binary that cannot start reads ' +
-            'like a clean refusal. The three classes above are unaffected: they are counted from the sources.',
+            'like a clean refusal. `total` and `library` are unaffected: they are counted from the tree.',
     )
     process.exitCode = 1
 }
 
-const summary =
-    `[LEDGER] total=${rows.length} library=${library.length} pass=${passCell} ` +
-    `with=${countKind('with')} array=${countKind('array')} other=${countKind('other')}`
+const summary = `[LEDGER] total=${rows.length} library=${library.length} pass=${passCell}`
 
 if (!quiet) {
     const width = Math.max(...rows.map((r) => r.relative.length), 10)
-    console.log(`${'case'.padEnd(width)}  exit  want  class   first diagnostic`)
+    console.log(`${'case'.padEnd(width)}  exit  want  off  first diagnostic`)
     for (const row of rows) {
         const line = [
             row.relative.padEnd(width),
             (row.exit === null ? '-' : String(row.exit)).padStart(4),
             (row.expected === null ? 'none' : String(row.expected)).padStart(5),
-            row.offPath ? 'off' : row.kind.padEnd(6),
+            (row.offPath ? 'off' : '').padEnd(3),
             row.first.slice(0, 110),
         ].join('  ')
         console.log(line)
@@ -597,7 +376,7 @@ if (!quiet) {
     const fromElsewhere = rows.filter((r) => r.declared && !r.planInHome)
     if (fromElsewhere.length > 0) {
         console.log(
-            `${fromElsewhere.length} cases have their expectation outside ${path.relative(ROOT, HOME_PLAN_DIR).replace(/\\/g, '/')}:`,
+            `${fromElsewhere.length} cases have their expectation outside ${relativeToRoot(HOME_PLAN_DIR)}:`,
         )
         for (const row of fromElsewhere) console.log(`  ${row.relative} -> ${row.planFile} want=${row.expected}`)
     }
@@ -605,7 +384,7 @@ if (!quiet) {
     if (undeclared.length > 0) {
         console.log(
             `${undeclared.length} cases are named by no [[tests]] table under ` +
-                `${path.relative(ROOT, PLAN_ROOT).replace(/\\/g, '/')}: they are listed with \`want = none\`, ` +
+                `${relativeToRoot(PLAN_ROOT)}: they are listed with \`want = none\`, ` +
                 'they are **not** counted as passing, and a case with no `func main` among them is run ' +
                 'through another case rather than alone:',
         )
@@ -617,9 +396,9 @@ if (!quiet) {
             `${OFF_PATH_DIR}/ or name nothing the library owns and are counted in total only.`,
     )
     // The nine under `jax_names/` are not skipped, and this says so where a reader can see the
-    // count: they are walked like the rest, they print a row, and they are left out of the four
-    // classes because they exercise the prelude's `vmap`, not this library's `vjp` -- counting them
-    // as "not passing on the library" would be counting the wrong thing.
+    // count: they are walked like the rest, they print a row, and they are left out of `pass` because
+    // they exercise the prelude's `vmap`, not this library's `vjp` -- counting them as "not passing on
+    // the library" would be counting the wrong thing.
     const offPathRows = rows.filter((r) => r.offPath)
     if (offPathRows.length > 0) {
         console.log(
@@ -633,88 +412,163 @@ if (!quiet) {
             `the plan names; ${noNames.length} of the ${library.length} name none of the library's ` +
             'transforms, so they pass without it.',
     )
-    const binary = camelBinary()
-    let stamp = 'absent'
-    try {
-        stamp = fs.statSync(binary).mtime.toISOString()
-    } catch {
-        stamp = 'absent'
-    }
     console.log(
-        `pass is a run of ${path.relative(ROOT, binary).replace(/\\/g, '/')} (${stamp}): it moves with ` +
-            'that binary and is not comparable across machines. The three classes above are counted ' +
-            'from the sources and never run anything.',
-    )
-    const spells = ruleSpellings()
-    if (spells.array.length > 0 || spells.with.length > 0) {
-        console.log(
-            `Rule files, same two spellings: array ${spells.array.length} site(s)` +
-                (spells.array.length > 0 ? ` (${spells.array.slice(0, 6).join(', ')})` : '') +
-                `, with ${spells.with.length} site(s)` +
-                (spells.with.length > 0 ? ` (${spells.with.slice(0, 6).join(', ')})` : '') +
-                '.',
-        )
-    }
-    console.log(
-        'array is not the array step\'s acceptance: read `grad(f)([3.0, 2.0])` printing `[2.0, 3.0]` ' +
-            'and `skip=body` gone. This column only counts cases written with an array type.',
+        `pass is a run of ${relativeToRoot(camelBinary())} (${binaryStamp()}): it moves with that ` +
+            'binary and is not comparable across machines. The record is a run too, which is why it ' +
+            'names the tree and the binary it came from.',
     )
 }
 console.log(summary)
 
-if (ledgerCheck && blind) {
-    console.log('')
-    console.log('[LEDGER-CHECK] not run: the instrument is not running (see above), so `pass` is not ' +
-        'compared against its recorded 12 -- a number from a run of nothing would send a reader hunting ' +
-        'for a fall that happened because nothing started.')
-    process.exit(1)
+// --- the record -----------------------------------------------------------------------------------
+//
+// True when the file on disk was written by the counted form of this check (six numbers, one of them
+// a classification). A number is not a case, so it is not read as a list -- reading it as one would
+// report every case in the tree as having entered -- and `--record` replaces it while the gate
+// refuses to compare against it until somebody does.
+let countedForm = false
+
+function readRecord() {
+    if (!fs.existsSync(RECORD_PATH)) return null
+    let document
+    try {
+        document = JSON.parse(fs.readFileSync(RECORD_PATH, 'utf8'))
+    } catch {
+        countedForm = true
+        return null
+    }
+    if (!Array.isArray(document.passing)) {
+        countedForm = true
+        return null
+    }
+    return document
+}
+
+function describeFall(name) {
+    const row = rowByName.get(name)
+    if (!row) return `  ${name}  is not in the tree any more`
+    const want = row.expected === null ? 'none' : row.expected
+    const got = row.exit === null ? '-' : row.exit
+    return `  ${name}  want=${want}  got=${got}  ${row.first.slice(0, 110)}`
+}
+
+if (record) {
+    if (blind) {
+        console.error(
+            'ledger: not recording: the instrument is not running (see above). A record written from a ' +
+                'run of nothing would be a floor of zero, and every later reading would be compared ' +
+                'against it.',
+        )
+        process.exit(1)
+    }
+    const previous = readRecord()
+    const recorded = previous ? new Set(previous.passing) : new Set()
+    const fell = [...recorded].filter((name) => !passingNow.has(name)).sort()
+    const rose = [...passingNow].filter((name) => !recorded.has(name)).sort()
+    if (countedForm) {
+        console.log(
+            `[LEDGER] the record on disk is the counted form of this check (numbers, not case paths); ` +
+                `replacing it with the ${passingNow.size} case(s) this run passes`,
+        )
+    }
+    if (rose.length > 0) {
+        console.log('[LEDGER] cases this run passes that the record did not name:')
+        for (const name of rose) console.log(`  ${name}`)
+    }
+    if (fell.length > 0 && !force) {
+        console.log('[LEDGER] refusing to record these cases as no longer passing:')
+        for (const name of fell) console.log(describeFall(name))
+        console.log(
+            '[LEDGER] a fall is the defect this record exists to find; --force records it anyway, so ' +
+                'the diff of the record shows it for a reviewer to refuse, and the commit says why',
+        )
+        process.exit(2)
+    }
+    if (fell.length > 0) {
+        console.log('[LEDGER] --force: recording cases that stopped passing; the diff says so')
+        for (const name of fell) console.log(describeFall(name))
+    }
+    const document = {
+        comment:
+            'The baseline of the autodiff migration ledger: the case paths that passed, as the run that ' +
+            'recorded it read them. `--ledger-check` compares names, and one direction is red -- a case ' +
+            'listed here that no longer passes. A case that starts passing is progress and is put here ' +
+            'by `--record`, which refuses to drop a name without `--force`, because a fall is the defect ' +
+            'this list exists to find and the diff has to show it. There is no count here: a count says ' +
+            'how many fell, a list says which one. `recordedFrom` says which tree and binary the run was ' +
+            'and is never compared. Record it with node ' +
+            'scripts/autodiff-migration-ledger.mjs --record.',
+        recordedFrom: `tree ${treeState()} / ${relativeToRoot(camelBinary())} built ${binaryStamp()}`,
+        passing: [...passingNow].sort(),
+    }
+    fs.mkdirSync(path.dirname(RECORD_PATH), { recursive: true })
+    // LF and a trailing newline: this file is read on the host and on this machine, and a change to it
+    // should diff as one line per case that entered or left.
+    fs.writeFileSync(RECORD_PATH, `${JSON.stringify(document, null, 2)}\n`, 'utf8')
+    console.log(`[LEDGER] recorded ${document.passing.length} passing case(s) in ${relativeToRoot(RECORD_PATH)}`)
+    console.log('[LEDGER] ok: the record is this run')
+    process.exit(0)
 }
 
 if (ledgerCheck) {
-    const problems = []
-    const measured = {
-        total: rows.length,
-        library: library.length,
-        pass: passed,
-        with: countKind('with'),
-        array: countKind('array'),
-        other: countKind('other'),
-    }
-    const move = (key, direction, wording) => {
-        const recorded = LEDGER_RECORDED[key]
-        const got = measured[key]
-        if (direction === 'up' ? got < recorded : got > recorded) {
-            problems.push(
-                `${key} 记录值 ${recorded} 但实测 ${got}（${wording}）：` +
-                    `改了就该在同一个提交里改下 LEDGER_RECORDED 的那个数，并说明读数为什么动了`,
-            )
-        }
-    }
-    if (measured.total !== LEDGER_RECORDED.total) {
-        problems.push(
-            `total 记录值 ${LEDGER_RECORDED.total} 但实测 ${measured.total}：分母是决定，不是副作用`,
-        )
-    }
-    if (measured.library !== LEDGER_RECORDED.library) {
-        problems.push(
-            `library 记录值 ${LEDGER_RECORDED.library} 但实测 ${measured.library}：分母是决定，不是副作用`,
-        )
-    }
-    move('pass', 'up', '只能升')
-    move('with', 'down', '只能降')
-    move('array', 'down', '只能降')
-    move('other', 'down', '只能降')
-    if (problems.length > 0) {
+    if (blind) {
         console.log('')
-        console.log('[LEDGER-CHECK] the ledger moved the wrong way:')
-        for (const problem of problems) console.log(`  ${problem}`)
+        console.log(
+            '[LEDGER-CHECK] not run: the instrument is not running (see above), so this run is not ' +
+                'compared with the record -- a comparison against a record of nothing would send a ' +
+                'reader hunting for a fall that happened because nothing started.',
+        )
+        process.exit(1)
+    }
+    const previous = readRecord()
+    if (!previous) {
+        console.error(
+            countedForm
+                ? `ledger: ${relativeToRoot(RECORD_PATH)} is the counted form of this check (numbers, ` +
+                      'not case paths): re-record it with `node scripts/autodiff-migration-ledger.mjs ' +
+                      '--record`, which writes the case paths'
+                : `ledger: no record at ${relativeToRoot(RECORD_PATH)}; record one with ` +
+                      '`node scripts/autodiff-migration-ledger.mjs --record`',
+        )
+        process.exit(2)
+    }
+    const recorded = new Set(previous.passing)
+    const fell = [...recorded].filter((name) => !passingNow.has(name)).sort()
+    const rose = [...passingNow].filter((name) => !recorded.has(name)).sort()
+    if (fell.length > 0) {
+        console.log('')
+        console.log('[LEDGER-CHECK] these cases passed at the last record and do not pass now:')
+        for (const name of fell) console.log(describeFall(name))
+        console.log(
+            `[LEDGER-CHECK] a fall is the one direction this record has: fix the case, or record the ` +
+                `fall with --record --force in a commit that says why it stopped passing. ` +
+                `${fell.length} of the ${recorded.size} recorded case(s) fell.`,
+        )
         process.exitCode = 1
     } else {
         console.log('')
-        console.log(
-            `[LEDGER-CHECK] ok: total=${measured.total} library=${measured.library} ` +
-                `pass=${measured.pass} with=${measured.with} array=${measured.array} ` +
-                `other=${measured.other} -- pass 没有降，三类与记录的读数一致`,
-        )
+        console.log('[LEDGER-CHECK] ok: every case the record names still passes')
+        if (rose.length > 0) {
+            console.log(
+                `[LEDGER-CHECK] ${rose.length} case(s) pass that the record does not name yet, so a fall ` +
+                    'among them would not be seen; --record raises the floor to this run:',
+            )
+            for (const name of rose) console.log(`  ${name}`)
+        }
     }
+}
+
+// The tree the record is taken on, for `recordedFrom` only: a reading with no tree named cannot be
+// quoted, and a record is a reading. The vocabulary is the build stamp's (`scripts/common.js#gitState`:
+// revision, then whether the tree was clean, and how many files it was not), for the same reason --
+// `revision` alone names a commit whose files are not the ones the run read. A tree that cannot be
+// read is named as one, never guessed.
+function treeState() {
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' })
+    const revision = head.status === 0 ? (head.stdout || '').trim().slice(0, 9) : ''
+    if (revision === '') return 'unknown'
+    const status = spawnSync('git', ['status', '--porcelain'], { cwd: ROOT, encoding: 'utf8' })
+    if (status.status !== 0) return `${revision} (no status)`
+    const dirty = (status.stdout || '').split(/\r?\n/).filter((line) => line !== '').length
+    return dirty > 0 ? `${revision} (dirty: ${dirty} file(s))` : `${revision} (clean)`
 }

@@ -97,8 +97,8 @@ std::optional<Width> widthOf(const Type *type) {
 
 /// Why a value of this type is not translated: the reason names the class it belongs to. A whole
 /// tensor is one class (design 8.1: the property would be over every element at once), a floating
-/// width another (S3's work -- and the question "is this floating point" is asked of the family, so
-/// `bf16` and `f16` are in it and not left out), and anything else is refused by its own name.
+/// width another (the floating theory's work -- and the question "is this floating point" is asked
+/// of the family, so `bf16` and `f16` are in it and not left out), and anything else is refused by its own name.
 std::string uncoveredType(const Type *type) {
     if (type == nullptr) {
         return "the type of the value is not known";

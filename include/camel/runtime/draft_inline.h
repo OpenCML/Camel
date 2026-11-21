@@ -42,7 +42,7 @@ DraftInlineResult inlineCallableInDraft(
 /// another type. Reading E bounds that recursion in the types themselves: a recursive call inside
 /// an instance of the function it names reuses that instance, and a call whose key differs
 /// (polymorphic recursion) has its extents and dimension names widened to `?` instead of taking a
-/// copy per level. No count is a shape bound any more, and nothing stops silently at one: passing
+/// copy per level. No count is a shape bound, and nothing stops silently at one: passing
 /// this guard means the specialization never reached a fixed point, which is reported as a
 /// compiler error naming the function -- never a truncated shape.
 inline constexpr size_t kTypeSpecializationFixedPointGuard = 4096;

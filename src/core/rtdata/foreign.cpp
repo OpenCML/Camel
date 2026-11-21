@@ -275,7 +275,7 @@ namespace {
 /// module's `Ref` declares it, and a python object or a file handle -- wrapped the same way, made
 /// by a descriptor that does not declare it -- answers null here and keeps the lifetime it has
 /// today. The declaration is the whole answer: the kind string is a name for diagnostics and
-/// nothing in the count reads it (author review 2026-11-16, item 7).
+/// nothing in the count reads it.
 ForeignResourceControlBlock *countedBlockOf(Object *value) noexcept {
     if (value == nullptr) {
         return nullptr;

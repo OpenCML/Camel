@@ -194,16 +194,9 @@ gc_node_ref_t LoopDraftView::bodyStateParam(size_t j) const {
 gc_node_ref_t LoopDraftView::bodyResult() const { return draft_->region(bodyRegion_).result; }
 
 gc_node_ref_t LoopDraftView::nextState() const {
-    gc_node_ref_t at = bodyResult();
-    for (int guard = 0; guard < 64; ++guard) {
-        const auto *header = draft_->header(at);
-        if (header == nullptr || header->kind != GCNodeKind::Gate ||
-            draft_->normInputsOf(at).empty()) {
-            break;
-        }
-        at = draft_->normInputsOf(at).front();
-    }
-    return at;
+    // The value the body's result carries, behind the gates that order it after the statements of
+    // the body: the one walk, read over a draft (`camel/runtime/draft.h#ungated`).
+    return ungated(*draft_, bodyResult());
 }
 
 Type *LoopDraftView::bodyResultType() const { return draft_->header(nextState())->dataType; }
@@ -322,16 +315,9 @@ gc_node_ref_t LoopView::condResult() const {
 }
 
 gc_node_ref_t LoopView::nextState() const {
-    // The value behind the GATEs that order it after the statements of the body.
-    gc_node_ref_t at = bodyResult();
-    for (int guard = 0; guard < 64; ++guard) {
-        const GCNode *node = graph_->node(at);
-        if (node == nullptr || node->kind != GCNodeKind::Gate || graph_->normInputsOf(at).empty()) {
-            break;
-        }
-        at = graph_->normInputsOf(at).front();
-    }
-    return at;
+    // The value behind the GATEs that order it after the statements of the body: the one walk
+    // (`camel/runtime/graph.h#valueBehindGates`), read over a frozen graph.
+    return valueBehindGates(*graph_, bodyResult());
 }
 
 Type *LoopView::bodyResultType() const { return graph_->node(nextState())->dataType(); }

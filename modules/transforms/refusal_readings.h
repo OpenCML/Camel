@@ -7,10 +7,9 @@
  * A transform says what it built (or why it built nothing) on `readings()`, one line per step:
  * `REINTERP jvp function=f skip=body`. The line is for a reader, and it was also the only thing a
  * plan could assert, so the wording of a refusal became the criterion -- a word renamed in
- * `split.cpp` turned a green case red without anything about the transform changing (2026-11-04:
- * the transposed leg's `skip=` words). The same defect had already been fixed once on the other
- * side: `transpose` names its refusals with `TransposeRefusalCause` and spells them from one table
- * (`transpose.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
+ * `split.cpp` turned a green case red without anything about the transform changing. The same
+ * defect is avoided on the other side: `transpose` names its refusals with `TransposeRefusalCause` and spells them from one table
+ * (`transpose/walk.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
  * instead of the text (`test/tools/transpose_refusal/check.py`).
  *
  * This is the same fact for the readings, and it adds the other half:
@@ -30,8 +29,7 @@
  * `test/tools/reading_refusal/check.py`).
  *
  * A record is written by the site that writes the line, from the same values. Nothing parses the
- * log back: the defect the transpose change removed was exactly that second reading
- * (`docs/handover/reviews/questions-2026-10-29.md`, A3).
+ * log back: parsing the printed line is exactly the second reading a plan must not do.
  */
 
 #pragma once

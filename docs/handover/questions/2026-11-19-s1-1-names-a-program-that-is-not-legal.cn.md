@@ -96,3 +96,14 @@ perm_query_types.cml:59:9: [Error]: 'c17' is assigned inside a closure, and a cl
   `test/plans/feat/linear/var_reference.plan.toml` 里 `'out' is assigned inside a closure` 与那一条的
   `expect_exit = 1` 一起改，并且要说明按值捕获口与 `var` 形参单元从此各自算什么。
   只改一半就会变成「让一个用例绿」。
+
+## 默认建议（写死）
+
+**默认建议**：按 §5 的「**覆盖**」办（也是树里今天的实现）：3.5(198) 的「闭包不能给外面的名字赋值」
+**覆盖**「写的是函数的 `var` 形参」这一形状，于是 `perm_query_types.cml` 是欠改写、已按 (A) 还清，
+规则与诊断一个字不动。
+**判据**：`-Plan feat/mm/capacity -Jobs 8` 18/18（`capacity.perm_query_types` 通过）、
+`var_capture_reference.cml` 仍 `exit 1` + `ClosureAssignsCapturedName`、六计划逐条与 `9db2972af` 相同。
+若作者改判「不覆盖」，则 §5 第二条是硬要求：两个程序**必须同一笔一起放行**，
+并同笔改 `test/plans/feat/linear/var_reference.plan.toml` 的 `expect_exit = 1` 与那句
+`'out' is assigned inside a closure` —— 只改一半就是「让一个用例绿」。

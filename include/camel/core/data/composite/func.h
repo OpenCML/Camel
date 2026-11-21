@@ -26,7 +26,7 @@ using func_list_t = std::initializer_list<func_ptr_t>;
 
 class FunctionData : public CompositeData {
     // FunctionData is a compile-time boxed function value that already names the materialized
-    // runtime graph: the graph of a program, by id. It no longer depends on compile GIR ownership.
+    // runtime graph: the graph of a program, by id. It does not depend on compile GIR ownership.
     // program-holder-exempt: long-lived-cache -- a compile-time box (FunctionData::create has
     // no caller); a pin would keep the program of every boxed function alive.
     const camel::runtime::Program *program_;

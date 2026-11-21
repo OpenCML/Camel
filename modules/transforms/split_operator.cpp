@@ -158,7 +158,7 @@ slot_t splitKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
     }
     // The answer is the forward half alone: `fwd(x)` is `(y, lin)`, and `lin` is built inside that
-    // graph, closed over the residuals the call computes (author, 2026-11-02 05:10). The backward
+    // graph, closed over the residuals the call computes. The backward
     // graph is reachable only through that `lin`, which is why the call hands out no second value.
     printSplitCallReading(readings(), function->graph()->name());
     return toSlot<::Function *>(forwardFunction);
@@ -194,7 +194,7 @@ void registerSplitOperatorMetadata() {
     // How a call of it is written: `split(f)`, one function and no `with` parameters. A Camel
     // declaration cannot spell the signature -- the result is the function's two halves, a type no
     // signature writes -- so the call shape is recorded here, where the operator is declared,
-    // rather than in a signature invented to make the printer pass (P1-13).
+    // rather than in a signature invented to make the printer pass.
     camel::core::OperatorTable::instance().declareCallForm(
         "transforms:split", {.name = "split", .minArgs = 1, .withCount = 0, .declaredByModule = true});
 }

@@ -10,7 +10,7 @@
  * the pass that prints the answer for a plan to pin (`KeepInspectTestPass`).
  *
  * The gate's bypass test, the splice that moves a statement into a chain and the walk that reports
- * a dropped effect are **not** among them, although this header used to say so: each of them asks
+ * a dropped effect are **not** among them: each of them asks
  * whether a node carries a **wait**, which is a structural fact and never a credential -- a GATE
  * with a wait is `HasNoCredential` here, and that is the right answer to a different question.
  * Three callers read the wait from three different places (control inputs; control or sync inputs;
@@ -41,13 +41,11 @@ enum class EffectStanding : uint8_t {
 /// reads its own draft, the builder reads its own bookkeeping -- and the answer is one function so
 /// that no two callers invent different rules.
 ///
-/// Three fields, and each is a fact the answer reads. Nothing about a **wait** lives here any more:
-/// `hasWaitEdge` was filled by four call sites in three spellings (`!ctrlInputs`, `!ctrl ∨ !sync`,
-/// a control frontier) and `isWaitedOn` by one, and `effectStandingOf` read neither -- so the
-/// header's "asked in one place" was true of the declaration and false of the four answers, which
-/// is what a pseudo-single-point is. Deleting the two fields is the ruling from
-/// `docs/handover/reports/code-review-2026-11-01.md` item 4: a field that cannot be routed through
-/// the answer is deleted rather than left looking like part of it.
+/// Three fields, and each is a fact the answer reads. Nothing about a **wait** lives here: a wait
+/// field would be filled by several call sites in different spellings while `effectStandingOf`
+/// reads none of them, so "asked in one place" would be true of the declaration and false of the
+/// answers, which is what a pseudo-single-point is. A field that cannot be routed through the
+/// answer does not belong, rather than looking like part of it.
 struct EffectLivenessFacts {
     /// A value of the node is read by something (design principles 3.1): a normal, `with` or
     /// version input of another node.
@@ -67,7 +65,7 @@ struct EffectLivenessFacts {
 /// new version of what it wrote, and the read takes a data edge from it
 /// (`Builder::valueVersionOf`). A write the writer table does not know is registered by the
 /// conservative writer set (all functions in the program that write the variable, scanned before
-/// building; see the 22:50 ruling). The sync blocks and the resource order are only an extra
+/// building). The sync blocks and the resource order are only an extra
 /// guarantee now, not the only one.
 EffectStanding effectStandingOf(const EffectLivenessFacts &facts);
 

@@ -378,7 +378,7 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
         // The order and sync runs are part of what the node is (docs/design/effects/edges.cn.md 4):
         // a rewrite that replaces it and drops them loses where it stood -- the statement written
         // before it in its block's chain, and what ordered it -- and the chain it was part of dies
-        // with it (a devirtualized call used to take the whole `sync` block's effects down).
+        // with it (a devirtualized call would take the whole `sync` block's effects down).
         .orderInputs = draft.orderInputsOf(nodeId),
         .syncInputs  = draft.syncInputsOf(nodeId),
     };
@@ -482,8 +482,8 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             return resolved;
         }
         if (header->kind == GCNodeKind::Gate) {
-            // The value a GATE hands on is its first normal input (design principles 3.1, the
-            // author's ruling of 2026-11-17); the inputs after it are the reads of the region's
+            // The value a GATE hands on is its first normal input (design principles 3.1);
+            // the inputs after it are the reads of the region's
             // writes, so the canonical node behind a region's GATE is the first one.
             const auto normInputs = draft.normInputsOf(canonicalId);
             if (!normInputs.empty()) {
@@ -574,12 +574,12 @@ bool onCallCycle(const Program &program, const GCGraph *graph) {
 /// True when node `id` runs inside an arm of a branch of the draft (between a BRCH and its JOIN).
 ///
 /// Asked of the regions, which is where an arm says what is in it (docs/design/effects/edges.cn.md
-/// 5.2). This used to be a reachability walk from every BRCH through the nodes its edges reach,
-/// stopped at the JOIN -- and the only way into an arm that walk had was the ctrl edge the builder
+/// 5.2). This is not a reachability walk from every BRCH through the nodes its edges reach,
+/// stopped at the JOIN -- the only way into an arm such a walk has is the ctrl edge the builder
 /// draws from the BRCH to the arm's first node. That edge is a position the regions already carry,
 /// and the answer here decides something else: whether binding constants into a call may unroll a
-/// recursion (collectDirectFuncSpecializations). Reading it off the edge meant that deleting the
-/// edge let a guarded recursion unroll one level per rewriting round.
+/// recursion (collectDirectFuncSpecializations). Reading it off the edge would mean that deleting the
+/// edge lets a guarded recursion unroll one level per rewriting round.
 bool insideBranchArm(const GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     if (!draft.alive(id)) {
@@ -1177,7 +1177,6 @@ gc_node_ref_t resolveInlineValueExit(
     const GraphTransaction &transaction, const DraftGraphCloneResult &cloned,
     const GCGraph *calleeGraph, const GraphTransaction *calleeTransaction,
     std::span<const gc_node_ref_t> boundActualInputs) {
-    const auto &draft = transaction.graph();
     std::array<gc_node_ref_t, 3> candidates{
         cloned.returnNode,
         cloned.outputNode,
@@ -1275,12 +1274,12 @@ bool specializeDirectFuncInDraft(
         }
     }
 
-    // Type-only specialization on a call cycle has no shape bound any more. A call inside an
+    // Type-only specialization on a call cycle has no shape bound. A call inside an
     // instance of the function it names reuses that instance (above), and a call whose key
     // differs is the polymorphic case, which widens to `?`; what is left here is a runaway
     // guard, and passing it means the specialization did not reach a fixed point. That is a
-    // compiler error naming the function: the eight-copy count this replaces used to keep the
-    // current callee instead, which silently truncated the shape.
+    // compiler error naming the function: a fixed eight-copy count would keep the
+    // current callee instead, which silently truncates the shape.
     const bool boundedTypeSpecialization =
         std::ranges::none_of(
             bindings,
@@ -1562,7 +1561,7 @@ bool devirtualizeClosureCallInDraft(
 
 /// True when `from` runs after `target`, over every kind of edge the cycle check follows (value,
 /// `with`, control, sync and order alike: docs/technical/17_graph_rewrite_api_contracts.md, 4.2
-/// rule 1). Used to name the statement a call is written after among the arguments it reads.
+/// rule 1). Names the statement a call is written after among the arguments it reads.
 bool waitsOnAnyEdge(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t target) {
     std::vector<gc_node_ref_t> work{from};
     std::unordered_set<gc_node_ref_t> seen;
@@ -1701,8 +1700,8 @@ bool devirtualizeStaticCallInDraft(
         // the previous statement); look through it. keepCalleeOrdering keeps the gate as a
         // control input of the rewritten FUNC, so statement ordering is preserved.
         // The step is camel::runtime::forwardedInputOf (camel/runtime/graph.h): a gate carries
-        // its first ordinary input, then its first context input, and this used to take
-        // ack() -- the last wait. Nothing to follow keeps the gate where it is.
+        // its first ordinary input, then its first context input, not
+        // ack() -- the last wait. Nothing to follow keeps the gate where it is.
         while (true) {
             const DraftNodeHeader *gateHeader = draft.header(calleeRef);
             if (!gateHeader || gateHeader->kind != GCNodeKind::Gate) {
@@ -2021,7 +2020,7 @@ DraftInlineResult inlineCallableInDraft(
     ctrlPreds = controlFrontier(transaction, ctrlPreds);
     // What this splice asks about the call's place: the predecessors are the wait the call carries
     // today, and whether the call sat on a block's chain is a fact of its own. A structural
-    // reading, written where it is read -- `EffectLivenessFacts` no longer carries a wait field
+    // reading, written where it is read -- `EffectLivenessFacts` carries no wait field
     // (camel/runtime/effect_liveness.h says why). Read once, so that a later change moves the
     // decision below without moving the reading. Note that the wait here is the *frontier* of the
     // predecessors, not the raw control inputs: a splice waits on what is left after the frontier,
@@ -2204,9 +2203,9 @@ DraftInlineResult inlineCallableInDraft(
 
     // The entry roots take over the call's predecessors: each of them waits on the predecessors
     // itself. The roots are all there is to order: the parameter gates and the callee's recorded
-    // entry node are not entry points. (They used to stand in when a body had no root; nothing of
-    // such a body reads them, so the predecessors ended at nodes nothing followed.) A body with
-    // several roots used to get one SYNC node standing for the predecessors, which the model
+    // entry node are not entry points. (Nothing of a body with no root reads them, so
+    // the predecessors would end at nodes nothing follows.) A body with
+    // several roots gets no SYNC node standing for the predecessors, which the model
     // deletes (docs/design/effects/edges.cn.md 5.3): the wait is written on the roots themselves.
     bool calleeHasSyncChain = false;
     for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
@@ -2281,9 +2280,9 @@ DraftInlineResult inlineCallableInDraft(
         // call still ran after its predecessors, and what waited on the call, or read its
         // value, ran after them too. A GATE on the result carries that. Without it the result
         // waits on nothing: where the call was the tail of a branch arm (placed in the arm by
-        // the BRCH, or by an argument computed there), the tail became a value outside the
-        // branch, the arm was taken to have no code, and what the call's arguments ran in the
-        // arm belonged to no arm any more. The same gate carries an argument's effect when the
+        // the BRCH, or by an argument computed there), the tail becomes a value outside the
+        // branch, the arm is taken to have no code, and what the call's arguments run in the
+        // arm belongs to no arm. The same gate carries an argument's effect when the
         // body reads none of it: the call ran it, so the value the call became waits for it.
         const DraftNodeHeader *valueHeader        = draft.header(result.valueExit);
         std::vector<gc_node_ref_t> gateCtrlInputs = waitPreds;
@@ -2545,8 +2544,8 @@ DraftInlineResult inlineCallableInDraft(
     // the control edge that names the same pair beside it; it runs here rather than inside
     // eraseNode below because the users have to be known before the call's own edges go.
     //
-    // What the body ordered before those statements used to be carried as one order edge into the
-    // body's anchor as well (7ca495665). It is gone: an order edge only orders something that has
+    // What the body ordered before those statements is not carried as one order edge into the
+    // body's anchor: an order edge only orders something that has
     // an order, and the following statement is a plain statement of the block, not an effect
     // (docs/design/effects/edges.cn.md 1.5, 4.6). The ordering it named is what the body's region
     // carries once it stands on the chain as one statement of the block.

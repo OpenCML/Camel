@@ -247,9 +247,8 @@ class RuntimeGraphDraftSession {
     /// gives a body an access its type does not name (`tiles`: a device submission writes the
     /// ambient `tiles:driver`) reads the body here -- through the same `bodySignature` the commit's
     /// check reads -- and states the widened type on the draft (`GraphDraft::setFuncType`) before
-    /// the commit that judges it, which is how a pass declares the type its own edit needs (the
-    /// ruling of 2026-11-18, `f61196246`). The commit widens nothing itself: a body whose type no
-    /// caller declared is refused exactly as it was before this method existed.
+    /// the commit that judges it, which is how a pass declares the type its own edit needs. The commit widens nothing itself: a body whose type no
+    /// caller declared is refused.
     const Program *prepared();
     /// The graphs the session read or wrote (decoded or edited) whose version in the context's
     /// program is not the one it started from; empty while the context's program is still the

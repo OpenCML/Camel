@@ -256,9 +256,9 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 
 } // namespace
 
-/// The target of a leading-axis reduction, checked: `at` is a **suffix** of `shape` (ruling 甲).
+/// The target of a leading-axis reduction, checked: `at` is a **suffix** of `shape`.
 ///
-/// This is the one thing 甲 states as testable, so it is checked and named here rather than left to
+/// This is the one thing that is testable, so it is checked and named here rather than left to
 /// the stride walk: a target that is *longer* than the tensor, or that asks for an extent the
 /// tensor does not have at that position, is a fault and not a number. An axis the target states as
 /// 1 against a longer one is still a reduction -- the adjoint of a broadcast that handed one element
@@ -295,7 +295,7 @@ void requireSuffixTarget(
 ///
 /// The length is the caller's: since `sum_to` takes its target as an `int[]` (the twin of the
 /// tensors it reduces), the extents are a runtime value and the operator never reads a shape off
-/// another value of the program. What it still does not do is spread: 甲 is a leading-axis
+/// another value of the program. What it still does not do is spread: it is a leading-axis
 /// reduction, and the axes it removes are the ones `g` has in front of `shape`'s (plus the ones the
 /// target states as 1). `requireSuffixTarget` refuses the rest by name.
 ///

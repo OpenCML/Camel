@@ -17,7 +17,7 @@ This check holds the places that have to agree, as relations and never as counts
   that names no cause cannot spell one;
 * **the word table** spells every cause exactly once, and the words are distinct: two causes spelled
   the same are one cause a reader cannot tell from the other;
-* **no site spells a cause itself**: `skip=` is a literal nowhere in the three walks, every
+* **no site spells a cause itself**: `skip=` is a literal nowhere in the walks, every
   `skip="` is followed by the table's call, and a file that spells through the table includes it --
   without that last one the other relations are green on a file that does not compile;
 * **every printed cause is recorded and every record names the printed cause**: the number of
@@ -40,15 +40,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 HEADER_FILE = ROOT / "modules" / "transforms" / "refusal_readings.h"
+# The walks, one file each: `split`'s is two, because the loop tier of the cut (`split_loop_cut.cpp`)
+# spells its causes in its own file. A site is a site wherever the walk that holds it lives.
 WALK_FILES = [
     ROOT / "modules" / "transforms" / "jvp.cpp",
     ROOT / "modules" / "transforms" / "split.cpp",
+    ROOT / "modules" / "transforms" / "split_loop_cut.cpp",
     ROOT / "modules" / "transforms" / "vmap.cpp",
 ]
 
 # The causes the table declares and no walk records yet. Pinned rather than deleted, so that a
 # *second* such cause is a red instead of a habit, and so the day this one gets its site this entry
-# has to say so. Empty: every word below is printed by one of the three walks.
+# has to say so. Empty: every word below is printed by one of the walks.
 WAITS_FOR_A_SITE: set[str] = set()
 
 

@@ -21,14 +21,11 @@
  * (`residualsOf`) before either half is built, and the halves are typed with it -- the identity
  * graph's forward half answers `(result, ())`, `f(x, y) = x*x*y`'s answers a three-member tuple.
  * The residual position in `Split<F>` is therefore a hole the compiler fills where the graph is in
- * hand (author, 2026-11-01); the operator resolver, which sees types only, gets a stand-in -- one
+ * hand; the operator resolver, which sees types only, gets a stand-in -- one
  * member per value parameter -- and that stand-in is the type a call site is checked against, never
  * what the graphs carry. It is not a reading: nothing prints it and it is never compared with the
  * graph. The count a reading states is the graph's (`residuals=`), and the halves' types are the
  * graphs' (`type=`). Nothing on the far side of the cut is recomputed.
- *
- * Written up with the readings in
- * docs/handover/reviews/questions-2026-11-01-the-residual-slot-has-no-type-until-execution.md.
  *
  * `g(x) = x*x` at 3 reads `forward y= 9.0`, `residual r0= (3.0)` and `tangent dx1= 6.0`, and 12.0 and
  * 0.0 for dx = 2 and dx = 0. On a lifted graph that computes nothing (two parameter ports and one tuple
@@ -68,9 +65,8 @@ namespace camel::transforms {
 /// answers with, i.e. the forward half. `why` says why there are none when the function is outside
 /// what the step takes.
 ///
-/// The **forward** half is the one that carries the source's `with` list; `backward` carries none
-/// (author, 2026-11-03 15:15). A `with` value the backward half reads is a residual, so it arrives
-/// in `lin`'s closure, and `lin` stays an ordinary function of the tangents -- which is what makes
+/// The **forward** half is the one that carries the source's `with` list; `backward` carries none. A `with` value the backward half reads is a
+/// residual, so it arrives in `lin`'s closure, and `lin` stays an ordinary function of the tangents -- which is what makes
 /// `transpose(lin)` the declared `Pullback<F>` `(ct) => (..Tangent<ParamsOf<F>>)`.
 struct SplitHalves {
     camel::core::type::FunctionType *forward    = nullptr;
@@ -109,22 +105,21 @@ struct Residual {
 /// When this residual is the **linear half** of a call whose callee answers a pair: `node` is the
     /// call, and `type` is that half's type -- the callee's own backward half, `(tangents) => tangent`,
     /// with the values it reads in its closure. Nothing the callee computes crosses as a value: the
-    /// call site never sees the residuals of `g`'s body (author, 2026-11-03 17:55), it sees `lin_g`.
+    /// call site never sees the residuals of `g`'s body, it sees `lin_g`.
     /// The two halves reach it differently: the forward half gets it as the second component of the
     /// call it placed (`ACCS 1`), and the backward half **calls** it on the tangents the source call
     /// passed, which is one indirect call where the source had one direct one.
     bool linearHalf = false;
     /// True when the value is computed **from the loop the cut is about to build**, so it does not
-    /// exist until that loop has run (author, 2026-11-03 11:10: 凡是由前一半循环的输出算出来的残差，
-    /// 在循环建好之后再取). The forward half takes such a residual *after* the loop it made and after
-    /// seeding the cell's projections; an unflagged residual is computed before the loop. Only the
+    /// exist until that loop has run. The forward half takes such a residual *after* the loop it
+    /// made and after seeding the cell's projections; an unflagged residual is computed before the loop. Only the
     /// loop's cut uses the flag, and it says where the copy goes -- not what the closure holds: a
     /// member is one value either way, and the closure's order is invariants, then these, then the tape.
     bool afterLoop = false;
     static constexpr size_t kNotAParameter = static_cast<size_t>(-1);
 };
 
-/// What crosses the cut, read from the graph: the answer the author's ruling (2026-11-01) asks for
+/// What crosses the cut, read from the graph: the answer is asked for
 /// where the graph is in hand, since it cannot be asked of the type. A residual is a value the
 /// forward half computes and the backward half reads, so the answer is a property of the body and
 /// not of the signature: `f(x) = x` has none and `f(x) = x*x` has one, and the two functions have
@@ -135,13 +130,19 @@ struct Residual {
 /// it. Where a walk from the tangent side arrives at a node that is already on the result side, that
 /// node's value crosses the cut -- it is a residual, and the walk stops there rather than descending
 /// into the forward half. A `with` port the tangent side reads crosses the same way, whether or not
-/// the result side reads it too (author, 2026-11-03 15:15: 后一半要读的东西都是残差，`with` 值也在内).
+/// the result side reads it too: everything the later half reads is a residual, `with` values included.
 ///
 /// Program order: parameters by their index, then computed values by their node. The answer is empty
 /// when the graph is not a lifted graph (the exit is not the pair), which is when there is nothing
 /// to cut.
+///
+/// `why`, when given, is set only by a walk that **cannot answer**: a call the backward half
+/// computes after the cut whose callee's type does not state which of its arguments are values. The
+/// answer is then empty *because the walk stopped*, not because there is nothing to cut, so a caller
+/// that can say so refuses by name rather than reading the empty list as "no residuals".
 std::vector<Residual> residualsOf(
-    const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr);
+    const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr,
+    std::string *why = nullptr);
 
 /// Whether this graph answers the pair (value, tangent) that `split` cuts -- **by its content**, not by
 /// any record of where it came from. Two questions, both of them, because either one alone names a
@@ -153,7 +154,7 @@ std::vector<Residual> residualsOf(
 ///    value is the pair, or the `Join` a branch answers with (`exitShapeOf`).
 ///
 /// A hand-written graph of that content is the same function as a lifted one and is answered the same
-/// way (author, 2026-11-03 16:55): the rule a caller applies to a callee must be a function of the
+/// way: the rule a caller applies to a callee must be a function of the
 /// callee's content, or two graphs that compute the same thing are transformed differently because of
 /// where one of them was written down. `why` says which of the two questions failed.
 ///

@@ -109,30 +109,17 @@ namespace graph {
 bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
-    switch (kind) {
-    case GCNodeKind::Data:
-    case GCNodeKind::Port:
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
-    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
-    case GCNodeKind::Brch:
-    case GCNodeKind::Join:
-        return true;
-    case GCNodeKind::Cast:
-        return !nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource, fixedShapes);
-    case GCNodeKind::Oper: {
-        const auto &table = camel::core::OperatorTable::instance();
-        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-        if (!table.mayBeRecomputed(oper) || !traits.has_value()) {
-            return false;
-        }
-        return !nodeMayFault(kind, oper, nullptr, nullptr, fixedShapes);
-    }
-    default:
-        // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
-        // refuses an order on it (docs/design/effects/edges.cn.md 4.6).
+    // A node a pass may move is one running it cannot fail -- `nodeMayFault` above, asked of every
+    // kind -- and, for an operator, one a pass may run again. `mayBeRecomputed` is the one question
+    // the fault table does not answer: a pure operator a rule writes, and one a macro expands, does
+    // not fault, yet a pass may neither drop it nor copy it.
+    if (kind == GCNodeKind::Oper &&
+        !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
         return false;
     }
+    // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing refuses an
+    // order on it (docs/design/effects/edges.cn.md 4.6) -- the fault table says they may fault.
+    return !nodeMayFault(kind, oper, castTarget, castSource, fixedShapes);
 }
 
 bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
@@ -632,7 +619,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     validateRef(graph->outputNodeRef(), "output");
     validateRef(graph->returnNodeRef(), "return");
 
-    // The exit check (the author's rework of 2026-11-18, item 1, from the calculus's list of what a
+    // The exit check (from the calculus's list of what a
     // commit owes): the value a graph hands on is read at its exit, and the nodes a graph names as
     // what it hands on -- the exit, the output, the returned value -- must be nodes of the function
     // body, region 0. A rewrite that leaves one of them inside an arm or a loop publishes a graph
@@ -810,21 +797,20 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // A GATE is "let a value through once the sync chain has", and it waits through a
             // **sync predecessor** (docs/design/effects/edges.cn.md 5.3 -- it has no control input
             // there at all: it is a pure value-forwarding node with one data port and one sync
-            // predecessor). The control input is what that wait used to be written as; the paths
-            // this lane has not moved onto the sync edge yet still carry one, and the ones that
-            // have carry the sync edge instead.
+            // predecessor). A path that has not moved onto the sync edge may still carry the wait as a
+            // control input, and the ones that have carry the sync edge instead.
             // The wait a GATE carries is either a block's chain or an edge of its own, and this
             // refuses a gate with neither. It is a structural reading, and it is written where it
-            // is read: `EffectLivenessFacts` no longer carries it (camel/runtime/effect_liveness.h
+            // is read: `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h
             // says why -- four call sites filled that field in three spellings, and none of them
             // was the liveness answer).
             const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
             const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
             // A gate may also wait through **what it reads**: the inputs after the value are nodes
             // whose running the gate's own value depends on, so it is an order of its own and not a
-            // wait that went missing (design principles 3.1, the author's ruling of 2026-11-17: the
+            // wait that went missing (design principles 3.1: the
             // region `GATE` is `[the value the region hands out, the region's writes...]`, one node
-            // per region, and it waits on nothing else -- "这些写之间不加边").
+            // per region, and it waits on nothing else).
             const bool holdsReads = graph->normInputsOf(ref).size() > 1;
             // This is an assertion, not a rule programs reach. Measured: payload validation does
             // run on the execution path (three graphs validated for a small program, five with a
@@ -970,18 +956,37 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-/// Every sync edge the draft has is built into the payload, whatever it ends on (author ruling
-/// 2026-11-02 07:30: the edges stay, the check side changes). The build used to leave an edge out
-/// when its end was neither a statement, a `GATE` nor a node in the tail's region -- the "do not
-/// build a wait the seal would refuse" half of the question -- and that is what lost the waits
+/// Whether the finished node `id` carries no order edge: a node that arranges itself freely says
+/// nothing with one, so the payload the graph holds does not keep them. Two readers ask this -- the
+/// payload plan below, which decides the edge count and the edges emitted, and the delivery check
+/// (`verifyDraftDelivery`), which would otherwise report every dropped order edge as lost -- and
+/// they ask it here so that they cannot answer it two ways.
+bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+        !nodeIsFreelySchedulable(draft, id)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            if (draft.region(region).owner == id) {
+                return false; // it stands for its region and carries its order
+            }
+        }
+    }
+    return true;
+}
+
+/// Every sync edge the draft has is built into the payload, whatever it ends on: the edges stay,
+/// and the check side changes. An edge is built even when its end is neither a statement, a `GATE`
+/// nor a node in the tail's region -- leaving it out so as not to build "a wait the seal would
+/// refuse" would lose the waits
 /// whose end was a block's `Join` or `Func`: edges.cn.md 1 and 4.6 say the chain's tail reaches
 /// the block's value, and the value may be one of those.
 ///
 /// So the wait is not dropped, and what the seal makes of it stays the seal's business: the check
-/// side judges the ends of an edge the graph has, which is the half of the ruling that the code
-/// below is about. Measured on this corpus, dropping the edge was also the only reason the tree did
-/// not build: with it gone, `feat.exemplars` reaches `05_effect_order` -- the chain of a block
-/// whose value the old predicate refused -- and the full fast layer has no red.
+/// side judges the ends of an edge the graph has, which is the half that the code
+/// below is about.
 
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
@@ -1055,27 +1060,13 @@ DraftPayloadPlan planDraftPayload(
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
-        // The finished node answers for itself here, and this is the one owner of that answer: the
-        // payload the graph will hold is the one the draft holds, so the question the seal check
-        // asks of the frozen graph (nodeTakesNoOrder, graph_edges.cpp) is asked of this node before
-        // it is written, and the answer decides both the edge count and the edges emitted. It
-        // cannot be asked where the edge is written: a node still being built has no payload, so
-        // nodeIsFreelySchedulable answers for a half-made node and every writer believes the edge
-        // is wanted. Asked here, once, the two answers cannot disagree.
-        bool dropsOrder = false;
-        if (const DraftNodeHeader *ordered = draft.header(draftId);
-            ordered != nullptr && ordered->kind != GCNodeKind::Dead &&
-            ordered->kind != GCNodeKind::Cast && nodeIsFreelySchedulable(draft, draftId)) {
-            dropsOrder = true;
-            if (ordered->kind == GCNodeKind::Brch || ordered->kind == GCNodeKind::Loop) {
-                for (uint32_t region = 1; region < draft.regionCount(); ++region) {
-                    if (draft.region(region).owner == draftId) {
-                        dropsOrder = false; // it stands for its region and carries its order
-                        break;
-                    }
-                }
-            }
-        }
+        // The finished node answers for itself here: the payload the graph will hold is the one the
+        // draft holds, so the question the seal check asks of the frozen graph (nodeTakesNoOrder,
+        // graph_edges.cpp) is asked of this node before it is written, and the answer decides both
+        // the edge count and the edges emitted. It cannot be asked where the edge is written: a node
+        // still being built has no payload, so nodeIsFreelySchedulable answers for a half-made node
+        // and every writer believes the edge is wanted.
+        const bool dropsOrder = takesNoOrder(draft, draftId);
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
             if (dropsOrder) {
@@ -1182,9 +1173,9 @@ void emitDraftPayload(
                 // A draft node's input names a node of the same draft, and the plan holds one entry
                 // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff
                 // -- is a graph built with a hole in it, and read as an index it walks 16 GB past
-                // the table. This was an `ASSERT`, which `NDEBUG` makes `((void)0)`: the build that
-                // ships had no check here at all, so a hole the passes made arrived as a SIGSEGV
-                // with an empty stdout and no sentence (measured 2026-11-04, a transposed half
+                // the table. An `ASSERT` would be `((void)0)` under `NDEBUG`: the build that
+                // ships would have no check here at all, so a hole the passes made would arrive as a SIGSEGV
+                // with an empty stdout and no sentence (a transposed half
                 // whose answer tuple was handed an empty cotangent). A throw and not an abort: a
                 // pass that builds a graph the encoder cannot write is the pass's answer to give,
                 // and the driver reports it as one (`reportPassFailure`), by name.
@@ -1222,21 +1213,17 @@ void emitDraftPayload(
 
     // A GATE forwards its **first** norm input: FastVM reads the producer, NodeVM reads the gate's
     // slot, so the slot must be the input's. The inputs after the first are the reads the gate takes
-    // and are not what it hands on (design principles 3.1, the author's ruling of 2026-11-17: "第一个
-    // 输入是区域交出的值，其余输入是区域里 ... 会写外部资源或句柄的节点"). Rewrites that rebind a
+    // and are not what it hands on (design principles 3.1), and the walk to the forwarding value is
+    // the one walk (`camel/runtime/draft.h#ungated`).
+    // Rewrites that rebind a
     // gate's input (inlining binds parameter gates to the caller's arguments) leave a stale slot, so
     // it is derived here. The owner of this rule is the encoder -- the payload plan in this file --
     // not the draft's writers: it is the place that decides what the frozen graph holds, which is
     // where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
-        for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
-            const DraftNodeHeader *h = draft.header(id);
-            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-                return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
-            }
-            id = draft.normInputsOf(id).front();
-        }
-        return static_cast<gc_slot_idx_t>(0);
+        const gc_node_ref_t value = ungated(draft, id);
+        const DraftNodeHeader *h  = value == kInvalidNodeRef ? nullptr : draft.header(value);
+        return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
     };
 
     for (const PlannedDraftNode &planned : plan.nodes) {
@@ -1570,26 +1557,6 @@ std::string spelledRefs(std::span<const gc_node_ref_t> refs) {
         text += std::to_string(refs[i]);
     }
     return text;
-}
-
-/// Whether the encoder writes no order input on `id`: the edge says nothing on a node that
-/// arranges itself freely, so the payload plan drops them (this file, `planDraftPayload`, and
-/// `carriesOrdering`, which is the same rule read by the rewrite side). The delivery check has to
-/// read that rule the same way or it would report every order edge of such a node as lost.
-bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
-    const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
-        !nodeIsFreelySchedulable(draft, id)) {
-        return false;
-    }
-    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
-        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
-            if (draft.region(region).owner == id) {
-                return false; // it stands for its region and carries its order
-            }
-        }
-    }
-    return true;
 }
 
 } // namespace
@@ -2200,10 +2167,8 @@ template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &fa
     reach();
 
     // What a region owes its writes is not seeded here: it is an edge laid once when the graph was
-    // built (`Builder::layRegionWriteEdges`, the author's spec of 2026-11-17, `3e4c0929c`), and
-    // this walk reaches it like any other sync edge. The seed it used to make -- a region's outside
-    // writes and its writes to a handle, and a branch that joins no value -- is gone with the walks
-    // that derived it.
+    // built (`Builder::layRegionWriteEdges`), and
+    // this walk reaches it like any other sync edge.
     std::vector<gc_node_ref_t> live(visited.begin(), visited.end());
     std::sort(live.begin(), live.end());
     return live;

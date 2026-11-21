@@ -185,12 +185,12 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     const gc_node_ref_t startRef = graph->exitNodeRef() != camel::runtime::kInvalidNodeRef
                                        ? graph->exitNodeRef()
                                        : graph->returnNodeRef();
-    // Two sets, because the ruling keeps them apart (docs/design/effects/edges.cn.md 5.2):
+    // Two sets, because the design keeps them apart (docs/design/effects/edges.cn.md 5.2):
     //
     //   * `used` -- what the exit depends on. The walk from the exit along the edges that carry
     //     "used": data ports and sync edges. This is the set the region-result check below reads.
     //   * `live` -- what the execution holds. It starts as `used` and then takes the seed the
-    //     ruling names: **the results of the regions**. A region runs because its owner runs, so
+    //     design names: **the results of the regions**. A region runs because its owner runs, so
     //     its result is part of the execution whether or not anything downstream reads it.
     //
     // The members of a region are not seeds. They are the region's *range*: laid out below as the
@@ -224,19 +224,19 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         reachBack(fromExit, used);
         live = used;
         // The writes a region owes are not seeded here: they reach the region's exit by the sync
-        // edge laid when the graph was built (`Builder::layRegionWriteEdges`, the author's spec of
-        // 2026-11-17, `3e4c0929c`), and the walk above follows sync edges like any other. What is
-        // seeded below is only what the ruling above names -- the results of the regions.
-        // The seed is the region's result, and the ruling above says why: a region runs because its
+        // edge laid when the graph was built (`Builder::layRegionWriteEdges`),
+        // and the walk above follows sync edges like any other. What is
+        // seeded below is only what the rule above names -- the results of the regions.
+        // The seed is the region's result, and the rule above says why: a region runs because its
         // owner runs. So a region is seeded only once its owner is in the execution. Seeding every
         // region of the graph instead laid out the members of a region whose owner nothing reached,
         // and they ran with the ports the owner would have bound still empty: the body of a loop
         // that answers nothing ran before any round, and the element its round binds was read as a
-        // null tuple (the member `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` transposes to,
-        // 2026-11-03). The walk repeats because an owner may itself be a member of a region: what a
+        // null tuple (the member `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` transposes to).
+        // The walk repeats because an owner may itself be a member of a region: what a
         // seed brings in can be the owner of another region.
         //
-        // Measured on 2026-11-03 (`test/plans/feat/compile/transforms.plan.toml`, 84 entries): no
+        // In `test/plans/feat/compile/transforms.plan.toml` no
         // entry needs more than one round -- a seeded result is one the exit walk already had, so
         // no seed brings in an owner the walk had not reached (the GUARD below is what keeps that
         // true: an owner in `used` with a result outside it is an error, not a seed). The
@@ -649,31 +649,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
 gc_node_ref_t resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, gc_node_ref_t ref) {
     GUARD(graph != nullptr, "Runtime forwarded-value resolution requires a graph.");
 
-    gc_node_ref_t currentIndex = ref;
-    while (currentIndex != camel::runtime::kInvalidNodeRef) {
-        const auto *current = graph->node(currentIndex);
-        GUARD(current != nullptr, "Runtime forwarded-value chain resolved to null.");
-        if (current->kind != camel::runtime::GCNodeKind::Gate) {
-            return currentIndex;
-        }
-        // The value a GATE hands on is its **first** normal input (design principles 3.1, the
-        // author's ruling of 2026-11-17: "第一个输入是区域交出的值，其余输入是区域里 ... 会写外部
-        // 资源或句柄的节点"). The inputs after the first are the reads the region's writes are held
-        // by; reading the last one here is what made a body returning `x + 1` hand on the value of
-        // its last write instead (`test/cases/compile/diag_json/dropped_effects_forward.cml`).
-        const auto normInputs = graph->normInputsOf(currentIndex);
-        if (!normInputs.empty()) {
-            currentIndex = normInputs.front();
-            continue;
-        }
-        const auto withInputs = graph->withInputsOf(currentIndex);
-        if (!withInputs.empty()) {
-            currentIndex = withInputs.front();
-            continue;
-        }
-        return camel::runtime::kInvalidNodeRef;
-    }
-    return camel::runtime::kInvalidNodeRef;
+    // The walk is `camel/runtime/graph.h#valueBehindGates`: a gate hands on its **first** ordinary
+    // input (design principles 3.1) and the inputs after it are the reads the region's writes are
+    // held by. Reading the inputs again here is what made a body returning `x + 1` hand on the value
+    // of its last write instead (`test/cases/compile/diag_json/dropped_effects_forward.cml`), and a
+    // second copy of the reading is what drifts from the one every other walker of a graph asks
+    // (`resolveRuntimeTailValueRef` beside this one asks it already).
+    return camel::runtime::valueBehindGates(*graph, ref);
 }
 
 gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {

@@ -176,3 +176,13 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <tree> -Plan feat/mo
 `siamese_shared_encoder` 四条管线的 plan，`args` 分别为 `std::macro std::nvm`、
 `… std::cxx::devirtualize std::nvm`、`… std::cxx::inline std::nvm`、
 `… std::cxx::devirtualize std::cxx::inline std::nvm`。
+
+## 默认建议（写死）
+
+**默认建议**：按 ⑦ 已定的纪律**只抄被子句、不在读法里补**，把同一笔扩到 ⑦ 末尾点名的那三处 ——
+`modules/transforms/split.cpp#split` 的 `halves.backward`、`modules/transforms/transpose.cpp` 的转置产物、
+`modules/transforms/vmap.cpp` 交出的函数值，写法照 `modules/autodiff/pullback.cpp#makePlanTypes`
+与 `#Engine::build`（`*.pb` 写 `pure`、`*.fwd` 原样带上被变换函数的子句）。
+**判据**：`-Plan feat/trans,feat/linear -Jobs 8` 的 `total/pass/fail` 与改前逐条相同（`print_and_recompile`
+之外零新红）、`-Plan feat/modules -Jobs 8` 的 2074 条不增红；并且 `git diff` 里**不出现**
+`src/runtime/resources.cpp` 那一侧的任何一行 —— 读法一侧动了就是走了另一条路，不算这个默认。

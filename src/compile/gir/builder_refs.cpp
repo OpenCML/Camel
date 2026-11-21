@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The content rule of `Ref<T>` (the author's ruling of 2026-11-14): a reference may hold any type
+ * The content rule of `Ref<T>`: a reference may hold any type
  * but one that holds a reference.
  *
  * A box is reclaimed by counting the handles that point at it -- the last handle to go frees it --

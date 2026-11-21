@@ -1,8 +1,11 @@
 // `relu`'s gradient through the library, with the shape written into the type.
 //
-// The open-rank twin is `relu_gradient_through_the_library.cml`, and it still refuses: the product
-// law reads the tangent's own shape for `sum_to` and `float[...]` states no extents. Here the type is
-// `float[4]`, `shapeCarrierOf` answers it (author, 2026-11-03 16:15), and both legs answer.
+// The open-rank twin is `relu_gradient_through_the_library.cml`, and both answer. What the two cases
+// separate is where the extents come from: a tangent's type states none (design principles 5.4), so
+// the open-rank program states them beside the product (`mul_stated`) while this one writes them into
+// the declaration, `float[4]`, where `shapeCarrierOf` answers any law that asks for a carrier. Both
+// readings have to stay: a law that reads a tangent's shape is refused by name, and a case whose
+// shape is in the type would not notice that it is.
 //
 // Hand first. `relu`'s slope is one where `x > 0` and zero at or below it, and `sum`'s adjoint is one
 // for every lane, so the gradient is the mask itself. The input holds one negative, the boundary

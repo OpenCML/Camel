@@ -49,7 +49,7 @@ using camel::runtime::kInvalidNodeRef;
 
 /// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
 /// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
-/// built any more, and NodeVM does not execute it.
+/// built, and NodeVM does not execute it.
 bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
     for (uint32_t r = 0; r < graph.regionCount(); ++r) {
         const camel::runtime::GCRegion *region = graph.region(r);
@@ -661,7 +661,7 @@ slot_t NodeVMSchedPass::call(
                 // so the entry's call of `main` asked whether it may reuse the entry's activation
                 // would leave one activation fewer on the stack and lift the limit by one -- which
                 // is what a graph whose entry call is a direct call (`FUNC main`) rather than a
-                // call through a function value used to do, after std::cxx::devirtualize. The
+                // call through a function value does, after std::cxx::devirtualize. The
                 // count of open calls must not depend on how a call is spelled, so the entry's
                 // callee always gets an activation of its own, the way the value-call spelling
                 // gives it one. Every other tail call reuses its caller's activation as before.
@@ -1003,7 +1003,7 @@ void NodeVMSchedPass::evalMarkedOperator(
     GUARD(calls != nullptr, "A marked operator declares how it calls its function.");
     switch (calls->shape) {
     case camel::core::sem::ElementShape::Map:
-        // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
+        // `apply` (f from T to T) returns a new array, like `map`: it does not change the
         // array it is given (design principles 11.3).
         evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
         break;

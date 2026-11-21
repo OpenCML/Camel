@@ -41,10 +41,10 @@ void declareResourcesAndDefinitions() {
             // The library pool's count of the most recent call, the same reading `gemm_threads`
             // gives of the pool this module owns: `gemmLibraryThreadsKernel` answers
             // `k::gemmLibraryThreadsUsed()` (utility_ops.cpp), the counter `gemm.cpp` sets on
-            // every product. It was the one of the four (`set_num_threads`, `num_threads`,
-            // `gemm_threads`, and this) left out of the list, so it fell back to the conservative
-            // reading -- every operand read-modify-written -- and a body that called it could not
-            // prove its effect to any clause (2026-11-20).
+            // every product. The name has to be declared here with its three siblings
+            // (`set_num_threads`, `num_threads`, `gemm_threads`): left out of the list it falls
+            // back to the conservative reading -- every operand read-modify-written -- and a body
+            // that calls it proves its effect to no clause.
             {"gemm_library_threads", externalAmbient("tensor:threads", AccessMode::Read)},
         });
     // `load_npy` is not one operator but one per element type a `.npy` file can hold, registered
@@ -53,8 +53,8 @@ void declareResourcesAndDefinitions() {
     // declaration written there reached none of them and each fell back to "writes the resource
     // every effect conflicts with". Two loads of two different files then met as two writes of one
     // resource, and a commit that published them unordered -- a splice that carries the callee's
-    // own two loads into a caller -- was refused for a conflict the program never had
-    // (2026-11-19). Reading a file is a read of `fs`, the answer `fs:read_bytes` gives.
+    // own two loads into a caller -- was refused for a conflict the program never had.
+    // Reading a file is a read of `fs`, the answer `fs:read_bytes` gives.
     for (std::string_view name : npyLoadOperatorNames()) {
         table.declareResources(
             std::string("tensor:") + std::string(name),

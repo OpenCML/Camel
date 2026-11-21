@@ -64,8 +64,7 @@ class TensorExecutor : public Executor {
 /// so they follow from a *value*, and the only type a declaration could write is `T[..]`. That
 /// type is a claim the value can contradict: the answer is the element itself when the reduction
 /// leaves rank 0 (design principles 5.4), and a cotangent typed array over a value that has no
-/// rank is read as a pointer (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`, and
-/// docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its
+/// rank is read as a pointer (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`). Its
 /// signature is computed, and it is recorded in `stdlib/signatures/tensor.cml`.
 ///
 /// `sum_stated` and `take_stated` stay declared: neither can answer an element. A stated sum is
@@ -77,6 +76,18 @@ class TensorExecutor : public Executor {
 /// broadcast of the two, a matrix product's is neither), so the only type a declaration can write
 /// is `T[..]` and that is the honest one. The declared result is what a program sees; the walk
 /// reads the lists and never the result's extents.
+///
+/// `add_stated` and `subtract_stated` are the same shape as `mul_stated` for the same reason: the sum
+/// of two arrays broadcasts, so its result's extents are a function of the two lists and `T[..]` is
+/// the only type a declaration can write. They exist because a forward rule's **tangent** is where
+/// the problem bites -- `jvp_add_tensor` and `jvp_subtract` write them, and on the reverse side the
+/// position a cotangent is answered for is a tangent, whose type states no extents
+/// (`stdlib/rulesets/jvp.cml#jvp_subtract` and `stdlib/rulesets/transpose.cml#subtract_stated_t`).
+///
+/// `div_stated` is the fourth of that family and the one a **division** needs: `jvp_sqrt`, `jvp_log`
+/// and `jvp_divide` write their tangent as a quotient, and the quotient's transpose law has to reduce
+/// each cotangent to its own operand's shape, which on the reverse side is a tangent's and therefore
+/// not in a type (`stdlib/rulesets/jvp.cml#jvp_divide`, `stdlib/rulesets/transpose.cml#div_stated_t`).
 constexpr std::string_view kDeclaredOperators[] = {
     "broadcast_like", "dim",
     "pick_at",        "gemm_backend",
@@ -89,7 +100,8 @@ constexpr std::string_view kDeclaredOperators[] = {
     "shape",          "sum_axis_stated",
     "sum_stated",     "sum_to",
     "take_stated",    "show",
-    "to_bytes",
+    "add_stated",     "subtract_stated",
+    "div_stated",     "to_bytes",
 };
 
 bool isScalarConversion(std::string_view name) {

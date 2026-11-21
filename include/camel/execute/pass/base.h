@@ -58,15 +58,13 @@ class GraphIRPass {
     // `add_constant` and the rest of stdlib/graph.cml, which is every handle a pass written in Camel
     // has on a graph. Such a pass cannot make a node that carries an access, cannot splice a body in
     // and cannot change what a node is, so for it "no access appears and no order is lost" is a
-    // theorem (docs/design/effects/analysis.cn.md 4.1; the ruling of 2026-11-15: the checks are for
-    // the C++ passes, whose interface is wider, and E9's swapped and dropped prints came out of
-    // them).
+    // theorem (docs/design/effects/analysis.cn.md 4.1: the checks are for
+    // the C++ passes, whose interface is wider).
     //
     // This answers a fact about the pass, not the question of whether the two commit checks are
     // asked of it. That question is the caller's, because it depends on the build: a shipped build
     // reads the theorem and does not pay for the check, a debug or test build asks anyway
-    // (`camelPassCommitChecksEnabled`), which is the ruling of 2026-11-16 -- a theorem nobody reads
-    // is a guess.
+    // (`camelPassCommitChecksEnabled`) -- a theorem nobody reads is a guess.
     virtual bool rewritesThroughTheGraphModuleOnly() const { return false; }
 
   private:
@@ -255,9 +253,8 @@ bool checkPassBoundary(
 /// `GraphIRPass::rewritesThroughTheGraphModuleOnly`, which every pass written in Camel answers with
 /// yes (src/execute/camel_pass.cpp).
 ///
-/// The ruling of 2026-11-15 stopped asking, because such a pass cannot build the defect the checks
-/// look for. The ruling of 2026-11-16 keeps the saving where it is paid for and reads the theorem
-/// everywhere else: **a shipped build (`NDEBUG`) does not ask, a debug build asks, and a test asks
+/// Such a pass cannot build the defect the checks look for, so the saving is kept where it is paid
+/// for and the theorem is read everywhere else: **a shipped build (`NDEBUG`) does not ask, a debug build asks, and a test asks
 /// through `setCamelPassCommitChecksEnabled`** -- a theorem nobody reads is a guess, and a suite
 /// that never runs the check cannot say whether the theorem still holds.
 ///

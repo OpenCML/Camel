@@ -167,8 +167,8 @@
 # So the gate reads them, and decides only what is news. `gpu-plans` reuses the `reportOnly` shape of
 # the table below -- one machine-readable line, an exit code kept out of `checkfail` -- but it is a
 # plan run and not a checker, so it is emitted as a block of its own after the checkers instead of a
-# table row. `N run` in the closing summary is the static layer's count (19 under `-Check all`), and
-# a twentieth row would have changed a number every lane compares. The number it prints is the
+# table row. `N run` in the closing summary is the static layer's count (20 under `-Check all`), and
+# a twenty-first row would have changed a number every lane compares. The number it prints is the
 # runner's own [SUMMARY] reduced to one line, never a second count kept here, and it is `unknown` --
 # not zero -- when the runner printed no summary at all. It runs on the caller's -Jobs, after the
 # checkers, and under the host's plan lock: it *is* a plan run and not a reader of one, so a number
@@ -512,6 +512,14 @@ $checkers = [ordered]@{
     # so `-NoBuild` after one needs `-AllowStale` -- the parser's reading of a file does not depend
     # on the tree its binary was built from, which is the one thing that stamp cannot know.
     'ast-hashes'          = @{ script = 'scripts/check-ast-hashes.mjs'; args = @(); compiler = $true }
+    # A comment says what the code does and why; it does not record how the project got there. This
+    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
+    # a path that is data in a string literal is not its business, and it counts a comment that names
+    # a dated ruling, a handover page, a role or a lane, a slice code, a host path. A wall with a
+    # threshold of zero: the tree carries none of those comments, so the first one added is this
+    # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
+    # what the gate returns.
+    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
@@ -588,8 +596,8 @@ $namedOnlyNames = @($checkers.Keys | Where-Object { $checkers[$_].namedOnly })
 $namedOnlySkipped = @($namedOnlyNames | Where-Object { $checkNames -notcontains $_ })
 
 # The gpu observation, beside the table and deliberately not in it: it is a plan run, so it is no
-# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (19
-# under -Check all), which a twentieth row would have changed for every lane that compares that
+# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (20
+# under -Check all), which a twenty-first row would have changed for every lane that compares that
 # number. It reuses the report-only shape instead (one machine-readable line, an exit code that never
 # reaches `checkfail`) and is emitted as a block of its own after the checkers; the header section
 # "the gpu layer is observed, and never gates a known red" states what it is, what it is not, and how
@@ -2238,8 +2246,8 @@ if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
     #
     # The gpu observation's footer travels on the same regex as a checker's, so its reading arrives
     # in `$checkResults` too. It is taken out here rather than left in: `N run` below is the static
-    # layer's count (19 under -Check all), and the observation is a plan run that is not one of those
-    # checks -- a twentieth name in that count would change a number every lane compares. It is
+    # layer's count (20 under -Check all), and the observation is a plan run that is not one of those
+    # checks -- a twenty-first name in that count would change a number every lane compares. It is
     # listed on its own line instead, with the same "report only" tag and a word about the count, so
     # that a green check summary is not read over a gpu layer somebody forgot to look at.
     $gpuObserved = @($checkResults | Where-Object { $_.name -eq $gpuObservationName })

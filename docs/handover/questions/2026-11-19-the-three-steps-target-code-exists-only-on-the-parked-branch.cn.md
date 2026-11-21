@@ -57,3 +57,13 @@ develop 上 `withExitType` 只有一处会写图的函数类型：`src/compile/g
 ② 三步的前两步**随 `lane-ssa` 一起等**本条裁定
 ③ `withExitType` 那处写回**不动**（删它会掉 23 条）
 ```
+
+## 默认建议（写死）
+
+**默认建议**：按页首已经写死的那条开工 —— **`develop` 上只做「删 `declaredFuncType`」**
+（5 处代码命中 / 4 个文件，删完 `git grep` 归零），三步裁定的前两步**随 `lane-ssa` 一起等**，
+`withExitType` 那处写回（`src/compile/gir/draft_graph_builder.cpp` 的 `else` 分支）**不动**。
+**判据**：`-Plan feat/linear -Jobs 8` 仍是 `869 / 864 / 0`，**不许**出现 §二 那 23 条
+（`decorator_*` 7、`order_edges_regions` 5、`same_resource_order*` 6 等）；六计划与
+`feat/modules`、`feat/trans` 逐条相同。要看三步的前两步，先量 `lane-ssa` 的 104 条红 ——
+那不是「执行裁定」，那是「重做整套打包」，不许在 `develop` 上试。

@@ -647,7 +647,36 @@ struct DeclinedCall {
     size_t calleeComputeNodes;
     size_t callerNodes;
     size_t callSites;
+    /// Where the call is written (see InlineDeclined::origin): taken here, because the graphs the
+    /// position is read from are replaced by the commit that follows the run.
+    camel::source::origin_id_t origin;
 };
+
+/// Where the call `id` of the draft being examined is written: the call node's own position, or the
+/// definition of the callee it leaves when the compiler built the call and gave it none. A graph's
+/// call of the function it was compiled from -- the entry graph's call of `main` -- is of the second
+/// kind, and "inlining 'main' into '__root__'" is a statement about `main`, so the function's
+/// definition is the place the reader can look at. Neither is invented: a call with no position and
+/// a callee the compiler built (a specialization, a lifted closure) has nothing to point at, and
+/// `kInvalidOriginId` says so -- a constant inside the callee's body is not where the call is.
+camel::source::origin_id_t leftCallOrigin(
+    const camel::core::context::Context *context, const camel::runtime::GraphDraft &draft,
+    gc_node_ref_t id, const GCGraph *callee) {
+    const uint64_t callOrigin = draft.nodeOrigin(id);
+    if (callOrigin != camel::source::kInvalidOriginId) {
+        return callOrigin;
+    }
+    if (context == nullptr || callee == nullptr) {
+        return camel::source::kInvalidOriginId;
+    }
+    const auto source = context->sourceContext();
+    if (!source) {
+        return camel::source::kInvalidOriginId;
+    }
+    const uint64_t definition = source->debugMap().graphOrigin(callee->id());
+    return definition != camel::source::kInvalidOriginId ? definition
+                                                         : camel::source::kInvalidOriginId;
+}
 
 /// The direct calls of the graphs in the closure, kept up to date as the session rewrites
 /// graphs: the number of calls of each graph, and a stamp per graph that changes whenever
@@ -1036,7 +1065,14 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 const size_t calls    = callBook.calls(calleeGraph);
                 const auto decline    = [&](InlineDecline why) {
                     declined.push_back(
-                        {nextGraph, calleeGraph, why, copied, computed, draft.nodeCount(), calls});
+                        {nextGraph,
+                         calleeGraph,
+                         why,
+                         copied,
+                         computed,
+                         draft.nodeCount(),
+                         calls,
+                         leftCallOrigin(context.get(), draft, id, calleeGraph)});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
@@ -1146,8 +1182,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
             // call that names its callee and one the effect resolver has to read as "writes
             // everything", and a differentiated body's two calls both land in one region.
             //
-            // That they do not write is a rule and not an assumption (design principles 9.9, author
-            // 2026-11-19): a reverse half only computes the transposed rules over the values its
+            // That they do not write is a rule and not an assumption (design principles 9.9): a
+            // reverse half only computes the transposed rules over the values its
             // forward recorded, and its type says so -- `modules/autodiff/pullback.cpp#pureClause`
             // publishes `pure` on every pullback and on the function value the forward hands out.
             // So naming them costs nothing, while leaving them unnamed costs the graph the order
@@ -1211,7 +1247,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
              call.calleeNodes,
              call.calleeComputeNodes,
              call.callerNodes,
-             call.callSites});
+             call.callSites,
+             call.origin});
     }
 
     if (!changed) {
@@ -1377,7 +1414,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut,
-    const GCGraph **lastChangedGraphOut) {
+    const GCGraph **lastChangedGraphOut, std::optional<InlineDeclined> *growthBudgetLeft) {
     (void)os;
     (void)lastChangedGraphOut;
 
@@ -1429,10 +1466,10 @@ const camel::runtime::Program *applyOptimizeRewritePass(
             break;
         }
         // The boundary check every optimization step ends with, asked here as the other steps ask
-        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp, since 2026-11-02): the
-        // engine's own steps -- devirtualize, specialize, inline -- went unchecked, so a splice
-        // that dropped an effect or moved one past another on the same resource was found only by
-        // comparing the output of the whole pipeline, one step after the one that broke it. Asked
+        // it (`rewriteReachableGraphs`, src/passes/opt/generic/rewrite.cpp): without it the
+        // engine's own steps -- devirtualize, specialize, inline -- go unchecked, and a splice
+        // that drops an effect or moves one past another on the same resource would be found only
+        // by comparing the output of the whole pipeline, one step after the one that broke it. Asked
         // per session and on the whole program the session returned, for the reason the sibling
         // site gives: a rewrite's edges are not the only ones it moves, so the graph is judged once
         // it is written, not predicted from the node pair the rewrite named. A refusal records the
@@ -1446,6 +1483,18 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         CAMEL_LOG_INFO_S("Opt", "boundary asked after session {} of '{}'", i, stepName);
         changed = true;
         program = rewritten;
+    }
+    // The call this run left because the budget is spent is this run's answer, so it goes to the
+    // caller that has to explain a round which changed nothing -- whether or not there is a context
+    // to keep the report below on. InlineReport is that same record for a reader that asks after
+    // the run (onnx::export), not the path this answer takes.
+    if (growthBudgetLeft != nullptr) {
+        for (const InlineDeclined &entry : declined) {
+            if (entry.why == InlineDecline::GrowthBudget) {
+                *growthBudgetLeft = entry;
+                break;
+            }
+        }
     }
     // A run of this pass does a couple of sessions: the first changes something, the second finds
     // nothing left to do and ends the run. A rewrite that never settles therefore does not show up

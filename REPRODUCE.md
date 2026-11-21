@@ -105,14 +105,17 @@ reds on a machine without a device; that plan set is report-only and is not one 
 
 ## 4. The trimmed subset
 
-The archive can be built without the GPU back end, the ONNX exporter, the NN and checkpoint
-libraries, and the Python support on either side:
+The archive can be built as a subset: `CAMEL_PACKAGE_MINIMAL=ON` builds the full module list minus the
+modules `CAMEL_MINIMAL_DROPS` names (top-level `CMakeLists.txt`, with the reason each module is in or
+out written beside it) and leaves out the Python support on either side. Neither the list nor its
+size is repeated here: the configure prints the set it builds, and the install carries exactly those
+modules' `.cmo`.
 
 ```bash
 printf '%s\n' '{ "CAMEL_PACKAGE_MINIMAL": "ON" }' > .camel-opts.json
 rm -rf build out
-node scripts/build.js
-ls out/latest/stdlib/*.cmo | wc -l          # 22, not 28
+node scripts/build.js                       # prints "CAMEL_PACKAGE_MINIMAL: building ..."
+ls out/latest/stdlib/*.cmo                  # exactly the modules that line named
 ls out/latest/libs                          # libcamel.so only
 out/latest/bin/camel hello.cml              # Hello, <your user name>!
 out/latest/bin/camel test/cases/smoke/core/fib10_pipeline.cml std::fvm

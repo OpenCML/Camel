@@ -77,8 +77,7 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
         }
         expect(TK::RBrace);
     }
-    // A `when` after the closing brace is not read as a condition any more. It is
-    // not read as a condition any more, and it is not reported as a token that did not fit: the
+    // A `when` after the closing brace is not read as a condition, and it is not reported as a token that did not fit: the
     // program is told where the condition belongs.
     if (!panic_ && cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "when") {
         error(SyntaxError::Kind::WhenAfterBody, {}, pos_);

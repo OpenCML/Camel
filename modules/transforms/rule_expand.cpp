@@ -91,8 +91,7 @@ leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
             //                            value is the mistake this branch exists to not make: it has
             //                            no value to compare (`dataIndex` is not negative), and
             //                            comparing against the placeholder refused `jvp_reshape` for
-            //                            every node in the tree (measured 2026-11-20 by another
-            //                            lane: 27 red lines in `feat/compile`, verbatim
+            //                            every node in the tree (it refused with, verbatim
             //                            "writes 1 `<>` value(s) of its own ((int[])), and this
             //                            node's configuration is not that one ((float[...], int[]))").
             if (constant == nullptr || constant->kind != camel::runtime::GCNodeKind::Data ||
@@ -117,12 +116,12 @@ leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
 ///
 /// This is the half the fit was missing. A `<>` value is compared **by content** against the value
 /// the node holds at that port -- `valuesEqualByContent`, the same relation `==` uses on the two
-/// arrays -- because the type does not carry it: measured 2026-11-20, `reshape<[2, 2]>` and
+/// arrays -- because the type does not carry it: `reshape<[2, 2]>` and
 /// `reshape<[2, 1, 2]>` are assignable to one another, so a type comparison lets the law through and
 /// its right side then writes `[2, 2]` into the tangent of a rank-three reshape. A law written for
 /// one configuration therefore answers only the node that carries that configuration, which is the
-/// defect this closes: `reshape<[8, 2, 8]>` used to match the law written for `[2, 2]` and the run
-/// died with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
+/// defect this closes: `reshape<[8, 2, 8]>` would match the law written for `[2, 2]` and the run
+/// would die with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
 ///
 /// A law that writes **no** `<>` value is not asked about the node's configuration here: what such a
 /// law says about it is nothing, and `namesTheNode` already settles how many ports it must name.
@@ -286,9 +285,9 @@ RuleChoice chooseRuleAmong(
         }
         // A law that writes a `<>` value of its own must find the node's configuration to be that value.
         // The fit below compares **types and counts**, and `namesTheNode` lets a law name only some
-        // of the node's ports, so a law whose left side writes a constant used to fit every node of
-        // that operator however the node spelled its configuration -- and its right side then wrote
-        // the law's constant into the answer. Measured 2026-11-20 (`probes/06_layout.cml`):
+        // of the node's ports, so a law whose left side writes a constant would fit every node of
+        // that operator however the node spelled its configuration -- and its right side would then
+        // write the law's constant into the answer. For example
         // `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, a `reshape<[8, 2, 8]>` node matched it,
         // and the tangent came out as `[2, 2]` -- `TensorDimensionMismatch: [6] -> [2, 2]`. Design
         // principles 9.9: the right derivative, or a refusal at compile time that names the
@@ -392,8 +391,8 @@ RuleChoice chooseRuleAmong(
         return choice;
     }
     // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than
-    // the other are two laws the declaration does not choose between -- the author's `two laws both
-    // accept these arguments` -- and it is reported rather than answered by filing order.
+    // the other are two laws the declaration does not choose between -- the `two laws both
+    // accept these arguments` case -- and it is reported rather than answered by filing order.
     //
     // A law that names more of the operator's ports is the narrower one, and that is settled before
     // the port types are compared: the axis reduction's law names the axis and the flag beside the
@@ -402,8 +401,8 @@ RuleChoice chooseRuleAmong(
     // refuse the axis node's two extra ports, because `namesTheNode` takes a law that names fewer
     // ports than the node has -- the rest may be written as constants in the law's own left side
     // (`reshape`'s shape). Both laws are filed under `sum` at the one operand the parentheses carry,
-    // which is the author's ruling of 2026-11-05 ("a reduction over an axis has one name, the whole
-    // reduction's"), so they are told apart here: the law that names every port is the node's.
+    // (a reduction over an axis has one name, the whole
+    // reduction's), so they are told apart here: the law that names every port is the node's.
     size_t widest = 0;
     for (const Fit &fit : fitting) {
         widest = std::max(widest, fit.ports.size());
@@ -575,11 +574,11 @@ constexpr std::string_view kShapeUri = "tensor:shape";
 /// The extents as the value a law reads them as: a rank-one array of the numbers, of the type the
 /// law's own `tensor:shape` node answers with (`int[]`).
 ///
-/// This is the whole of the pathway the author asked for on 2026-11-03 (17:35 and 17:55): a shape
+/// This is the whole of the pathway: a shape
 /// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
 /// built -- instead of being read off the value of an operand the caller does not have. It is not a
-/// zero standing in for a value (`transpose.cpp#shapeCarrierOf` was one, and a law that multiplied
-/// by it answered zeros; deleted 2026-11-05); it is the extents themselves, and the only thing that
+/// zero standing in for a value (`transpose/walk.cpp#shapeCarrierOf` was one, and a law that multiplied
+/// by it answered zeros); it is the extents themselves, and the only thing that
 /// reads them is the shape (5.4: a shape is a fact about a type, and this is that fact written
 /// down).
 gc_node_ref_t statedExtentsValue(
@@ -791,7 +790,7 @@ gc_node_ref_t expandRuleRightSide(
     // that is nothing. So the product is written as the zero of its own type and the nodes nothing
     // else reads -- the coefficient, and the calls it is made of -- are not copied at all.
     //
-    // This is the author's ruling of 2026-11-04: the zero of a tangent is a structural fact (a
+    // This is the rule that the zero of a tangent is a structural fact (a
     // constant has no tangent), not a value a law computes and branches on. Deciding it here, on
     // the graph, is what lets `pow_tangent`'s rule carry no `if dw == T(0)` and still answer -6.0.
     std::vector<bool> collapsed;
@@ -909,13 +908,13 @@ gc_node_ref_t expandRuleRightSide(
     std::unordered_map<gc_node_ref_t, bool> answeredAsShape;
     // Whether the answer can have `capture`'s **shape** where it cannot have its value.
     //
-    // The question is the author's 2026-11-03 17:35/17:55 ruling -- a shape reaches a transpose as
-    // a known operand, never read off an operand's value -- and the answer is yes exactly when two
+    // The question is the rule that a shape reaches a transpose as
+    // a known operand, never read off an operand's value; and the answer is yes exactly when two
     // facts hold:
     //
     //   * the law's port for that capture states its extents (`float[2, 3]` does, `float[..]` and a
     //     number do not). The instance is made at the node's own operand types
-    //     (`expandRuleByName`, `transpose.cpp#ruleCotangent`), so the port is the operand's type;
+    //     (`expandRuleByName`, `transpose/walk.cpp#ruleCotangent`), so the port is the operand's type;
     //   * every place the answer reads that capture is a `tensor:shape` call. A body that read it
     //     anywhere else needs the value, and the value is the caller's to carry: substituting there
     //     would answer arithmetic with a shape, which is the silent zero this exists to remove.
@@ -962,7 +961,7 @@ gc_node_ref_t expandRuleRightSide(
         }
         answeredAsShape.emplace(capture, true);
         if (!keep.empty()) {
-            // Not part of the answer any more: the call that read it answers with the shape, so the
+            // Not part of the answer: the call that read it answers with the shape, so the
             // value is neither asked for nor copied.
             keep[capture] = false;
         }
@@ -986,7 +985,7 @@ gc_node_ref_t expandRuleRightSide(
         // Asked before the value, not after it: a caller that has no value for this operand may
         // still have a *shape* for it, and that shape is answerable from the port's type whatever
         // the caller holds. Answering the shape from the type is the same answer in either case,
-        // and it is the one the author asked for: the extents the port states, written into the
+        // and it is the one the rule asks for: the extents the port states, written into the
         // graph where the call stood. A caller with no value *and* no stated shape gets no answer
         // here; the law then asks for the value, and a law whose forward half writes the extents as
         // operands of the node
