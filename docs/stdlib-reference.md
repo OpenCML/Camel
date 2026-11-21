@@ -1491,7 +1491,7 @@ same rule for a value the body computed, a value it read from outside, and a `wi
 the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 
 **`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
-that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+that makes it is `modules/transforms/transpose/signature.cpp#transposeSignature`. So `transpose(f)` is
 called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 
 The member is built once for a graph version and kept: the walk reads
