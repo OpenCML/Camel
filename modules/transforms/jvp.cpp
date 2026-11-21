@@ -451,6 +451,16 @@ struct LiftState {
     /// the type the call site has to fill in, kept rather than derived again there so the two
     /// cannot disagree about the order or the length of the list (`liftSignature`).
     std::unordered_map<uint32_t, FunctionType *> calleeTypes;
+    /// The lifted value of each **value** this build has lifted, keyed by the value's node in the
+    /// graph being lifted. A value's lift is not a graph of its own when the value is not a callee:
+    /// a Fill's product and a projection out of one are values the lift already holds, so a call
+    /// written through such a value reaches the lift it already has instead of asking for a second
+    /// one. It lives in this build and nowhere else -- not in a graph, not across calls.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> liftedValues;
+    /// How often the table was read, and how often it had an entry (a build that never registers a
+    /// value can only miss).
+    mutable size_t valueLookups = 0;
+    mutable size_t valueHits    = 0;
 };
 
 bool fail(JvpGraph &refusal) {
@@ -1056,9 +1066,16 @@ bool liftGraph(
         //     were built by this same function.
         // Nothing here asks what kind a member is: the shape came from `liftedShapeOf`, and these
         // are its three cases.
-        const auto liftedValueOf = [&draft, &copyOf, &valueOf, &tangentOf, &liftedPair](
+        const auto liftedValueOf = [&state, &draft, &copyOf, &valueOf, &tangentOf, &liftedPair](
                                        gc_node_ref_t ref,
                                        Type *type) -> gc_node_ref_t {
+            // The table first: a value this build has already lifted is that lift, not a second one.
+            if (const auto known = state.liftedValues.find(ref); known != state.liftedValues.end()) {
+                ++state.valueLookups;
+                ++state.valueHits;
+                return known->second;
+            }
+            ++state.valueLookups;
             // A copy that is **already the pair** is the member's lifted value as it stands: an
             // `Accs` out of a lifted answer (`(value, tangent)`) and a loop's state port are both
             // that. Taking its value leg would unpack it a second time and hand the fill a lone
