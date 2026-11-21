@@ -1377,7 +1377,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut,
-    const GCGraph **lastChangedGraphOut) {
+    const GCGraph **lastChangedGraphOut, std::optional<InlineDeclined> *growthBudgetLeft) {
     (void)os;
     (void)lastChangedGraphOut;
 
@@ -1446,6 +1446,18 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         CAMEL_LOG_INFO_S("Opt", "boundary asked after session {} of '{}'", i, stepName);
         changed = true;
         program = rewritten;
+    }
+    // The call this run left because the budget is spent is this run's answer, so it goes to the
+    // caller that has to explain a round which changed nothing -- whether or not there is a context
+    // to keep the report below on. InlineReport is that same record for a reader that asks after
+    // the run (onnx::export), not the path this answer takes.
+    if (growthBudgetLeft != nullptr) {
+        for (const InlineDeclined &entry : declined) {
+            if (entry.why == InlineDecline::GrowthBudget) {
+                *growthBudgetLeft = entry;
+                break;
+            }
+        }
     }
     // A run of this pass does a couple of sessions: the first changes something, the second finds
     // nothing left to do and ends the run. A rewrite that never settles therefore does not show up
