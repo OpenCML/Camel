@@ -1,0 +1,40 @@
+// The shape `timeit` had before 2026-11-22, written once more as its own program: a recursion
+// whose depth is a run-time count, and whose answer is one array built by `concat` at every level.
+// The optimizer's second pass over it costs seconds -- `test/plans/feat/opt/opt_second_pass` pins
+// the number -- and the shape has to stay in the tree so that the reading does not leave with the
+// timing helper that used to carry it.
+
+import { now } from time
+
+func chain(n: int, xs: float[], fn: () => void): float[] sync {
+    if n <= 0 then {
+        return xs
+    } else sync {
+        let start = now()
+        fn()
+        let duration = now() - start
+        let rest = chain(n - 1, xs, fn)
+        return concat([duration], rest)
+    }
+}
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func main(): int sync {
+    let warm = fib(20)
+    if warm != 6765 then {
+        return 1
+    } else {
+        let durations = chain(20, [], (): void => {
+            fib(20)
+        })
+        let total = durations->reduce<(acc: float, d: float): float => acc + d, 0.0>
+        if total < 0.0 then {
+            return 2
+        } else {
+            return 0
+        }
+    }
+}

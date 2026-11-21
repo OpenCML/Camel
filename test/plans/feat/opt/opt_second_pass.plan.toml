@@ -1,0 +1,67 @@
+# Where the optimizer's *second* pass burns, pinned as a number: the CPU time of `std::opt #2` on
+# two programs, read from the compiler's own `--time-phases` report (`cpu_ns` per pass) by
+# `test/tools/opt-cost/second_pass.mjs`.
+#
+# Why the entry exists. `perf_fib_smoke.opt_twice` ran `std::opt` twice over the timed helper and
+# cost 4005 ms of CPU, of which the *second* pass was 3607 ms against 89 ms for the first
+# (`docs/handover/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`). The helper's own shape was
+# what made the program expensive -- it returned one array built by `concat` at every level of a
+# recursion -- so rewriting the helper (2026-11-22) takes the workload away with it. This entry keeps
+# the reading: it names the case, runs the same pipeline, and pins the second pass's CPU time, so the
+# cost cannot drop out of the tests just because the tool that used to produce it was rewritten.
+#
+# What the numbers are, and what each one is a reading of:
+#
+#   `perf_fib_smoke` -- the program whose whole run is the entry's cost. The second pass over it
+#   costs 3608 ms while the helper still builds the chain, and 1668 ms with the helper rewritten as
+#   one fold over `(0..repeat)` (measured 2026-11-22 on tangshan88, Release, `--jobs 1`). The ceiling
+#   is 2200 ms: 1.3 times the rewritten reading, and 1.6 times below the chain's -- so the entry is
+#   red on the old helper and green on the new one, which is what makes it a regression case and not
+#   a description. It is not 89 ms: where the remaining 1668 ms goes is the reading the entry above
+#   this one explains (`std::cxx::fold` scanning the graph the inliner unrolled), and the step that
+#   fixes it is the rewrite core of the design page (docs/design/architecture/abstractions.cn.md §7).
+#
+#   `concat_chain` -- the chain written as its own program, with a depth that is a run-time count, so
+#   `fib(20)` is only there to give the program something to do. It costs 1404 ms in the second pass
+#   and the helper never enters it; the ceiling is 2200 ms for the same reason as above. This is the
+#   entry that would still be red if the helper regressed to the chain shape: it keeps the shape in
+#   the tree, where a `timeit` rewrite cannot take it away.
+#
+# The unit is CPU time of the pass, not the wall clock: a shared host stretches the wall clock of a
+# CPU-bound pass several times over without the pass having used more CPU (the rule
+# `test/tools/startup-cost.mjs` states). CPU time barely moves with the load, so a crossed ceiling is
+# a regression and never "the host was busy". The entry is `parallel = false` for the same reason the
+# startup gate is: it reads an absolute millisecond bound.
+#
+# The tool prints the build, the two pass times, the run's total and `result=PASS|FAIL`, and on a
+# failure it names the case, the value and the ceiling on standard output -- the stream the plan
+# keeps -- so a red log carries the reason rather than a bare exit 1.
+
+id = "opt.second_pass"
+order = 342
+tier = "fast"
+tags = ["feat", "opt", "perf"]
+
+[[tests]]
+name = "second_pass.perf_fib_smoke"
+desc = "The CPU time of the second std::opt over the timed helper's program, against a ceiling derived from the measurement: red (3608 ms) while the helper built its answer by concatenating a recursion, green (1668 ms) with the helper rewritten as one fold over the interval, against 2200 ms."
+kind = "behavior"
+parallel = false
+tool = "node"
+case = "../../../tools/opt-cost/second_pass.mjs"
+args = ["${case}", "--case", "test/cases/linear/jit/perf_fib_smoke.cml", "--ceiling", "2200", "--index", "2", "--backend", "jit"]
+expect_exit = 0
+expect_stdout_contains = ["opt_second_pass case=test/cases/linear/jit/perf_fib_smoke.cml", "pass=std::opt index=2", "result=PASS"]
+timeout_ms = 120000
+
+[[tests]]
+name = "second_pass.concat_chain"
+desc = "The same reading on the chain written as its own program (a run-time recursion whose answer is one concat per level), which no helper rewrite can take out of the tree: 1404 ms against 2200 ms."
+kind = "behavior"
+parallel = false
+tool = "node"
+case = "../../../tools/opt-cost/second_pass.mjs"
+args = ["${case}", "--case", "test/cases/opt/generic/concat_chain.cml", "--ceiling", "2200", "--index", "2", "--backend", "jit"]
+expect_exit = 0
+expect_stdout_contains = ["opt_second_pass case=test/cases/opt/generic/concat_chain.cml", "pass=std::opt index=2", "result=PASS"]
+timeout_ms = 120000
