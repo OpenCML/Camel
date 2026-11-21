@@ -317,8 +317,14 @@ jobs:
       - name: Install LLVM, Ninja, CMake (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        # `install` is a no-op when the image already ships LLVM, and the image ships 20.1.8. MSVC
+        # 14.52's own headers refuse anything below Clang 22 -- `_EMIT_STL_ERROR(STL1000,
+        # "Unexpected compiler version, expected Clang 22 or newer")` -- so Conan's build of fmt
+        # stopped a minute and a half into the job, on a tree that builds everywhere else.
+        # `upgrade` is what moves past the version the image pinned; ci-leg.yml has always used it,
+        # which is why the test legs never saw this.
         run: |
-          choco install llvm ninja cmake -y --no-progress
+          choco upgrade llvm ninja cmake -y --no-progress
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Select Clang (Windows)
@@ -339,6 +345,12 @@ jobs:
           clang --version
           ninja --version
           cmake --version
+          # The version the MSVC headers accept, checked here rather than discovered inside a
+          # dependency build: STL1000 names the number but the failure it causes is fmt's.
+          $major = [int]((clang -dumpversion) -split '\.')[0]
+          if ($major -lt 22) {
+            throw "Clang 22 or newer is required on Windows: MSVC 14.52's headers refuse Clang $major (STL1000)"
+          }
 
       - name: Install toolchain (macOS)
         if: runner.os == 'macOS'
