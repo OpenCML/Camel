@@ -26,8 +26,8 @@
 // have to copy a body region`. The reason is the shape of a lifted loop with more than one state: its
 // value is a tuple of one `(state, tangent)` pair per state, so a projection of it names a **state**
 // and not a half of the pair, and `split`'s loop cut takes one state
-// (`modules/transforms/split.cpp#readLoopCut`, `ports.size() != 2`). Nothing in this case needs that
-// cut, and the mark would not make it exist.
+// (`modules/transforms/split_loop_cut.cpp#readLoopCut`, `ports.size() != 2`). Nothing in this case
+// needs that cut, and the mark would not make it exist.
 import { transpose } from transforms
 import rulesets.transpose
 

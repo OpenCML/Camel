@@ -1198,4 +1198,30 @@ inline Type *rankZeroElementOf(Type *type) {
     return array != nullptr ? array->rankZeroType() : nullptr;
 }
 
+// The group whose result `a != b` negates (design principles 4.2, 4.3): `==`. `!=` is not
+// overloaded itself -- an overload of `==` gives it -- so this is also the group the call
+// resolves in before the negation is built over its one result. Null for every other operator,
+// and for a call written by name. `!==` is not here: it is not an overloadable form, so no DREF
+// of it reaches these files -- the construction tree builds it as `!(===)` (gct/builder.cpp).
+inline const char *negatedWholeOf(const std::string &group) {
+    if (group == "__neq__") {
+        return "__eq__";
+    }
+    return nullptr;
+}
+
+/// Clears the "the statement being built has a value nobody takes" mark for the length of a
+/// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
+/// an argument written inside one is not a statement of its own.
+struct UnusedStatementScope {
+    const GCT::Node *&slot;
+    const GCT::Node *saved;
+    UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value) : slot(slot), saved(slot) {
+        slot = value;
+    }
+    ~UnusedStatementScope() { slot = saved; }
+    UnusedStatementScope(const UnusedStatementScope &)            = delete;
+    UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
+};
+
 } // namespace camel::compile::gir

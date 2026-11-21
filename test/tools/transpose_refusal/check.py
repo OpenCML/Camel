@@ -48,6 +48,12 @@ HEADER_FILE = ROOT / "modules" / "transforms" / "transpose.h"
 WORDS_FILE = ROOT / "modules" / "transforms" / "transpose.cpp"
 SENTENCE_FILE = ROOT / "modules" / "transforms" / "transpose_operator.cpp"
 
+# The files a refusal site may be written in. The walk and the table are one file; the site that
+# decides a cause after the walk -- `buildTransposeGraph` -- is the transform's entry point and
+# lives in `transpose/entry.cpp`. The check is the same relation either way: every cause has a
+# site, and a cause nothing records is red.
+SITE_FILES = [WORDS_FILE, ROOT / "modules" / "transforms" / "transpose" / "entry.cpp"]
+
 # The causes whose sentence is the one that names the shape. This is not a defect list: a sentence
 # that would repeat the word adds nothing, and the catch-all still prints the word. It is pinned so
 # that the list is a decision someone made, not the place an unanswered cause happens to fall.
@@ -301,7 +307,7 @@ def sentence_dispatch(path: Path) -> tuple[set[str], set[str], bool]:
 
 
 def main() -> int:
-    for path in (HEADER_FILE, WORDS_FILE, SENTENCE_FILE):
+    for path in (HEADER_FILE, WORDS_FILE, SENTENCE_FILE, *SITE_FILES):
         if not path.is_file():
             print(f"transpose refusals: {path} is not here", file=sys.stderr)
             return 2
@@ -314,7 +320,9 @@ def main() -> int:
 
     table, none_is_silent = word_table(WORDS_FILE)
     own, named, catch_all = sentence_dispatch(SENTENCE_FILE)
-    recorded = recorded_causes(WORDS_FILE)
+    recorded: set[str] = set()
+    for path in SITE_FILES:
+        recorded |= recorded_causes(path)
 
     broken = False
 
