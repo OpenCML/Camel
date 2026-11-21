@@ -969,6 +969,34 @@ class TilesModule final : public BuiltinModule {
                          .accesses       = {driver(AccessMode::ReadModifyWrite)},
                          .allocates      = device,
                          .externalEffect = true}},
+                    // The three resident runners take the host aggregate as their ordinary
+                    // parameter and download any resident leaf inside it before the callee sees it
+                    // (`hostArgument`), so they read the device values among operand 0 and
+                    // read-modify-write the driver, exactly as `download` above. `retain_host`
+                    // keeps a value where the host can read it, `run_host_resident` hands back what
+                    // the host ran, and both answer a resident value wrapped in a `Device<...>`,
+                    // which is a new `tiles:device` handle. `run_preferred_resident` may make its
+                    // program for the device instead, and its result may be a device value it was
+                    // handed ("returned inputs share native ownership"). op-semantics 8 and 14.4
+                    // state these touches; design principles 3.3 is why they are declared here and
+                    // not read off each implementation: a body that calls one could prove nothing
+                    // about its own clause while the table said nothing about them.
+                    {"retain_host",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_host_resident",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_preferred_resident",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates      = device,
+                         .externalEffect = true}},
                 });
         }
         // The driver asks this before the first graph runs; the selection is the run's, and this
