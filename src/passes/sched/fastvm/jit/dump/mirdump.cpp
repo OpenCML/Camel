@@ -4,13 +4,16 @@
 #include "mirdump.h"
 #include "../../compile.h"
 #include "../jit_config.h"
+// The registration of the kernels below stands outside the JIT guard: a build with the JIT off
+// still declares these passes (they report that there is no code generator and dump nothing), so
+// the header that declares PassKernel and makePass has to be read by both builds.
+#include "camel/execute/pass/registration.h"
 
 #if ENABLE_FASTVM_JIT
 #include "../../bytecode.h"
 #include "../backend/backend.h"
 #include "../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
-#include "camel/execute/pass/registration.h"
 #include <unordered_map>
 #endif
 

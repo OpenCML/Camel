@@ -84,8 +84,9 @@ std::pair<std::string, std::string> getGirJsonFromCurrentState(const std::string
         return {"", "run first"};
     if (!st.mainModule || !st.mainModule->loaded())
         return {"", "run first"};
-    auto graph =
-        camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(*st.mainModule);
+    const auto graphOwner =
+        camel::core::module::detail::UserDefinedModuleAccess::programGraph(*st.mainModule);
+    const void *graph = graphOwner.get();
     if (!graph)
         return {"", "no graph"};
     return getGirJsonFromCompileGraph(graph, graphId);
@@ -107,8 +108,10 @@ getGirJsonByPath(const std::string &path, const std::string &graphId) {
         camel::core::module::compileForLoad(state.mainModule, CompileStage::Done);
         if (!state.mainModule->loaded())
             return {"", "compile failed"};
-        auto graph = camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(
-            *state.mainModule);
+        const auto graphOwner =
+            camel::core::module::detail::UserDefinedModuleAccess::programGraph(
+                *state.mainModule);
+        const void *graph = graphOwner.get();
         if (!graph)
             return {"", "no graph"};
         return getGirJsonFromCompileGraph(graph, graphId);

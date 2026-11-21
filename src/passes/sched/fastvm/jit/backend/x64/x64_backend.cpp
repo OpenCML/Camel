@@ -111,8 +111,7 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
         return found;
     }
     if (!unit.runtimeGraph->hasFrameLayout()) {
-        add(
-            0,
+        add(0,
             "no-frame-layout",
             "incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
         return found;
@@ -132,7 +131,7 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
         if (bc.opcode == OpCode::BRCH) {
             // The lowering jumps to the entries of the jump table.
             const size_t table = pc + bc.opsize;
-            bool complete = table + bc.withCnt() < graphEnd;
+            bool complete      = table + bc.withCnt() < graphEnd;
             for (size_t arm = 0; complete && arm < branchTableEntries(bc); ++arm) {
                 complete = unit.bytecodes[table + arm].opcode == OpCode::JUMP;
             }
@@ -170,9 +169,9 @@ constexpr size_t kMaxRegisterArgs = 4;
 // back to the first instruction of a round when another one follows.
 struct LoopRound {
     const camel::runtime::ExecLoop *loop = nullptr;
-    size_t beginPc = SIZE_MAX; // LBEG
-    size_t testPc  = SIZE_MAX; // LTST
-    size_t endPc   = SIZE_MAX; // LEND
+    size_t beginPc                       = SIZE_MAX; // LBEG
+    size_t testPc                        = SIZE_MAX; // LTST
+    size_t endPc                         = SIZE_MAX; // LEND
     size_t bodyPc  = SIZE_MAX; // the first instruction of the body (the LTST falls through to it)
     size_t roundPc = SIZE_MAX; // the first instruction of a round (the LEND jumps back to it)
     // The pc this lowering gives the first instruction of the stop path. No bytecode is at it: it
@@ -259,7 +258,7 @@ std::vector<LoopRound> loopRoundsOf(const CompilationUnit &unit) {
     std::vector<LoopRound> rounds;
     if (!unit.runtimeGraph || unit.graphLength == 0)
         return rounds;
-    const Bytecode *base = unit.bytecodes.data();
+    const Bytecode *base  = unit.bytecodes.data();
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     GUARD(
         graphEnd <= unit.bytecodes.size(),
@@ -278,18 +277,25 @@ std::vector<LoopRound> loopRoundsOf(const CompilationUnit &unit) {
                 }
                 LoopRound &round = rounds[it->second];
                 switch (bc.opcode) {
-                case OpCode::LBEG: round.beginPc = pc; break;
-                case OpCode::LTST: round.testPc = pc; break;
-                case OpCode::LEND: round.endPc = pc; break;
-                default: break;
+                case OpCode::LBEG:
+                    round.beginPc = pc;
+                    break;
+                case OpCode::LTST:
+                    round.testPc = pc;
+                    break;
+                case OpCode::LEND:
+                    round.endPc = pc;
+                    break;
+                default:
+                    break;
                 }
             }
         }
         pc += bc.opsize;
     }
     for (size_t i = 0; i < rounds.size(); ++i) {
-        LoopRound &round = rounds[i];
-        round.stopPc    = kLocalLabelPcBase + static_cast<uint32_t>(i);
+        LoopRound &round                     = rounds[i];
+        round.stopPc                         = kLocalLabelPcBase + static_cast<uint32_t>(i);
         const camel::runtime::ExecLoop &loop = *round.loop;
         auto why = [&](std::string reason) { round.helperReason = std::move(reason); };
         if (round.beginPc == SIZE_MAX || round.testPc == SIZE_MAX || round.endPc == SIZE_MAX) {
@@ -317,8 +323,7 @@ std::vector<LoopRound> loopRoundsOf(const CompilationUnit &unit) {
             continue;
         }
         if (!loop.stateComponents) {
-            why(
-                loop.stateCount == 1
+            why(loop.stateCount == 1
                     ? "the state is a single value, not a slot the body writes every round"
                     : "the round makes the state tuple anew every round");
             continue;
@@ -410,8 +415,8 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
     //    updates in place. The one place that has no such load is a call or self tail call
     //    with more arguments than are passed in registers, which copies constants as
     //    immediates; a graph that passes an object constant there is framed code.
-    const bool objectsMove          = camel::core::mm::autoSpace().youngGenCopyingEnabled();
-    const auto *staticLayoutOfGraph = unit.runtimeGraph->staticDataType();
+    const bool objectsMove            = camel::core::mm::autoSpace().youngGenCopyingEnabled();
+    const auto *staticLayoutOfGraph   = unit.runtimeGraph->staticDataType();
     auto passesObjectConstantInMemory = [&](const Bytecode &bc) {
         if (!objectsMove || staticLayoutOfGraph == nullptr)
             return false;
@@ -425,8 +430,8 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
             ++moved;
             const auto index = static_cast<size_t>(-srcArgs[i]);
             objectConstant   = objectConstant ||
-                             (srcArgs[i] < 0 && index < staticLayoutOfGraph->size() &&
-                              camel::core::type::isGCTraced(staticLayoutOfGraph->codeAt(index)));
+                               (srcArgs[i] < 0 && index < staticLayoutOfGraph->size() &&
+                                camel::core::type::isGCTraced(staticLayoutOfGraph->codeAt(index)));
         }
         return objectConstant && moved > kMaxRegisterArgs;
     };
@@ -441,8 +446,8 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
     for (size_t pc = unit.entryPc; pc < graphEnd;) {
         if (firstOnly && !found.empty())
             return found;
-        const Bytecode &bc      = unit.bytecodes[pc];
-        const std::string where = "pc=" + std::to_string(pc);
+        const Bytecode &bc         = unit.bytecodes[pc];
+        const std::string where    = "pc=" + std::to_string(pc);
         const std::string fallback = "graph needs the runtime: " + where;
         switch (bc.opcode) {
         case OpCode::OPER:
@@ -481,15 +486,14 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
                     break;
                 }
             }
-            const bool isNative = round != nullptr && round->native();
-            const std::string what =
-                isNative
-                    ? where + " contains a loop whose rounds are native code"
-                    : fallback + " contains a loop (LBEG/LTST/LEND)" +
-                          (round != nullptr && !round->helperReason.empty()
-                               ? ": " + round->helperReason
-                               : std::string());
-            std::string lowering = "helper";
+            const bool isNative    = round != nullptr && round->native();
+            const std::string what = isNative
+                                         ? where + " contains a loop whose rounds are native code"
+                                         : fallback + " contains a loop (LBEG/LTST/LEND)" +
+                                               (round != nullptr && !round->helperReason.empty()
+                                                    ? ": " + round->helperReason
+                                                    : std::string());
+            std::string lowering   = "helper";
             if (round != nullptr) {
                 lowering = isNative ? "native" : "helper: " + round->helperReason;
             }
@@ -585,6 +589,22 @@ void freeExecutable(void *p, size_t size) {
     munmap(p, size);
 #endif
 }
+
+// A function address that C++ calls indirectly is preceded by an eight-byte type descriptor when
+// the translation unit is built with clang's `-fsanitize=function`, which the
+// `-fsanitize=undefined` group includes: the call site reads the magic 0xc105cafe at `fn - 8` and
+// the type hash at `fn - 4`, and reports a mismatch when the magic matches and the hash does not.
+// Generated code has no descriptor, and its mapping begins at a page boundary, so that read landed
+// in the page *before* the code -- an unmapped read eight bytes below a page boundary, which is how
+// the ASan leg saw the indirect call of `runFramedJit` die (the `curFn` call in
+// `fastvm.cpp#runFramedJit`) and every other entry of a compiled graph with it. The slot is
+// therefore part of the mapping, in front of the code, and left zeroed: the check reads no magic,
+// takes the callee for a function it has no record of and skips it, as it does for a function from
+// a translation unit built without the check. The hash cannot be written there instead -- it is the
+// compiler's own, and another clang would turn every call into a reported mismatch. Sixteen bytes
+// keep the entry as aligned as the page it starts in; a build without the check pays them and never
+// reads them.
+constexpr size_t kTypeDescriptorBytes = 16;
 
 } // namespace
 
@@ -686,7 +706,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // leaving enough structure for later peephole and dead-store cleanup.
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
-    x64::VRegId nextVReg                     = 0;
+    x64::VRegId nextVReg = 0;
     // A constant is read at compile time and becomes an immediate, except an object constant
     // when the collector moves objects (the code outlives collections; the static area is
     // where the collector keeps the reference up to date) and in framed code under either
@@ -694,7 +714,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // frameless code has none between its entry and its return, and in framed code no value
     // lives across a helper call, an exit or a poll.
     const bool objectsMove = camel::core::mm::autoSpace().youngGenCopyingEnabled();
-    auto loadStaticConst = [&](data_idx_t idx, x64::VRegId v) {
+    auto loadStaticConst   = [&](data_idx_t idx, x64::VRegId v) {
         const auto index = static_cast<size_t>(-idx);
         if ((framed || objectsMove) && staticLayout != nullptr && index < staticLayout->size() &&
             camel::core::type::isGCTraced(staticLayout->codeAt(index))) {
@@ -845,7 +865,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // Keeping the body prologue-free is what makes direct JIT-to-JIT calls cheap.
 
     for (size_t pc = entryPc; pc < pcEnd;) {
-        const Bytecode &bc         = base[pc];
+        const Bytecode &bc          = base[pc];
         const size_t mirCountBefore = mirBuf.size();
         if (blockStarts.count(pc))
             slotCache.clear();
@@ -1415,12 +1435,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             params->calleeSlotBytes =
                 static_cast<uint32_t>((slotCount * sizeof(slot_t) + 15u) & ~size_t{15});
             if (params->calleeSlotBytes > x64::kMaxNativeFrameBytes)
-                return fail(std::format(
-                    "pc={} self call with a frame of {} bytes (more than {}): the recursion "
-                    "would not fit the machine stack at the recursion limit",
-                    pc,
-                    params->calleeSlotBytes,
-                    x64::kMaxNativeFrameBytes));
+                return fail(
+                    std::format(
+                        "pc={} self call with a frame of {} bytes (more than {}): the recursion "
+                        "would not fit the machine stack at the recursion limit",
+                        pc,
+                        params->calleeSlotBytes,
+                        x64::kMaxNativeFrameBytes));
             // Phase L: the arguments of a call with few of them are loaded by visible
             // VLoadFromFrame, so that peephole can fuse a preceding store with the load.
             const bool inRegisters = srcArgs.size() <= kMaxRegisterArgs;
@@ -1898,19 +1919,22 @@ JitEntryFn X64Backend::load(std::unique_ptr<CompiledCode> code) {
     size_t pageSize = 4096;
     size_t aligned  = (size + pageSize - 1) & ~(pageSize - 1);
 
-    void *mem = allocExecutable(aligned);
+    // The descriptor slot comes with the code, in front of it (see kTypeDescriptorBytes).
+    auto *mem = static_cast<uint8_t *>(allocExecutable(aligned + kTypeDescriptorBytes));
     if (!mem)
         return nullptr;
 
+    std::memset(mem, 0, kTypeDescriptorBytes);
+    std::memcpy(mem + kTypeDescriptorBytes, code->code.data(), size);
     allocatedPages_.push_back(mem);
-    std::memcpy(mem, code->code.data(), size);
 
-    return reinterpret_cast<JitEntryFn>(mem);
+    return reinterpret_cast<JitEntryFn>(mem + kTypeDescriptorBytes);
 }
 
 void X64Backend::unload(JitEntryFn fn) {
+    auto *entry = reinterpret_cast<uint8_t *>(fn);
     for (auto it = allocatedPages_.begin(); it != allocatedPages_.end(); ++it) {
-        if (reinterpret_cast<void *>(fn) == *it) {
+        if (entry == static_cast<uint8_t *>(*it) + kTypeDescriptorBytes) {
             freeExecutable(*it, 4096);
             allocatedPages_.erase(it);
             break;

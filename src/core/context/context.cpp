@@ -21,6 +21,7 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/introspect.h"
+#include "camel/core/module/source_loader.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
@@ -1016,9 +1017,15 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
     auto rootModule = tt::as_shared<UserDefinedModule>(mainModule_);
     camel::utils::phase::Scope phaseScope("encode");
     camel::runtime::Program *program = runtimeGraphMgr_->reserve();
-    camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeProgram(
-        *rootModule,
-        *program);
+    // Encoding a compiled graph into a runtime program is the compiler's job, and this is the
+    // kernel asking for it through the registered loader: the kernel names no compile graph.
+    const auto graph =
+        camel::core::module::detail::UserDefinedModuleAccess::programGraph(*rootModule);
+    GUARD(graph != nullptr, "The entry module has no program graph to encode.");
+    camel::core::module::SourceModuleLoader *loader =
+        camel::core::module::sourceModuleLoader();
+    GUARD(loader != nullptr, "No source module loader is registered to encode the program.");
+    loader->encodeProgram(graph, *rootModule, *program, false);
     runtimeGraphMgr_->adoptRoot(program);
     return program;
 }
