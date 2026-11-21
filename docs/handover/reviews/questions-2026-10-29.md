@@ -6702,3 +6702,9 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 1. **新增 5 条红先修**，其中文档类（`docs.links.questions_index` 的 6 个已答页仍在 `questions/`、`docs.links.citations` 的 3 条未核引用、`gate-static` 的待答问题数）是合并位的日常活——已答页移进 `reviews/`、重建索引、核引用。修完前不合新东西。
 2. **known 39→41 的两条要能点名**：基线只记了数，这本身是缺口——闸门读数从今天起**带名单**（known 与 fail 各列名字），与前一天逐名比；这两条先从 `a2a0acd3a` 之后新登记的 `known_fail` 里找出来写上。
 3. **老的三条红**（`print_and_recompile` 等）开一格修，各自报根因。
+
+## 下发（2026-11-21 11:45）：二阶导的下一步，设计已落盘
+
+决策者。`transpose` 的前向法则设计写在 `docs/design/program-transforms/nested-transforms.cn.md` §2.4。结论：不给 `transpose` 写前向规则，也不再"先提升 `lin` 再转置"——**提升一个函数值时把它的捕获一起算进来**（捕获带切向作为新闭包的捕获），`transpose(lin)` 的结果就是普通的闭包，按这条提升即可。
+派一格（接 `jvp-closure`）：第 1 步改闭包的提升（参数与捕获一起求导）；第 2 步 `jvp` 遇到 `transpose(v)` 调用时按普通函数值提升。验收见 §2.4 末：`jvp_vjp_f` 打印 `1.0/2.0/3.0`，`grad(grad(x⁴))(2)=48`。实现前先量今天的提升对捕获做了什么，结论与 §2.2 不一致就带读数来问。
+另：施工侧 10:29 后无提交，09:20 那条（拆三个中心文件、收敛 O/N、车道表）仍未回。
