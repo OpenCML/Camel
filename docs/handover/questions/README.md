@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：76 页
+## 现在在等作者：77 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -85,6 +85,7 @@
 | [`2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to`](2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md) | 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗 |
 | [`2026-11-21-whether-transpose-can-say-its-signature-is-lifted`](2026-11-21-whether-transpose-can-say-its-signature-is-lifted.cn.md) | `Transpose<F>` 说不出「我的参数里有一半是提升出来的」 |
 | [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 |
+| [`2026-11-21-who-supplies-the-primal-to-a-transposed-lift`](2026-11-21-who-supplies-the-primal-to-a-transposed-lift.cn.md) | 谁把原值交给「线性函数的提升」的转置 |
 
 ## 生成器不会删的行：149 行（页已不在 `questions/` 里）
 
