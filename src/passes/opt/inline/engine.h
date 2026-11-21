@@ -9,22 +9,22 @@
 
 #pragma once
 
-#include <optional>
+#include <memory>
 
 #include "camel/execute/pass/opt.h"
 #include "config.h"
 
 /// Runs the engine once over `program`, inlining, specializing and devirtualizing by `config`.
 ///
-/// `growthBudgetLeft`, when given, receives the direct call this run left because the growth
-/// budget is spent -- the one reason whose presence means the run did not finish its work, as
-/// against one that stopped because the strategy does not select the call. It is an out
-/// parameter and not a pass fact because the answer is this run's own: a caller that has to
-/// explain a round that changed nothing asks the run that changed nothing, instead of reading a
-/// value a later pass has to keep fresh on the context. (`InlineReport` is the same record on the
-/// context, for a pass that has to explain a call long after the run: onnx::export.)
+/// `inlineReport`, when given, receives the record this run made: the direct calls it examined and
+/// left, each with the reason it was left and the budget it was measured against. It is the run's
+/// own answer and not a value read back off the context, so a caller that has to explain a round
+/// which changed nothing -- `std::opt`, which says the growth budget is reached rather than that the
+/// optimizer reached a fixed point -- asks the run it just made, and a run with no context to keep a
+/// fact on answers all the same. The same record is published on the context as
+/// kInlineReportFactKey for the reader that asks long after the run (onnx::export explains a call
+/// still in the entry graph). One record with two readers, not two copies of one answer.
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::ostream &os, const OptimizeRewriteConfig &config, bool *changed = nullptr,
-    const camel::runtime::GCGraph **lastChangedGraph = nullptr,
-    std::optional<InlineDeclined> *growthBudgetLeft  = nullptr);
+    const OptimizeRewriteConfig &config, bool *changed = nullptr,
+    std::shared_ptr<const InlineReport> *inlineReport = nullptr);

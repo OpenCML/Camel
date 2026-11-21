@@ -14,13 +14,19 @@ The cause is now a value, `TransposeRefusalCause`, and this check holds the four
 together:
 
 * **the header** declares the causes (`enum class TransposeRefusalCause`);
-* **the word table** (`transposeRefusalWord`, `transpose.cpp`) spells each cause into the log, and is
-  the only place that spells one: each word appears as a literal exactly once in `transpose.cpp` and
+* **the word table** (`transposeRefusalWord`) spells each cause into the log, and is the only place
+  that spells one: each word appears as a literal exactly once in the file that holds the table and
   nowhere in the file that renders the sentence;
-* **the sentence** (`refusalSentence`, `transpose_operator.cpp`) is rendered from the cause -- its own
-  word for the cause, or the sentence that names the shape a cause has no sentence for;
+* **the sentence** (`refusalSentence`) is rendered from the cause -- its own word for the cause, or
+  the sentence that names the shape a cause has no sentence for;
 * **the refusal sites** decide the cause (`refuse(TransposeRefusalCause::X)`), so a cause with a
   sentence and no site is a promise nothing keeps.
+
+None of the four is named by its file name: each is found by what it says, in the directory the
+transposition's sources are under, and the sites are read from that whole directory. The walk, the
+entry point and the table were one file until it was split, and the split is what taught this: a list
+of names read two files that no longer held the fact and stopped with exit 2 -- a check that ran
+nothing while looking like a check.
 
 Every assertion is a relation between those sets. No count is pinned: adding a cause with its word,
 its sentence and its site is green here, and a count would ask for an edit to a number that measures
@@ -44,15 +50,54 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-HEADER_FILE = ROOT / "modules" / "transforms" / "transpose.h"
-WORDS_FILE = ROOT / "modules" / "transforms" / "transpose.cpp"
-SENTENCE_FILE = ROOT / "modules" / "transforms" / "transpose_operator.cpp"
+TRANSFORMS = ROOT / "modules" / "transforms"
 
-# The files a refusal site may be written in. The walk and the table are one file; the site that
-# decides a cause after the walk -- `buildTransposeGraph` -- is the transform's entry point and
-# lives in `transpose/entry.cpp`. The check is the same relation either way: every cause has a
-# site, and a cause nothing records is red.
-SITE_FILES = [WORDS_FILE, ROOT / "modules" / "transforms" / "transpose" / "entry.cpp"]
+ENUM_START = "enum class TransposeRefusalCause {"
+WORD_FN = "const char *transposeRefusalWord(TransposeRefusalCause cause) {"
+SENTENCE_FN = "std::string refusalSentence(const TransposeRefusal &refusal) {"
+REFUSE_FN = "const auto refuse = [&](TransposeRefusalCause cause,"
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _read_every_file() -> dict[Path, str]:
+    """Every file under `modules/transforms`, read once: a place is found by what it says."""
+    return {path: read(path) for path in sorted(TRANSFORMS.rglob("*")) if path.is_file()}
+
+
+_SOURCES = _read_every_file()
+
+
+def _the_only(marker: str, what: str) -> Path:
+    """The one file under `modules/transforms` that contains `marker`."""
+    found = [path for path, text in _SOURCES.items() if marker in text]
+    if len(found) != 1:
+        named = ", ".join(str(path) for path in found) if found else "none"
+        raise SystemExit(
+            f"transpose refusals: {len(found)} files under {TRANSFORMS} contain `{marker}` ({named}), "
+            f"so the {what} is not one place")
+    return found[0]
+
+
+# Where each of the four places is, found by what it says rather than by its name: the walk, its
+# entry point and the word table were one file (`transpose.cpp`) until it was split, and a list of
+# names went stale the day it was. A place that moves into another file in this directory is still
+# the place; one that is written twice is a red rather than a silent choice of the first.
+HEADER_FILE = _the_only(ENUM_START, "header that declares the causes")
+WORDS_FILE = _the_only(WORD_FN, "word table")
+SENTENCE_FILE = _the_only(SENTENCE_FN, "sentence")
+REFUSE_FILE = _the_only(REFUSE_FN, "refusal lambda")
+
+# The files a refusal site may be written in: every file of the transposition's own directory,
+# whatever it is called. The walk and the table are files there now; the site that decides a cause
+# after the walk -- `buildTransposeGraph` -- is the transform's entry point and lives there too. The
+# check is the same relation either way -- every cause has a site, and a cause nothing records is
+# red -- and it reads the directory, so a file added to it is read as a site the day it appears
+# instead of the day someone remembers this list.
+SITES = TRANSFORMS / "transpose"
+SITE_FILES = sorted(path for path in SITES.iterdir() if path.is_file())
 
 # The causes whose sentence is the one that names the shape. This is not a defect list: a sentence
 # that would repeat the word adds nothing, and the catch-all still prints the word. It is pinned so
@@ -74,14 +119,6 @@ NAMES_THE_SHAPE = {
 # and is therefore where the shape that has no closure is refused. The set stays because the check it
 # asks is worth keeping: a cause that gains a sentence and no site is still a red.
 WAITS_FOR_A_SITE: set[str] = set()
-
-ENUM_START = "enum class TransposeRefusalCause {"
-WORD_FN = "const char *transposeRefusalWord(TransposeRefusalCause cause) {"
-SENTENCE_FN = "std::string refusalSentence(const TransposeRefusal &refusal) {"
-
-
-def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
 
 
 def function_body(text: str, start_marker: str, where: str) -> str:
@@ -211,13 +248,12 @@ def code_only(text: str) -> str:
     return "".join(blank)
 
 
-def render_span(text: str) -> tuple[int, int]:
+def render_span(text: str, where: str) -> tuple[int, int]:
     """Where the one place that prints a refusal's word starts and ends, in `text`'s offsets."""
-    marker = "const auto refuse = [&](TransposeRefusalCause cause,"
-    start = text.find(marker)
+    start = text.find(REFUSE_FN)
     if start < 0:
         raise SystemExit(
-            "transpose refusals: transpose.cpp has no `const auto refuse = [&](` lambda, so nothing "
+            f"transpose refusals: {where} has no `const auto refuse = [&](` lambda, so nothing "
             "is the single place that prints a refusal's word"
         )
     code = code_only(text)
@@ -268,16 +304,20 @@ def word_table(path: Path) -> tuple[dict[str, str], bool]:
 def recorded_causes(path: Path) -> set[str]:
     """The causes a refusal site decides, read from the sites themselves.
 
-    Two shapes are a site. The walk records one through the one lambda that prints it
-    (`refuse(TransposeRefusalCause::X)`, and the lambda is where a log line is rendered). A cause
-    decided *after* the walk -- `buildTransposeGraph` compares the ports the member was built with
-    against the ports the operator's type promised, which is a fact no step of the walk has -- writes
-    the record directly (`refusal.cause = TransposeRefusalCause::X`), and it is a site all the same:
-    it is where the fact is decided.
+    Three shapes are a site. The walk records one through the one lambda that prints it
+    (`refuse(TransposeRefusalCause::X)`, and the lambda is where a log line is rendered), and a helper
+    of the walk that has the log's `ctx` in hand records one the same way through the function the
+    lambda calls (`refuseMember(ctx, TransposeRefusalCause::X, ...)`). A cause decided *after* the walk
+    -- `buildTransposeGraph` compares the ports the member was built with against the ports the
+    operator's type promised, which is a fact no step of the walk has -- writes the record directly
+    (`refusal.cause = TransposeRefusalCause::X`), and it is a site all the same: it is where the fact
+    is decided.
     """
     text = read(path)
-    return set(re.findall(r"refuse\(TransposeRefusalCause::(\w+)", text)) | set(
-        re.findall(r"\.cause\s*=\s*TransposeRefusalCause::(\w+)", text)
+    return (
+        set(re.findall(r"refuse\(TransposeRefusalCause::(\w+)", text))
+        | set(re.findall(r"refuseMember\(\w+, TransposeRefusalCause::(\w+)", text))
+        | set(re.findall(r"\.cause\s*=\s*TransposeRefusalCause::(\w+)", text))
     )
 
 
@@ -307,7 +347,7 @@ def sentence_dispatch(path: Path) -> tuple[set[str], set[str], bool]:
 
 
 def main() -> int:
-    for path in (HEADER_FILE, WORDS_FILE, SENTENCE_FILE, *SITE_FILES):
+    for path in (HEADER_FILE, WORDS_FILE, SENTENCE_FILE, REFUSE_FILE, *SITE_FILES):
         if not path.is_file():
             print(f"transpose refusals: {path} is not here", file=sys.stderr)
             return 2
@@ -369,13 +409,13 @@ def main() -> int:
     # `skip=` anywhere else is a second spelling of the same fact, whether or not it agrees with the
     # table today -- and a site that writes its own log line is exactly how the one on
     # `UnreadParameter` survived the change that removed the rest.
-    span = render_span(read(WORDS_FILE))
-    for path in (WORDS_FILE, SENTENCE_FILE, HEADER_FILE):
+    span = render_span(read(REFUSE_FILE), REFUSE_FILE.name)
+    for path in dict.fromkeys((REFUSE_FILE, WORDS_FILE, SENTENCE_FILE, HEADER_FILE)):
         text = read(path)
         for offset, literal in scanned_literals(text):
             if "skip=" not in literal:
                 continue
-            if path == WORDS_FILE and span[0] <= offset <= span[1]:
+            if path == REFUSE_FILE and span[0] <= offset <= span[1]:
                 continue
             line = text.count("\n", 0, offset) + 1
             red(f"{path.name}:{line}: a string literal spells `{literal.strip()}` outside the one "

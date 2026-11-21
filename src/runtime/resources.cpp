@@ -9,8 +9,8 @@
  * recursive graphs depend on each other. They are computed as a least fixpoint: a graph met
  * again while its own footprint is being collected contributes what is known of it so far,
  * and the walk is repeated until no footprint grows (each one is a set over a finite domain,
- * so it ends). A footprint that came out of a finished walk is cached by the closure revision of the graph
- * (closureRevision: a new one whenever the graph or a graph it refers to changes) and the
+ * so it ends). A footprint that came out of a finished walk is cached by the closure revision of
+ * the graph (closureRevision: a new one whenever the graph or a graph it refers to changes) and the
  * operator declaration epoch, which together fix everything it was computed from.
  */
 
@@ -43,7 +43,8 @@ using sem::AccessMode;
 using sem::ResourceClass;
 using sem::ResultAlias;
 
-// ---- Which port of a graph an access came through -------------------------------------------------
+// ---- Which port of a graph an access came through
+// -------------------------------------------------
 
 size_t declaredWithPorts(const GCGraph &graph) {
     const auto with     = graph.withPorts();
@@ -111,8 +112,7 @@ const ::Function *staticFunctionOf(const GCGraph &graph, gc_node_ref_t ref) {
     ref                = valueBehindGates(graph, ref);
     const GCNode *node = graph.node(ref);
     if (node->kind != GCNodeKind::Data || node->dataIndex >= 0 || graph.staticArea() == nullptr ||
-        node->dataType() == nullptr ||
-        node->dataType()->code() != core::type::TypeCode::Function) {
+        node->dataType() == nullptr || node->dataType()->code() != core::type::TypeCode::Function) {
         return nullptr;
     }
     return core::rtdata::fromSlot<::Function *>(
@@ -184,7 +184,7 @@ bool merge(GraphFootprint &into, const GraphFootprint &from) {
         addAny(into, cls);
     }
     into.external |= from.external;
-    into.result   = from.result;
+    into.result = from.result;
     into.declared &= from.declared;
     return !(into == before);
 }
@@ -207,7 +207,7 @@ class FootprintWalk {
         }
         for (;;) {
             done_.clear();
-            grew_ = false;
+            grew_     = false;
             recursed_ = false;
             of(graph);
             if (!recursed_ || !grew_) {
@@ -270,9 +270,9 @@ class Resolver {
     /// (`sem::ResourceSpec::functionOperand`): the clause of the function value that arrives in the
     /// operand the declaration names. Never "touches nothing" -- an unreadable value keeps the
     /// conservative answer, because the operator runs code this graph does not hold.
-    NodeResources
-    fromFunctionOperand(const GCGraph &graph, gc_node_ref_t ref, const sem::ResourceSpec &spec,
-                        const sem::OperatorSemantics *facts) const;
+    NodeResources fromFunctionOperand(
+        const GCGraph &graph, gc_node_ref_t ref, const sem::ResourceSpec &spec,
+        const sem::OperatorSemantics *facts) const;
 
     /// The footprint `fp` of a graph run by node `ref`, with each binding resolved to an input
     /// of the node by `bind` (kInvalidNodeRef: the resource cannot be told).
@@ -351,7 +351,8 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
                 break;
             case camel::runtime::PortGroup::Capture:
                 binding = {
-                    sem::ResourceBinding::Kind::Capture, static_cast<uint8_t>(placement.index)};
+                    sem::ResourceBinding::Kind::Capture,
+                    static_cast<uint8_t>(placement.index)};
                 break;
             case camel::runtime::PortGroup::None:
                 // A port of no group: the graph does not number it, so no clause can name it. That
@@ -438,8 +439,8 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
     case GCNodeKind::Oper:
         return oper(graph, ref);
     case GCNodeKind::Func: {
-        const auto norm           = graph.normInputsOf(ref);
-        const GCGraph *callee     = program_.calleeOf(graph, ref);
+        const auto norm       = graph.normInputsOf(ref);
+        const GCGraph *callee = program_.calleeOf(graph, ref);
         if (callee != nullptr && callee->funcType() != nullptr &&
             callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete &&
             callee->funcType()->resources().captures.empty()) {
@@ -488,20 +489,23 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
 }
 
 NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
-    const auto &table           = core::OperatorTable::instance();
-    const core::OperId id       = graph.nodeBodyAs<GCOperBody>(ref)->oper;
-    const auto traits           = table.find(id);
+    const auto &table               = core::OperatorTable::instance();
+    const core::OperId id           = graph.nodeBodyAs<GCOperBody>(ref)->oper;
+    const auto traits               = table.find(id);
     const sem::OperatorSemantics *s = table.semantics(id);
-    const auto norm             = graph.normInputsOf(ref);
-    const auto with             = graph.withInputsOf(ref);
+    const auto norm                 = graph.normInputsOf(ref);
+    const auto with                 = graph.withInputsOf(ref);
 
     NodeResources r;
     sem::ResourceSpec spec;
     if (s != nullptr && s->resources) {
         spec = *s->resources;
     } else {
-        spec       = sem::conservativeResources(
-            norm.size(), with.size(), traits && traits->pure, table.hasExternalEffect(id));
+        spec = sem::conservativeResources(
+            norm.size(),
+            with.size(),
+            traits && traits->pure,
+            table.hasExternalEffect(id));
         r.declared = traits && traits->pure;
     }
     r.result    = spec.result;
@@ -519,10 +523,12 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
         a.unordered = access.unordered;
         switch (access.binding.kind) {
         case sem::ResourceBinding::Kind::Norm:
-            a.value = access.binding.index < norm.size() ? norm[access.binding.index] : kInvalidNodeRef;
+            a.value =
+                access.binding.index < norm.size() ? norm[access.binding.index] : kInvalidNodeRef;
             break;
         case sem::ResourceBinding::Kind::With:
-            a.value = access.binding.index < with.size() ? with[access.binding.index] : kInvalidNodeRef;
+            a.value =
+                access.binding.index < with.size() ? with[access.binding.index] : kInvalidNodeRef;
             break;
         default:
             break;
@@ -568,9 +574,9 @@ NodeResources Resolver::fromFunctionOperand(
         r = fromSignature(*site.clause, site.withCount, graph, ref, site.withArgBase);
     } else {
         const sem::ResourceSignature &signature = *site.clause;
-        r.result    = signature.result;
-        r.allocates = signature.allocates;
-        r.external  = signature.external;
+        r.result                                = signature.result;
+        r.allocates                             = signature.allocates;
+        r.external                              = signature.external;
         for (const auto &use : signature.params) {
             r.accesses.push_back(
                 NodeAccess{
@@ -613,11 +619,12 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
         const gc_node_ref_t value = valueBehindGates(graph, with[0]);
         if (const ::Function *fn = staticFunctionOf(graph, value)) {
             callee = fn->graph();
-        } else if (graph.node(value)->kind == GCNodeKind::Fill && !graph.normInputsOf(value).empty()) {
+        } else if (
+            graph.node(value)->kind == GCNodeKind::Fill && !graph.normInputsOf(value).empty()) {
             if (const ::Function *fn = staticFunctionOf(graph, graph.normInputsOf(value)[0])) {
-                callee          = fn->graph();
-                const auto *body = graph.nodeBodyAs<GCFillBody>(value);
-                const auto slots = body->slots();
+                callee            = fn->graph();
+                const auto *body  = graph.nodeBodyAs<GCFillBody>(value);
+                const auto slots  = body->slots();
                 const auto inputs = graph.withInputsOf(value);
                 for (size_t i = 0; i < slots.size() && i < inputs.size(); ++i) {
                     const size_t position = static_cast<size_t>(slots[i]);
@@ -632,7 +639,7 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     if (callee == nullptr) {
         // A call through a value: the value's function type is where its effect is written, and it
         // is the one thing a call site can read when the callee's body is not statically known --
-// `declaredClauseAt` reads the same place, through the same reading. A type that writes a
+        // `declaredClauseAt` reads the same place, through the same reading. A type that writes a
         // clause is read as written, `pure` included: `pure` is the clause that names nothing, so
         // the call reaches nothing and is not an effect. A type that promises nothing (a `Generic`
         // clause: no clause written, `docs/design/effects/plan.cn.md` 2.2) is not a reading at all,
@@ -643,13 +650,12 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
         if (!with.empty()) {
             const core::FunctionValueClause site = clauseOfCall(graph, ref);
             // The clause is read in one place (`core::functionValueClause`, through the one lookup
-            // below), together with the base its `with` parameters land at; a `captures` list is not
-            // a reason to refuse the reading, because `fromSignature` places a capture as "some
+            // below), together with the base its `with` parameters land at; a `captures` list is
+            // not a reason to refuse the reading, because `fromSignature` places a capture as "some
             // resource of its class" and never drops it. What the type cannot say is what an absent
             // clause (`Generic`) says, and that keeps the conservative answer below.
             if (site.clause.has_value()) {
-                return fromSignature(
-                    *site.clause, site.withCount, graph, ref, site.withArgBase);
+                return fromSignature(*site.clause, site.withCount, graph, ref, site.withArgBase);
             }
         }
         // No clause to read: anything may happen.
@@ -677,26 +683,29 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
             ref,
             /*withArgBase=*/1);
     }
-    return fromFootprint(footprint_(callee), norm.size(), [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
-        switch (b.kind) {
-        case sem::ResourceBinding::Kind::Norm:
-            return b.index < norm.size() ? norm[b.index] : kInvalidNodeRef;
-        case sem::ResourceBinding::Kind::With:
-            // With input 0 is the callee; the explicit with arguments follow it.
-            return size_t(b.index) + 1 < with.size() ? with[b.index + 1] : kInvalidNodeRef;
-        case sem::ResourceBinding::Kind::Capture:
-            return b.index < captures.size() ? captures[b.index] : kInvalidNodeRef;
-        default:
-            return kInvalidNodeRef;
-        }
-    });
+    return fromFootprint(
+        footprint_(callee),
+        norm.size(),
+        [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
+            switch (b.kind) {
+            case sem::ResourceBinding::Kind::Norm:
+                return b.index < norm.size() ? norm[b.index] : kInvalidNodeRef;
+            case sem::ResourceBinding::Kind::With:
+                // With input 0 is the callee; the explicit with arguments follow it.
+                return size_t(b.index) + 1 < with.size() ? with[b.index + 1] : kInvalidNodeRef;
+            case sem::ResourceBinding::Kind::Capture:
+                return b.index < captures.size() ? captures[b.index] : kInvalidNodeRef;
+            default:
+                return kInvalidNodeRef;
+            }
+        });
 }
 
 NodeResources Resolver::fromSignature(
     const sem::ResourceSignature &signature, size_t withCount, const GCGraph &graph,
     gc_node_ref_t ref, size_t withArgBase) const {
-    const auto norm   = graph.normInputsOf(ref);
-    const auto with   = graph.withInputsOf(ref);
+    const auto norm = graph.normInputsOf(ref);
+    const auto with = graph.withInputsOf(ref);
     NodeResources r;
     r.result    = signature.result;
     r.allocates = signature.allocates;
@@ -772,7 +781,8 @@ ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
                 return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
             }
             const auto norm = graph.normInputsOf(ref);
-            if ((result.kind == ResultAlias::Kind::Same || result.kind == ResultAlias::Kind::View) &&
+            if ((result.kind == ResultAlias::Kind::Same ||
+                 result.kind == ResultAlias::Kind::View) &&
                 result.operand < norm.size()) {
                 ref = norm[result.operand];
                 continue;
@@ -807,11 +817,10 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
             const auto at   = std::find(norm.begin(), norm.end(), value);
             // A with port or a capture is not a norm port of the footprint; the footprint has no
             // binding for it yet.
-            return at == norm.end()
-                       ? sem::ResultAlias{.kind = ResultAlias::Kind::Unknown}
-                       : sem::ResultAlias{
-                             .kind    = ResultAlias::Kind::Same,
-                             .operand = static_cast<uint8_t>(at - norm.begin())};
+            return at == norm.end() ? sem::ResultAlias{.kind = ResultAlias::Kind::Unknown}
+                                    : sem::ResultAlias{
+                                          .kind    = ResultAlias::Kind::Same,
+                                          .operand = static_cast<uint8_t>(at - norm.begin())};
         }
         case GCNodeKind::Copy:
         case GCNodeKind::Fill:
@@ -826,7 +835,8 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
                 return result;
             }
             const auto norm = graph.normInputsOf(value);
-            if ((result.kind == ResultAlias::Kind::Same || result.kind == ResultAlias::Kind::View) &&
+            if ((result.kind == ResultAlias::Kind::Same ||
+                 result.kind == ResultAlias::Kind::View) &&
                 result.operand < norm.size()) {
                 value = norm[result.operand];
                 continue;
@@ -844,8 +854,10 @@ sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) c
 
 /// Whether two accesses' regions may overlap (only meaningful for one resource).
 bool regionsOverlap(
-    const GCGraph &graph, gc_node_ref_t a, const NodeAccess &x, gc_node_ref_t b, const NodeAccess &y) {
-    const auto boundsAt = [&](gc_node_ref_t node, const NodeAccess &access) -> std::optional<RegionBounds> {
+    const GCGraph &graph, gc_node_ref_t a, const NodeAccess &x, gc_node_ref_t b,
+    const NodeAccess &y) {
+    const auto boundsAt = [&](gc_node_ref_t node,
+                              const NodeAccess &access) -> std::optional<RegionBounds> {
         if (access.region.kind != sem::ResourceRegion::Kind::Mapped) {
             return std::nullopt;
         }
@@ -900,7 +912,8 @@ std::string accessText(const NodeAccess &access) { return toString(access); }
 
 } // namespace
 
-// ---- Public queries ------------------------------------------------------------------------------
+// ---- Public queries
+// ------------------------------------------------------------------------------
 
 std::optional<RegionBounds>
 regionBounds(const camel::core::sem::IndexedInstance &instance, const sem::ResourceRegion &region) {
@@ -1082,14 +1095,14 @@ namespace {
 bool exclusive(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
     std::vector<std::pair<gc_node_ref_t, uint32_t>> armsOfA; // (BRCH, arm)
     for (uint32_t r = graph.nodeRegion(a); r != 0 && r < graph.regionCount();
-         r = graph.region(r)->parent) {
+         r          = graph.region(r)->parent) {
         const GCRegion &region = *graph.region(r);
         if (region.kind == GCRegionKind::Arm) {
             armsOfA.emplace_back(region.owner, region.index);
         }
     }
     for (uint32_t r = graph.nodeRegion(b); r != 0 && r < graph.regionCount();
-         r = graph.region(r)->parent) {
+         r          = graph.region(r)->parent) {
         const GCRegion &region = *graph.region(r);
         if (region.kind != GCRegionKind::Arm) {
             continue;
@@ -1188,7 +1201,8 @@ std::string toString(const NodeResources &r) {
         part(result);
     }
     if (r.allocates) {
-        std::string allocates = std::format("allocates {}", sem::resourceClassName(r.allocates->cls));
+        std::string allocates =
+            std::format("allocates {}", sem::resourceClassName(r.allocates->cls));
         if (!r.allocates->name.empty()) {
             allocates += " " + r.allocates->name;
         }
@@ -1247,9 +1261,13 @@ sem::ResourceSignature signatureOfFootprint(const GraphFootprint &footprint, siz
             const auto same = std::find_if(
                 signature.ambient.begin(),
                 signature.ambient.end(),
-                [&](const sem::ResourceSignature::AmbientUse &other) { return other.name == access.resource.name; });
+                [&](const sem::ResourceSignature::AmbientUse &other) {
+                    return other.name == access.resource.name;
+                });
             if (same == signature.ambient.end()) {
-                sem::ResourceSignature::AmbientUse use{.name = access.resource.name, .mode = access.mode};
+                sem::ResourceSignature::AmbientUse use{
+                    .name = access.resource.name,
+                    .mode = access.mode};
                 use.unordered = access.unordered;
                 signature.ambient.push_back(use);
             } else {
@@ -1260,9 +1278,10 @@ sem::ResourceSignature signatureOfFootprint(const GraphFootprint &footprint, siz
         }
         if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
             // A capture: the position in the closure is all a declaration can name.
-            if (std::find(signature.captures.begin(),
-                          signature.captures.end(),
-                          access.binding.index) == signature.captures.end()) {
+            if (std::find(
+                    signature.captures.begin(),
+                    signature.captures.end(),
+                    access.binding.index) == signature.captures.end()) {
                 signature.captures.push_back(access.binding.index);
             }
             continue;
@@ -1280,7 +1299,9 @@ sem::ResourceSignature signatureOfFootprint(const GraphFootprint &footprint, siz
         const auto same = std::find_if(
             signature.params.begin(),
             signature.params.end(),
-            [&](const sem::ResourceSignature::ParamUse &other) { return other.index == use.index; });
+            [&](const sem::ResourceSignature::ParamUse &other) {
+                return other.index == use.index;
+            });
         if (same == signature.params.end()) {
             signature.params.push_back(use);
         } else {
@@ -1305,8 +1326,8 @@ std::string accessUseText(const sem::ResourceAccess &access) {
 /// callers need to answer with a diagnostic that names a node (`unnamed`).
 struct BeyondCoverage {
     std::vector<std::string> beyond;
-    /// A reading of unknown class the declaration does not promise: refused rather than counted
-    /// (the ruling of 2026-11-20), and the one line of `beyond` a node has to be found for.
+    /// A reading of unknown class the declaration does not promise: refused rather than counted,
+    /// and the one line of `beyond` a node has to be found for.
     bool unnamed = false;
 };
 
@@ -1316,7 +1337,7 @@ struct BeyondCoverage {
 /// A reading of unknown class is judged like any other and refused when the clause does not
 /// promise it. It used to be counted and passed -- "a possibility is not an access" -- but a clause
 /// that cannot name what the body reaches proves nothing about it, and a body that may reach past
-/// its own promise is what the check is for (the ruling of 2026-11-20). A declaration that does
+/// its own promise is what the check is for. A declaration that does
 /// promise it (`any unknown`, which a widened signature can carry) still covers it: the refusal is
 /// the clause's answer applied to the reading, not an unconditional one.
 ///
@@ -1458,12 +1479,10 @@ std::optional<UnnamedReading> firstUnnamedReading(const Program &program, const 
             continue;
         }
         const NodeResources resources = resolver.node(graph, ref);
-        const bool reaches = std::any_of(
+        const bool reaches            = std::any_of(
             resources.accesses.begin(),
             resources.accesses.end(),
-            [](const NodeAccess &access) {
-                return access.resource.cls == ResourceClass::Unknown;
-            });
+            [](const NodeAccess &access) { return access.resource.cls == ResourceClass::Unknown; });
         if (reaches) {
             return UnnamedReading{.node = ref, .why = unnamedReasonOf(program, graph, ref)};
         }
@@ -1519,8 +1538,8 @@ CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_
 
 } // namespace
 
-std::optional<EffectContainment>
-effectContainmentViolation(const Program &program, const GCGraph &graph, EffectContainmentReport *report) {
+std::optional<EffectContainment> effectContainmentViolation(
+    const Program &program, const GCGraph &graph, EffectContainmentReport *report) {
     for (gc_cnt_t i = 0; i < graph.nodeCount(); ++i) {
         const gc_node_ref_t ref = static_cast<gc_node_ref_t>(i);
         const GCNode *node      = graph.node(ref);
@@ -1582,8 +1601,8 @@ sem::ResourceSignature bodySignature(const Program &program, const GCGraph &grap
     return signatureOfFootprint(footprintOf(program, &graph), withCount);
 }
 
-sem::ResourceSignature widened(
-    const sem::ResourceSignature &declared, const sem::ResourceSignature &body) {
+sem::ResourceSignature
+widened(const sem::ResourceSignature &declared, const sem::ResourceSignature &body) {
     if (declared.mode == sem::ResourceSignature::Mode::Generic) {
         // A type that promises nothing already covers everything: there is no clause to widen.
         return declared;
@@ -1647,7 +1666,8 @@ sem::ResourceSignature widened(
     return wider;
 }
 
-// ---- The commit checks (analysis 4.1), one question for every commit path ------------------------
+// ---- The commit checks (analysis 4.1), one question for every commit path
+// ------------------------
 
 std::string_view commitCheckName(CommitCheck check) {
     switch (check) {
@@ -1695,8 +1715,8 @@ std::string nodeAccessText(const NodeAccess &access) {
 
 /// The accesses of every node of one graph, resolved at most once each. The commit checks ask for a
 /// node's accesses once per pair it takes part in and once per access those contain; resolving them
-/// again per question would put the resolver's work inside a loop over pairs, where nothing it reads
-/// depends on the pair.
+/// again per question would put the resolver's work inside a loop over pairs, where nothing it
+/// reads depends on the pair.
 class NodeAccessTable {
   public:
     NodeAccessTable(const GCGraph &graph, const Resolver &resolver)
@@ -1738,8 +1758,8 @@ enum class EffectReader : uint8_t {
 /// declarations make it reach (principle 3.3, resolved bottom-up) must stay inside the clause the
 /// graph's own type declares. A reading the analysis cannot name (class Unknown) is refused like
 /// any other access the clause does not cover, and the diagnostic names the node and the reason; a
-/// cell of a variable is still passed over (its mutability is declared where the variable is), which
-/// is the line the call-site check draws too.
+/// cell of a variable is still passed over (its mutability is declared where the variable is),
+/// which is the line the call-site check draws too.
 ///
 /// `reader` changes only the closing sentence: who is being told, and so whether the reach is
 /// something the commit is about to do or something the compiler already handed over.
@@ -1754,9 +1774,8 @@ std::optional<CommitViolation> effectBeyondDeclaration(
     if (declared.mode != sem::ResourceSignature::Mode::Concrete) {
         return std::nullopt; // a type that promises nothing covers everything
     }
-    const GraphFootprint body = walk.run(&graph);
-    const BeyondCoverage coverage =
-        beyondCoverage(declared, body, type->withTypesCount(), nullptr);
+    const GraphFootprint body     = walk.run(&graph);
+    const BeyondCoverage coverage = beyondCoverage(declared, body, type->withTypesCount(), nullptr);
     const std::vector<std::string> &beyond = coverage.beyond;
     if (beyond.empty()) {
         return std::nullopt;
@@ -1766,16 +1785,18 @@ std::optional<CommitViolation> effectBeyondDeclaration(
     // compiler's defect, and the reading says so rather than blaming the program.
     const std::string closing =
         reader == EffectReader::Publishing
-            ? std::string("the commit would publish a body that reaches past its own declared "
-                          "effect")
-            : std::string("the front end accepted a graph that is beyond its own type, which is a "
-                          "defect of the compiler and not of the program: no commit can judge an "
-                          "edit against it");
-    const std::string declaredText =
-        declared.ambient.empty() && declared.params.empty() && declared.captures.empty() &&
-                declared.anyOf.empty() && !declared.external
-            ? std::string("nothing")
-            : sem::toString(declared);
+            ? std::string(
+                  "the commit would publish a body that reaches past its own declared "
+                  "effect")
+            : std::string(
+                  "the front end accepted a graph that is beyond its own type, which is a "
+                  "defect of the compiler and not of the program: no commit can judge an "
+                  "edit against it");
+    const std::string declaredText = declared.ambient.empty() && declared.params.empty() &&
+                                             declared.captures.empty() && declared.anyOf.empty() &&
+                                             !declared.external
+                                         ? std::string("nothing")
+                                         : sem::toString(declared);
     for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
         if (graph.node(ref) == nullptr) {
             continue;
@@ -1785,9 +1806,9 @@ std::optional<CommitViolation> effectBeyondDeclaration(
         // has no access text for the loop below to match, and it is the one beyond the check
         // refuses for what the analysis cannot say rather than for what it said.
         const auto unknown = std::find_if(
-            resources.accesses.begin(), resources.accesses.end(), [](const NodeAccess &access) {
-                return access.resource.cls == ResourceClass::Unknown;
-            });
+            resources.accesses.begin(),
+            resources.accesses.end(),
+            [](const NodeAccess &access) { return access.resource.cls == ResourceClass::Unknown; });
         if (coverage.unnamed && unknown != resources.accesses.end()) {
             return CommitViolation{
                 .check  = CommitCheck::Effect,
@@ -1875,10 +1896,10 @@ uint32_t judgedRegionOf(const GCGraph &graph, uint32_t region) {
     return 0;
 }
 
-/// One half of the tier (docs/design/graph-editing/README.cn.md 8.1), read from the access table the
-/// checks already build: did the draft add an access? A node the draft made that carries none (a
-/// constant, a copy of a value) adds none. The other half is `GraphDraft::lowLevelEdits`, and the
-/// table is why both are read: a commit is asked by which edit it used, and a node made with no
+/// One half of the tier (docs/design/graph-editing/README.cn.md 8.1), read from the access table
+/// the checks already build: did the draft add an access? A node the draft made that carries none
+/// (a constant, a copy of a value) adds none. The other half is `GraphDraft::lowLevelEdits`, and
+/// the table is why both are read: a commit is asked by which edit it used, and a node made with no
 /// access and a node changed in place with no new access are the two ways a draft can leave the
 /// graph's accesses and orderings alone.
 bool addsAnAccess(const NodeAccessTable &table, std::span<const gc_node_ref_t> made) {
@@ -1890,15 +1911,14 @@ bool addsAnAccess(const NodeAccessTable &table, std::span<const gc_node_ref_t> m
     return false;
 }
 
-/// The regions a commit answers for: the region each node it touched is in -- one it made, or one it
-/// changed in place -- and every region around that one up to the body.
-/// A region is touched by what
-/// was written in it and by what was written anywhere under it: an owner node stands in the region
-/// it sits in for every region under it (the `RegionEntrant` below), so a write spliced into an arm
-/// changes the footprint the branch node carries outside, and the pair out there can be new while
-/// neither of its nodes is one this commit touched. The regions the commit did not touch are left
-/// alone: the program's own accesses there are already ordered, and asking again would decide a
-/// question whose answer cannot have changed.
+/// The regions a commit answers for: the region each node it touched is in -- one it made, or one
+/// it changed in place -- and every region around that one up to the body. A region is touched by
+/// what was written in it and by what was written anywhere under it: an owner node stands in the
+/// region it sits in for every region under it (the `RegionEntrant` below), so a write spliced into
+/// an arm changes the footprint the branch node carries outside, and the pair out there can be new
+/// while neither of its nodes is one this commit touched. The regions the commit did not touch are
+/// left alone: the program's own accesses there are already ordered, and asking again would decide
+/// a question whose answer cannot have changed.
 std::vector<uint8_t> touchedRegions(const GCGraph &graph, std::span<const gc_node_ref_t> made) {
     std::vector<uint8_t> touched(static_cast<size_t>(graph.regionCount()), 0);
     if (touched.empty()) {
@@ -1910,7 +1930,7 @@ std::vector<uint8_t> touchedRegions(const GCGraph &graph, std::span<const gc_nod
         }
         uint32_t region = judgedRegionOf(graph, graph.nodeRegion(ref));
         for (uint32_t steps = 0; region != 0 && steps <= graph.regionCount(); ++steps) {
-            touched[region] = 1;
+            touched[region]     = 1;
             const GCRegion *one = graph.region(region);
             if (one == nullptr) {
                 break;
@@ -1938,8 +1958,8 @@ struct RegionEntrant {
 
 /// A pair of accesses the order reading found with no path between them, named canonically (the
 /// smaller node reference first) so that two readings of two versions of one graph can be compared:
-/// the ids of the nodes two versions share are the same ids, which is what lets a commit ask whether
-/// a pair is new.
+/// the ids of the nodes two versions share are the same ids, which is what lets a commit ask
+/// whether a pair is new.
 using UnorderedPair = std::pair<gc_node_ref_t, gc_node_ref_t>;
 
 UnorderedPair unorderedPairKey(gc_node_ref_t a, gc_node_ref_t b) {
@@ -2030,20 +2050,20 @@ void forEachUnorderedPair(
                     y.stands == kInvalidNodeRef) {
                     continue;
                 }
-                // A pair is judged when either side answers for a node this commit touched -- and the
-                // side that answers for it need not be the node itself: an owner node stands in its
-                // region for everything under it, so a write spliced into an arm turns the branch
-                // node into a writer the body did not have while the branch node is not a node this
-                // commit made. Two nodes the commit neither made nor now carries are two the program
-                // already had in the relation it already had them in.
+                // A pair is judged when either side answers for a node this commit touched -- and
+                // the side that answers for it need not be the node itself: an owner node stands in
+                // its region for everything under it, so a write spliced into an arm turns the
+                // branch node into a writer the body did not have while the branch node is not a
+                // node this commit made. Two nodes the commit neither made nor now carries are two
+                // the program already had in the relation it already had them in.
                 if (!answersFor(x) && !answersFor(y)) {
                     continue;
                 }
-                // An owner node and a node it stands for here are one effect seen at two depths, not
-                // two effects: the owner's access in this region *is* the access of what is under it.
-                // A pair of them would ask whether an effect is ordered against itself, which is not
-                // a question -- and the two sides are then the same access, or one side's own node is
-                // a member of the other.
+                // An owner node and a node it stands for here are one effect seen at two depths,
+                // not two effects: the owner's access in this region *is* the access of what is
+                // under it. A pair of them would ask whether an effect is ordered against itself,
+                // which is not a question -- and the two sides are then the same access, or one
+                // side's own node is a member of the other.
                 const auto covers = [](const RegionEntrant &side, gc_node_ref_t node) {
                     return std::find(side.members.begin(), side.members.end(), node) !=
                            side.members.end();
@@ -2088,7 +2108,10 @@ std::optional<CommitViolation> orderIncomplete(
         graph,
         table,
         scope,
-        [&](gc_node_ref_t x, gc_node_ref_t y, gc_node_ref_t first, gc_node_ref_t second,
+        [&](gc_node_ref_t x,
+            gc_node_ref_t y,
+            gc_node_ref_t first,
+            gc_node_ref_t second,
             const ResourceConflict &conflict) {
             if (std::find(already.begin(), already.end(), unorderedPairKey(first, second)) !=
                 already.end()) {
@@ -2097,8 +2120,8 @@ std::optional<CommitViolation> orderIncomplete(
                 // already was, which is a question for the pass boundary and not for an edit.
                 return true;
             }
-            const uint64_t origin = graph.nodeOrigin(y) != 0 ? graph.nodeOrigin(y)
-                                                             : graph.nodeOrigin(x);
+            const uint64_t origin =
+                graph.nodeOrigin(y) != 0 ? graph.nodeOrigin(y) : graph.nodeOrigin(x);
             found = CommitViolation{
                 .check  = CommitCheck::Order,
                 .graph  = &graph,
@@ -2114,8 +2137,7 @@ std::optional<CommitViolation> orderIncomplete(
                     namedNode(program, graph, x),
                     graph.name(),
                     namedNode(program, graph, y),
-                    nodeAccessText(table.of(first).accesses[conflict.accessA]) +
-                        " / " +
+                    nodeAccessText(table.of(first).accesses[conflict.accessA]) + " / " +
                         nodeAccessText(table.of(second).accesses[conflict.accessB])),
             };
             return false;
@@ -2127,16 +2149,15 @@ std::optional<CommitViolation> orderIncomplete(
 
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
-    std::span<const gc_node_ref_t> changed, const GCGraph *before,
-    const Program *beforeProgram) {
+    std::span<const gc_node_ref_t> changed, const GCGraph *before, const Program *beforeProgram) {
     // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
     // table decides which of the six checks a commit is asked, and what decides that is which
     // edit the draft used -- not "did it make a node". A draft that made no node and changed
-    // none added no access and dropped no ordering, so it owes no answer about either, and a rewrite
-    // whose only interface is the graph module pays one size check per graph and nothing else. A
-    // draft that made no node but added an operand or swapped an operator is the last row of that
-    // table ("add an edge, change an operator"), which owes every one of the six: this is the shape
-    // that published an edit without asking, and the reason `made` alone is not the tier.
+    // none added no access and dropped no ordering, so it owes no answer about either, and a
+    // rewrite whose only interface is the graph module pays one size check per graph and nothing
+    // else. A draft that made no node but added an operand or swapped an operator is the last row
+    // of that table ("add an edge, change an operator"), which owes every one of the six: this is
+    // the shape that published an edit without asking, and the reason `made` alone is not the tier.
     if (made.empty() && changed.empty()) {
         return std::nullopt;
     }
@@ -2156,31 +2177,38 @@ std::optional<CommitViolation> commitViolation(
     //
     // The effect half is not the same shape, and it is not answered that way.
     // The graph a commit starts from is the compiler's own product -- the front end
-    // built it, or a commit published it after answering for it -- so one whose body already reaches
-    // past its own signature is a graph the front end accepted beyond its type. No program writes
-    // that: it is a defect of the compiler, and it is reported as an internal error instead of being
-    // stepped over. Stepping over it was worse than it sounds: the effect question about the edited
-    // graph was then not asked at all, so an edit that added reach on a graph nobody vouches for
-    // went unreported, and the skip looked like an answer.
+    // built it, or a commit published it after answering for it -- so one whose body already
+    // reaches past its own signature is a graph the front end accepted beyond its type. No program
+    // writes that: it is a defect of the compiler, and it is reported as an internal error instead
+    // of being stepped over. Stepping over it was worse than it sounds: the effect question about
+    // the edited graph was then not asked at all, so an edit that added reach on a graph nobody
+    // vouches for went unreported, and the skip looked like an answer.
     std::vector<UnorderedPair> alreadyUnordered;
     if (!changed.empty() && before != nullptr) {
-        // The graph it started from, read in the program that published it: a call's footprint is the
-        // callee's declared clause, and this commit is publishing new declarations for the callees it
-        // rewrote. Reading `before` against them would measure the old body through a promise it was
-        // never published under, and report the graph as beyond a type it satisfied (the measurement
-        // constraint: `tiles` widens a callee and its caller in one commit).
+        // The graph it started from, read in the program that published it: a call's footprint is
+        // the callee's declared clause, and this commit is publishing new declarations for the
+        // callees it rewrote. Reading `before` against them would measure the old body through a
+        // promise it was never published under, and report the graph as beyond a type it satisfied
+        // (the measurement constraint: `tiles` widens a callee and its caller in one commit).
         const Program &beforeIn = beforeProgram != nullptr ? *beforeProgram : program;
         FootprintWalk beforeWalk(beforeIn, core::OperatorTable::instance().declarationEpoch());
-        Resolver beforeResolver(
-            beforeIn, [&beforeWalk](const GCGraph *callee) { return beforeWalk.run(callee); });
+        Resolver beforeResolver(beforeIn, [&beforeWalk](const GCGraph *callee) {
+            return beforeWalk.run(callee);
+        });
         const NodeAccessTable beforeTable(*before, beforeResolver);
         if (const auto beforeBeyond = effectBeyondDeclaration(
-                beforeIn, *before, beforeWalk, beforeTable, EffectReader::BeforeTheEdit)) {
-            throw GraphBeforeEditBeyondType(std::format(
-                "the graph '{}' a commit was asked to edit already reached past the type its own "
-                "signature declares, before the edit: {}",
-                before->name(),
-                beforeBeyond->text));
+                beforeIn,
+                *before,
+                beforeWalk,
+                beforeTable,
+                EffectReader::BeforeTheEdit)) {
+            throw GraphBeforeEditBeyondType(
+                std::format(
+                    "the graph '{}' a commit was asked to edit already reached past the type its "
+                    "own "
+                    "signature declares, before the edit: {}",
+                    before->name(),
+                    beforeBeyond->text));
         }
         if (auto effect =
                 effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
@@ -2191,18 +2219,22 @@ std::optional<CommitViolation> commitViolation(
             beforeTable,
             changed,
             [&alreadyUnordered](
-                gc_node_ref_t /*x*/, gc_node_ref_t /*y*/, gc_node_ref_t first,
-                gc_node_ref_t second, const ResourceConflict &) {
+                gc_node_ref_t /*x*/,
+                gc_node_ref_t /*y*/,
+                gc_node_ref_t first,
+                gc_node_ref_t second,
+                const ResourceConflict &) {
                 alreadyUnordered.push_back(unorderedPairKey(first, second));
                 return true;
             });
-    } else if (auto effect =
-                   effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
+    } else if (
+        auto effect =
+            effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
         return effect;
     }
     // The order reading answers for the regions the commit touched, and judges a pair when one side
-    // stands for a node it touched: the nodes it made and the nodes it changed in place are the same
-    // question there, and an in-place edit answers for its node's region like a splice does.
+    // stands for a node it touched: the nodes it made and the nodes it changed in place are the
+    // same question there, and an in-place edit answers for its node's region like a splice does.
     std::vector<gc_node_ref_t> scope(made.begin(), made.end());
     scope.insert(scope.end(), changed.begin(), changed.end());
     return orderIncomplete(program, graph, table, scope, alreadyUnordered);
@@ -2275,8 +2307,8 @@ void setCommitChecksEnabled(bool enabled) {
 // both ask `core::functionValueClauseAt` for the clause, the base its `with` parameters land at and
 // how many there are, so the runtime footprint and the effect summary cannot disagree.
 
-core::FunctionValueClause clauseOfOperand(
-    const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where) {
+core::FunctionValueClause
+clauseOfOperand(const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where) {
     if (where.kind != core::sem::ResourceBinding::Kind::Norm &&
         where.kind != core::sem::ResourceBinding::Kind::With) {
         return core::FunctionValueClause{};
@@ -2289,7 +2321,9 @@ core::FunctionValueClause clauseOfOperand(
     }
     const gc_node_ref_t value = valueBehindGates(graph, operands[where.index]);
     return core::functionValueClauseAt(
-        functionTypeOfValue(graph, value), where.kind, size_t(where.index));
+        functionTypeOfValue(graph, value),
+        where.kind,
+        size_t(where.index));
 }
 
 core::FunctionValueClause clauseOfCall(const GCGraph &graph, gc_node_ref_t node) {
@@ -2299,7 +2333,9 @@ core::FunctionValueClause clauseOfCall(const GCGraph &graph, gc_node_ref_t node)
     }
     const gc_node_ref_t value = valueBehindGates(graph, with[0]);
     return core::functionValueClauseAt(
-        functionTypeOfValue(graph, value), core::sem::ResourceBinding::Kind::With, 0);
+        functionTypeOfValue(graph, value),
+        core::sem::ResourceBinding::Kind::With,
+        0);
 }
 
 } // namespace camel::runtime

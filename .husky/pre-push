@@ -1,0 +1,13 @@
+# A push to the project's remote is where a merge stops being a local arrangement. The merge gate
+# measures the tree a lane hands over; the merge result, and every commit made straight on
+# develop, was read by nothing before it became public. A clean `git merge` does not run
+# pre-commit at all, develop is not a CI trigger, and the checker for this reads a tree in the
+# gate only when the caller names it there. This is the layer that runs on every push to origin,
+# merge or not, so the tree this reads is the tree that becomes public.
+#
+# The staging push a gate run makes goes to the host's bare repository by URL and not to
+# `origin`, so it is left out: a measurement stays possible on a tree whose comments still have
+# to be cleaned, which is the order the work happens in.
+if [ "$1" = "origin" ]; then
+    node scripts/check-process-traces.mjs
+fi

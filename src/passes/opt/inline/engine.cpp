@@ -674,8 +674,7 @@ camel::source::origin_id_t leftCallOrigin(
         return camel::source::kInvalidOriginId;
     }
     const uint64_t definition = source->debugMap().graphOrigin(callee->id());
-    return definition != camel::source::kInvalidOriginId ? definition
-                                                         : camel::source::kInvalidOriginId;
+    return definition;
 }
 
 /// The direct calls of the graphs in the closure, kept up to date as the session rewrites
@@ -1413,11 +1412,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 
 const camel::runtime::Program *applyOptimizeRewritePass(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut,
-    const GCGraph **lastChangedGraphOut, std::optional<InlineDeclined> *growthBudgetLeft) {
-    (void)os;
-    (void)lastChangedGraphOut;
-
+    const OptimizeRewriteConfig &config, bool *changedOut,
+    std::shared_ptr<const InlineReport> *inlineReport) {
     if (!program) {
         return nullptr;
     }
@@ -1484,18 +1480,6 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         changed = true;
         program = rewritten;
     }
-    // The call this run left because the budget is spent is this run's answer, so it goes to the
-    // caller that has to explain a round which changed nothing -- whether or not there is a context
-    // to keep the report below on. InlineReport is that same record for a reader that asks after
-    // the run (onnx::export), not the path this answer takes.
-    if (growthBudgetLeft != nullptr) {
-        for (const InlineDeclined &entry : declined) {
-            if (entry.why == InlineDecline::GrowthBudget) {
-                *growthBudgetLeft = entry;
-                break;
-            }
-        }
-    }
     // A run of this pass does a couple of sessions: the first changes something, the second finds
     // nothing left to do and ends the run. A rewrite that never settles therefore does not show up
     // inside one run -- the round that changes nothing is the one that ends it -- but across runs:
@@ -1541,8 +1525,12 @@ const camel::runtime::Program *applyOptimizeRewritePass(
             return nullptr;
         }
     }
-    if (config.enableInlining && context) {
-        // For a later pass that has to explain a call this one left (see InlineReport).
+    if (config.enableInlining && (context != nullptr || inlineReport != nullptr)) {
+        // The record of this run, made once. The caller is handed it -- the round that changed
+        // nothing has to say whether it reached the budget or a fixed point, and that answer belongs
+        // to this run, so it does not depend on a context existing -- and the same object is the
+        // pass fact a later pass reads (onnx::export, which explains a call still in the entry
+        // graph). One record, two readers; the answer is not written twice.
         auto report                 = std::make_shared<InlineReport>();
         report->growthBudget        = growthBudget;
         report->growthSpent         = growthSpent;
@@ -1551,7 +1539,12 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         report->maxOwnerNodes       = config.inlineConfig.maxOwnerNodes;
         report->smallNodes          = config.inlineConfig.smallSubgraphMaxComputeNodes;
         report->declined            = std::move(declined);
-        context->setPassFact(kInlineReportFactKey, std::move(report));
+        if (inlineReport != nullptr) {
+            *inlineReport = report;
+        }
+        if (context != nullptr) {
+            context->setPassFact(kInlineReportFactKey, std::move(report));
+        }
     }
     if (hadBudget && growthSpent >= growthBudget) {
         const std::string where =

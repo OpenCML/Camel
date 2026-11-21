@@ -105,9 +105,12 @@ struct InlineDeclined {
 };
 
 /// What the last run of the rewrite engine with inlining enabled decided about the calls it
-/// left, recorded on the context as the pass fact kInlineReportFactKey (Context::setPassFact).
-/// The graph a pass hands on does not show why a call in it is still a call; a pass that has to
-/// refuse such a graph (onnx::export: a request it cannot see) reads the reason here.
+/// examined, each with the reason it was left. The graph a pass hands on does not show why a call in
+/// it is still a call, and the record is one object read twice: the engine hands it to the caller
+/// through its return value, for the round that has to explain a graph it changed nothing in, and
+/// publishes it on the context as the pass fact kInlineReportFactKey, for a pass that has to refuse
+/// such a graph (onnx::export: a request it cannot see). The run's answer and the later reader's
+/// record are the same object, so neither is a second copy of the other.
 struct InlineReport {
     size_t growthBudget      = 0;
     size_t growthSpent       = 0;
@@ -120,6 +123,19 @@ struct InlineReport {
     const InlineDeclined *find(std::string_view caller, std::string_view callee) const {
         for (const InlineDeclined &entry : declined) {
             if (entry.caller == caller && entry.callee == callee) {
+                return &entry;
+            }
+        }
+        return nullptr;
+    }
+
+    /// The first call the run left for `why`. `InlineDecline::GrowthBudget` is the one reason whose
+    /// presence means the run did not finish its work -- the owner cap and the strategy are asked
+    /// first, so a call left for them would have been left whatever the budget was -- and a round
+    /// that changed nothing while one of these is here reached the budget and not a fixed point.
+    const InlineDeclined *firstLeftFor(InlineDecline why) const {
+        for (const InlineDeclined &entry : declined) {
+            if (entry.why == why) {
                 return &entry;
             }
         }
