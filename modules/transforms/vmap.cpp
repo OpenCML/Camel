@@ -112,8 +112,8 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
 /// The rule of `rulesets.vmap` that answers `uri` here: the key's one law, or -- when a key holds
 /// several -- the law the operands' own types pick.
 ///
-/// This family is the same choice the transpose family makes (`modules/transforms/
-/// transpose.cpp#chooseTransposedRule`) with one difference in what is compared: an instance here
+/// This family is the same choice the transpose family makes (`modules/transforms/transpose/
+/// rules.cpp#chooseTransposedRule`) with one difference in what is compared: an instance here
 /// is made at the **element** type of the operand, because that is the type a rule of this family
 /// is generic in, and its ports are then compared with the operands' *batched* types --
 /// `vmap_rule_idx:: <T>(xs: T[], i: int)` at `T = float` takes a `float[2, 3]` batch through its

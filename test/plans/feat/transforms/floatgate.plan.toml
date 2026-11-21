@@ -2,7 +2,7 @@
 #
 # `lane-f32trans` opened the gate: `transpose` no longer requires a function that returns a `float`,
 # it requires a result whose *tangent space* is a width the walk can add
-# (`transpose.cpp#transposeSignature`, `#hasResultCotangent`). That is what lets the five cases here
+# (`transpose.cpp#transposeSignature`, `transpose/cotangent.cpp#hasResultCotangent`). That is what lets the five cases here
 # reach a law at all. The readings they pin are the other half of that change: the places inside
 # `modules/transforms/transpose.cpp` that were written as `Type::Float64()` because, behind a gate
 # that only admitted `float`, a `float` was the true answer.
@@ -20,7 +20,7 @@
 
 [[tests]]
 name = "floatgate.f32_scalar_transpose"
-desc = "An `f32` scalar's pullback at two points and two cotangents: `f(x) = x*x + x*5`, `f'(x) = 2x + 5`, so 11 and 22 at x = 3 with ct = 1 and 2, and 1 at x = -2. The body reads `x` twice, so two cotangents land on one value and are added -- at `f32` with `:op/add_f`, which is the registry's addition for that space (`transpose.cpp#addUriFor`). The `float` twin prints the same two numbers: one program, two widths, no conversion."
+desc = "An `f32` scalar's pullback at two points and two cotangents: `f(x) = x*x + x*5`, `f'(x) = 2x + 5`, so 11 and 22 at x = 3 with ct = 1 and 2, and 1 at x = -2. The body reads `x` twice, so two cotangents land on one value and are added -- at `f32` with `:op/add_f`, which is the registry's addition for that space (`transpose/cotangent.cpp#addUriFor`). The `float` twin prints the same two numbers: one program, two widths, no conversion."
 kind = "behavior"
 case = "../../../cases/transforms/transpose/floatgate_f32_scalar.cml"
 args = ["--trace", "transforms", "${case}", "${backend}"]
