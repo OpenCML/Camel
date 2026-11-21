@@ -95,7 +95,7 @@ export rule neg_t::<T>(x: T) when is_float::<T>() {
 /// this one is refused where it is written.
 ///
 /// Two type parameters, in the order the expansion names a law's ports -- the cotangent's element
-/// first, then the operands (`transpose.cpp#chooseTransposedRule`) -- because the cotangent of
+/// first, then the operands (`modules/transforms/transpose/rules.cpp#chooseTransposedRule`) -- because the cotangent of
 /// `float(x)` is a `float` whatever width `x` has, and one type parameter cannot be both. `T` is
 /// that cotangent and `S` the width of the operand, so the guard names both ports and not one of
 /// them: a rule's `when` says which shapes it serves, and a law filed under `float(x)` without a
@@ -578,7 +578,7 @@ func ct_of_b::<T>(ct: T[...], a: T[?, ?], b: T[?]): T[?] when is_float::<T>() {
 // position it is answering (`buildTransposeMember`: the transposition is handed the cotangent and the
 // *other* operand). The plain helpers above therefore reach `float[]` and stop: `ct_of_a(ct, a, b)`
 // names `a`, the expansion asks for a value behind it, the type states no extents, and the walk builds
-// no zero array to stand in for it (`modules/transforms/transpose.cpp#buildTransposeMember`), so the step is refused by name.
+// no zero array to stand in for it (`modules/transforms/transpose/walk.cpp#buildTransposeMember`), so the step is refused by name.
 // The two vector cases of `test/plans/feat/showcase_s2.plan.toml` show it:
 //
 //     skip=parameter-shape uri=tensor:matmul_stated node=11 position=0 param=0 param-type=float[]

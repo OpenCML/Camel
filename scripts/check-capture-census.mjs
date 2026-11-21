@@ -57,7 +57,7 @@
  *   capture_ports_generator  the port sits in a graph the generator machine built. Two markers,
  *                            both facts about the graph:
  *                            (a) the graph names itself `__gen_*`. The machine's step function is
- *                                `src/compile/gct/builder.cpp#Builder::visitGeneratorBody`'s
+ *                                `src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`'s
  *                                `stepName` (`const std::string stepName = "__gen_step__"`), and
  *                                nothing else in the compiler gives a graph that prefix (an
  *                                ordinary anonymous closure is `__g_<n>__`);
@@ -180,7 +180,7 @@ const FORMAT = 'camel.gir'
 
 /**
  * The prefix of the graphs the generator machine builds for itself: `__gen_step__`
- * (`src/compile/gct/builder.cpp#Builder::visitGeneratorBody`, `stepName`). It is matched on a
+ * (`src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`, `stepName`). It is matched on a
  * graph's `name`, never on a port's, and the header says why the graph is the reliable marker.
  */
 const GENERATOR_GRAPH = '__gen_'

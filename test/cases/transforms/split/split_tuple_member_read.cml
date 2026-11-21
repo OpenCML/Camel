@@ -5,7 +5,7 @@
 // pinned below beside the pullback so that a change that "fixes" `vjp` by changing the halves shows
 // up as a cut that stopped agreeing with its own lift. The defect was one step later: `transpose`
 // files a member's cotangent in the place that member has in the value it was read from
-// (`memberCotangents`, `modules/transforms/transpose.cpp#buildTransposeMember`) and marks the
+// (`memberCotangents`, `modules/transforms/transpose/walk.cpp#buildTransposeMember`) and marks the
 // **parameter** answered, and nothing joined those places back into the cotangent the answer needs.
 // The answer tuple then held an empty reference, the encoder was handed a node whose input was no
 // node, and the run died inside the encoder's input table: SIGSEGV, empty stdout, stderr ending after

@@ -60,14 +60,14 @@
  *   * the state parameter is named `__gen_state__` **and that is why the port has a name at all**:
  *     `createCompileGraph` takes a port's name from the signature, and an unnamed parameter is port
  *     `__w0` with no name in scope (the same sentence the construction tree's machine keeps at
- *     `src/compile/gct/builder.cpp#Builder::visitGeneratorBody`). The name is not decoration: it
+ *     `src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`). The name is not decoration: it
  *     enters the scope, which is what makes the two machines give one observable shape;
  *   * the round state is `(answer, int)`, i.e. `((string, string..)?, int)` -- the `?` is on the
  *     **first** component and the pc is a bare `int`. A `?` on the pc, or its absence on the answer,
  *     would be a difference of structure and not of ids.
  *
  * Two readings taken from the construction tree's own machine today. They are the *transition* and
- * not the destination (`src/compile/gct/builder.cpp#Builder::visitGeneratorBody`):
+ * not the destination (`src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`):
  *
  *   * the loop's first round state is `(Data::null(), 0)` declared as `roundStateType`: an **untyped
  *     null data node cast to the answer's type**, and the pc's zero as an ordinary `int` literal --

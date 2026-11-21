@@ -1,0 +1,19 @@
+docs: the citations name the files the two splits left their symbols in
+
+`node scripts/check-doc-links.mjs --citations` read twenty-eight unverified citations on the head,
+every one of them pointing at a file a recent split had removed:
+`src/compile/gct/builder.cpp` (six files now) and `modules/transforms/transpose.cpp` (a directory
+now). The repair is mechanical in shape and was resolved by definition site, not by guessing: each
+symbol was searched in the directory its old file belonged to, and the citation now names the file
+that defines it -- `buildTransposeMember` to `transpose/walk.cpp`,
+`ruleTakesOperands` and `chooseTransposedRule` to `transpose/rules.cpp`,
+`transposeSignature` to `transpose/signature.cpp`, `Builder::visitGeneratorBody` to
+`builder_func.cpp`, `visitArrayType` and `dimBindAllowed_` to the type-side files,
+`MacroCmp`, `DimPack` and `FoldCountsReport` where they moved.
+
+Two things stayed out on purpose. The historical pages under `docs/handover/` still name the paths
+that existed on the day they were written, because rewriting them would falsify a record rather than
+repair a citation; the checker does not read those. And seven citations remain unresolved
+(`ruleCotangent`, `shapeFromType` twice, `equalTo`, `FUNC`, `core`, and one transpose-parameter
+citation) because those symbols are nowhere defined under their old names any more -- a rename, not
+a move, and it is the split's author who can say where each went.

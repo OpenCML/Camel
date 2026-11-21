@@ -1161,7 +1161,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_owner = "unowned (the `lane-valports` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
-known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/reviews/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
+known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose/walk.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/reviews/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
 known_fail_msg = "skip=law-reads-a-value uri=:op/mul_d position=0"
 known_fail_note = "Waits on docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=law-reads-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
 
@@ -1394,7 +1394,7 @@ timeout_ms = 20000
 # Where a callee can stand: five cases, one per position, written so that each of the walks a CALL can
 # send a transposition down has a program.
 #
-# `modules/transforms/transpose.cpp#buildTransposeMember` asks two questions of a CALL node about its
+# `modules/transforms/transpose/walk.cpp#buildTransposeMember` asks two questions of a CALL node about its
 # callee: does the node itself name a graph (`GCGraph::calleeIdOf`, which answers only for FUNC nodes --
 # a call written by name); does a `with` input name one (a static function, or a Port this graph
 # receives). It used to ask a third -- does the **first ordinary input** name one -- and no program had

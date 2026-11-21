@@ -21,7 +21,7 @@
 // `argumentAt = 1`, found `g`'s one parameter against the two ordinary inputs, and accepted.
 //
 // So the callee it transposed was `g`, which is not the callee of this call at all -- it is the callee of
-// the *first argument*. The branch it landed in (`modules/transforms/transpose.cpp#buildTransposeMember`,
+// the *first argument*. The branch it landed in (`modules/transforms/transpose/walk.cpp#buildTransposeMember`,
 // `argumentAt == 1`) wrote the transposed call with that callee in the call's first ordinary input and no
 // `with` input, which `src/runtime/graph.cpp` refuses to run:
 //
