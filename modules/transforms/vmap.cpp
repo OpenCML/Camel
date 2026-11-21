@@ -141,7 +141,7 @@ std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
     }
     // The ports past the data operands are the operator's own configuration -- `reshape`'s target
     // shape comes in `<>` position -- and a rule names them beside the value it batches, in port
-    // order (`transpose.cpp` says the same about the pullback's list). Without them a law that
+    // order (`transpose/walk.cpp` says the same about the pullback's list). Without them a law that
     // names its shape would look like a law that names more ports than the operator has.
     for (const gc_node_ref_t input : function.withInputsOf(ref)) {
         const camel::runtime::GCNode *node = function.node(input);

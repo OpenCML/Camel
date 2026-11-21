@@ -324,7 +324,7 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
         exportEntity(group->name(), group);
     }
     // `transpose` is the second one, and it is the same kind of value: the pullback of a linear
-    // function's graph, built when the call runs (transpose.cpp).
+    // function's graph, built when the call runs (transpose/walk.cpp).
     for (const auto &group : camel::transforms::transposeOperatorGroups()) {
         exportEntity(group->name(), group);
     }

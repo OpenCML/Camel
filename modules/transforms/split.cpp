@@ -462,7 +462,7 @@ pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_
 /// Here because *two* builds write this shape, not one: the cut hands `lin` out of the forward
 /// half, and a call site that transposes a pair-answering callee closes the same graph over the
 /// same values
-/// (`transpose.cpp`, `transposePairCall`). One writer, so a closure a cut made and a closure a call
+/// (`transpose/walk.cpp`, `transposePairCall`). One writer, so a closure a cut made and a closure a call
 /// site made are the same value.
 gc_node_ref_t buildLinearClosure(
     rt::GraphDraft &draft, const rt::Program *program, GraphId backwardId,
@@ -899,7 +899,7 @@ std::vector<Residual> residualsOf(
         // would read the wrong slot and answer `dL/dx=0.0`. The ordering below puts a parameter's
         // value in the prefix, so the values added here are in the prefix in port order and nothing
         // the walk numbered is displaced by more than the count of parameters it did not reach. The
-        // transposed half reads them by counting its own parameters (`transpose.cpp`, the zero of
+        // transposed half reads them by counting its own parameters (`transpose/walk.cpp`, the zero of
         // an unread parameter -- one reader, and it checks the type before it uses one).
         {
             const size_t half =

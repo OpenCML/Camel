@@ -577,7 +577,7 @@ constexpr std::string_view kShapeUri = "tensor:shape";
 /// This is the whole of the pathway: a shape
 /// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
 /// built -- instead of being read off the value of an operand the caller does not have. It is not a
-/// zero standing in for a value (`transpose.cpp#shapeCarrierOf` was one, and a law that multiplied
+/// zero standing in for a value (`transpose/walk.cpp#shapeCarrierOf` was one, and a law that multiplied
 /// by it answered zeros); it is the extents themselves, and the only thing that
 /// reads them is the shape (5.4: a shape is a fact about a type, and this is that fact written
 /// down).
@@ -914,7 +914,7 @@ gc_node_ref_t expandRuleRightSide(
     //
     //   * the law's port for that capture states its extents (`float[2, 3]` does, `float[..]` and a
     //     number do not). The instance is made at the node's own operand types
-    //     (`expandRuleByName`, `transpose.cpp#ruleCotangent`), so the port is the operand's type;
+    //     (`expandRuleByName`, `transpose/walk.cpp#ruleCotangent`), so the port is the operand's type;
     //   * every place the answer reads that capture is a `tensor:shape` call. A body that read it
     //     anywhere else needs the value, and the value is the caller's to carry: substituting there
     //     would answer arithmetic with a shape, which is the silent zero this exists to remove.

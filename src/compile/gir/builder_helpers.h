@@ -1183,7 +1183,7 @@ inline ConditionSeparation separateWhenConditions(
 /// The rule itself is stated once, in the type layer
 /// (`camel/core/type/composite/array.h#isRankZeroEdge`), because the transposition walk asks it too
 /// where it hands a law the cotangent of that law's port, and that entrance is not a builder's
-/// (`modules/transforms/transpose.cpp#ruleCotangent`). One rule, and the entrances that ask it
+/// (`modules/transforms/transpose/walk.cpp#ruleCotangent`). One rule, and the entrances that ask it
 /// rather than a second reading each.
 using camel::core::type::isRankZeroEdge;
 

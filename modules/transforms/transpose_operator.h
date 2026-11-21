@@ -5,7 +5,7 @@
  * `transpose(f)` as an operator of the `transforms` module (see transpose.h).
  *
  * The wiring is `jvp`'s, copied rather than shared: a type resolver, a kernel and a registration.
- * The work is `buildTransposeGraph` (transpose.cpp), which is the one place that knows what
+ * The work is `buildTransposeGraph` (transpose/walk.cpp), which is the one place that knows what
  * `transpose(f)` is. Like `jvp`, it answers with a function value naming the graph it built, so `f`
  * itself is untouched.
  */

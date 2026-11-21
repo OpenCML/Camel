@@ -141,7 +141,7 @@ func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
 type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose/signature.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；
