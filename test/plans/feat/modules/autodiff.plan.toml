@@ -463,8 +463,9 @@ expect_output_contains = ["cannot differentiate through this call of a function 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
 known_fail = true
-known_fail_owner = "lane-holdmerge (hold/vjpgrad): the `#macro` tag on `stdlib/vjp.cml#vjp` moved this shape's callee from an `Oper` node to a `Func` node, so the tail is written by the other arm of `Backward::whyNotEvident`; this sentence is the pre-tag answer of the same program, measured on one build with the tag off"
+known_fail_owner = "lane-holdmerge (hold/vjpgrad)"
 known_fail_msg = "is not a function that is named or built in it"
+known_fail_ends_when = "when a shape reaches the `Oper` node again, this entry prints the tail it pins, `which function it calls is not evident where it is called: the function is computed at run time`, and exits 1 with both `expect_output_contains` lines matching; today the same program prints the `Func` tail (`is not a function that is named or built in it`), which is the sentence `second_order_refused_vjp_func` pins, so the two entries are read as one measurement and the day the `Oper` tail returns this one goes green"
 known_fail_reason = "同一个程序在标签在场时读的是另一句：`#macro` 落在 `stdlib/vjp.cml#vjp` 上之后，调用点拿到的是「一次具名调用交回的图」，`whyNotEvident` 于是走 `GCNodeKind::Func` 那一支。拒绝、位置、前半句都没变，只有尾巴按值的种类换。这一条钉 `Oper` 那种值的措辞，今天不出现；`second_order_refused_vjp_func` 钉另一种。"
 known_fail_note = "Two facts, two entries, one case file: the tail is decided by what the value is, so an operator's answer and a tagged call's answer are pinned apart instead of one of them being dropped from the record. The mark is not a wall -- it is the second fact, and it fires in both directions: `known_fail_msg` pins what the run does say today (a third wording turns the run red), and the day a shape reaches the `Oper` node again this entry passes and the mark has to come off. Where the `Oper` node went: `#macro` makes a call of a declaration hand back a graph, which is what a macro is, so nothing in this tree computes that value with an operator any more."
 
