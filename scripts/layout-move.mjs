@@ -438,12 +438,12 @@ const CMAKE_HOOKS = [
   ],
   // Two modules gave their own object target something the top-level build never did: a version
   // string (`ckpt`), and the CBLAS include directory with the defines that select it (`tensor`).
-  // The block compiles those sources now, so the settings go to the block -- the whole of
-  // `lib_module`, which is wider than the module and is the transition this drill states. The
-  // hooks name the files where they are after the move: the move runs first, then the rewrite.
-  ['lib/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module '],
-  ['lib/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module ', 'all'],
-  ['lib/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'camel_layout_block_includes_of(lib_module '],
+  // The module target still compiles those sources and the block compiles them too, so the call
+  // names both: a CMake `target_...` call takes a list of targets, and the settings stay exactly
+  // what the module wrote. The hooks name the files where they are after the move.
+  ['lib/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'target_compile_definitions(ckpt_cmo_objects camel_layout_lib_module_objects PRIVATE '],
+  ['lib/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'target_compile_definitions(tensor_cmo_objects camel_layout_lib_module_objects PRIVATE ', 'all'],
+  ['lib/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'target_include_directories(tensor_cmo_objects camel_layout_lib_module_objects PRIVATE '],
 ]
 
 // `BUILD_INFO_ROOTS` is what `-NoBuild` fingerprints. Left alone, every moved source falls out of
@@ -631,18 +631,6 @@ function cmakeText (blocksInfo) {
   L.push('    foreach(_t IN LISTS _targets)')
   L.push('        camel_taskflow_with_worker_stack(${_t})')
   L.push('    endforeach()')
-  L.push('endfunction()')
-  L.push('')
-  L.push('function(camel_layout_block_definitions_of _block)')
-  L.push('    # A module added definitions to the object target that compiled its sources; the block owns')
-  L.push('    # those sources now, so the definition lands on the block. That is wider than the module,')
-  L.push('    # and it is the drill: when a module becomes its own block it keeps only its own.')
-  L.push('    target_compile_definitions(' + BLOCK_PREFIX + '${_block}_objects PRIVATE ${ARGN})')
-  L.push('endfunction()')
-  L.push('')
-  L.push('function(camel_layout_block_includes_of _block)')
-  L.push('    # Same for the include directories a module added for its own headers or for BLAS.')
-  L.push('    target_include_directories(' + BLOCK_PREFIX + '${_block}_objects PRIVATE ${ARGN})')
   L.push('endfunction()')
   L.push('')
   return L.join('\n')
