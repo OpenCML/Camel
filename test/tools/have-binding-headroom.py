@@ -76,7 +76,7 @@ call_us = fastest(one_call, 200) * 1e6
 
 MIB = 1 << 20
 source = (ctypes.c_float * (MIB // 4))()
-target = (ctypes.c_float * (MIB // 4))
+target = (ctypes.c_float * (MIB // 4))()
 
 
 def copy_one_mib():
@@ -92,7 +92,7 @@ if call_us < 2 * copy_us:
 # call passes the buffer by pointer on the host that reds the line.
 big = 64 << 20
 big_source = (ctypes.c_float * (big // 4))()
-big_target = (ctypes.c_float * (big // 4))
+big_target = (ctypes.c_float * (big // 4))()
 copy_us_64 = fastest(lambda: ctypes.memmove(big_target, big_source, big), 10) * 1e6
 print(
     f"one call costs {call_us:.1f} us and twice a 1 MiB memmove {2 * copy_us:.1f} us: the entry's "
