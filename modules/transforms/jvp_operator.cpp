@@ -216,11 +216,45 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // to be one string, and is what the call site relies on, is the lifted half: the type the
     // operator says it returns and the type of the graph it hands back.
     printJvpCallReading(readings(), function->graph()->funcType(), built.graph->funcType());
-    auto *result = ::Function::create(
-        built.program, built.graph->id(), function->tupleType(), mm::autoSpace());
+    // The closure this function value carries is the **lifted graph's own**, not `f`'s: a capture
+    // whose tangent space is its own type is a `(x, dx)` member in the lifted graph
+    // (`jvp.cpp`, the capture ports and the arm that reads them), so the value's closure has to have
+    // a place for the direction. When the value being lifted already came out of an enclosing pass
+    // its tuple type is that lifted closure's type -- the pairs are filled there, by the pass that
+    // knows the direction -- and the members are carried as they stand. A value lifted here for the
+    // first time carries the plain members, and the second leg of each pair is the zero of its slot:
+    // that is the direction of a value captured from *outside* every pass (design principles 9.9),
+    // and the pair is what says so, by position, rather than a member and no direction at all.
+    const auto *closureType = built.graph->closureType();
+    const auto *carriedType = function->tupleType();
+    if (closureType == nullptr) {
+        closureType = carriedType;
+    }
+    auto *result =
+        ::Function::create(built.program, built.graph->id(), closureType, mm::autoSpace());
     if (::Tuple *closure = function->tuple()) {
-        for (size_t i = 0; i < closure->size(); ++i) {
-            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
+        for (size_t i = 0; i < closure->size() && i < closureType->size(); ++i) {
+            const slot_t carried = closure->get<slot_t>(i);
+            Type *source =
+                carriedType != nullptr && i < carriedType->size()
+                    ? const_cast<Type *>(carriedType->typeAt(i))
+                    : nullptr;
+            Type *member = const_cast<Type *>(closureType->typeAt(i));
+            const bool pairOfSource =
+                source != nullptr && member != nullptr && member != source &&
+                !member->equals(source) && member->code() == TypeCode::Tuple &&
+                static_cast<const camel::core::type::TupleType *>(member)->size() == 2 &&
+                static_cast<const camel::core::type::TupleType *>(member)->typeAt(0) == source &&
+                static_cast<const camel::core::type::TupleType *>(member)->typeAt(1) == source;
+            if (!pairOfSource) {
+                result->tuple()->set<slot_t>(i, carried, closureType);
+                continue;
+            }
+            const auto *pairType = static_cast<const camel::core::type::TupleType *>(member);
+            ::Tuple *pair        = ::Tuple::create(2, mm::autoSpace());
+            pair->set<slot_t>(0, carried, pairType);
+            pair->set<slot_t>(1, NullSlot, pairType);
+            result->tuple()->set<slot_t>(i, toSlot(pair), closureType);
         }
     }
     return toSlot<::Function *>(result);

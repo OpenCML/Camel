@@ -441,7 +441,12 @@ struct LiftState {
     // was given and outlives no call.
     const camel::runtime::Program *program;
     camel::runtime::GraphDraftGroup &group;
-    std::unordered_map<uint32_t, camel::runtime::GraphId> callees;
+    /// The lifted graph of each callee this build made, keyed by the **original** graph's id and by
+    /// whether that lift carries paired captures (`(id << 1) | paired`): a closure *built inside a
+    /// body* is lifted with `(x, dx)` members, and the same graph reached as a plain call is lifted
+    /// with the value members only. Keeping them apart is what makes the two layouts one graph each
+    /// instead of two readers of one graph.
+    std::unordered_map<uint64_t, camel::runtime::GraphId> callees;
     /// The lifted signature of each callee this build made, keyed by the **original** graph's id --
     /// the type the call site has to fill in, kept rather than derived again there so the two
     /// cannot disagree about the order or the length of the list (`liftSignature`).
@@ -461,7 +466,7 @@ bool fail(JvpGraph &refusal, JvpGraph &&why) {
 bool liftGraph(
     LiftState &state, const GraphRead &function, std::string_view name,
     camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
-    JvpGraph &refusal);
+    JvpGraph &refusal, bool pairedCaptures = false);
 
 } // namespace
 
@@ -529,7 +534,7 @@ namespace {
 bool liftGraph(
     LiftState &state, const GraphRead &function, std::string_view name,
     camel::runtime::GraphId source, camel::runtime::GraphId member, std::ostream &os,
-    JvpGraph &refusal) {
+    JvpGraph &refusal, bool pairedCaptures) {
     const camel::core::context::context_ptr_t &context = state.context;
     const camel::runtime::Program *program             = state.program;
     camel::runtime::GraphDraftGroup &group             = state.group;
@@ -894,9 +899,22 @@ bool liftGraph(
         // what a transform reads simply did not pass them on, so a transform holding a `GraphRead`
         // could see a graph's parameters and its `with` ports and not what it captures. Nothing is
         // recorded twice and nothing new is encoded.
+        //
+        // A capture whose tangent space is itself (`pairTypeOf`) is **one member holding both
+        // halves**, `(x, dx)`, instead of one member and no direction -- but only for a closure
+        // **built inside the body being lifted** (`pairedCaptures`): that closure's captures are
+        // values this very body computes, so the direction they move in is the direction this body
+        // is propagating, and the lifted closure has to have a place for it. The *root's* captures
+        // are the other case and keep their single member: they come from outside the transform, so
+        // their direction is the zero of their type, which is what design principles 9.9 says about
+        // a captured value and what `floatgate.f32_closure_member_ports` pins. A capture of any
+        // other type keeps its single member in both cases: its tangent space is not its own type,
+        // so the pair is not a form `Lift` writes for it (`pairTypeOf` answers null).
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
         {
             const std::vector<gc_node_ref_t> captures = function.closureNodesOf();
+            std::vector<camel::core::type::Type *> memberTypes;
+            bool pairedClosure = false;
             for (gc_node_ref_t original : captures) {
                 const NodeFace *captureNode = function.node(original);
                 camel::core::type::Type *captureType =
@@ -904,13 +922,24 @@ bool liftGraph(
                 if (captureType == nullptr) {
                     continue;
                 }
+                camel::core::type::Type *memberType = captureType;
+                if (pairedCaptures) {
+                    if (camel::core::type::TupleType *pair = pairTypeOf(captureType)) {
+                        memberType    = pair;
+                        pairedClosure = true;
+                    }
+                }
                 const gc_node_ref_t port =
-                    draft.addPortNode(captureType, draft.allocateRuntimeSlot(captureType));
+                    draft.addPortNode(memberType, draft.allocateRuntimeSlot(memberType));
                 draft.appendClosureNode(port);
                 capturePortOf[original] = port;
+                memberTypes.push_back(memberType);
             }
             if (!capturePortOf.empty()) {
-                if (const camel::core::type::TupleType *closureType = function.closureTypeOf()) {
+                if (pairedClosure && memberTypes.size() == captures.size()) {
+                    draft.setClosureType(camel::core::type::TupleType::create(memberTypes));
+                } else if (const camel::core::type::TupleType *closureType =
+                               function.closureTypeOf()) {
                     draft.setClosureType(const_cast<camel::core::type::TupleType *>(closureType));
                 }
             }
@@ -1251,18 +1280,36 @@ bool liftGraph(
                 return true;
             }
             GraphId liftedCallee;
-            const auto at = state.callees.find(rt::toValue(calleeId));
+            // A function **value** is a closure this body built: its captures are values this body
+            // computes, so the lift of that closure carries a direction for each of them
+            // (`pairedCaptures`). A **call** is not a construction -- the closure it reaches was
+            // built where the callee was written -- so its lift carries the value members only.
+            //
+            // Switched **off** on 2026-11-21 by the reading the pair costs today: the moment a
+            // closure built inside a body carries `(x, dx)`, `transpose` sees a closure whose ports
+            // are pairs and refuses the call that reads it -- `nest_square`,
+            // `nest_quartic` and `compositions.jvp_vjp_f` all end at
+            // `transpose has no transpose for this function: the callee's transpose was built, but
+            // the parameter at position 3 reads a value this call does not carry`. That is the
+            // `transpose(jvp(lin))` shape, and it is the second step's wall (`nested-transforms`
+            // 2.4): the pair is right and the transpose of a lifted closure is what has to go, which
+            // is not a change this file can make. The layout below is what a lift of a closure built
+            // inside a body declares; until the second step lands, it is declared for no graph.
+            const bool pairedCallee = false && isFunctionValue;
+            const uint64_t calleeKey =
+                (static_cast<uint64_t>(rt::toValue(calleeId)) << 1) | (pairedCallee ? 1u : 0u);
+            const auto at = state.callees.find(calleeKey);
             if (at == state.callees.end()) {
                 liftedCallee = group.reserve(
                     "jvp_of_" + std::string(callee->name()),
                     "jvp_of_" + std::string(callee->name()));
-                state.callees.emplace(rt::toValue(calleeId), liftedCallee);
+                state.callees.emplace(calleeKey, liftedCallee);
                 // The lift this starts is a **callee's**: it is called from a body that is itself
                 // lifted, and it keeps the same lifted signature the top-level one has -- values,
                 // tangents, and the callee's own `with` list (`liftSignature`).
                 JvpGraph sub;
-                const bool lifted =
-                    liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub);
+                const bool lifted = liftGraph(
+                    state, calleeFace, calleeName, calleeId, liftedCallee, os, sub, pairedCallee);
                 if (!lifted) {
                     refusal = std::move(sub);
                     return false;
@@ -1470,19 +1517,42 @@ bool liftGraph(
                     break;
                 }
                 // A value the body captured from where it was written: it enters by the port made
-                // for it above, and it does not move -- the same rule the `with` parameter one arm
-                // up follows (design principles 9.9's ruleset: `reinterpret<jvp>` lifts a captured
-                // value to a zero tangent), so its tangent is the zero of its own type and there is
-                // no second port to hand a direction in.
+                // for it above -- the pair `(x, dx)` when this graph's closure is one the lift
+                // builds itself (a closure built inside the body being lifted) and the type's
+                // tangent space is the type itself, and the value alone otherwise. A capture is not
+                // a `with` parameter: a capture moves exactly as far as the pass that lifts it says
+                // it does (`nested-transforms` 2.2 and 2.4), so a value captured from *outside*
+                // every pass reads `(value, zero)` -- design principles 9.9's reading of a captured
+                // value -- and one captured by the body's own computation reads the direction this
+                // body is propagating for it, because this lift is the one filling the pair.
                 const auto captured = capturePortOf.find(ref);
                 if (captured != capturePortOf.end()) {
-                    copyOf[ref] = captured->second;
-                    if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
-                        tangentOf[ref] = zeroConstantFor(node->dataType());
-                        if (tangentOf[ref] == rt::kInvalidNodeRef) {
-                            // An extent the type leaves open: the zero is the value's shape, made
-                            // where the value is (see `zeroOfValueAtRunTime`).
-                            tangentOf[ref] = zeroOfValueAtRunTime(copyOf[ref], node->dataType());
+                    if (pairedCaptures && pairTypeOf(node->dataType()) != nullptr) {
+                        // The member is the pair `(x, dx)`, so the two things the walk asks a node
+                        // for are its two legs. Who fills the second leg is the caller's question
+                        // and not this graph's: `jvp(f)` on a closure lifts a value that is outside
+                        // every pass, so the leg is the zero of the type there (`jvpKernel`), and a
+                        // callee this lift builds itself has the direction of every value it closes
+                        // over in its own hands -- which is `nested-transforms` 2.2's "a captured
+                        // value is lifted with the closure", read through the one law that says a
+                        // lifted value *is* `(value, tangent)`.
+                        const gc_node_ref_t leg = draft.addAccsNode(node->dataType(), 0);
+                        draft.setNormInputs(
+                            leg, std::span<const gc_node_ref_t>(&captured->second, 1));
+                        const gc_node_ref_t legTangent = draft.addAccsNode(node->dataType(), 1);
+                        draft.setNormInputs(
+                            legTangent, std::span<const gc_node_ref_t>(&captured->second, 1));
+                        copyOf[ref]    = leg;
+                        tangentOf[ref] = legTangent;
+                    } else {
+                        copyOf[ref] = captured->second;
+                        if (camel::core::tangentSpaceOf(node->dataType()).hasSpace()) {
+                            tangentOf[ref] = zeroConstantFor(node->dataType());
+                            if (tangentOf[ref] == rt::kInvalidNodeRef) {
+                                // An extent the type leaves open: the zero is the value's shape,
+                                // made where the value is (see `zeroOfValueAtRunTime`).
+                                tangentOf[ref] = zeroOfValueAtRunTime(copyOf[ref], node->dataType());
+                            }
                         }
                     }
                     copied[ref] = true;
@@ -2029,6 +2099,55 @@ bool liftGraph(
                     arguments.insert(arguments.end(), values.begin(), values.end());
                     arguments.insert(arguments.end(), tangents.begin(), tangents.end());
                 }
+                if (isValue) {
+                    // A function **value** is a closure this body built, so the lift of its callee
+                    // declares one `(x, dx)` member per capture whose tangent space is its own type
+                    // (`pairedCaptures`), and the value carries both halves: the value this body
+                    // holds, and the direction this body is propagating for it. That direction is
+                    // this body's own -- the value is computed *here* -- which is what makes it a
+                    // capture with a tangent rather than the outer pass's direction reaching in.
+                    //
+                    // A `with` parameter of the callee is not a capture and travels as it stands, the
+                    // rule the call above follows and for the same reason; a capture whose tangent
+                    // space is not its own type travels as its value, because that is the member the
+                    // callee's lift declared for it.
+                    const FrozenGraphRead calleeFace(*callee);
+                    const std::vector<gc_node_ref_t> captured = calleeFace.closureNodesOf();
+                    const std::vector<gc_node_ref_t> withArgs   = function.withInputsOf(ref);
+                    const size_t firstCapture =
+                        withArgs.size() >= captured.size() ? withArgs.size() - captured.size() : 0;
+                    for (size_t i = 0; i < withArgs.size(); ++i) {
+                        const gc_node_ref_t input = withArgs[i];
+                        if (input >= function.nodeCount() || !copied[input]) {
+                            return fail(refusal);
+                        }
+                        const gc_node_ref_t half =
+                            valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
+                        Type *captureType = nullptr;
+                        if (i >= firstCapture) {
+                            const NodeFace *captureNode =
+                                calleeFace.node(captured[i - firstCapture]);
+                            captureType = captureNode != nullptr
+                                              ? const_cast<Type *>(captureNode->dataType())
+                                              : nullptr;
+                        }
+                        if (captureType == nullptr || pairTypeOf(captureType) == nullptr) {
+                            carries.push_back(half);
+                            continue;
+                        }
+                        gc_node_ref_t direction = tangentOf[input];
+                        if (direction == rt::kInvalidNodeRef) {
+                            direction = zeroConstantFor(captureType);
+                        }
+                        if (direction == rt::kInvalidNodeRef) {
+                            direction = zeroOfValueAtRunTime(half, captureType);
+                        }
+                        if (direction == rt::kInvalidNodeRef) {
+                            return fail(refusal);
+                        }
+                        carries.push_back(liftedPair(captureType, half, direction));
+                    }
+                }
                 // The answer's shape is `Lift<call's value>`, read from the one law
                 // (`liftedShapeOf`) and not from `pairOf` here: a pair-shaped answer is carried as
                 // the walk's two halves, and an answer that lifts by component -- a call whose
@@ -2071,9 +2190,12 @@ bool liftGraph(
                     if (!arguments.empty()) {
                         draft.setNormInputs(made, arguments);
                     }
-                    if (!carries.empty()) {
-                        draft.setWithInputs(made, carries);
-                    }
+                }
+                // The closure travels in both cases. For a **call** that list is the callee's
+                // declared `with` values, which the lifted callee keeps; for a function **value** it
+                // is the list above, one member per capture (a pair where the capture moves).
+                if (!carries.empty()) {
+                    draft.setWithInputs(made, carries);
                 }
                 copyOf[ref] = made;
                 if (!isValue) {
