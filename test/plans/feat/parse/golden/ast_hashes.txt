@@ -2051,7 +2051,7 @@ c2f3b02ac4be9761 ok test/cases/compile/transforms/transpose_hand_closed_lambda.c
 2cae09c8b995914b ok test/cases/compile/transforms/transpose_loop_escape_reads_outer.cml
 5cd174d580f5417a ok test/cases/compile/transforms/transpose_loop_escape_reads_twice.cml
 80e517661c1e0539 ok test/cases/compile/transforms/transpose_loop_escape_two_states.cml
-7239684615673619 ok test/cases/compile/transforms/transpose_loop_state_second.cml
+671629ed0d354dfa ok test/cases/compile/transforms/transpose_loop_state_second.cml
 b13a02e222829562 ok test/cases/compile/transforms/transpose_many_parameters.cml
 563a56efb7d3ee21 ok test/cases/compile/transforms/transpose_many_parameters_in_ct.cml
 78dda92169ddf168 ok test/cases/compile/transforms/transpose_no_tangent_bool.cml
