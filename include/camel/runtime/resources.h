@@ -209,7 +209,8 @@ struct RequiredOrdering {
 /// through references outside a sync block).
 std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph);
 
-// ---- Which port of a graph an access came through -------------------------------------------------
+// ---- Which port of a graph an access came through
+// -------------------------------------------------
 //
 // A resource use that reaches its graph through a port is written down by the port's number in the
 // graph's own numbering (sem::ResourceSignature: `with` parameters first, then ordinary ones, and a
@@ -268,32 +269,17 @@ struct EffectContainment {
     std::string declared;
     /// The accesses beyond it, one line each, sorted and without repeats.
     std::vector<std::string> beyond;
-    /// Where the analysis could not name what the body reaches: the graph the call site runs, the
-    /// node of it whose access is of unknown class, and the reason no clause can state it. A
-    /// reading of unknown class is refused, not counted (the ruling of 2026-11-20: a body with an
-    /// access the checker cannot name cannot be proved to stay inside its clause), and a refusal
-    /// has to name the node. `body` is nullptr and `unnamed` invalid when every reading could be
-    /// named.
-    const GCGraph *body = nullptr;
-    gc_node_ref_t unnamed = kInvalidNodeRef;
-    std::string unnamedWhy;
 };
 
 /// What the check looked at and what it declined to judge. A decline is not a verdict: it is the
 /// analysis saying it cannot name the resource, and the count is here so that "I looked and it is
 /// fine" and "I refused to look" cannot read the same in a log -- a checker that grows its declines
 /// to stay green has to make a number grow first.
-///
-/// One component is no longer a decline: a reading of unknown class is refused (see
-/// EffectContainment::unnamed), so the run stops on it. It stays counted here so that a summary of
-/// a refused run says how many readings the refusal was about, and so that the line keeps six
-/// components that add up to `declined()`.
 struct EffectContainmentReport {
     /// Call sites whose footprint was compared with the type at the site.
     size_t checked = 0;
     /// Readings of unknown class (GraphFootprint::anyOf, or an access of class Unknown): the
-    /// analysis cannot name the resource, so no clause is proved to cover it and the check refuses
-    /// (EffectContainment::unnamed).
+    /// analysis cannot name the resource, so a type that cannot spell it is not proved against it.
     size_t anyUnknown = 0;
     size_t anyObject  = 0;
     size_t anyHandle  = 0;
@@ -322,21 +308,12 @@ struct EffectContainmentReport {
 /// clause (Generic) promises nothing and `covers` says it covers anything: it is not a violation.
 /// So is a call through a value the graph does not resolve: there is no body to compare.
 ///
-/// An external resource is judged by name and a handle by the parameter that names it. A reading
-/// the analysis cannot name at all -- `ResourceClass::Unknown`: an operator that declares nothing,
-/// a call through a function value whose type publishes no clause, an access of no nameable port --
-/// is refused: nothing proves such a body stays inside its promise, and "a possibility is not an
-/// access" cannot be read as "the promise holds" (the ruling of 2026-11-20). The refusal names the
-/// node and the reason (EffectContainment::body, `unnamed`, `unnamedWhy`).
-///
-/// Two readings stay counted and passed. A cell of a variable: its mutability is declared where the
-/// variable is (design effects plan 5.1), not in a `uses` clause, so the clause is not the place
-/// that promises about it, and writing variables is what the order check asks about. And a class
-/// the footprint names but a clause cannot spell (`any object`, `any handle`): the analysis knows
-/// the class and the design models "may reach any one of them" deliberately (design principles 3.3,
-/// effect masking), so refusing it is an item of its own and not this one.
-///
-/// `report`, when given, counts what was judged and what was declined.
+/// Only what a type can state is judged: an external resource by name, and a handle a parameter
+/// names. The conservative half of a footprint -- the classes it "cannot name"
+/// (GraphFootprint::anyOf), a cell of a variable (whose mutability is declared where the variable
+/// is, design effects plan 5.1, not in a `uses` clause) -- is not an access the callee is known to
+/// make, and a type that cannot spell it does not promise against it. Writing variables is what the
+/// order check asks about. `report`, when given, counts what was judged and what was declined.
 std::optional<EffectContainment> effectContainmentViolation(
     const Program &program, const GCGraph &graph, EffectContainmentReport *report = nullptr);
 
@@ -357,7 +334,8 @@ std::string toString(const NodeAccess &access);
 std::string toString(const NodeResources &resources);
 std::string toString(const GraphFootprint &footprint);
 
-// ---- The commit checks of the effect analysis, asked of one graph as one question ----------------
+// ---- The commit checks of the effect analysis, asked of one graph as one question
+// ----------------
 //
 // docs/design/effects/analysis.cn.md 4.1 names the two things a commit owes the program it
 // publishes. They are one question here because both commit paths (a pass, and the graph module's
@@ -365,10 +343,9 @@ std::string toString(const GraphFootprint &footprint);
 //
 //   Effect  the footprint the graph's body reaches (resolved bottom-up from the nodes' operator
 //           declarations, principle 3.3) must stay inside the clause the graph's own type
-//           declares. A reading the analysis cannot name (class Unknown) is refused, at the same
-//           line the call-site check draws and with the same diagnostic form -- node and reason
-//           (the ruling of 2026-11-20). A cell of a variable is still not judged: its mutability
-//           is declared where the variable is, not in a `uses` clause.
+//           declares. What the type cannot spell -- a cell of a variable, a class the analysis
+//           cannot name -- is not judged: a possibility is not an access (the same line the
+//           call-site check draws).
 //   Order   within one region, any two accesses to one resource of which at least one writes must
 //           have a path between them in the graph (a data, sync or order edge, or a region's
 //           `GATE` input). A region is the body, an arm, a loop's condition or a loop's body; an
@@ -379,8 +356,8 @@ std::string toString(const GraphFootprint &footprint);
 //           and is passed over (principle 3.3).
 //
 // The reading is per graph because a commit edits graphs; which of them it must answer for is the
-// caller's question (`commitViolation`'s `made` and `changed`), and which regions inside one are the
-// commit's is the same pair's (the regions those nodes are in, and every region around them).
+// caller's question (`commitViolation`'s `made` and `changed`), and which regions inside one are
+// the commit's is the same pair's (the regions those nodes are in, and every region around them).
 //
 // Three more things are part of the same commitment. Two of them are asked by the seal every commit
 // already runs, and are said here so that a reader of this file knows where each of the four lands:
@@ -391,8 +368,8 @@ std::string toString(const GraphFootprint &footprint);
 //           graph published, not of what the commit added, so it is not one of the two checks
 //           below and does not read the tier.
 //   Cycle   a graph that closes a cycle of inputs has no order any back end can run. Asked by the
-//           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build, before
-//           the two checks below -- one reading, not a second copy of it here.
+//           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build,
+//           before the two checks below -- one reading, not a second copy of it here.
 //   Tier    the two checks above (effect, order) are asked by the edit the draft used, not by what
 //           the build is. The table
 //           of `docs/design/graph-editing/README.cn.md` 8.1 is the rule, and it is why the tier has
@@ -413,11 +390,11 @@ std::string_view commitCheckName(CommitCheck check);
 /// and the one line the diagnostic carries. `origin` is the source position to report against (0
 /// when the program does not name one), so that a caller with a diagnostic can attach it.
 struct CommitViolation {
-    CommitCheck check     = CommitCheck::Effect;
-    const GCGraph *graph  = nullptr;
-    gc_node_ref_t first   = kInvalidNodeRef;
-    gc_node_ref_t second  = kInvalidNodeRef;
-    uint64_t origin       = 0;
+    CommitCheck check    = CommitCheck::Effect;
+    const GCGraph *graph = nullptr;
+    gc_node_ref_t first  = kInvalidNodeRef;
+    gc_node_ref_t second = kInvalidNodeRef;
+    uint64_t origin      = 0;
     std::string text;
 };
 
@@ -426,10 +403,11 @@ struct CommitViolation {
 /// when the draft's edit can break either -- see the tier below -- in every build.
 ///
 /// `made` is what the commit made here, and `changed` the existing nodes the draft changed in place
-/// through the low-level interface (an operand or an operator; `GraphDraft::lowLevelEdits`). The two
-/// together are the tier, and they scope both questions twice over:
+/// through the low-level interface (an operand or an operator; `GraphDraft::lowLevelEdits`). The
+/// two together are the tier, and they scope both questions twice over:
 ///
-///   * whether they are asked at all -- the table of `docs/design/graph-editing/README.cn.md` 8.1 is
+///   * whether they are asked at all -- the table of `docs/design/graph-editing/README.cn.md` 8.1
+///   is
 ///     the rule, and its last row is why `made` cannot be the whole of it: "add an edge, change an
 ///     operator" owes all six checks and makes no node. A commit whose draft made nothing and
 ///     changed nothing owes no answer about either, in any build; one that made a node carrying an
@@ -444,9 +422,9 @@ struct CommitViolation {
 ///
 /// What the two questions are asked *of* is the edit, and `before` is what says that: the graph as
 /// the commit started from, when the commit changed existing nodes in place (the caller that has it
-/// passes it; a commit that only made nodes passes nothing). A pair the graph already left unordered
-/// is what the program already was -- the pass boundary's question, not this commit's -- so an
-/// in-place edit answers for the pairs that were ordered and are not any more.
+/// passes it; a commit that only made nodes passes nothing). A pair the graph already left
+/// unordered is what the program already was -- the pass boundary's question, not this commit's --
+/// so an in-place edit answers for the pairs that were ordered and are not any more.
 ///
 /// A *body* that already reached past its declaration is not the same thing and is not passed over.
 /// The graph a commit starts from is the compiler's own product: the
@@ -462,9 +440,10 @@ struct CommitViolation {
 /// through the callee's *declared* clause, so an old graph read against the program this commit is
 /// publishing measures a callee that grew in this very commit and reports a body the graph never
 /// had. A draft plus the program as it is now, read together, answers about a program nobody
-/// has, and the one commit that states a widened type is exactly where that bites: `tiles` widens `chain` and its caller in the same
-/// commit, and the caller's old version is lawful in the old program and beyond in the new one. A
-/// caller whose two programs are the same object passes nothing, which is the whole answer there.
+/// has, and the one commit that states a widened type is exactly where that bites: `tiles` widens
+/// `chain` and its caller in the same commit, and the caller's old version is lawful in the old
+/// program and beyond in the new one. A caller whose two programs are the same object passes
+/// nothing, which is the whole answer there.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
@@ -480,12 +459,12 @@ std::optional<CommitViolation> commitViolation(
 bool commitAddsAccess(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made);
 
-/// A commit that would publish a graph breaking one of the two promises above: the body stays inside
-/// the effect its own type declares, and two conflicting accesses in one region have a path ordering
-/// them. The refusal is carried whole so that a caller which catches it reports the same diagnostic
-/// the reading named, with the same graph, nodes and source position; `what()` is that line. It is
-/// thrown where the graphs of a commit are read (draft_session.cpp), which is the one place a graph
-/// becomes a graph either commit path can publish.
+/// A commit that would publish a graph breaking one of the two promises above: the body stays
+/// inside the effect its own type declares, and two conflicting accesses in one region have a path
+/// ordering them. The refusal is carried whole so that a caller which catches it reports the same
+/// diagnostic the reading named, with the same graph, nodes and source position; `what()` is that
+/// line. It is thrown where the graphs of a commit are read (draft_session.cpp), which is the one
+/// place a graph becomes a graph either commit path can publish.
 class GraphCommitRefused : public std::runtime_error {
   public:
     explicit GraphCommitRefused(CommitViolation violation)
@@ -517,15 +496,16 @@ class GraphBeforeEditBeyondType : public std::runtime_error {
     explicit GraphBeforeEditBeyondType(std::string what) : std::runtime_error(std::move(what)) {}
 };
 
-/// The clause of the function value that arrives at a node's operand, found the way the graph stores
-/// it: the value is read through the gates the graph puts between an operand and the value the
-/// program handed over, and the operand is picked by the declaration's `Norm`/`With` kind and index.
-/// The one lookup the runtime and the effect summary share, so a call through a value
+/// The clause of the function value that arrives at a node's operand, found the way the graph
+/// stores it: the value is read through the gates the graph puts between an operand and the value
+/// the program handed over, and the operand is picked by the declaration's `Norm`/`With` kind and
+/// index. The one lookup the runtime and the effect summary share, so a call through a value
 /// (`clauseOfCall`) and a higher-order operator's operand (`clauseOfOperand`) read the same place.
-core::FunctionValueClause clauseOfOperand(
-    const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where);
+core::FunctionValueClause
+clauseOfOperand(const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where);
 
-/// The same reading for a call through a function value: the callee is the call's first `with` input.
+/// The same reading for a call through a function value: the callee is the call's first `with`
+/// input.
 core::FunctionValueClause clauseOfCall(const GCGraph &graph, gc_node_ref_t node);
 
 /// Records a refusal as the diagnostic both commit paths carry, and says who asked: `site` is the
