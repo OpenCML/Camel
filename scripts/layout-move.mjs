@@ -537,6 +537,15 @@ function cmakeText (blocksInfo) {
   for (const r of [...all].sort()) L.push(`    \${PROJECT_SOURCE_DIR}/${r}`)
   L.push(')')
   L.push('')
+  // A module's own build file still names `${CMAKE_SOURCE_DIR}/include` for the tree's headers;
+  // that directory no longer holds them. This variable is what those lines name instead: the
+  // catch-all while the transition is on, and nothing once every reference has been cleared.
+  L.push('if(CAMEL_LAYOUT_TRANSITIONAL)')
+  L.push('    set(CAMEL_LAYOUT_TRANSITIONAL_ROOTS ${CAMEL_LAYOUT_CATCHALL_ROOTS})')
+  L.push('else()')
+  L.push('    set(CAMEL_LAYOUT_TRANSITIONAL_ROOTS "")')
+  L.push('endif()')
+  L.push('')
   L.push('set(CAMEL_LAYOUT_ALL_OBJECTS "")')
   L.push('set(CAMEL_LAYOUT_BLOCK_TARGETS "")')
   L.push('')
@@ -870,6 +879,11 @@ function applyMoves (tree, moves) {
   return done
 }
 
+// The two build files a hook rewrites in place. They name the tree's include roots themselves and
+// the hook is what gives those roots their transitional stand-in, so the generic old-root rewrite
+// leaves them to it.
+const HOOK_OWNED_FILES = new Set(['modules/camel_module.cmake', 'tools/libcamel_tool.cmake'])
+
 function applyRewrites (tree, moves, scan) {
   const edits = []
   // The `#include` lines first: they are the ones the compiler would otherwise fail on.
@@ -929,6 +943,17 @@ function applyRewrites (tree, moves, scan) {
         count++
         return r.to
       })
+    }
+    // A build file that names the tree's old include roots -- a module's own check targets do --
+    // names a directory that no longer holds the kernel's or the parser's headers. Those tokens
+    // become the transitional stand-in: the catch-all while the transition is on, nothing after.
+    // The two files a hook rewrites are left alone: their hook says the same thing in place.
+    for (const oldRoot of HOOK_OWNED_FILES.has(rel) ? [] : ['include', 'src']) {
+      const token = `\${CMAKE_SOURCE_DIR}/${oldRoot}`
+      const hits = text.split(token).length - 1
+      if (!hits) continue
+      count += hits
+      text = text.split(token).join('${CAMEL_LAYOUT_TRANSITIONAL_ROOTS}')
     }
     // The module loop names the directory through a variable, so no per-module rule can see it.
     const genericHits = text.match(/modules\/\$\{/g)
