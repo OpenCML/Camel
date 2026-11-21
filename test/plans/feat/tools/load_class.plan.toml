@@ -7,8 +7,17 @@ tags = ["feat", "tools"]
 # is a selftest of one half of it: a shared writable place or a fixed port (check-load-class),
 # and a bound with no margin over the work's own CPU time (the runner's TIMEOUT_MARGIN).
 
+# The self-test's second half judges the runner's margin rule, and that rule is a figure of the
+# test's own CPU time: `/proc/self/stat` fields 16/17, read by `test/tools/child-cpu.mjs`. A host
+# without that file (Windows, macOS) has no CPU figure at all, so the runner says so once
+# (`[WARN] no /proc/self/stat here: a test's timeout margin is skipped`) and skips the judgement --
+# and the fixture that must go red here (`margin/tight.plan.toml`) then passes, so the self-test's
+# assertion `the tight bound ... make one run exit 1` fails on a fact about the host, not about the
+# rule. The entry declares that premise, the same one the runner's warning names, and is skipped
+# where it does not hold.
 [[tests]]
 name = "load_class.shared_place"
+skip_unless = ["node", "test/tools/have-child-cpu.mjs"]
 desc = "Two tests that write one path, a literal port, or a fixed temporary path in a case are reported; the same plan written under ${test_tmp} passes."
 kind = "behavior"
 tool = "node"
