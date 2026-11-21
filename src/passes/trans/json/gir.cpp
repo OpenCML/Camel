@@ -3,6 +3,7 @@
 
 // Export the materialized runtime graph: IDs and references are data, never parsed labels.
 
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/trans/json/gir.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_semantics.h"
@@ -533,3 +534,11 @@ PassMaker jgirPass() {
                 .egraph    = args.getBool("egraph")});
     };
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+
+const PassKernel jsonGirKernel("std::jgir", jgirPass());
+
+} // namespace

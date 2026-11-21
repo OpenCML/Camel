@@ -22,6 +22,7 @@
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/graph_txn.h"
 
 #include <format>
@@ -127,3 +128,14 @@ DraftNodeOwnerTestPass::apply(const camel::runtime::Program *program, std::ostre
     say(os, "ok");
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel draftNodeOwnerKernel(kDraftNodeOwnerTestPass, makePass<DraftNodeOwnerTestPass>());
+
+} // namespace

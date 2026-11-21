@@ -8,6 +8,7 @@
 #include "camel/passes/test/loop_range.h"
 
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/exec_plan.h"
 
 #include <string>
@@ -146,3 +147,15 @@ InterleaveLoopRangeTestPass::apply(const camel::runtime::Program *program, std::
     os << "test::interleave_loop_range: no graph with two loops was found\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel breakLoopRangeKernel(kBreakLoopRangeTestPass, makePass<BreakLoopRangeTestPass>());
+const PassKernel interleaveLoopRangeKernel(kInterleaveLoopRangeTestPass, makePass<InterleaveLoopRangeTestPass>());
+
+} // namespace

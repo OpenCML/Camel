@@ -15,6 +15,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/writings.h"
 
@@ -358,3 +359,18 @@ const camel::runtime::Program *
 SaturatePropsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     return saturateProgramChecked(context_, program, os, sem::NumericPolicy::relaxed());
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel saturateKernel(kSaturateTestPass, makePass<SaturateTestPass>());
+const PassKernel saturateSafeKernel(kSaturateSafeTestPass, makePass<SaturateSafeTestPass>());
+const PassKernel saturateWideKernel(kSaturateWideTestPass, makePass<SaturateWideTestPass>());
+const PassKernel saturateOneRoundKernel(kSaturateOneRoundTestPass, makePass<SaturateOneRoundTestPass>());
+const PassKernel saturatePropsKernel(kSaturatePropsTestPass, makePass<SaturatePropsTestPass>());
+
+} // namespace

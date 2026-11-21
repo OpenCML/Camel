@@ -9,6 +9,7 @@
 #include "camel/passes/test/inlineuse.h"
 
 #include "camel/core/resource_semantics.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/resources.h"
 
@@ -129,3 +130,15 @@ InlineUseDropTestPass::apply(const camel::runtime::Program *program, std::ostrea
     os << "INLINE_USE_DROP erased=" << erased << "\n";
     return session.commit();
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel inlineUseKernel(kInlineUseTestPass, makePass<InlineUseTestPass>());
+const PassKernel inlineUseDropKernel(kInlineUseDropTestPass, makePass<InlineUseDropTestPass>());
+
+} // namespace

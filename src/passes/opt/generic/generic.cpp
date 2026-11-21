@@ -27,6 +27,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
@@ -2162,3 +2163,27 @@ const camel::runtime::Program *simplifyGraph(
         std::format("all {} round(s) changed the program, the last changed {}", maxRounds, where));
     return finish(program);
 }
+
+namespace {
+
+using camel::execute::constantBudgetOf;
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel constantFoldKernel(
+    "std::cxx::fold",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<ConstantFoldPass>(ctx, constantBudgetOf(args));
+    });
+
+const PassKernel commonSubexpressionKernel("std::cxx::cse", makePass<CommonSubexpressionPass>());
+
+const PassKernel deadCodeKernel(
+    "std::cxx::dce",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
+    });
+
+const PassKernel orderReductionKernel("std::cxx::order", makePass<OrderReductionPass>());
+
+} // namespace

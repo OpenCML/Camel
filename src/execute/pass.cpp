@@ -3,96 +3,26 @@
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
-#include "camel/core/array/block_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/mm.h"
-#include "camel/core/mm/block.h"
-#include "camel/core/mm/foreign_handle.h"
-#include "camel/core/mm/profiler.h"
 #include "camel/core/module/module.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/process_exit.h"
-#include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/core/tags.h"
 #include "camel/core/trace.h"
-#include "camel/core/type/array_type_selftest.h"
-#include "camel/core/type/type_identity_selftest.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
-#include "camel/passes/test/arm_loop_regions.h"
-#include "camel/passes/test/bounds.h"
-#include "camel/passes/test/broken_boundary.h"
-#include "camel/passes/test/chunks.h"
-#include "camel/passes/test/commit_checks.h"
-#include "camel/passes/test/context_lifetime.h"
-#include "camel/passes/test/contexts.h"
-#include "camel/passes/test/control.h"
-#include "camel/passes/test/deadwrite.h"
-#include "camel/passes/test/derivatives.h"
-#include "camel/passes/test/draft_erase_unread.h"
-#include "camel/passes/test/draft_node_owner.h"
-#include "camel/passes/test/edges.h"
-#include "camel/passes/test/exec_plan.h"
-#include "camel/passes/test/exhaust_perm_space.h"
-#include "camel/passes/test/graph_faces.h"
-#include "camel/passes/test/graph_release.h"
-#include "camel/passes/test/inlineuse.h"
-#include "camel/passes/test/keepfn.h"
-#include "camel/passes/test/loop_collect.h"
-#include "camel/passes/test/loop_inputs.h"
-#include "camel/passes/test/loop_range.h"
-#include "camel/passes/test/plan_refs.h"
-#include "camel/passes/test/regions.h"
-#include "camel/passes/test/retype.h"
-#include "camel/passes/test/rules.h"
-#include "camel/passes/test/saturate.h"
-#include "camel/passes/test/tangent_space.h"
-#include "camel/passes/test/throw_bad_alloc.h"
-#include "camel/passes/test/undo_selfcheck.h"
-#include "camel/passes/test/writings.h"
-#include "camel/passes/trans/cml/cml.h"
-#include "camel/passes/trans/json/gir.h"
 #include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/resources.h"
 #include "camel/runtime/writings.h"
 #include "camel_pass.h"
-#include "macro/macro.h"
 #include "pass_declarations.h"
 #include "pass_spec.h"
-#include "passes/opt/defun/defunctionalize.h"
-#include "passes/opt/devirtualize/devirtualize.h"
-#include "passes/opt/generic/generic.h"
-#include "passes/opt/inline/inline.h"
-#include "passes/opt/opt/opt.h"
-#include "passes/opt/specialize/specialize.h"
-#include "passes/sched/fastvm/bcdump.h"
-#include "passes/sched/fastvm/fastvm.h"
-#include "passes/sched/fastvm/jit/dump/asmdump.h"
-#include "passes/sched/fastvm/jit/dump/bindump.h"
-#include "passes/sched/fastvm/jit/dump/mirdump.h"
-#include "passes/sched/nodevm/nodevm.h"
-#include "passes/sched/taskflow/taskflow.h"
-#include "passes/test/definitions.h"
-#include "passes/test/facts.h"
-#include "passes/test/fault.h"
-#include "passes/test/impl_body.h"
-#include "passes/test/index_semantics.h"
-#include "passes/test/native_call.h"
-#include "passes/test/resource_transition.h"
-#include "passes/test/resources.h"
-#include "passes/test/semantics.h"
-#include "passes/test/tags.h"
-#include "passes/trans/cpp/cpp_export.h"
-#include "passes/trans/dot/graphviz.h"
-#include "passes/trans/profile/profile.h"
-#include "passes/trans/rulesets/rulesets.h"
-#include "passes/trans/stats/stats.h"
-#include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
 #include "camel/utils/phase_timer.h"
@@ -108,18 +38,11 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
-#include <tuple>
 #include <unordered_map>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
 using camel::runtime::GCGraph;
-
-const camel::runtime::Program *
-NullGraphIRPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    (void)os;
-    return nullptr;
-}
 
 namespace {
 
@@ -138,584 +61,17 @@ std::string specName(const std::string &spec) {
     return trimText(end == std::string::npos ? spec : spec.substr(0, end));
 }
 
-FastVMConfig makeDefaultFastVmJitConfig() {
-#if !ENABLE_FASTVM_JIT
-    // The JIT has a code generator for x86-64 only; in a build without it std::jit is the
-    // bytecode interpreter of std::fvm, with the same results. Said once per process, in the log
-    // (-v) and not as a warning: the same command line must run on every platform, also under
-    // -Werror.
-    static std::once_flag said;
-    std::call_once(said, [] {
-        CAMEL_LOG_WARN_S(
-            "JIT",
-            "std::jit: this build has no native code generator (x86-64 only); the program runs "
-            "on the bytecode interpreter, as under std::fvm.");
-    });
-#endif
-    FastVMConfig config{};
-    config.jitMode           = FastVMConfig::JitMode::OnDemand;
-    config.jitHotThreshold   = 1;
-    config.enableJitTraceMir = false;
-    return config;
-}
-
-std::string
-formatGcIssue(const camel::core::mm::GenerationalAllocatorWithGC::HeapVerificationIssue &issue) {
-    std::ostringstream os;
-    os << issue.message;
-    if (!issue.path.empty())
-        os << " | path=" << issue.path;
-    if (!issue.owner.empty())
-        os << " | owner=" << issue.owner;
-    if (!issue.slotType.empty())
-        os << " | slotType=" << issue.slotType;
-    if (!issue.region.empty())
-        os << " | region=" << issue.region;
-    if (issue.object != 0)
-        os << " | object=0x" << std::hex << issue.object << std::dec;
-    if (issue.target != 0)
-        os << " | target=0x" << std::hex << issue.target << std::dec;
-    return os.str();
-}
-
-class GcSnapshotPass final : public GraphIRPass {
-  public:
-    explicit GcSnapshotPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << camel::core::mm::profiler::snapshotToJson() << '\n';
-        return nullptr;
-    }
-};
-
-class GcVerifyPass final : public GraphIRPass {
-  public:
-    explicit GcVerifyPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        auto issues = camel::core::mm::autoSpace().verifyHeap();
-        if (!issues.empty()) {
-            constexpr size_t maxIssues = 10;
-            std::ostringstream details;
-            const size_t shown = std::min(maxIssues, issues.size());
-            for (size_t i = 0; i < shown; ++i) {
-                details << "\n  [" << i << "] " << formatGcIssue(issues[i]);
-            }
-            if (issues.size() > shown) {
-                details << "\n  ... " << (issues.size() - shown) << " more issue(s)";
-            }
-            throw std::runtime_error(
-                std::format(
-                    "GC heap verification failed with {} issue(s):{}",
-                    issues.size(),
-                    details.str()));
-        }
-        os << "{\"ok\":true,\"kind\":\"gc.verify\"}\n";
-        return program;
-    }
-};
-
-class GcMinorPass final : public GraphIRPass {
-  public:
-    explicit GcMinorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        camel::core::mm::autoSpace().minorGC();
-        os << "{\"ok\":true,\"kind\":\"gc.minor\"}\n";
-        return program;
-    }
-};
-
-class GcMajorPass final : public GraphIRPass {
-  public:
-    explicit GcMajorPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        camel::core::mm::autoSpace().majorGC();
-        os << "{\"ok\":true,\"kind\":\"gc.major\"}\n";
-        return program;
-    }
-};
-
-class GcConfigPass final : public GraphIRPass {
-  public:
-    explicit GcConfigPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << camel::core::mm::profiler::configToJson() << '\n';
-        return program;
-    }
-};
-
-class GcSummaryPass final : public GraphIRPass {
-  public:
-    explicit GcSummaryPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << camel::core::mm::profiler::summaryToText();
-        return program;
-    }
-};
-
-class GcBlocksPass final : public GraphIRPass {
-  public:
-    explicit GcBlocksPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        camel::core::array::debugRunBlockSelfTest();
-        os << std::format(
-            "BLOCK_SELFTEST ok live={} peak={} count={} creations={}\n",
-            camel::core::mm::blockBytesLive(),
-            camel::core::mm::blockBytesPeak(),
-            camel::core::mm::blockLiveCount(),
-            camel::core::mm::blockCreations());
-        return program;
-    }
-};
-
-class ArrayTypeSelfTestPass final : public GraphIRPass {
-  public:
-    explicit ArrayTypeSelfTestPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << "ARRAY_TYPE_SELFTEST ok " << camel::core::type::debugRunArrayTypeSelfTest() << "\n";
-        return program;
-    }
-};
-
-class TypeIdentitySelfTestPass final : public GraphIRPass {
-  public:
-    explicit TypeIdentitySelfTestPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << "TYPE_IDENTITY_SELFTEST ok " << camel::core::type::debugRunTypeIdentitySelfTest()
-           << "\n";
-        return program;
-    }
-};
-
-class GcRememberedSetPass final : public GraphIRPass {
-  public:
-    explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        camel::core::mm::autoSpace().debugRunRememberedSetSelfTest();
-        os << "{\"ok\":true,\"kind\":\"gc.remembered_set\"}\n";
-        return program;
-    }
-};
-
-class GcPoisonPass final : public GraphIRPass {
-  public:
-    explicit GcPoisonPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        camel::core::mm::autoSpace().debugRunPoisonSelfTest();
-        os << "{\"ok\":true,\"kind\":\"gc.poison\"}\n";
-        return program;
-    }
-};
-
-class GcTupleMembersPass final : public GraphIRPass {
-  public:
-    GcTupleMembersPass(const context_ptr_t &ctx, bool mismatch)
-        : GraphIRPass(ctx), mismatch_(mismatch) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        // The collector trusts a value's static type, so a value carrying more members than its
-        // type declares is a memory-safety bug. The reading that put this guard here had five
-        // members against a type that declared zero (a residuals tuple typed by the operator
-        // resolver's empty placeholder); here the disagreement is three against two, which is the
-        // same bug without depending on `split`.
-        //
-        // The pass has two modes and the case runs both. `agree` is the control: two members, a
-        // type of two, the walk runs and the program goes on. `mismatch` is the guard: it must stop
-        // the process with the two counts in the message, and must not return -- a guard that
-        // reports a disagreement and then reads anyway is worse than none, because the read it
-        // allows may be taken as data.
-        const type::TupleType *pair = type::TupleType::create(
-            std::vector<type::Type *>{type::Type::Float(), type::Type::Float()});
-        const size_t members = mismatch_ ? 3 : 2;
-        ::Tuple *value       = ::Tuple::create(members, camel::core::mm::autoSpace());
-        const auto relocate  = [](camel::core::rtdata::Object *object,
-                                  const camel::core::type::Type *,
-                                  const camel::core::rtdata::RefTraceInfo &) { return object; };
-        value->updateRefs(relocate, pair);
-        os << "{\"ok\":true,\"kind\":\"gc.tuple_members\",\"members\":" << members
-           << ",\"declared\":2}\n";
-        return program;
-    }
-
-  private:
-    bool mismatch_;
-};
-
-class GcForeignResourcePass final : public GraphIRPass {
-  public:
-    explicit GcForeignResourcePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        camel::core::mm::debugRunForeignResourceSelfTest(camel::core::mm::autoSpace());
-        os << "{\"ok\":true,\"kind\":\"gc.foreign_resource\"}\n";
-        return program;
-    }
-};
-
-class GcViewsPass final : public GraphIRPass {
-  public:
-    explicit GcViewsPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << camel::core::rtdata::debugRunViewSelfTest() << '\n';
-        return program;
-    }
-};
-
-class GcViewsEscapePass final : public GraphIRPass {
-  public:
-    explicit GcViewsEscapePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        // A debug build aborts inside the store; a release build prints why it did not.
-        os << camel::core::rtdata::debugRunViewEscapeSelfTest() << '\n';
-        return program;
-    }
-};
-
-/// The `growth_budget` parameter of every pass built on the rewrite engine (design principles
-/// 9.3): the nodes specialization and inlining may copy. Its declaration is in stdlib/std.cml.
-GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
-    GrowthBudget budget;
-    const int64_t nodes = args.getInt("growth_budget");
-    budget.nodes        = nodes < 0 ? 0 : static_cast<size_t>(nodes);
-    budget.written      = args.given("growth_budget");
-    budget.passName     = std::move(passName);
-    return budget;
-}
-
-// A file a pass writes to is a `string?` parameter: null (left out) writes none, which the passes
-// read as the empty path.
-std::string pathArgument(const PassArgs &args, const std::string &name) {
-    return args.isNull(name) ? std::string() : args.getString(name);
-}
-
-/// The `constant_budget` parameter of the passes that fold (design principles 9.6): the bytes of
-/// constants folding may materialize in a graph. A negative value is read as 0, which
-/// materializes none of them, the way `growth_budget`'s 0 copies nothing. Its declaration is in
-/// stdlib/std.cml.
-size_t constantBudgetOf(const PassArgs &args) {
-    const int64_t bytes = args.getInt("constant_budget");
-    return bytes < 0 ? 0 : static_cast<size_t>(bytes);
-}
-
-/// The `settle_runs` parameter of `std::opt`: how many runs of the rewrite in a row may each change
-/// the same graph before the pass reports that the rewrite does not settle. It is an internal bound
-/// of the engine, exposed so that a test can prove the report happens at all (a run that changes
-/// nothing ends the loop, so the runaway shows up across runs, not inside one); it is not a tuning
-/// knob, and a value below 1 is refused rather than read as "never report".
-size_t settleRunsOf(const PassArgs &args) {
-    return static_cast<size_t>(args.getInt("settle_runs"));
-}
-
-PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
-    return [config](const context_ptr_t &ctx, const PassArgs &) {
-        return std::make_unique<GraphVizDumpPass>(ctx, config);
-    };
-}
-
-template <class Pass, class... Args> PassMaker makePass(Args &&...args) {
-    return [arguments = std::tuple<Args...>(
-                std::forward<Args>(args)...)](const context_ptr_t &ctx, const PassArgs &) {
-        return std::apply(
-            [&](const auto &...unpacked) { return std::make_unique<Pass>(ctx, unpacked...); },
-            arguments);
-    };
-}
-
-/// `report` is declared in stdlib/std.cml with a default of false: the reading line is for a run
-/// that has to explain where it is, and a program keeps its stderr unless it asks for the line.
-PassMaker macroPass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<MacroRewritePass>(ctx, args.getBool("report"));
-    };
-}
-
-PassMaker optimizePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        OptimizeRewriteConfig config;
-        config.safeFloatingPoint   = args.getBool("safe_fp");
-        config.checkScreens        = args.getBool("check_screens");
-        config.growthBudget        = growthBudgetOf(args, "std::opt");
-        config.constantBudgetBytes = constantBudgetOf(args);
-        config.settleRuns          = settleRunsOf(args);
-        return std::make_unique<OptimizeRewritePass>(ctx, config);
-    };
-}
-
-/// The lowering step itself. `report` is declared in stdlib/std.cml with a default of true: a
-/// program that names the pass is asking what it did, and the pipeline runs it with the parameter
-/// off (`fixedLoweringSteps`), so an inserted step writes nothing on the program's own output.
-PassMaker defunctionalizePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DefunctionalizeRewritePass>(
-            ctx,
-            args.getBool("report"),
-            args.getBool("debug"));
-    };
-}
-
-PassMaker inlinePass(std::optional<InlineTargetStrategy> strategy, std::string passName) {
-    return
-        [strategy, passName = std::move(passName)](const context_ptr_t &ctx, const PassArgs &args) {
-            InlineRewriteConfig config{};
-            if (strategy) {
-                config.inlineStrategy = *strategy;
-            }
-            return std::make_unique<InlineRewritePass>(ctx, config, growthBudgetOf(args, passName));
-        };
-}
-
-PassMaker specializePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<SpecializeRewritePass>(
-            ctx,
-            growthBudgetOf(args, "std::cxx::specialize"));
-    };
-}
-
-PassMaker devirtualizePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DevirtualizeRewritePass>(
-            ctx,
-            growthBudgetOf(args, "std::cxx::devirtualize"));
-    };
-}
-
-PassMaker extractPass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<ExtractPass>(ctx, args.getString("cost"));
-    };
-}
-
-/// The fold pass on its own, with the same `constant_budget` the integrated pipeline reads.
-PassMaker foldPass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<ConstantFoldPass>(ctx, constantBudgetOf(args));
-    };
-}
-
-/// The saturation of the rules library, under the core's name. Like `std::cxx::algebra`,
-/// the laws are the library's (`opt::saturate`); unlike it, the extraction is not made, so
-/// the program stops in the state where a value has several writings.
-PassMaker saturatePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<OptimizeSaturatePass>(
-            ctx,
-            args.getInt("rounds"),
-            args.getBool("strict"));
-    };
-}
-
-PassMaker dcePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
-    };
-}
-
-/// The algebraic simplification under the core's name: the rules library's pass
-/// (`rules::simplify`, or `rules::simplify strict=true` for `safe_fp=true`), so the laws live once,
-/// in stdlib/rules.cml. `neutral_only` has no library equivalent; it keeps the C++ reference
-/// mode (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
-const camel::runtime::Program *runRulesAlgebra(
-    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
-    bool safeFp, std::ostream &os, GraphIRPass *caller);
-
-class RulesAlgebraPass final : public GraphIRPass {
-  public:
-    RulesAlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp)
-        : GraphIRPass(ctx), safeFp_(safeFp) {}
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        return runRulesAlgebra(context_, program, safeFp_, os, this);
-    }
-
-  private:
-    bool safeFp_;
-};
-
-PassMaker algebraPass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        if (args.getBool("neutral_only")) {
-            return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
-        }
-        return std::unique_ptr<GraphIRPass>(
-            std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
-    };
-}
-
-PassMaker profilePass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        camel::profile::ReportOptions options;
-        const int64_t top     = args.getInt("top");
-        options.top           = top < 0 ? 0 : static_cast<size_t>(top);
-        options.hints         = args.getBool("hints");
-        options.report        = args.getBool("report");
-        const int64_t gcStats = args.getInt("gc_stats");
-        return std::make_unique<ProfilePass>(
-            ctx,
-            options,
-            pathArgument(args, "json"),
-            gcStats < 0 ? 0 : static_cast<int>(gcStats),
-            args.getBool("type_stats"),
-            pathArgument(args, "effect_trace"),
-            args.getBool("opstats"),
-            args.getBool("variant_trace"));
-    };
-}
-
-PassMaker fastVmPass(bool jit) {
-    return [jit](const context_ptr_t &ctx, const PassArgs &args) {
-        FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
-        config.statsPath    = pathArgument(args, "stats");
-        if (jit) {
-            const int64_t threshold = args.getInt("hot_threshold");
-            config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);
-        }
-        return std::make_unique<FastVMSchedPass>(ctx, config);
-    };
-}
-
-PassMaker taskflowPass() {
-    return [](const context_ptr_t &ctx, const PassArgs &args) {
-        TaskflowOptions options;
-        options.linear         = args.getBool("linear");
-        options.fanOutAll      = args.getBool("fanout_all");
-        options.diag           = args.getBool("diag");
-        options.segments       = args.getBool("segments");
-        options.bytecode       = args.getBool("bytecode");
-        options.gcStats        = static_cast<int>(args.getInt("gc_stats"));
-        options.gcStress       = args.getBool("gc_stress");
-        options.blockingLeaves = args.getBool("blocking_leaves");
-        auto pass              = std::make_unique<TaskflowExecSchedPass>(ctx);
-        pass->setOptions(options);
-        return pass;
-    };
-}
-
-/// Binds the kernel of one core pass to the module and name its declaration in stdlib/std.cml
-/// gives it. Nothing here declares a pass: the name belongs to the declaration, the parameters
-/// belong to the declaration, and this is only the function that implements it (design
-/// principles 9.3).
-void registerCoreKernel(const char *name, PassMaker make, bool readsTags = false) {
-    PassDescriptor descriptor;
-    descriptor.make      = std::move(make);
-    descriptor.readsTags = readsTags;
-    registerModulePass(std::string("std::") + name, std::move(descriptor));
-}
-
-/// The core's kernels, one per declaration in stdlib/std.cml. A declaration with no kernel is a
-/// pass the language declares and the core does not implement; the pipeline refuses it, and the
-/// guard that resolves every declaration catches it.
+/// The core passes that read tag facts: the dumps show a node's attributes and numeric
+/// permissions, and the optimizing pipeline keeps them across rewrites (CSE combines by their
+/// merge rules). A tag's `read_by` names one of these (or a module's pass that registers itself).
+/// Both names of the pipeline are readers: `std::opt` is the default pipeline's name, and
+/// `std::cxx` covers the C++ passes named under the isolation (`std::cxx::opt`, `std::cxx::fold`)
+/// by the prefix rule that makes a name cover the passes under it.
 ///
-/// The optimization passes are registered under `std::cxx::`, because they are the C++
-/// implementations and the Camel ones are the module `opt`: the two sets are separated by their
-/// names so that a comparison can name both (docs/roadmap.cn.md section 0, P). The
-/// names they answered to before the separation are gone with the separation: `std::opt::fold` and
-/// the rest resolve to nothing, and a pipeline that still writes one is refused as an unknown pass.
-/// The one
-/// name that stays is `std::opt` -- not an alias of a sub-pass but the default pipeline's own name,
-/// the choice "optimize by default", which today selects the C++ implementation.
-void registerCoreKernels() {
-    registerCoreKernel("nop", makePass<NullGraphIRPass>());
-    registerCoreKernel("macro", macroPass());
-    registerCoreKernel("defunctionalize", defunctionalizePass());
-    registerCoreKernel("gir", makeGraphVizPass({}));
-    registerCoreKernel("rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true}));
-    registerCoreKernel("gir_regions", makeGraphVizPass(GraphVizDumpConfig{.regions = true}));
-    registerCoreKernel(
-        "rgir_regions",
-        makeGraphVizPass(GraphVizDumpConfig{.rich = true, .regions = true}));
-    registerCoreKernel("jgir", jgirPass());
-    registerCoreKernel("cml", cmlPass());
-    registerCoreKernel("agir", makeGraphVizPass(GraphVizDumpConfig{.annotateRoles = true}));
-    registerCoreKernel(
-        "argir",
-        makeGraphVizPass(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
-    registerCoreKernel("stats", makePass<GraphStatsPass>());
-    registerCoreKernel("rulesets", [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<RulesetsPass>(
-            ctx,
-            args.isNull("query") ? std::string() : args.getString("query"),
-            args.getBool("forward"),
-            args.getBool("sig"));
-    });
-    registerCoreKernel("profile", profilePass());
-    registerCoreKernel("cpp", makePass<CppDumpPass>());
-    registerCoreKernel("cpp::module_file", makePass<CppModuleDumpPass>());
-    registerCoreKernel("cpp::inspect", makePass<CppInspectDumpPass>());
-    registerCoreKernel("topo_node_seq", makePass<TopoNodeSeqDumpPass>());
-    registerCoreKernel("tfdump", makePass<TfDumpPass>());
-    registerCoreKernel("arraytype", makePass<ArrayTypeSelfTestPass>());
-    registerCoreKernel("identitytype", makePass<TypeIdentitySelfTestPass>());
-    registerCoreKernel("gc::snapshot", makePass<GcSnapshotPass>());
-    registerCoreKernel("gc::verify", makePass<GcVerifyPass>());
-    registerCoreKernel("gc::minor", makePass<GcMinorPass>());
-    registerCoreKernel("gc::major", makePass<GcMajorPass>());
-    registerCoreKernel("gc::config", makePass<GcConfigPass>());
-    registerCoreKernel("gc::summary", makePass<GcSummaryPass>());
-    registerCoreKernel("gc::blocks", makePass<GcBlocksPass>());
-    registerCoreKernel("gc::views", makePass<GcViewsPass>());
-    registerCoreKernel("gc::views_escape", makePass<GcViewsEscapePass>());
-    registerCoreKernel("gc::remembered_set", makePass<GcRememberedSetPass>());
-    registerCoreKernel("gc::foreign_resource", makePass<GcForeignResourcePass>());
-    registerCoreKernel("gc::poison", makePass<GcPoisonPass>());
-    registerCoreKernel("gc::tuple_members", makePass<GcTupleMembersPass>(true));
-    registerCoreKernel("gc::tuple_members_agree", makePass<GcTupleMembersPass>(false));
-    registerCoreKernel("nvm", makePass<NodeVMSchedPass>());
-    registerCoreKernel("fvm", fastVmPass(false));
-    registerCoreKernel("fastvm::bytecode", makePass<BytecodeDumpPass>());
-    registerCoreKernel("fastvm::linked_bytecode", makePass<LinkedBytecodeDumpPass>());
-    registerCoreKernel("fastvm::jit", fastVmPass(true));
-    registerCoreKernel("fastvm::jit_asm", makePass<JitAsmDumpPass>());
-    registerCoreKernel("fastvm::jit_bin", makePass<JitBinaryDumpPass>());
-    registerCoreKernel("fastvm::jit_rmir", makePass<JitRmirDumpPass>());
-    registerCoreKernel("fastvm::jit_mir", makePass<JitMirDumpPass>());
-    registerCoreKernel("taskflow", taskflowPass());
-    registerCoreKernel("cxx::opt", optimizePass());
-    registerCoreKernel("cxx::inline", inlinePass(std::nullopt, "std::cxx::inline"));
-    registerCoreKernel("cxx::small", inlinePass(InlineTargetStrategy::Small, "std::cxx::small"));
-    registerCoreKernel("cxx::arm", inlinePass(InlineTargetStrategy::Arm, "std::cxx::arm"));
-    registerCoreKernel("cxx::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::cxx::hybrid"));
-    registerCoreKernel("cxx::devirtualize", devirtualizePass());
-    registerCoreKernel("cxx::specialize", specializePass());
-    registerCoreKernel("cxx::fold", foldPass());
-    registerCoreKernel("cxx::algebra", algebraPass());
-    registerCoreKernel("cxx::saturate", saturatePass());
-    registerCoreKernel("cxx::extract", extractPass());
-    registerCoreKernel("cxx::cse", makePass<CommonSubexpressionPass>());
-    registerCoreKernel("cxx::dce", dcePass());
-    registerCoreKernel("cxx::order", makePass<OrderReductionPass>());
-    // The core passes that read tag facts: the dumps show a node's attributes and numeric
-    // permissions, and the optimizing pipeline keeps them across rewrites (CSE combines by their
-    // merge rules). A tag's `read_by` names one of these (or a module's pass that registers
-    // itself). Both names of the pipeline are readers: `std::opt` is the default pipeline's name,
-    // and `std::cxx` covers the C++ passes named under the isolation (`std::cxx::opt`,
-    // `std::cxx::fold`) by the prefix rule that makes a name cover the passes under it.
+/// This is the tag registry's answer, not the pipeline's: the kernels are registered by the files
+/// that implement them (camel/execute/pass/registration.h), and what the core still has to say
+/// about a pass here is which of its names read tag facts.
+void declareCoreTagReaders() {
     for (const char *reader :
          {"std::gir",
           "std::rgir",
@@ -729,6 +85,7 @@ void registerCoreKernels() {
         camel::core::tag::declareReader(reader);
     }
 }
+
 
 const std::map<std::string, std::string> passAliases = {
     // The optimization passes are registered under `std::cxx::` -- the C++ implementations, kept
@@ -816,25 +173,19 @@ ModuleAliasRegistry &moduleAliases() {
     return registry;
 }
 
-/// Registers `test::declared`, the test-only pass whose parameters are a declaration and not a
-/// list in this file (defined with the pass itself, below).
-void registerDeclaredParamsTestPass();
-
-/// Binds every kernel of the core to its declaration. Called on first resolution, so a run that
-/// never looks a pass up pays nothing; the registry it fills holds implementations only.
-void ensureCorePasses() {
+/// Declares the core's tag readers on first resolution, so a run that never resolves a pass pays
+/// nothing for the table.
+void ensureCoreTagReaders() {
     static std::once_flag once;
-    std::call_once(once, [] {
-        registerCoreKernels();
-        registerDeclaredParamsTestPass();
-    });
+    std::call_once(once, [] { declareCoreTagReaders(); });
 }
+
 
 /// The implementation bound to the function `module::function`, whichever side of the core it
 /// belongs to. The name, documentation and parameters are the declaration's; this answers only
 /// which function implements it.
 std::optional<PassDescriptor> findImplementation(const std::string &path) {
-    ensureCorePasses();
+    ensureCoreTagReaders();
     auto &registry = passImplementations();
     std::lock_guard lock(registry.mutex);
     auto it = registry.passes.find(path);
@@ -1041,237 +392,6 @@ std::string resolveAlias(const std::string &name) {
     return it == registry.aliases.end() ? name : it->second;
 }
 
-/// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (no variable gates
-/// them).
-const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
-#define TEST_PASS(K, T)                                                                            \
-    {                                                                                              \
-        K, [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {                          \
-            return std::make_unique<T>(ctx);                                                       \
-        }                                                                                          \
-    }
-    static const std::vector<std::pair<std::string, PassFactory>> table = {
-        TEST_PASS(kNativeCallbackTestPass, NativeCallbackTestPass),
-        TEST_PASS(kDropCallArgumentPass, DropCallArgumentTestPass),
-        TEST_PASS(kDraftEraseUnreadTestPass, DraftEraseUnreadTestPass),
-        TEST_PASS(kDraftNodeOwnerTestPass, DraftNodeOwnerTestPass),
-        TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
-        TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
-        TEST_PASS(kOrderOnlyEffectPass, OrderOnlyEffectTestPass),
-        TEST_PASS(kRecalleeArityPass, RecalleeArityTestPass),
-        TEST_PASS(kRecalleeTypePass, RecalleeTypeTestPass),
-        TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
-        TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
-        TEST_PASS(kBreakJoinTestPass, BreakJoinTestPass),
-        // A pass that refuses to be built. The throw is the point: it is what the construction
-        // receiver exists to turn into a named diagnostic instead of a terminate.
-        {
-            kBrokenMakerTestPass,
-            [](const context_ptr_t &) -> std::unique_ptr<GraphIRPass> {
-                throw std::runtime_error("this test pass refuses to be built, and says so");
-            },
-        },
-        TEST_PASS(kIndexSemanticsTestPass, IndexSemanticsTestPass),
-        TEST_PASS(kDefinitionsTestPass, DefinitionsTestPass),
-        TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
-        TEST_PASS(kResourcesTestPass, ResourcesTestPass),
-        TEST_PASS(kResourceTransitionTestPass, ResourceTransitionTestPass),
-        TEST_PASS(kControlTestPass, ControlTestPass),
-        TEST_PASS(kTagsTestPass, TagsTestPass),
-        TEST_PASS(kImplBodyTestPass, ImplBodyTestPass),
-        TEST_PASS(kChunksTestPass, ChunksTestPass),
-        TEST_PASS(kRetypeTrivialTestPass, RetypeTrivialTestPass),
-        TEST_PASS(kRetypeEnumTestPass, RetypeEnumTestPass),
-        TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
-        TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
-        TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
-        TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
-        TEST_PASS(kFoldFunctionTypeTestPass, FoldFunctionTypeTestPass),
-        TEST_PASS(kCamelCommitChecksTestPass, CamelCommitChecksTestPass),
-        TEST_PASS(kCommitOrderTestPass, CommitOrderTestPass),
-        TEST_PASS(kCommitEffectTestPass, CommitEffectTestPass),
-        TEST_PASS(kCommitLegalSpliceTestPass, CommitLegalSpliceTestPass),
-        TEST_PASS(kValueRetypeTwiceTestPass, ValueRetypeTwiceTestPass),
-        TEST_PASS(kCommitExitRegionTestPass, CommitExitRegionTestPass),
-        TEST_PASS(kCommitCycleTestPass, CommitCycleTestPass),
-        TEST_PASS(kCommitAncestorTestPass, CommitAncestorTestPass),
-        TEST_PASS(kCommitTierTestPass, CommitTierTestPass),
-        TEST_PASS(kCommitInPlaceTestPass, CommitInPlaceTestPass),
-        TEST_PASS(kCommitSiblingArmTestPass, CommitSiblingArmTestPass),
-        TEST_PASS(kCommitLoopBodyReadTestPass, CommitLoopBodyReadTestPass),
-        TEST_PASS(kCommitPortTypeTestPass, CommitPortTypeTestPass),
-        TEST_PASS(kCommitMadeGraphPortsTestPass, CommitMadeGraphPortsTestPass),
-        TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
-        TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
-        TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
-        TEST_PASS(kDanglePortTestPass, DanglePortTestPass),
-        TEST_PASS(kNestedBreakTestPass, NestedBreakTestPass),
-        TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
-        TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
-        TEST_PASS(kInlineUseDropTestPass, InlineUseDropTestPass),
-        TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
-        TEST_PASS(kContextsTestPass, ContextsTestPass),
-        TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
-        TEST_PASS(kTangentSpaceTestPass, TangentSpaceTestPass),
-        TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
-        TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
-        TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),
-        TEST_PASS(kEdgesOrderScheduleTestPass, EdgesOrderScheduleTestPass),
-        TEST_PASS(kEdgesOrderSpliceTestPass, EdgesOrderSpliceTestPass),
-        TEST_PASS(kEdgesOrderReplaceTestPass, EdgesOrderReplaceTestPass),
-        TEST_PASS(kEdgesSyncGateTestPass, EdgesSyncGateTestPass),
-        TEST_PASS(kEdgesSyncForkTestPass, EdgesSyncForkTestPass),
-        TEST_PASS(kEdgesSyncForkGateTestPass, EdgesSyncForkGateTestPass),
-        TEST_PASS(kEdgesSyncCycleTestPass, EdgesSyncCycleTestPass),
-        TEST_PASS(kEdgesEditOnlyTestPass, EdgesEditOnlyTestPass),
-        TEST_PASS(kEdgesCommitDiffTestPass, EdgesCommitDifferentialTestPass),
-        TEST_PASS(kEdgesDeliveryCheckTestPass, EdgesDeliveryCheckTestPass),
-        TEST_PASS(kEdgeUsersTestPass, EdgeUsersTestPass),
-        TEST_PASS(kGraphReleaseTestPass, GraphReleaseTestPass),
-        TEST_PASS(kFactNodeTestPass, FactNodeTestPass),
-        TEST_PASS(kWritingsTestPass, WritingsTestPass),
-        TEST_PASS(kDeadWriteTestPass, DeadWriteTestPass),
-        TEST_PASS(kTabledTestPass, TabledTestPass),
-        TEST_PASS(kSaturateTestPass, SaturateTestPass),
-        TEST_PASS(kRulesTestPass, RulesTestPass),
-        TEST_PASS(kRulesGreedyTestPass, RulesGreedyTestPass),
-        TEST_PASS(kSavepointTestPass, SavepointTestPass),
-        TEST_PASS(kUndoSelfCheckTestPass, UndoSelfCheckTestPass),
-        TEST_PASS(kSaturateSafeTestPass, SaturateSafeTestPass),
-        TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
-        TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
-        TEST_PASS(kSaturatePropsTestPass, SaturatePropsTestPass),
-        TEST_PASS(kGraphFacesTestPass, GraphFacesTestPass),
-        TEST_PASS(kRegionsTestPass, RegionsTestPass),
-        TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
-        TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
-        TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
-        TEST_PASS(kPlanRefsTestPass, PlanRefsTestPass),
-        TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
-        TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
-        TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
-        TEST_PASS(kBreakLoopRangeTestPass, BreakLoopRangeTestPass),
-        TEST_PASS(kInterleaveLoopRangeTestPass, InterleaveLoopRangeTestPass),
-        TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
-        TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
-        TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
-        TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
-        TEST_PASS(kFactCheckTestPass, FactCheckTestPass),
-        TEST_PASS(kFactPersistTestPass, FactPersistTestPass),
-    };
-#undef TEST_PASS
-    return table;
-}
-
-/// A test-only pass whose call can be read back: it prints every parameter the declaration
-/// names, the value it was given, whether that value was written, and how many default
-/// expressions have been evaluated in the process. A plan pins the declaration's count with
-/// `declared=`, writes each name in one call, and compares the count of two calls that use the
-/// defaults (equal: a default is evaluated at the declaration, not at each call).
-class PassParamsTestPass final : public GraphIRPass {
-  public:
-    PassParamsTestPass(
-        const context_ptr_t &ctx, const PassArgs &args, std::vector<PassParam> declared)
-        : GraphIRPass(ctx), args_(args), declared_(std::move(declared)) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << "test::params";
-        for (const auto &p : declared_) {
-            os << ' ' << p.name << '=';
-            switch (p.type) {
-            case PassParamType::Bool:
-                os << (args_.getBool(p.name) ? "true" : "false");
-                break;
-            case PassParamType::Int:
-                os << args_.getInt(p.name);
-                break;
-            case PassParamType::Float:
-                os << std::format("{}", args_.getFloat(p.name));
-                break;
-            case PassParamType::String:
-                os << args_.getString(p.name);
-                break;
-            case PassParamType::IntArray:
-                // Not declared by this pass (its list is the registration's own); the case is here
-                // so the switch covers every type a parameter may have.
-                os << args_.text(p.name);
-                break;
-            }
-            os << (args_.given(p.name) ? " (given)" : " (default)");
-        }
-        os << std::format(" declared={}\n", declared_.size());
-        return program;
-    }
-
-  private:
-    PassArgs args_;
-    std::vector<PassParam> declared_;
-};
-
-const PassDescriptor &passParamsTestDescriptor() {
-    static const PassDescriptor descriptor = [] {
-        PassDescriptor d;
-        d.params = {
-            {"flag", PassParamType::Bool, false, "a parameter that must be given", true},
-            {"n",
-             PassParamType::Int,
-             int64_t{5},
-             "an int with a constant expression default",
-             false},
-            {"ratio", PassParamType::Float, 1.5, "a float", false},
-            {"label", PassParamType::String, std::string("x"), "a string", false},
-            {"count", PassParamType::Int, int64_t{7}, "another int", false},
-        };
-        d.make = [declared = d.params](const context_ptr_t &ctx, const PassArgs &args) {
-            return std::make_unique<PassParamsTestPass>(ctx, args, declared);
-        };
-        return d;
-    }();
-    return descriptor;
-}
-
-/// A test-only pass whose parameters are a declaration and not a list in C++: it has none of its
-/// own, so the names, types and defaults the pipeline binds are exactly the ones a `.cml` on the
-/// module search path writes for `test::declared` (`test.cml` in a case's own directory, `-I .`).
-/// It prints every parameter the declaration named, the value the declared type read from the
-/// word, and whether that value was written — which is what a case that checks how a type is read
-/// compares against. A declaration the pipeline cannot read (a type it has no value for, a
-/// default that does not fit it) is refused while the pass is resolved, so nothing here ever asks
-/// for a parameter by a type the declaration did not write.
-class DeclaredParamsTestPass final : public GraphIRPass {
-  public:
-    DeclaredParamsTestPass(const context_ptr_t &ctx, const PassArgs &args)
-        : GraphIRPass(ctx), args_(args) {}
-
-    const camel::runtime::Program *
-    apply(const camel::runtime::Program *program, std::ostream &os) override {
-        const std::vector<std::string> names = args_.names();
-        os << "test::declared";
-        for (const auto &name : names) {
-            os << ' ' << name << '=' << args_.text(name)
-               << (args_.given(name) ? " (given)" : " (default)");
-        }
-        os << std::format(" declared={}\n", names.size());
-        return program;
-    }
-
-  private:
-    PassArgs args_;
-};
-
-/// Registers `test::declared`: in no default pipeline, so naming it is the whole switch, and the
-/// declaration it reads is the one its `.cml` writes (there is no parameter list here to fall
-/// back to, which is the point).
-void registerDeclaredParamsTestPass() {
-    PassDescriptor descriptor;
-    descriptor.make = [](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<DeclaredParamsTestPass>(ctx, args);
-    };
-    registerModulePass("test::declared", std::move(descriptor));
-}
-
 /// A pass a name resolves to: how to make it and the parameters its declaration gives. The
 /// declaration is the standard library's; a pass written in Camel's is its signature's `with`
 /// list.
@@ -1361,26 +481,6 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
     return std::nullopt;
 }
 
-/// Test-only passes: they exist only to be named by a test's pipeline and are in no default
-/// pipeline, so naming one is the whole switch (no variable gates
-/// them).
-std::optional<FoundPass> findTestPass(const std::string &name) {
-    if (name == "test::params") {
-        FoundPass found;
-        found.descriptor = passParamsTestDescriptor();
-        found.params     = found.descriptor.params;
-        return found;
-    }
-    for (const auto &[testName, factory] : testPasses()) {
-        if (name == testName) {
-            FoundPass found;
-            found.descriptor = passWithoutParameters(factory);
-            return found;
-        }
-    }
-    return std::nullopt;
-}
-
 struct ResolvedPass {
     PassFactory factory; // the pass with its parameters bound; null if not usable
     bool known = false;  // the name is a pass
@@ -1443,12 +543,7 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
             }
         }
     }
-    const auto descriptor = [&]() -> std::optional<FoundPass> {
-        if (auto declared = findDescriptor(ctx, parsed.name)) {
-            return declared;
-        }
-        return findTestPass(resolveAlias(parsed.name));
-    }();
+    const auto descriptor = findDescriptor(ctx, parsed.name);
     if (!descriptor) {
         return result;
     }
@@ -1625,7 +720,7 @@ void printPass(
 /// Lists the available passes on stderr. The listing is help text for the command line:
 /// stdout stays reserved for program output and the diagnostics array.
 void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
-    ensureCorePasses();
+    ensureCoreTagReaders();
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
     for (const auto &declaration : camel::execute::detail::passDeclarations("std", ctx)) {
@@ -1658,23 +753,26 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
                 declaration ? declaration->params : descriptor.params);
         }
     }
-    help << std::format("Passes that exist for the tests only:\n");
-    printPass(help, "test::params", "a test pass whose parameters exercise every type", {});
-    for (const auto &[testName, factory] : testPasses()) {
-        (void)factory;
-        printPass(help, testName, {}, {});
-    }
     {
-        // `test::declared` is a test pass whose parameters are a declaration, not a list here:
-        // where `test.cml` is on the module search path, the listing shows the types it declares.
-        const auto declaration =
-            camel::execute::detail::findPassDeclaration("test", "declared", ctx);
-        printPass(
-            help,
-            "test::declared",
-            declaration ? declaration->doc
-                        : "a test pass whose parameters are the declaration `test.cml` writes",
-            declaration ? declaration->params : std::vector<PassParam>{});
+        // The test-only passes are registered like every other pass and are in no declaration file
+        // of the standard library: they are listed from the registry, with whatever `test.cml` the
+        // search path publishes for them says about their parameters where it says anything.
+        help << std::format("Passes that exist for the tests only:\n");
+        auto &registry = passImplementations();
+        std::lock_guard lock(registry.mutex);
+        for (const auto &[path, descriptor] : registry.passes) {
+            if (path.rfind("test::", 0) != 0) {
+                continue;
+            }
+            const std::string function = path.substr(path.find("::") + 2);
+            const auto declaration =
+                camel::execute::detail::findPassDeclaration("test", function, ctx);
+            printPass(
+                help,
+                path,
+                declaration ? declaration->doc : std::string(),
+                declaration ? declaration->params : descriptor.params);
+        }
     }
     help << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {
@@ -3061,22 +2159,6 @@ bool checkPassBoundary(
 
 namespace {
 
-const camel::runtime::Program *runRulesAlgebra(
-    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
-    bool safeFp, std::ostream &os, GraphIRPass *caller) {
-    const PassRunResult result = applyRegisteredPass(
-        program,
-        safeFp ? "rules::simplify strict=true" : "rules::simplify",
-        ctx,
-        os,
-        caller);
-    return result.program;
-}
-
-} // namespace
-
-namespace {
-
 /// A step the pipeline runs ahead of another pass, whether or not the writer names it: a lowering
 /// step is the input a later pass is written against, not another optimization a writer has to
 /// remember to ask for.
@@ -3300,7 +2382,7 @@ tagsNeverReadWarnings(const std::vector<std::string> &passes, const context_ptr_
     // The registry says which of the core's passes read tag facts, and it is built on first
     // use. A run whose pipeline never looks a pass up would otherwise find no core reader at
     // all.
-    ensureCorePasses();
+    ensureCoreTagReaders();
     // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
     // own name): a tag's `read_by` may name either.
     std::vector<std::string> inPipeline;

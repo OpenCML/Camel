@@ -13,6 +13,7 @@
 #include "camel/core/source/manager.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/storage.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
 
@@ -254,3 +255,30 @@ void ProfilePass::noteLoopsOf(const Program &program) {
         }
     }
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+using camel::execute::pathArgument;
+
+const PassKernel profileKernel(
+    "std::profile",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        camel::profile::ReportOptions options;
+        const int64_t top     = args.getInt("top");
+        options.top           = top < 0 ? 0 : static_cast<size_t>(top);
+        options.hints         = args.getBool("hints");
+        options.report        = args.getBool("report");
+        const int64_t gcStats = args.getInt("gc_stats");
+        return std::make_unique<ProfilePass>(
+            ctx,
+            options,
+            pathArgument(args, "json"),
+            gcStats < 0 ? 0 : static_cast<int>(gcStats),
+            args.getBool("type_stats"),
+            pathArgument(args, "effect_trace"),
+            args.getBool("opstats"),
+            args.getBool("variant_trace"));
+    });
+
+} // namespace

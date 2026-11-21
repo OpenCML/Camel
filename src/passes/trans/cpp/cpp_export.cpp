@@ -6,6 +6,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/pass/registration.h"
 
 namespace {
 
@@ -54,3 +55,15 @@ CppDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     }
     return nullptr;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The C++ exporter and the two readings of the module it generated.
+const PassKernel cppDumpKernel("std::cpp", makePass<CppDumpPass>());
+const PassKernel cppModuleDumpKernel("std::cpp::module_file", makePass<CppModuleDumpPass>());
+const PassKernel cppInspectDumpKernel("std::cpp::inspect", makePass<CppInspectDumpPass>());
+
+} // namespace

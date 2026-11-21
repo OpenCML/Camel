@@ -11,6 +11,7 @@
 
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/test/anchor.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/draft_session.h"
@@ -1218,3 +1219,31 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
        << " disagree=" << disagreeingNodes << "\n";
     return next;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel edgesCycleKernel(kEdgesCycleTestPass, makePass<EdgesCycleTestPass>());
+const PassKernel edgesTypeKernel(kEdgesTypeTestPass, makePass<EdgesTypeTestPass>());
+const PassKernel edgesOkKernel(kEdgesOkTestPass, makePass<EdgesOkTestPass>());
+const PassKernel commitConflictKernel(kCommitConflictTestPass, makePass<CommitConflictTestPass>());
+const PassKernel commitMergeKernel(kCommitMergeTestPass, makePass<CommitMergeTestPass>());
+const PassKernel edgesOrderOkKernel(kEdgesOrderOkTestPass, makePass<EdgesOrderOkTestPass>());
+const PassKernel edgesOrderPureKernel(kEdgesOrderPureTestPass, makePass<EdgesOrderPureTestPass>());
+const PassKernel edgesOrderScheduleKernel(kEdgesOrderScheduleTestPass, makePass<EdgesOrderScheduleTestPass>());
+const PassKernel edgesOrderSpliceKernel(kEdgesOrderSpliceTestPass, makePass<EdgesOrderSpliceTestPass>());
+const PassKernel edgesOrderReplaceKernel(kEdgesOrderReplaceTestPass, makePass<EdgesOrderReplaceTestPass>());
+const PassKernel edgesSyncGateKernel(kEdgesSyncGateTestPass, makePass<EdgesSyncGateTestPass>());
+const PassKernel edgesSyncForkKernel(kEdgesSyncForkTestPass, makePass<EdgesSyncForkTestPass>());
+const PassKernel edgesSyncForkGateKernel(kEdgesSyncForkGateTestPass, makePass<EdgesSyncForkGateTestPass>());
+const PassKernel edgesSyncCycleKernel(kEdgesSyncCycleTestPass, makePass<EdgesSyncCycleTestPass>());
+const PassKernel edgesEditOnlyKernel(kEdgesEditOnlyTestPass, makePass<EdgesEditOnlyTestPass>());
+const PassKernel edgesCommitDifferentialKernel(kEdgesCommitDiffTestPass, makePass<EdgesCommitDifferentialTestPass>());
+const PassKernel edgesDeliveryCheckKernel(kEdgesDeliveryCheckTestPass, makePass<EdgesDeliveryCheckTestPass>());
+const PassKernel edgeUsersKernel(kEdgeUsersTestPass, makePass<EdgeUsersTestPass>());
+
+} // namespace

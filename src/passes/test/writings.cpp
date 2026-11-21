@@ -9,6 +9,7 @@
 #include "camel/passes/test/writings.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
@@ -506,3 +507,15 @@ TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     writings.save();
     return session.commit();
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel writingsKernel(kWritingsTestPass, makePass<WritingsTestPass>());
+const PassKernel tabledKernel(kTabledTestPass, makePass<TabledTestPass>());
+
+} // namespace

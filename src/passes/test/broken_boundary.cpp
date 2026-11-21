@@ -12,10 +12,12 @@
 #include "camel/core/context/context.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <stdexcept>
 #include <vector>
 
 using namespace camel::runtime;
@@ -181,3 +183,34 @@ NestedBreakTestPass::apply(const camel::runtime::Program *program, std::ostream 
        << (nested.program == nullptr ? "nothing" : "a program") << '\n';
     return nested.program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel failsWithValueKernel(kFailsWithValueTestPass, makePass<FailsWithValueTestPass>());
+const PassKernel breakJoinKernel(kBreakJoinTestPass, makePass<BreakJoinTestPass>());
+const PassKernel breakExitKernel(kBreakExitTestPass, makePass<BreakExitTestPass>());
+const PassKernel breakPortsKernel(kBreakPortsTestPass, makePass<BreakPortsTestPass>());
+const PassKernel danglePortKernel(kDanglePortTestPass, makePass<DanglePortTestPass>());
+const PassKernel nestedBreakKernel(kNestedBreakTestPass, makePass<NestedBreakTestPass>());
+
+} // namespace
+
+namespace {
+
+using camel::execute::PassKernel;
+
+/// A pass that refuses to be built. The throw is the point: it is what the construction receiver
+/// exists to turn into a named diagnostic instead of a terminate.
+const PassKernel brokenMakerKernel(
+    kBrokenMakerTestPass,
+    [](const camel::core::context::context_ptr_t &,
+       const PassArgs &) -> std::unique_ptr<GraphIRPass> {
+        throw std::runtime_error("this test pass refuses to be built, and says so");
+    });
+
+} // namespace
