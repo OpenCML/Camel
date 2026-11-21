@@ -2975,7 +2975,7 @@ c1ea776970d7ad7f ok test/cases/modules/autodiff/grad_closure.cml
 a09672f5203a533b ok test/cases/modules/autodiff/grad_first_with_parameter.cml
 ea22f54b4603ba6e ok test/cases/modules/autodiff/grad_function_value_branch.cml
 f3362465bbfb422c ok test/cases/modules/autodiff/grad_function_value_container.cml
-6e09e0bf1094368b ok test/cases/modules/autodiff/grad_function_value_parameter.cml
+724b133f88af4d1a ok test/cases/modules/autodiff/grad_function_value_parameter.cml
 60b6fdf556ca493e ok test/cases/modules/autodiff/grad_function_value_passed.cml
 fcea97e5207e5c59 ok test/cases/modules/autodiff/grad_function_value_recursion.cml
 c84b4992ab023744 ok test/cases/modules/autodiff/grad_function_value_static_branch.cml

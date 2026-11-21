@@ -2252,47 +2252,44 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.default"
-desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22); a run-time refusal is a fault, and a run stops at the first fault, so one diagnostic, at the first call in source order. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (10:11). Under: the default run (grad runs with the program)."
+desc = "The differentiated function calls a function value that came in as its own parameter, and the value is a lambda at the call site, so the library's `grad` lifts that call and answers the gradient of `p -> sum(f(f(p)) * p)` with `f = tanh`. The expectation is 0 and not the refusal the pullback engine answers -- `the function is a parameter, or a captured value, of the function being differentiated` is that engine's own precondition and not a rule of the language (design principles 9.9), and a derivative that runs has to print the right numbers. The three numbers are read against the closed form `f(f(p)) + f'(f(p)) * f'(p) * p`, not against a recording of this run. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}"]
-expect_exit = 1
+expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-const errors = text.split('\n').filter((line) => line.includes('[Error]'))
-assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
-assert(errors[0].includes('grad_function_value_parameter.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
-assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 9:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
-assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
+assert(!text.includes('[Error]'), 'the gradient must run, not refuse: ' + text)
+const line = text.trim()
+assert(line.startsWith('[') && line.endsWith(']'), 'no gradient array in the output: ' + text)
+const got = line.slice(1, -1).split(',').map((part) => Number(part.trim()))
+const want = [0.7517121915154015, 0.46158834723002296, -0.6020036316605653]
+assert(got.length === want.length, 'the gradient does not have three members: ' + text)
+for (let i = 0; i < want.length; i++) assert(Math.abs(got[i] - want[i]) < 1e-9, `gradient member ${i} is ${got[i]}, and the closed form is ${want[i]}: ${text}`)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.macro"
-desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22): the expansion collects every refused call, and the run reports one fault, at the first of them in source order, with each further refused call as related information carrying its own position and its own reason. The related position of each names the parameter the function value came in through; the port of the parameter carries the position the parameter is written at (10:11). Under: std::macro (grad built at compile time)."
+desc = "The same program under `std::macro`: `grad` is expanded at compile time and the run prints the three numbers the default entry reads, so the compile-time route and the run-time route agree. The expectation is 0 for the reason the default entry states -- the pullback engine's refusal is its own precondition, not a rule of the language -- and the numbers are read against the closed form `f(f(p)) + f'(f(p)) * f'(p) * p`."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}", "std::macro"]
-expect_exit = 1
+expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-const errors = text.split('\n').filter((line) => line.includes('[Error]'))
-assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_parameter.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
-assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:(11:13|12:22)[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
-assert(text.split('[the function value is chosen here at 9:11]').length === 3, 'each refused call must carry the parameter the value came in through as its related position: ' + text)
-const alsoRefused = text.match(/\[[^\]]*the function is a parameter[^\]]*at 11:22\]/g) || []
-assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
-assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
-assert(text.includes('[the function value is chosen here at 9:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
+assert(!text.includes('[Error]'), 'the gradient must run, not refuse: ' + text)
+const line = text.trim()
+assert(line.startsWith('[') && line.endsWith(']'), 'no gradient array in the output: ' + text)
+const got = line.slice(1, -1).split(',').map((part) => Number(part.trim()))
+const want = [0.7517121915154015, 0.46158834723002296, -0.6020036316605653]
+assert(got.length === want.length, 'the gradient does not have three members: ' + text)
+for (let i = 0; i < want.length; i++) assert(Math.abs(got[i] - want[i]) < 1e-9, `gradient member ${i} is ${got[i]}, and the closed form is ${want[i]}: ${text}`)
 }
 """
 timeout_ms = 12000
