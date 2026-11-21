@@ -52,10 +52,35 @@ namespace camel::standalone {
 
 // ---- The text of a value ----
 
-inline void appendText(std::string &out, int64_t v) { out += std::to_string(v); }
-inline void appendText(std::string &out, int32_t v) { out += std::to_string(v); }
-inline void appendText(std::string &out, double v) { out += camel::utils::floatText(v); }
-inline void appendText(std::string &out, float v) { out += camel::utils::floatText(v); }
+/// A number: one overload per kind of value, not one per C++ type. `int32_t` and `int64_t` beside
+/// each other left an argument whose type is neither -- `long` on an LP64 target, which is the type
+/// the literal of the greatest i64 width takes there -- with two integral conversions of one rank,
+/// and `float`, `double` and `bool` beside them made five: clang-19 with libc++ refused
+/// `println(9223372036854775807, 9223372036854775807)` -- `int64_t` is `long long` there, the
+/// literal's type is `long` (2026-11-21, `agree_with_fvm`, `every_expect_program_links_no_runtime`;
+/// on glibc `int64_t` is `long`, and on MSVC the literal is `long long`, so neither platform read
+/// it). One candidate per kind of value answers every argument, and no conversion is written at the
+/// call to choose between two. A `bool` is not of this kind (it prints `true`/`false`, below), and
+/// an enumeration is not `std::integral`, so the `appendText` a generated enum declares (enum.h,
+/// recursive.h) keeps its own.
+template <typename T>
+    requires(std::integral<T> && !std::same_as<std::remove_cv_t<T>, bool>)
+void appendText(std::string &out, T v) {
+    if constexpr (std::is_signed_v<T>) {
+        out += std::to_string(static_cast<int64_t>(v));
+    } else {
+        out += std::to_string(static_cast<uint64_t>(v));
+    }
+}
+
+/// A float: its own shortest text (number_text.h), the one rule `println`, `string(x)` and a `{}`
+/// of `format` share.
+template <typename T>
+    requires std::floating_point<T>
+void appendText(std::string &out, T v) {
+    out += camel::utils::floatText(v);
+}
+
 inline void appendText(std::string &out, bool v) { out += v ? "true" : "false"; }
 inline void appendText(std::string &out, const Str &v) { out += v.view(); }
 inline void appendText(std::string &out, const Unit &) { out += "null"; }

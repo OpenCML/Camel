@@ -114,7 +114,9 @@ class FusionGroupView {
 
 /// A group as a back end reports it after asking the registry: the attribute that names it and
 /// the node it runs at. `name` is the attribute's value (the name the module registered the
-/// kernel under); an empty `name` means no kernel owns the node.
+/// kernel under); an empty `name` means no kernel owns the node. The view is of the registration
+/// itself, which lives as long as the process does, so it stays valid after the call that filled
+/// this: a back end reports the group to an observer after `runFusionGroup` returns.
 struct FusionGroupRef {
     camel::core::attr::AttrKey key = camel::core::attr::kNoKey;
     std::string_view name;

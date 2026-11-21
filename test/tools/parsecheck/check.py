@@ -80,6 +80,19 @@ import sys
 import tempfile
 from pathlib import Path
 
+# What this tool prints is not all ASCII: the row count `drop_guard` writes is bilingual (`删掉 1 条，
+# 对应文件已不存在`), and the self-test prints that report back. A console whose encoding has no such
+# character -- cp1252 on a Windows runner -- made `print` raise UnicodeEncodeError and the run end
+# with a traceback instead of a reading (2026-11-21, `frontend.ast_snapshot_drop_guard`). The
+# encoding is therefore named here rather than left to the console: UTF-8, which is what reads this
+# tool's stdout (`test/tools/run-tests.mjs` decodes a child's output as utf8), and `replace` as the
+# floor for a stream that still cannot take a character, so no report ends a run by failing to be
+# written. A redirected stream (io.StringIO, a caller's own) has no encoding to set and is left
+# alone.
+for _stream in (sys.stdout, sys.stderr):
+    if _stream is not None and hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent.parent
 GOLDEN = ROOT / "test" / "plans" / "feat" / "parse" / "golden" / "ast_hashes.txt"
