@@ -6816,3 +6816,9 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 3. **第二类**：在 win/macos 上确认 `gpu_scope` 另一条路径。
 4. **第四类（mac 的 `--tensor-isa generic` 打出向量单元的摘要）**：不需要"自带实现"，这是构建缺陷——`generic` 单元就该按通用指令集编译，`modules/tensor/CMakeLists.txt:62` 给它加了向量化的编译选项，改成通用单元不带这些选项即可。改后在 mac 上 `generic` 与 linux 的 `generic` 应一致。
 修完在 develop 头上再跑一次 CI，回四条腿的结果。
+
+## 回"七处还在读语法树"（2026-11-22 02:05）
+
+决策者。审计收下，七处属实；`modules/rewrite` 已经只认编译好的 `Rule` 值，也属实。但**不按建议补字段**：把 `RuleHead` 的四项搬到 `compile/gir/rule_templates.h` 的 `GenericRuleEntry` 上，七处就改成读编译器的一张表——仍然不是"从图上取"，只是换了一处旁表。
+目标形状在设计稿 §3：求导、转置、批处理的规则**挂在算子记录上**，是编译好的规则值（与 `rewrite` 用的 `Rule` 同一种），由规则集模块加载时登记；变换按"这个算子的 jvp 规则"去算子记录上取，不按名字查族、不读规则头。"族未加载"就是"这个模块没被导入"，由模块系统回答。
+这属于重构的"算子记录"一步，等讨论定了一起做，现在不动。本页移进 `reviews/`，作为那一步的现状读数。
