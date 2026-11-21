@@ -426,16 +426,23 @@ const CMAKE_HOOKS = [
   // A module and a tool each name the tree's include roots themselves, and those roots no longer
   // hold the kernel's headers. The transitional catch-all is what keeps them compiling while the
   // references that need a lower layer are listed; without it the drill stops at the first module.
+  // It cannot go in this call: a tool adds its own `src/` afterwards, and a catch-all placed
+  // earlier would answer `state.h` with another module's header before that. So the target is
+  // recorded here and the catch-all is appended to it at the end, after every other root.
   [
     'modules/camel_module.cmake',
     '  target_include_directories(${_objects} PRIVATE\n    ${CMAKE_CURRENT_SOURCE_DIR}\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${ARG_EXTRA_INCLUDES}\n  )',
-    '  set(_camel_module_roots\n    ${CMAKE_CURRENT_SOURCE_DIR}\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${ARG_EXTRA_INCLUDES})\n  if(CAMEL_LAYOUT_TRANSITIONAL)\n    list(APPEND _camel_module_roots ${CAMEL_LAYOUT_CATCHALL_ROOTS})\n  endif()\n  target_include_directories(${_objects} PRIVATE ${_camel_module_roots})',
+    '  set(_camel_module_roots\n    ${CMAKE_CURRENT_SOURCE_DIR}\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${ARG_EXTRA_INCLUDES})\n  target_include_directories(${_objects} PRIVATE ${_camel_module_roots})\n  set_property(GLOBAL APPEND PROPERTY CAMEL_LAYOUT_LATE_CATCHALL_TARGETS ${_objects})',
   ],
   [
     'tools/libcamel_tool.cmake',
     '  target_include_directories(${target} PRIVATE\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/src\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${CMAKE_CURRENT_SOURCE_DIR}\n  )',
-    '  set(_camel_tool_roots\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/src\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${CMAKE_CURRENT_SOURCE_DIR})\n  if(CAMEL_LAYOUT_TRANSITIONAL)\n    list(APPEND _camel_tool_roots ${CAMEL_LAYOUT_CATCHALL_ROOTS})\n  endif()\n  target_include_directories(${target} PRIVATE ${_camel_tool_roots})',
+    '  set(_camel_tool_roots\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/src\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${CMAKE_CURRENT_SOURCE_DIR})\n  target_include_directories(${target} PRIVATE ${_camel_tool_roots})\n  set_property(GLOBAL APPEND PROPERTY CAMEL_LAYOUT_LATE_CATCHALL_TARGETS ${target})',
   ],
+  // Everything a tool has to say about its own roots is said by the time `tools/` is done, so the
+  // catch-all is appended to the recorded targets there: last, where it cannot shadow a header a
+  // target names itself.
+  ['add_subdirectory(tools)', 'add_subdirectory(tools)\ncamel_layout_append_catchall()'],
   // Two modules gave their own object target something the top-level build never did: a version
   // string (`ckpt`), and the CBLAS include directory with the defines that select it (`tensor`).
   // The module target still compiles those sources and the block compiles them too, and a
@@ -644,6 +651,27 @@ function cmakeText (blocksInfo) {
   L.push('function(camel_layout_module_includes _target _visibility)')
   L.push('    target_include_directories(${_target} ${_visibility} ${ARGN})')
   L.push('    target_include_directories(' + BLOCK_PREFIX + 'lib_module_objects ${_visibility} ${ARGN})')
+  L.push('endfunction()')
+  L.push('')
+  // The modules and tools are built by their own object targets, and a tool adds its own `src/`
+  // after `libcamel_tool.cmake` has said what it says. The catch-all is therefore appended here,
+  // last of all, so that a header a target names itself is always answered by that target's own
+  // directory: the transition adds roots under everything the tree already asks for.
+  L.push('function(camel_layout_append_catchall)')
+  L.push('    if(NOT CAMEL_LAYOUT_TRANSITIONAL)')
+  L.push('        return()')
+  L.push('    endif()')
+  L.push('    get_property(_targets GLOBAL PROPERTY CAMEL_LAYOUT_LATE_CATCHALL_TARGETS)')
+  L.push('    if(NOT _targets)')
+  L.push('        return()')
+  L.push('    endif()')
+  L.push('    list(REMOVE_DUPLICATES _targets)')
+  L.push('    foreach(_t IN LISTS _targets)')
+  L.push('        if(NOT TARGET ${_t})')
+  L.push('            continue()')
+  L.push('        endif()')
+  L.push('        target_include_directories(${_t} PRIVATE ${CAMEL_LAYOUT_CATCHALL_ROOTS})')
+  L.push('    endforeach()')
   L.push('endfunction()')
   L.push('')
   return L.join('\n')
@@ -945,27 +973,31 @@ function applyRewrites (tree, moves, scan) {
         return r.to
       })
     }
-    // A build file that names the tree's old include roots -- a module's own check targets do --
-    // names a directory that no longer holds the kernel's or the parser's headers. Those tokens
-    // become the transitional stand-in: the catch-all while the transition is on, nothing after.
-    // The two files a hook rewrites are left alone: their hook says the same thing in place.
-    for (const oldRoot of HOOK_OWNED_FILES.has(rel) ? [] : ['include', 'src']) {
-      const token = `\${CMAKE_SOURCE_DIR}/${oldRoot}`
-      if (!text.includes(token)) continue
-      // A spelled path that still exists is a file the move did not touch --
-      // `${CMAKE_SOURCE_DIR}/src/execute/devices.cpp` names a source in `src/execute`, one of the
-      // directories the table leaves undecided -- so the root it names still holds it. The token on
-      // its own is the root itself (`... /include)` names the directory the kernel's headers left),
-      // and a directory that is still there but no longer holds them is not the same header root.
-      text = text.replace(new RegExp(`${escapeRe(token)}(?![\\w.-])`, 'g'), (match, offset) => {
-        let j = offset + match.length
-        while (j < text.length && !/[\s()"'`,;]/.test(text[j])) j++
-        const tail = text.slice(offset + match.length, j)
-        const spelled = oldRoot + tail
-        if (tail.startsWith('/') && fs.existsSync(path.join(tree, spelled))) return match
-        count++
-        return '${CAMEL_LAYOUT_TRANSITIONAL_ROOTS}'
-      })
+    // A build file that names the tree's old include roots -- a module's own check targets do, and a
+    // tool that links nothing of Camel spells `camel/utils/...` against `${PROJECT_SOURCE_DIR}/
+    // include` -- names a directory that no longer holds the kernel's or the parser's headers.
+    // Those tokens become the transitional stand-in: the catch-all while the transition is on,
+    // nothing after. The two files a hook rewrites are left alone (their hook says the same thing
+    // in place), and so is the top-level file, whose own hook owns the whole call.
+    const guarded = HOOK_OWNED_FILES.has(rel) || rel === 'CMakeLists.txt'
+    for (const prefix of guarded ? [] : ['${CMAKE_SOURCE_DIR}', '${PROJECT_SOURCE_DIR}']) {
+      for (const oldRoot of ['include', 'src']) {
+        const token = `${prefix}/${oldRoot}`
+        if (!text.includes(token)) continue
+        // A spelled path that still exists is a file the move did not touch --
+        // `${CMAKE_SOURCE_DIR}/src/execute/devices.cpp` names a source in `src/execute`, one of the
+        // directories the table leaves undecided -- so the root it names still holds it. The token
+        // on its own is the root itself (`.../include)` names the directory the kernel's headers
+        // left), and a directory that is still there but no longer holds them is not that root.
+        text = text.replace(new RegExp(`${escapeRe(token)}(?![\\w.-])`, 'g'), (match, offset) => {
+          let j = offset + match.length
+          while (j < text.length && !/[\s()"'`,;]/.test(text[j])) j++
+          const tail = text.slice(offset + match.length, j)
+          if (tail.startsWith('/') && fs.existsSync(path.join(tree, oldRoot + tail))) return match
+          count++
+          return '${CAMEL_LAYOUT_TRANSITIONAL_ROOTS}'
+        })
+      }
     }
     // The module loop names the directory through a variable, so no per-module rule can see it.
     const genericHits = text.match(/modules\/\$\{/g)
