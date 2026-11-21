@@ -953,12 +953,15 @@ function applyRewrites (tree, moves, scan) {
       if (!text.includes(token)) continue
       // A spelled path that still exists is a file the move did not touch --
       // `${CMAKE_SOURCE_DIR}/src/execute/devices.cpp` names a source in `src/execute`, one of the
-      // directories the table leaves undecided -- so the root it names still holds it.
+      // directories the table leaves undecided -- so the root it names still holds it. The token on
+      // its own is the root itself (`... /include)` names the directory the kernel's headers left),
+      // and a directory that is still there but no longer holds them is not the same header root.
       text = text.replace(new RegExp(`${escapeRe(token)}(?![\\w.-])`, 'g'), (match, offset) => {
         let j = offset + match.length
         while (j < text.length && !/[\s()"'`,;]/.test(text[j])) j++
-        const spelled = (oldRoot + text.slice(offset + match.length, j)).replace(/^\/+/, '')
-        if (spelled && fs.existsSync(path.join(tree, spelled))) return match
+        const tail = text.slice(offset + match.length, j)
+        const spelled = oldRoot + tail
+        if (tail.startsWith('/') && fs.existsSync(path.join(tree, spelled))) return match
         count++
         return '${CAMEL_LAYOUT_TRANSITIONAL_ROOTS}'
       })
