@@ -7999,6 +7999,7 @@ correctly is what the case in `test/cases/compile/transforms/layer_norm_jvp.cml`
 isolation of that difference is written up in the lane's report rather than guessed at here.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `layer_norm_neutral([1.0, 2.0] as float[], 1.0)` gives `[1.0, 1.0]`
 
 ### The forward rule of `^` (a power)
 
