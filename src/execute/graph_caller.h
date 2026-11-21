@@ -9,7 +9,7 @@
  * pipeline's. So this is an interface, not a dependency: the reference executor implements it
  * (`src/passes/sched/nodevm/nodevm.cpp`) and installs it while the program loads, and
  * `src/execute/camel_pass.cpp` never names the executor it runs a pass on
- * (docs/handover/plans/2026-11-22-refactor-stage0.cn.md, 0.2).
+.
  */
 
 #pragma once
@@ -29,12 +29,9 @@ namespace camel::execute::detail {
 /// reads them from the closure nodes of its graph, which only a caller holding the function value
 /// can fill; a caller that passes no closure leaves them empty.
 using GraphCaller = slot_t (*)(
-    const camel::core::context::context_ptr_t &ctx,
-    const camel::runtime::Program *program,
-    camel::runtime::GCGraph *graph,
-    std::span<const slot_t> arguments,
-    std::span<const slot_t> withArguments,
-    std::span<const slot_t> closure);
+    const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *graph, std::span<const slot_t> arguments,
+    std::span<const slot_t> withArguments, std::span<const slot_t> closure);
 
 /// Installs the caller. Called once, by the reference executor, while the program loads.
 void setGraphCaller(GraphCaller caller);

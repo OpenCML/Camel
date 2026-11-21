@@ -60,9 +60,10 @@ struct DeclarationFile {
 /// The reader of one declaration file: `<module>.cml` at `path`, with `module` for the reports it
 /// writes. Reading a `.cml` is the parse layer's work, so this is an interface, not a dependency:
 /// `src/parse/pass_declarations.cpp` implements it and installs it when the program loads, and no
-/// file of the pipeline knows the parser (docs/handover/plans/2026-11-22-refactor-stage0.cn.md,
+/// file of the pipeline knows the parser (
 /// 0.2).
-using DeclarationFileReader = DeclarationFile (*)(const std::string &module, const std::string &path);
+using DeclarationFileReader =
+    DeclarationFile (*)(const std::string &module, const std::string &path);
 
 /// Installs the reader. Called once, by the parse layer, while the program loads.
 void setDeclarationFileReader(DeclarationFileReader reader);
@@ -74,13 +75,13 @@ DeclarationFileReader declarationFileReader();
 /// The pass declarations of `module` (`std` for the core), read from `<module>.cml` under the
 /// context's module search paths. Empty when the module has no declaration file, and empty when
 /// the file could not be read: `declarationProblem` is what says which of the two it was.
-const std::vector<PassDeclaration> &passDeclarations(
-    const std::string &module, const camel::core::context::context_ptr_t &ctx);
+const std::vector<PassDeclaration> &
+passDeclarations(const std::string &module, const camel::core::context::context_ptr_t &ctx);
 
 /// Why the declarations of `module` could not be read, or nothing when they were read (or when
 /// the module has no declaration file at all).
-std::optional<DeclarationProblem> declarationProblem(
-    const std::string &module, const camel::core::context::context_ptr_t &ctx);
+std::optional<DeclarationProblem>
+declarationProblem(const std::string &module, const camel::core::context::context_ptr_t &ctx);
 
 /// The declaration of `name` in `module`, or null.
 const PassDeclaration *findPassDeclaration(
@@ -93,8 +94,8 @@ const PassDeclaration *findPassDeclaration(
 bool passDeclarationApplies(const PassDeclaration &declaration, std::string &why);
 
 /// The file the declarations of `module` are read from, or empty when there is none.
-std::string moduleDeclarationPath(
-    const std::string &module, const camel::core::context::context_ptr_t &ctx);
+std::string
+moduleDeclarationPath(const std::string &module, const camel::core::context::context_ptr_t &ctx);
 
 /// Every file `moduleDeclarationPath` looks at, in order. A pass whose declarations cannot be
 /// found is refused with this list: the pipeline never falls back to a kernel without the
