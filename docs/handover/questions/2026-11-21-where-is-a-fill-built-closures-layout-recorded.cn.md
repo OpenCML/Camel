@@ -46,3 +46,25 @@
 - 判据：`split_of_jvp_of_sq_backward` 的 `closureType` 从 `(f32,)` → `(f32, f32)`；`jvp_vjp_f` → `1.0 / 2.0 / 3.0`；`grad(grad(x ↦ x⁴))(2) = 48`；`floatgate.f32_closure_member_ports` 与 `residuals_in_the_closure` 逐字 PASS；`4296/4291/0/5` 不变。
 
 **若走路 A 时发现 `FunctionType` 的 intern 键里必须包含闭包类型（否则两个只差闭包类型的函数值会被 intern 成同一个）⇒ 那正是这条路要付的代价，如实报出，不绕。**
+
+## 四、本页默认已作废（同日撤回）
+
+落地的车道量到两件事，**推翻上面那条默认**：
+
+1. **`FunctionType::intern` 的键里没有闭包位置**：`src/core/type/composite/func.cpp:197-257` 的键是 `withCount / 参数数 / exitType / hasNames / hasRest / withWithRest / constas / withConst / resources(全套) / 参数与名`；`Parts`（`func.h:308-323`）里**没有**闭包字段。**只加 `withClosureType` 而不动键，两个只差闭包类型的签名会被 intern 成同一个 —— 那正是本页第三节担心的「静默合并」。**
+2. **`include/camel/core/type/composite/func.h:14-16` 有一条成文的设计声明，与本页第二节理由**反向**：**
+
+   > Captures are not part of a function type: which names a graph captures is a fact about the
+   > graph (GraphDraft::captureNames, GCGraph::captureNames), not about the type of its values.
+
+**⇒ 而本页第二节理由 1 把方向读反了**：`jvp.cpp:957`/`:960` 在**图级**设闭包类型，**正是这条声明的体现**（闭包布局是关于**图**的事实，不是关于类型的），**不是**「类型层缺一个入口」的反证。
+
+**裁定改为路 B**（不新增类型层 API）：
+
+- 让**闭包构造 Fill 所在的那张图**记住它造的闭包布局：`GCGraph::closureType` 与 `draft.setClosureType(...)` **都是现成的**，`jvp.cpp:957/960` 在用的就是它们；
+- `jvp.cpp` 的闭包构造 Fill 分支在**体内造的闭包**上调 `draft.setClosureType(...)`，根的 Port 捕获那条路不动；
+- **`FunctionType` 一字不动，`func.h:14-16` 那条注释也不动 —— 它是对的。**
+
+**路 B 的代价是真实的，而它是**设计**，不是缺陷**：同一个函数类型的两个值可以有不同闭包布局。**这正是 `func.h:14-16` 说的形状。**
+
+**本页要记的教训**：一条成文的设计声明先于一份裁定页的默认。下一次再遇到「类型层少一个入口」，先 `git grep` 那个类型自己的头文件开头有没有成文声明 —— **它常常已经把答案写在那里，而且方向与「缺一个 API」相反。**
