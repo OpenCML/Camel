@@ -830,34 +830,125 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gelu_grad.f64"
-desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
+desc = "The gradient of `gelu` on an f64 array, element by element, against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The three numbers are pinned within the error bound of the composition that computes them, not bit for bit (design principles 7.1: a transcendental is promised a written error bound in ulps, not the same bits on every device). Forward, at x = ±1: 0.5 x (1 + tanh(u)) with u = kScale (x + 0.044715 x^3) -- the tangent's declared 4 ulp, the polynomial's five roundings at 2.5 ulp amplified by (1 - t^2) u / t = 1.63 into t, and two roundings of the outer product: 3.3 ulp, declared 6. Gradient: t enters 1 - t^2, whose own error is 2t / (1 - t^2) = 2.55 times t's, and at x = -1 the terms +0.1588 and -0.2418 cancel into -0.0830, so the second term is 2.9 times the result and the composition is 51 ulp there (3.2 at x = +1): declared 64. The f32 gradient beside it is the arm that was right all along -- the same expression at 24 bits, so the same counts in f32 ulps (its bits are pinned shape by shape by `gelu_grad.bits`; this entry pins its value)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_f64.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "gelu_grad_f64 forward=[-0.15880800939172324, 0.0, 0.8411919906082768]\ngelu_grad_f64 grad=[-0.08296408384578255, 0.5, 1.0829640838457826]\ngelu_grad_f32 grad=[-0.08296409, 0.5, 1.0829641]\n"
+verify_script = """
+const numbersOf = (line, label) => {
+    const prefix = label + '=['
+    assert(
+        line.startsWith(prefix) && line.endsWith(']'),
+        'expected `' + label + '=[...]`, got: ' + line
+    )
+    return line.slice(prefix.length, -1).split(',').map((text) => Number(text.trim()))
+}
+const within = (values, declared, bound, bits, what) => {
+    assert(
+        values.length === declared.length,
+        what + ': ' + values.length + ' elements, the declared value has ' + declared.length
+    )
+    values.forEach((value, index) => {
+        assert(
+            ulp(value, declared[index], bound, bits),
+            what + '[' + index + '] is ' + value + ', declared ' + declared[index] + ': ' +
+                ulpDistance(value, declared[index], bits).toExponential(3) +
+                ' ulp apart (bound ' + bound + ', derived in this entry desc)'
+        )
+    })
+}
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.length === 3, 'expected three lines, got ' + lines.length)
+within(numbersOf(lines[0], 'gelu_grad_f64 forward'), [-0.15880800939172324, 0.0, 0.8411919906082768], 6, 53, 'gelu forward')
+within(numbersOf(lines[1], 'gelu_grad_f64 grad'), [-0.08296408384578255, 0.5, 1.0829640838457826], 64, 53, 'gelu grad')
+within(numbersOf(lines[2], 'gelu_grad_f32 grad'), [-0.08296409, 0.5, 1.0829641], 64, 24, 'gelu grad (f32)')
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
 name = "erf_grad.f64"
-desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The numbers are pinned within the composition's error bound (design principles 7.1): the forward is `erf`'s own declared 4 ulp plus the one rounding of the answer, declared 6; the gradient is `kScale * exp(-x^2)` at |x| = 1, where the exponent is exact, so the declared 2 ulp of `exp` plus the two roundings of the product -- 3.5 ulp in the result's own grid, the exp's being an ulp of 0.3679 against a result of 0.4151 -- declared 8. The f32 gradient beside it is the same expression at 24 bits, bounded at the same 8 counts of f32 ulps."
 kind = "behavior"
 case = "../../../cases/modules/tensor/erf_grad_f64.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "erf_grad_f64 forward=[-0.8427007929497149, 0.0, 0.8427007929497149]\nerf_grad_f64 grad=[0.4151074974205947, 1.1283791670955126, 0.4151074974205947]\nerf_grad_f32 grad=[0.41510752, 1.1283792, 0.41510752]\n"
+verify_script = """
+const numbersOf = (line, label) => {
+    const prefix = label + '=['
+    assert(
+        line.startsWith(prefix) && line.endsWith(']'),
+        'expected `' + label + '=[...]`, got: ' + line
+    )
+    return line.slice(prefix.length, -1).split(',').map((text) => Number(text.trim()))
+}
+const within = (values, declared, bound, bits, what) => {
+    assert(
+        values.length === declared.length,
+        what + ': ' + values.length + ' elements, the declared value has ' + declared.length
+    )
+    values.forEach((value, index) => {
+        assert(
+            ulp(value, declared[index], bound, bits),
+            what + '[' + index + '] is ' + value + ', declared ' + declared[index] + ': ' +
+                ulpDistance(value, declared[index], bits).toExponential(3) +
+                ' ulp apart (bound ' + bound + ', derived in this entry desc)'
+        )
+    })
+}
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.length === 3, 'expected three lines, got ' + lines.length)
+within(numbersOf(lines[0], 'erf_grad_f64 forward'), [-0.8427007929497149, 0.0, 0.8427007929497149], 6, 53, 'erf forward')
+within(numbersOf(lines[1], 'erf_grad_f64 grad'), [0.4151074974205947, 1.1283791670955126, 0.4151074974205947], 8, 53, 'erf grad')
+within(numbersOf(lines[2], 'erf_grad_f32 grad'), [0.41510752, 1.1283792, 0.41510752], 8, 24, 'erf grad (f32)')
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
 name = "erfc_grad.f64"
-desc = "The gradient of `erfc` on an f64 array, element by element: `erfc`'s rule is `erf`'s with the incoming gradient negated, so this is -2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. The `neg_erf` line is the identity that says the rule runs the right kernel: erfc = 1 - erf makes the two gradients exact negatives, so every element of their sum is 0.0. Before this was fixed it read [0.0, 1.570800649e-314, 0.0] -- the erf reading with its sign turned, a f32 answer hidden in the low half of each f64 element -- instead of [-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+desc = "The gradient of `erfc` on an f64 array, element by element: `erfc`'s rule is `erf`'s with the incoming gradient negated, so this is -2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. The `neg_erf` line is the identity that says the rule runs the right kernel: erfc = 1 - erf makes the two gradients exact negatives, so every element of their sum is 0.0 -- and a zero is a value 7.1 promises exactly, sign included, so that line is still compared bit for bit. Before this was fixed it read [0.0, 1.570800649e-314, 0.0] -- the erf reading with its sign turned, a f32 answer hidden in the low half of each f64 element -- instead of [-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]. The other two lines are pinned within the composition's error bound (design principles 7.1): the forward is `erfc`'s declared 4 ulp plus the one rounding of the answer, declared 6; the gradient is `erf`'s expression with the sign of the incoming gradient turned (an exact negation), so the same 8 ulp -- `exp`'s declared 2 plus the two roundings of the product, at a result whose grid is 0.885 of the exp's. The f32 gradient beside it is the same expression at 24 bits, bounded at the same 8 counts of f32 ulps."
 kind = "behavior"
 case = "../../../cases/modules/tensor/erfc_grad_f64.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "erfc_grad_f64 forward=[1.842700792949715, 1.0, 0.15729920705028513]\nerfc_grad_f64 grad=[-0.4151074974205947, -1.1283791670955126, -0.4151074974205947]\nerfc_grad_f64 neg_erf=[0.0, 0.0, 0.0]\nerfc_grad_f32 grad=[-0.41510752, -1.1283792, -0.41510752]\n"
+verify_script = """
+const numbersOf = (line, label) => {
+    const prefix = label + '=['
+    assert(
+        line.startsWith(prefix) && line.endsWith(']'),
+        'expected `' + label + '=[...]`, got: ' + line
+    )
+    return line.slice(prefix.length, -1).split(',').map((text) => Number(text.trim()))
+}
+const within = (values, declared, bound, bits, what) => {
+    assert(
+        values.length === declared.length,
+        what + ': ' + values.length + ' elements, the declared value has ' + declared.length
+    )
+    values.forEach((value, index) => {
+        assert(
+            ulp(value, declared[index], bound, bits),
+            what + '[' + index + '] is ' + value + ', declared ' + declared[index] + ': ' +
+                ulpDistance(value, declared[index], bits).toExponential(3) +
+                ' ulp apart (bound ' + bound + ', derived in this entry desc)'
+        )
+    })
+}
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.length === 4, 'expected four lines, got ' + lines.length)
+within(numbersOf(lines[0], 'erfc_grad_f64 forward'), [1.842700792949715, 1.0, 0.15729920705028513], 6, 53, 'erfc forward')
+within(numbersOf(lines[1], 'erfc_grad_f64 grad'), [-0.4151074974205947, -1.1283791670955126, -0.4151074974205947], 8, 53, 'erfc grad')
+const negative = numbersOf(lines[2], 'erfc_grad_f64 neg_erf')
+negative.forEach((value, index) => {
+    assert(
+        ulp(value, 0.0, 0, 53),
+        'erfc grad + erf grad must be exactly 0.0 in [' + index + '], got ' + value + ' (7.1 promises a zero exactly)'
+    )
+})
+within(numbersOf(lines[3], 'erfc_grad_f32 grad'), [-0.41510752, -1.1283792, -0.41510752], 8, 24, 'erfc grad (f32)')
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

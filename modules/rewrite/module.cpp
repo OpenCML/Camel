@@ -1827,22 +1827,388 @@ double checkEpsilon(TypeCode dtype) {
     }
 }
 
+// ---- the reference's own precision: an explicit wide type, the same on every platform ---------
+//
+// A rule that asks for `refine_accuracy` is judged by the error of each side against this
+// reference, not by bits, so the reference must hold MORE precision -- and MORE range -- than the
+// element type being judged (design principles 7.1: a transcendental promises a written error
+// bound in ulps, not the same bits on every device, and the special values exactly). A `long
+// double` is that only where the platform's long double is wider than double: x86-64 Linux, where
+// it is 80 bits with a 15-bit exponent. On the MSVC ABI (the Windows leg builds with clang-cl) and
+// on Apple arm64 it is 53 bits, exactly the width of the `float` being judged, so the judged
+// value's own rounding read as the reference's "error" and an accurate rule was refuted on those
+// two legs alone: `refuted accurate_log1p ... its error 7.28033e-16 exceeds the original's 0`.
+// The reference is therefore an explicit type here, on every platform: an unevaluated sum of two
+// doubles times a power of two -- 106 bits of mantissa and a range of 2^+-100000, against f64's 53
+// bits and 2^+-1022. One declared precision and one declared range, no dependence on what
+// `long double` happens to be on the machine running the check.
+//
+// Both halves of that matter, and the range is not a luxury: the reference's job is to hold the
+// value the element type rounded AWAY from. A softmax over `{..., 853.383}` draws `exp(-854)`,
+// which is 1e-371 -- an ordinary intermediate the f32 element type answers with 0, and 80-bit
+// `long double` held it on this platform. A type with only the double range answers 0 there, which
+// makes the reference agree with the wrong side and REFUTES a rewrite that is exactly right
+// (measured: `refuted array_log_softmax_of_softmax ... at (tensor<f32> [3] {-0.5, 832.754,
+// 1e-40}, 0): its error inf exceeds the original's 0`). So the scale is part of the type.
+//
+// Every step is the usual Knuth/Dekker pair -- `twoSum` for the exact sum of two doubles,
+// `twoProduct` through `std::fma` for the exact product -- on normalized mantissas, and each
+// function is a series after an exact reduction of its argument, cut where its next term falls
+// below 2^-106 of the result. There is no `long double` left in the reference: what it computes is
+// the same number on a Linux runner, a Windows runner and an arm64 Mac.
+namespace wide {
+
+/// The exact sum of two doubles: `sum + error` is `a + b` with no rounding at all.
+inline void twoSum(double a, double b, double &sum, double &error) {
+    sum                 = a + b;
+    const double shifted = sum - a;
+    error               = (a - (sum - shifted)) + (b - shifted);
+}
+
+/// The exact sum of two doubles when `|a| >= |b|`: the fast case of `twoSum`.
+inline void quickTwoSum(double a, double b, double &sum, double &error) {
+    sum   = a + b;
+    error = b - (sum - a);
+}
+
+/// ln 2 split into a 32-bit head and a tail: `k * head` is exact for every `|k|` a reduction of an
+/// f64 argument can reach, so `k * (head + tail)` carries the reduction's own rounding no further.
+constexpr double kLn2Head = 6.93147180369123816490e-01;
+constexpr double kLn2Tail = 1.90821492927058770002e-10;
+
+/// The range this type declares, as a power of two: 2^-100000 to 2^100000, about 10^-30103 to
+/// 10^30103. It is far past f32 (10^-45 .. 10^38) and f64 (10^-308 .. 10^308) on purpose -- see
+/// the header above -- and bounded so that a scale is an `int` and no step can wrap it.
+constexpr int64_t kScaleLimit = 100000;
+
+/// A power of two kept inside the declared range.
+inline int clampedScale(int64_t digits) {
+    return static_cast<int>(std::clamp<int64_t>(digits, -kScaleLimit, kScaleLimit));
+}
+
+} // namespace wide
+
+/// A number as `(hi + lo) * 2^scale`, with `hi` leading in `[1, 2)` and `lo` the term below it:
+/// 106 bits of mantissa over a range of 2^+-100000, on every platform.
+class WideReal {
+  public:
+    WideReal() = default;
+    /// A double is exact in this type.
+    WideReal(double value) { assign(value); }
+    /// The components as given: `hi` and `lo` at `scale`, not renormalized (see `wideNormalize`).
+    WideReal(double hi, double lo, int scale) : hi_(hi), lo_(lo), scale_(scale) {}
+
+    static WideReal infinity() {
+        WideReal out;
+        out.assign(std::numeric_limits<double>::infinity());
+        return out;
+    }
+    static WideReal quietNaN() {
+        WideReal out;
+        out.assign(std::numeric_limits<double>::quiet_NaN());
+        return out;
+    }
+
+    double hi() const { return hi_; }
+    double lo() const { return lo_; }
+    int scale() const { return scale_; }
+    /// The value rounded once to the nearest double: `hi + lo` is one correctly rounded addition of
+    /// the exact sum, and the scaling is exact unless the answer leaves the double range -- which
+    /// is exactly what rounding into a double does. The specials come out of it too.
+    double toDouble() const { return std::scalbn(hi_ + lo_, scale_); }
+
+    bool isNaN() const { return std::isnan(hi_); }
+    bool isInf() const { return std::isinf(hi_); }
+    bool isFinite() const { return std::isfinite(hi_); }
+    /// The leading half of a normalized value is zero for the number zero and for nothing else.
+    bool isZero() const { return hi_ == 0.0; }
+    /// -1 or 1; a NaN has no sign (its leading half compares false both ways).
+    int sign() const { return hi_ < 0.0 ? -1 : 1; }
+
+  private:
+    void assign(double value) {
+        if (!std::isfinite(value) || value == 0.0) {
+            hi_    = value;
+            lo_    = 0.0;
+            scale_ = 0;
+            return;
+        }
+        const int exponent = std::ilogb(value);
+        hi_                = std::scalbn(value, -exponent);
+        lo_                = 0.0;
+        scale_             = wide::clampedScale(exponent);
+    }
+
+    double hi_ = 0.0;
+    double lo_ = 0.0;
+    int scale_ = 0;
+};
+
+/// `(hi + lo) * 2^scale` in the type's own form: `hi` leading in `[1, 2)`, `lo` below it, and the
+/// shift of the leading bit folded into the scale.
+inline WideReal wideNormalize(double hi, double lo, int64_t scale) {
+    if (!std::isfinite(hi)) {
+        return WideReal(hi, 0.0, 0);
+    }
+    if (hi == 0.0) {
+        hi = lo;
+        lo = 0.0;
+        if (hi == 0.0) {
+            return WideReal(0.0, 0.0, 0);
+        }
+    }
+    const int exponent = std::ilogb(hi);
+    return WideReal(std::scalbn(hi, -exponent), std::scalbn(lo, -exponent),
+                    wide::clampedScale(int64_t(scale) + exponent));
+}
+
+/// `a * 2^digits`, exactly.
+inline WideReal wideShift(const WideReal &a, int64_t digits) {
+    if (!a.isFinite() || a.isZero()) {
+        return a;
+    }
+    return wideNormalize(a.hi(), a.lo(), int64_t(a.scale()) + digits);
+}
+
+/// `b`'s components expressed on `a`'s scale. What is more than four thousand binades below the
+/// other term cannot change it at 106 bits, so it underflows to zero here -- the rounding this type
+/// makes, and the reason a sum is scale-invariant.
+inline void wideOnScale(const WideReal &a, const WideReal &b, double &hi, double &lo) {
+    const int64_t delta = int64_t(b.scale()) - int64_t(a.scale());
+    if (delta > 4000 || delta < -4000) {
+        hi = 0.0;
+        lo = 0.0;
+        return;
+    }
+    hi = std::scalbn(b.hi(), static_cast<int>(delta));
+    lo = std::scalbn(b.lo(), static_cast<int>(delta));
+}
+
+/// `a + b`, the special values included: a NaN or an infinity is IEEE arithmetic on the value the
+/// double range holds, which is what the comparison of a special value is about.
+inline WideReal operator+(const WideReal &a, const WideReal &b) {
+    if (!a.isFinite() || !b.isFinite()) {
+        return WideReal(a.toDouble() + b.toDouble());
+    }
+    if (a.isZero()) {
+        return b;
+    }
+    if (b.isZero()) {
+        return a;
+    }
+    if (a.scale() < b.scale()) {
+        return b + a; // the larger magnitude leads, so the smaller one is what rounds away
+    }
+    double lead, leadLo;
+    wideOnScale(a, b, lead, leadLo);
+    double hi, lo, tail, tailError;
+    wide::twoSum(a.hi(), lead, hi, lo);
+    wide::twoSum(a.lo(), leadLo, tail, tailError);
+    lo += tail;
+    wide::quickTwoSum(hi, lo, hi, lo);
+    lo += tailError;
+    wide::quickTwoSum(hi, lo, hi, lo);
+    return wideNormalize(hi, lo, a.scale());
+}
+
+inline WideReal operator-(const WideReal &a) { return WideReal(-a.hi(), -a.lo(), a.scale()); }
+
+inline WideReal operator-(const WideReal &a, const WideReal &b) { return a + (-b); }
+
+/// `a * b`: the leading halves' exact product plus the cross terms, renormalized; the scales add.
+inline WideReal operator*(const WideReal &a, const WideReal &b) {
+    if (!a.isFinite() || !b.isFinite()) {
+        return WideReal(a.toDouble() * b.toDouble());
+    }
+    if (a.isZero() || b.isZero()) {
+        return WideReal(0.0);
+    }
+    const double product   = a.hi() * b.hi();
+    const double exactPart = std::fma(a.hi(), b.hi(), -product);
+    const double tail      = exactPart + a.hi() * b.lo() + a.lo() * b.hi();
+    double hi, lo;
+    wide::quickTwoSum(product, tail, hi, lo);
+    return wideNormalize(hi, lo, int64_t(a.scale()) + int64_t(b.scale()));
+}
+
+/// `a / b` in two refinement steps from the quotient of the two leading halves, which leaves it at
+/// 106 bits; the scales subtract.
+inline WideReal operator/(const WideReal &a, const WideReal &b) {
+    if (!a.isFinite() || !b.isFinite() || b.isZero()) {
+        return WideReal(a.toDouble() / b.toDouble());
+    }
+    if (a.isZero()) {
+        return WideReal(0.0);
+    }
+    const WideReal leadA(a.hi(), a.lo(), 0);
+    const WideReal leadB(b.hi(), b.lo(), 0);
+    const double first  = a.hi() / b.hi();
+    const WideReal rest = leadA - WideReal(first) * leadB;
+    const double second = rest.toDouble() / b.hi();
+    const double third  = (rest.toDouble() - second * b.hi()) / b.hi();
+    double hi, lo;
+    wide::quickTwoSum(first, second, hi, lo);
+    return wideNormalize(hi, lo + third, int64_t(a.scale()) - int64_t(b.scale()));
+}
+
+/// The order of the real numbers the two name; a NaN is unordered, as in IEEE.
+inline bool operator<(const WideReal &a, const WideReal &b) {
+    if (a.isNaN() || b.isNaN()) {
+        return false;
+    }
+    if (a.isZero() || b.isZero()) {
+        const int signA = a.isZero() ? 0 : a.sign();
+        const int signB = b.isZero() ? 0 : b.sign();
+        return signA < signB;
+    }
+    if (a.sign() != b.sign()) {
+        return a.sign() < b.sign();
+    }
+    if (a.scale() != b.scale()) {
+        // A mantissa leading in [1, 2) makes the scale the exponent of the value, so the larger
+        // scale is the larger magnitude -- with the order turned over for two negative numbers.
+        return a.sign() < 0 ? a.scale() > b.scale() : a.scale() < b.scale();
+    }
+    if (a.hi() != b.hi()) {
+        return a.sign() < 0 ? a.hi() > b.hi() : a.hi() < b.hi();
+    }
+    return a.sign() < 0 ? a.lo() > b.lo() : a.lo() < b.lo();
+}
+inline bool operator<=(const WideReal &a, const WideReal &b) { return !(b < a); }
+inline bool operator>(const WideReal &a, const WideReal &b) { return b < a; }
+inline bool operator==(const WideReal &a, const WideReal &b) {
+    if (a.isNaN() || b.isNaN()) {
+        return false;
+    }
+    if (a.isZero() || b.isZero()) {
+        return a.isZero() && b.isZero(); // a zero of either sign is the number zero
+    }
+    if (a.scale() != b.scale()) {
+        return false;
+    }
+    return a.hi() == b.hi() && a.lo() == b.lo();
+}
+
+inline WideReal wideAbs(const WideReal &a) { return a < WideReal(0.0) ? -a : a; }
+
+/// The square root: the mantissa is moved into an even binade (an exact doubling), one Newton step
+/// from its correctly rounded root leaves a relative error below 2^-106, and the scale is halved.
+inline WideReal wideSqrt(const WideReal &a) {
+    if (!a.isFinite() || a.hi() < 0.0) {
+        return WideReal(std::sqrt(a.toDouble()));
+    }
+    if (a.isZero()) {
+        return a;
+    }
+    int scale = a.scale();
+    double hi = a.hi();
+    double lo = a.lo();
+    if (scale % 2 != 0) {
+        hi = hi * 2.0; // exact
+        lo = lo * 2.0;
+        scale -= 1;
+    }
+    const double root      = std::sqrt(hi);
+    const WideReal refined = (WideReal(root) + WideReal(hi, lo, 0) / WideReal(root)) * WideReal(0.5);
+    return wideShift(refined, int64_t(scale) / 2);
+}
+
+/// e^x: the argument reduced by the nearest multiple of ln 2, then the Taylor series of the
+/// remainder (`|r| <= ln2/2`, whose 29th term is below 2^-106 of the sum), then the exact scaling --
+/// a shift of the scale, so an answer far below the double range survives as itself.
+inline WideReal wideExp(const WideReal &a) {
+    if (!a.isFinite()) {
+        return WideReal(std::exp(a.toDouble()));
+    }
+    if (a.isZero()) {
+        return WideReal(1.0);
+    }
+    if (a.scale() > 16) {
+        // The answer is past the range this type declares (2^+-100000) and past every width the
+        // language has, so the element type answers it with 0 or an infinity and so does this.
+        return WideReal(std::exp(a.toDouble()));
+    }
+    const double steps = std::nearbyint(a.toDouble() / wide::kLn2Head);
+    if (std::fabs(steps) > 90000.0) {
+        return WideReal(std::exp(a.toDouble())); // the scaling alone would leave the declared range
+    }
+    const WideReal k(steps);
+    const WideReal remainder = a - k * WideReal(wide::kLn2Head) - k * WideReal(wide::kLn2Tail);
+    WideReal term(1.0), sum(1.0);
+    for (int n = 1; n <= 29; ++n) {
+        term = term * remainder / WideReal(static_cast<double>(n));
+        sum  = sum + term;
+    }
+    return wideShift(sum, static_cast<int64_t>(steps));
+}
+
+/// ln x: `ln m + e ln 2`, with the mantissa `m` moved into `[1/sqrt2, sqrt2)` (an exact halving) and
+/// `e` the value's own scale; then `ln m = 2 atanh(t)` with `t = (m - 1) / (m + 1)`,
+/// `|t| <= 0.1716`, whose odd series' 31st term is below 2^-106 of the result.
+inline WideReal wideLog(const WideReal &a) {
+    if (!a.isFinite() || a.hi() <= 0.0) {
+        return WideReal(std::log(a.toDouble()));
+    }
+    WideReal mantissa(a.hi(), a.lo(), 0);
+    int64_t binade = int64_t(a.scale());
+    if (mantissa > WideReal(1.41421356237309504880)) {
+        mantissa = mantissa * WideReal(0.5); // exact
+        binade += 1;
+    }
+    const WideReal t      = (mantissa - WideReal(1.0)) / (mantissa + WideReal(1.0));
+    const WideReal square = t * t;
+    WideReal term = t, sum = t;
+    for (int k = 1; k <= 31; ++k) {
+        term = term * square;
+        sum  = sum + term / WideReal(static_cast<double>(2 * k + 1));
+    }
+    const WideReal binades(static_cast<double>(binade));
+    return WideReal(2.0) * sum + binades * WideReal(wide::kLn2Head) +
+           binades * WideReal(wide::kLn2Tail);
+}
+
+/// ln(1 + x): `1 + x` is exact in this type -- a term thousands of binades below 1 cannot move it,
+/// which is the whole point of `log1p` -- so the small-x case is the reduction `wideLog` makes.
+inline WideReal wideLog1p(const WideReal &a) {
+    if (!a.isFinite() || (a.hi() <= -1.0 && a.scale() == 0)) {
+        return WideReal(std::log1p(a.toDouble()));
+    }
+    return wideLog(WideReal(1.0) + a);
+}
+
+/// e^x - 1: the Taylor series where `|x| <= 1/2` (no cancellation, 29th term below 2^-106 of the
+/// result), and `e^x - 1` otherwise.
+inline WideReal wideExpm1(const WideReal &a) {
+    if (!a.isFinite()) {
+        return WideReal(std::expm1(a.toDouble()));
+    }
+    if (wideAbs(a) > WideReal(0.5)) {
+        return wideExp(a) - WideReal(1.0);
+    }
+    WideReal term = a, sum = a;
+    for (int n = 2; n <= 29; ++n) {
+        term = term * a / WideReal(static_cast<double>(n));
+        sum  = sum + term;
+    }
+    return sum;
+}
 // ---- the higher-precision reference of the check ------------------------------------------
 
-/// One value of the reference: a scalar or a row-major tensor, in long double. A rule that asks
-/// for `refine_accuracy` is judged by the error of each side against this, not by bits, so the
-/// reference must hold more precision than the element type being judged.
+/// One value of the reference: a scalar or a row-major tensor, in the reference's own precision (a
+/// double-double, `WideReal` above). A rule that asks for `refine_accuracy` is judged by the error
+/// of each side against this, not by bits, so the reference must hold more precision than the
+/// element type being judged.
 struct RefTensor {
     std::vector<int64_t> shape;
-    std::vector<long double> values;
+    std::vector<WideReal> values;
 };
 
 struct RefValue {
     bool tensor        = false;
-    long double scalar = 0.0L;
+    WideReal scalar    = WideReal(0.0);
     RefTensor t;
 
-    static RefValue ofScalar(long double value) {
+    static RefValue ofScalar(WideReal value) {
         RefValue out;
         out.scalar = value;
         return out;
@@ -1882,15 +2248,15 @@ template <typename Fn> RefValue refMap(const RefValue &value, Fn &&fn) {
 /// element, and two tensors are aligned from the right.
 RefValue refBinary(
     const RefValue &a, const RefValue &b,
-    const std::function<long double(long double, long double)> &fn) {
+    const std::function<WideReal(WideReal, WideReal)> &fn) {
     if (!a.tensor && !b.tensor) {
         return RefValue::ofScalar(fn(a.scalar, b.scalar));
     }
     if (a.tensor && !b.tensor) {
-        return refMap(a, [&](long double x) { return fn(x, b.scalar); });
+        return refMap(a, [&](WideReal x) { return fn(x, b.scalar); });
     }
     if (!a.tensor && b.tensor) {
-        return refMap(b, [&](long double y) { return fn(a.scalar, y); });
+        return refMap(b, [&](WideReal y) { return fn(a.scalar, y); });
     }
     const size_t rank = std::max(a.t.shape.size(), b.t.shape.size());
     std::vector<int64_t> aShape(rank, 1), bShape(rank, 1), outShape(rank, 1);
@@ -1972,32 +2338,29 @@ RefValue refReduce(const RefTensor &x, int64_t axisArg, bool keep, RefReduce kin
     out.values.resize(static_cast<size_t>(outer * inner));
     for (int64_t o = 0; o < outer; ++o) {
         for (int64_t i = 0; i < inner; ++i) {
-            long double value =
-                kind == RefReduce::Max   ? -std::numeric_limits<long double>::infinity()
-                : kind == RefReduce::Min ? std::numeric_limits<long double>::infinity()
-                                         : 0.0L;
+            WideReal value = kind == RefReduce::Max   ? -WideReal::infinity()
+                             : kind == RefReduce::Min ? WideReal::infinity()
+                                                      : WideReal(0.0);
             for (int64_t e = 0; e < extent; ++e) {
-                const long double element =
+                const WideReal element =
                     x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
                 switch (kind) {
                 case RefReduce::Sum:
                 case RefReduce::Mean:
-                    value += element;
+                    value = value + element;
                     break;
                 case RefReduce::Max:
-                    value = std::isnan(value) || std::isnan(element)
-                                ? std::numeric_limits<long double>::quiet_NaN()
-                                : std::max(value, element);
+                    value = value.isNaN() || element.isNaN() ? WideReal::quietNaN()
+                                                             : std::max(value, element);
                     break;
                 case RefReduce::Min:
-                    value = std::isnan(value) || std::isnan(element)
-                                ? std::numeric_limits<long double>::quiet_NaN()
-                                : std::min(value, element);
+                    value = value.isNaN() || element.isNaN() ? WideReal::quietNaN()
+                                                             : std::min(value, element);
                     break;
                 }
             }
             if (kind == RefReduce::Mean && extent != 0) {
-                value /= static_cast<long double>(extent);
+                value = value / WideReal(static_cast<double>(extent));
             }
             out.values[static_cast<size_t>(o * inner + i)] = value;
         }
@@ -2022,31 +2385,33 @@ RefValue refSoftmax(const RefTensor &x, int64_t axisArg, bool logarithm) {
     out.values.resize(x.values.size());
     for (int64_t o = 0; o < outer; ++o) {
         for (int64_t i = 0; i < inner; ++i) {
-            long double maximum = -std::numeric_limits<long double>::infinity();
+            WideReal maximum = -WideReal::infinity();
             for (int64_t e = 0; e < extent; ++e) {
                 maximum = std::max(
                     maximum,
                     x.values[static_cast<size_t>(o * extent * inner + e * inner + i)]);
             }
-            long double sum = 0.0L;
+            WideReal sum(0.0);
             for (int64_t e = 0; e < extent; ++e) {
-                sum += std::exp(
-                    x.values[static_cast<size_t>(o * extent * inner + e * inner + i)] - maximum);
+                const WideReal element =
+                    x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
+                sum = sum + wideExp(element - maximum);
             }
-            const long double logSum = std::log(sum);
+            const WideReal logSum = wideLog(sum);
             for (int64_t e = 0; e < extent; ++e) {
-                const long double element =
+                const WideReal element =
                     x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
                 out.values[static_cast<size_t>(o * extent * inner + e * inner + i)] =
-                    logarithm ? (element - maximum) - logSum : std::exp(element - maximum) / sum;
+                    logarithm ? (element - maximum) - logSum
+                              : wideExp(element - maximum) / sum;
             }
         }
     }
     return RefValue::ofTensor(std::move(out));
 }
 
-/// The tensor of a sample as long double elements. A bf16 or an f16 element is the f32 it widens
-/// to exactly, which is the value the operator the reference is a reference for computes on.
+/// The tensor of a sample as reference-precision elements. A bf16 or an f16 element is the f32 it
+/// widens to exactly, which is the value the operator the reference is a reference for computes on.
 RefTensor tensorOfSample(const TensorSample &sample) {
     RefTensor out;
     out.shape    = sample.shape;
@@ -2058,11 +2423,11 @@ RefTensor tensorOfSample(const TensorSample &sample) {
     const size_t elementBytes = elementBytesOf(sample.dtype);
     for (size_t i = 0; i < count; ++i) {
         if (sample.bytes.size() < (i + 1) * elementBytes) {
-            out.values[i] = 0.0L;
+            out.values[i] = WideReal(0.0);
             continue;
         }
-        out.values[i] = static_cast<long double>(
-            elementOfBytes(sample.dtype, sample.bytes.data() + i * elementBytes));
+        out.values[i] =
+            WideReal(elementOfBytes(sample.dtype, sample.bytes.data() + i * elementBytes));
     }
     return out;
 }
@@ -2071,18 +2436,18 @@ RefTensor tensorOfSample(const TensorSample &sample) {
 /// a step whose exact result leaves the type's range reads as the infinity (or the zero) it becomes
 /// there. The reduced-precision types are rounded through f32 and their own two bytes, exactly as
 /// the sampler rounds a drawn value into a parameter's type.
-long double roundToElement(long double value, TypeCode element) {
+WideReal roundToElement(const WideReal &value, TypeCode element) {
     switch (element) {
     case TypeCode::Float64:
-        return static_cast<long double>(static_cast<double>(value));
+        return WideReal(static_cast<double>(value.toDouble()));
     case TypeCode::Float32:
-        return static_cast<long double>(static_cast<float>(value));
+        return WideReal(static_cast<float>(value.toDouble()));
     case TypeCode::BFloat16:
-        return static_cast<long double>(
-            halfToFloat<BFloat16>(halfFromFloat<BFloat16>(static_cast<float>(value))));
+        return WideReal(halfToFloat<BFloat16>(halfFromFloat<BFloat16>(
+            static_cast<float>(value.toDouble()))));
     case TypeCode::Float16:
-        return static_cast<long double>(
-            halfToFloat<Float16>(halfFromFloat<Float16>(static_cast<float>(value))));
+        return WideReal(
+            halfToFloat<Float16>(halfFromFloat<Float16>(static_cast<float>(value.toDouble()))));
     default:
         return value;
     }
@@ -2090,7 +2455,8 @@ long double roundToElement(long double value, TypeCode element) {
 
 /**
  * The higher-precision reference of one side of a rule: the side's expression evaluated over the
- * same argument values in long double. It reads the operators the accuracy library uses, and
+ * same argument values in the reference's own precision (`WideReal`, a double-double on every
+ * platform). It reads the operators the accuracy library uses, and
  * refuses (rather than guesses) an operator it does not know, so a rule the check cannot examine
  * fails the check instead of passing it silently.
  *
@@ -2114,7 +2480,7 @@ class RefEvaluator {
         }
         RefValue value = evalUncached(ref);
         if (element_) {
-            value = refMap(value, [&](long double x) { return roundToElement(x, *element_); });
+            value = refMap(value, [&](WideReal x) { return roundToElement(x, *element_); });
         }
         recordSpecials(value);
         memo_.emplace(ref, value);
@@ -2128,15 +2494,15 @@ class RefEvaluator {
 
   private:
     void recordSpecials(const RefValue &value) {
-        const auto note = [&](long double x) {
-            sawInfinity_ = sawInfinity_ || std::isinf(x);
-            sawNaN_      = sawNaN_ || std::isnan(x);
+        const auto note = [&](const WideReal &x) {
+            sawInfinity_ = sawInfinity_ || x.isInf();
+            sawNaN_      = sawNaN_ || x.isNaN();
         };
         if (!value.tensor) {
             note(value.scalar);
             return;
         }
-        for (const long double x : value.t.values) {
+        for (const WideReal &x : value.t.values) {
             note(x);
         }
     }
@@ -2196,22 +2562,22 @@ class RefEvaluator {
         }
         switch (type->code()) {
         case TypeCode::Float32:
-            return RefValue::ofScalar(static_cast<long double>(fromSlot<Float32>(slot)));
+            return RefValue::ofScalar(WideReal(fromSlot<Float32>(slot)));
         case TypeCode::Float64:
-            return RefValue::ofScalar(static_cast<long double>(fromSlot<Float64>(slot)));
+            return RefValue::ofScalar(WideReal(fromSlot<Float64>(slot)));
         case TypeCode::Int32:
-            return RefValue::ofScalar(static_cast<long double>(fromSlot<Int32>(slot)));
+            return RefValue::ofScalar(WideReal(fromSlot<Int32>(slot)));
         case TypeCode::Int64:
-            return RefValue::ofScalar(static_cast<long double>(fromSlot<Int64>(slot)));
+            return RefValue::ofScalar(WideReal(fromSlot<Int64>(slot)));
         case TypeCode::Bool:
-            return RefValue::ofScalar(fromSlot<Bool>(slot) ? 1.0L : 0.0L);
+            return RefValue::ofScalar(WideReal(fromSlot<Bool>(slot) ? 1.0 : 0.0));
         case TypeCode::BFloat16:
             // A constant of a reduced-precision type is the f32 it widens to, exactly: the
             // reference holds more precision than the element type, which is the one thing an
             // accuracy comparison needs of it.
-            return RefValue::ofScalar(static_cast<long double>(halfToFloat<BFloat16>(slot)));
+            return RefValue::ofScalar(WideReal(halfToFloat<BFloat16>(slot)));
         case TypeCode::Float16:
-            return RefValue::ofScalar(static_cast<long double>(halfToFloat<Float16>(slot)));
+            return RefValue::ofScalar(WideReal(halfToFloat<Float16>(slot)));
         default:
             throw std::runtime_error("the reference cannot read a constant of this type");
         }
@@ -2231,7 +2597,7 @@ class RefEvaluator {
         if (sample.tensor != nullptr) {
             return RefValue::ofTensor(tensorOfSample(*sample.tensor));
         }
-        return RefValue::ofScalar(static_cast<long double>(sample.asDouble));
+        return RefValue::ofScalar(WideReal(sample.asDouble));
     }
 
     RefValue operate(camel::runtime::gc_node_ref_t ref) {
@@ -2259,7 +2625,7 @@ class RefEvaluator {
                 throw std::runtime_error(
                     "the reference reads an operator with the wrong number of inputs");
             }
-            return refBinary(in[0], in[1], [&](long double a, long double b) { return fn(a, b); });
+            return refBinary(in[0], in[1], [&](WideReal a, WideReal b) { return fn(a, b); });
         };
         // The element type a side is written in decides the operator's uri, and the
         // reduced-precision types have stems of their own -- `_bf` for bfloat16, `_f6` for float16
@@ -2267,79 +2633,79 @@ class RefEvaluator {
         // exactly as one at f32 or f64 is. `_f` is f32's stem and `_d` is f64's.
         if (uri == ":op/add_f" || uri == ":op/add_d" || uri == ":op/add_bf" ||
             uri == ":op/add_f6") {
-            return binary([](long double a, long double b) { return a + b; });
+            return binary([](WideReal a, WideReal b) { return a + b; });
         }
         if (uri == ":op/sub_f" || uri == ":op/sub_d" || uri == ":op/sub_bf" ||
             uri == ":op/sub_f6") {
-            return binary([](long double a, long double b) { return a - b; });
+            return binary([](WideReal a, WideReal b) { return a - b; });
         }
         if (uri == ":op/mul_f" || uri == ":op/mul_d" || uri == ":op/mul_bf" ||
             uri == ":op/mul_f6") {
-            return binary([](long double a, long double b) { return a * b; });
+            return binary([](WideReal a, WideReal b) { return a * b; });
         }
         if (uri == ":op/div_f" || uri == ":op/div_d" || uri == ":op/div_bf" ||
             uri == ":op/div_f6") {
-            return binary([](long double a, long double b) { return a / b; });
+            return binary([](WideReal a, WideReal b) { return a / b; });
         }
         if (uri == ":op/neg_f" || uri == ":op/neg_d" || uri == ":op/neg_bf" ||
             uri == ":op/neg_f6") {
-            return unary([](long double a) { return -a; });
+            return unary([](WideReal a) { return -a; });
         }
         if (uri == "math:sqrt") {
-            return unary([](long double a) { return std::sqrt(a); });
+            return unary([](WideReal a) { return wideSqrt(a); });
         }
         if (uri == "math:exp_f" || uri == "math:exp_d") {
-            return unary([](long double a) { return std::exp(a); });
+            return unary([](WideReal a) { return wideExp(a); });
         }
         if (uri == "math:log_f" || uri == "math:log_d") {
-            return unary([](long double a) { return std::log(a); });
+            return unary([](WideReal a) { return wideLog(a); });
         }
         if (uri == "math:log1p_f" || uri == "math:log1p_d") {
-            return unary([](long double a) { return std::log1p(a); });
+            return unary([](WideReal a) { return wideLog1p(a); });
         }
         if (uri == "math:expm1_f" || uri == "math:expm1_d") {
-            return unary([](long double a) { return std::expm1(a); });
+            return unary([](WideReal a) { return wideExpm1(a); });
         }
         if (uri == "math:abs_f" || uri == "math:abs_d") {
-            return unary([](long double a) { return std::fabs(a); });
+            return unary([](WideReal a) { return wideAbs(a); });
         }
         if (uri == "tensor:add") {
-            return binary([](long double a, long double b) { return a + b; });
+            return binary([](WideReal a, WideReal b) { return a + b; });
         }
         if (uri == "tensor:subtract") {
-            return binary([](long double a, long double b) { return a - b; });
+            return binary([](WideReal a, WideReal b) { return a - b; });
         }
         if (uri == "tensor:multiply") {
-            return binary([](long double a, long double b) { return a * b; });
+            return binary([](WideReal a, WideReal b) { return a * b; });
         }
         if (uri == "tensor:divide") {
-            return binary([](long double a, long double b) { return a / b; });
+            return binary([](WideReal a, WideReal b) { return a / b; });
         }
         if (uri == "tensor:maximum") {
-            return binary([](long double a, long double b) { return std::max(a, b); });
+            return binary([](WideReal a, WideReal b) { return std::max(a, b); });
         }
         if (uri == "tensor:minimum") {
-            return binary([](long double a, long double b) { return std::min(a, b); });
+            return binary([](WideReal a, WideReal b) { return std::min(a, b); });
         }
         if (uri == "tensor:neg") {
-            return unary([](long double a) { return -a; });
+            return unary([](WideReal a) { return -a; });
         }
         if (uri == "tensor:abs") {
-            return unary([](long double a) { return std::fabs(a); });
+            return unary([](WideReal a) { return wideAbs(a); });
         }
         if (uri == "tensor:exp") {
-            return unary([](long double a) { return std::exp(a); });
+            return unary([](WideReal a) { return wideExp(a); });
         }
         if (uri == "tensor:log") {
-            return unary([](long double a) { return std::log(a); });
+            return unary([](WideReal a) { return wideLog(a); });
         }
         if (uri == "tensor:sqrt") {
-            return unary([](long double a) { return std::sqrt(a); });
+            return unary([](WideReal a) { return wideSqrt(a); });
         }
         if (uri == "tensor:sum" && in.size() == 1) {
-            long double total = 0.0L;
-            for (long double value : in[0].t.values) {
-                total += value;
+            WideReal total(0.0);
+            for (const WideReal &value : in[0].t.values) {
+                total = total + value;
             }
             return RefValue::ofScalar(total);
         }
@@ -2348,19 +2714,21 @@ class RefEvaluator {
             if (in.size() < 2 || !in[0].tensor || in[1].tensor) {
                 throw std::runtime_error("the reference reads a reduction without its axis");
             }
-            const bool keep = in.size() > 2 && !in[2].tensor && in[2].scalar != 0.0L;
+            const bool keep = in.size() > 2 && !in[2].tensor && !in[2].scalar.isZero();
             const auto kind = uri == "tensor:sum_axis"   ? RefReduce::Sum
                               : uri == "tensor:max_axis" ? RefReduce::Max
                               : uri == "tensor:min_axis" ? RefReduce::Min
                                                          : RefReduce::Mean;
-            return refReduce(in[0].t, static_cast<int64_t>(in[1].scalar), keep, kind);
+            return refReduce(
+                in[0].t, static_cast<int64_t>(in[1].scalar.toDouble()), keep, kind);
         }
         if (uri == "tensor:softmax" || uri == "tensor:log_softmax") {
             if (in.empty() || !in[0].tensor) {
                 throw std::runtime_error("the reference reads a softmax without its tensor");
             }
-            const int64_t axis =
-                in.size() > 1 && !in[1].tensor ? static_cast<int64_t>(in[1].scalar) : -1;
+            const int64_t axis = in.size() > 1 && !in[1].tensor
+                                     ? static_cast<int64_t>(in[1].scalar.toDouble())
+                                     : -1;
             return refSoftmax(in[0].t, axis, uri == "tensor:log_softmax");
         }
         throw std::runtime_error(
@@ -2378,41 +2746,40 @@ class RefEvaluator {
 
 /// The normalized error of a native value against the reference: the difference relative to the
 /// magnitude (absolutely when the value is small), with NaNs that agree and equal infinities
-/// treated as exact.
-long double refScalarError(long double native, long double reference) {
-    if (std::isnan(native) || std::isnan(reference)) {
-        return std::isnan(native) && std::isnan(reference)
-                   ? 0.0L
-                   : std::numeric_limits<long double>::infinity();
+/// treated as exact. Both numbers are reference-precision values: the native is exact in that type,
+/// so the whole of the difference is the element type's own.
+WideReal refScalarError(const WideReal &native, const WideReal &reference) {
+    if (native.isNaN() || reference.isNaN()) {
+        return native.isNaN() && reference.isNaN() ? WideReal(0.0) : WideReal::infinity();
     }
-    if (std::isinf(native) || std::isinf(reference)) {
-        return native == reference ? 0.0L : std::numeric_limits<long double>::infinity();
+    if (native.isInf() || reference.isInf()) {
+        return native == reference ? WideReal(0.0) : WideReal::infinity();
     }
-    if (reference == 0.0L) {
-        return std::fabs(native);
+    if (reference.isZero()) {
+        return wideAbs(native);
     }
     // Relative error, not absolute: the benefit of `log1p` is its accuracy near zero, where an
     // absolute bound would call the 100% error of `log(1 + x)` invisible.
-    return std::fabs(native - reference) / std::fabs(reference);
+    return wideAbs(native - reference) / wideAbs(reference);
 }
 
 /// The largest normalized error of a sample against the reference of its side.
-long double refSampleError(const Sample &native, const RefValue &reference) {
+WideReal refSampleError(const Sample &native, const RefValue &reference) {
     if (native.tensor != nullptr) {
         if (!reference.tensor || reference.t.shape != native.tensor->shape) {
-            return std::numeric_limits<long double>::infinity();
+            return WideReal::infinity();
         }
         const RefTensor values = tensorOfSample(*native.tensor);
-        long double worst      = 0.0L;
+        WideReal worst(0.0);
         for (size_t i = 0; i < values.values.size(); ++i) {
             worst = std::max(worst, refScalarError(values.values[i], reference.t.values[i]));
         }
         return worst;
     }
     if (reference.tensor) {
-        return std::numeric_limits<long double>::infinity();
+        return WideReal::infinity();
     }
-    return refScalarError(static_cast<long double>(native.asDouble), reference.scalar);
+    return refScalarError(WideReal(native.asDouble), reference.scalar);
 }
 
 /// The one rounding step the element type can make, the measurement noise of "not worse". f32 and
@@ -2433,29 +2800,29 @@ double refTypeEpsilon(TypeCode code) {
 
 /// Whether the right side's error is not larger than the left side's, allowing one rounding step
 /// of the element type so that the measurement itself does not make an accurate rule fail.
-bool refNotWorse(long double left, long double right, TypeCode code) {
-    if (std::isinf(left)) {
+bool refNotWorse(const WideReal &left, const WideReal &right, TypeCode code) {
+    if (left.isInf()) {
         return true; // both sides missed the same special value; the rewrite adds nothing
     }
-    return right <= left + 2.0L * static_cast<long double>(refTypeEpsilon(code));
+    return right <= left + WideReal(2.0 * refTypeEpsilon(code));
 }
 
 /// The reported ratio of the right side's error to the left side's, with the element type's two
 /// ULP measurement floor so that an exact left side does not divide by zero.
-double refErrorRatio(long double left, long double right, TypeCode code) {
-    if (right == 0.0L) {
+double refErrorRatio(const WideReal &left, const WideReal &right, TypeCode code) {
+    if (right.isZero()) {
         return 0.0;
     }
-    const long double floor = 2.0L * static_cast<long double>(refTypeEpsilon(code));
-    return static_cast<double>(right / std::max(left, floor));
+    const WideReal floor(2.0 * refTypeEpsilon(code));
+    return (right / std::max(left, floor)).toDouble();
 }
 
 /// What the check reports for one sample of a rule that carries `refine_accuracy`.
 struct AccuracyResult {
     bool ok                 = true;
     bool referenceAvailable = true;
-    long double leftError   = 0.0L;
-    long double rightError  = 0.0L;
+    WideReal leftError      = WideReal(0.0);
+    WideReal rightError     = WideReal(0.0);
     double ratio            = 0.0;
     std::string reason;
 };
@@ -2990,10 +3357,10 @@ bool realComparable(TypeCode code) {
 /// the element type is one rounding the permission covers) may differ by that rounding -- but the
 /// cancellation that inflates two element-type results is not in the comparison at all.
 bool refScalarsAgree(
-    long double x, long double y, bool single, const camel::core::sem::RewriteErrorBound &bound,
-    double scale) {
-    if (std::isnan(x) || std::isnan(y)) {
-        return std::isnan(x) && std::isnan(y);
+    const WideReal &x, const WideReal &y, bool single,
+    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    if (x.isNaN() || y.isNaN()) {
+        return x.isNaN() && y.isNaN();
     }
     if (!bound.checkable) {
         return true; // no contract to compare against (reported as unchecked)
@@ -3001,16 +3368,16 @@ bool refScalarsAgree(
     if (bound.ulps == 0.0 && bound.relative == 0.0) {
         return x == y;
     }
-    if (std::isinf(x) || std::isinf(y)) {
+    if (x.isInf() || y.isInf()) {
         return x == y;
     }
-    const long double eps       = single ? 1.2e-7L : 2.3e-16L;
-    const long double magnitude = std::fabs(x) + std::fabs(y) + scale;
+    const double eps       = single ? 1.2e-7 : 2.3e-16;
+    const WideReal magnitude = wideAbs(x) + wideAbs(y) + WideReal(scale);
     // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
-    const long double smallest = single ? 1.4e-45L : 4.9e-324L;
-    const long double allowed =
-        (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
-    return std::fabs(x - y) <= allowed;
+    const WideReal smallest(single ? 1.4e-45 : 4.9e-324);
+    const WideReal allowed =
+        WideReal(bound.ulps * eps + bound.relative) * magnitude + WideReal(bound.ulps) * smallest;
+    return wideAbs(x - y) <= allowed;
 }
 
 /// Whether two reference values are the same number, elementwise for tensors.
@@ -3151,8 +3518,8 @@ RealComparison propositionComparison(
     // A side whose native value is a NaN or an infinity where the real model has a finite value is
     // not a rounding of that value: there the proposition is the IEEE half, and `agree` with no
     // numeric contract is exactly that comparison (a NaN agrees with a NaN, the bits otherwise).
-    const bool special = std::isinf(refSampleError(leftValue, referenceLeft)) ||
-                         std::isinf(refSampleError(rightValue, referenceRight));
+    const bool special = refSampleError(leftValue, referenceLeft).isInf() ||
+                         refSampleError(rightValue, referenceRight).isInf();
     if (special) {
         result.agree = agree(leftValue, rightValue, {}, 1.0, needs);
         result.why   = "a special value is not the same bit for bit";
@@ -3190,10 +3557,15 @@ std::string sampleText(const Sample &s) {
             }
             switch (t.dtype) {
             case TypeCode::Float32:
-                text += std::format("{}", static_cast<float>(tensorElement(t, i)));
+                // A NaN's text carries no sign (design principles 7.1, language reference 2.5.2):
+                // `withoutNaNSign` is what every path that formats a number through a library
+                // applies first, and this one prints a value of the language like any other.
+                text += std::format(
+                    "{}", camel::utils::withoutNaNSign(static_cast<float>(tensorElement(t, i))));
                 break;
             case TypeCode::Float64:
-                text += std::format("{}", tensorElement(t, i));
+                text += std::format(
+                    "{}", camel::utils::withoutNaNSign(tensorElement(t, i)));
                 break;
             case TypeCode::Int64:
                 text += std::to_string(static_cast<int64_t>(tensorElement(t, i)));
@@ -3227,7 +3599,7 @@ std::string sampleText(const Sample &s) {
     case TypeCode::Float16:
         return halfText(Float16::fromBits(halfBitsOfSlot(s.slot)));
     default:
-        return std::format("{}", s.asDouble);
+        return std::format("{}", camel::utils::withoutNaNSign(s.asDouble));
     }
 }
 
@@ -3553,8 +3925,8 @@ void checkOneRule(
                         "the right side is worse at ({}): its error {:.6g} exceeds the left "
                         "side's {:.6g} (ratio {:.6g})",
                         at,
-                        static_cast<double>(checked.rightError),
-                        static_cast<double>(checked.leftError),
+                        checked.rightError.toDouble(),
+                        checked.leftError.toDouble(),
                         checked.ratio);
                 } else {
                     // Nothing could be compared: the rule is outside what the check can examine,
@@ -3672,8 +4044,8 @@ void checkOneRule(
                             "the rewritten left side is less accurate at ({}): its error {:.6g} "
                             "exceeds the original's {:.6g} (ratio {:.6g})",
                             at,
-                            static_cast<double>(checked.rightError),
-                            static_cast<double>(checked.leftError),
+                            checked.rightError.toDouble(),
+                            checked.leftError.toDouble(),
                             checked.ratio);
                     } else {
                         failureEvidence = "none";
