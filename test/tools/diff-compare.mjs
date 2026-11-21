@@ -6,9 +6,15 @@
  * The differential comparison of core abstractions §18: **one tool, configured with what compares to
  * what**, that reads three things about a run of the same program --
  *
- *   1. **output**: exit status, standard output, standard error, with numbers compared at the
- *      **declared error bound** (design principles 7.1: a transcendental answer is promised in ulps
- *      of its declared value, not bit for bit) and everything else byte for byte;
+ *   1. **output**: exit status, signal and timeout always (every case declares `expect_exit`), and
+ *      the **text** where the plan declares the text -- a block that pins its output
+ *      (`expect_stdout_exact` / `expect_stdout`, or a `golden` snapshot compared as text) is compared
+ *      line by line, numbers at the **declared error bound** (design principles 7.1: a transcendental
+ *      answer is promised in ulps of its declared value, not bit for bit) and everything else byte
+ *      for byte, after the block's own `normalizers`. A block that asserts fragments, a pattern or
+ *      bounds inside a `verify_script` declares a narrower promise, and its wording is reported as
+ *      `not-pinned` rather than compared: `mm.gc_pacing` prints `minor_pause_ms=0.11` and asserts the
+ *      peak stays inside a window, and a comparison that read the figure would invent a difference;
  *   2. **the canonical form of the graph**: the program's pipeline run to the point where the
  *      scheduler takes it, dumped as GIR DOT and compared **up to isomorphism** (node and edge
  *      identities are not part of the canonical form; shapes are), by the same comparison a plan's
@@ -82,6 +88,7 @@ import { performance } from 'node:perf_hooks'
 import url from 'node:url'
 
 import { compareGirDotIsomorphic } from './gir-dot.mjs'
+import { applyNormalizers } from './normalizers.mjs'
 import { expandArgs, loadPlanTests } from './run-tests.mjs'
 import { parseTomlFile } from './toml-lite.mjs'
 
@@ -405,7 +412,35 @@ function classify(block, config) {
     }
     // Only the compiler's own cases have a pipeline to draw: `camel-format` prints formatted text,
     // and `std::gir` appended to its command line would ask it a question it does not take.
-    return { kind: 'compared', namesCase, graphable: tool === 'camel' && namesCase }
+    return {
+        kind: 'compared',
+        namesCase,
+        graphable: tool === 'camel' && namesCase,
+        pinnedStreams: pinnedStreams(block),
+    }
+}
+
+/**
+ * Which of a run's streams this block declares to be the program's answer.
+ *
+ * `expect_stdout_exact` / `expect_stdout` pin **standard output** and say nothing about standard
+ * error, which is where the compiler writes its own notices (`[INFO] <GCGraphBuild> ... staticArea=0x...`
+ * carries an address the run chose). A `golden` snapshot compared as text pins the stream
+ * `snapshot_stream` names, `stdout` by default. Everything else -- fragments, patterns, bounds read
+ * inside a `verify_script` -- declares a promise about something narrower than a whole stream, and
+ * the text there is not a reading this tool can take.
+ *
+ * An empty list is therefore not "compare nothing": it is the honest statement that this case never
+ * promised its wording, and the tool reports it as `not-pinned`.
+ */
+function pinnedStreams(block) {
+    const streams = new Set()
+    if (block.expect_stdout_exact !== undefined || block.expect_stdout !== undefined) streams.add('stdout')
+    if (block.golden !== undefined) {
+        const comparison = String(block.snapshot_compare === undefined ? 'text_exact' : block.snapshot_compare)
+        if (comparison !== 'gir_dot_isomorphic') streams.add(String(block.snapshot_stream || 'stdout'))
+    }
+    return [...streams]
 }
 
 // --- running one side --------------------------------------------------------
@@ -438,11 +473,22 @@ function scratchOf(side, block) {
 }
 
 function scopeOf(side, block) {
-    return {
-        ...varsFor(side),
+    const vars = varsFor(side)
+    const scope = {
+        ...vars,
         case: path.resolve(path.dirname(block.__planPath), block.case),
         test_tmp: scratchOf(side, block).split(path.sep).join('/'),
     }
+    // `${backend}` is not a name but the *pass list* `test/vars.toml` writes for one (`run_nvm` is
+    // `["std::nvm"]`), which is why the runner substitutes it as a whole token. The runner expands a
+    // block that lists `backends` into one run per back end; this tool compares the block once, so
+    // the value is the first back end it names, and the coverage line reports how many blocks that
+    // applies to rather than leaving the difference in granularity unsaid.
+    const first = Array.isArray(block.backends) ? block.backends[0] : null
+    if (first !== undefined && first !== null && vars[`run_${String(first)}`] !== undefined) {
+        scope.backend = vars[`run_${String(first)}`]
+    }
+    return scope
 }
 
 /// The words a side runs, for one reading. `graph` replaces the terminal scheduling pass with the
@@ -586,23 +632,25 @@ function safeRealpath(target) {
 }
 
 /// What a run printed, with every spelling of a path that is a property of the install or of the
-/// scratch directory replaced: those differ between two install roots and say nothing about the
-/// program.
+/// scratch directory replaced, and then the block's **own** normalizers applied -- the same list the
+/// plan runner applies before it asserts anything (`test/tools/normalizers.mjs` is the one
+/// definition of them). A case that declares `normalize_addresses` prints addresses that are not
+/// part of its promise; a comparison that read them would call two runs of one program different.
 function normalize(text, side, block) {
     const scratch = path.join(REPO_ROOT, scratchOf(side, block))
     const pairs = [
         [scratch, '<TMP>'],
         [scratchOf(side, block).split(path.sep).join('/'), '<TMP>'],
-        [side.install, '<CAMEL_HOME>'],
-        [safeRealpath(side.install), '<CAMEL_HOME>'],
-        [REPO_ROOT, '<REPO>'],
-        [safeRealpath(REPO_ROOT), '<REPO>'],
+        [side.install, '<INSTALL>'],
+        [safeRealpath(side.install), '<INSTALL>'],
+        [REPO_ROOT, '<ROOT>'],
+        [safeRealpath(REPO_ROOT), '<ROOT>'],
     ]
     let out = String(text).replace(/\r\n/g, '\n').replace(/\x1b\[[0-9;]*m/g, '')
     for (const [from, to] of pairs) {
         if (from) out = out.split(from).join(to)
     }
-    return out
+    return applyNormalizers(out, block.normalizers, { installRoot: side.install })
 }
 
 const NUMBER_TOKEN = /[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?/g
@@ -660,12 +708,22 @@ function linesOf(text) {
 }
 
 /**
- * The output comparison: `same` is byte-identical, `within-bound` differs only in numbers inside
- * the declared error bound (reported, and not a difference -- the bound is what the language
- * promises), `differ` is everything else, and `unmeasurable` is the case where neither side
- * answered at all.
+ * The output comparison.
+ *
+ * Exit status, signal and timeout are promises in every case (`expect_exit`), so they are compared
+ * always. The **text** is a promise only where the plan says so: a block that pins its output with
+ * `expect_stdout_exact` / `expect_stdout`, or with a `golden` snapshot compared as text, declares
+ * that this exact wording is the program's answer, and that text is compared line by line -- numbers
+ * at the declared error bound, everything else byte for byte.
+ *
+ * A block that asserts fragments (`expect_stdout_contains`, `expect_stdout_starts_with`), a pattern
+ * (`expect_stdout_matches`) or bounds inside a `verify_script` has declared that the wording is
+ * *not* its promise: `mm.gc_pacing` prints `minor_pause_ms=0.11` and asserts the peak stays inside a
+ * window, and a comparison that read the millisecond figure would report a difference the suite
+ * never declared. Those cases read `not-pinned`: the count is reported, and it is not a difference.
+ * Exit status is still compared for them, because a crash is a promise in every case.
  */
-function compareOutput(one, other, sideOne, sideOther, block, bound, bits) {
+function compareOutput(one, other, sideOne, sideOther, block, bound, bits, streams) {
     const detail = []
     // Both sides unable to answer is not a difference and not a reading either: a case that times
     // out on both installs has told this tool nothing, and calling that "the same" would be the
@@ -682,8 +740,25 @@ function compareOutput(one, other, sideOne, sideOther, block, bound, bits) {
     if (one.timedOut !== other.timedOut) detail.push(`timeout: a=${one.timedOut} b=${other.timedOut}`)
     if (one.status !== other.status) detail.push(`exit: a=${one.status} b=${other.status}`)
     if (one.signal !== other.signal) detail.push(`signal: a=${one.signal} b=${other.signal}`)
+    if (!Array.isArray(streams) || streams.length === 0) {
+        // The wording was never declared comparable; what the run did (its status) was. The lines
+        // are still counted -- not as a difference, but as the size of what the suite chose not to
+        // pin, which is the one number that says whether that choice is hiding anything.
+        let drifted = 0
+        for (const stream of ['stdout', 'stderr']) {
+            const left = linesOf(normalize(one[stream], sideOne, block))
+            const right = linesOf(normalize(other[stream], sideOther, block))
+            const total = Math.max(left.length, right.length)
+            for (let index = 0; index < total; index += 1) {
+                if (left[index] !== right[index]) drifted += 1
+            }
+        }
+        return detail.length === 0
+            ? { verdict: 'not-pinned', detail: [], drifted }
+            : { verdict: 'differ', detail, drifted }
+    }
     let numericOnly = detail.length === 0
-    for (const stream of ['stdout', 'stderr']) {
+    for (const stream of streams) {
         const left = linesOf(normalize(one[stream], sideOne, block))
         const right = linesOf(normalize(other[stream], sideOther, block))
         const total = Math.max(left.length, right.length)
@@ -739,13 +814,11 @@ function compareGraph(one, other, sideOne, sideOther, block) {
     const rightIsDot = DOT_HEADER.test(right)
     if (!leftIsDot && !rightIsDot) {
         // Neither side drew a graph: this invocation is not a pipeline run (a `check`, a `-E`, a
-        // `--version`), so the reading is `not-a-graph` -- unless the two runs themselves differ,
-        // which is a difference of this mode and is reported as one.
-        if (left === right && one.status === other.status) return { verdict: 'not-a-graph', detail: [] }
-        return {
-            verdict: 'differ',
-            detail: [`no graph on either side and the runs differ: exit a=${one.status} b=${other.status}`],
-        }
+        // `--version`, a tree dump), so there is no canonical form here to compare and the reading
+        // is `not-a-graph`. What the runs printed instead is the *output* reading's business: it is
+        // already compared there, by the rule that case declares, and borrowing it here would count
+        // one difference twice under a name that does not describe it.
+        return { verdict: 'not-a-graph', detail: [] }
     }
     if (leftIsDot !== rightIsDot) {
         return { verdict: 'differ', detail: [`a printed a graph: ${leftIsDot}; b printed one: ${rightIsDot}`] }
@@ -818,7 +891,16 @@ async function measure(block, verdict, config) {
     let output = null
     let graph = null
     if (config.compare.output && runs.a.output && runs.b.output) {
-        output = compareOutput(runs.a.output, runs.b.output, config.a, config.b, block, bound, bits)
+        output = compareOutput(
+            runs.a.output,
+            runs.b.output,
+            config.a,
+            config.b,
+            block,
+            bound,
+            bits,
+            verdict.pinnedStreams,
+        )
     }
     if (config.compare.graph) {
         graph =
@@ -842,7 +924,7 @@ function median(values) {
 
 function summaryLines(rows, config) {
     const lines = []
-    const output = { same: 0, 'within-bound': 0, differ: 0, unmeasurable: 0 }
+    const output = { same: 0, 'within-bound': 0, 'not-pinned': 0, differ: 0, unmeasurable: 0 }
     const graph = { same: 0, isomorphic: 0, differ: 0, 'not-a-graph': 0, unmeasurable: 0 }
     const cpu = { a: 0, b: 0, both: 0 }
     const ratios = []
@@ -863,7 +945,8 @@ function summaryLines(rows, config) {
     }
     lines.push(
         `[OUTPUT] same=${output.same} within_bound=${output['within-bound']} differ=${output.differ} ` +
-            `unmeasurable=${output.unmeasurable} bound=${config.output.bound_ulp}ulp@${config.output.bits}bits (${ULP_SOURCE})`,
+            `not_pinned=${output['not-pinned']} unmeasurable=${output.unmeasurable} ` +
+            `bound=${config.output.bound_ulp}ulp@${config.output.bits}bits (${ULP_SOURCE})`,
     )
     lines.push(
         `[GRAPH] pass=${config.graph.pass} same=${graph.same} isomorphic=${graph.isomorphic} differ=${graph.differ} ` +
@@ -931,6 +1014,7 @@ async function sweep(config, options) {
     console.log(
         `[COVERAGE] declared=${declared} compared=${comparable.length} excluded=${excluded} ` +
             `measured=${planned.length} time_only=${timeOnly} ` +
+            `backends=${comparable.filter((entry) => Array.isArray(entry.block.backends)).length} ` +
             `plans=${new Set(blocks.map((block) => block.__planPath)).size} jobs=${jobs}`,
     )
     for (const [reason, names] of [...excludedByReason.entries()].sort((l, r) => r[1].length - l[1].length)) {
@@ -1003,11 +1087,17 @@ async function sweep(config, options) {
                 `delta=${formatMs(entry.delta)} (report only)`,
         )
     }
+    const notPinned = rows.filter((row) => row.output && row.output.verdict === 'not-pinned')
+    const textPinned = rows.filter((row) => row.output && row.output.verdict !== 'not-pinned').length
+    const driftedCases = notPinned.filter((row) => (row.output.drifted || 0) > 0).length
+    const driftedLines = notPinned.reduce((sum, row) => sum + (row.output.drifted || 0), 0)
     console.log(
         `[TOTAL] label=${config.label} declared=${declared} compared=${comparable.length} measured=${planned.length} ` +
             `output_differ=${differences.filter((entry) => entry.kind === 'output').length} ` +
             `graph_differ=${differences.filter((entry) => entry.kind === 'graph').length} ` +
-            `within_bound=${withinBound.length} isomorphic=${isomorphic.length} ` +
+            `within_bound=${withinBound.length} text_pinned=${textPinned} not_pinned=${notPinned.length} ` +
+            `not_pinned_drifted=${driftedCases}/${driftedLines} ` +
+            `isomorphic=${isomorphic.length} ` +
             `unmeasurable=${unmeasurable.length} seconds=${seconds}`,
     )
     if (options.report) {
@@ -1025,6 +1115,7 @@ async function sweep(config, options) {
             withinBound,
             isomorphic,
             unmeasurable,
+            notPinned: notPinned.map((row) => `${row.block.__planId}/${row.block.name}`),
             time: timeRows,
             seconds: Number(seconds),
         }
@@ -1053,6 +1144,9 @@ async function selfTest(config) {
         if ((block.tool || 'camel') !== 'camel') return false
         const verdict = classify(block, config)
         if (verdict.kind !== 'compared' || !verdict.graphable) return false
+        // The plant changes standard output, so the case has to be one whose standard output is a
+        // promise; a case that pins nothing would read `not-pinned` and prove nothing.
+        if (!verdict.pinnedStreams.includes('stdout')) return false
         const args = (block.args || []).map((word) => String(word))
         if (args.length !== 1) return false
         const casePath = path.resolve(path.dirname(block.__planPath), block.case)

@@ -1614,14 +1614,28 @@ them).
 
 It is configured with *what compares to what*, and it reads three things:
 
-- **output** -- exit status, standard output, standard error. Numbers are compared at the declared
+- **output** -- exit status, signal and timeout always, and the printed text where the plan declares
+  the text. A block that pins its output (`expect_stdout_exact` / `expect_stdout`, or a `golden`
+  snapshot compared as text) declares that stream to be the program's answer, and that stream is
+  compared line by line after the block's own `normalizers` (the list `test/tools/normalizers.mjs`
+  defines, the same one the runner and `exemplars/check.mjs` apply), with numbers at the declared
   error bound, not bit for bit: `ulp(actual, declared, bound, bits)`, the helper a `verify_script`
   gets (`run-tests.mjs`, the block that defines `ulpStep`, `ulpDistance` and `ulp`; read from that
-  file at load time, so there is one definition of the bound). The default is the licence's two
-  ulps at 53 bits; a case that declares a wider bound in its `desc` names it in the configuration's
+  file at load time, so there is one definition of the bound). The default is the licence's two ulps
+  at 53 bits; a case that declares a wider bound in its `desc` names it in the configuration's
   `output.overrides`. An integer is compared exactly -- it is a count, an index or a code, and no
   licence promises those two units apart -- and a differing line that is inside the bound is
-  reported as `within-bound`, not as a difference.
+  reported as `within-bound`, not as a difference. `expect_stdout_exact` pins standard output and
+  says nothing about standard error, which is where the compiler writes its own notices
+  (`[INFO] <GCGraphBuild> ... staticArea=0x...` carries an address the run chose), so the stream a
+  block does not pin is not compared.
+  A block that asserts fragments (`expect_stdout_contains`, `expect_stdout_starts_with`), a pattern
+  (`expect_stdout_matches`) or bounds inside a `verify_script` has declared that its wording is
+  **not** the promise, and the tool reports it as `not-pinned` rather than comparing it: `mm.gc_pacing`
+  prints `minor_pause_ms=0.11` and asserts that the peak stays inside a window, and a comparison that
+  read the millisecond figure would report a difference the suite never declared. The count of lines
+  that moved in those cases is reported too (`not_pinned_drifted`), because "the suite does not pin
+  this text" is a choice that has a size, and a tool that silently skipped it would be hiding it.
 - **the canonical form of the graph** -- the block's pipeline with its terminal scheduling pass
   replaced by `graph.pass` (default `std::gir`), compared up to isomorphism by
   `compareGirDotIsomorphic` (`test/tools/gir-dot.mjs`, the same comparison
