@@ -126,7 +126,7 @@ export func strip_debug_prints::<F>(f: F): F! when is_function::<F>() {
 - **提出新函数**：`outline` 一段，在原处 `inline` 一次对它的调用；
 - **展开循环**：`outline` 循环体，`inline` 两次；
 - **合并两个循环**：`outline` 两个循环体，`inline` 一个用 Camel 写的合并循环并把两个体作实参交给它，再内联；
-- **移出循环**：`outline` 与循环无关的那段，在循环外 `inline`、循环内 `replace`。移出区域的必须是纯且不会出故障的计算（原则 9.7），当场检查；
+- **移出循环**：`outline` 与循环无关的那段，在循环外 `inline`、循环内 `replace`。它是否保持程序的含义由做这件事的遍负责（原则 1"遍可以改语义"）；
 - **内联**：`inline` 被调函数的体、`replace` 接上；
 - **特化、删没用的形参**（签名会变）：先写一个 Camel 闭包，如 `(y) => f(3, y)`，再对它 `edit`、内联、折叠。
 
