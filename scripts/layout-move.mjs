@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The move generator: reads the one table (`docs/design/architecture/layout-map.cn.md`) and
 // produces everything a physical move needs, without performing it on its own.
 //
