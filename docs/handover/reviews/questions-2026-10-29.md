@@ -6772,3 +6772,15 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 1. **`b81580f56`**：钉住 `known_fail_msg`（按 02:20 的答，目标是算出数的用例钉期望输出，不钉拒句）后即合。
 2. **`f177d28be`（`ast/builder.cpp` 六拆）与已合的 transpose 四簇**：不因"起因是行数"作废，按边界判——每个新文件说得出它管的是哪个概念、文件之间只通过这个概念的接口说话，就合；如果是按位置切成"第几块"、彼此还在读对方的内部，就先停在分支上，等设计稿。回一行：六个文件各管什么。
 3. **不再新开按文件拆分的格**，直到设计稿下来。空格派给与重新设计无关的真活：闸门老红的根因、known 39→41 点名、二阶导（`jvp-closure`）。
+
+## 每日审查（2026-11-21）
+
+决策者。范围：develop 过去 24 小时非合并提交 67 笔，动代码 37 笔（55%，昨日 26%）。三个只读子代理按领域审，下列各条我已对照代码核实。编号带日期。**今天在做全抽象设计**，涉及结构的返工（11-21/R1）以设计稿为准，不要先动。
+**11-21/R1 transpose 的拆分是"抽出助手"，不是按概念拆。** `transpose/walkmachinery.cpp` 的头注释自述"被多处用到、但不是遍历本身的部分"——按排除定义，是新的杂物间；`walk.h` 的 `WalkBookkeeping`（:149）与 `ArmWalk` 是十几个指向 `buildTransposeMember` 局部变量的裸指针，`WalkContext` 构造后逐字段赋值，助手里到处判空——这是共享可变状态，不是接口；`walk.cpp` 仍 4100 行、`walkCtx` 用 52 次，旧名字下各留一个一行的转发 lambda，同一概念两种写法。`walkcall.h` 是死代码：`WalkCall`/`buildCallFamily` 只在它自己里出现，注释指向四个不存在的文件。`participatesInTheAnswer` 在 `participates` 与 `places` 两个决定者之间二选一。处理：**停止继续拆**；`walkcall.h` 删；其余等设计稿（转置遍历按什么概念组织、它的状态归谁）。不回滚已合的部分。
+**11-21/R2 过程痕迹闸门没挡住。** 昨晚清零并"改成闸门"，今天 develop 上 `check-process-traces.mjs` 读数回到 7（`src/execute/pass.cpp:2721/2814`、`src/runtime/resources.cpp:1309` 的 "the ruling of 2026-11-20"，`jvp.cpp`、`split.cpp` 里的 "measured …"），即合并路径上它仍不是硬门槛。修：查清它挂在哪一层、为什么没拦住 b993eeaaf，改成合并前必过；7 处同轮清掉。测试计划里 `known_fail_*` 字段的长篇散文同样带日期与车道名，压成"结束条件 + 一句理由"。
+**11-21/R3 develop 上出现编译不过的中间提交。** c88316f21 调了不存在的 `callee->graphId()`，下一笔 3376309ae 才修，二分被破坏。每笔进主干的提交都要能单独构建；车道合并前按提交逐笔构建，或压成一笔。
+**11-21/R4 内联预算拒绝的两条通道。** 2bce92122 加了出参 `growthBudgetLeft`，同时 `InlineReport` 与它的事实照留——同一个答案两条路。留运行本身的返回值；事实若已无读者就删。`applyOptimizeRewritePass` 的两个 `(void)` 形参删掉；c88316f21 那个 `x != k ? x : k` 的空三元删掉。ea93057df 把位置放进报告记录、找不到就取被调函数的定义处——指向一个调用并不写在那里的位置；调用节点本身没有位置是表示的缺口，记进设计稿。
+**11-21/R5 `cml.cpp` 余下的名字比较。** :3970 `:op/idx*`、:4006 `:struct/range` 仍按 uri 字面量判；`isVariableOperator` 是手写的六个 id。改成算子定义上的属性（取下标族、区间构造、变量族），打印器只问属性。
+**11-21/R6 `SITE_FILES` 手写清单。** `test/tools/transpose_refusal/check.py:55` 等按文件名列站点，文件一拆就断。改成按目录匹配或从登记处读。
+**收下**：提交前钩子的修法（区分合并、拒绝空提交）；`a3d783c45` 把可移动判定收到 `nodeMayFault`；效应检查退出再回到 develop（tiles 声明已随 dc0f73b8f 落地）；`msg12.txt` 已由 a68122e1f 删除。
+**闸门**：今天 linux 一条腿读数 09:30 已有；R2 修完后补一次。
