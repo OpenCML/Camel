@@ -647,7 +647,36 @@ struct DeclinedCall {
     size_t calleeComputeNodes;
     size_t callerNodes;
     size_t callSites;
+    /// Where the call is written (see InlineDeclined::origin): taken here, because the graphs the
+    /// position is read from are replaced by the commit that follows the run.
+    camel::source::origin_id_t origin;
 };
+
+/// Where the call `id` of the draft being examined is written: the call node's own position, or the
+/// definition of the callee it leaves when the compiler built the call and gave it none. A graph's
+/// call of the function it was compiled from -- the entry graph's call of `main` -- is of the second
+/// kind, and "inlining 'main' into '__root__'" is a statement about `main`, so the function's
+/// definition is the place the reader can look at. Neither is invented: a call with no position and
+/// a callee the compiler built (a specialization, a lifted closure) has nothing to point at, and
+/// `kInvalidOriginId` says so -- a constant inside the callee's body is not where the call is.
+camel::source::origin_id_t leftCallOrigin(
+    const camel::core::context::Context *context, const camel::runtime::GraphDraft &draft,
+    gc_node_ref_t id, const GCGraph *callee) {
+    const uint64_t callOrigin = draft.nodeOrigin(id);
+    if (callOrigin != camel::source::kInvalidOriginId) {
+        return callOrigin;
+    }
+    if (context == nullptr || callee == nullptr) {
+        return camel::source::kInvalidOriginId;
+    }
+    const auto source = context->sourceContext();
+    if (!source) {
+        return camel::source::kInvalidOriginId;
+    }
+    const uint64_t definition = source->debugMap().graphOrigin(callee->id());
+    return definition != camel::source::kInvalidOriginId ? definition
+                                                         : camel::source::kInvalidOriginId;
+}
 
 /// The direct calls of the graphs in the closure, kept up to date as the session rewrites
 /// graphs: the number of calls of each graph, and a stamp per graph that changes whenever
@@ -1036,7 +1065,14 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                 const size_t calls    = callBook.calls(calleeGraph);
                 const auto decline    = [&](InlineDecline why) {
                     declined.push_back(
-                        {nextGraph, calleeGraph, why, copied, computed, draft.nodeCount(), calls});
+                        {nextGraph,
+                         calleeGraph,
+                         why,
+                         copied,
+                         computed,
+                         draft.nodeCount(),
+                         calls,
+                         leftCallOrigin(context.get(), draft, id, calleeGraph)});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
@@ -1211,7 +1247,8 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
              call.calleeNodes,
              call.calleeComputeNodes,
              call.callerNodes,
-             call.callSites});
+             call.callSites,
+             call.origin});
     }
 
     if (!changed) {

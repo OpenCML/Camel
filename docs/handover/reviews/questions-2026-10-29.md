@@ -6708,3 +6708,17 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 决策者。`transpose` 的前向法则设计写在 `docs/design/program-transforms/nested-transforms.cn.md` §2.4。结论：不给 `transpose` 写前向规则，也不再"先提升 `lin` 再转置"——**提升一个函数值时把它的捕获一起算进来**（捕获带切向作为新闭包的捕获），`transpose(lin)` 的结果就是普通的闭包，按这条提升即可。
 派一格（接 `jvp-closure`）：第 1 步改闭包的提升（参数与捕获一起求导）；第 2 步 `jvp` 遇到 `transpose(v)` 调用时按普通函数值提升。验收见 §2.4 末：`jvp_vjp_f` 打印 `1.0/2.0/3.0`，`grad(grad(x⁴))(2)=48`。实现前先量今天的提升对捕获做了什么，结论与 §2.2 不一致就带读数来问。
 另：施工侧 10:29 后无提交，09:20 那条（拆三个中心文件、收敛 O/N、车道表）仍未回。
+
+---
+
+## 更正（2026-11-21）：`registry.docs_complete` 那笔账以截断输出为据，作废
+
+本节只作废上面「新的五条」里那条记录的**结论**，原记录一字未删——它是「当时读到了什么」的证据，删掉就看不出为什么会读错。
+
+原记录（上面「新的五条」里 `feat.modules.stdlib_registry / registry.docs_complete` 那一条）写：「`feat.modules.stdlib_registry / registry.docs_complete`（`1 documentation problem(s) in 598 compiled example(s)`，`stdlib/graph.cml` 一串 `binds n` 的例子行，另有 18 行被省略）」。
+
+- **那串 `binds n` 不是问题。** 它是 `scripts/stdlib-reference.mjs` 的 `announceExamples(coverage.bound, 'examples a marker calls not compiled that compile only with a name bound', (one) => \`binds ${one.bindings.join(', ')}\`)`（3854-3858）打的**信息段**：那些例子反而是**对的**——marker 说它们不是独立程序，绑上页面本该由外层程序提供的名字就能编译。`problems` 只在 3861 按 `problems.length` 计数，来源只有两处：`docProblems(entries)`（1706）与非 fragment 的 `@example` 编译失败（1713）。信息段一行都不进。
+- **「另有 18 行被省略」与代码常量矛盾。** 那句话是转抄 `test/tools/run-tests.mjs#printFailedOutput`（1369-1393）的截尾行 `[stdout] omitted N line(s) above`：它 `maxLines = 12`，只保留**末尾 12 行**，`18` 是「总行数 − 12」，与 `stdlib-reference.mjs` 的 `EXCEPTIONS_SHOWN = 12`（2081）**毫无关系**——两个 12 是巧合。脚本自己的省略写作 `, and N more`（3826），不是「N 行被省略」。
+- **真正的 1 处**（2026-11-21 从失败捕获的**首行**读出，不读截尾）：`stdlib/rulesets/jvp.cml:642: 'layer_norm_neutral' has no @example`——有描述、缺 `@example`，由 `e9d1d191d`（2026-11-20）引入。本格已补该 `@example` 并重录 AST 金标修好。
+- **结论：那笔账作废。** 它把「被截掉的 18 行」读成「问题所在的 18 行」，于是把一个具体的符号级缺陷，记成了一段与它无关的信息段。
+- **出处一句话**：那条「18 行」出自 11-20 那次闸门（本页记录自引基线树 `8fab0d3e1`）的 `feat.modules.stdlib_registry / registry.docs_complete` 失败捕获，是 `test/tools/run-tests.mjs#printFailedOutput` 的 `maxLines = 12` 截尾行，与 `EXCEPTIONS_SHOWN` 无关。
