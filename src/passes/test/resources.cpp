@@ -10,6 +10,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/reachable.h"
@@ -647,3 +648,14 @@ ResourcesTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     syntheticGraphs(os, *program);
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel resourcesKernel(kResourcesTestPass, makePass<ResourcesTestPass>());
+
+} // namespace

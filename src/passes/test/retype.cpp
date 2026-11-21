@@ -14,6 +14,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/intern.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/retype.h"
 
@@ -381,3 +382,15 @@ const Program *RetypeEnumTestPass::apply(const Program *program, std::ostream &o
     os << "RETYPEENUM source_unchanged=" << (sourceUnchanged ? 1 : 0) << "\n";
     return next;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel retypeTrivialKernel(kRetypeTrivialTestPass, makePass<RetypeTrivialTestPass>());
+const PassKernel retypeEnumKernel(kRetypeEnumTestPass, makePass<RetypeEnumTestPass>());
+
+} // namespace

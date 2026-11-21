@@ -15,6 +15,7 @@
 
 #include "camel/passes/test/graph_release.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/test/anchor.h"
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
@@ -63,3 +64,14 @@ GraphReleaseTestPass::apply(const camel::runtime::Program *program, std::ostream
        << "\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel graphReleaseKernel(kGraphReleaseTestPass, makePass<GraphReleaseTestPass>());
+
+} // namespace

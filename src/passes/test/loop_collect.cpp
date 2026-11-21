@@ -12,6 +12,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
 #include "camel/utils/assert.h"
@@ -255,3 +256,15 @@ const camel::runtime::Program *
 LoopCollectSummaryTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return applyCollect(context_, program, true);
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel loopCollectKernel(kLoopCollectTestPass, makePass<LoopCollectTestPass>());
+const PassKernel loopCollectSummaryKernel(kLoopCollectSummaryTestPass, makePass<LoopCollectSummaryTestPass>());
+
+} // namespace

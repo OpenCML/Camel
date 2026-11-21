@@ -31,6 +31,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/effects.h"
@@ -4695,3 +4696,11 @@ CmlDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
     out << rendered.str();
     return nullptr;
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+
+const PassKernel cmlDumpKernel("std::cml", cmlPass());
+
+} // namespace

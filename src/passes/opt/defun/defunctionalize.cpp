@@ -78,6 +78,7 @@
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -1855,3 +1856,21 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
         return done;
     }
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+
+/// The lowering step itself. `report` is declared in stdlib/std.cml with a default of true: a
+/// program that names the pass is asking what it did, and the pipeline runs it with the parameter
+/// off (`fixedLoweringSteps`), so an inserted step writes nothing on the program's own output.
+const PassKernel defunctionalizeKernel(
+    "std::defunctionalize",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DefunctionalizeRewritePass>(
+            ctx,
+            args.getBool("report"),
+            args.getBool("debug"));
+    });
+
+} // namespace

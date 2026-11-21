@@ -15,6 +15,8 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/execute/pass/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_writes.h"
 
 #include <deque>
@@ -284,3 +286,47 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
         nullptr,
         camel::passes::generic::mayAlgebra);
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+
+/// The algebraic simplification under the core's name: the rules library's pass
+/// (`rules::simplify`, or `rules::simplify strict=true` for `safe_fp=true`), so the laws live once,
+/// in stdlib/rules.cml. `neutral_only` has no library equivalent; it keeps the C++ reference mode
+/// (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
+///
+/// The library pass is run by its name, the way a pipeline names it (applyRegisteredPass): a pass is
+/// a function of the standard library, and the core's `std::cxx::algebra` is that function with the
+/// C++ reference mode beside it.
+class RulesAlgebraPass final : public GraphIRPass {
+  public:
+    RulesAlgebraPass(const camel::core::context::context_ptr_t &ctx, bool safeFp)
+        : GraphIRPass(ctx), safeFp_(safeFp) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        const PassRunResult result = applyRegisteredPass(
+            program,
+            safeFp_ ? "rules::simplify strict=true" : "rules::simplify",
+            context_,
+            os,
+            this);
+        return result.program;
+    }
+
+  private:
+    bool safeFp_;
+};
+
+const PassKernel algebraKernel(
+    "std::cxx::algebra",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        if (args.getBool("neutral_only")) {
+            return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
+        }
+        return std::unique_ptr<GraphIRPass>(
+            std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
+    });
+
+} // namespace

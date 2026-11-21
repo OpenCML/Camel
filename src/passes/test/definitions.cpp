@@ -9,6 +9,7 @@
 
 #include "camel/core/context/context.h"
 #include "camel/core/operator_table.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/reachable.h"
@@ -173,3 +174,15 @@ ExpandDefinitionsTestPass::apply(const camel::runtime::Program *program, std::os
     }
     return session.commit();
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel definitionsKernel(kDefinitionsTestPass, makePass<DefinitionsTestPass>());
+const PassKernel expandDefinitionsKernel(kExpandDefinitionsTestPass, makePass<ExpandDefinitionsTestPass>());
+
+} // namespace

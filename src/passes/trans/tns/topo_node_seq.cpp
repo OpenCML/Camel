@@ -4,6 +4,7 @@
 #include "topo_node_seq.h"
 
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/type.h"
@@ -228,3 +229,12 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
     os << oss.str();
     return nullptr;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel topoNodeSeqKernel("std::topo_node_seq", makePass<TopoNodeSeqDumpPass>());
+
+} // namespace

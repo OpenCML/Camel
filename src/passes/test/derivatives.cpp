@@ -25,6 +25,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/execute/pass/registration.h"
 
 #include <string>
 #include <string_view>
@@ -68,3 +69,14 @@ DerivativesTestPass::apply(const camel::runtime::Program *program, std::ostream 
        << " after_total=" << afterTotal << " after_tensor=" << afterTensor << "\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel derivativesKernel(kDerivativesTestPass, makePass<DerivativesTestPass>());
+
+} // namespace

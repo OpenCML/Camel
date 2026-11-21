@@ -4,7 +4,9 @@
 #include "opt.h"
 
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/opt/generic.h"
+#include "passes/opt/budget.h"
 
 #include <format>
 
@@ -30,3 +32,37 @@ OptimizeSaturatePass::apply(const camel::runtime::Program *program, std::ostream
         this);
     return result.program;
 }
+
+namespace {
+
+using camel::execute::constantBudgetOf;
+using camel::execute::growthBudgetOf;
+using camel::execute::PassKernel;
+using camel::execute::settleRunsOf;
+
+/// `std::cxx::opt`, the C++ implementation the default pipeline's name `std::opt` selects.
+const PassKernel optimizeKernel(
+    "std::cxx::opt",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        OptimizeRewriteConfig config;
+        config.safeFloatingPoint   = args.getBool("safe_fp");
+        config.checkScreens        = args.getBool("check_screens");
+        config.growthBudget        = growthBudgetOf(args, "std::opt");
+        config.constantBudgetBytes = constantBudgetOf(args);
+        config.settleRuns          = settleRunsOf(args);
+        return std::make_unique<OptimizeRewritePass>(ctx, config);
+    });
+
+/// The saturation of the rules library, under the core's name. Like `std::cxx::algebra`, the laws
+/// are the library's (`opt::saturate`); unlike it, the extraction is not made, so the program stops
+/// in the state where a value has several writings.
+const PassKernel saturateKernel(
+    "std::cxx::saturate",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<OptimizeSaturatePass>(
+            ctx,
+            args.getInt("rounds"),
+            args.getBool("strict"));
+    });
+
+} // namespace

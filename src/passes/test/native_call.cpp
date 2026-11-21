@@ -8,6 +8,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include <array>
 #include <stdexcept>
@@ -68,3 +69,14 @@ NativeCallbackTestPass::apply(const camel::runtime::Program *program, std::ostre
     }
     return changed ? session.commit() : program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel nativeCallbackKernel(kNativeCallbackTestPass, makePass<NativeCallbackTestPass>());
+
+} // namespace

@@ -3,6 +3,7 @@
 
 #include "bcdump.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/reachable.h"
 #include "compile.h"
 
@@ -69,3 +70,15 @@ LinkedBytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostre
 
     return nullptr;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel bytecodeDumpKernel("std::fastvm::bytecode", makePass<BytecodeDumpPass>());
+const PassKernel linkedBytecodeDumpKernel(
+    "std::fastvm::linked_bytecode",
+    makePass<LinkedBytecodeDumpPass>());
+
+} // namespace

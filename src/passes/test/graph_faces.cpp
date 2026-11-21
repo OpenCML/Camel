@@ -31,6 +31,7 @@
 #include "camel/passes/test/graph_faces.h"
 
 #include "camel/compile/gir/graph_read.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 
 using camel::compile::gir::DraftGraphRead;
@@ -183,3 +184,14 @@ GraphFacesTestPass::apply(const camel::runtime::Program *program, std::ostream &
        << "\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel graphFacesKernel(kGraphFacesTestPass, makePass<GraphFacesTestPass>());
+
+} // namespace

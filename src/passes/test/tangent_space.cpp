@@ -15,6 +15,7 @@
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/pass/registration.h"
 
 #include <vector>
 
@@ -53,3 +54,14 @@ TangentSpaceTestPass::apply(const camel::runtime::Program *program, std::ostream
     }
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel tangentSpaceKernel(kTangentSpaceTestPass, makePass<TangentSpaceTestPass>());
+
+} // namespace

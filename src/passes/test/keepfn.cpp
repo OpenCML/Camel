@@ -14,6 +14,7 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
 
@@ -62,3 +63,14 @@ KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
        << " graph=" << (graph != nullptr ? graph->name() : "?") << "\n";
     return next;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel keepFnKernel(kKeepFnTestPass, makePass<KeepFnTestPass>());
+
+} // namespace

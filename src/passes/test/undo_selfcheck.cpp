@@ -20,6 +20,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -374,3 +375,14 @@ UndoSelfCheckTestPass::apply(const camel::runtime::Program *program, std::ostrea
     os << std::format("SELFCHECK {}\n", ok ? "ok" : "FAIL");
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel undoSelfCheckKernel(kUndoSelfCheckTestPass, makePass<UndoSelfCheckTestPass>());
+
+} // namespace
