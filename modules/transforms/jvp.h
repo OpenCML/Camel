@@ -96,9 +96,4 @@ JvpGraph buildJvpGraph(
     camel::runtime::GraphId self, std::ostream &os);
 
 
-/// TEMPORARY (removed before this step is committed): one built graph's nodes, in order.
-void dumpBuiltNodesForDiagnostics(
-    std::ostream &os, const camel::runtime::GCGraph *graph,
-    const camel::runtime::Program *program);
-
 } // namespace camel::transforms

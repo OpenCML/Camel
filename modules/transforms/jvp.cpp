@@ -490,15 +490,6 @@ JvpGraph buildJvpGraphInGroup(
     os << "REINTERP jvp callees=" << state.callees.size() << '\n';
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
-    // TEMPORARY (removed before this step is committed): the encoded graph, node by node, so a graph
-    // the lift recursion built can be read like one a kernel built.
-    dumpBuiltNodesForDiagnostics(os, made, group.program());
-    // TEMPORARY: the callee graphs of the same group, which the lift recursion wrote and which no
-    // other entry encodes.
-    for (const auto &[calleeKey, calleeId] : state.callees) {
-        (void)calleeKey;
-        dumpBuiltNodesForDiagnostics(os, group.encoded(calleeId), group.program());
-    }
     return JvpGraph{
         camel::runtime::ProgramHold(*context, group.program()),
         const_cast<camel::runtime::GCGraph *>(made)};

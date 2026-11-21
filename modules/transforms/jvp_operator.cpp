@@ -167,64 +167,6 @@ class JvpResolver final : public FuncTypeResolver {
     }
 };
 
-/// TEMPORARY (removed before this step is committed): one graph's nodes, in order, with the operator
-/// name of an Oper, the payload of a Fill, the index of an Accs and the callee graphs of a Func.
-void dumpBuiltNodesImpl(
-    std::ostream &os, const camel::runtime::GCGraph *graph,
-    const camel::runtime::Program *program) {
-    if (graph == nullptr) {
-        return;
-    }
-    os << "DUMP graph=" << graph->name() << " nodes=" << graph->nodeCount() << '\n';
-    for (camel::runtime::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-        const auto *record = graph->node(ref);
-        if (record == nullptr) {
-            continue;
-        }
-        camel::core::type::Type *nodeType = nullptr;
-        if (record->typeId != camel::core::type::kNoTypeId) {
-            nodeType = camel::core::type::TypeTable::instance().get(record->typeId);
-        }
-        os << "DUMP node=" << ref << " kind=" << static_cast<int>(record->kind) << " type="
-           << (nodeType != nullptr ? nodeType->toString() : "-") << " norm=";
-        for (camel::runtime::gc_node_ref_t in : graph->normInputsOf(ref)) {
-            os << in << ',';
-        }
-        if (record->kind == camel::runtime::GCNodeKind::Oper) {
-            if (const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)) {
-                os << " oper=" << operBody->uri();
-            }
-        }
-        if (record->kind == camel::runtime::GCNodeKind::Fill) {
-            if (const auto *fillBody = graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)) {
-                os << " fill=" << static_cast<int>(fillBody->fillKind) << " slots=";
-                for (const auto slot : fillBody->slots()) {
-                    os << slot << ',';
-                }
-            }
-        }
-        if (record->kind == camel::runtime::GCNodeKind::Accs) {
-            if (const auto *accsBody = graph->nodeBodyAs<camel::runtime::GCAccsBody>(ref)) {
-                os << " index=" << accsBody->value
-                   << " accsKind=" << static_cast<int>(accsBody->accsKind);
-            }
-        }
-        if (record->kind == camel::runtime::GCNodeKind::Func) {
-            os << " callees=";
-            for (camel::runtime::GraphId callee : graph->dependencies()) {
-                os << static_cast<unsigned long long>(callee);
-                const auto *calleeGraph =
-                    program != nullptr ? program->graph(callee) : nullptr;
-                os << ':' << (calleeGraph != nullptr ? calleeGraph->name() : "?") << ',';
-            }
-        }
-        os << " with=";
-        for (camel::runtime::gc_node_ref_t in : graph->withInputsOf(ref)) {
-            os << in << ',';
-        }
-        os << '\n';
-    }
-}
 
 /// jvp(f) at run time: the new graph, as a function value. Nothing of `f`'s graph is changed --
 /// `buildJvpGraph` reads it and reserves a member of its own group -- and the value keeps `f`'s
@@ -241,7 +183,6 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // the walk that explains a refusal must not land among the numbers the program prints.
     const JvpGraph built = buildJvpGraph(
         ctx.shared_from_this(), function->program(), function->graph(), readings());
-    dumpBuiltNodesForDiagnostics(readings(), built.graph, function->program()); // TEMPORARY
     if (built.graph == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -498,13 +439,6 @@ slot_t liftTransposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             RuntimeDiag::RuntimeError,
             "transforms: transpose has no transpose for this function");
     }
-    // TEMPORARY (removed before this step is committed): the transposed member itself and every
-    // graph it depends on -- the graphs `transpose` writes, which no lift reading covers and which
-    // only this step makes them run.
-    dumpBuiltNodesForDiagnostics(os, member.graph, member.program);
-    for (camel::runtime::GraphId callee : member.graph->dependencies()) {
-        dumpBuiltNodesForDiagnostics(os, member.program->graph(callee), member.program);
-    }
     // The layout the operand carries is the fact, not a guess: a lift that carried
     // `(residual, direction)` pairs closes over pairs, and one that carried the residuals alone
     // closes over the residuals alone. `transpose(f)` keeps `f`'s closure, so both sides close over
@@ -535,7 +469,6 @@ slot_t liftTransposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // TEMPORARY (removed before this step is committed): every graph this edit builds, node by node,
     // so the FILL that stores a view and the node chain that feeds it can be named instead of guessed
     // at. Shared by both kernels so the two readings are the same text.
-    dumpBuiltNodesForDiagnostics(os, lifted.graph, function->program()); // TEMPORARY
     if (lifted.graph == nullptr) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -658,14 +591,6 @@ void registerOperatorMetadata() {
         "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0, .declaredByModule = true});
     camel::core::OperatorTable::instance().declareCallForm(
         "transforms:transpose", {.name = "transpose", .minArgs = 1, .withCount = 0, .declaredByModule = true});
-}
-
-// TEMPORARY (removed before this step is committed): the external entry of the dump above, for the
-// graphs `jvp.cpp`'s own build encodes (the lift recursion builds those, not a kernel).
-void dumpBuiltNodesForDiagnostics(
-    std::ostream &os, const camel::runtime::GCGraph *graph,
-    const camel::runtime::Program *program) {
-    dumpBuiltNodesImpl(os, graph, program);
 }
 
 } // namespace camel::transforms
