@@ -652,27 +652,30 @@ struct DeclinedCall {
     camel::source::origin_id_t origin;
 };
 
-/// Where the call `id` of the draft being examined is written: the call node's own position, or
-/// the definition of the callee it leaves when the compiler built the call and gave it none. A
-/// graph's call of the function it was compiled from -- the entry graph's call of `main` -- is of
-/// the second kind, and "inlining 'main' into '__root__'" is a statement about `main`, so the
-/// callee's position is the place the reader can look at. `kInvalidOriginId` when neither has one: a
-/// report about this call then names it without a position, which is the truth about the program.
+/// Where the call `id` of the draft being examined is written: the call node's own position, or the
+/// definition of the callee it leaves when the compiler built the call and gave it none. A graph's
+/// call of the function it was compiled from -- the entry graph's call of `main` -- is of the second
+/// kind, and "inlining 'main' into '__root__'" is a statement about `main`, so the function's
+/// definition is the place the reader can look at. Neither is invented: a call with no position and
+/// a callee the compiler built (a specialization, a lifted closure) has nothing to point at, and
+/// `kInvalidOriginId` says so -- a constant inside the callee's body is not where the call is.
 camel::source::origin_id_t leftCallOrigin(
-    const camel::runtime::GraphDraft &draft, gc_node_ref_t id, const GCGraph *callee) {
+    const camel::core::context::Context *context, const camel::runtime::GraphDraft &draft,
+    gc_node_ref_t id, const GCGraph *callee) {
     const uint64_t callOrigin = draft.nodeOrigin(id);
     if (callOrigin != camel::source::kInvalidOriginId) {
         return callOrigin;
     }
-    if (callee != nullptr) {
-        for (auto it = callee->nodes().begin(); it != callee->nodes().end(); ++it) {
-            const uint64_t origin = callee->nodeOrigin(it.ref());
-            if (origin != camel::source::kInvalidOriginId) {
-                return origin;
-            }
-        }
+    if (context == nullptr || callee == nullptr) {
+        return camel::source::kInvalidOriginId;
     }
-    return camel::source::kInvalidOriginId;
+    const auto source = context->sourceContext();
+    if (!source) {
+        return camel::source::kInvalidOriginId;
+    }
+    const uint64_t definition = source->debugMap().graphOrigin(callee->graphId());
+    return definition != camel::source::kInvalidOriginId ? definition
+                                                         : camel::source::kInvalidOriginId;
 }
 
 /// The direct calls of the graphs in the closure, kept up to date as the session rewrites
@@ -1069,7 +1072,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                          computed,
                          draft.nodeCount(),
                          calls,
-                         leftCallOrigin(draft, id, calleeGraph)});
+                         leftCallOrigin(context.get(), draft, id, calleeGraph)});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
