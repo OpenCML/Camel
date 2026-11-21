@@ -1,41 +1,62 @@
-# Where the optimizer's *second* pass burns, pinned as a number: the CPU time of `std::opt #2` on
-# two programs, read from the compiler's own `--time-phases` report (`cpu_ns` per pass) by
-# `test/tools/opt-cost/second_pass.mjs`.
+# Where the optimizer's *second* pass burns, pinned as a ratio: the CPU time of `std::opt #2` over
+# the CPU time of `std::opt #1` on the same program in the same run, read from the compiler's own
+# `--time-phases` report (`cpu_ns` per pass) by `test/tools/opt-cost/second_pass.mjs`.
 #
 # Why the entry exists. `perf_fib_smoke.opt_twice` ran `std::opt` twice over the timed helper and
 # cost 4005 ms of CPU, of which the *second* pass was 3607 ms against 89 ms for the first
 # (`docs/handover/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`). The helper's own shape was
 # what made the program expensive -- it returned one array built by `concat` at every level of a
 # recursion -- so rewriting the helper (2026-11-22) takes the workload away with it. This entry keeps
-# the reading: it names the case, runs the same pipeline, and pins the second pass's CPU time, so the
-# cost cannot drop out of the tests just because the tool that used to produce it was rewritten.
+# the reading: it names the case, runs the same pipeline, and pins how many times the first pass the
+# second one costs, so the cost cannot drop out of the tests just because the tool that used to
+# produce it was rewritten.
 #
-# What the numbers are, and what each one is a reading of:
+# Why a ratio and not a ceiling in milliseconds. This entry's first shape pinned the second pass's
+# CPU time against 2200 ms, and that bound is not portable: CPU milliseconds are a host's speed as
+# much as the pass's work, and the same commit was red on win-x64 and on macos-arm64 while green here
+# -- CI 44938160097 read `[FAIL] second_pass.perf_fib_smoke 2.96 s` on macos-arm64, `[FAIL]
+# second_pass.perf_fib_smoke 2.33 s` and `[FAIL] second_pass.concat_chain 1.95 s` on win-x64, against
+# 2.02 s and 1.69 s of the same two tests on the reference host -- while the ratio of the second pass
+# to the first in the same run stayed put: both are the same pass over the same program in the same
+# process, so a host N times slower stretches both by the same N. What is left over is that a host
+# slow in memory rather than in instructions loses more on the second pass (it walks the graph the
+# inliner unrolled, where the first walks one it has not), which moves the ratio a little and is what
+# the margin below is for. A bound per platform was rejected: it writes the machine's name into the
+# criterion, and a regression then hides behind whichever machine has the generous bound.
 #
-#   `perf_fib_smoke` -- the program whose whole run is the entry's cost. The second pass over it
-#   costs 3608 ms while the helper still builds the chain, and 1668 ms with the helper rewritten as
-#   one fold over `(0..repeat)` (measured 2026-11-22 on tangshan88, Release, `--jobs 1`). The ceiling
-#   is 2200 ms: 1.3 times the rewritten reading, and 1.6 times below the chain's -- so the entry is
-#   red on the old helper and green on the new one, which is what makes it a regression case and not
-#   a description. It is not 89 ms: where the remaining 1668 ms goes is the reading the entry above
-#   this one explains (`std::cxx::fold` scanning the graph the inliner unrolled), and the step that
-#   fixes it is the rewrite core section of the abstractions design page, still under discussion on fsh-dev.
+# What the numbers are, and what each one is a reading of (reference host, Release, `--jobs 1`,
+# measured 2026-11-22 with the tool's own line, `cpu_ms` against `baseline_cpu_ms`):
+#
+#   `perf_fib_smoke` -- the program whose whole run is the entry's cost. The first pass over it costs
+#   207.9 ms and the second 1669.8-1673.8 ms, a ratio of 8.03-8.05 (7.85 in one run taken at load 24).
+#   With the helper that built the chain -- `stdlib/perf.cml` taken from 96d8c9ea3, the same tool and
+#   the same host -- the two read 176.6-178.0 ms and 3590.0-3611.1 ms over three runs, 20.08-20.39
+#   times, so the bound of 14 is red on the old helper and green on the new one, which is what makes
+#   it a regression case and not a description. (The report above records 89 ms for the first pass of
+#   its own run, which was the plan's `opt_twice` entry rather than this pipeline; the ratio is read
+#   and pinned from this pipeline's two windows.) Where the remaining 1670 ms goes is the reading that
+#   report carries (`std::cxx::fold` scanning the graph the inliner unrolled), and the step that fixes
+#   it is the rewrite core section of the abstractions design page, still under discussion on fsh-dev.
+#   Fixing it should take the ratio down, and this bound is what will have to be re-derived then.
 #
 #   `concat_chain` -- the chain written as its own program, with a depth that is a run-time count, so
-#   `fib(20)` is only there to give the program something to do. It costs 1404 ms in the second pass
-#   and the helper never enters it; the ceiling is 2200 ms for the same reason as above. This is the
-#   entry that would still be red if the helper regressed to the chain shape: it keeps the shape in
-#   the tree, where a `timeit` rewrite cannot take it away.
+#   `fib(20)` is only there to give the program something to do. The first pass costs 159.5-160.6 ms
+#   and the second 1405.6-1413.4 ms over four runs, 8.77-8.86 times (8.90-8.99 on the build that
+#   carried the old helper), and the helper never enters it. This is the entry that would still be
+#   red if the helper regressed to the chain shape: it keeps the shape in the tree, where a `timeit`
+#   rewrite cannot take it away. Its ratio is judged against the same bound as `perf_fib_smoke`'s, so
+#   the two are one criterion written twice rather than two numbers taken on one host's day.
 #
 # The unit is CPU time of the pass, not the wall clock: a shared host stretches the wall clock of a
 # CPU-bound pass several times over without the pass having used more CPU (the rule
-# `test/tools/startup-cost.mjs` states). CPU time barely moves with the load, so a crossed ceiling is
-# a regression and never "the host was busy". The entry is `parallel = false` for the same reason the
-# startup gate is: it reads an absolute millisecond bound.
+# `test/tools/startup-cost.mjs` states). The entry stays `parallel = false` for a different reason
+# than the startup gate's: a reading of this shape compares two windows of one process, and the pass
+# it reads is memory-bound, so work running beside it slows the second window (the larger graph) more
+# than the first, which inflates the ratio the entry judges.
 #
-# The tool prints the build, the two pass times, the run's total and `result=PASS|FAIL`, and on a
-# failure it names the case, the value and the ceiling on standard output -- the stream the plan
-# keeps -- so a red log carries the reason rather than a bare exit 1.
+# The tool prints the build, the two pass times, their ratio and `result=PASS|FAIL`, and on a failure
+# it names the case, both values and the bound on standard output -- the stream the plan keeps -- so
+# a red log carries the reason rather than a bare exit 1.
 
 id = "opt.second_pass"
 order = 342
@@ -44,24 +65,24 @@ tags = ["feat", "opt", "perf"]
 
 [[tests]]
 name = "second_pass.perf_fib_smoke"
-desc = "The CPU time of the second std::opt over the timed helper's program, against a ceiling derived from the measurement: red (3608 ms) while the helper built its answer by concatenating a recursion, green (1668 ms) with the helper rewritten as one fold over the interval, against 2200 ms."
+desc = "The CPU time of the second std::opt over the timed helper's program as a ratio of the first std::opt's in the same run, against a bound derived from the measurement: red (3601.0 ms against 178.0, 20.2 times) while the helper built its answer by concatenating a recursion, green (1669.8 ms against 207.9, 8.03 times) with the helper rewritten as one fold over the interval, against 14 times."
 kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../../tools/opt-cost/second_pass.mjs"
-args = ["${case}", "--case", "test/cases/linear/jit/perf_fib_smoke.cml", "--ceiling", "2200", "--index", "2", "--backend", "jit"]
+args = ["${case}", "--case", "test/cases/linear/jit/perf_fib_smoke.cml", "--max-ratio", "14", "--index", "2", "--backend", "jit"]
 expect_exit = 0
-expect_stdout_contains = ["opt_second_pass case=test/cases/linear/jit/perf_fib_smoke.cml", "pass=std::opt index=2", "result=PASS"]
+expect_stdout_contains = ["opt_second_pass case=test/cases/linear/jit/perf_fib_smoke.cml", "pass=std::opt index=2", "baseline_index=1", "ratio=", "result=PASS"]
 timeout_ms = 120000
 
 [[tests]]
 name = "second_pass.concat_chain"
-desc = "The same reading on the chain written as its own program (a run-time recursion whose answer is one concat per level), which no helper rewrite can take out of the tree: 1404 ms against 2200 ms."
+desc = "The same reading on the chain written as its own program (a run-time recursion whose answer is one concat per level), which no helper rewrite can take out of the tree: 1413.2 ms against 159.5, 8.86 times, against the same bound of 14."
 kind = "behavior"
 parallel = false
 tool = "node"
 case = "../../../tools/opt-cost/second_pass.mjs"
-args = ["${case}", "--case", "test/cases/opt/generic/concat_chain.cml", "--ceiling", "2200", "--index", "2", "--backend", "jit"]
+args = ["${case}", "--case", "test/cases/opt/generic/concat_chain.cml", "--max-ratio", "14", "--index", "2", "--backend", "jit"]
 expect_exit = 0
-expect_stdout_contains = ["opt_second_pass case=test/cases/opt/generic/concat_chain.cml", "pass=std::opt index=2", "result=PASS"]
+expect_stdout_contains = ["opt_second_pass case=test/cases/opt/generic/concat_chain.cml", "pass=std::opt index=2", "baseline_index=1", "ratio=", "result=PASS"]
 timeout_ms = 120000
