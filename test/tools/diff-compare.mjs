@@ -1161,6 +1161,7 @@ async function selfTest(config) {
         )
         return 1
     }
+    const verdictOfCandidate = classify(candidate, config)
     const casePath = path.resolve(path.dirname(candidate.__planPath), candidate.case)
     const source = fs.readFileSync(casePath, 'utf8')
     const scratch = path.join(REPO_ROOT, 'tmp', 'diff', 'self-test')
@@ -1182,7 +1183,18 @@ async function selfTest(config) {
     fs.writeFileSync(changedPath, changed)
     const originOutput = await runCase(casePath, [casePath])
     const changedOutput = await runCase(changedPath, [changedPath])
-    const outputVerdict = compareOutput(originOutput, changedOutput, side, side, candidate, 2, 53)
+    // The plant is a difference in standard output, so it is read as the stream the sweep would read
+    // for this block: the streams it pins. A candidate that pins none is never chosen (above).
+    const outputVerdict = compareOutput(
+        originOutput,
+        changedOutput,
+        side,
+        side,
+        candidate,
+        2,
+        53,
+        verdictOfCandidate.pinnedStreams,
+    )
     console.log(`[SELF-TEST] plant=output expected=differ got=${outputVerdict.verdict} case=${label}`)
     for (const line of outputVerdict.detail.slice(0, 2)) console.log(`  ${line}`)
 
