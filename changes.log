@@ -10,6 +10,15 @@ Changes:
 - **三处诊断**：没有 `else` 的 `if` 分支里未使用的 `T!` 重新告警；被分支携带的写入，分支自己的语句照常执行；微分后的函数体保留它等待的语句。
 - **一条性能是退的**：`std::opt` 这条路比上一版慢约 30%（两次优化 `6.48 s` 对 `5.00 s` 预算，四个后端一致，不是抖动）。这一版带着它发，读数与追查记在 `docs/handover/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`。
 
+本版带发的问题（四条，下一版修）：
+
+- `opt_saturate_rhs_from_an_enclosing_region` 在 `std::cxx::saturate` 的一个用例上让编译器报 `internal error: the graph 'main' a commit
+  was asked to edit already reached past the type its own signature declares, before the edit`（`node 9`），四条腿一致；判词是编译器自己给的
+  `This is a defect of the compiler, not an error of the program`。
+- `ref.foreach_gives_back` 在 nvm、fvm、jit、prl 四个后端上读到 `produced 1 copies 0 give-backs 0 kept 1`，用例期望有归还。
+- `frontend.ast_snapshot` 与 `tutorial_images.current` 的现状与各自的记录不一致。
+- `opt_twice` 的 CPU 预算仍未回到 `5.00 s`，见上面最后一条。
+
 [0.2.44]
 Changes:
 - **`with` 的第一个参数是第一个普通参数**：`first_with_as_param(f)` 把函数第一个声明的 `with` 端口登记为第一个普通端口，其余 `with` 端口各前移一位；函数体不重读、节点原样带过，解析侧给调用定型与内核给返回的图定型共用同一条签名律。库层 `grad` 因此写作 `vjp(first_with_as_param(f))` 在种子 1 处读第一条余切；前向的 `with` 提升路径删除——它把 `with` 值当常量、切线取该类型的零，线性映射退化为零映射（`value=9.0 grad=0.0`，引擎给 3.0）。
