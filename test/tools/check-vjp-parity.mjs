@@ -110,11 +110,15 @@ function link(name) {
 
 function buildCopy() {
     fs.mkdirSync(path.join(scratch, 'stdlib', 'rulesets'), { recursive: true })
-    for (const name of ['transpose.cml', 'jvp.cml']) {
-        fs.copyFileSync(
-            path.join(ROOT, 'stdlib', 'rulesets', name),
-            path.join(scratch, 'stdlib', 'rulesets', name)
-        )
+    // Every ruleset the tree holds, by directory: a copy that named two files compared a library the
+    // tree does not have, and it said so in the readings instead of here -- `rulesets/vmap.cml` was
+    // left out, the copy's library therefore filed no law for `argmax`, `argmin`, `concat`, `dim` or
+    // `unsqueeze`, and the reading below ("the same law is not reported once the list holds it")
+    // went red on five differences the *real* tree does not have. A copy is the tree plus one law,
+    // and the only way to keep that true is to start from the directory.
+    const rulesets = path.join(ROOT, 'stdlib', 'rulesets')
+    for (const name of fs.readdirSync(rulesets).filter((name) => name.endsWith('.cml')).sort()) {
+        fs.copyFileSync(path.join(rulesets, name), path.join(scratch, 'stdlib', 'rulesets', name))
     }
     for (const name of ['src', 'modules']) {
         link(name)

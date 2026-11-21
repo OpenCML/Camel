@@ -59,11 +59,15 @@ permute_inverse	engine-autodiff	the inverse permutation a permute's adjoint need
 # without the row it would refuse a shape query in a loss whose contribution is zero. A transposition
 # law has nothing to put on that side: the library's forward half states the same fact by not
 # filing a `jvp_*`.
+#
+# `dim` left it on 2026-11-22, when the comparison read `stdlib/rulesets/vmap.cml` for the first
+# time: `#vmap_rule_dim` files `dim<axis>(x)` under `dim@1`, so the key is one both tables answer
+# and the row had stopped holding a difference. The engine keeps its rule, and 9.9 is still why it
+# answers zero; what changed is that the file states that fact and the comparison now reads it.
 
 zeros_like	engine-autodiff	locally constant in its operand: the zero array is the same for every value
 ones_like	engine-autodiff	locally constant in its operand: the ones array is the same for every value
 numel	engine-autodiff	answers an integer: a discrete value's derivative is zero by definition
-dim	engine-autodiff	answers an integer: a discrete value's derivative is zero by definition
 shape	engine-autodiff	answers an integer list: a discrete value's derivative is zero by definition
 one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
 strict_eq	engine-autodiff	a comparison: a boolean has no tangent space to carry
@@ -90,10 +94,12 @@ int	engine-autodiff	the conversion's destination is `int`, a discrete type with 
 # `argmax_axis`/`argmin_axis`, whose key now lands under `argmax`/`argmin`). The ones left are the
 # ones still owed. `layer_norm` left it on 2026-11-20, when `rulesets/jvp.cml#jvp_layer_norm` landed
 # beside the reverse rule the engine already had, so `layer_norm` is now a key both tables answer.
+# `argmax`, `argmin`, `concat` and `unsqueeze` left it on 2026-11-22, when the comparison stopped
+# reading two rulesets by name and read `stdlib/rulesets/` instead: `#vmap_rule_argmax`,
+# `#vmap_rule_argmin`, `#vmap_rule_concat` and `#vmap_rule_unsqueeze` file `argmax@1`, `argmin@1`,
+# `concat@2` and `unsqueeze@1`. Those rows were not recording a decision about the forward half;
+# they were recording a file no line of the comparison opened.
 
-argmax	lane-rulesets	no `jvp_argmax`: the library's forward half stops a program before the reverse is asked
-argmin	lane-rulesets	no `jvp_argmin`: the library's forward half stops a program before the reverse is asked
-concat	lane-rulesets	no `jvp_concat`: the library's forward half stops a program before the reverse is asked
 erf_d	lane-rulesets	`math:erf_d` has no `jvp_erf_d`, and `math:` is a module the rulesets do not file for
 erf_f	lane-rulesets	`math:erf_f` has no `jvp_erf_f`, and `math:` is a module the rulesets do not file for
 erfc_d	lane-rulesets	`math:erfc_d` has no `jvp_erfc_d`, and `math:` is a module the rulesets do not file for
@@ -102,7 +108,6 @@ erfc_f	lane-rulesets	`math:erfc_f` has no `jvp_erfc_f`, and `math:` is a module 
 pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
 sqrt_d	lane-rulesets	`math:sqrt_d` has no `jvp_sqrt_d`, and `math:` is a module the rulesets do not file for
-unsqueeze	lane-rulesets	no `jvp_unsqueeze`: the forward half states a reshape, not a new axis
 idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
 
 # ---- 丙: the model operators (`modules/nn`), none of which the rulesets file for ---------------

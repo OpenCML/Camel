@@ -218,11 +218,83 @@ function lineOf(text, offset) {
 
 // ---- the library's table ---------------------------------------------------------------------
 //
-// One row per rule declaration in the two rulesets that hold laws: the rule's symbol (`pick_at_t`,
+// One row per rule declaration in every ruleset the directory holds: the rule's symbol (`pick_at_t`,
 // `jvp_pick_at`), the key it files (read from the head of its left side, `src/parse/ast/
 // rule_head.cpp#leftHeadOf`), and the left side itself, so a reader can see what was read.
+//
+// The rulesets are read by directory, not from a list of names. The list this replaced named two
+// files (`transpose.cml`, `jvp.cml`) while the directory held five, and the three it did not name
+// were read by nothing: `vmap.cml` files 27 laws -- `argmax`, `sum`, `where`, `concat`, `dim`,
+// `unsqueeze`, ... -- so five keys they file were reported as keys the library files no law for,
+// and five rows of the exemption list were written against that blind reading. A law in a file no
+// line of this script opens is a law nothing compares, and no error says so: each table stays
+// complete in itself, which is the shape of every defect this comparison exists for.
+//
+// So the read set is the top of `stdlib/rulesets/`, and `unreadRulesets` below is the relation that
+// keeps it the whole directory rather than its top level: a ruleset that moves into a subdirectory
+// stops being read the day it moves, and a green check would not say so.
 
-const RULESETS = ['stdlib/rulesets/transpose.cml', 'stdlib/rulesets/jvp.cml']
+const RULESET_DIRECTORY = 'stdlib/rulesets'
+
+function rulesetFiles() {
+    let names
+    try {
+        names = fs.readdirSync(path.join(ROOT, RULESET_DIRECTORY))
+    } catch {
+        return fail(
+            `${RULESET_DIRECTORY} is not in the tree: the comparison reads its rulesets from it`
+        )
+    }
+    const files = names.filter((name) => name.endsWith('.cml')).sort()
+    if (files.length === 0) {
+        // An empty read set makes every relation below true of nothing.
+        return fail(
+            `${RULESET_DIRECTORY} holds no .cml: a reader that found nothing compared nothing`
+        )
+    }
+    return files.map((name) => `${RULESET_DIRECTORY}/${name}`)
+}
+
+const RULESETS = rulesetFiles()
+
+/// The `.cml` files under `stdlib/rulesets` that declare a rule and are not in the read set.
+///
+/// The read set is the top of the directory, so a ruleset one level down is read by nothing while
+/// the check stays green -- the same defect, moved. A file is recognised by what it says (`rule`,
+/// comments blanked) rather than by its name, and every one is named: a red that says only how many
+/// places were missed leaves the reader to work out which, which is the work this check exists to do.
+function unreadRulesets() {
+    const readSet = new Set(RULESETS)
+    const stray = []
+    const walk = (directory) => {
+        let entries
+        try {
+            entries = fs.readdirSync(directory, { withFileTypes: true })
+        } catch {
+            return
+        }
+        for (const entry of entries) {
+            const full = path.join(directory, entry.name)
+            if (entry.isDirectory()) {
+                walk(full)
+                continue
+            }
+            if (!entry.name.endsWith('.cml')) {
+                continue
+            }
+            const relative = path.relative(ROOT, full).replaceAll(path.sep, '/')
+            if (readSet.has(relative)) {
+                continue
+            }
+            const text = withoutComments(fs.readFileSync(full, 'utf8'))
+            if (/^[ \t]*(?:export[ \t]+)?rule[ \t]+[A-Za-z_]/m.test(text)) {
+                stray.push(relative)
+            }
+        }
+    }
+    walk(path.join(ROOT, RULESET_DIRECTORY))
+    return stray.sort()
+}
 
 /// The number of top-level commas plus one: `f(a, b)` takes two operands. Commas inside brackets
 /// are the types' (`f::<T, U>(a)`), and the caller has already cut those off.
@@ -349,8 +421,19 @@ function readLibrary() {
             keysByHead.get(key.head).add(key.arity)
         }
     }
+    // The read set is a directory, so it has to be the directory that was read: a ruleset it does
+    // not hold is a law nothing compares, and each one is named rather than counted.
+    for (const unread of unreadRulesets()) {
+        fail(
+            `${unread} declares rules and is not read: the library is read from ` +
+                `${RULESET_DIRECTORY}/*.cml, so its laws are compared by nothing. It belongs at the ` +
+                `top of that directory, or this reader has to read it`
+        )
+    }
     if (rules.length === 0) {
-        fail('the two rulesets file no rule: the reader stopped matching, so nothing was compared')
+        fail(
+            `${RULESET_DIRECTORY} files no rule: the reader stopped matching, so nothing was compared`
+        )
     }
     return { rules, keysByHead }
 }
