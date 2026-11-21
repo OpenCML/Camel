@@ -748,7 +748,7 @@ func pick(x: int): string { return 'wide' }
 | 有什么 | 在哪 |
 |---|---|
 | 打印机 | `src/passes/trans/cml/cml.cpp`（2433 行）、`include/camel/passes/trans/cml/cml.h`；`CmlDumpPass` 是 `RuntimeGraphTranslatePass`，`acceptsWritings()` 为假（`cml.h#CmlDumpPass`） |
-| 注册与声明 | 内核注册 `pass.cpp#registerCoreKernels`；遍的声明（名字、说明、参数）在 `stdlib/std.cml#cml` |
+| 注册与声明 | 每个遍在自己的源文件里登记 `PassKernel`，驱动按名字从 `pass.cpp#passImplementations` 取；遍的声明（名字、说明、参数）在 `stdlib/std.cml#cml` |
 | 诊断码 | `CmlUnsupportedConstruct = 0x1A5`、`CmlBigConstant = 0x1A6`（`semantic.h#CmlUnsupportedConstruct`） |
 | 参数 | `maxLiteralBytes` 默认 64 KiB（`cml.h#CmlOptions`），写出为 `std::cml max_literal_bytes=...` |
 | 抽取写法 | 有写法状态时，驱动器挑一个写法再交给消费者（`pass.cpp#applyPassesDetailed`）；不知道状态的遍拒绝（同一函数里的 `RuntimeDiag::PassNeedsExtraction`） |

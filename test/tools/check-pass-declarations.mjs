@@ -14,7 +14,7 @@
  *   * no parameter declaration written as a string literal
  *     (`"safe_fp: bool = false, ..."`) outside `stdlib/`, where the declaration belongs;
  *   * every pass declared in `stdlib/std.cml` has exactly one kernel registered with
- *     `registerCoreKernel`, and every kernel is declared: a bijection, stated as such rather than
+ *     `PassKernel`, and every kernel is declared: a bijection, stated as such rather than
  *     as a count. A count moves with every pass the language gains while the property it was
  *      meant to guard does not, which is why the rule that wrote the declarations down asks for
  *     the relation and not the number; what the two sets must not be is empty, and that lower
@@ -129,10 +129,18 @@ const declarations = []
 }
 const implementations = []
 {
-    const file = path.join(REPO_ROOT, 'src', 'execute', 'pass.cpp')
-    const text = fs.readFileSync(file, 'utf8')
-    for (const match of text.matchAll(/registerCoreKernel\(\s*"([a-z_][a-z0-9_:]*)"/g)) {
-        implementations.push(match[1])
+    // Every kernel is registered by the file that implements the pass, as a `PassKernel` object
+    // holding the Camel function's path (camel/execute/pass/registration.h), so the scan is the
+    // sources rather than one file: the pipeline reads the registry, and what it reads there is
+    // this set.
+    for (const file of files(path.join(REPO_ROOT, 'src'))) {
+        if (!file.endsWith('.cpp')) {
+            continue
+        }
+        const text = fs.readFileSync(file, 'utf8')
+        for (const match of text.matchAll(/PassKernel\s+[A-Za-z_][A-Za-z0-9_]*\(\s*"std::([a-z_][a-z0-9_:]*)"/g)) {
+            implementations.push(match[1])
+        }
     }
 }
 // The property is the bijection below: every declaration has one kernel and every kernel one
@@ -162,8 +170,8 @@ for (const name of implementations) {
         const found = declarations.filter((declared) => declared === name).length
         problems.push(
             found === 0
-                ? `src/execute/pass.cpp implements '${name}' and no declaration names it`
-                : `src/execute/pass.cpp implements '${name}' ${found} times`
+                ? `a kernel implements '${name}' and no declaration names it`
+                : `a kernel implements '${name}' ${found} times`
         )
     }
 }
@@ -400,7 +408,7 @@ for (const path of moduleDeclarations) {
 // parameters are its module's `.cml` declaration.
 const CPP_PARAMETERS = new Map([
     ['modules/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
-    ['src/execute/pass.cpp', 5], // test::params, test-only
+    ['src/passes/test/params.cpp', 5], // test::params, test-only
     // Not a second declaration: built from the Camel function's `with` list, which is the
     // pass's declaration.
     ['src/execute/camel_pass.cpp', 1],
@@ -414,7 +422,7 @@ for (const root of ['src', 'modules']) {
         const text = fs.readFileSync(file, 'utf8')
         const named = (text.match(/PassParam\{/g) || []).length
         const aggregate =
-            relative === 'src/execute/pass.cpp'
+            relative === 'src/passes/test/params.cpp'
                 ? (text.match(/\{\s*"[a-z_]+"\s*,\s*PassParamType::/g) || []).length
                 : 0
         const count = named + aggregate

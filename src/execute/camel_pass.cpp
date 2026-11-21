@@ -19,8 +19,8 @@
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/definitions.h"
 #include "camel/utils/assert.h"
+#include "graph_caller.h"
 #include "pass_declarations.h"
-#include "passes/sched/nodevm/nodevm.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -254,7 +254,6 @@ class CamelPass final : public GraphIRPass {
                 ASSERT(false, "A pass parameter was checked when the pass was registered.");
             }
         }
-        NodeVMSchedPass vm(context_);
         // The root function of the program: it captures nothing, since the root graph holds the
         // values of the top level itself.
         slot_t argument = 0;
@@ -270,11 +269,17 @@ class CamelPass final : public GraphIRPass {
         // and binds them before it calls the function, so the captures are filled before the body
         // runs. There is no closure left for this caller to pass, and the entry graph, not a
         // function value, is what `callGraph` is for.
-        const slot_t result   = vm.callGraph(
+        //
+        // The graph is run on the reference executor, which installs itself (graph_caller.h): the
+        // pass is a function of the module, and the interpreter it runs on is not this file's
+        // business.
+        const slot_t result = camel::execute::detail::graphCaller()(
+            context_,
             tool->program,
             tool->graph,
             std::span(&argument, 1),
-            std::span<const slot_t>(withArgs));
+            std::span<const slot_t>(withArgs),
+            {});
         if (camel::core::rtdata::isErrorValue(result)) {
             // The pass is `(f: F) => F!` (design principles 9.1): it failed, and what
             // it returned is an error value like any other. It is handed to the driver, which

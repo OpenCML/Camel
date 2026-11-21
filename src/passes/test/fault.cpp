@@ -5,6 +5,7 @@
 
 #include "../opt/generic/rewrite.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -353,3 +354,19 @@ const camel::runtime::Program *
 RecalleeTypeTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return retargetFirstCall(context_, program, /*arity=*/false);
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel dropCallArgumentKernel(kDropCallArgumentPass, makePass<DropCallArgumentTestPass>());
+const PassKernel leakBranchArmKernel(kLeakBranchArmPass, makePass<LeakBranchArmTestPass>());
+const PassKernel shareBranchArmKernel(kShareBranchArmPass, makePass<ShareBranchArmTestPass>());
+const PassKernel orderOnlyEffectKernel(kOrderOnlyEffectPass, makePass<OrderOnlyEffectTestPass>());
+const PassKernel recalleeArityKernel(kRecalleeArityPass, makePass<RecalleeArityTestPass>());
+const PassKernel recalleeTypeKernel(kRecalleeTypePass, makePass<RecalleeTypeTestPass>());
+
+} // namespace

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "camel/passes/test/control.h"
 #include "../opt/generic/rewrite.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph_txn.h"
 
@@ -405,3 +406,14 @@ ControlTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel controlKernel(kControlTestPass, makePass<ControlTestPass>());
+
+} // namespace

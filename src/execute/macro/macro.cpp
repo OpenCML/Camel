@@ -15,6 +15,8 @@
 #include <iostream>
 #include <span>
 
+#include "camel/execute/pass/registration.h"
+
 namespace {
 
 /// One line per reachable graph, before the round evaluates anything: the shapes a rewrite can take
@@ -154,3 +156,17 @@ MacroRewritePass::apply(const camel::runtime::Program *program, std::ostream &os
 
     return program;
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+
+/// `report` is declared in stdlib/std.cml with a default of false: the reading line is for a run
+/// that has to explain where it is, and a program keeps its stderr unless it asks for the line.
+const PassKernel macroKernel(
+    "std::macro",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<MacroRewritePass>(ctx, args.getBool("report"));
+    });
+
+} // namespace

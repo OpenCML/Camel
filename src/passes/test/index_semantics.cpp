@@ -8,6 +8,7 @@
 #include "index_semantics.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/execute/pass/registration.h"
 
 #include <format>
 #include <ostream>
@@ -385,3 +386,14 @@ IndexSemanticsTestPass::apply(const camel::runtime::Program *program, std::ostre
     }
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel indexSemanticsKernel(kIndexSemanticsTestPass, makePass<IndexSemanticsTestPass>());
+
+} // namespace

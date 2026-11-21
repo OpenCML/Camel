@@ -7,6 +7,7 @@
 
 #include "stats.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/reachable.h"
 
@@ -96,3 +97,14 @@ GraphStatsPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     os << "GRAPH_STATS " << collectGraphStats(*program, program->root()).toJson() << std::endl;
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// `std::stats`: the name and the parameters are the declaration in stdlib/std.cml; this is the
+/// kernel and nothing else (design principles 9.3, camel/execute/pass/registration.h).
+const PassKernel statsKernel("std::stats", makePass<GraphStatsPass>());
+
+} // namespace

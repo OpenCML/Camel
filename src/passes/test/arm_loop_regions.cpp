@@ -10,6 +10,7 @@
 
 #include "camel/passes/test/arm_loop_regions.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/draft_session.h"
 
@@ -68,3 +69,14 @@ ArmLoopRegionsTestPass::apply(const camel::runtime::Program *program, std::ostre
         return program;
     }
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel armLoopRegionsKernel(kArmLoopRegionsTestPass, makePass<ArmLoopRegionsTestPass>());
+
+} // namespace

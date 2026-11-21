@@ -3,6 +3,7 @@
 
 #include "passes/trans/rulesets/rulesets.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/core/forward.h"
 
@@ -168,3 +169,19 @@ RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     // A reading of the index, not a rewrite: the graph goes on exactly as it came.
     return program;
 }
+
+namespace {
+
+using camel::execute::PassKernel;
+
+const PassKernel rulesetsKernel(
+    "std::rulesets",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<RulesetsPass>(
+            ctx,
+            args.isNull("query") ? std::string() : args.getString("query"),
+            args.getBool("forward"),
+            args.getBool("sig"));
+    });
+
+} // namespace

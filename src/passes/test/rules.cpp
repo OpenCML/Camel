@@ -10,6 +10,7 @@
 
 #include "camel/passes/test/rules.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/rules.h"
 
@@ -314,3 +315,16 @@ SavepointTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     check("budget_cut_lands_nothing", cut && cutApplied >= 1 && resumed && never && *resumed == *never, os);
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel rulesKernel(kRulesTestPass, makePass<RulesTestPass>());
+const PassKernel rulesGreedyKernel(kRulesGreedyTestPass, makePass<RulesGreedyTestPass>());
+const PassKernel savepointKernel(kSavepointTestPass, makePass<SavepointTestPass>());
+
+} // namespace

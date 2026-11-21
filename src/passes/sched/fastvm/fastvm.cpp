@@ -10,6 +10,7 @@
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
 #include "camel/execute/operator_call.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/profile/profile.h"
 #include "camel/execute/loop_frame.h"
 #include "camel/runtime/exec_plan.h"
@@ -1508,3 +1509,51 @@ slot_t FastVMSchedPass::invokeCallOrJit(
     return call(pc, frame);
 }
 #endif
+
+namespace {
+
+using camel::execute::PassKernel;
+using camel::execute::pathArgument;
+
+FastVMConfig makeDefaultFastVmJitConfig() {
+#if !ENABLE_FASTVM_JIT
+    // The JIT has a code generator for x86-64 only; in a build without it std::jit is the
+    // bytecode interpreter of std::fvm, with the same results. Said once per process, in the log
+    // (-v) and not as a warning: the same command line must run on every platform, also under
+    // -Werror.
+    static std::once_flag said;
+    std::call_once(said, [] {
+        CAMEL_LOG_WARN_S(
+            "JIT",
+            "std::jit: this build has no native code generator (x86-64 only); the program runs "
+            "on the bytecode interpreter, as under std::fvm.");
+    });
+#endif
+    FastVMConfig config{};
+    config.jitMode           = FastVMConfig::JitMode::OnDemand;
+    config.jitHotThreshold   = 1;
+    config.enableJitTraceMir = false;
+    return config;
+}
+
+/// `std::fvm` is the bytecode VM, and `std::fastvm::jit` is the same VM with the JIT switched on;
+/// `std::jit` is the alias its declaration gives it.
+const PassKernel fastVmKernel(
+    "std::fvm",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        FastVMConfig config{};
+        config.statsPath = pathArgument(args, "stats");
+        return std::make_unique<FastVMSchedPass>(ctx, config);
+    });
+
+const PassKernel fastVmJitKernel(
+    "std::fastvm::jit",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        FastVMConfig config = makeDefaultFastVmJitConfig();
+        config.statsPath    = pathArgument(args, "stats");
+        const int64_t threshold = args.getInt("hot_threshold");
+        config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);
+        return std::make_unique<FastVMSchedPass>(ctx, config);
+    });
+
+} // namespace

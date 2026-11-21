@@ -5,6 +5,9 @@
 
 #include "../inline/engine.h"
 
+#include "camel/execute/pass/registration.h"
+#include "passes/opt/budget.h"
+
 const camel::runtime::Program *
 SpecializeRewritePass::apply(const camel::runtime::Program *program, std::ostream &) {
     OptimizeRewriteConfig config{};
@@ -21,3 +24,18 @@ SpecializeRewritePass::apply(const camel::runtime::Program *program, std::ostrea
     config.growthSpentNodes = &growthSpent_;
     return applyOptimizeRewritePass(context_, program, config);
 }
+
+namespace {
+
+using camel::execute::growthBudgetOf;
+using camel::execute::PassKernel;
+
+const PassKernel specializeKernel(
+    "std::cxx::specialize",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<SpecializeRewritePass>(
+            ctx,
+            growthBudgetOf(args, "std::cxx::specialize"));
+    });
+
+} // namespace

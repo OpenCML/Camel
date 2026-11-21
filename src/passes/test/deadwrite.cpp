@@ -14,6 +14,7 @@
 #include "camel/passes/test/deadwrite.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/effect_liveness.h"
 #include "passes/opt/generic/rewrite.h"
 
@@ -104,3 +105,14 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
        << "\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel deadWriteKernel(kDeadWriteTestPass, makePass<DeadWriteTestPass>());
+
+} // namespace

@@ -33,6 +33,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/execute/pass/registration.h"
 
 #include <string>
 #include <string_view>
@@ -92,3 +93,14 @@ ContextsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
        << " alive=" << (alive ? 1 : 0) << "\n";
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel contextsKernel(kContextsTestPass, makePass<ContextsTestPass>());
+
+} // namespace
