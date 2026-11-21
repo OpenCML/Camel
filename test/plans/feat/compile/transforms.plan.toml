@@ -1160,10 +1160,10 @@ assert(targets.filter((t) => norm.includes(t)).length === 1, `answer=per-target:
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
-known_fail_owner = "unowned (the `lane-valports` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
-known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose/walk.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/reviews/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
+known_fail_owner = "unowned (`lane-valports` wrote this mark and is gone)"
+known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose/walk.cpp#buildTransposeMember`), so the walk stops at the scalar product's law (`uri=:op/mul_d`) and not at its own parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`), which prints the same sentence"
 known_fail_msg = "skip=law-reads-a-value uri=:op/mul_d position=0"
-known_fail_note = "Waits on docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=law-reads-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
+known_fail_ends_when = "when the transposed member gets a port for the value of a parameter a rule reads, the walk stops printing `skip=law-reads-a-value uri=:op/mul_d position=0` and this entry prints `29.0` with each of its three trace lines pinned exactly once -- `TRANSPOSE function=read_outer carried=2 ... answer=per-target` and both `ESCAPE` lines with `kindOfTarget` 1 and 11; 15 or 22 in place of 29 says the cotangent was summed across two values that are not the same value"
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -2108,8 +2108,9 @@ expect_output_not_contains = ["Warning", "[Error]", "library=(0.0", "library=(9.
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 known_fail = true
-known_fail_owner = "unowned (the `lane-deleth` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
+known_fail_owner = "unowned (`lane-deleth` wrote this mark and is gone)"
 known_fail_msg = "Reference 'with_grad' is declared as imported but is not exported by its module."
+known_fail_ends_when = "when `stdlib/vjp.cml` exports `with_grad` again -- the pair body with its `FirstOf<WithOf<F>>` declaration, or the refusing placeholder ahead of them -- the case compiles past `import { with_grad } from vjp` and prints its pinned five lines, `gx/vg  engine=(9.0, 3.0) library=RuntimeError` through `sk/sx  engine=6.0 4.0 library=RuntimeError` and the `why=` paragraph, exiting 0; the four `library=` fields carry tuples the day the composition answers, which is when this pin and the mark turn over together"
 known_fail_reason = "库层 `with_grad` 按裁定 `080778522` 删除，等它作为组合写出来：`stdlib/vjp.cml` 不再导出这个名字，所以用例停在 `import { with_grad } from vjp`，不是停在组合的某道墙上。"
 known_fail_note = "The mark is the removal, not a wall: the placeholder was deleted with its `fail` sentence and its doc, so there is no name for the case to call and nothing to rewrite the library's leg onto. The four groups, the engine's four answers and the pin stay as the object the composition will answer; `grad_first_with_parameter.cml`'s two entries already pin the engine's numbers, which is why this entry is not duplicated as an engine-only case. Waits on `stdlib/vjp.cml` gaining `with_grad` as the composition (`vjp` of the signature reinterpretation `first_with_as_param`, which moves the weight onto an ordinary parameter, with the seed 1 read off the pullback) with the declaration `FirstOf<WithOf<F>>` beside it."
 
