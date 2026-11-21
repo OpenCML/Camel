@@ -420,6 +420,30 @@ if (!/\[INFO\] known_fail_owner\s+the runner self-test\b/.test(knownfail.output)
     problems.push('known_fail gate: the owner was not printed on the [XFAIL] line')
 }
 knownfailVerdict.push(`all-three=${/^\[XFAIL\] complete\b/m.test(knownfail.output) ? 'accepted' : 'MISSING'}`)
+// What would end the red, printed beside the name of every known failure the run accepted. The
+// complete fixture carries the other three fields and no `known_fail_ends_when`, so its row is the
+// reading the roster exists to expose -- `(no end condition)` in red, which is a red nobody has said
+// how to end. Two readings, both off the output: the row for this fixture, and the closing count
+// agreeing with the rows above it. The count is the metric a mark cannot hide inside -- before this,
+// a red with no stated end was one number among `known failures: N` and nothing said which -- so the
+// assertion is its arithmetic and not a literal, since this run's other fixtures are marked too.
+const rosterRows = [...knownfail.output.matchAll(/^\[KNOWN\] (\S+): (.*)$/gm)]
+const rosterCount = knownfail.output.match(
+    /^\[KNOWN\] (\d+) of (\d+) known failure\(s\) carry no known_fail_ends_when$/m
+)
+const rosterFixture = rosterRows.some(
+    ([, name, ends]) => name === 'selftest.knownfail.complete/complete' && ends.trim() === '(no end condition)'
+)
+if (!rosterFixture) {
+    problems.push(`known_fail gate: the roster did not name the missing end condition:\n${knownfail.output}`)
+}
+const rosterArithmetic = rosterCount !== null
+    && Number(rosterCount[2]) === rosterRows.length
+    && Number(rosterCount[1]) === rosterRows.filter(([, , ends]) => ends.trim() === '(no end condition)').length
+if (!rosterArithmetic) {
+    problems.push('known_fail gate: the roster count does not agree with the rows it prints')
+}
+knownfailVerdict.push(`roster=${rosterFixture && rosterArithmetic ? 'named' : 'MISSING'}`)
 console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
 // The two directories' refusals are counted where their plans are read, which is the one thing the
 // single summary cannot say: it counts the run. Each refusal names its own plan file, so the count
