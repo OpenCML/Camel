@@ -15,6 +15,7 @@ add_camel_module(
     split.cpp
     split_operator.cpp
     transpose.cpp
+    transpose/cotangent.cpp
     transpose/rules.cpp
     transpose_operator.cpp
     vmap.cpp
