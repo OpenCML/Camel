@@ -190,6 +190,7 @@ bool buildTransposeMember(
     // refusal is met inside a graph and the lambda is the one place that has it: the sentence keeps
     // saying "this function" only because the name never left the log before.
     WalkContext walkCtx{state, function, os};
+    walkCtx.member = member;
     const auto refuse = [&](TransposeRefusalCause cause,
                             std::optional<size_t> param = std::nullopt) -> void {
         refuseMember(walkCtx, cause, param);
@@ -269,13 +270,15 @@ bool buildTransposeMember(
     // parameter port is one the answer holds; when some is, a cotangent that lands there is a
     // value's, not an answer's, and `portOfParameter` says which place a port belongs to.
     const bool partial        = !participates.empty() || (places.isLift && places.hasValues());
-    const auto participatesOf = [&](size_t at) {
-        if (!participates.empty()) {
-            return at < participates.size() && participates[at];
-        }
-        return places.answers(at);
-    };
+    // Which places the answer is about, and the two readings that decide it, are on
+    // `participatesInTheAnswer` in `transpose/walk.h`: the call site's set when it has one and the
+    // lift law's reading otherwise. What stays here is the spelling the rest of this file reads.
+    walkCtx.partial      = partial;
+    walkCtx.participates = &participates;
+    walkCtx.places       = &places;
+    const auto participatesOf = [&](size_t at) { return participatesInTheAnswer(walkCtx, at); };
     std::vector<std::string> usedRules;
+    walkCtx.book.usedRules = &usedRules;
     std::vector<uint32_t> armRegionsBuilt;
     // Which parameter a normal port of this function stands for, and which port a parameter asks
     // for.
@@ -398,6 +401,7 @@ bool buildTransposeMember(
         // number crosses the signature: the count is read here, from the graph.
         std::vector<gc_node_ref_t> closurePorts;
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> closurePortOf;
+        walkCtx.book.closurePortOf = &closurePortOf;
         for (const gc_node_ref_t ref : closureOf) {
             const camel::runtime::GCNode *node = function->node(ref);
             const Type *declared               = node != nullptr ? node->dataType() : nullptr;
@@ -422,6 +426,7 @@ bool buildTransposeMember(
         // differentiation -- so these ports are reads only, and the answer tuple has no member for
         // them.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+        walkCtx.book.withPortOf = &withPortOf;
         {
             const size_t withCount =
                 function->funcType() != nullptr ? function->funcType()->withTypesCount() : 0;
@@ -519,26 +524,13 @@ bool buildTransposeMember(
         };
         // A tuple of these values, as a node of the new graph, and the type that names it: the Fill
         // the builder writes for a state tuple (`builder_control.cpp`, `gir.loop.split`), so a loop
-        // that carries more than one value is the shape every consumer of a loop already reads.
-        // The types travel with the values: a state's cotangent can be an array, and a tuple that
-        // names it `float` is a tuple whose members are not the things it holds -- the same lie as
-        // telling an array sum it is a float.
+        // that carries more than one value is the shape every consumer of a loop already reads. The
+        // rule, and why the types travel with the values, is on `tupleOfValues` in
+        // `transpose/walk.h` and applied in `transpose/walkmachinery.cpp`; what stays here is the
+        // spelling the rest of this file reads.
         const auto tupleOf = [&](const std::vector<gc_node_ref_t> &parts,
                                  const std::vector<Type *> &partTypes) {
-            Type *const tupleType      = camel::core::type::TupleType::create(partTypes);
-            ::Tuple *emptyTuple        = ::Tuple::create(parts.size(), mm::autoSpace());
-            const gc_node_ref_t source = draft.materializeStaticValue(
-                camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple),
-                tupleType);
-            std::vector<size_t> slots;
-            for (size_t i = 0; i < parts.size(); ++i) {
-                slots.push_back(i);
-            }
-            const gc_node_ref_t tuple =
-                draft.addFillNode(tupleType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
-            draft.setNormInputs(tuple, std::span<const gc_node_ref_t>(&source, 1));
-            draft.setWithInputs(tuple, std::span<const gc_node_ref_t>(parts));
-            return std::pair<gc_node_ref_t, Type *>{tuple, tupleType};
+            return tupleOfValues(walkCtx, parts, partTypes);
         };
         // The cotangent of a value in the original graph, as a node of the new one: `k summed
         // cotangents` when the value was used k times, which is the transpose of using it k times.
@@ -546,39 +538,25 @@ bool buildTransposeMember(
         std::vector<bool> hasCotangent(nodeCount, false);
         // A constant operand carries no cotangent, but its *value* is what a rule needs (`ct * c`).
         std::vector<gc_node_ref_t> constantOf(nodeCount, rt::kInvalidNodeRef);
+        // The node tables are the walk's, and from here on the reading of them is
+        // `transpose/walkmachinery.cpp`'s: "is this node a constant", "what is the constant's
+        // value", "which space does this value sum in" are asked by more than one node family, so
+        // they left the walk with the tables they read (`WalkBookkeeping` in `transpose/walk.h`).
+        walkCtx.book.nodeCount    = nodeCount;
+        walkCtx.book.cotangent    = &cotangent;
+        walkCtx.book.hasCotangent = &hasCotangent;
+        walkCtx.book.constantOf   = &constantOf;
 
-        const auto isConstant = [function](gc_node_ref_t ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
-            return node != nullptr && node->kind == rt::GCNodeKind::Data;
-        };
+        const auto isConstant = [&](gc_node_ref_t ref) { return isConstantNode(walkCtx, ref); };
         const auto constantValue = [&](gc_node_ref_t ref) -> gc_node_ref_t {
-            if (constantOf[ref] != rt::kInvalidNodeRef) {
-                return constantOf[ref];
-            }
-            const camel::runtime::GCNode *node  = function->node(ref);
-            const std::span<const slot_t> slots = function->staticSlots();
-            const std::ptrdiff_t index          = -static_cast<std::ptrdiff_t>(node->dataIndex);
-            if (node->dataIndex < 0 && index >= 0 && static_cast<size_t>(index) < slots.size()) {
-                constantOf[ref] = draft.materializeStaticValue(
-                    slots[static_cast<size_t>(index)],
-                    node->dataType(),
-                    rt::kGCNodeFlagConstant);
-            }
-            return constantOf[ref];
+            return constantValueOf(walkCtx, ref);
         };
         // A round's cotangent can land on a value the round only read: that cotangent has to
         // leave the loop, and this is where it is caught. `allowEscapes` is on while a LOOP's
         // body runs -- a branch arm has nowhere to put a capture, so there an outside target is
-        // still a refusal.
+        // still a refusal. One escaped cotangent is `Escape` (`transpose/walk.h`): the product it is
+        // and the value it landed on, both named, because the refusal has to say which node escaped.
         bool allowEscapes = false;
-        // One escaped cotangent: the product it is (`from`, the node whose rule handed it out) and
-        // the value it landed on. Both are named because the refusal below has to say which node
-        // escaped -- a value the round only read is the only thing that may stand for it, and a
-        // reader that has the count alone cannot tell that from a port that merely stands nearby.
-        struct Escape {
-            gc_node_ref_t cotangent = rt::kInvalidNodeRef;
-            gc_node_ref_t from      = rt::kInvalidNodeRef;
-        };
         std::unordered_map<gc_node_ref_t, Escape> escapes;
         // An aggregate value's cotangent, member by member. A member read puts its cotangent in
         // that member's place and leaves the rest empty; the value that holds the aggregate -- a
@@ -589,99 +567,30 @@ bool buildTransposeMember(
         // it by: the answer is assembled in declaration order (design principles 9.9), so the read
         // is resolved to that index at the `Accs` case below.
         std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> memberCotangents;
-        // How many places a value of aggregate type has: a Fill knows its components, anything else
-        // has to be asked its type -- a tuple's arity and a struct's field count are the same
-        // question to `tree::arity`, and a struct parameter read by name is exactly the value that
-        // has no Fill of its own. The condition is `arity`'s own domain, so `.value()` cannot throw
-        // here; a `0` fallback would have sized nothing and said nothing.
-        const auto aggregateSlots = [&](gc_node_ref_t ref) -> size_t {
-            const camel::runtime::GCNode *node = function->node(ref);
-            if (node == nullptr) {
-                return 0;
-            }
-            if (node->kind == rt::GCNodeKind::Fill) {
-                return function->withInputsOf(ref).size();
-            }
-            const Type *type = node->dataType();
-            return type != nullptr && (type->code() == camel::core::type::TypeCode::Tuple ||
-                                       type->code() == camel::core::type::TypeCode::Struct)
-                       ? camel::core::type::tree::arity(type).value()
-                       : 0;
+        walkCtx.book.memberCotangents = &memberCotangents;
+        // How many places a value of aggregate type has, and whether a value can hold a cotangent at
+        // all. Both are questions about one node's type, both are asked by more than one node
+        // family, and both are answered in `transpose/walkmachinery.cpp`: `aggregateSlotCount` -- a
+        // Fill knows its components, anything else is asked `tree::arity` -- and `holdsACotangent`,
+        // which is `tangentSpaceOf` asked of one node's `dataType` and **not** a reading of which
+        // half of a signature a place is (that is `participatesOf`'s question, and `lift.h`'s law).
+        const auto aggregateSlots = [&](gc_node_ref_t ref) {
+            return aggregateSlotCount(walkCtx, ref);
         };
-        // Whether a value can hold a cotangent at all. The type answers, through the same query
-        // `jvp` asks of a parameter: a float (and a tuple or array of them) is its own tangent
-        // space, and an integer, a boolean, a `string` or a function has none. A node with no type
-        // yet is given the benefit of the doubt -- guessing "no space" would silently stop a chain
-        // that has one.
-        //
-        // **This is not a reading of which half of a signature a place is**, and it is not
-        // `lift.h#liftedParametersOf`'s question: that law answers about a *parameter list*, whose
-        // two halves are one shape (a lifted signature and an ordinary two-parameter cut's backward
-        // half are the same type) and can be told apart only by the graph fact `liftedFrom`. This
-        // asks about the `dataType` of one node, which is no parameter list at all: there is nothing
-        // here for the lift law to read, and a value's own type either holds a cotangent or it does
-        // not. So it stays a `tangentSpaceOf` question, asked of the value rather than of a
-        // signature, and the sites that allocate ports ask `places.answers()` instead.
         const auto hasTangentSpace = [&](gc_node_ref_t ref) {
-            const camel::runtime::GCNode *node = function->node(ref);
-            if (node == nullptr) {
-                return true;
-            }
-            const Type *type = node->dataType();
-            return type == nullptr || camel::core::tangentSpaceOf(type).hasSpace();
+            return holdsACotangent(walkCtx, ref);
         };
-        // One line per value whose cotangent is zero because the value cannot hold one.
-        // Deduplicated: a value read in three rounds is still one value contributing one zero, and
-        // a reading that printed it three times would look like three different findings.
-        std::vector<gc_node_ref_t> zeroedValues;
+        // One line per value whose cotangent is zero because the value cannot hold one: the list is
+        // the context's (`book.zeroedValues`), so every reader of a zero contributes to one list.
         const auto noteZero = [&](gc_node_ref_t target, gc_node_ref_t from) {
-            if (std::find(zeroedValues.begin(), zeroedValues.end(), target) != zeroedValues.end()) {
-                return;
-            }
-            zeroedValues.push_back(target);
-            const camel::runtime::GCNode *node = function->node(target);
-            const Type *type                   = node != nullptr ? node->dataType() : nullptr;
-            os << "TRANSPOSE function=" << function->name() << " contribution=0 node=" << target
-               << " type=" << (type != nullptr ? type->toString() : std::string("?"))
-               << " space=none from=" << from << '\n';
+            noteZeroContribution(walkCtx, target, from);
         };
-        // Whether a cotangent landing on `target` is one the answer holds. A closure member's is
-        // not (below); an ordinary transposition answers for every other value; a partial one
-        // answers only for its participating parameters, and a parameter outside the set is a value
-        // the graph reads, not an answer it gives.
+        // Whether a cotangent landing on `target` is one the answer holds: a closure member's is not
+        // and a `with` port's is not -- both are constants of this differentiation -- while an
+        // ordinary transposition holds every value's and a partial one only its participating
+        // places'. The rule is on `wantsCotangentAt` in `transpose/walk.h`.
         const auto wantsCotangent = [&](gc_node_ref_t target) {
-            if (target >= nodeCount) {
-                return true;
-            }
-            // A closure member is a **known value** -- a capture a caller closed over, a residual
-            // the cut carried -- and not a linear input of the transposition. The answer is one
-            // cotangent per parameter the caller differentiates (`Transpose<F>`),
-            // and a member is not one of them: it is a constant of this differentiation, like a
-            // `with` port, and no cotangent has a slot to land in. Asked
-            // before the sets below, because a member is neither a parameter nor an answer for one.
-            if (closurePortOf.find(target) != closurePortOf.end()) {
-                return false;
-            }
-            if (!partial) {
-                return true;
-            }
-            const camel::runtime::GCNode *node = function->node(target);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Port) {
-                return true;
-            }
-            // A `with` port is a value the call supplies and the answer says nothing about: the
-            // transposition answers one cotangent per ordinary parameter (`Transpose<F>`), and a
-            // weight is not one.
-            if (withPortOf.find(target) != withPortOf.end()) {
-                return false;
-            }
-            const auto ports = function->normPorts();
-            for (size_t i = 0; i < ports.size(); ++i) {
-                if (ports[i] == target) {
-                    return participatesOf(i);
-                }
-            }
-            return true;
+            return wantsCotangentAt(walkCtx, target);
         };
         // Whether a value can receive a cotangent this member *holds*: it is a parameter the answer
         // is given for (`wantsCotangent`), or a value computed from one. A value computed only from
@@ -745,279 +654,53 @@ bool buildTransposeMember(
             participantReach[target] = reach ? 1 : 0;
             return reach;
         };
+        // Filing one cotangent on a value, summed with what the place already holds through the
+        // space's own addition. The rules -- a cotangent no parameter asks for is not collected, a
+        // value with no tangent space records its zero instead, and a space with no addition is
+        // recorded rather than guessed at -- are on `addCotangentTo` in `transpose/walk.h` and
+        // applied in `transpose/walkmachinery.cpp`; what stays here is the spelling the call sites
+        // read.
         const auto addCotangent = [&](gc_node_ref_t ref, gc_node_ref_t node) {
-            // A cotangent no parameter asks for is not collected: with a participating set, the
-            // parameters outside it are values the transposed graph reads, not answers it gives,
-            // and the answer tuple has no slot for them. Dropped before the arithmetic is looked at
-            // -- the coefficient of such a delivery would be the value of a participating
-            // parameter, which is exactly what does not exist here.
-            if (!wantsCotangent(ref)) {
-                return;
-            }
-            // A value with no tangent space holds no cotangent: the type says so, and the reading
-            // names the value rather than leaving the zero unexplained. This is the same question
-            // `jvp` asks of a parameter, asked of a value in the middle of a graph.
-            if (!hasTangentSpace(ref)) {
-                noteZero(ref, ref);
-                return;
-            }
-            if (!hasCotangent[ref]) {
-                cotangent[ref]    = node;
-                hasCotangent[ref] = true;
-                return;
-            }
-            Type *addType            = nullptr;
-            const std::string addUri = addUriFor(function, ref, addType);
-            // A space with one operator sums with it; an aggregate sums member by member
-            // (`accumulate`, design principles 9.9), so `addUri` being empty is not the answer for
-            // a tuple or a struct -- only for a space that has neither an operator nor members.
-            const bool aggregate =
-                addType != nullptr && (addType->code() == camel::core::type::TypeCode::Tuple ||
-                                       addType->code() == camel::core::type::TypeCode::Struct);
-            if (addType == nullptr || (addUri.empty() && !aggregate)) {
-                // Two cotangents land on one value and the value's space registers no addition:
-                // there is no sum to write, so this member answers no cotangent. Recorded here and
-                // refused by name at the end of the walk (`NoCotangentArithmetic`); a `float` sum
-                // here would be an addition the space never declared.
-                walkCtx.cotangentArithmeticMissing = true;
-                os << "TRANSPOSE function=" << function->name()
-                   << " cotangent-no-arithmetic node=" << ref << '\n';
-                return;
-            }
-            // The sum itself is `accumulate`'s, the one function this file's comment says every
-            // accumulation goes through.
-            const gc_node_ref_t summed = accumulate(addType, cotangent[ref], node);
-            if (summed == rt::kInvalidNodeRef) {
-                return;
-            }
-            cotangent[ref] = summed;
+            addCotangentTo(walkCtx, ref, node);
         };
-        // One position's cotangent: the rule the index filed for this operator, its right side
-        // expanded where the operator stood. What stands in the graph is the rule's own function of
-        // the cotangent -- `mul_cotangent(c, ct)`, `neg_cotangent(ct)` -- so no law is written here
-        // a second time, and the numbers are the library's (design principles 5.5: one writing).
-        //
-        // The rule answers one cotangent per name its left side writes, in that order -- a tuple --
-        // and `position` is the name whose cotangent this is. The operands' values are handed over
-        // in the left side's own order, because that is the order the right side binds them in: the
-        // dividend stays the dividend and the divisor stays the divisor, whichever position is
-        // being answered. Which of them the answer at `position` reads is the rule's own business
-        // -- the expansion asks only for those -- so a position that needs nothing it does not have
-        // is answered even where the walk carries no value for the other operand (a transposed loop
-        // body's own state, or a divisor that is the differentiated value itself).
-        //
         // The `int[]` of extents one step is handed beside its operands, when the law that answers
         // it asks for one (`sum_from_type_t` and its neighbours read the extents instead of the
         // operand, so that no array stands in for a value the transposition does not have). Set by
         // the `Oper` case for the duration of its answer and cleared after it, so a law of any
         // other step -- an arm's, a call's -- is handed nothing it did not ask for.
         gc_node_ref_t extentsValue = rt::kInvalidNodeRef;
-        const auto ruleCotangent   = [&](const std::string &ruleName,
-                                         std::span<const gc_node_ref_t>
-                                             inputs,
-                                         size_t position,
-                                         gc_node_ref_t ct,
-                                         Type *ctType,
-                                         std::string &why,
-                                         bool &noInstance,
-                                         bool &refusedAtTheLaw,
-                                         std::optional<size_t> &unboundSlot) -> gc_node_ref_t {
-            const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
-                if (slot == inputs.size()) {
-                    // The slot past the operands is the extents: the law asked for them
-                    // (`sum_from_type_t` names one port more than its operator has) and the walk is
-                    // the one that can read them, because it has the types.
-                    return extentsValue;
-                }
-                return slot < inputs.size() ? knownValue(inputs[slot]) : rt::kInvalidNodeRef;
-            };
-            // The operands' own types: the cotangent of a parameter is the parameter's tangent
-            // space, so the law is built at the types the operator really has. A node that is not
-            // in the graph answers no type, and the expansion falls back to the single-type
-            // instance.
-            std::vector<Type *> operandTypes;
-            // The cotangent's own type first: a law that covers two shapes of one operator writes
-            // `(ct: T[..])`, and `T` has to be the type the cotangent really has -- a number here,
-            // an array there -- or the right side's operator is resolved for the wrong one.
-            // `T` is the law's *element* type: an array cotangent contributes its element type,
-            // whether its rank is open or fixed. The law writes `T[..]` around that element, so
-            // handing it the whole array type would incorrectly add another array nesting.
-            Type *ctElement = ctType;
-            if (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array) {
-                if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(ctType)) {
-                    if (Type *elementType = array->elemType()) {
-                        ctElement = elementType;
-                    }
-                }
-            }
-            operandTypes.reserve(inputs.size() + 2);
-            operandTypes.push_back(ctElement);
-            for (const gc_node_ref_t input : inputs) {
-                const camel::runtime::GCNode *inputNode = function->node(input);
-                operandTypes.push_back(
-                    inputNode != nullptr ? const_cast<Type *>(inputNode->dataType()) : nullptr);
-            }
-            if (extentsValue != rt::kInvalidNodeRef) {
-                // The law names one port more than its operator has: the extents, which the walk
-                // read off the types (`extent_of`'s rule) and no operand of this node carries.
-                operandTypes.push_back(intArrayTypeOf());
-            }
-            // The tuple the right side is expanded at: the one the law has an instance at, decided
-            // by the same question the shape test and the choice ask (`lawInstanceTypes`), so the
-            // three cannot disagree about which instance is under discussion.
-            //
-            // The expansion falls back to a single `float` instance on its own when the tuple it is
-            // handed has none, and at an `f32` step that `float` instance is a lie: `transpose_of_autodiff::mul_tangent<f32>` would pass `a f32
-            // as ordinary argument 0 of autodiff::add_cotangent<float>, which takes a float`, and the
-            // scheduler would stop on the edge invariants. Handing it the step's own element type is what keeps
-            // the right side in the width the cotangent is in. A law with no instance at either
-            // tuple is expanded at the ports' own types, and the expansion says what it could not
-            // build in its own words.
-            const std::vector<Type *> at = lawInstanceTypes(*state.context, ruleName, operandTypes);
-            // A cotangent with no shape is a value an open-rank port takes (design principles 5.4:
-            // `T[..]` includes rank 0, a rank-zero array being the element itself), and that is not
-            // a statement about the type alone: the slot of a `T[..]` position holds the rank-zero
-            // array that *is* the element. Without it the body has no rank to read, and where the
-            // body asks `numel(ct)` a number is read as a pointer -- a SIGSEGV inside the numel
-            // kernel. The conversion is made
-            // wherever a value's type goes from `T` to `T[..]` (`Builder::coerceTo`, whose reason
-            // is stated in `ArrayType::castSlotFrom`: the run gets a value with a rank to read),
-            // and a call argument is the one entrance that is not such a position (it asks the same
-            // question before it enters, `builder_operators.cpp`). A law's right side is entered by
-            // this walk and not by a call, so the conversion is made here -- the value is handed
-            // over through a cast to the port's own type, which is what the language would have
-            // inserted had the law been written as a call.
-            gc_node_ref_t handed = ct;
-            Type *port = ctType != nullptr
-                             ? cotangentPortOf(*state.context, ruleName, operandTypes, position)
-                             : nullptr;
-            if (ctType != nullptr && ctType->code() != camel::core::type::TypeCode::Array) {
-                const auto *arrayPort =
-                    port != nullptr && port->code() == camel::core::type::TypeCode::Array
-                        ? tt::as_ptr<camel::core::type::ArrayType>(port)
-                        : nullptr;
-                if (arrayPort != nullptr && arrayPort->rankZeroType() != nullptr &&
-                    port->assignableFrom(ctType)) {
-                    const std::vector<gc_node_ref_t> source{ct};
-                    handed = draft.addCastNode(port);
-                    draft.setNormInputs(handed, std::span<const gc_node_ref_t>(source));
-                }
-            }
-            // **The port's declared type against the type of the value really handed.** A law is filed under its operator's head and its operand count and the
-            // index reads no operand types, so nothing ties the port the law writes for its
-            // cotangent to the shape this step has: `mul_tangent`'s law says `(ct: T[..])` and a
-            // `float` step hands it the number it was transposed at. The two agree here when the
-            // cast above made them one type -- the rank-zero cotangent read as the open-rank array
-            // it is.
-            //
-            // **A disagreement is a compiler defect, not a language rule** . No program reaches the refusal below. The
-            // cotangent a program can hand a transposed function is `Tangent<ResultOf<F>>`, which
-            // is the type the declaration states, so a port that disagrees with it is a law whose
-            // writing and whose own instancing came apart inside the compiler -- the walk has no
-            // reading of a program that produces one. So the check is a **guard**, kept because a
-            // guard at the one place that hands a value through a port is worth its three lines,
-            // and the sentence it feeds says `internal error: ... a compiler defect and not the
-            // program's fault`. What it must never be is a sentence about what the language allows:
-            // the language allows no such program.
-            //
-            // What the comparison covers is a difference of the **same kind**: two arrays whose
-            // element types differ (`float[3]` and `f32[3]`), or two numbers of different codes
-            // (an `f32` step handed to a `float` law). A difference across
-            // kinds is not a disagreement at all: a number handed to an array port is the rank-zero
-            // case the cast above answers (design principles 5.4), an array handed to a number port
-            // is what the law's own instancing answers from the operands' types, and a `Ref` is a
-            // type that is not decided yet, which `Type::assignableFrom` cannot compare at all. A
-            // comparison that also covered the cross-kind cases finds `mean_axis`'s law on shapes
-            // that answer correct numbers, and under correctness > an explicit refusal > a wrong
-            // number > a crash, turning a right number into a refusal is a step *down*, so the
-            // comparison stays inside one kind.
-            const bool portIsArray =
-                port != nullptr && port->code() == camel::core::type::TypeCode::Array;
-            const bool handedIsArray =
-                ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array;
-            const bool undecided =
-                (port != nullptr && port->code() == camel::core::type::TypeCode::Ref) ||
-                (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Ref);
-            if (port != nullptr && ctType != nullptr && handed == ct && !undecided &&
-                portIsArray == handedIsArray && !port->assignableFrom(ctType)) {
-                refusedAtTheLaw = true;
-                // `refuse` writes the record whole (`TransposeRefusal{cause, param}`), so the two
-                // spellings go in after it and not before: a field written first is a field the
-                // record drops, and the sentence below read two empty strings.
-                refuse(TransposeRefusalCause::CotangentPortMismatch, position);
-                state.refusal.uri        = ruleName;
-                state.refusal.portType   = port->toString();
-                state.refusal.handedType = ctType->toString();
-                os << " rule=" << ruleName << " position=" << position
-                   << " port=" << state.refusal.portType << " handed=" << state.refusal.handedType
-                   << '\n';
-                return rt::kInvalidNodeRef;
-            }
-            // Which operand the answer read and this walk could not bind. `why` says the same
-            // sentence for every such operand, so this is the fact that tells the two repairs
-            // apart: a declaration whose extents are missing (write them) and a value nothing hands
-            // over (a port, not a declaration). Recorded on the way out so the refusal sites below
-            // can name the class instead of reading `why` back.
-            size_t unbound               = std::numeric_limits<size_t>::max();
-            const gc_node_ref_t expanded = camel::transforms::expandRuleByName(
-                *state.context,
-                group,
-                group.transaction(member),
+        walkCtx.book.extentsValue  = &extentsValue;
+        // One position's cotangent: the rule the index filed for this operator, its right side
+        // expanded where the operator stood -- `mul_cotangent(c, ct)`, `neg_cotangent(ct)` -- so no
+        // law is written here a second time, and the numbers are the library's (design principles
+        // 5.5: one writing). What the expansion is handed, the two shapes it is guarded against, and
+        // the extents a step may ask for are on `ruleCotangentOf` in `transpose/walk.h` and applied
+        // in `transpose/walkmachinery.cpp`.
+        //
+        // What stays here is the spelling the call sites read, and `knownValue` -- the walk's own
+        // lookup of an operand's value, which the expansion asks for and this file is the one that
+        // can answer.
+        const auto ruleCotangent = [&](const std::string &ruleName,
+                                       std::span<const gc_node_ref_t> inputs, size_t position,
+                                       gc_node_ref_t ct, Type *ctType, std::string &why,
+                                       bool &noInstance, bool &refusedAtTheLaw,
+                                       std::optional<size_t> &unboundSlot) -> gc_node_ref_t {
+            return ruleCotangentOf(
+                walkCtx,
+                knownValue,
                 ruleName,
-                valueOf,
-                {handed},
+                inputs,
                 position,
-                at,
+                ct,
+                ctType,
                 why,
-                &noInstance,
-                &unbound);
-            if (expanded == rt::kInvalidNodeRef && unbound != std::numeric_limits<size_t>::max()) {
-                unboundSlot = unbound;
-            }
-            // **The law's right side, against the operand it answers for.**
-            // The question is asked here, on the node the expansion built, because this is the one
-            // place that holds both: the type the law's body really answered with (the draft's own
-            // record of that node, not a guess from the law's text) and the type of the operand at
-            // `position`, which is the type the answer must have -- a cotangent of a value has that
-            // value's type. A disagreement is refused with the **law's name**, because the law is
-            // the thing to edit, and the two spellings follow it: see `statedShapeDisagreement` for
-            // what is compared and why nothing else is.
-            //
-            // This runs after the body was expanded and not instead of it: a law that answers the
-            // wrong shape is exactly the law that expanded without complaint, so there is no
-            // earlier moment at which it could be caught. The node it built stays in the draft and
-            // is discarded with it (`buildTransposeMember` throws the whole member away on a
-            // refusal), so nothing half-built survives.
-            if (expanded != rt::kInvalidNodeRef) {
-                const camel::runtime::DraftNodeHeader *const answered = draft.header(expanded);
-                const Type *const answerType = answered != nullptr ? answered->dataType : nullptr;
-                const Type *const answeredOperand =
-                    position + 1 < operandTypes.size() ? operandTypes[position + 1] : nullptr;
-                if (std::optional<std::string> disagreement =
-                        statedShapeDisagreement(answerType, answeredOperand);
-                    disagreement.has_value()) {
-                    refusedAtTheLaw = true;
-                    refuse(TransposeRefusalCause::LawAnswerShape, position);
-                    // The record carries the law and the two spellings; `refuse` wrote the cause
-                    // whole, so the fields go in after it.
-                    state.refusal.rule                 = ruleName;
-                    state.refusal.answerType           = camel::core::type::typeToString(answerType);
-                    state.refusal.answeredOperandType =
-                        camel::core::type::typeToString(answeredOperand);
-                    os << " rule=" << ruleName << " position=" << position
-                       << " answer=" << state.refusal.answerType
-                       << " operand=" << state.refusal.answeredOperandType << " reason="
-                       << *disagreement << '\n';
-                    return rt::kInvalidNodeRef;
-                }
-            }
-            return expanded;
+                noInstance,
+                refusedAtTheLaw,
+                unboundSlot);
         };
-        const auto noteRule = [&usedRules](const std::string &name) {
-            if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
-                usedRules.push_back(name);
-            }
-        };
+        // The rules this member's answer used, once each, in first-use order. The list is the
+        // context's (`book.usedRules`).
+        const auto noteRule = [&](const std::string &name) { noteRuleUsed(walkCtx, name); };
         // The condition of a branch, copied: the transposed graph decides its arms with the same
         // predicate the forward graph did, at the same values -- which is why the parameters of `f`
         // are parameters of the transposed function too.
@@ -1337,10 +1020,6 @@ bool buildTransposeMember(
         // The order both sweeps below walk the graph in -- the graph's, not the ids'
         // (`cotangentWalkOrder`) -- computed once for this member and shared with every arm.
         const std::vector<gc_node_ref_t> walkOrder = cotangentWalkOrder(function);
-        struct ArmSeed {
-            gc_node_ref_t at        = rt::kInvalidNodeRef;
-            gc_node_ref_t cotangent = rt::kInvalidNodeRef;
-        };
         const auto runSeeded =
             [&](uint32_t oldRegion,
                 const std::vector<ArmSeed> &seeds,
@@ -1348,82 +1027,26 @@ bool buildTransposeMember(
             std::vector<gc_node_ref_t> local(nodeCount, rt::kInvalidNodeRef);
             std::vector<bool> hasLocal(nodeCount, false);
             std::vector<gc_node_ref_t> portCotangents(stops.size(), rt::kInvalidNodeRef);
+            // What the arm does with the cotangents it meets, and the arm's own state: one
+            // accumulator per value inside the region, one per stop, the slots a residual goes back
+            // into, and the escapes it caught. The rules are on `ArmWalk`, `addLocalCotangent` and
+            // `deliverCotangent` in `transpose/walk.h`, applied in `transpose/walkmachinery.cpp`;
+            // what stays here is the spelling the arm's walk reads.
+            ArmWalk arm;
+            arm.oldRegion      = oldRegion;
+            arm.stops          = &stops;
+            arm.local          = &local;
+            arm.hasLocal       = &hasLocal;
+            arm.portCotangents = &portCotangents;
+            arm.residualBack   = &residualBack;
+            arm.escapes        = &escapes;
+            arm.armsOk         = &armsOk;
+            arm.allowEscapes   = allowEscapes;
             const auto addLocal = [&](gc_node_ref_t ref, gc_node_ref_t node) {
-                if (!hasLocal[ref]) {
-                    local[ref]    = node;
-                    hasLocal[ref] = true;
-                    return;
-                }
-                local[ref] = accumulate(cotangentTypeOf(ref), local[ref], node);
+                addLocalCotangent(walkCtx, arm, ref, node);
             };
-            // The arm's chain ends at the parameter, which lives outside the arm's region: the
-            // cotangent of that parameter for this arm is what the chain hands it. Anything else
-            // from outside the region is a residual this step does not have.
             const auto deliver = [&](gc_node_ref_t target, gc_node_ref_t node, gc_node_ref_t from) {
-                // A value the round read that cannot hold a cotangent contributes zero: the round's
-                // answer does not depend on it in a differentiable way, so there is nothing to
-                // carry out of the loop and no accumulator to grow. Dropped here rather than at the
-                // escape collection, which would otherwise build a float sum for an integer.
-                if (!hasTangentSpace(target)) {
-                    noteZero(target, from);
-                    return;
-                }
-                if (function->nodeRegion(target) == oldRegion) {
-                    addLocal(target, node);
-                    return;
-                }
-                // The space every accumulation below fills: a state's cotangent for a stop, the
-                // member's for a component read, the escaped value's for an escape. One answer,
-                // asked once -- the place being filled is a node this build made, so it cannot be
-                // asked here.
-                Type *const ctSpace = cotangentTypeOf(target);
-                for (size_t i = 0; i < stops.size(); ++i) {
-                    if (stops[i] != target) {
-                        continue;
-                    }
-                    portCotangents[i] = accumulate(ctSpace, portCotangents[i], node);
-                    return;
-                }
-                // A residual the arm read: the cotangent goes back into the slot it came from,
-                // named by the slot's number. Nothing inside the arm stands for it, so dropping it
-                // here would be a claim about the value rather than a rule about the cotangent.
-                if (const camel::runtime::GCNode *targetNode = function->node(target);
-                    targetNode != nullptr && targetNode->kind == rt::GCNodeKind::Accs) {
-                    const auto readFrom = function->normInputsOf(target);
-                    const auto *body    = function->nodeBodyAs<rt::GCAccsBody>(target);
-                    const bool onAResidualPort =
-                        !readFrom.empty() &&
-                        std::any_of(stops.begin(), stops.end(), [&](gc_node_ref_t stopRef) {
-                            return stopRef == readFrom.front();
-                        });
-                    if (body != nullptr && onAResidualPort) {
-                        auto &slot = residualBack[body->value];
-                        slot       = accumulate(ctSpace, slot, node);
-                        os << "TRANSPOSE function=" << function->name()
-                           << " residual-return slot=" << body->value << " region=" << oldRegion
-                           << '\n';
-                        return;
-                    }
-                }
-                if (allowEscapes) {
-                    // The round read this value from outside: its cotangent leaves the loop
-                    // through the capture channel, accumulated over the rounds.
-                    auto &slot = escapes[target];
-                    if (slot.cotangent == rt::kInvalidNodeRef) {
-                        slot = Escape{node, from};
-                    } else {
-                        slot.cotangent = accumulate(ctSpace, slot.cotangent, node);
-                    }
-                    return;
-                }
-                // Named, not silent: a cotangent the arm cannot place -- a value from outside the
-                // region that is neither a stop nor a residual the arm read -- is the one failure
-                // this walk has no rule for, and the next reader needs to know which value it
-                // landed on.
-                os << "TRANSPOSE function=" << function->name()
-                   << " arm-unplaced region=" << oldRegion << " target=" << target
-                   << " from=" << from << '\n';
-                armsOk = false;
+                deliverCotangent(walkCtx, arm, target, node, from);
             };
             for (const ArmSeed &seed : seeds) {
                 if (seed.at != rt::kInvalidNodeRef) {
@@ -2063,142 +1686,32 @@ bool buildTransposeMember(
             return portCotangents;
         };
         // A single seed and a single stop: the branch's case, which is what every arm of a branch
-        // is. A loop body is the same walk with one seed and one stop per state it carries.
+        // is. A loop body is the same walk with one seed and one stop per state it carries. The arm
+        // itself is `armCotangentOf` in `transpose/walk.h`: the walk seeded once and stopped at the
+        // arm's own region.
         const auto runArm = [&](uint32_t oldRegion,
                                 gc_node_ref_t armResult,
                                 gc_node_ref_t armCotangent,
                                 const std::vector<gc_node_ref_t> &stops) -> gc_node_ref_t {
-            const std::vector<gc_node_ref_t> back =
-                runSeeded(oldRegion, {ArmSeed{armResult, armCotangent}}, stops);
-            return back.empty() ? rt::kInvalidNodeRef : back.front();
+            return armCotangentOf(walkCtx, runSeeded, oldRegion, armResult, armCotangent, stops);
         };
 
-        // The adjoint of reading a value **member by member** (`q.0` by place, `qq.a` by name) is
+// The adjoint of reading a value **member by member** (`q.0` by place, `qq.a` by name) is
         // that value's own cotangent, assembled member by member -- `Tangent<(float, float)>` is the
         // tuple of the members' tangents and `Tangent<Point>` the struct of them, in the
         // declaration's order (design principles 9.9). Such a value never receives a whole cotangent
         // from anywhere else: the `Accs` case below files each member's cotangent in
-        // `memberCotangents` and marks the value answered, and this is the join that turns those
-        // places back into the value the answer, or a call's cotangent port, needs.
+        // `book.memberCotangents` and marks the value answered, and this is the join that turns
+        // those places back into the value the answer, or a call's cotangent port, needs.
         //
         // Two readers ask it, so it is written once: a **parameter** the body read that way
         // (`Port`'s case), and a **call's answer** the body read that way -- the member of that call
         // is handed the whole cotangent of what the call answered, and a component's cotangent is
-        // not that whole.
-        //
-        // Before the join existed for a parameter, the answer tuple of a **tuple** parameter held an
-        // empty reference: the encoder then used `kInvalidNodeRef` (0xffffffff) as an index into its
-        // table and the run died on a signal with nothing on stdout, while the same program written
-        // with a struct parameter refused one step earlier at the zero this file could not write. A
-        // member nobody read gets that zero now -- the zero of the member's own tangent space, which
-        // says "read, not differentiated" the same way the `Fill` case below says it for a tuple
-        // literal -- so neither a parameter's answer nor a call's argument list reaches the encoder
-        // with a hole in it.
+        // not that whole. The join and the refusals it makes are on `joinMemberReadOf` in
+        // `transpose/walk.h` and applied in `transpose/walkmachinery.cpp`.
         const auto joinMemberRead = [&](gc_node_ref_t ref,
                                         const std::vector<gc_node_ref_t> &slots) -> bool {
-            const camel::runtime::GCNode *const joinNode = function->node(ref);
-            const Type *const joinPrimal = joinNode != nullptr ? joinNode->dataType() : nullptr;
-            const gc_node_ref_t whole    = cotangent[ref];
-            if (joinPrimal == nullptr ||
-                (joinPrimal->code() != camel::core::type::TypeCode::Tuple &&
-                 joinPrimal->code() != camel::core::type::TypeCode::Struct)) {
-                refuse(TransposeRefusalCause::Component);
-                os << " node=" << ref
-                   << " type=" << (joinPrimal != nullptr ? joinPrimal->toString() : "?")
-                   << " why=a-member-read-of-a-value-that-is-not-an-aggregate\n";
-                return false;
-            }
-            // The value the fill is written at: the value's own tangent space, which for a tuple of
-            // numbers and for a struct of them is the value's type itself (`tangentSpaceOf`: `self`),
-            // and for a struct whose members are `f32` is a struct of `f32` -- not one of `float`
-            // (design principles 9.9).
-            const camel::core::TangentSpaceAnswer joinSpace =
-                camel::core::tangentSpaceOf(joinPrimal);
-            if (!joinSpace.hasSpace() || joinSpace.space == nullptr) {
-                refuse(TransposeRefusalCause::Component);
-                os << " node=" << ref << " type=" << joinPrimal->toString()
-                   << " why=no-tangent-space-for-the-parameter\n";
-                return false;
-            }
-            const auto memberCount = camel::core::type::tree::arity(joinPrimal);
-            if (!memberCount) {
-                refuse(TransposeRefusalCause::Component);
-                os << " node=" << ref << " type=" << joinPrimal->toString()
-                   << " why=not-a-type-with-members\n";
-                return false;
-            }
-            if (slots.size() > *memberCount) {
-                refuse(TransposeRefusalCause::Component);
-                os << " node=" << ref << " slots=" << slots.size() << " arity=" << *memberCount
-                   << '\n';
-                return false;
-            }
-            std::vector<gc_node_ref_t> parts;
-            for (size_t i = 0; i < *memberCount; ++i) {
-                Type *const memberType = camel::core::type::tree::childType(joinPrimal, i);
-                const camel::core::TangentSpaceAnswer memberSpace =
-                    memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
-                                          : camel::core::TangentSpaceAnswer{};
-                if (!memberSpace.hasSpace() || memberSpace.space == nullptr) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " member=" << i
-                       << " type=" << (memberType != nullptr ? memberType->toString() : "?")
-                       << " why=no-tangent-space\n";
-                    return false;
-                }
-                gc_node_ref_t part = i < slots.size() ? slots[i] : rt::kInvalidNodeRef;
-                if (part == rt::kInvalidNodeRef) {
-                    // The member nobody read: the zero of its own space, asked the same way the
-                    // answer assembly asks for an unread parameter's (`zeroOfSpaceOf`, then the zero
-                    // the type itself states). A space with neither is a zero this file cannot
-                    // write, and saying so is the refusal rather than a `float` where the member's
-                    // own shape belongs.
-                    part = zeroOfSpaceOf(
-                        draft,
-                        memberSpace.space,
-                        ref < forwardOf.size() ? forwardOf[ref] : rt::kInvalidNodeRef);
-                    if (part == rt::kInvalidNodeRef) {
-                        part = zeroOfType(memberType, memberSpace.space);
-                    }
-                    if (part == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::Component);
-                        os << " node=" << ref << " member=" << i << " memberType="
-                           << (memberType != nullptr ? memberType->toString() : "?")
-                           << " space=" << memberSpace.space->toString()
-                           << " why=no-zero-for-an-unread-member\n";
-                        return false;
-                    }
-                }
-                parts.push_back(part);
-            }
-            const gc_node_ref_t joined = aggregateOf(joinSpace.space, parts);
-            if (joined == rt::kInvalidNodeRef) {
-                refuse(TransposeRefusalCause::Component);
-                os << " node=" << ref << " type=" << joinPrimal->toString()
-                   << " why=the-member-join-built-nothing\n";
-                return false;
-            }
-            if (whole != rt::kInvalidNodeRef) {
-                // The value was read **both whole and by member**, and the adjoint of the two uses
-                // is their sum (`f(q) = q.0 * 2.0 + g(q)`). That sum is the aggregate's addition,
-                // which is its members' addition one place at a time -- derived from the type, not
-                // registered (design principles 9.9) -- so this is a sum and not a refusal (the
-                // aggregate's addition is derived from its type; refusing would judge the registry's
-                // completeness and call it the type's ability).
-                const gc_node_ref_t summed = accumulate(joinSpace.space, whole, joined);
-                if (summed == rt::kInvalidNodeRef) {
-                    refuse(TransposeRefusalCause::Component);
-                    os << " node=" << ref << " type=" << joinPrimal->toString()
-                       << " whole-and-member slots=" << slots.size()
-                       << " why=no-addition-for-a-member-of-the-parameter\n";
-                    return false;
-                }
-                cotangent[ref] = summed;
-            } else {
-                cotangent[ref] = joined;
-            }
-            hasCotangent[ref] = true;
-            return true;
+            return joinMemberReadOf(walkCtx, ref, slots);
         };
 
         // The walk runs the graph backwards in the graph's own order: every node after the nodes
@@ -2856,19 +2369,9 @@ bool buildTransposeMember(
                         const auto unstatedArrayBehind = [&]() -> std::optional<size_t> {
                             // One walk-back, shared with the rule-expansion path below: the same
                             // question ("which declaration leaves this operand's shape open?") has
-                            // one answer, or the two entrances name different parameters.
-                            for (const gc_node_ref_t input : inputs) {
-                                if (const auto unstated = unstatedParameterBehind(
-                                        function,
-                                        input,
-                                        portParameter,
-                                        paramCount,
-                                        nodeCount);
-                                    unstated.has_value()) {
-                                    return unstated;
-                                }
-                            }
-                            return std::nullopt;
+                            // one answer, or the two entrances name different parameters. The
+                            // walk-back is `unstatedParameterOfAnyInput` in `transpose/walk.h`.
+                            return unstatedParameterOfAnyInput(walkCtx, inputs, portParameter);
                         };
                         if (const auto unstated = unstatedArrayBehind(); unstated.has_value()) {
                             refuse(TransposeRefusalCause::ParameterShape, *unstated);
@@ -3137,10 +2640,7 @@ bool buildTransposeMember(
                     intervalForm           = function->loopIterableFormOf(ref) ==
                                              camel::core::LoopIterableForm::Interval;
                     const auto intConstant = [&](int64_t value) {
-                        return draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(value),
-                            Type::Int64(),
-                            rt::kGCNodeFlagConstant);
+                        return intConstantNode(walkCtx, value);
                     };
                     // How many rounds the loop runs: the sequence's length, or `b - a` for an
                     // interval. An empty sequence makes an empty range, and the loop then runs no
@@ -3336,8 +2836,7 @@ bool buildTransposeMember(
                         at < oldNorm.size() ? oldNorm[at] : rt::kInvalidNodeRef);
                 }
                 const auto isStateInitial = [&](gc_node_ref_t what) {
-                    return std::find(stateInitials.begin(), stateInitials.end(), what) !=
-                           stateInitials.end();
+                    return isStateInitialValue(stateInitials, what);
                 };
                 // One accumulator per escaped value, beside one cotangent per state: the loop stays
                 // one loop -- not one loop per escape -- and grows a state for each value that
@@ -3545,19 +3044,11 @@ bool buildTransposeMember(
                     // cotangents of it -- that is `answer=summed`. Different values get different
                     // slots -- `answer=per-target` -- and nothing is added across values.
                     const auto component = [&](uint32_t index) {
-                        // The component read is typed like the member it reads: a sum over an array
-                        // is an array, and reading it as a float is the same read `add_d` made. A
-                        // component index this region has no type for is a count that disagrees
-                        // with the parts the region returns -- the walk's own defect -- so it
-                        // answers no node rather than a `float` read.
-                        Type *const componentType =
-                            index < componentTypes.size() ? componentTypes[index] : nullptr;
-                        if (componentType == nullptr) {
-                            return rt::kInvalidNodeRef;
-                        }
-                        const gc_node_ref_t part = draft.addAccsNode(componentType, index);
-                        draft.setNormInputs(part, std::span<const gc_node_ref_t>(&loopNode, 1));
-                        return part;
+                        // The component read is typed like the member it reads (a sum over an array
+                        // is an array, and reading it as a float is the same read `add_d` made).
+                        // The rule, the type it reads, and the defect an index with no type is, are
+                        // on `componentReadOf` in `transpose/walk.h`.
+                        return componentReadOf(walkCtx, componentTypes, loopNode, index);
                     };
                     for (size_t i = 0; i < stateCount; ++i) {
                         if (stateInitials[i] != rt::kInvalidNodeRef) {
@@ -3825,11 +3316,7 @@ bool buildTransposeMember(
                     // The refusal names the node that carries that value and its kind, so a
                     // reader can see what stands in the way without a dump.
                     const auto describe = [&](gc_node_ref_t value) {
-                        const camel::runtime::GCNode *carrierNode2 = function->node(value);
-                        return std::to_string(value) + ':' +
-                               std::to_string(
-                                   carrierNode2 != nullptr ? static_cast<int>(carrierNode2->kind)
-                                                           : -1);
+                        return describeNodeValue(walkCtx, value);
                     };
                     // **Not linear in the parameter this call was built from.** A bare `transpose(f)` reads every parameter of `f` as a linear
                     // input, and a call whose **callee the body made out of a parameter** is not
@@ -4094,14 +3581,9 @@ bool buildTransposeMember(
                 const auto unforwardedCause = [&](gc_node_ref_t ref, size_t param) {
                     // Ask again with the flag cleared, so the answer is this attempt's: a failure
                     // is not memoised, so the walk repeats the same path and stops at the same
-                    // node.
-                    stoppedAtARegion          = false;
-                    const gc_node_ref_t probe = forward(ref);
-                    if (probe == rt::kInvalidNodeRef && stoppedAtARegion) {
-                        refuse(TransposeRefusalCause::CallValueComputedByTheBody, param);
-                        return;
-                    }
-                    refuse(TransposeRefusalCause::CallValueMissing, param);
+                    // node. The two causes it tells apart are on `noteUnforwardedCause` in
+                    // `transpose/walk.h`.
+                    noteUnforwardedCause(walkCtx, stoppedAtARegion, forward, ref, param);
                 };
                 std::vector<gc_node_ref_t> arguments;
                 // Which of the callee's parameters this call hands a value for: this file's reading of the
@@ -4284,12 +3766,7 @@ bool buildTransposeMember(
             // nothing in it -- which is what keeps the tuple the signature promised and the tuple
             // this builds the same length and the same order.
             Type *const unitType = camel::core::type::TupleType::create(std::vector<Type *>{});
-            const auto unit      = [&]() {
-                ::Tuple *emptyTuple = ::Tuple::create(0, mm::autoSpace());
-                return draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple),
-                    unitType);
-            };
+            const auto unit      = [&]() { return unitMemberOf(walkCtx, unitType); };
             std::vector<Type *> partTypes;
             // The **parameters**, not the ports: the walk above says which port a parameter asks
             // for, and a `()` place has no port at all. Iterating `ports` was the same reading of a
