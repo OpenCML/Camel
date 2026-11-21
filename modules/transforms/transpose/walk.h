@@ -111,6 +111,12 @@ struct WalkContext {
     /// What the walk forwarded for each source node, by the source node's own index; a node the
     /// cotangent path does not carry has no entry. A zero's shape is read from here.
     const std::vector<gc_node_ref_t> *forwardOf = nullptr;
+    /// Whether some cotangent in this member could not be summed at all: a space with no addition,
+    /// or a member of an aggregate that has one but no way to write it. It is a fact about the
+    /// member and not a refusal -- the walk reads it at the end and refuses by name
+    /// (`NoCotangentArithmetic`) instead of handing the slot a `float` sum -- and a probe carries a
+    /// context of its own, so a probe's fact never becomes the answer of the build that made it.
+    bool cotangentArithmeticMissing = false;
 };
 
 /// Records the cause and writes the line for it, in the one place both are written: the cause on the
@@ -158,6 +164,46 @@ gc_node_ref_t zeroOfCotangentType(WalkContext &ctx, const Type *primal, Type *ta
 /// `valueRef` when it forwarded one, and the type's own stated zero (`zeroOfCotangentType`)
 /// otherwise.
 gc_node_ref_t zeroOfValue(WalkContext &ctx, gc_node_ref_t valueRef);
+
+/// The sum of two cotangents in one space: what the place holds already (`into`, `kInvalidNodeRef`
+/// when it holds nothing yet) and what arrives, answered as the value that place holds afterwards.
+///
+/// The sum is the space's **own** (`addUriOfSpace`, the registry's `addUri`), so an `f32` sums with
+/// `:op/add_f`, an array with `:tangent/add_arr` and a tensor with `tensor:add`; nothing here spells
+/// an addition of its own, and no width is written down as a placeholder. The space is the *value's*,
+/// handed in by the caller that knows the value -- not `into`'s space: `into` is a node of the new
+/// graph, and asking the source graph about it reads whatever source node sits at that index, a type
+/// that has nothing to do with the cotangent being summed.
+///
+/// **The sum of an aggregate is its members' sum** (design principles 9.9: an aggregate's tangent is
+/// its members' tangents, so its addition is the members' additions, one place at a time). It is
+/// therefore derived from the type and not registered -- no tangent space has to spell an `addUri`
+/// for a tuple or a struct, and `addUriOfSpace` answering nothing for one is not "an aggregate has no
+/// addition", it is "a single operator cannot answer for it". A place whose member has no tangent
+/// space (`int`, `bool`) carries the unit: the walk hands that place through untouched rather than
+/// stopping the whole sum, and a member that has a space but no addition is a refusal about *that
+/// member*, because the walk cannot sum what nothing can sum.
+///
+/// A space with no addition at all is a cotangent that cannot be summed: `cotangentArithmeticMissing`
+/// records it and the member is refused by name (`NoCotangentArithmetic`) at the end of the walk,
+/// rather than the slot being handed a `float` sum. This is a free function and not a `std::function`
+/// because it recurses: an aggregate's members are summed by this same function, and a `const auto`
+/// lambda cannot name itself while a free function needs no one to tell it its own type.
+gc_node_ref_t sumOfCotangents(
+    WalkContext &ctx, Type *space, gc_node_ref_t into, gc_node_ref_t node);
+
+/// An aggregate of these values, as a node of the new graph, at the type the aggregate's tangent
+/// space names: the Fill the builder writes for a tuple literal and for a struct literal
+/// (`builder_static.cpp`, `{ a: .., b: .. }`), which is the shape every reader of an aggregate already
+/// reads. The members are in the type's own order -- a struct's declaration order and a tuple's place
+/// order, never the order the body happened to read them in -- and the slots are the identity, one
+/// member per place, which is how `addAggregate` writes one (`modules/autodiff/pullback.cpp`).
+///
+/// The type is handed in rather than built here because the caller is the one that asked the tangent
+/// space (`tangentSpaceOf`): a tuple of numbers is its own tangent, and so is a struct of them, while
+/// a tuple of `f32` members is a tuple of `f32` and not one of `float`.
+gc_node_ref_t aggregateOfMembers(
+    WalkContext &ctx, Type *aggregateType, const std::vector<gc_node_ref_t> &parts);
 
 /// Builds the transposed member of one function into state's group and answers whether it did.
 bool buildTransposeMember(
