@@ -1,0 +1,56 @@
+{
+  "//": [
+    "Configuration A: the same suite on two commits. Both sides are install roots of a build of",
+    "this repository (`<checkout>/out/latest`, or a copy of one) -- the directory that holds `bin/`",
+    "and `stdlib/` and that CAMEL_HOME points at. The plan files and cases always come from the",
+    "checkout this tool lives in, so the two sides are two compilers of the same programs.",
+    "",
+    "This is the shape stage 0's acceptance reads: `output_differ=0` and `graph_differ=0` between",
+    "the commits before and after a step that was supposed to change nothing.",
+    "",
+    "Two installs are made by building the same worktree at each commit in turn and copying the",
+    "first install aside (`cp -a out/latest /tmp/camel-a`) before the second build:",
+    "  internal/tools/camel-remote.ps1 -Path <worktree>                     # first commit",
+    "  cp -a ~/camel-work/<worktree>/out/latest /tmp/camel-a             # keep it",
+    "  git -C <worktree> checkout <second commit>",
+    "  internal/tools/camel-remote.ps1 -Path <worktree>                     # second commit",
+    "  node test/tools/diff-compare.mjs --config <this file, with those two paths>"
+  ],
+  "label": "step0-a-example",
+  "a": {
+    "name": "before",
+    "commit": "<sha of the second install's build, for the record>",
+    "install": "/tmp/camel-a"
+  },
+  "b": {
+    "name": "after",
+    "commit": "<sha>",
+    "install": "/home/zjwei/camel-work/<worktree>/out/latest"
+  },
+  "select": {
+    "plans": ["test/plans"],
+    "skip_tiers": ["debug"]
+  },
+  "compare": {
+    "output": true,
+    "graph": true,
+    "time": true
+  },
+  "output": {
+    "bound_ulp": 2,
+    "bits": 53,
+    "overrides": [
+      {
+        "//": "A case that declares a wider bound in its own `desc` names it here, one entry at a time; nothing is widened to make a comparison pass.",
+        "test": "<plan id>/<test name>",
+        "bound_ulp": 4
+      }
+    ]
+  },
+  "graph": {
+    "//": "The pass whose dump is the canonical form: `std::gir` is compact DOT with the graph references the tooling reads. Any terminal scheduling pass of a block is replaced by this one, so the comparison is of the graph the scheduler would have taken.",
+    "pass": "std::gir"
+  },
+  "timeout_scale": 2,
+  "jobs": 8
+}
