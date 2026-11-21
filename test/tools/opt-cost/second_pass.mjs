@@ -260,6 +260,11 @@ function main() {
         return verdict === 'PASS' ? 0 : 1
     }
 
+    // What the next expectation has to know: `case=` is a path of this repository, so it carries the
+    // host's separator (`test\cases\...` on win-x64, `test/cases/...` on Linux). A plan's assertion
+    // must therefore name the case by its file name, or hold no path at all -- one that pinned a
+    // spelling was red on the other host over a line that read `ratio=6.93 max_ratio=14
+    // result=PASS` (CI 44943488386), which is a red about a separator and not about a reading.
     console.log(`opt_second_pass build ${build}`)
     console.log(
         `opt_second_pass case=${path.relative(REPO_ROOT, casePath)} backend=${options.backend} ` +
