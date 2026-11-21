@@ -209,7 +209,8 @@ struct RequiredOrdering {
 /// through references outside a sync block).
 std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph);
 
-// ---- Which port of a graph an access came through -------------------------------------------------
+// ---- Which port of a graph an access came through
+// -------------------------------------------------
 //
 // A resource use that reaches its graph through a port is written down by the port's number in the
 // graph's own numbering (sem::ResourceSignature: `with` parameters first, then ordinary ones, and a
@@ -333,7 +334,8 @@ std::string toString(const NodeAccess &access);
 std::string toString(const NodeResources &resources);
 std::string toString(const GraphFootprint &footprint);
 
-// ---- The commit checks of the effect analysis, asked of one graph as one question ----------------
+// ---- The commit checks of the effect analysis, asked of one graph as one question
+// ----------------
 //
 // docs/design/effects/analysis.cn.md 4.1 names the two things a commit owes the program it
 // publishes. They are one question here because both commit paths (a pass, and the graph module's
@@ -354,8 +356,8 @@ std::string toString(const GraphFootprint &footprint);
 //           and is passed over (principle 3.3).
 //
 // The reading is per graph because a commit edits graphs; which of them it must answer for is the
-// caller's question (`commitViolation`'s `made` and `changed`), and which regions inside one are the
-// commit's is the same pair's (the regions those nodes are in, and every region around them).
+// caller's question (`commitViolation`'s `made` and `changed`), and which regions inside one are
+// the commit's is the same pair's (the regions those nodes are in, and every region around them).
 //
 // Three more things are part of the same commitment. Two of them are asked by the seal every commit
 // already runs, and are said here so that a reader of this file knows where each of the four lands:
@@ -366,8 +368,8 @@ std::string toString(const GraphFootprint &footprint);
 //           graph published, not of what the commit added, so it is not one of the two checks
 //           below and does not read the tier.
 //   Cycle   a graph that closes a cycle of inputs has no order any back end can run. Asked by the
-//           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build, before
-//           the two checks below -- one reading, not a second copy of it here.
+//           same seal (`EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every build,
+//           before the two checks below -- one reading, not a second copy of it here.
 //   Tier    the two checks above (effect, order) are asked by the edit the draft used, not by what
 //           the build is. The table
 //           of `docs/design/graph-editing/README.cn.md` 8.1 is the rule, and it is why the tier has
@@ -388,11 +390,11 @@ std::string_view commitCheckName(CommitCheck check);
 /// and the one line the diagnostic carries. `origin` is the source position to report against (0
 /// when the program does not name one), so that a caller with a diagnostic can attach it.
 struct CommitViolation {
-    CommitCheck check     = CommitCheck::Effect;
-    const GCGraph *graph  = nullptr;
-    gc_node_ref_t first   = kInvalidNodeRef;
-    gc_node_ref_t second  = kInvalidNodeRef;
-    uint64_t origin       = 0;
+    CommitCheck check    = CommitCheck::Effect;
+    const GCGraph *graph = nullptr;
+    gc_node_ref_t first  = kInvalidNodeRef;
+    gc_node_ref_t second = kInvalidNodeRef;
+    uint64_t origin      = 0;
     std::string text;
 };
 
@@ -401,10 +403,11 @@ struct CommitViolation {
 /// when the draft's edit can break either -- see the tier below -- in every build.
 ///
 /// `made` is what the commit made here, and `changed` the existing nodes the draft changed in place
-/// through the low-level interface (an operand or an operator; `GraphDraft::lowLevelEdits`). The two
-/// together are the tier, and they scope both questions twice over:
+/// through the low-level interface (an operand or an operator; `GraphDraft::lowLevelEdits`). The
+/// two together are the tier, and they scope both questions twice over:
 ///
-///   * whether they are asked at all -- the table of `docs/design/graph-editing/README.cn.md` 8.1 is
+///   * whether they are asked at all -- the table of `docs/design/graph-editing/README.cn.md` 8.1
+///   is
 ///     the rule, and its last row is why `made` cannot be the whole of it: "add an edge, change an
 ///     operator" owes all six checks and makes no node. A commit whose draft made nothing and
 ///     changed nothing owes no answer about either, in any build; one that made a node carrying an
@@ -419,9 +422,9 @@ struct CommitViolation {
 ///
 /// What the two questions are asked *of* is the edit, and `before` is what says that: the graph as
 /// the commit started from, when the commit changed existing nodes in place (the caller that has it
-/// passes it; a commit that only made nodes passes nothing). A pair the graph already left unordered
-/// is what the program already was -- the pass boundary's question, not this commit's -- so an
-/// in-place edit answers for the pairs that were ordered and are not any more.
+/// passes it; a commit that only made nodes passes nothing). A pair the graph already left
+/// unordered is what the program already was -- the pass boundary's question, not this commit's --
+/// so an in-place edit answers for the pairs that were ordered and are not any more.
 ///
 /// A *body* that already reached past its declaration is not the same thing and is not passed over.
 /// The graph a commit starts from is the compiler's own product: the
@@ -437,9 +440,10 @@ struct CommitViolation {
 /// through the callee's *declared* clause, so an old graph read against the program this commit is
 /// publishing measures a callee that grew in this very commit and reports a body the graph never
 /// had. A draft plus the program as it is now, read together, answers about a program nobody
-/// has, and the one commit that states a widened type is exactly where that bites: `tiles` widens `chain` and its caller in the same
-/// commit, and the caller's old version is lawful in the old program and beyond in the new one. A
-/// caller whose two programs are the same object passes nothing, which is the whole answer there.
+/// has, and the one commit that states a widened type is exactly where that bites: `tiles` widens
+/// `chain` and its caller in the same commit, and the caller's old version is lawful in the old
+/// program and beyond in the new one. A caller whose two programs are the same object passes
+/// nothing, which is the whole answer there.
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made = {},
     std::span<const gc_node_ref_t> changed = {}, const GCGraph *before = nullptr,
@@ -455,12 +459,12 @@ std::optional<CommitViolation> commitViolation(
 bool commitAddsAccess(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made);
 
-/// A commit that would publish a graph breaking one of the two promises above: the body stays inside
-/// the effect its own type declares, and two conflicting accesses in one region have a path ordering
-/// them. The refusal is carried whole so that a caller which catches it reports the same diagnostic
-/// the reading named, with the same graph, nodes and source position; `what()` is that line. It is
-/// thrown where the graphs of a commit are read (draft_session.cpp), which is the one place a graph
-/// becomes a graph either commit path can publish.
+/// A commit that would publish a graph breaking one of the two promises above: the body stays
+/// inside the effect its own type declares, and two conflicting accesses in one region have a path
+/// ordering them. The refusal is carried whole so that a caller which catches it reports the same
+/// diagnostic the reading named, with the same graph, nodes and source position; `what()` is that
+/// line. It is thrown where the graphs of a commit are read (draft_session.cpp), which is the one
+/// place a graph becomes a graph either commit path can publish.
 class GraphCommitRefused : public std::runtime_error {
   public:
     explicit GraphCommitRefused(CommitViolation violation)
@@ -492,15 +496,16 @@ class GraphBeforeEditBeyondType : public std::runtime_error {
     explicit GraphBeforeEditBeyondType(std::string what) : std::runtime_error(std::move(what)) {}
 };
 
-/// The clause of the function value that arrives at a node's operand, found the way the graph stores
-/// it: the value is read through the gates the graph puts between an operand and the value the
-/// program handed over, and the operand is picked by the declaration's `Norm`/`With` kind and index.
-/// The one lookup the runtime and the effect summary share, so a call through a value
+/// The clause of the function value that arrives at a node's operand, found the way the graph
+/// stores it: the value is read through the gates the graph puts between an operand and the value
+/// the program handed over, and the operand is picked by the declaration's `Norm`/`With` kind and
+/// index. The one lookup the runtime and the effect summary share, so a call through a value
 /// (`clauseOfCall`) and a higher-order operator's operand (`clauseOfOperand`) read the same place.
-core::FunctionValueClause clauseOfOperand(
-    const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where);
+core::FunctionValueClause
+clauseOfOperand(const GCGraph &graph, gc_node_ref_t node, const core::sem::ResourceBinding &where);
 
-/// The same reading for a call through a function value: the callee is the call's first `with` input.
+/// The same reading for a call through a function value: the callee is the call's first `with`
+/// input.
 core::FunctionValueClause clauseOfCall(const GCGraph &graph, gc_node_ref_t node);
 
 /// Records a refusal as the diagnostic both commit paths carry, and says who asked: `site` is the

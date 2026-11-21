@@ -49,10 +49,10 @@
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/rules.h"
-#include "camel/passes/test/undo_selfcheck.h"
 #include "camel/passes/test/saturate.h"
 #include "camel/passes/test/tangent_space.h"
 #include "camel/passes/test/throw_bad_alloc.h"
+#include "camel/passes/test/undo_selfcheck.h"
 #include "camel/passes/test/writings.h"
 #include "camel/passes/trans/cml/cml.h"
 #include "camel/passes/trans/json/gir.h"
@@ -2032,8 +2032,8 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
 /// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
-/// so a place in it is a sync or control edge either way, read from the edges themselves.
+/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control
+/// one), so a place in it is a sync or control edge either way, read from the edges themselves.
 ///
 /// An order edge is not one of them: it orders two nodes that both run and makes neither of them
 /// run (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read
@@ -2822,22 +2822,21 @@ bool passBoundaryViolation(
                 violation = std::move(found);
             }
         }
-            // A reading of the effect-containment summary, on the run's tracing channel
-            // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
-            // The text is that of a log line, down to the trailing newline.
-            camel::core::trace(camel::core::TraceArea::Effects)
-                << std::format(
-                       "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
-                       "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
-                       "other {})\n",
-                       report.checked,
-                       report.declined(),
-                       report.anyUnknown,
-                       report.anyObject,
-                       report.anyHandle,
-                       report.variableCell,
-                       report.unresolved,
-                       report.other);
+        // A reading of the effect-containment summary, on the run's tracing channel
+        // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
+        // The text is that of a log line, down to the trailing newline.
+        camel::core::trace(camel::core::TraceArea::Effects) << std::format(
+            "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
+            "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
+            "other {})\n",
+            report.checked,
+            report.declined(),
+            report.anyUnknown,
+            report.anyObject,
+            report.anyHandle,
+            report.variableCell,
+            report.unresolved,
+            report.other);
         if (violation.has_value()) {
             ctx->rtmDiags()
                 ->of(RuntimeDiag::PassEffectContainment)
