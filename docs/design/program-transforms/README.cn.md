@@ -36,13 +36,13 @@ func zip::<...A>(...xs: ...A): (...ElementOf<A>)[] when ...is_array::<A>()
 
 ## 3. 原语的规则
 
-内置原语（`prelude` 里的 `func operator +` 等，以及 tensor、math 的原语）的规则写在**规则集模块**里，
-例如 `stdlib/rulesets/jvp.cml`。**一个模块是不是规则集，由它的路径前缀决定**：`stdlib/rulesets/` 下的
-模块是规则集，其他模块是库；索引只从这样命名的模块里建，所以一个库不会因为写了 `rule` 就被当成规则集。
-一条规则属于哪一族，是因为它声明在哪个模块里；**它是哪个原语的规则，由它的左边决定**——`rule jvp_add
+内置原语（`prelude` 里的 `func operator +` 等，以及 tensor、math 的原语）的规则写在规则集里，
+例如 `stdlib/rulesets/jvp.cml` 导出的那个 `Rule[]` 值。**规则集是显式交给变换的编译期值**（规则连同它的 `Lift` 类型函数）（设计原则 9.9、9.11，
+负责人 2026-11-22）：不按模块路径认定，也不在导入时挂到算子记录上，所以一个库不会因为写了 `rule` 就改变变换的结果。
+**一条规则是哪个原语的规则，由它的左边决定**——`rule jvp_add
 { x + w => … }` 的左边头就是 `+`，**而且左边的运算符连同它的元数一起才是键**：`-x` 是一元取负
-（`__neg__`），`x - w` 是二元减法（`__sub__`），两者写同一个 `-`，是两条规则、两个原语。变换按"原语 →
-规则集模块里左边以它（运算符与元数）为键的规则"建一张索引，一条规则集一张。
+（`__neg__`），`x - w` 是二元减法（`__sub__`），两者写同一个 `-`，是两条规则、两个原语。变换在交来的规则集里按"原语 →
+左边以它（运算符与元数，即算子编号）为根的规则"建一张索引，一条规则集一张。
 
 ```camel
 // 规则集模块里（例如 stdlib/rulesets/jvp.cml）：左边的运算符与元数就是这条规则所属的原语
@@ -137,11 +137,11 @@ type Split<F> = ((...ParamsOf<F>)          => (ResultOf<F>, (...Tangent<ParamsOf
 ### 4.3 转置 `transpose`
 
 ```camel
-func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
+func transpose::<F>(f: F): Transpose<F>
 type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose/signature.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。线性不写在类型里：`transpose` 遇到没有 `#transpose` 规则的算子就拒绝（设计原则 9.9"缺规则必须拒绝"，负责人 2026-11-22），这已保证只有线性的函数能被转置。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose/signature.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；
@@ -166,7 +166,7 @@ func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 
 ## 5. 实现与对照
 
-- 三个算子各有一份 Camel 参考实现与一份原生实现，原生的用 `#impl` 标出（原则 6.2），差分测试对照。Camel 参考实现在实例化时遍历函数的图并展开成代码，需要元层（`static for`、`match type`）能读图的结构，这一块随第 6 节第 6 步单独定写法。
+- 三个算子先用 C++ 在 `lib/transforms/` 下只经内核接口做对，再写成 Camel；C++ 版保留作对照，等 Camel 版在表达能力与执行效率上都能媲美它，再另行决定删除（设计原则第 1 节、9.9，负责人 2026-11-22），两份由差分测试对照。Camel 版在实例化时遍历函数的图并展开成代码，需要元层（`static for`、`match type`）能读图的结构，这一块随第 6 节第 6 步单独定写法。
 - 求导的验收对照三样：有限差分、现在的 `pullback.cpp`、ADBench 能表达的 GMM、BA、LSTM。三个调度器的值与解释器一致。新路线全过之后，`pullback.cpp` 删除，不留兼容层。
 - M6 那三组组合（`grad(vmap(f))`、`vmap(grad(f))`、`jvp(vjp(f))`）的期望值、解析导数与有限差分的步长、误差界，先写在 `docs/design/program-transforms/m6-combination-numbers.cn.md`：代码还没写，数先钉死。
 
