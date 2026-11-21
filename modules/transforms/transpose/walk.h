@@ -15,6 +15,7 @@
 #include "transpose.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -29,6 +30,7 @@
 
 namespace camel::transforms {
 
+using camel::core::type::Type;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
 
@@ -91,13 +93,24 @@ struct PairCall {
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
 };
 
-/// What one node family is handed besides the node: the walk's state, the graph it is reading, and
-/// the stream a refusal is written to. One struct for every family, because they differ in what
-/// they do and not in what they are handed.
+/// What one node family is handed besides the node: the walk's state, the graph it is reading, the
+/// stream a refusal is written to, the draft the member is being built into, and what the walk has
+/// already forwarded. One struct for every family, because they differ in what they do and not in
+/// what they are handed.
+///
+/// `draft` and `forwardOf` are pointers and not references because they do not exist when the
+/// context is made: the transaction is opened and the forward table is sized further into the
+/// walk, so the walk fills them in where they are made (`walk.cpp`) instead of here.
 struct WalkContext {
     TransposeState &state;
     camel::runtime::GCGraph *function = nullptr;
     std::ostream &os;
+    /// The draft the member is being written into. Read by the zero builders, which write a
+    /// constant into this graph.
+    camel::runtime::GraphDraft *draft = nullptr;
+    /// What the walk forwarded for each source node, by the source node's own index; a node the
+    /// cotangent path does not carry has no entry. A zero's shape is read from here.
+    const std::vector<gc_node_ref_t> *forwardOf = nullptr;
 };
 
 /// Records the cause and writes the line for it, in the one place both are written: the cause on the
@@ -109,6 +122,43 @@ void refuseMember(WalkContext &ctx, TransposeRefusalCause cause,
 /// Records the parameter whose shape the walk had to ask for, and the name and type its declaration
 /// writes: the parameter's place, its declared name, and the type whose extents are missing.
 void noteUnstatedParameterOf(WalkContext &ctx, size_t param);
+
+/// The cotangent space of a type: the space a value of that type's cotangent lives in, or nullptr
+/// when the type has no tangent space at all. There is **no fallback** -- a value whose type has no
+/// tangent space has no cotangent type, and every caller refuses by name; answering `float` here
+/// would be the whole family's defect, because the answer is read.
+Type *cotangentSpaceOfType(WalkContext &ctx, const Type *type);
+
+/// The cotangent space of the value at `ref`, read from the value's type in the source graph: the
+/// same question `jvp` asks of a parameter (`camel/core/tangent_space.h`), asked of a loop's state
+/// and of a value that escaped it. A `float[]` state pulls back an array; a number pulls back a
+/// number. Nothing decides that by hand -- the port, the tuple member and the component read all ask
+/// here. A ref the source graph does not have has no type, and therefore no cotangent.
+Type *cotangentTypeOfValue(WalkContext &ctx, gc_node_ref_t ref);
+
+/// The zero of a cotangent space that the **type itself** states: an array of a floating scalar,
+/// every element zero, at the extents the type states -- the same rule, in the same words, as
+/// `jvp`'s `zeroConstantFor` (`modules/transforms/jvp.cpp`).
+///
+/// An extent the type leaves open has no size to write, so the answer there is `kInvalidNodeRef`:
+/// the zero this member needs is the forward argument's, and its witness arrives as one of the cut's
+/// residuals. An unwitnessed zero is wrong at every length but one, so a missing witness is a loud
+/// refusal, never a quiet wrong width. `kInvalidNodeRef` also answers an array whose element is not
+/// a numeric scalar, whose elements' zeros are the space's business and not one value's; the caller
+/// refuses by name rather than answer a value the slot does not promise.
+gc_node_ref_t zeroOfCotangentType(WalkContext &ctx, const Type *primal, Type *tangentType);
+
+/// The zero of the cotangent space of the value at `ref`, asked of the space (`zeroOfSpaceOf`): a
+/// floating scalar's is the constant the registry holds in that scalar's own width -- an `f32` zero
+/// is four bytes, not a `float` zero read as four -- and a space whose zero is built from a value's
+/// shape uses the space's own `zerosLikeUri`. Nothing here writes a `float` zero on behalf of a type
+/// that is not a `float`.
+///
+/// The shape a zero array is built at is a node of **this** graph: the value the walk forwarded for
+/// `valueRef` when it forwarded one, and the type's own stated zero (`zeroOfCotangentType`)
+/// otherwise.
+gc_node_ref_t zeroOfValue(WalkContext &ctx, gc_node_ref_t valueRef);
+
 /// Builds the transposed member of one function into state's group and answers whether it did.
 bool buildTransposeMember(
     TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,
