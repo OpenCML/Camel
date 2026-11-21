@@ -436,6 +436,13 @@ const CMAKE_HOOKS = [
     '  target_include_directories(${target} PRIVATE\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/src\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${CMAKE_CURRENT_SOURCE_DIR}\n  )',
     '  set(_camel_tool_roots\n    ${CMAKE_SOURCE_DIR}/include\n    ${CMAKE_SOURCE_DIR}/src\n    ${CMAKE_SOURCE_DIR}/third_party\n    ${CMAKE_SOURCE_DIR}\n    ${CMAKE_CURRENT_SOURCE_DIR})\n  if(CAMEL_LAYOUT_TRANSITIONAL)\n    list(APPEND _camel_tool_roots ${CAMEL_LAYOUT_CATCHALL_ROOTS})\n  endif()\n  target_include_directories(${target} PRIVATE ${_camel_tool_roots})',
   ],
+  // Two modules gave their own object target something the top-level build never did: a version
+  // string (`ckpt`), and the CBLAS include directory with the defines that select it (`tensor`).
+  // The block compiles those sources now, so the settings go to the block -- the whole of
+  // `lib_module`, which is wider than the module and is the transition this drill states.
+  ['modules/ckpt/CMakeLists.txt', 'target_compile_definitions(ckpt_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module '],
+  ['modules/tensor/CMakeLists.txt', 'target_compile_definitions(tensor_cmo_objects PRIVATE ', 'camel_layout_block_definitions_of(lib_module ', 'all'],
+  ['modules/tensor/CMakeLists.txt', 'target_include_directories(tensor_cmo_objects PRIVATE ', 'camel_layout_block_includes_of(lib_module '],
 ]
 
 // `BUILD_INFO_ROOTS` is what `-NoBuild` fingerprints. Left alone, every moved source falls out of
@@ -614,6 +621,18 @@ function cmakeText (blocksInfo) {
   L.push('    foreach(_t IN LISTS _targets)')
   L.push('        camel_taskflow_with_worker_stack(${_t})')
   L.push('    endforeach()')
+  L.push('endfunction()')
+  L.push('')
+  L.push('function(camel_layout_block_definitions_of _block)')
+  L.push('    # A module added definitions to the object target that compiled its sources; the block owns')
+  L.push('    # those sources now, so the definition lands on the block. That is wider than the module,')
+  L.push('    # and it is the drill: when a module becomes its own block it keeps only its own.')
+  L.push('    target_compile_definitions(' + BLOCK_PREFIX + '${_block}_objects PRIVATE ${ARGN})')
+  L.push('endfunction()')
+  L.push('')
+  L.push('function(camel_layout_block_includes_of _block)')
+  L.push('    # Same for the include directories a module added for its own headers or for BLAS.')
+  L.push('    target_include_directories(' + BLOCK_PREFIX + '${_block}_objects PRIVATE ${ARGN})')
   L.push('endfunction()')
   L.push('')
   return L.join('\n')
@@ -972,15 +991,24 @@ function escapeRe (s) {
 
 function applyHooks (tree) {
   const applied = []
-  // A hook is `[from, to]` against the top-level `CMakeLists.txt`, or `[file, from, to]` against a
-  // named build file. Either way it must match exactly once.
+  // A hook is `[from, to]` against the top-level `CMakeLists.txt`, `[file, from, to]` against a
+  // named build file, or `[file, from, to, 'all']` for a line that appears once per configuration
+  // branch and must be rewritten wherever it appears. Otherwise it must match exactly once.
   for (const hook of CMAKE_HOOKS) {
-    const [rel, from, to] = hook.length === 3 ? hook : ['CMakeLists.txt', hook[0], hook[1]]
+    const [rel, from, to, repeat] =
+      hook.length === 2 ? ['CMakeLists.txt', hook[0], hook[1], 1]
+      : hook.length === 3 ? [hook[0], hook[1], hook[2], 1]
+      : hook
     const file = path.join(tree, rel)
     const text = fs.readFileSync(file, 'utf8')
     const count = text.split(from).length - 1
-    if (count !== 1) fail(`${rel}: hook matched ${count} times, expected 1:\n${from}`)
-    fs.writeFileSync(file, text.replace(from, to))
+    if (repeat === 'all') {
+      if (count < 1) fail(`${rel}: hook matched no line to rewrite:\n${from}`)
+      fs.writeFileSync(file, text.split(from).join(to))
+    } else {
+      if (count !== 1) fail(`${rel}: hook matched ${count} times, expected 1:\n${from}`)
+      fs.writeFileSync(file, text.replace(from, to))
+    }
     applied.push(`${rel}: ${from.split('\n')[0].trim()}`)
   }
   // The two JavaScript patches.
