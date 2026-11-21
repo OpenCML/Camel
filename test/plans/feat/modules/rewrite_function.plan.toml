@@ -24,3 +24,35 @@ case = "../../../cases/modules/rewrite_function/simp_target.cml"
 args = ["${case}", "rules::simplify", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "rewrite_function.ordered"
+desc = "Ordered binding forbids nested swaps, guard fallback and associative remainder search; defaults preserve them. Repeated variables keep identity, and explicit commutativity still adds saturation alternatives."
+case = "../../../cases/modules/rewrite_function/ordered.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "guard ordered 0 3\nguard default 1 2\nguard omitted 1 2\nnested ordered 0 1\nnested default 1 0\nrepeated swapped ordered 0 1\nrepeated swapped default 1 0\nrepeated shared ordered 1 0\nrepeated distinct ordered 0 1\nchain ordered 0 2\nchain default 1 1\nrewrite ordered 3 10\nrewrite default 2 10\nsaturate ordered 3 10\nsaturate default 2 10\nexplicit commute true\nRuleTwoWay\nRuleTwoWay\n"
+expect_output_not_contains = ["error[", "warning["]
+
+[[tests]]
+name = "rewrite_function.ordered_explain"
+desc = "why_not reads the stored positional policy for both concrete and generic rules."
+case = "../../../cases/modules/rewrite_function/ordered_explain.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "concrete ordered true\ngeneric ordered true\nconcrete default true\ngeneric default true\n"
+expect_output_not_contains = ["error[", "warning["]
+
+[[tests]]
+name = "rewrite_function.ordered_type_error"
+desc = "All three entry points reject a non-bool matching option."
+case = "../../../cases/modules/rewrite_function/ordered_type_error.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["<rewrite:rewrite>: <rules:", "<rewrite:run>: <rules:", "<rewrite:saturate>: <rules:", "ordered: bool"]
+verify_script = """
+({ input, assert }) => {
+    assert((input.normalized.stdout.match(/SemanticDiag::NoMatchingFunction/g) || []).length === 3,
+        'each entry point must diagnose the wrong policy type')
+}
+"""

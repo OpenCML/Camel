@@ -100,7 +100,7 @@ const LEDGER = [
         reads: 'CAMEL_TILES_TEST_I64',
         owner: 'the tiles line (its test pass)',
         why: 'a switch of the test pass itself',
-    },
+    }
 ]
 
 const CALL = /\bgetenv\s*\(/g

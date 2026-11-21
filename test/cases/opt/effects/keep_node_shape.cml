@@ -1,7 +1,8 @@
 // A program whose graph the draft-level readings act on: a call that must run, a node above it that
-// reads its value and nothing else, and a print the pass can reroute. `test::keep_node` replaces
-// that node, and what happens to this print is the reading (design principles 3.3, 9.7);
-// `test::keep_node_pure` makes the removals that must get no keeper at all.
+// reads its value and nothing else, and a print the pass can reroute. `test::bounds_flip` turns one
+// of the call's ambient uses into a read and the commit refuses the graph (design principles 3.3,
+// 9.7); `std::opt` is the control, and the print it keeps runs through the `GATE` a removal that
+// takes the call's last read leaves in its place.
 import { println } from std
 
 func side(): int sync {

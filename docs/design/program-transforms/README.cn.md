@@ -130,7 +130,7 @@ type Split<F> = ((...ParamsOf<F>)          => (ResultOf<F>, (...Tangent<ParamsOf
 **残差取决于函数本身（它的图），不取决于它的类型**（作者，2026-11-01，撤回 10-31 的 `ResidualsOf<F>`）：残差的个数与内容由"前一半算出来的值里被后一半读到的那些"决定，只有图能回答，类型不能——`f(x) = x` 与 `f(x) = x*x` 的 lifted 类型完全相同，一个残差为 0 一个为 1。所以 `Split<F>` 里的残差位不是一个类型函数，是**实例化时由编译器按图填的空位**；它对用户不可见，程序既不写它、不解构它、也不数它（`ResidualsOf<F>` 因此从 `stdlib/signatures` 里删掉了）。读到该值的后一半**不重算**它：值从残差元组里取（`residuals.cpp` 的 `residualsOf` 按程序顺序编号），重算只在没有残差位可用时才发生，而那不是设计允许的形状。
 
 - **循环**：每一轮的残差作为收集输出保存，是值不是闭包（原则 9.9 现有规定），后一个函数里循环按同样的轮数执行，逐轮取残差。
-  - 今天的树上这一条**能测，但分辨不出走序**（2026-11-02）：能给循环状态配对的只有浮点标量（`pairTypeOf`，`modules/transforms/jvp.cpp#pairTypeOf`），单 `float` 的逐轮映射可交换，正序与倒序打出同一个数；「倒序」本身属 4.3，而 `transpose` 仍按原样复制循环区间，所以 `vjp` 过循环**尚未保序**。聚合状态现在能 lift（`jvp` 逐状态抬起），所以判别用例已经能分出两个数；真正的缺口换成了「倒序需要一个倒序的数组值，而 `LoopKind::For` 里没有轮次下标」，见 `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`。
+  - 今天的树上这一条**能测，但分辨不出走序**（2026-11-02）：能给循环状态配对的只有浮点标量（`pairTypeOf`，`modules/transforms/jvp.cpp#pairTypeOf`），单 `float` 的逐轮映射可交换，正序与倒序打出同一个数；「倒序」本身属 4.3，而 `transpose` 仍按原样复制循环区间，所以 `vjp` 过循环**尚未保序**。聚合状态现在能 lift（`jvp` 逐状态抬起），所以判别用例已经能分出两个数；真正的缺口换成了「倒序需要一个倒序的数组值，而 `LoopKind::For` 里没有轮次下标」，见 `docs/handover/reviews/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`。
 - **分支**：条件是残差，后一个函数按同一个条件选臂。
 - **调用**：被调函数各自拆分，残差按调用嵌套。
 
@@ -141,7 +141,7 @@ func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
 type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose/signature.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；

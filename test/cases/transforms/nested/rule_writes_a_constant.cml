@@ -1,0 +1,36 @@
+// A reshape whose configuration is not one any law spells: `[2, 1, 2]` on four elements, reached
+// through `sum` and differentiated.
+//
+// `jvp_reshape` used to be written for one constant (`reshape<[2, 2]>(x)`), and then a node like
+// this one was answered by a law that wrote the wrong shape into the tangent: `reshape<[8, 2, 8]>`
+// came out `reshape<[2, 2]>` and the run died with `TensorDimensionMismatch: [6] -> [2, 2]`. The law
+// is general now -- it names `dims` as its second port (`stdlib/rulesets/jvp.cml`, "It used to be
+// written for one constant") -- so no law states a configuration of its own and there is none to
+// disagree with. That is `angleargs`' face and this case does not test it.
+//
+// What this case pins is that the matcher does not stop a configuration the law does not spell,
+// which is the regression a value comparison in `chooseRuleAmong` reintroduced on 2026-11-20:
+// measured by another lane, 27 red lines in `feat/compile`, with `jvp_reshape` and `jvp_permute`
+// both refused at "writes 1 `<>` value(s) of its own" over their own `dims`/`perm` parameter.
+//
+// The reading is WHICH refusal fires. The transposition half has no rule for `reshape` at all
+// (`stdlib/rulesets/transpose.cml`, the section on the three operations that state their extents), so
+// the run stops there; a matcher refusal instead would mean the configuration had been refused
+// before any law ran, which is the defect.
+//
+// `rule_constant_agrees.cml` is the same program at `[2, 2]`. The two differ only in the node's
+// configuration and read the same sentence, which is what a general law should do.
+import { grad } from vjp
+import { reshape, sum } from tensor
+
+with <x: f32[]>
+func loss(): f32 {
+    let t = reshape<[2, 1, 2]>(x)
+    return sum(t)
+}
+
+func main(): int sync {
+    let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
+    println(grad(loss)<xs>())
+    return 0
+}

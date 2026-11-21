@@ -16,6 +16,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/collection.h"
+#include "camel/core/trace.h"
 #include "camel/execute/cpu_isa.h"
 #include "camel/execute/devices.h"
 #include "camel/execute/limits.h"
@@ -186,8 +187,9 @@ std::vector<SpecWord> splitSpec(const std::string &spec) {
         if (!word.empty()) {
             const size_t equals = word.find('=');
             words.push_back(
-                equals == std::string::npos ? SpecWord{word, ""}
-                                            : SpecWord{word.substr(0, equals), word.substr(equals + 1)});
+                equals == std::string::npos
+                    ? SpecWord{word, ""}
+                    : SpecWord{word.substr(0, equals), word.substr(equals + 1)});
         }
         if (comma == std::string::npos) {
             break;
@@ -414,6 +416,8 @@ bool dumpInstances = false; // Whether to dump the index semantics of every oper
 bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
 bool dumpTags      = false; // Whether to dump the tags the program declares
 bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
+bool dumpTies      = false; // Whether to dump the canonical numbering's tie groups
+bool dumpCopies    = false; // Whether to dump what the plan decided about every update node
 bool geneCode      = false; // Whether to generate code from GIR
 int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -627,6 +631,7 @@ void _printInspectArgs() {
     cout << "\tdump-ast:" << dumpAST << endl;
     cout << "\tdump-gct:" << dumpGCT << endl;
     cout << "\tdump-gir:" << dumpGIR << endl;
+    cout << "\tdump-ties:" << dumpTies << endl;
     cout << "\tpass-until:" << passUntil << endl;
     cout << "\ttarget-file:";
     for (auto &file : targetFiles) {
@@ -667,6 +672,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     std::string logPresetConsumed;
     std::string logIncludeConsumed;
+    std::string traceConsumed;
 
     auto globalOps =
         (option("-vvvv") % "log threshold: trace (shortcut)",
@@ -678,7 +684,10 @@ bool parseArgs(int argc, char *argv[]) {
          ((option("--log-preset") & value("preset", logPresetConsumed)) %
           "scope filter preset: none|wall|extra"),
          ((option("--log-include") & value("scopes", logIncludeConsumed)) %
-          "comma-separated scope prefixes (overrides preset list)"));
+          "comma-separated scope prefixes (overrides preset list)"),
+         ((option("--trace") & value("areas", traceConsumed)) %
+          "print the compiler's step-by-step readings for these areas, comma-separated: "
+          "transforms|plan|effects|fold (default: none)"));
 
     // How diagnostics are reported, for every command that compiles. The -W... options are
     // taken out of argv before clipp sees it (applyWarningArguments): their value is joined to
@@ -703,7 +712,8 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
              "limit on nested calls while std::macro evaluates a call (default: 64)",
          (option("--max-macro-rounds") & value("rounds", maxMacroRoundsOpt)) %
-             "limit on the rounds one loop may run while std::macro evaluates it (default: 1000000)",
+             "limit on the rounds one loop may run while std::macro evaluates it (default: "
+             "1000000)",
          (option("--gc") & value("collector", gcModeOpt)) %
              "collector of run-time values: generational (default; young objects are copied) or "
              "mark-sweep (objects keep their address)",
@@ -743,8 +753,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--gc-check") & value("moves,poison,verify=...,config,mark", gcCheckOpt)) %
              "read the collector: moves logs every moved object, poison writes over the from-space "
              "at every safepoint, verify=before|after|both checks the invariants around a "
-              "collection, config prints the resolved configuration at start, mark compares the marks the "
-              "root walk clears with the whole graph space",
+             "collection, config prints the resolved configuration at start, mark compares the "
+             "marks the "
+             "root walk clears with the whole graph space",
          (option("--coll") & value("leaf=...,fanout=...,pad=...,validate=...", collOpt)) %
              "the widths of a Map or Set tree: leaf=N entries per leaf (0: unbounded, one sorted "
              "array), fanout=N children per branch, pad=on|off (off allocates a table for its "
@@ -850,6 +861,14 @@ bool parseArgs(int argc, char *argv[]) {
              "print every node attribute the tree can write with its fate in the interpreter, "
              "the dumps, the ONNX export and Tiles, then fail if a loaded module interned an "
              "attribute key the table does not classify",
+         option("--ties").set(dumpTies) %
+             "print the tie groups the canonical numbering met -- how wide each is, how much of "
+             "it the node key left equal, and which parts were too wide to enumerate -- so that a "
+             "known limitation is reported and not silently arranged in the creation order",
+         option("--copies").set(dumpCopies) %
+             "print what the execution plan decided about every update node (an append, a path "
+             "assignment, a sort rebinding): one line per update saying whether it reuses the "
+             "storage of the value it is given (in-place) or allocates new storage (copied)",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
@@ -938,6 +957,19 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (selectedCommand == Command::Info) {
         return false;
+    }
+
+    // The trace areas a run asked for (`--trace transforms,plan`): a name that is not in the
+    // registry is refused here rather than silently tracing nothing, because a run that prints no
+    // reading and says nothing about why is the failure mode this option exists to remove.
+    if (!traceConsumed.empty()) {
+        const std::string unknown = camel::core::enableTraceAreas(traceConsumed);
+        if (!unknown.empty()) {
+            std::cerr << "Invalid --trace value: '" << unknown << "'. Expected " << camel::core::traceAreaList()
+                      << ", comma-separated." << std::endl;
+            exitCode = 1;
+            return false;
+        }
     }
 
     // Resolve input path and pass list so main does not branch on --input/--passes
@@ -1093,11 +1125,19 @@ bool parseArgs(int argc, char *argv[]) {
                         std::exit(1);
                     }
                 } else if (word.key == "alloc") {
-                    if (!readNumberOption(word.value, "--gc-stress alloc", checks.stressEveryAllocations, 1u << 20)) {
+                    if (!readNumberOption(
+                            word.value,
+                            "--gc-stress alloc",
+                            checks.stressEveryAllocations,
+                            1u << 20)) {
                         std::exit(1);
                     }
                 } else if (word.key == "safepoint") {
-                    if (!readNumberOption(word.value, "--gc-stress safepoint", checks.stressEverySafepoints, 1u << 20)) {
+                    if (!readNumberOption(
+                            word.value,
+                            "--gc-stress safepoint",
+                            checks.stressEverySafepoints,
+                            1u << 20)) {
                         std::exit(1);
                     }
                 } else {
@@ -1112,10 +1152,12 @@ bool parseArgs(int argc, char *argv[]) {
                     checks.logMoves = true;
                 } else if (word.key == "poison") {
                     checks.poison = true;
-                    } else if (word.key == "mark") {
-                        checks.markCheck = true;
+                } else if (word.key == "mark") {
+                    checks.markCheck = true;
                 } else if (word.key == "config") {
                     checks.printConfig = true;
+                } else if (word.key == "foreign") {
+                    checks.printForeignResources = true;
                 } else if (word.key == "verify") {
                     if (word.value == "before" || word.value == "pre") {
                         checks.verifyBefore = true;
@@ -1131,7 +1173,8 @@ bool parseArgs(int argc, char *argv[]) {
                     }
                 } else {
                     std::cerr << "Invalid --gc-check word: '" << word.key
-                              << "'. Expected moves, poison, config or verify=...." << std::endl;
+                              << "'. Expected moves, poison, foreign, config or verify=...."
+                              << std::endl;
                     std::exit(1);
                 }
             }

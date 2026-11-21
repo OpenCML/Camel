@@ -19,6 +19,7 @@
 //                                                lines; the old one-liner catches one
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -79,9 +80,19 @@ for (const file of visited) {
 
 if (process.argv.includes('--self-test')) {
     // The reverse reading: build a file that carries each of the four forms, prove this script finds
-    // them, and prove the old one-liner finds only the first. The temporary file is written under
-    // the system temp directory so a run of the gate never sees it.
-    const probe = path.join(process.env.TEMP ?? '/tmp', 'camel-conflict-probe.txt');
+    // them, and prove the old one-liner finds only the first. The probe is written under the system
+    // temp root so a run of the gate never sees it, in a directory of its own: a fixed name there
+    // was shared by every run of the gate on a host at once, and a write or a removal by one run
+    // landing between another's write and its read came back as a truncated or vanished probe --
+    // `catches 0 line(s)` or `catches 1 line(s)`, red on a leg where nothing was wrong with the
+    // rule. The directory is per run, so the reading is this run's own, as `CAMEL_TEST_TMPDIR` is
+    // for every other case that writes a file.
+    const base = process.env.CAMEL_TEST_TMPDIR
+        ? path.resolve(process.env.CAMEL_TEST_TMPDIR)
+        : os.tmpdir();
+    fs.mkdirSync(base, { recursive: true });
+    const scratch = fs.mkdtempSync(path.join(base, 'camel-conflict-probe-'));
+    const probe = path.join(scratch, 'probe.txt');
     fs.writeFileSync(
         probe,
         ['clean line', '<<<<<<< HEAD', 'ours', '||||||| bbc9b2b65', 'base', '=======', 'theirs', '>>>>>>> theirs', 'clean tail', ''].join('\n'),
@@ -98,7 +109,7 @@ if (process.argv.includes('--self-test')) {
     });
     const oldCaught = probeLines.filter((line) => /^<<<<<<< /.test(line)).length;
     console.log(`self-test: this rule catches ${caught.length} line(s) [${caught.join(', ')}], the old one-liner catches ${oldCaught}`);
-    fs.rmSync(probe, { force: true });
+    fs.rmSync(scratch, { recursive: true, force: true });
     const ok = caught.length === 4 && oldCaught === 1;
     console.log(ok ? 'self-test: the old pattern misses three of the four forms' : 'self-test: FAILED');
     process.exit(ok ? 0 : 1);

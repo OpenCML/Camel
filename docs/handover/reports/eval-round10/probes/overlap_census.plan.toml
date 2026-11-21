@@ -1,0 +1,15 @@
+id = "modules.rules_overlap_census"
+order = 396
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite", "census"]
+desc = "Scratch measurement for the rule-overlap census (not part of the tree): nineteen pairs of rules whose left sides unify, each pair applied one rule at a time to one witness program that carries the shared node, and the two readings printed side by side."
+
+[[tests]]
+name = "rules.overlap_census"
+desc = "Every overlapping pair of the standard rule library, applied one rule at a time to one witness, with both readings printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/overlap_census.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000

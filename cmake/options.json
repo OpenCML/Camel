@@ -8,12 +8,6 @@
             "type": "platform"
         },
         {
-            "name": "ENABLE_FASTVM_COMPUTED_GOTO",
-            "description": "Use computed goto in interpreter",
-            "default": "ON",
-            "type": "bool"
-        },
-        {
             "name": "CAMEL_ENABLE_PYTHON",
             "description": "Build python.cmo, pyplot.cmo, and py_bridge* (requires Python dev layout)",
             "default": "ON",
@@ -23,6 +17,18 @@
             "name": "CAMEL_TENSOR_BLAS",
             "description": "Use a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels. On by default: without a findable CBLAS the builtin GEMM is the library path and the build is unchanged",
             "default": "ON",
+            "type": "bool"
+        },
+        {
+            "name": "CAMEL_ENABLE_PYTHON_BINDINGS",
+            "description": "Build the CPython extension camel._camel (bindings/python), independent of CAMEL_ENABLE_PYTHON which embeds Python in Camel",
+            "default": "ON",
+            "type": "bool"
+        },
+        {
+            "name": "CAMEL_PACKAGE_MINIMAL",
+            "description": "Build the subset CAMEL_MINIMAL_DROPS names (top-level CMakeLists.txt, with the reason each module is in or out), without the Python embedding modules and the Python host binding",
+            "default": "OFF",
             "type": "bool"
         }
     ]

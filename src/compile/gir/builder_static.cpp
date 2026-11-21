@@ -164,7 +164,7 @@ void Builder::resolveGenericTemplateNames(const generic_template_ptr_t &tmpl) {
         locals.back().insert(param);
     }
     std::vector<std::string> variables;
-    camel::core::type::collectTypeVars(tmpl->funcType, variables);
+    GCT::collectTypeVarsWithoutPlaceholders(tmpl->funcType, variables);
     for (const std::string &variable : variables) {
         locals.back().insert(variable);
     }
@@ -340,28 +340,36 @@ void Builder::walkStaticBodyNames(
         return;
     }
     case GCT::NodeKind::SFOR: {
-        // `n` is bound in the body only. The type name `F` is not a value, so a use of it in
-        // a value position stays unresolved, as it should. `_` (the wildcard of `match`) binds
-        // nothing, so a use of it stays unresolved too.
+        // The field name and its tags are values bound in the body only. The type name `F` is not
+        // a value, so a use of it in a value position stays unresolved, as it should. `_` (the
+        // wildcard of `match`) binds nothing, so a use of it stays unresolved too.
         locals.emplace_back();
         const std::string &valueName = node->staticForValueName();
-        if (!valueName.empty() && valueName != "_") {
+        if (!valueName.empty() && valueName != GCT::kDiscardName) {
             locals.back().insert(valueName);
+        }
+        const std::string &tagsName = node->staticForTagsName();
+        if (!tagsName.empty() && tagsName != GCT::kDiscardName) {
+            locals.back().insert(tagsName);
         }
         walkStaticBodyNames(node->staticForBody(), locals, intoFunctions);
         locals.pop_back();
         return;
     }
     case GCT::NodeKind::SLOOP: {
-        // The first values are outside the names of the head; `n` and the state names are
-        // bound in the body only (as for a run-time loop).
+        // The first values are outside the names of the head; the field name, its tags and the
+        // state names are bound in the body only (as for a run-time loop).
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             walkStaticBodyNames(node->staticLoopInitial(j), locals, intoFunctions);
         }
         locals.emplace_back();
         const std::string &valueName = node->staticLoopValueName();
-        if (valueName != "_") {
+        if (valueName != GCT::kDiscardName) {
             locals.back().insert(valueName);
+        }
+        const std::string &tagsName = node->staticLoopTagsName();
+        if (!tagsName.empty() && tagsName != GCT::kDiscardName) {
+            locals.back().insert(tagsName);
         }
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             locals.back().insert(node->staticLoopStateName(j));
@@ -534,8 +542,12 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             const auto &caseNode = gct->at(i + 1);
             GUARD(caseNode->type() == GCT::NodeKind::TCASE, "A case of match type is a TCASE.");
             const uint16_t patterns = caseNode->typeCasePatterns();
-            const bool catchesAll   = (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
-                                                   typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
+            // A guarded `_` or `#leaf` selects the types its predicate holds for, not every type,
+            // so a case written after it is reachable (design principles 5.5).
+            const bool guarded      = tree_->caseGuardOf(caseNode) != nullptr;
+            const bool catchesAll =
+                !guarded && (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
+                                         typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
             if (catchesAll && i + 1 < caseCount) {
                 diags_->of(SemanticDiag::StaticMatchUnreachableCase)
                     .atOrigin(caseNode->origin())
@@ -548,6 +560,11 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             uint16_t earlierShapes = 0;
             for (size_t j = 0; j < i; ++j) {
                 const auto &other = gct->at(j + 1);
+                if (tree_->caseGuardOf(other) != nullptr) {
+                    // A guarded case selects nothing out of the pattern alone: it is not what keeps
+                    // this one from being reached.
+                    continue;
+                }
                 for (size_t k = 0; k < other->typeCaseTypeCount(); ++k) {
                     earlier.push_back(other->typeCaseTypeAt(k));
                 }
@@ -609,9 +626,26 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
         GCT::node_ptr_t selected = nullptr;
         for (size_t i = 0; i < caseCount; ++i) {
             const auto &caseNode = gct->at(i + 1);
-            if (typeCaseMatches(subject, caseNode)) {
+            if (!typeCaseMatches(subject, caseNode)) {
+                continue;
+            }
+            // The guard of the case is a Camel predicate, read here with the type arguments of the
+            // instance bound. A case whose guard does not hold sends the subject on to the case
+            // written after it, exactly as the guard of a value `match` does (design principles
+            // 5.5); a predicate that cannot be read here is reported as the
+            // defect it is, rather than as a type no case selects.
+            const GCT::node_ptr_t guardNode = tree_->caseGuardOf(caseNode);
+            if (guardNode == nullptr) {
                 selected = caseNode;
                 break;
+            }
+            const WhenResult answer = evaluateGuardNode(guardNode, nullptr, typeBindings_);
+            if (answer.holds()) {
+                selected = caseNode;
+                break;
+            }
+            if (!answer.fails()) {
+                reportWhenProblem(answer, "match type " + subject->toString(), guardNode);
             }
         }
         if (selected == nullptr) {
@@ -958,7 +992,9 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         if (value->type() == GCT::NodeKind::DREF) {
             const auto bound = nodeAt(value->name());
             if (bound.has_value()) {
-                if (isVariable(*bound)) {
+                // A `var` may hold another array by the time the loop runs, and one built as a
+                // value is the same to the compiler's knowledge.
+                if (isVariable(*bound) || nameIsSsa(value->name())) {
                     return std::nullopt;
                 }
                 return ofArrayData(constantOfNode(*bound));
@@ -1002,7 +1038,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         data_ptr_t data  = nullptr;
         const auto bound = nodeAt(expr->name());
         if (bound.has_value()) {
-            if (isVariable(*bound)) {
+            if (isVariable(*bound) || nameIsSsa(expr->name())) {
                 return std::nullopt;
             }
             data = constantOfNode(*bound);
@@ -1143,8 +1179,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // `static loop s1 = a1, ..., sk = ak for i in <序列> do body`: the fold the fields of `T`
     // unroll into (`in fields T`), the positions of a tuple value (`in indices ts`), or a
     // sequence the compiler works out (`in 0..5`, `in range(0, 9, 3)`, `in [1, 2, 3]`, `in
-    // xs`, which dropped the head's parentheses
-    // of 2026-10-25 that draws the line by the one rule of `staticLoopSequenceOf`). The body is
+    // xs`; the line is drawn by the one rule of `staticLoopSequenceOf`). The body is
     // built once per round in the current graph; its value is the next state. No LOOP node, no
     // region, and nothing of the state or the generator left in the graph: the first values are
     // ordinary values and each round reads the previous round's node directly (a DREF to a
@@ -1604,10 +1639,11 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         const auto bound = nodeAt(keyNode->name());
         if (!bound.has_value()) {
             key = staticValueNamed(keyNode->name());
-        } else if (!isVariable(*bound)) {
+        } else if (!isVariable(*bound) && !nameIsSsa(keyNode->name())) {
             // A `let` bound to a value the compiler knows is a constant too: the binding is
             // immutable, and `first_leaf` in the library names the first field once this way.
-            // A `var` is not: it can be assigned another key before the access.
+            // A `var` is not: it can be assigned another key before the access, and one built as
+            // a value reads the same way the cell did.
             if (data_ptr_t data = constantOfNode(*bound)) {
                 key = keyOfData(data);
             }

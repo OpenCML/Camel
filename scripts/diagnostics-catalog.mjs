@@ -74,7 +74,7 @@ const EXAMPLES_REL = 'diagnostics/examples.tsv'
 //   22 -> 14  `calling_incomplete` pinned `CallingIncompleteFunction`, and the counter learned the
 //             `verify_script` form (`diagnostics[0].name === 'SemanticDiag::X'`, `.code === '0x...'`),
 //             which these seven had been pinned by all along: StatementAfterReturn,
-//             UnusedFallibleValue, EffectNotExecuted, IgnoredSideEffect, NeverArgumentCall,
+//             UnusedFallibleValue, UnusedAssignedValue, IgnoredSideEffect, NeverArgumentCall,
 //             FailNotExecuted, StatementAfterFail.
 //   14 -> 6   `null_test_never_null` pinned `NullTestNeverNull`; the counter learned the rendered form
 //             a `-E short` run prints (`name=SemanticDiag::X, code=0x...`, which six had been pinned
@@ -1388,6 +1388,14 @@ const PINNED_COVERAGE_EXCEPTIONS = [
         reason:
             'the compiler reporting that it has no code for a state it reached; no program provokes it,'
             + ' so no case can pin it -- the registry entry exists so the reporter has something to say',
+    },
+    {
+        fullName: 'SemanticDiag::OperatorAccessesUndeclared',
+        reason:
+            'raised at the load of the built-in module when one of its operators itemizes no accesses;'
+            + ' every built-in operator itemizes them now, so a program cannot provoke it -- the load'
+            + ' refuses before a program is read, and a case that pinned it would have to register an'
+            + ' operator without a declaration, which is the mistake it refuses',
     },
 ]
 

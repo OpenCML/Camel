@@ -1,0 +1,23 @@
+/**
+ * The value form of the sum `0..x-1`: a loop whose state is the sum itself, and no closure that
+ * captures and writes a `var`.
+ *
+ * The shape this case used to pin -- `acc` a `var` of `total`'s call, `add` a closure that captures
+ * it and writes it -- is refused by the ruling of 2026-11-15 (a closure may not assign a name it
+ * captures; design principles 3.5). This program prints the bytes it printed then (6 for
+ * `total(4)`), and it is the ruling's first way out, "pass the state as a value".
+ *
+ * The rule's own tests are plan compile.state_escape.
+ */
+
+func total(x: int): int sync {
+    let (_, acc) = loop s = (0, 0) while s.0 < x do sync {
+        (s.0 + 1, s.1 + s.0)
+    }
+    return acc
+}
+
+func main(): int sync {
+    println(total(4))
+    return 0
+}

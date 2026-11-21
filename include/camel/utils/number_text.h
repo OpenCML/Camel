@@ -498,8 +498,7 @@ template <std::floating_point T> inline bool scientificParsesBack(std::string_vi
 
 /// The shortest scientific text -- `[-]d[.ddd]e[+-]dd`, correctly rounded by `to_chars` -- whose
 /// digits read back under `roundsBack` as the value they came from, for a value that is an
-/// element of a type narrower than f32 (a bf16 or an f16; design principles 7.7, the rule of
-/// 2026-10-23, "reduced-precision-text"). `value` is the exact f32 widening of the element, so
+/// element of a type narrower than f32 (a bf16 or an f16; design principles 7.7). `value` is the exact f32 widening of the element, so
 /// its own digits are a fallback that always reads back, and the loop only takes fewer of them.
 /// `roundsBack(token)` says whether one candidate is the same element of the narrow type.
 ///

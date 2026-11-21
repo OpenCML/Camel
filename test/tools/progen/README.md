@@ -25,7 +25,7 @@ execute the programs they name and compare what they print -- while nothing comp
 text with a fresh draw: a header whose seed no longer reproduces its file is a stale claim no check
 reports, so re-draw and diff by hand when the generator changes.
 The versions recorded there stop at 1, 2 and 3 (15 files record none, 2 predate versioning) while
-`generate.VERSION` is 6 today, and the version is part of the random stream, so those seeds draw
+`generate.VERSION` is 8 today, and the version is part of the random stream, so those seeds draw
 another program now -- a 3293 draw differs from `perm_query_types.cml`'s program body in 229 lines.
 A byte comparison here is therefore not only missing but meaningless.
 
@@ -81,7 +81,7 @@ with `--features all,modules`.
 | `tuple`, `struct` | literals, `.N` and field access, as parameters, results, array elements and variables |
 | `var` | `var` of int, float, string, bool, `int[]`, tuple; `=`, `+=`, `-=`, `*=`, `/=`, `%=` (and `+=` on a string) in sync blocks; reads before and after writes |
 | `varparam` | a function with one or two `var` parameters, writes through them, a variable passed on to another function |
-| `capture` | lambdas and nested functions that read captured values and variables (seeing later writes) or write them; a function returning a lambda that owns a variable (a counter) |
+| `capture` | lambdas and nested functions that read captured values and variables (seeing later writes) or write them; a function whose body owns a `var`, closes over it and calls the closure twice or three times there, printing the readings (the counter stays in the call that declares the cell); a chain `let t = (f(x), f(f(x)), ...)` where the state goes in as a value and the next value comes back |
 | `if`, `match` | as expressions with expression or block arms; as statements with `sync` arms that print and write; `match` on an int, string or bool name with literal cases and `_` |
 | `func`, `rec` | functions over all the types; recursion bounded by a depth argument (0 to 9): tail, non-tail, tree (two self calls), mutual, and a recursion that writes a `var` parameter before and after the call and prints |
 | `closure`, `hof` | lambdas, named functions as values, functions that return lambdas, user functions with function parameters (pure, and effectful ones called from sync bodies) |
@@ -143,6 +143,26 @@ checks it on every generated and every reduced program:
    checked is only "a standard pass must not make a determined program print something else".
    A pipeline may decline: a located diagnostic of a pass before anything ran is the outcome
    `REFUSED` and is not a finding.
+8. **A closure does not carry a `var` out of the call that declares it** (3.5, rule two; the
+   front end's `SemanticDiag::ClosureCaptureEscapes`). The author withdrew that rule on
+   2026-11-16: a closure captures a value, so leaving the call with it is legal, and the front end
+   refuses the write instead (`SemanticDiag::ClosureAssignsCapturedName`, design principles 3.5,
+   197). `model.escape_violations` stays as it is and is now a filter of the shape rather than a
+   check of a rule: it still keeps every generated and reduced program away from the two ways such
+   a closure used to leave -- as the result of the call whose cell it holds, and handed to a callee
+   whose result can carry a function -- which is why the corpora carry no program of those shapes
+   even though they compile. The
+   state it used to carry out is written two other ways: the counter is declared and called
+   inside the call that owns the cell, so the readings leave as values, and a chain of calls
+   passes the state in as a value and takes the next value back.
+
+   One dimension is missing here, and the gap is the language's rather than this tool's: **a
+   closure that keeps a writable cell across calls, after leaving the call that declared it** (a
+   counter a caller can hold and call later) has no legal spelling in this tree. There is no
+   `Ref<T>`, and no `stdlib/state.cml` on `develop` -- that file is on the `reftype` branch only --
+   so the front end refuses the closure instead of lending it the cell. Until `Ref<T>` exists the
+   dimension is written as the two shapes above, or it is a permanent blank; what it may not be is
+   a dimension dropped from the plan without a word, which is why it is written down here.
 
 What the hand probes established and the reference therefore models: a read of a `var` is a
 snapshot of its value (`let k = c` does not follow later writes) while a lambda that reads a
@@ -201,8 +221,8 @@ seed back; when the generator changes the programs of existing seeds, raise
 present.
 
 The same plan runs `progen.py fixed`: every finding with a `fixed` key in `findings.json`, under
-the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
-`std::opt::inline std::opt::dce`, `std::opt` and `std::opt::specialize`, on the four schedulers. When a finding is fixed, give it that key.
+the rewrite sequence it was found with and under `std::cxx::inline`, `std::opt`,
+`std::cxx::inline std::cxx::dce`, `std::opt` and `std::cxx::specialize`, on the four schedulers. When a finding is fixed, give it that key.
 
 ## What is not covered
 
@@ -241,6 +261,9 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   `generate.VERSION` 5 adds `append` and `opover` (design principles 11.3).
   `generate.VERSION` 6 adds `loop` (design principles 3.10). Seeds 1-100 under `--matrix full`:
   10100 cells, all agree with the reference (2026-10-15, `lane/loop`).
+  `generate.VERSION` 8 writes the state a closure may not carry out of its call as a counter
+  called inside that call and as a chain of values, instead of a factory that returns the
+  closure (the front end refuses the factory since design principles 3.5, rule two).
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
   operators, `^`, `i32` / `f32`, `as` / `is`, slices with a step.
 
@@ -260,3 +283,24 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
 - **One statement, one effect** means interleavings inside an expression are not explored.
 - The seed stream depends on `generate.VERSION` and on the feature set; findings are archived
   as reduced programs with their expected output, not as seeds.
+- **A seed is left out when a pass crashes on it.** The check batch holds seeds whose every
+  cell passes, so a seed that stops being green is listed in `progen.py`'s `CHECK_EXCLUDED`
+  with what it shows, and left out is not absent: the test plan runs that seed on its own in a
+  fast-layer entry (`progen_seed_4` today), so the reading appears on every merge instead of
+  passing over it. `CHECK_EXCLUDED` is empty today. Its last entry was seed 4 of
+  `generate.VERSION` 8, which made all four cells of `std::cxx::inline` end in SIGSEGV -- not
+  something the front end says about the program and not something the generator can avoid
+  without dropping a shape the language accepts -- until `edeaa9c41` laid a spliced body's wait
+  before the loop's first round; `test/cases/opt/inline/loop_wait_after_inline.cml` is its
+  25-line reduction.
+- **A seed number is not a program.** `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing seeds are
+  other programs") re-pointed every seed at another program, so a finding recorded as "seed 26"
+  alone names nothing a later version generates: the record survives, the program it named does
+  not. Every record of a seed therefore carries the generator version with it -- the entries of
+  `CHECK_EXCLUDED` (in the comment above it and in the entry itself), the plan's entries, and the
+  notes here.
+- **One program in fifty is still refused by the front end.** `SemanticDiag::GenericFunctionAsValue`
+  is a generic function given a position that does not fix its type variables; seed 32 under
+  `generate.VERSION` 8 shows it, seed 49 under version 7, so about one program in fifty and none
+  of seeds 1-25. A refusal is a bad cell like any other, and the feature that draws it is left in
+  rather than guessed at.

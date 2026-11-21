@@ -7,7 +7,7 @@
 // and the arguments do not fit it -- and neither is an abort. Measured before this case: the
 // builder's assertion in `visitLinkNode` fired instead for a callee whose recorded type is the
 // answer rather than the function that answers it, which is the shape a member that takes a value
-// port has (`docs/handover/questions/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`),
+// port has (`docs/handover/reviews/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`),
 // and the process stopped with a `Camel Invariant Violation`. A call of a value that is not a
 // function is now a report, so the refusal is the program's and the run ends with a diagnostic.
 //

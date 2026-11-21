@@ -4,7 +4,7 @@
 /*
  * The residual of the old C++ algebraic pass: its integer neutral elements alone. The algebraic
  * laws (like terms, coefficients, exact doubling, tensor element-wise forms) are the rules
- * library's now (`rules::simplify`, registered as `std::opt::algebra`), so a law is written once,
+ * library's now (`rules::simplify`, registered as `std::cxx::algebra`), so a law is written once,
  * in stdlib/rules.cml. `neutral_only` is a documented reference mode with no library equivalent;
  * it keeps the five neutral rewrites that the Camel-pass tests compare against. Nothing here runs
  * without that parameter.
@@ -276,9 +276,8 @@ AlgebraPass::apply(const camel::runtime::Program *program, std::ostream &) {
     return camel::passes::generic::rewriteReachableGraphs(
         context_,
         program,
-        "std::opt::algebra",
+        "std::cxx::algebra",
         [&](camel::runtime::GraphTransaction &transaction) {
-    auto &draft = transaction.edit();
             return camel::passes::generic::algebraDraft(transaction, false, neutralOnly_);
         },
         nullptr,

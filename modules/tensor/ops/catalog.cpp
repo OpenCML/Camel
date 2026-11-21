@@ -34,12 +34,32 @@ void declareResourcesAndDefinitions() {
         "tensor",
         {
             {"show", externalAmbient("stdout", AccessMode::Write)},
-            {"load_npy", externalAmbient("fs", AccessMode::Read)},
             {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},
             {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
             {"num_threads", externalAmbient("tensor:threads", AccessMode::Read)},
             {"gemm_threads", externalAmbient("tensor:threads", AccessMode::Read)},
+            // The library pool's count of the most recent call, the same reading `gemm_threads`
+            // gives of the pool this module owns: `gemmLibraryThreadsKernel` answers
+            // `k::gemmLibraryThreadsUsed()` (utility_ops.cpp), the counter `gemm.cpp` sets on
+            // every product. The name has to be declared here with its three siblings
+            // (`set_num_threads`, `num_threads`, `gemm_threads`): left out of the list it falls
+            // back to the conservative reading -- every operand read-modify-written -- and a body
+            // that calls it proves its effect to no clause.
+            {"gemm_library_threads", externalAmbient("tensor:threads", AccessMode::Read)},
         });
+    // `load_npy` is not one operator but one per element type a `.npy` file can hold, registered
+    // under its own URI each (`utility_ops.cpp#kNpyElementTypes`). The declaration goes on those
+    // five: `tensor:load_npy` is the group's head, which answers a call and is no operator, so a
+    // declaration written there reached none of them and each fell back to "writes the resource
+    // every effect conflicts with". Two loads of two different files then met as two writes of one
+    // resource, and a commit that published them unordered -- a splice that carries the callee's
+    // own two loads into a caller -- was refused for a conflict the program never had.
+    // Reading a file is a read of `fs`, the answer `fs:read_bytes` gives.
+    for (std::string_view name : npyLoadOperatorNames()) {
+        table.declareResources(
+            std::string("tensor:") + std::string(name),
+            externalAmbient("fs", AccessMode::Read));
+    }
     const auto operand = [](uint8_t index,
                             std::optional<DefinitionDefault> fallback = std::nullopt) {
         return DefinitionParam{

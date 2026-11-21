@@ -1,0 +1,83 @@
+/**
+ * The signature reinterpretation copies a body into a graph of its own, and that copy is read in the
+ * program it belongs to.
+ *
+ * `weighted` is `with <w: int> func weighted(y) = scaled(y) * w` and `scaled` is `x + 1`. `drop_one`
+ * removes the `+ 1`, so the `scaled` the rewrite's program holds is `x` while the one the program
+ * the rewrite was taken from holds is `x + 1`. `first_with_as_param` copies the body into a graph of
+ * the transform's own program and hands back a value naming that program, and the reinterpretation
+ * puts the weight in front: `moved(2, 5)` is `5 * 2 = 10` beside `plain(5)` computing `6 * 2 = 12`.
+ * `plain` is the same body in the program the rewrite was taken from, so the two lines differ in
+ * exactly the program their `scaled` is read in.
+ *
+ * Both numbers on a line are one reading. A copy whose calls were read where its source graph came
+ * from -- the program the run was handed -- computes 12 beside `ones=0`: the graph query says the
+ * copy reached the rewritten callee and the run says it did not.
+ */
+import { first_with_as_param } from transforms
+import { Rule, rewrite } from rewrite
+import { Graph, Node, constant, graph_of, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { ends_with } from str
+
+rule drop_one(x: int) { x + 1 => x }
+
+func scaled(x: int): int {
+    return x + 1
+}
+
+with <w: int>
+func weighted(y: int): int spelling {
+    return scaled(y) * w
+}
+
+/// The body of `weighted` at `w = 2` in the program the rewrite was taken from.
+func plain(y: int): int spelling {
+    return scaled(y) * 2
+}
+
+/// The text of a node's operator, or '' for a node that is not an operator.
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+/// Whether a node is the constant 1.
+func isOne(n: Node): bool {
+    return match constant::<int>(n) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of a `scaled`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool spelling {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+func isScaled(g: Graph): bool spelling {
+    return name(g)->ends_with<'scaled'>
+}
+
+/// The graph of `scaled` that `p` reaches.
+func scaledIn::<F>(p: F): Graph {
+    let found = graphs_of(p)->filter<isScaled>
+    return found[0]
+}
+
+func main(): int spelling sync {
+    let rules: Rule[] = [drop_one]
+    let q = weighted->rewrite<rules> !! weighted
+    let moved = first_with_as_param(q)
+    println('copy', moved(2, 5), addOnes(scaledIn(moved)))
+    println('given', plain(5), addOnes(scaledIn(plain)))
+    println('form', name(graph_of(moved)))
+    return 0
+}

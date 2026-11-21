@@ -1,0 +1,25 @@
+/**
+ * Route two again, an element of the caller's array, with a closure that only reads (design
+ * principles 3.5, 197): `fill` binds `acc` to `base * 3` and writes a closure that reads it into
+ * `out[0]`. The array belongs to the caller and outlives the call; the closure holds the value, so
+ * the element it is stored in holds a value nobody has to own (the author's ruling of 2026-11-16).
+ * Nothing is reported, and the program prints 21 + 1 = 22.
+ *
+ * As in `ok_read_escape_return`, the single binding means the reading cannot separate a value port
+ * from a shared cell; the two-binding shape is measured in the plan's header (it prints 1 on this
+ * tree). The refusing counterpart of this shape is `err_escape_array`, whose closure assigns `acc`.
+ */
+
+func fill(var out: ((x: int) => int)[], base: int) {
+    var acc = base * 3
+    sync {
+        out[0] = (x: int): int => acc + x
+    }
+}
+
+func main(): int sync {
+    var fs: ((x: int) => int)[] = [(x: int): int => x]
+    fill(fs, 7)
+    println(fs[0](1))
+    return 0
+}

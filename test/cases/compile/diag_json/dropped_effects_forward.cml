@@ -1,6 +1,13 @@
 /**
- * A dropped call is reported whether its callee is written before or after the caller:
- * `later` and `earlier_dropped` follow `caller` in the file.
+ * The order two functions are written in does not decide whether their writes run: `later` and
+ * `earlier_dropped` are written after `caller`, and both of them print, because a call written as a
+ * statement is one of its body's writes when its callee writes (design principles 3.1, the author's
+ * ruling of 2026-11-17: "算子、调用、分支、循环一样") and the body's `GATE` reads it.
+ *
+ * It used to be the half of the same rule that named a dropped call -- "a dropped call is reported whether
+ * its callee is written before or after the caller" -- and what the case pins now is that the order
+ * of definitions does not decide which writes run: `later`, `earlier_dropped`, then the value
+ * `caller` hands on.
  */
 
 func caller(x: int): int {

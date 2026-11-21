@@ -208,9 +208,9 @@
           "captures": { "1": { "name": "storage.type.contextual-declaration.camel" } }
         },
         {
-          "comment": "contextual keywords: 'unordered' — a resource declaration whose effects keep no written order: `resource net unordered` ends there.",
+          "comment": "contextual keywords: 'unordered', 'readonly' — the modifier that ends a resource declaration: `resource net unordered` says its effects keep no written order, `resource graph readonly` that nothing ever writes it.",
           "name": "storage.type.contextual-declaration.camel",
-          "match": "\\b(unordered)\\b(?=\\s*$)"
+          "match": "\\b(unordered|readonly)\\b(?=\\s*$)"
         },
         {
           "comment": "contextual keywords: 'on' — the tag declaration's list of positions, which starts at the position name after it.",
@@ -236,6 +236,11 @@
           "comment": "contextual keywords: 'pure' — a resource clause promising no resource at all.",
           "name": "keyword.other.contextual-clause.camel",
           "match": "\\b(pure)\\b(?!\\s*[=,)\\]};:.])"
+        },
+        {
+          "comment": "contextual keywords: 'spelling' — the leading word of a resource clause, declaring that the body reads the spelling of the program (design principles 9.5). It stands before `pure`/`uses` in that clause and before the `when`/`sync` that may follow it, and nowhere else, so `let spelling = 4` stays a name.",
+          "name": "keyword.other.contextual-clause.camel",
+          "match": "\\b(spelling)\\b(?=\\s+(?:pure|uses)\\b|\\s*(?:\\{|when\\b|sync\\b)\\b)"
         },
         {
           "comment": "contextual keywords: 'join', 'meet', 'widen', 'narrow' — the trailing clauses of a fact declaration: on the line that closes its body, or on a line of their own, as the formatter writes them. Each names the function that follows it.",
@@ -294,6 +299,7 @@
         { "include": "#with-parameters" },
         { "include": "#function-declaration" },
         { "include": "#type-declaration" },
+        { "include": "#resource-clause-write" },
         { "include": "#let-declaration" },
         { "include": "#var-declaration" }
       ]
@@ -408,6 +414,11 @@
         },
         { "include": "#carrier-punctuation" }
       ]
+    },
+    "resource-clause-write": {
+      "comment": "contextual keywords: the 'var' of a resource clause entry -- `uses var fs` writes the resource where `uses fs` reads it (design principles 3.3). It is written after `uses` or after a comma of the same clause, so it is told apart from a `var` declaration, and it opens no declaration block: the name that follows is the resource.",
+      "match": "(?<=\\buses\\s+|,\\s*)\\b(var)\\b(?=\\s+[A-Za-z_])",
+      "name": "storage.modifier.var.camel"
     },
     "var-declaration": {
       "comment": "dataDecl: VAR carrier (':' typeList)? '=' dataList. The names of the carrier are mutable variables.",

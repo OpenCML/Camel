@@ -26,6 +26,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
 #include "camel/runtime/program.h"
@@ -132,17 +133,17 @@ struct DraftNodeHeader {
     /// run, so that adding them moved no existing offset either.
     gc_cnt_t syncInputCount = 0;
 
-    GCNodeKind kind                  = GCNodeKind::Data;
-    uint8_t runtimeFlags             = 0;
+    GCNodeKind kind      = GCNodeKind::Data;
+    uint8_t runtimeFlags = 0;
     /// Which of a FUNC node's arguments are tangents, one bit per argument position: bit `i` is set
     /// when the call's i-th argument is a tangent. A rule's right side is
-    /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and the
-    /// tangents are the lambda's own parameters, so the expansion knows the positions and records them
-    /// here, on the call it produces. One source: the rule. Nothing re-derives the boundary from a name
-    /// or a spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
-    /// node. A rule may write a tangent anywhere its right side writes one -- `index_into(dxs, i)` puts
-    /// one first -- so the record is a set of positions, not a count of trailing ones. 0 for every node
-    /// that is not a rule's tangent call.
+    /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and
+    /// the tangents are the lambda's own parameters, so the expansion knows the positions and
+    /// records them here, on the call it produces. One source: the rule. Nothing re-derives the
+    /// boundary from a name or a spelling, and a reader that needs it (`transpose`, at a call
+    /// inside a branch arm) reads the node. A rule may write a tangent anywhere its right side
+    /// writes one -- `index_into(dxs, i)` puts one first -- so the record is a set of positions,
+    /// not a count of trailing ones. 0 for every node that is not a rule's tangent call.
     uint16_t tangentArgs             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with the standard permission
@@ -182,15 +183,15 @@ struct DraftNode {
 };
 
 struct DraftNodeInit {
-    gc_slot_idx_t dataIndex           = 0;
-    camel::core::type::Type *dataType = nullptr;
-    GCNodeKind kind                   = GCNodeKind::Data;
-    uint8_t runtimeFlags              = 0;
-    uint64_t origin                   = 0;
+    gc_slot_idx_t dataIndex                      = 0;
+    camel::core::type::Type *dataType            = nullptr;
+    GCNodeKind kind                              = GCNodeKind::Data;
+    uint8_t runtimeFlags                         = 0;
+    uint64_t origin                              = 0;
     camel::core::sem::PermissionMask permissions = 0; // see DraftNodeHeader::permissions
-    uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
-    uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
-    uint32_t name                     = 0; // see DraftNodeHeader::name; 0 on a rewrite: kept
+    uint32_t attrs                               = 0; // see DraftNodeHeader::attrs
+    uint32_t region = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
+    uint32_t name   = 0; // see DraftNodeHeader::name; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
     /// The ports of the one data edge kind, by role (the normal ports, then the context ports).
     std::span<const gc_node_ref_t> normInputs{};
@@ -324,30 +325,61 @@ uint64_t nextDraftEpoch();
 /// fact `handChainPlaceTo` cannot read off the draft, because it is about the graph the rewrite is
 /// making rather than the graph it is holding. It is a parameter type and not a member of
 /// `GraphDraft` so that a caller stating it does not name the type: the direct-connection ledger
-/// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction, and
-/// a caller that passes a value is not one of them.
+/// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction,
+/// and a caller that passes a value is not one of them.
 ///
 /// The judgement is not read off the graph, it is declared by the caller: the graph has no quantity
 /// that separates the two cases. The draft does hold the region and its owner, so the tempting
 /// predicate is "the tail stands in an arm whose owner is still alive -- refuse". Measured, that is
-/// the wrong question: `src/passes/opt/generic/generic.cpp#pruneBranch` hands the place over while the
-/// branch it is pruning is still alive and its arm is still an arm (the probe reads
-/// `tkind=1 owner=15 ownerAlive=1 same=0`), and a predicate read that way refuses the handover that
-/// rewrite must make. Only the caller knows whether the region outlives the rewrite, so it says.
+/// the wrong question: `src/passes/opt/generic/generic.cpp#pruneBranch` hands the place over while
+/// the branch it is pruning is still alive and its arm is still an arm (the probe reads `tkind=1
+/// owner=15 ownerAlive=1 same=0`), and a predicate read that way refuses the handover that rewrite
+/// must make. Only the caller knows whether the region outlives the rewrite, so it says.
 ///
-/// The default is the conservative side: a call site that does not say gets `KeepsItsBlock`, so a new
-/// caller that forgets is stricter than it needs to be, never looser. A guard whose default was the
-/// permissive side would be worse than no guard, because it would look like one.
+/// The default is the conservative side: a call site that does not say gets `KeepsItsBlock`, so a
+/// new caller that forgets is stricter than it needs to be, never looser. A guard whose default was
+/// the permissive side would be worse than no guard, because it would look like one.
 enum class PlaceHandover {
-    /// The code the place is handed to keeps a block of its own (the body an inline splice moved in).
-    /// A statement of another block does not run whenever a statement of that block runs, so it heads
+    /// The code the place is handed to keeps a block of its own (the body an inline splice moved
+    /// in).
+    /// A statement of another block does not run whenever a statement of that block runs, so it
+    /// heads
     /// its own block's chain instead of following that block's tail.
     KeepsItsBlock,
-    /// The block the place is handed to is dissolved into `id`'s block by the same rewrite (a pruned
-    /// branch, whose arm's code becomes the block's code when `eraseNode` re-parents its regions), so
+    /// The block the place is handed to is dissolved into `id`'s block by the same rewrite (a
+    /// pruned
+    /// branch, whose arm's code becomes the block's code when `eraseNode` re-parents its regions),
+    /// so
     /// by the time the graph is committed the two ends are statements of one block.
     DissolvedIntoIdsBlock,
 };
+
+/// Which part of a draft a rollback did not put back. One name per kind of state the journal
+/// records, in the order the self-check compares them: a class that is not back is reported alone,
+/// as the class, because that is what a hook that was forgotten is.
+enum class UndoClass : uint8_t {
+    Nodes,
+    Regions,
+    Scalars,
+    Ports,
+    Types,
+    LowLevel,
+};
+std::string_view undoClassName(UndoClass cls);
+
+/// A whole draft as a savepoint found it: taken when the self-check is on, compared with the draft
+/// a rollback leaves. It is a copy of every part the journal is responsible for -- one entry per
+/// node slot with the body and the five user lists, the region table with the ports of each region,
+/// the draft's own scalars, its types, its port tables, the low-level edit list and the equivalence
+/// log -- so a part the journal missed shows up as a difference and not as a graph that merely
+/// looks plausible.
+struct UndoSnapshot;
+
+/// The whole draft, copied (see UndoSnapshot).
+std::shared_ptr<const UndoSnapshot> takeUndoSnapshot(const GraphDraft &draft);
+/// The first class that differs between `draft` and `snapshot`; empty when the draft is the one the
+/// snapshot holds.
+std::optional<UndoClass> undoMismatch(const GraphDraft &draft, const UndoSnapshot &snapshot);
 
 class GraphDraft {
   public:
@@ -460,12 +492,41 @@ class GraphDraft {
     /// the version it becomes names its nodes as the graph did. Past half the places dead,
     /// or for a draft that was built and not decoded, the nodes are numbered anew.
     bool keepsNodeIds() const {
-        return decoded_ && 2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <=
-                               nodesById_.size();
+        return decoded_ &&
+               2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <= nodesById_.size();
     }
     /// Counts the calls that may have changed the draft since it was decoded (every call of a
     /// member that is not const): a draft of none is the graph it was decoded from.
     uint64_t mutations() const { return mutations_; }
+    /// The existing nodes whose operands or operator this draft changed through the low-level
+    /// interface -- the last row of the table in `docs/design/graph-editing/README.cn.md` 8.1,
+    /// "add an edge, change an operator", which owes **all six** commit checks whatever the draft
+    /// made. The other half of the tier is `made` (the nodes the commit made, read off the graph in
+    /// `src/runtime/draft_session.cpp`); this list is what the commit changed in place, and it is
+    /// here because the table makes the tier a fact about *which edit was used* and not about
+    /// whether a node was made: a draft that made nothing and re-pointed one operand of one node
+    /// can still have dropped an ordering, and a commit that read only `made` would not ask.
+    ///
+    /// Only the edits of the table's last row land here. The named edits above it -- `replace`,
+    /// `erase`, `eval`, `order` -- promise in their own right that the effect and the ordering they
+    /// leave are the ones they left, so a draft that used one opens a `NamedEdit` around it and what
+    /// it changes is that edit's rather than this list's. A change that writes down the list a node
+    /// already has is no change and is not recorded.
+    std::span<const gc_node_ref_t> lowLevelEdits() const { return lowLevelEdits_; }
+    /// Says that what it covers is one named edit of that table, whose answer to the effect and the
+    /// order checks is a theorem about the edit: the raw setters it is written with do not make the
+    /// draft a low-level one. Nesting is counted, so a named edit that itself uses another is one
+    /// named edit.
+    class NamedEdit {
+      public:
+        explicit NamedEdit(GraphDraft &draft) : draft_(draft) { ++draft_.namedEdits_; }
+        ~NamedEdit() { --draft_.namedEdits_; }
+        NamedEdit(const NamedEdit &)            = delete;
+        NamedEdit &operator=(const NamedEdit &) = delete;
+
+      private:
+        GraphDraft &draft_;
+    };
     /// A counter the draft also advances whenever its revision() does: a session keeps one
     /// for all its drafts, to know whether any of them changed what it refers to.
     void setRefsEpoch(uint64_t *epoch) { refsEpoch_ = epoch; }
@@ -503,7 +564,7 @@ class GraphDraft {
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
-/// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
+    /// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
     /// value a draft holds; the graph's content does not change, so this is not an edit (it does
     /// not count a mutation or change what the draft refers to).
     void relocateStaticSlot(size_t index, slot_t value) {
@@ -586,10 +647,24 @@ class GraphDraft {
     void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
     void setFuncType(camel::core::type::FunctionType *funcType) {
+        noteOriginalTypes();
         ++mutations_;
         funcType_ = funcType;
     }
+    /// Fills the result type of an open signature **where it stands**
+    /// (`OpenFunctionType::setExitType`). The signature is the function's identity while its body
+    /// is built -- a recursive function refers to its own type before the result is worked out --
+    /// so it is not replaced by an interned copy, and its pointer does not move. What a rollback
+    /// has to put back is therefore the *content*: the record is taken first (`noteOriginalTypes`,
+    /// once per segment), and `replayJournal` writes the recorded result type and resources back
+    /// into that same object (a rollback restores content, not the pointer).
+    /// This is the one place the write is made, so that a caller cannot fill a signature without the
+    /// journal seeing it.
+    void setOpenExitType(camel::core::type::Type *exitType);
+    /// The same for the resources the signature publishes (`OpenFunctionType::setResources`).
+    void setOpenResources(const camel::core::sem::ResourceSignature &resources);
     void setCaptureNames(std::span<const camel::core::SymId> names) {
+        noteOriginalTypes();
         ++mutations_;
         captureNames_.assign(names.begin(), names.end());
     }
@@ -597,11 +672,13 @@ class GraphDraft {
     void addCaptureName(std::string_view name);
     /// Gives the graph this frame layout (possibly one without slots).
     void setRuntimeSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteOriginalTypes();
         ++mutations_;
         runtimeSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
         hasFrameLayout_ = true;
     }
     void setClosureType(camel::core::type::TupleType *closureType) {
+        noteOriginalTypes();
         ++mutations_;
         closureType_ = closureType;
     }
@@ -609,6 +686,7 @@ class GraphDraft {
     /// are. A rewrite that retypes what a constant stands for changes the layout here and not the
     /// value (camel/runtime/retype.h), which is why the two are set apart.
     void setStaticSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        noteOriginalTypes();
         ++mutations_;
         staticSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
     }
@@ -642,8 +720,8 @@ class GraphDraft {
     GraphId calleeIdOf(gc_node_ref_t id) const;
     GCGraph *calleeGraphOf(gc_node_ref_t id) const;
     void setCalleeGraph(gc_node_ref_t id, GraphId callee);
-    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names no
-    /// graph -- the condition and the body are regions of the graph it is written in (design
+    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names
+    /// no graph -- the condition and the body are regions of the graph it is written in (design
     /// principles 3.10).
     GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
     /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
@@ -654,9 +732,9 @@ class GraphDraft {
     uint32_t payloadGraphIndexOf(GraphId graph);
     /// `tangentArgs` is which of the call's arguments are tangents, one bit per argument position
     /// (bit `i` = the i-th argument is a tangent), when the caller knows (see
-    /// DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures it
-    /// bound and the tangents are the lambda's own parameters. A position, not a trailing count: the
-    /// rule writes a tangent where its right side writes it. 0 for a call that is not one.
+    /// DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures
+    /// it bound and the tangents are the lambda's own parameters. A position, not a trailing count:
+    /// the rule writes a tangent where its right side writes it. 0 for a call that is not one.
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0, uint16_t tangentArgs = 0);
@@ -665,8 +743,8 @@ class GraphDraft {
     /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
     uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
     void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
-    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form. The
-    /// caller links its inputs and writes the body's regions on the draft it is made in.
+    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form.
+    /// The caller links its inputs and writes the body's regions on the draft it is made in.
     gc_node_ref_t
     addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
@@ -676,6 +754,122 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// Erases a set of nodes that nothing outside the set reads -- a unit of the graph with no
+    /// reader left -- and hands the place each one held in its block's chain to the statement
+    /// written after it, the way `eraseNode` does (`closeChainOver`, `spliceOrderEdgesOver`).
+    ///
+    /// The question "may these go" is asked **here**, not by the caller, and asked before anything
+    /// is erased: a node that the graph names (`namesNode`: the exit, the output, the returned
+    /// value, the entry, a port, a capture, a region's result or a control region's port), a node
+    /// that is not alive, a node given twice, or a node whose value a **normal or `with` port of a
+    /// node outside the set** reads, makes the answer `false` and leaves the graph as it was found.
+    /// The set is what makes the question answerable at once: the nodes of a unit read each other
+    /// (a store reads the cell, the GATE that hands the statement's value out reads the store), so
+    /// asking one node at a time would call the unit's own nodes readers.
+    ///
+    /// Sequencing edges -- the chain of a `sync` block, a control edge, an ordering -- are not
+    /// reads (docs/design/effects/edges.cn.md 1.5, 5.3): a node nobody reads can still be what a
+    /// block's chain or a branch's control runs after, and that is exactly the case the place
+    /// handover exists for. The unit's own readers are erased before what they read, so a producer
+    /// never goes while the node that reads it is still there; `true` says every node of the set is
+    /// gone.
+    bool eraseUnreadNodes(std::span<const gc_node_ref_t> nodes);
+
+    /// Where the draft stood: the counts its node table and its two slot tables had, the regions it
+    /// had, how many writes it had seen, and where the undo journal stood.
+    ///
+    /// A savepoint names a *segment*: what `rollbackTo` takes back is what the draft appended and
+    /// what it changed in the nodes it already had. The two halves are both in it. What an
+    /// application appends is the counts below; what it changes in place -- a node's inputs, a
+    /// region result, the entry or the exit, the user lists -- is in the journal the `undo*`
+    /// marks below name, which is written by the draft itself and only while a segment is open.
+    ///
+    /// The undo rule this serves is the draft's own: one edit lands whole or leaves nothing, and
+    /// what an edit changed in place is kept in an undo log while a segment is open (the
+    /// graph-editing notes' 16.1 and 16.4). It is stated here in full rather than left to a
+    /// document, because it is what this type has to satisfy: a node the segment erased comes back at
+    /// the same id with the same body, since a node id is never handed out twice and a rollback that
+    /// moved one would break every class and every edge that names it.
+    struct Savepoint {
+        size_t nodes        = 0;
+        size_t staticSlots  = 0;
+        size_t frameSlots   = 0;
+        size_t regions      = 0;
+        uint64_t mutations  = 0;
+        bool hasFrameLayout = false;
+        // The journal's own marks, one per record kind (see the `UndoNode`, `UndoRegions`,
+        // `UndoScalars`, `UndoTypes`, `UndoPorts` and `UndoLowLevel` records below). The
+        // equivalence log is not one of them: the store owns it (`writings.h`,
+        // `DraftWritings::ApplicationMark`), and the draft's copy of it is a copy.
+        size_t undoNodes     = 0;
+        size_t undoRegions   = 0;
+        size_t undoScalars   = 0;
+        size_t undoTypes     = 0;
+        size_t undoPorts     = 0;
+        size_t undoLowLevel  = 0;
+        /// The draft as the mark found it, when the self-check was on: `rollbackTo` compares the
+        /// draft it put back with this and reports the first class that differs.
+        std::shared_ptr<const UndoSnapshot> check;
+    };
+    Savepoint savepoint() const;
+    /// Opens a segment: the journal starts recording, and the returned mark names its start. Every
+    /// `markUndo` taken while it is open is a rollback point inside it; `endUndo` closes the
+    /// outermost one and drops the journal. The record cost is what the segment changed, not the
+    /// size of the graph, so a caller that never rolls back pays the copies of the nodes it wrote
+    /// to and nothing else.
+    Savepoint beginUndo();
+    /// A rollback point inside the segment already open. Outside one it names no journal, and a
+    /// rollback to it is the count rollback `savepoint()` always was.
+    Savepoint markUndo();
+    /// Closes one segment; the outermost one drops the journal and the recording stops.
+    void endUndo();
+    /// Puts the draft back where `mark` found it: every node, static value and frame slot it
+    /// appended after the mark goes, then the journal is replayed backwards over the nodes it
+    /// changed in place and the ones it erased, and the counters go back. A commit after a rolled
+    /// back segment sees a draft that was not written to.
+    ///
+    /// The **ids** are not given back: `addNode` never reuses one, and the lists that keep the ids
+    /// of erased nodes (`gateIds_` and its two siblings) count on that, so the nodes go and the id
+    /// space keeps them. A node the segment erased comes back **at its own id** with the body it
+    /// had -- the id was never handed out twice, so putting the old body back at it is not a
+    /// reuse, and every class and edge that names the id is right again. A rollback with no
+    /// journal (a mark taken outside a segment) restores the counts alone, as it always did.
+    void rollbackTo(const Savepoint &mark);
+
+    /// How a rollback answers a class it did not put back. `Off` (a Release build's default) keeps
+    /// no copy at all; `Report` stores the class in `undoMismatch()` and stays quiet; `Abort` (a
+    /// debug build's default) also fails the invariant. The copy at a mark is the whole draft, so
+    /// only a build that is auditing a rollback pays for it: a test that walks the classes turns
+    /// `Report` on and reads them one by one, and a debug build starts in `Abort`.
+    enum class SelfCheckMode : uint8_t {
+        Off,
+        Report,
+        Abort,
+    };
+    void setUndoSelfCheck(SelfCheckMode mode) { selfCheck_ = mode; }
+    SelfCheckMode undoSelfCheck() const { return selfCheck_; }
+    /// The first class the last `rollbackTo` did not put back; empty when it put everything back
+    /// (and empty when the mark carried no copy).
+    std::optional<UndoClass> undoMismatch() const { return lastMismatch_; }
+    /// Makes one class's hook record nothing, which is what a hook that was forgotten amounts to:
+    /// the check's own test does this on purpose, one class at a time, and requires the class back.
+    void skipUndoClassForTest(UndoClass cls) { skippedClass_ = cls; }
+    void clearSkippedUndoClassForTest() { skippedClass_.reset(); }
+
+    /// Whether the graph names `id` by something other than a read, so that a policy which erases a
+    /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
+    /// the entry, the exit, the node whose value it returns, its ports, its captures, the result of
+    /// each region, and the ports of a control region (an arm of a branch, the condition and the
+    /// body of a loop).
+    ///
+    /// The last of those is not bookkeeping: a control region is entered with its port list, and
+    /// the list is positional -- `LoopDraftView::bodyStateParam(j)` is entry `j`, which is the j-th
+    /// state -- so a port node an erasure took leaves the entry naming nothing, which the commit
+    /// refuses (`validateRuntimeRegions`), and a table that dropped the entry instead renames every
+    /// state after it. An unread port of such a region is therefore a name and not dead code. The
+    /// ports of an annotation region are not in this list: a rewrite may remove one, and the
+    /// published graph then holds that entry as "none" (src/runtime/graph.cpp, the encoder).
+    bool namesNode(gc_node_ref_t id) const;
     /// The statements written directly after `id` follow what `id` followed: the block's chain
     /// closes over a node the graph loses (docs/design/effects/edges.cn.md 4, removing a node
     /// splices the orderings that pass through it). The control edge names the same pair beside the
@@ -690,8 +884,8 @@ class GraphDraft {
     /// written after `tail`, and `tail` is written after what `id` followed when it stands in no
     /// chain of its own (docs/design/effects/edges.cn.md 4 and 5.7). The node that takes the place
     /// is the last statement of the code that replaces `id` -- the tail of a taken branch arm or of
-    /// an inlined body: what the block's value reads, or, when that value carries no chain of its own
-    /// (a void block, a constant), the last statement of that block's chain
+    /// an inlined body: what the block's value reads, or, when that value carries no chain of its
+    /// own (a void block, a constant), the last statement of that block's chain
     /// (docs/design/effects/edges.cn.md 5.3).
     ///
     /// A rewrite that replaces a statement by a node of the same region can call takeStatementPlace
@@ -702,23 +896,23 @@ class GraphDraft {
     /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
     ///
     /// `how` says whether that block survives the rewrite. A caller splicing code it keeps -- an
-    /// inlined body -- keeps it, and then a statement of *another* block cannot follow `tail`: it does
-    /// not run whenever `tail` runs (src/runtime/branch_arms.cpp refuses exactly that graph,
+    /// inlined body -- keeps it, and then a statement of *another* block cannot follow `tail`: it
+    /// does not run whenever `tail` runs (src/runtime/branch_arms.cpp refuses exactly that graph,
     /// docs/technical/17_graph_rewrite_api_contracts.md 4.1), so it heads its own block's chain
     /// instead -- the same sentence `closeChainOver` applies to a predecessor of another block. A
     /// caller that dissolves the block in the same rewrite -- a pruned branch, whose arm's code
     /// becomes the block's code when `eraseNode` re-parents its regions -- hands the place over
-    /// normally, because by the time the graph is committed the two ends are statements of one block.
-    /// The distinction is the caller's to make: it is the only place that knows whether the region
-    /// outlives the rewrite, and it says so with `PlaceHandover`.
+    /// normally, because by the time the graph is committed the two ends are statements of one
+    /// block. The distinction is the caller's to make: it is the only place that knows whether the
+    /// region outlives the rewrite, and it says so with `PlaceHandover`.
     void handChainPlaceTo(
         gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how = PlaceHandover::KeepsItsBlock);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
     /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to
-    /// its replacer). `newId` is marked as a statement of that block. A rewrite that puts a node it
-    /// built where a statement stood calls this before erasing the statement; a node already
-    /// written somewhere in a chain keeps that place.
+    /// its replacer). A non-statement value between a predecessor and a successor is wrapped in a
+    /// GATE that takes the chain place. A rewrite that puts a node it built where a statement stood
+    /// calls this before erasing the statement; a node already in a chain keeps that place.
     ///
     /// The same clause covers the order edges that met at `oldId`: they meet at `newId` instead,
     /// in both directions (replaceOrderEdgesAt). A node that stood in no chain still hands its
@@ -759,6 +953,13 @@ class GraphDraft {
     /// Makes `predecessor` the statement written before `id` in the same `sync` block; refuses a
     /// self edge. A node has at most one: the block is a chain.
     bool setSyncPredecessor(gc_node_ref_t id, gc_node_ref_t predecessor);
+    /// Joins two chain fragments. A non-statement value that already has a predecessor hands the
+    /// continuation to a GATE instead of becoming a non-statement in the middle of the chain.
+    /// Returns the predecessor's actual exit, which is that GATE when one was needed.
+    gc_node_ref_t appendChainStatement(gc_node_ref_t id, gc_node_ref_t predecessor);
+    /// Moves a pure value out of the middle of a chain, putting its incoming and outgoing waits
+    /// on a GATE that reads it. A terminal block value keeps its own incoming wait.
+    size_t normalizeChainPlaces();
     /// `role` says which port of the one data edge kind the input is (the default is the ordinary
     /// argument role); every other kind ignores it.
     void appendInput(
@@ -776,8 +977,8 @@ class GraphDraft {
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);
     void replaceInput(
-        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId,
-        PortRole role = PortRole::Normal);
+        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId,
+        gc_node_ref_t newInputId, PortRole role = PortRole::Normal);
     void replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
@@ -789,6 +990,18 @@ class GraphDraft {
     /// head or tail of a branch arm is kept; when it waits on nothing it is made to wait on its
     /// BRCH. Returns the number removed.
     size_t dissolveUnorderedGates();
+    /// Writes every order edge that reaches into a control region on the node that owns that
+    /// region (docs/design/effects/edges.cn.md 4.6): an arm or a part of a loop runs as a whole
+    /// with its BRCH or LOOP, so the order it has with the code around it is an order on that
+    /// node. A rewrite that moves a node -- into an arm, into a part of a loop, out of one --
+    /// moves the nodes its order edges name with it, and the two ends can end up in regions the
+    /// other does not share; the edge keeps saying what it said, on the owner. An edge whose two
+    /// ends come out as one node is dropped: the owner runs before the code inside it. Returns
+    /// the number of nodes whose order edges it rewrote.
+    size_t rehomeOrderEdges();
+    bool chainReachesBlockValue(gc_node_ref_t id) const;
+    /// Removes chain GATEs left with no value user, no sync successor, and no block result.
+    size_t eraseOrphanedChainGates();
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
@@ -816,8 +1029,7 @@ class GraphDraft {
     /// failure, and the `GUARD` stays in every build: a build that reads past the end of the table
     /// without saying anything is one where only a Debug build's standard library would object
     /// (`settleStreamLinearity` read `regions_[0]` of an empty table in Release, bound the
-    /// reference, never read through it and passed; 24 tests of `feat/compile/stream` aborted in
-    /// Debug on 2026-11-02).
+    /// reference, never read through it and passed, while Debug aborted).
     const GCRegion &region(uint32_t id) const {
         GUARD(
             id < regions_.size(),
@@ -874,18 +1086,23 @@ class GraphDraft {
     /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
     /// in them go to the region around.
     void retireRegion(uint32_t id, bool keepRegion = false);
-    /// The join a BRCH node names. **No validation**: a draft is allowed to be inconsistent while it
-    /// is being written -- a rewrite may move the branch before it moves the join, or build the two
-    /// in either order -- so the refusal happens where the graph is published, in
+    /// The join a BRCH node names. **No validation**: a draft is allowed to be inconsistent while
+    /// it is being written -- a rewrite may move the branch before it moves the join, or build the
+    /// two in either order -- so the refusal happens where the graph is published, in
     /// `encodeDraftGraph`, which runs `camel::runtime::checkGraphCrossReferences` on the graph the
-    /// draft produced (and `EdgeChecker` runs the same four checks on a frozen graph). A setter that
-    /// refused here would become a fifth answer to "is this join sound", and the draft needs to be
-    /// able to hold the state in between.
+    /// draft produced (and `EdgeChecker` runs the same four checks on a frozen graph). A setter
+    /// that refused here would become a fifth answer to "is this join sound", and the draft needs
+    /// to be able to hold the state in between.
     void setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join);
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
     uint32_t insertRegion() const { return insertRegion_; }
-    void setInsertRegion(uint32_t region) { insertRegion_ = region; }
+    /// Which region a node is added into. A segment writes it and puts it back with everything
+    /// else the draft itself holds (`UndoScalars`), so the write goes through the hook.
+    void setInsertRegion(uint32_t region) {
+        noteOriginalScalars();
+        insertRegion_ = region;
+    }
     /// Whether a node that reads a node of a deeper control region moves into that region
     /// (inheritRegion). The front end places every node itself, so a read across the border
     /// of an arm is left for the validator to report.
@@ -925,7 +1142,8 @@ class GraphDraft {
     uint32_t nodeAttrs(gc_node_ref_t id) const;
     void setNodeAttrs(gc_node_ref_t id, uint32_t attrs);
     /// The source name of the value at node `id` (camel::core::SymId), camel::core::kEmptySym
-    /// when it has none. Cold metadata: it never enters a frozen graph's columns (GCGraph::nodeName).
+    /// when it has none. Cold metadata: it never enters a frozen graph's columns
+    /// (GCGraph::nodeName).
     uint32_t nodeName(gc_node_ref_t id) const;
     void setNodeName(gc_node_ref_t id, uint32_t name);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
@@ -936,18 +1154,22 @@ class GraphDraft {
     void removeWithPort(gc_node_ref_t id);
     void removeClosureNode(gc_node_ref_t id);
     void setEntryNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         entry_ = id;
     }
     void setExitNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         exit_ = id;
     }
     void setOutputNode(gc_node_ref_t id) {
+        noteOriginalScalars();
         ++mutations_;
         output_ = id;
     }
     void setReturnNode(gc_node_ref_t id, GCReturnKind kind) {
+        noteOriginalScalars();
         ++mutations_;
         returnNode_ = id;
         returnKind_ = kind;
@@ -979,8 +1201,10 @@ class GraphDraft {
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdgeSlot slot);
     /// A node that reads a node of a control region (an arm, a loop part) is in that region, or in
     /// one inside it: it cannot run before what it reads. A JOIN reads the results of its arms and
-    /// a LOOP those of its parts; they stay where the branch or the loop is.
-    void inheritRegion(gc_node_ref_t input, gc_node_ref_t user);
+    /// a LOOP those of its parts; they stay where the branch or the loop is. Only a value read
+    /// moves a node (docs/design/effects/edges.cn.md 4.6): an order or a control edge says when
+    /// the user runs, not what it reads, so it leaves the user where it was written.
+    void inheritRegion(gc_node_ref_t input, gc_node_ref_t user, DraftEdgeSlot slot);
     std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeSlot slot) const;
     std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeSlot slot);
     std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeSlot slot);
@@ -989,8 +1213,7 @@ class GraphDraft {
     std::span<const gc_node_ref_t>
     inputsOf(gc_node_ref_t id, DraftEdgeKind kind, PortRole role) const;
     void setInputs(
-        gc_node_ref_t id, DraftEdgeKind kind, PortRole role,
-        std::span<const gc_node_ref_t> inputs);
+        gc_node_ref_t id, DraftEdgeKind kind, PortRole role, std::span<const gc_node_ref_t> inputs);
     /// Adds `inputId` at the end of the `slot` inputs of `userId`, in place when the node's
     /// storage has room.
     void appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_node_ref_t inputId);
@@ -1004,13 +1227,15 @@ class GraphDraft {
     /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
     void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
-    GraphId id_                                = kInvalidGraphId;
-    GraphId outerGraphId_                      = kInvalidGraphId;
-    const Program *program_                    = nullptr;
-    GraphId typeSpecializationRoot_            = kInvalidGraphId;
-    uint8_t flags_                             = 0;
+    GraphId id_           = kInvalidGraphId;
+    GraphId outerGraphId_ = kInvalidGraphId;
+    // program-holder-exempt: kept-by-another-root -- the group's program is the session's
+    // (ProgramHold work_) or the pass's own; the draft is a view inside it.
+    const Program *program_         = nullptr;
+    GraphId typeSpecializationRoot_ = kInvalidGraphId;
+    uint8_t flags_                  = 0;
     std::string implKernelUri_;
-    uint32_t declarationFacts_ = 0; // see declarationFacts()
+    uint32_t declarationFacts_                 = 0; // see declarationFacts()
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
@@ -1024,8 +1249,8 @@ class GraphDraft {
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<GCRegion> regions_; // region 0 (the body), made with the draft, then the others
-    uint32_t insertRegion_    = 0;
-    bool inheritsRegions_     = true;
+    uint32_t insertRegion_ = 0;
+    bool inheritsRegions_  = true;
     std::vector<gc_node_ref_t> regionPorts_;
     std::vector<WritingUnion> writings_;
     uint32_t writingScope_ = 0;
@@ -1059,6 +1284,118 @@ class GraphDraft {
     std::vector<gc_node_ref_t> gateIds_;
     std::vector<gc_node_ref_t> brchIds_;
     std::vector<gc_node_ref_t> joinIds_;
+
+    /// One segment's undo journal: what it changed outside its own appends. The records are kept
+    /// per kind, so a rollback takes the *first* record a mark has of each kind -- the state the
+    /// mark found -- instead of replaying later records over it. Every mark bumps `journalEpoch_`,
+    /// which is what makes that first record per segment: a node written by the outer segment and
+    /// again by an inner one is recorded once with the outer epoch and once with the inner one.
+    struct UndoNode {
+        gc_node_ref_t id = kInvalidNodeRef;
+        DraftNodeHeader header{};
+        std::vector<std::byte> tail; // the payload and the five input runs, as the node had them
+        std::vector<gc_node_ref_t> users[5]; // its user lists, when the segment wrote them
+        bool usersRecorded = false;
+    };
+    struct UndoRegions {
+        std::vector<GCRegion> regions;
+        std::vector<gc_node_ref_t> regionPorts;
+    };
+    struct UndoScalars {
+        gc_node_ref_t entry      = kInvalidNodeRef;
+        gc_node_ref_t exit       = kInvalidNodeRef;
+        gc_node_ref_t output     = kInvalidNodeRef;
+        gc_node_ref_t returnNode = kInvalidNodeRef;
+        GCReturnKind returnKind  = GCReturnKind::None;
+        uint64_t mutations       = 0;
+        bool hasFrameLayout      = false;
+        uint32_t insertRegion    = 0;
+    };
+    struct UndoPorts {
+        std::vector<gc_node_ref_t> norm, with, closure;
+    };
+    /// The graph's own types, as the segment found them. `funcType_` is graph content a segment
+    /// writes: a rewrite republishes the graph under another signature (`setFuncType`), a port that
+    /// goes takes its parameter out of the signature with it (`removeNormPort`, `removeWithPort`),
+    /// and the builder fills an open signature where it stands (`setOpenExitType`,
+    /// `setOpenResources`). The other members are the same kind of state -- the frame layout a
+    /// rewrite retypes, the closure type, the capture names -- so one record holds them and one
+    /// class of the self-check compares them, by content rather than by pointer (see `exitType`
+    /// below):
+    struct UndoTypes {
+        camel::core::type::FunctionType *funcType = nullptr;
+        /// What that signature *holds*, which is the half a segment can change without its pointer
+        /// moving: an open signature is the function's identity while its body is built -- a
+        /// recursive function names its own type before its result is known -- so it is filled
+        /// where it stands (`OpenFunctionType::setExitType`, `setResources`) instead of being
+        /// replaced by an interned copy. `exitType` is nullptr while the signature has no result
+        /// type yet; `resources` is the signature the declaration publishes. A rollback writes these
+        /// two back into the signature the record names, and the self-check compares them.
+        camel::core::type::Type *exitType = nullptr;
+        camel::core::sem::ResourceSignature resources;
+        camel::core::type::TupleType *closureType = nullptr;
+        std::vector<camel::core::SymId> captureNames;
+        std::vector<camel::core::type::Type *> runtimeSlotTypes;
+        std::vector<camel::core::type::Type *> staticSlotTypes;
+    };
+    struct UndoLowLevel {
+        size_t edits = 0;
+    };
+
+    bool journalOpen() const { return journalDepth_ != 0; }
+    /// Records `id` as the segment found it, once per segment: the body and its user lists.
+    void noteOriginalNode(gc_node_ref_t id);
+    void noteOriginalRegions();
+    void noteOriginalScalars();
+    void noteOriginalTypes();
+    void noteOriginalPorts();
+    void noteOriginalLowLevel();
+    /// Puts one recorded node back at its own id: allocated again when the segment erased it, and
+    /// written over the body that stands there when it did not.
+    void restoreUndoNode(UndoNode &record);
+    /// Drops the records after `mark` and restores what they held (the journal half of
+    /// `rollbackTo`).
+    void replayJournal(const Savepoint &mark);
+    void dropJournal();
+    std::vector<UndoNode> undoNodes_;
+    std::vector<uint64_t> undoNodeEpoch_; // by node id: the epoch a node was last recorded in
+    std::vector<UndoRegions> undoRegions_;
+    std::vector<UndoScalars> undoScalars_;
+    std::vector<UndoTypes> undoTypes_;
+    std::vector<UndoPorts> undoPorts_;
+    std::vector<UndoLowLevel> undoLowLevel_;
+    uint64_t undoRegionsEpoch_  = 0;
+    uint64_t undoScalarsEpoch_  = 0;
+    uint64_t undoTypesEpoch_    = 0;
+    uint64_t undoPortsEpoch_    = 0;
+    uint64_t undoLowLevelEpoch_ = 0;
+    uint64_t journalEpoch_      = 0;
+    unsigned journalDepth_      = 0;
+    /// Set while the journal is putting itself back: a restore writes bodies, and a body write is
+    /// not an edit of the segment that is being rolled back.
+    bool undoSuspended_         = false;
+#ifdef NDEBUG
+    SelfCheckMode selfCheck_ = SelfCheckMode::Off;
+#else
+    SelfCheckMode selfCheck_ = SelfCheckMode::Abort;
+#endif
+    std::optional<UndoClass> lastMismatch_;
+    std::optional<UndoClass> skippedClass_;
+    /// True when this class's hook must record nothing: the journal is open, it is not putting
+    /// itself back, and the check's own test did not ask this class to be forgotten.
+    bool journalSkips(UndoClass cls) const {
+        return skippedClass_.has_value() && *skippedClass_ == cls;
+    }
+
+    /// What the commit checks read as the second half of their tier (see `lowLevelEdits`): the
+    /// existing nodes this draft changed in place, in the order the changes were first made, and a
+    /// bitmap so that a node changed twice is named once.
+    void noteLowLevelEdit(gc_node_ref_t id);
+    std::vector<gc_node_ref_t> lowLevelEdits_;
+    std::vector<uint8_t> lowLevelSeen_;
+    /// The named edits open right now (NamedEdit); the raw setters record nothing into
+    /// `lowLevelEdits_` while one is.
+    unsigned namedEdits_ = 0;
 
     gc_node_ref_t entry_      = kInvalidNodeRef;
     gc_node_ref_t exit_       = kInvalidNodeRef;
@@ -1106,9 +1443,18 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
 
 /// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
 /// node's payload, a cast's types from its input, and whether it owns a region from the draft's
-/// own regions. The builder writes a `sync` block's chain by this, so it is the same rule the seal
-/// check's census reads.
+/// own regions.
 bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
+/// The entry and exit of the statement `id` names. A JOIN maps back to its BRCH at the entry; a
+/// BRCH maps to its JOIN at the exit. Every other node is its own entry and exit.
+gc_node_ref_t chainEntryOf(const GraphDraft &draft, gc_node_ref_t id);
+gc_node_ref_t chainExitOf(const GraphDraft &draft, gc_node_ref_t id);
+bool isChainExit(const GraphDraft &draft, gc_node_ref_t id);
+/// Whether `id` occupies a chain position rather than only receiving a chain tail as a block value.
+/// A terminal GATE is a block-value carrier, not a continuation of the chain.
+bool occupiesChainPlace(const GraphDraft &draft, gc_node_ref_t id);
+/// Whether `id` is the value the draft's graph or one of its live regions hands on.
+bool isBlockValue(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
 /// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
@@ -1131,17 +1477,127 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape =
 /// statement and stays.
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
 
-/// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
-/// inlined call gates its arguments after what the call waited for -- and changes nothing else
-/// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
-/// what it forwards, which is what a comparison of two computations asks; the gate keeps its place
-/// and its wait either way, so the answer is about the value alone.
-inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
-    while (draft.header(node) != nullptr && draft.header(node)->kind == GCNodeKind::Gate &&
-           !draft.normInputsOf(node).empty()) {
-        node = draft.normInputsOf(node).back();
+/// Whether the node is a closure definition nothing can call: a FUNC node the graph does not export
+/// (`closureNodes`), with no control, order or sync edge on either side. A FUNC node is a value,
+/// not a statement (design principles 3.1): what runs is the CALL of it, so an unread definition
+/// runs nothing, drops no effect and faults nothing. What it captured is read only by its body,
+/// which is why letting it go is what leaves a write nothing else reads a dead write (9.7).
+bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
+
+/// The live set of a graph: the nodes backward reachable from its roots -- entry, exit, output,
+/// return, the norm and `with` ports, the closure nodes it exports -- over the norm, `with`,
+/// control and sync inputs, with a loop's region ports and a branch's join. A node outside it can
+/// never be run or read by the program, so a value it reads is read by nobody. Sorted by ref.
+/// One implementation: `camel::compile::gir::liveDraftNodes` is this function, and every caller
+/// that needs the set asks it here rather than walking the graph again.
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
+
+/// The JOIN that closes the branch `brch`, read from the draft (`kInvalidNodeRef` for a node that
+/// is not a branch). The frozen graph's answer is `branchJoinOf(const GCGraph &, gc_node_ref_t)`.
+gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
+
+
+/// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its
+/// payload. The members themselves are the frame slots the payload names, not the aggregate's
+/// inputs, so this number and the input count are two different things -- which is why the verdict
+/// below refuses.
+uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
+
+AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref);
+
+/// One node as a savepoint found it: the body, the tail bytes the body reads and the five lists of
+/// readers that point at it. `present` is false for a node slot the draft had not handed out.
+struct UndoSnapshotNode {
+    bool present = false;
+    DraftNodeHeader header{};
+    std::vector<std::byte> tail;
+    std::array<std::vector<gc_node_ref_t>, 5> users;
+};
+
+/// A whole draft as a savepoint found it (see `takeUndoSnapshot`). The parts are the classes
+/// `UndoClass` names, field for field: a rollback that leaves any of them changed is the mismatch
+/// the self-check reports, and the class it reports is the hook that was forgotten.
+struct UndoSnapshot {
+    std::vector<UndoSnapshotNode> nodes;
+    std::vector<GCRegion> regions;
+    /// The ports of each region, by region id (`regionPortsOf`).
+    std::vector<std::vector<gc_node_ref_t>> regionPorts;
+    // Scalars: the names the graph gives its own values and the counters a commit reads.
+    gc_node_ref_t entry      = kInvalidNodeRef;
+    gc_node_ref_t exit       = kInvalidNodeRef;
+    gc_node_ref_t output     = kInvalidNodeRef;
+    gc_node_ref_t returnNode = kInvalidNodeRef;
+    GCReturnKind returnKind  = GCReturnKind::None;
+    uint64_t mutations       = 0;
+    bool hasFrameLayout      = false;
+    uint32_t insertRegion    = 0;
+    // The graph's own types.
+    camel::core::type::FunctionType *funcType = nullptr;
+    /// What the signature held at the mark, for the same reason the journal records it: a segment
+    /// fills an open signature where it stands, so its pointer names the same object on both sides
+    /// of the write and a copy of the pointer answers "unchanged" for a signature that changed.
+    /// `exitType` is nullptr while the signature had no result type yet.
+    camel::core::type::Type *exitType = nullptr;
+    camel::core::sem::ResourceSignature resources;
+    camel::core::type::TupleType *closureType = nullptr;
+    std::vector<camel::core::SymId> captureNames;
+    std::vector<camel::core::type::Type *> runtimeSlotTypes;
+    std::vector<camel::core::type::Type *> staticSlotTypes;
+    // The port tables.
+    std::vector<gc_node_ref_t> normPorts;
+    std::vector<gc_node_ref_t> withPorts;
+    std::vector<gc_node_ref_t> closureNodes;
+    // The nodes this draft changed in place, as the commit checks read them.
+    std::vector<gc_node_ref_t> lowLevelEdits;
+};
+
+inline std::string_view undoClassName(UndoClass cls) {
+    switch (cls) {
+    case UndoClass::Nodes:
+        return "nodes";
+    case UndoClass::Regions:
+        return "regions";
+    case UndoClass::Scalars:
+        return "scalars";
+    case UndoClass::Ports:
+        return "ports";
+    case UndoClass::Types:
+        return "types";
+    case UndoClass::LowLevel:
+        return "low-level";
     }
-    return node;
+    return "unknown";
+}
+
+/// A draft read as a graph reader, so that `camel/runtime/graph.h`'s gate walk answers for a draft
+/// too: the four methods `forwardedInputOf` and `valueBehindGates` ask for are `nodeCount`, `node`,
+/// `normInputsOf` and `withInputsOf`, and a draft has them under the names `nodeSlotCount` and
+/// `header`. One reading of a gate, one walk, two readers.
+struct DraftGateReader {
+    const GraphDraft *draft;
+
+    size_t nodeCount() const { return draft->nodeSlotCount(); }
+    const DraftNodeHeader *node(gc_node_ref_t ref) const { return draft->header(ref); }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return draft->normInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return draft->withInputsOf(ref);
+    }
+};
+
+/// The value a chain of gates passes on, over a draft: the walk is `valueBehindGates`'s
+/// (camel/runtime/graph.h), and this is that walk with a draft as its reader. A gate orders the
+/// value it reads after other nodes and changes nothing else (docs/design/effects/edges.cn.md 4.6
+/// and 5.3), so a question about that value is a question about what the first ordinary input
+/// carries; the gate keeps its place and its wait either way.
+inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
+    return valueBehindGates(DraftGateReader{&draft}, node);
+}
+
+/// The one input a gate of a draft forwards (camel/runtime/graph.h, `forwardedInputOf`).
+inline gc_node_ref_t forwardedInputOf(const GraphDraft &draft, gc_node_ref_t ref) {
+    return forwardedInputOf(DraftGateReader{&draft}, ref);
 }
 
 } // namespace camel::runtime

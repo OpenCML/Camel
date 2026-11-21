@@ -25,11 +25,6 @@ Names match the configure log (booleans are CMake `ON` / `OFF`).
 - **Note**: On non-x64 or when disabled, the log shows `OFF` (with a platform note when applicable).
 - **Implementation**: `add_platform_option` sets compile definitions such as `ENABLE_FASTVM_JIT` and `JIT_TARGET_X64`.
 
-### `ENABLE_FASTVM_COMPUTED_GOTO`
-
-- **Meaning**: Use **computed goto** (label-value dispatch) in the FastVM interpreter.
-- **Implementation**: `add_bool_option`, injecting `ENABLE_FASTVM_COMPUTED_GOTO=0|1` on `camel_options`.
-
 ### `CAMEL_ENABLE_PYTHON`
 
 - **Meaning**: Build Python embedding artifacts: `python.cmo`, `pyplot.cmo`, `py_bridge*`, etc. Requires a Python **development** layout (headers and import library; see `modules/python` probing).
@@ -88,7 +83,7 @@ building (passing `-Config Release` by default) — judging the configuration th
 correct install. Timestamps, absolute paths and the user name are out; ccache is out (a cache returns
 the bytes it was given); the clang **version** is out, because probing it would make `-NoBuild` depend
 on `PATH` and invalidate every install after a toolchain update (whether it should be, see
-`docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`).
+`docs/handover/reviews/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`).
 
 ## See also
 

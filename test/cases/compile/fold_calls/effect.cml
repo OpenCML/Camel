@@ -3,7 +3,7 @@
  * refuses it by name (FoldCallHasEffects). Its body is never run while the program is built.
  */
 
-func reveal(s: string): string uses stdout {
+func reveal(s: string): string uses var stdout {
     println(s)
     return s
 }

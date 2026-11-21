@@ -154,7 +154,18 @@ void Builder::settleStreamLinearity() {
         }
         return root;
     };
-    for (const auto &[port, origin] : captureOriginOf_) {
+    // The table is hashed on the handle's ADDRESS (`std::hash<DraftNodeRef>` is
+    // `hash<const void*>(draft) * 31 + id`, `runtime/node_ref.h`), and the union below is not
+    // order-independent in its CHOICE of representative -- the partition is, `roots[left] = right`
+    // is not -- so walking the table as it stands makes the answer depend on where the nodes were
+    // allocated. Sorted by the graph the port belongs to and then by the id the graph gave it, the
+    // walk is a function of the program (`walksBefore`, builder_helpers.h).
+    std::vector<std::pair<node_handle_t, node_handle_t>> capturePorts(captureOriginOf_.begin(),
+                                                                     captureOriginOf_.end());
+    std::sort(capturePorts.begin(), capturePorts.end(), [](const auto &left, const auto &right) {
+        return walksBefore(left.first, right.first);
+    });
+    for (const auto &[port, origin] : capturePorts) {
         const node_handle_t left  = findRoot(port);
         const node_handle_t right = findRoot(origin);
         if (left != right) {
@@ -167,7 +178,14 @@ void Builder::settleStreamLinearity() {
     // one value. A machine's port and its origin stand in one graph -- the loop is built where the
     // value is -- where captureInto makes no port and records nothing, so the machine records it
     // itself, in the same place a capture origin is written (noteMachinePortOrigin).
-    for (const auto &[port, origin] : machinePortOrigin_) {
+    // The same table in the same order: `machinePortOrigin_` is hashed on the handle's address too,
+    // and the union is not order-independent in its choice of representative.
+    std::vector<std::pair<node_handle_t, node_handle_t>> machinePorts(
+        machinePortOrigin_.begin(), machinePortOrigin_.end());
+    std::sort(machinePorts.begin(), machinePorts.end(), [](const auto &left, const auto &right) {
+        return walksBefore(left.first, right.first);
+    });
+    for (const auto &[port, origin] : machinePorts) {
         const node_handle_t left  = findRoot(port);
         const node_handle_t right = findRoot(origin);
         if (left != right) {
@@ -192,14 +210,14 @@ void Builder::settleStreamLinearity() {
 
     // A graph is judged once, whatever registered it and however many units name it: a reader
     // counted twice would make one read look like two, and a loop asked about twice the same.
-    // The captures a call passes its callee (captures.cpp, addCaptureSite) are remembered as the
-    // edges they are: they hand the value on, and the capture they feed is refused where it is
-    // made, so counting them here would count one read twice.
-    std::unordered_map<node_handle_t, std::unordered_set<node_handle_t>> captureEdges;
+    // The captures a call passes its callee (captures.cpp, addCaptureSite) are the call's own `with`
+    // inputs -- edges, not a table -- so what is remembered here is only how many of a call's inputs
+    // are captures: the last that many, which is where linkCaptureSites puts them, after the declared
+    // `with` arguments. A capture hands the value on, and the capture it feeds is refused where it is
+    // made, so counting it here would count one read twice.
+    std::unordered_map<node_handle_t, size_t> captureInputs;
     for (const CaptureSite &site : captureSites_) {
-        for (node_handle_t value : site.values) {
-            captureEdges[site.call].insert(value);
-        }
+        captureInputs[site.call] = site.linked;
     }
     std::unordered_set<DraftGraphBuilder *> judged;
     for (const ModuleUnit *unit : unitOrder_) {
@@ -252,11 +270,11 @@ void Builder::settleStreamLinearity() {
                     note(value, operand);
                 }
                 if (!closure) {
-                    const auto sites = captureEdges.find(self);
-                    for (draft_node_ref_t value : draft.withInputsOf(id)) {
-                        const bool handed =
-                            sites != captureEdges.end() && sites->second.contains(draft.ref(value));
-                        note(value, handed);
+                    const auto known    = captureInputs.find(self);
+                    const auto withs    = draft.withInputsOf(id);
+                    const size_t handed = known != captureInputs.end() ? known->second : 0;
+                    for (size_t at = 0; at < withs.size(); ++at) {
+                        note(withs[at], at + handed >= withs.size());
                     }
                 }
             }
@@ -317,7 +335,17 @@ void Builder::settleStreamLinearity() {
         return true;
     });
 
+    // The identities in the order the program names them, not the order their hashes fall in: a
+    // violation is recorded below in this walk's order and `reportStreamLinearity` ends the report
+    // at the first one, so the walk decides which mistake a reader is told about.
+    std::vector<node_handle_t> identities;
+    identities.reserve(readers.size());
     for (const auto &[identity, list] : readers) {
+        identities.push_back(identity);
+    }
+    std::sort(identities.begin(), identities.end(), walksBefore);
+    for (const node_handle_t identity : identities) {
+        const auto &list          = readers.at(identity);
         const node_handle_t value = valueOf[identity];
         Type *type                = nodeTypeOf(value);
         if (!readOnce(type)) {
@@ -332,7 +360,17 @@ void Builder::settleStreamLinearity() {
         // may stand in another graph than the read does -- a closure's graph holds the value it
         // captured -- so the loops of every graph are asked.
         std::vector<std::pair<DraftGraphBuilder *, draft_node_ref_t>> carriers;
+        // The graphs by their identity, not by the address of their builder: `facts` is hashed on
+        // that address, and this walk is what orders the loops below, which is what decides which
+        // read stands for a stream's consumer.
+        std::vector<DraftGraphBuilder *> graphs;
+        graphs.reserve(facts.size());
         for (const auto &[builder, known] : facts) {
+            graphs.push_back(builder);
+        }
+        std::sort(graphs.begin(), graphs.end(), walksBeforeGraph);
+        for (DraftGraphBuilder *builder : graphs) {
+            const GraphFacts &known = facts.at(builder);
             for (draft_node_ref_t loop : known.loops) {
                 for (draft_node_ref_t state : known.transaction->graph().normInputsOf(loop)) {
                     if (findRoot(known.transaction->graph().ref(state)) == identity) {

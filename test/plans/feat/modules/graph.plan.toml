@@ -16,12 +16,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "node_kinds_match_the_graph"
-desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph."
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in the order `nodes` answers; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph. The first list read `Port, Port, Oper, Join, Brch, Oper, Oper` until 2026-11-18: that was the creation order, which put the `join` the branch ends at before the two operations that follow it. `nodes` answers the canonical order now (design principles 9.5), and the walk numbers a graph from what it returns. Three of the eight lists moved, each with the same kinds in a different order: `pick` is `Port, Port, Oper, Oper, Oper, Brch, Join` (the two operands of the join before it), `kinds` is `Port, Oper, Data, Oper` (the operator before the data it takes), and `main` is `Data, Data, Data, Func, Oper, Oper, Data, Data, Oper, Oper, Oper, Oper, Gate` (the three data nodes `main` builds first). The old values would ask for the creation order back."
 kind = "behavior"
 case = "../../../cases/modules/graph_kinds.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "10\n[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+expect_stdout_exact = "10\n[pick, total, kinds, main, __g_51__, __g_52__, __g_53__, __g_55__]\n[[NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Brch, NodeKind::Join], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper, NodeKind::Data, NodeKind::Oper], [NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -264,10 +264,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "neutral_elements_by_std_opt_algebra"
-desc = "The reference: std::opt::algebra restricted to the neutral elements."
+desc = "The reference: std::cxx::algebra restricted to the neutral elements."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_target.cml"
-args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 20000
@@ -307,10 +307,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "neutral_identities_by_std_opt_algebra"
-desc = "The reference: std::opt::algebra neutral_only=true removes all five identities of both integer types."
+desc = "The reference: std::cxx::algebra neutral_only=true removes all five identities of both integer types."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_identities.cml"
-args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::cxx::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -332,7 +332,7 @@ name = "neutral_identities_by_the_rule_library"
 desc = "rules::simplify removes the same five identities and leaves the same graph: the library has these laws."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_identities.cml"
-args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
+args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -354,7 +354,7 @@ name = "neutral_identities_execution"
 desc = "The five identities keep the value, including at the type's upper bound, on every back end."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_identities.cml"
-args = ["${case}", "std::opt::algebra neutral_only=true", "${backend}"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
@@ -369,7 +369,7 @@ name = "neutral_mode_keeps_the_other_laws"
 desc = "neutral_only=true leaves x*0, x-x, x/1 and -(-x): the mode's set is only the five neutral elements."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_kept.cml"
-args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -391,7 +391,7 @@ name = "the_library_simplifies_the_other_laws"
 desc = "rules::simplify removes those same four forms: the difference is the mode, not a law the library lacks."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_kept.cml"
-args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "std::jgir"]
+args = ["${case}", "rules::simplify", "std::cxx::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -420,7 +420,7 @@ name = "neutral_mode_keeps_the_named_node"
 desc = "neutral_only=true leaves x+0 when that add is the graph's return node."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_target.cml"
-args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 verify_script = '''
@@ -454,14 +454,14 @@ verify_script = '''
 timeout_ms = 20000
 
 # Unused values: after folding and inlining, constants and pure operations that no node reads are
-# left behind. unused::values (Camel) removes them like std::opt::dce restricted to values.
+# left behind. unused::values (Camel) removes them like std::cxx::dce restricted to values.
 
 [[tests]]
 name = "unused_values_by_std_opt_dce"
-desc = "The reference: std::opt::dce restricted to values, after folding and inlining."
+desc = "The reference: std::cxx::dce restricted to values, after folding and inlining."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/unused_target.cml"
-args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "std::opt::dce values_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::fold", "std::cxx::inline", "std::cxx::fold", "std::cxx::dce values_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 20000
@@ -471,7 +471,7 @@ name = "unused_values_by_a_camel_pass"
 desc = "unused::values, written in Camel with the graph module, gives the same graphs."
 kind = "differential"
 case = "../../../cases/modules/graph_pass/unused_target.cml"
-args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unused::values", "std::jgir"]
+args = ["${case}", "std::cxx::fold", "std::cxx::inline", "std::cxx::fold", "unused::values", "std::jgir"]
 expect_exit = 0
 compare_to = "unused_values_by_std_opt_dce"
 compare_fields = ["exit_code", "stdout_normalized"]
@@ -483,7 +483,7 @@ name = "unused_values_program_still_runs"
 desc = "The program after the Camel pass computes what it did."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/unused_target.cml"
-args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unused::values", "std::nvm"]
+args = ["${case}", "std::cxx::fold", "std::cxx::inline", "std::cxx::fold", "unused::values", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "7\n4\n"
 timeout_ms = 20000
@@ -507,12 +507,12 @@ timeout_ms = 20000
 # permissions a node was granted, read without a pass computing them again.
 [[tests]]
 name = "facts_of_graphs_and_nodes"
-desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted."
+desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value, which every numeric array states now (its element type and its extents, `?` for an extent nobody fixed); no permissions are granted. The shape list read `[int [?], f32 [?], f32 [2, 3]]` until 2026-11-18: the order the nodes were created in. It now reads `[f32 [?], int [?], f32 [2, 3]]` because `nodes` answers the canonical order (design principles 9.5), which numbers the graph from what it returns -- the `f32` value first -- and the two facts are the same facts in the walk's own order."
 kind = "behavior"
 case = "../../../cases/modules/graph_facts.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "false\nfalse\ntrue\ntrue\n[int [?], f32 [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
+expect_stdout_exact = "false\nfalse\ntrue\ntrue\n[f32 [?], int [?], f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
 timeout_ms = 10000
 
 # Written (`var`) slots: both passes leave the nodes whose value may be written in place alone.
@@ -522,7 +522,7 @@ name = "neutral_elements_with_var_by_std_opt_algebra"
 desc = "The reference on a program with var slots."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
-args = ["${case}", "std::opt::algebra neutral_only=true", "std::jgir"]
+args = ["${case}", "std::cxx::algebra neutral_only=true", "std::jgir"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 timeout_ms = 20000
@@ -645,6 +645,74 @@ expect_exit = 1
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/graph_pass_unparsable_diagnostic.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The same file, reached the other way. A pass module is also read by the pipeline's declaration
+# reader, which opens the module's own `.cml` to learn the passes it declares. The entry file's
+# directory is not a module root (design principles 10.2), so a module found through `-I` is the
+# one this reader sees -- and it used to throw the parser's first error as a
+# `std::runtime_error`, out of the pipeline and past every frame that catches a diagnostic: the
+# process ended with `terminate called after throwing an instance of 'std::runtime_error'` and
+# SIGABRT, while the very same file as the entry program gave its syntax diagnostic. The answer
+# is the one a pass library that does not compile already gets, with the parser's first error as
+# its secondary location, and the same one the module loader would give.
+
+[[tests]]
+name = "stage_module_that_does_not_parse_through_a_module_root"
+desc = "bad::report, whose module is found through -I and does not parse: InvalidPassParameter naming the module, the parse error as a secondary location at the module's own line and column, exit 1, and nothing about the process ending abnormally."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/step.cml"
+args = ["-I", "mods", "${case}", "bad::report", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "its library 'bad' does not compile. [SyntaxDiag::UnexpectedToken: Unexpected 'for'; expected '}'.", "at <ROOT>/test/cases/modules/stage_module_root/mods/bad.cml:3:5]"]
+expect_output_not_contains = ["42", "terminate called", "std::runtime_error", "Uncaught diagnostic"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The control: the same file, compiled as the program. Its own syntax diagnostic, at its own
+# position, and the count of errors -- the answer every other command's report is compared with.
+
+[[tests]]
+name = "entry_file_that_does_not_parse"
+desc = "The module that does not parse, compiled as the entry program: its syntax diagnostic at its own line and column and one error."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/mods/bad.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+expect_output_contains = ["error[SyntaxDiag::UnexpectedToken]: Unexpected 'for'; expected '}'.", "--> <ROOT>/test/cases/modules/stage_module_root/mods/bad.cml:3:5", "camel: 1 error"]
+expect_output_not_contains = ["terminate called", "InvalidPassParameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# A second loader: an import that names the module through the same root. The import site is
+# where the failure is located (`ModuleParseFailed`), and the module's own parse error follows it
+# as the error it is: two errors, no exception.
+
+[[tests]]
+name = "import_of_a_module_that_does_not_parse_through_a_module_root"
+desc = "A program importing the module that does not parse through -I: ModuleParseFailed at the import, the module's syntax error as its own error, exit 1."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/imports_bad.cml"
+args = ["--error-format", "text", "-I", "mods", "${case}"]
+expect_exit = 1
+expect_output_contains = ["error[SemanticDiag::ModuleParseFailed]: Failed to parse module file: <ROOT>/test/cases/modules/stage_module_root/mods/bad.cml.", "--> <ROOT>/test/cases/modules/stage_module_root/imports_bad.cml:3:1", "SyntaxDiag::UnexpectedToken", "camel: 2 errors"]
+expect_output_not_contains = ["terminate called", "InvalidPassParameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# A third loader: `--timeit` resolves the same pass and reports the failed iteration through the
+# same diagnostic exit as a run.
+
+[[tests]]
+name = "timeit_stage_module_that_does_not_parse_through_a_module_root"
+desc = "--timeit of bad::report with the module found through -I: the iteration fails with InvalidPassParameter naming the module, not an exception out of the process."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/step.cml"
+args = ["--error-format", "text", "-I", "mods", "--timeit", "bad::report/1", "${case}"]
+expect_exit = 1
+expect_output_contains = ["[timeit] 1/1 pass=bad::report failed", "InvalidPassParameter", "its library 'bad' does not compile."]
+expect_output_not_contains = ["terminate called", "std::runtime_error"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -895,10 +963,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "regions_after_inlining"
-desc = "After std::opt::inline, body nodes are Root, inlined nodes are in Inline regions with a parent, and an Arm region is kept."
+desc = "After std::cxx::inline, body nodes are Root, inlined nodes are in Inline regions with a parent, and an Arm region is kept."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/region_target.cml"
-args = ["${case}", "std::opt::inline", "regionprobe::report", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "regionprobe::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "2\n2\n0\n2\n7\n6\n0\n7\n10\n4\n5\n10\n3\n"
 timeout_ms = 20000
@@ -927,3 +995,15 @@ args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"graph:eq\"", "label=\":op/not\""]
 expect_output_not_contains = ["graph:ne"]
+
+[[tests]]
+name = "draft_id_is_refused_and_the_published_id_is_a_position"
+desc = "A node of a draft has no canonical number, and `id` refuses rather than answer the place the node holds in the draft -- that place is the order the nodes were made in, and the commit replaces it, so an answer there is a number of the right shape and the wrong value (design principles 9.5). The refused reading is a runtime fault, `RuntimeDiag::InvalidArgument` of `graph.id`, and its message is the answer: it says the node belongs to a draft, that a draft has no canonical number, and that `creation_id` is the reading for the draft's own order. The same body with the commit in it reads `id` of every node of the published graph, and the numbers are the positions in `nodes` -- the definition of the reading, checked as `0..n-1` and not sampled."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/graph_draft_id.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["Invalid argument of 'graph.id'", "a draft has no canonical number", "creation_id", "reading `id` of a draft's node is refused, and the refusal says why: PASS", "reading `id` after the commit is the position in `nodes`: PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

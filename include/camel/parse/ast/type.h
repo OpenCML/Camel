@@ -79,8 +79,7 @@ class NullableTypeLoad : public TypeLoad {
 
 /// The stream suffix `T..` (design principles 5.4): the elements of `T` that arrive one after
 /// another. One mark among the postfix marks, read left to right with `?` and `!`: `T?..` is
-/// the stream of `T?`, `T..?` is the possibly absent stream (the rule of
-/// 2026-10-24).
+/// the stream of `T?`, `T..?` is the possibly absent stream.
 class StreamTypeLoad : public TypeLoad {
   public:
     StreamTypeLoad() : TypeLoad(TypeType::Stream) {}
@@ -127,8 +126,8 @@ struct DimGroup {
     std::vector<node_ptr_t> extents;
     DimPack pack = DimPack::None;
     std::string packName;
-    size_t packItem  = 0;
-    size_t itemCount = 0;
+    size_t packItem   = 0;
+    size_t itemCount  = 0;
     bool packRepeated = false;
 
     bool empty() const { return extents.empty() && pack == DimPack::None; }
@@ -193,9 +192,7 @@ class FuncTypeLoad : public TypeLoad {
     /// `func zip::<..A>(..xs: ..A): (..ElementOf<A>)[]`. Empty for an ordinary function type and
     /// for a declaration that is not generic.
     const std::vector<TypeParam> &typeParams() const { return typeParams_; }
-    void setTypeParams(std::vector<TypeParam> typeParams) {
-        typeParams_ = std::move(typeParams);
-    }
+    void setTypeParams(std::vector<TypeParam> typeParams) { typeParams_ = std::move(typeParams); }
     /// The same, for a head written without a pack (`rule`, `fact` and a pass declare single
     /// type parameters only).
     void setTypeParamNames(std::vector<std::string> names) {
@@ -238,25 +235,44 @@ class FuncTypeLoad : public TypeLoad {
 };
 
 /// The resources a function type publishes (design effects plan 3.1): `pure` says a call
-/// touches none, `uses x, fs` names the parameters and the resources it touches. Attached to the
-/// function type it is written after; a declaration's clause is attached to the function type of
-/// its signature, so a body-less declaration and a function type carry the same thing.
+/// touches none, `uses x, var fs` names the parameters and the resources it touches. Attached to
+/// the function type it is written after; a declaration's clause is attached to the function type
+/// of its signature, so a body-less declaration and a function type carry the same thing.
 class ResourceClauseLoad : public Load {
   public:
     ResourceClauseLoad() : Load(LoadType::ResourceClause) {}
 
+    /// One resource of the clause, as it was written (design principles 3.3): an entry without
+    /// `var` reads the resource and one with `var` writes it, the way a parameter is written.
+    /// `range` is where the entry stands, so the report that refuses it can offer the text to add.
+    struct Uses {
+        Reference resource;
+        bool write = false;
+        camel::core::error::TokenRange range;
+    };
+
     bool pure() const { return pure_; }
     void setPure(bool pure) { pure_ = pure; }
 
-    void addUse(Reference use) { uses_.push_back(std::move(use)); }
-    const std::vector<Reference> &uses() const { return uses_; }
+    /// Whether the clause writes `spelling`: the body may read the spelling of the program -- a
+    /// name, a source position, creation order and creation numbers, the text a node shows
+    /// (design principles 9.5). It is written in the same clause as `pure`/`uses` and carried by
+    /// the same type, so a declaration that does not write it promises its body reads none.
+    bool spelling() const { return spelling_; }
+    void setSpelling(bool spelling) { spelling_ = spelling; }
+
+    void addUse(Reference use, bool write, camel::core::error::TokenRange range) {
+        uses_.push_back(Uses{std::move(use), write, range});
+    }
+    const std::vector<Uses> &uses() const { return uses_; }
 
     const std::string toString() const override;
     const std::string geneCode() const override;
 
   private:
     bool pure_ = false;
-    std::vector<Reference> uses_;
+    bool spelling_ = false;
+    std::vector<Uses> uses_;
 };
 
 class InferTypeLoad : public TypeLoad {

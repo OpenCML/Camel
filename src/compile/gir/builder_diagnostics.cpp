@@ -14,10 +14,12 @@
 #include "camel/core/data/composite/array.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/region_roots.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -137,7 +139,14 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
     const std::set<node_handle_t> written      = capturedWritesOf(callee.get());
     std::vector<CapturedUse> uses;
     for (node_handle_t origin : variables) {
-        // The callee's variable, as the current graph sees it (see captureInto).
+        // The callee's variable, as the current graph sees it (see captureInto) -- but only when
+        // this graph is where that variable lives or lives inside it. A callee reached through a
+        // value was made somewhere else, and the cells of its captures travel inside that value:
+        // they are not this graph's to name, and naming them here is what a capture it cannot
+        // make is. A callee of an enclosing graph is unaffected, which is every direct call.
+        if (!enclosesOrigin(origin)) {
+            continue;
+        }
         node_handle_t variable = captureInto(currGraph_, origin, captureNameOf(origin, ""));
         uses.push_back({variable, origin, written.contains(origin)});
     }
@@ -146,7 +155,10 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
 
 void Builder::reportIgnoredCapturedWrites() {
     for (const PendingIgnoredWrite &pending : unit_->pendingIgnoredWrites) {
-        std::set<node_handle_t> written = pending.written;
+        // A write to a variable the callee captured and did not hand back at the call. A `var`
+        // write is not an effect (design principles 3.1), so `pending.variables` names a variable
+        // only when one of the bodies this statement runs writes it.
+        std::set<node_handle_t> written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
         }
@@ -175,25 +187,15 @@ void Builder::reportIgnoredCapturedWrites() {
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
     // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
-    // that names a resource means the call touches it, `pure` means it touches nothing, and a
-    // `var` parameter is a resource by itself, so a signature that leaves it out is still read as
-    // one.
+    // that names a resource means the call touches it, `pure` means it touches nothing.
+    // A `var` parameter is not an effect of the call (design principles 3.1 and 3.5):
+    // what it writes is a value passed in and handed back, written into the caller's
+    // cell where the call stands, so the shape of a signature says nothing about anything outside
+    // the program. An assignment is that shape as well -- its first parameter is a `var` cell --
+    // and it is declared state-only for the same reason (builtin_semantics.cpp).
     const auto clauseSaysEffect = [](const FunctionType *func) {
         return func->resources().mode == sem::ResourceSignature::Mode::Concrete &&
                !func->resources().pure();
-    };
-    const auto shapeSaysEffect = [](const FunctionType *func) {
-        for (size_t i = 0; i < func->normTypesCount(); ++i) {
-            if (func->normIsVarAt(i)) {
-                return true;
-            }
-        }
-        for (size_t i = 0; i < func->withTypesCount(); ++i) {
-            if (func->withIsVarAt(i)) {
-                return true;
-            }
-        }
-        return false;
     };
     const auto calleeOf = [&](node_handle_t func) { return graph->funcTarget(func); };
     switch (nodeKindOf(node)) {
@@ -210,7 +212,27 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         if (op->uri() == ":var/after") {
             return false;
         }
-        return camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
+        // A higher-order operator's accesses are the function operand's (design principles 3.3):
+        // the same reading the Call case below makes of a value's type, at the
+        // operand the declaration names. A value that is not there, or a type that writes no
+        // clause, keeps the answer the table gives -- a `map` over a pure function is not an
+        // effect, and one over a function that prints is.
+        const auto &table = camel::core::OperatorTable::instance();
+        const auto id     = table.lookup(op->uri());
+        if (id.has_value()) {
+            if (const auto *facts = table.semantics(*id);
+                facts != nullptr && facts->resources && facts->resources->functionOperand) {
+                // The clause at the operand the declaration names, read through the builder's one
+                // lookup (`functionValueAt`): the same lookup, and the same function, the Call case
+                // below makes for a call's value.
+                const auto at = functionValueAt(
+                    graph->transaction(), nodeIdOf(node), *facts->resources->functionOperand);
+                if (at.has_value() && at->site.clause.has_value()) {
+                    return !at->site.clause->pure();
+                }
+            }
+        }
+        return table.hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
         // A call of a function this compiler has a body for is judged by that body first
@@ -225,23 +247,25 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             return true;
         }
         const FunctionType *type = callee->funcType();
-        return type != nullptr && (shapeSaysEffect(type) || clauseSaysEffect(type));
+        return type != nullptr && clauseSaysEffect(type);
     }
     case runtime::GCNodeKind::Call: {
         // A call through a function value: the value's type is all there is to read at this call,
         // and one that writes no clause promises nothing -- what it reaches is fixed by the
         // instantiation, which may write a cell or print -- so it is read conservatively. Only a
-        // type that promises the empty set says the call is not an effect.
-        const auto callee = withInputsOf(node);
-        if (callee.empty()) {
-            return false;
+        // type that promises the empty set says the call is not an effect. The clause comes from
+        // the builder's one lookup (`functionValueAt`), the same reading the ordering and the
+        // runtime's footprint make of the same value.
+        const auto at = functionValueAt(
+            graph->transaction(), nodeIdOf(node),
+            camel::core::sem::ResourceBinding{.kind = sem::ResourceBinding::Kind::With});
+        if (!at.has_value()) {
+            return false; // no value at `with` 0, or a value that is not a function
         }
-        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(callee[0]));
-        if (type == nullptr || type->code() != TypeCode::Function) {
-            return false;
+        if (!at->site.clause.has_value()) {
+            return true; // no clause written: the conservative answer, an effect
         }
-        const auto *func = tt::as_ptr<FunctionType>(type);
-        return !func->resources().pure() || shapeSaysEffect(func);
+        return !at->site.clause->pure();
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
@@ -262,8 +286,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Join: {
         // The branch is an effect when what an arm gives depends on one inside the arm.
-        const auto &draft                = graph->transaction().graph();
-        const draft_node_ref_t join      = nodeIdOf(node);
+        const auto &draft           = graph->transaction().graph();
+        const draft_node_ref_t join = nodeIdOf(node);
         const auto *body =
             reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
         std::vector<uint32_t> arms;
@@ -305,6 +329,699 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
 }
 
+bool Builder::callIsChainStatement(node_handle_t node) {
+    // What a `sync` block's chain carries is decided by what a call runs (design principles 3.4:
+    // "调用按被调函数推出的事实判：函数体含可能出故障的计算、或函数是递归的（递归可能超过深度上限）
+    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that
+    // is not pure, a cast that may fail, a branch or a loop that carries a region.
+    if (!runtime::isChainStatement(*nodeDraftOf(node), nodeIdOf(node))) {
+        return false;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Func)) {
+        // An effect of its own, a computation that may fault, or a call through a function value:
+        // the last one runs something no body of this program names, and nothing says it cannot
+        // fault.
+        return true;
+    }
+    if (isEffectNode(currGraph_.get(), node)) {
+        // The declaration is the whole truth a call site reads (design principles 3.3): a clause
+        // that names a resource, or a `var` parameter, says that a call of this reaches something
+        // which is not the graph -- and the body may well touch nothing, which is the promise the
+        // clause makes to its callers. `test/cases/effects/declared.cml` is that shape: `consume`
+        // writes the handle its clause names and its body only returns 0.
+        return true;
+    }
+    const compile_graph_ptr_t callee = nodeGraphOf(node)->funcTarget(node);
+    return callee == nullptr || !calleeIsFreelyArranged(callee.get());
+}
+
+bool Builder::calleeIsFreelyArranged(DraftGraphBuilder *callee) {
+    const auto known = freelyArrangedGraphs_.find(callee);
+    if (known != freelyArrangedGraphs_.end()) {
+        return known->second;
+    }
+    const auto isBuilt = [&](DraftGraphBuilder *graph) {
+        const auto state = bodyStates_.find(graph);
+        return state != bodyStates_.end() && state->second == BodyState::Built;
+    };
+    // A body that is not finished holds code this walk cannot see yet, so nothing is claimed about
+    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches
+    // a second time is one that reaches itself: that is a recursion, which may go deeper than the
+    // depth limit, so it is a call that may fault (design principles 3.4). Neither answer is
+    // memoized -- the first is about a body that is not finished, and the second is about this walk
+    // and not about the graph it names.
+    if (!isBuilt(callee) || !freelyArrangedActive_.insert(callee).second) {
+        return false;
+    }
+    const bool free = bodyHoldsNoChainStatement(callee);
+    freelyArrangedActive_.erase(callee);
+    freelyArrangedGraphs_[callee] = free;
+    return free;
+}
+
+bool Builder::bodyHoldsNoChainStatement(DraftGraphBuilder *graph) {
+    const auto &draft = graph->transaction().graph();
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        switch (nodeKindOf(node)) {
+        case runtime::GCNodeKind::Func: {
+            // A direct call: the body it names is what this call runs, so the walk follows it.
+            const compile_graph_ptr_t callee = graph->funcTarget(node);
+            if (callee == nullptr || !calleeIsFreelyArranged(callee.get())) {
+                return false;
+            }
+            break;
+        }
+        case runtime::GCNodeKind::Call:
+            // A call through a function value: whose body it runs is not known here, and nothing
+            // says that body cannot fault or reach a resource.
+            return false;
+        case runtime::GCNodeKind::Loop:
+            // A loop may run longer than the depth limit and may fault (camel/runtime/graph.cpp,
+            // `effectSummaryOf`): nothing says it does not, so a body holding one is not arranged
+            // freely. Its parts are nodes of this same draft and are walked as they come.
+            return false;
+        case runtime::GCNodeKind::Brch:
+        case runtime::GCNodeKind::Join:
+            // A branch as a value: choosing an arm is nothing to keep. What the arms hold is nodes
+            // of this draft, and they are walked as they come.
+            break;
+        case runtime::GCNodeKind::Gate:
+            // A GATE computes nothing and cannot fault. Where one stands, the block that wrote it
+            // had a statement on its chain, and that statement is a node of this draft.
+            break;
+        case runtime::GCNodeKind::Data:
+        case runtime::GCNodeKind::Port:
+        case runtime::GCNodeKind::Copy:
+        case runtime::GCNodeKind::Fill:
+        case runtime::GCNodeKind::Accs:
+            // A constant, a port, a copy, a closure value, a field read: computed from what it
+            // reads, with nothing to fail and nothing to order.
+            break;
+        default:
+            // An operator or a conversion, asked exactly as the chain asks it: an effect, a
+            // computation that may fault, or (for a cast) a value check that cannot be moved.
+            if (runtime::isChainStatement(draft, id)) {
+                return false;
+            }
+            break;
+        }
+    }
+    return true;
+}
+
+bool Builder::writesForRegionOf(DraftGraphBuilder *graph, node_handle_t node) const {
+    const runtime::gc_node_ref_t id = nodeIdOf(node);
+    if (const auto known = regionWrites_.find(id); known != regionWrites_.end()) {
+        return known->second;
+    }
+    // The answer is the node's *effect as it is declared or inferred*, never the operator's name
+    // (an operator, a call, a branch and a loop alike), and it is
+    // asked of the node's own kind, because the three kinds answer it from different places. Read
+    // once per node: the tables do not change while a body is laid out.
+    const auto answer = [&](bool writes) {
+        regionWrites_.emplace(id, writes);
+        return writes;
+    };
+    switch (nodeKindOf(node)) {
+    case runtime::GCNodeKind::Oper: {
+        // The operator's declaration, which is the effect inference for an operator: what its
+        // access list itemizes, and the conservative reading for one that declares an effect and
+        // itemizes nothing (`OperatorSemantics::writesForTheRegion`, and the same call the
+        // withdrawn region roots made -- reading it from the *body's promise* instead would answer
+        // the wrong question: `footprintOf(graph, id)` places an access only when the written value
+        // is one of the body's own ports, so a write to a box the body computed would be missed,
+        // and `set` on an array element is exactly that).
+        const auto &op = graph->operTarget(node);
+        return answer(
+            op != nullptr && camel::core::OperatorTable::instance().writesForTheRegion(op->uri()));
+    }
+    case runtime::GCNodeKind::Func:
+    case runtime::GCNodeKind::Call: {
+        // A call is answered by the **signature of the function it calls** -- the clause it wrote,
+        // or, when it wrote none, the set its body was measured to reach (design principles 3.3;
+        // the same reading `reachOfFunc` takes).
+        // The *body's footprint* would answer a different question: `footprintOf`
+        // places an access only when the written value is one of this body's own ports, so a call
+        // that writes a box this body computed reads as writing nothing -- `state::set(c, 7)` on a
+        // `let c = state::ref(0)` is exactly that (`test/cases/compile/ref/refwrite_shapes.cml`).
+        const runtime::GraphTransaction &transaction = graph->transaction();
+        const auto &draft                            = transaction.graph();
+        compile_graph_ptr_t callee;
+        if (graph->hasFuncTarget(draft.ref(id))) {
+            callee = graph->funcTarget(draft.ref(id));
+        }
+        if (callee != nullptr && callee->funcType() != nullptr) {
+            const auto &declared = callee->funcType()->resources();
+            if (declared.mode == camel::core::sem::ResourceSignature::Mode::Concrete) {
+                return answer(camel::core::sem::writesForTheRegion(declared));
+            }
+            // A signature that is not concrete -- no clause at all, or one a type parameter leaves
+            // open -- is read conservatively, and *only* from the declaration: the set the callee's
+            // body was measured to reach (`inferredResources_`) is the link step's answer and is
+            // not there yet for a module that has not been built, so reading it here made the same
+            // program lay different graphs depending on the order the modules loaded
+            // (`perf_fib_smoke`: the summary line `...->format<...>->println` printed or did not,
+            // and the 20 rounds and the summary were 21 lines in one run and 20 in the next).
+            // Design principles 3.3 puts the conservative reading first, and it is deterministic.
+            return answer(true);
+        }
+        const auto reach = footprintOf(graph, id);
+        // A call whose callee this builder never registered is a node a **rewrite** made; the
+        // footprint of the body it stands in cannot place its accesses (they are the callee's), so
+        // the conservative reading is taken rather than "writes nothing" (design principles 3.3:
+        // an operator nobody declared is read conservatively). A module's body-less kernel is this
+        // shape, and `state::set` on a box is a write of a handle -- a write of the region it is
+        // written in (`test/cases/compile/ref/refwrite_shapes.cml`, line 53).
+        return answer(true);
+    }
+    default:
+        // A branch and a loop are writes of the region they are written in when the region *they
+        // own* writes. That is not a fact about this node's own operands, so it is settled over the
+        // region table once the whole body has been collected (`layRegionWriteEdges`), not here.
+        return answer(false);
+    }
+}
+
+void Builder::layRegionWriteEdges() {
+    // Each region's exit holds one `GATE` (design principles 3.1): its first input is the value
+    // the region hands out, and the rest are the nodes of the region that are inferred to write an
+    // external resource or a handle (an operator, a call, a branch and a loop alike), whether or
+    // not anyone reads their values; no edge joins the writes to one another.
+    //
+    // So what is laid here is a GATE, not a fan-in of sync edges: the exit receives the writes as
+    // **normal inputs** and nothing joins the writes to one another. That is what makes the
+    // promise keepable at all -- a node has one sync predecessor (`GraphDraft::setSyncInputs`
+    // refuses two), so an exit cannot receive one edge per statement the region owes, while a GATE
+    // holds as many inputs as it likes.
+    //
+    // Three rules, and they are the whole of what this lays:
+    //
+    //   * every region gets **one** GATE: its `norm` is the value the region hands out first and
+    //     the region's writes after it, in that order;
+    //   * the writes are *not* ordered among themselves -- no sync edge joins two of them, and no
+    //     sync predecessor is invented. The order of two writes on one resource is what
+    //     `orderEffectsOnOneResource` lays, by the order they are written in, and the order of two
+    //     writes on two resources is nothing the graph has to keep(that is
+    //     `std::gir` evidence: swapping a `println` with a write to a file leaves the graph the
+    //     same);
+    //   * nothing searches for another root afterwards. The graph holds no rule about regions and
+    //     writes: a GATE's inputs are read by it like any other input, so the walks that ask what
+    //     runs (`computeExecutionOrder`, `liveNodesOf`, `reportDroppedEffects`) reach the writes
+    //     through ordinary edges and derive nothing (design principles 9.7).
+    //
+    // What the GATE is *for* is the half no edge could carry: the value a region hands out is read
+    // by its owner (the JOIN's `with` input, the LOOP's), so a write hung on that value is live
+    // exactly when the owner is -- and a write inside an arm or a loop body is now live because the
+    // arm or the body hands its value out through a GATE that reads it.
+    //
+    // The exit is `GCRegion::result` for a region, and the graph's own `exit`/`output`/`return`
+    // node for the body (region 0 has no result: `setRegionResult` takes only ids above 0). A
+    // region whose GATE cannot be reached -- no result, no owner that reads it, no JOIN to wait on
+    // it -- is left as it is rather than given a dead GATE: an unreachable GATE would be a write
+    // carried by nothing, which is worse than the reading it replaces because it looks like a
+    // carrier.
+    //
+    // `exit` first, and the three are not interchangeable: `output` and `exit` are the node the
+    // graph's execution ends at, which is what a write is carried by, while `return` is the node a
+    // *value* is read from -- for a body whose statements end in a value nobody returns, `return`
+    // names a node of another type (`test/cases/undefined/chain_place_after_a_branch.cml`).
+    regionWrites_.clear();
+    for (const ModuleUnit *unit : unitOrder_) {
+        for (const compile_graph_ptr_t &graph : unit->builtBodies) {
+            regionWrites_.clear();
+            DraftGraphBuilder *body = graph.get();
+            auto &draft             = body->transaction().edit();
+            const auto exitOf       = [&draft](uint32_t region) -> runtime::gc_node_ref_t {
+                if (region == 0) {
+                    for (runtime::gc_node_ref_t root :
+                         {draft.exitNode(), draft.outputNode(), draft.returnNode()}) {
+                        if (root != runtime::kInvalidNodeRef) {
+                            return root;
+                        }
+                    }
+                    return runtime::kInvalidNodeRef;
+                }
+                return region < draft.regionCount() ? draft.region(region).result
+                                                    : runtime::kInvalidNodeRef;
+            };
+            // The exit is a node of the region it is the exit of. The body is region 0, and a node
+            // of an arm, of a loop's parts or of a block is not in the body: only a node written
+            // there is.
+            //
+            // The one shape that is not a node *of* its region is a region's own `result`: what an
+            // arm hands out need not be built inside the arm. A constant the arm ends with is
+            // placed in the region that encloses it (the arm's `result` names it all the same), and
+            // the write rule is about the value the reader takes, not about where the value was
+            // built -- `test/cases/compile/ref/refwrite_shapes.cml` writes into a box and then
+            // hands out a `1`, and refusing that exit left the write carried by nothing.
+            const auto exitInRegion = [&draft](uint32_t region, runtime::gc_node_ref_t exit) {
+                if (exit == runtime::kInvalidNodeRef || !draft.alive(exit)) {
+                    return false;
+                }
+                if (region != 0 && region < draft.regionCount() &&
+                    draft.region(region).result == exit) {
+                    return true;
+                }
+                const uint32_t at = draft.nodeRegion(exit);
+                return region == 0 ? at == 0 : (at != 0 && draft.regionWithin(at, region));
+            };
+            // Whether `from` reaches `target` through the edges that carry "used" -- data, `with`,
+            // control and sync: the reading is "`target` is upstream of `from`", because the walk
+            // follows inputs.
+            const auto reachesBack =
+                [&draft](runtime::gc_node_ref_t from, runtime::gc_node_ref_t target) {
+                    std::vector<runtime::gc_node_ref_t> work{from};
+                    std::unordered_set<runtime::gc_node_ref_t> seen{from};
+                    while (!work.empty()) {
+                        const runtime::gc_node_ref_t at = work.back();
+                        work.pop_back();
+                        if (at == target) {
+                            return true;
+                        }
+                        for (std::span<const runtime::gc_node_ref_t> inputs :
+                             {draft.normInputsOf(at),
+                              draft.withInputsOf(at),
+                              draft.ctrlInputsOf(at),
+                              draft.syncInputsOf(at)}) {
+                            for (runtime::gc_node_ref_t input : inputs) {
+                                if (seen.insert(input).second) {
+                                    work.push_back(input);
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                };
+            // Whether the statement *writes* the value the region's exit names -- the box a region
+            // hands out, where the statement is the write into it (the operator's declaration says
+            // which operand of it, if any, the operator writes in place).
+            //
+            // It is the one shape the "the statement reads the exit" reading below must not leave
+            // out. A write into the box a region hands out reads that box, so the reading sees the
+            // statement and the exit as the same value and concludes the box carries the write --
+            // which is false: the box carries its own value, the write changes what it holds, and
+            // no edge says so. `test/cases/compile/ref/refwrite_shapes.cml`'s `r6` shape is that
+            // body (`return c` after `state::set(c, 3)`): it answered 0, the value the box started
+            // with, because the write was left on no chain and no GATE read it.
+            const auto writesTheExit = [&draft, body](
+                                           runtime::gc_node_ref_t statement,
+                                           runtime::gc_node_ref_t exit) {
+                if (nodeKindOf(draft.ref(statement)) != runtime::GCNodeKind::Oper) {
+                    return false;
+                }
+                const auto &op = body->operTarget(draft.ref(statement));
+                if (op == nullptr) {
+                    return false;
+                }
+                const auto &table = camel::core::OperatorTable::instance();
+                const auto oper   = table.lookup(op->uri());
+                if (!oper.has_value()) {
+                    return false;
+                }
+                for (const auto &[isWith, inputs] :
+                     {std::pair{false, draft.normInputsOf(statement)},
+                      std::pair{true, draft.withInputsOf(statement)}}) {
+                    for (size_t index = 0; index < inputs.size(); ++index) {
+                        if (inputs[index] == exit && table.writesOperand(*oper, isWith, index)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            // Whether the value the region hands out is the one its reader takes. An arm is read
+            // by the JOIN that closes its branch, and the JOIN takes the arm's `with` slot: a
+            // branch whose arms write one `var` puts the value that write stored in that slot
+            // instead of the arm's own result (`Builder::buildBranch`, the carried write), and then
+            // the arm's exit -- the statement the arm ends with, or the GATE the block hands its
+            // value out through -- is read by nothing. Everything below that says "it runs with the
+            // exit" is then false: the exit does not run, so nothing behind it does.
+            const auto readerTakesExit = [&draft](
+                                             uint32_t region, runtime::gc_node_ref_t exit) {
+                if (region == 0 || region >= draft.regionCount() ||
+                    draft.region(region).kind != runtime::GCRegionKind::Arm) {
+                    return true;
+                }
+                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
+                if (owner == runtime::kInvalidNodeRef || !draft.alive(owner) ||
+                    nodeKindOf(draft.ref(owner)) != runtime::GCNodeKind::Brch) {
+                    return true;
+                }
+                const runtime::gc_node_ref_t join = runtime::branchJoinOf(draft, owner);
+                if (join == runtime::kInvalidNodeRef || !draft.alive(join)) {
+                    return true;
+                }
+                const auto slots    = draft.withInputsOf(join);
+                const uint32_t slot = draft.region(region).index;
+                if (slot >= slots.size() || !draft.alive(slots[slot])) {
+                    return true;
+                }
+                return slots[slot] == exit;
+            };
+            // What a region owes, per region, in node order: every statement in it that writes,
+            // whatever else the statement already waits on.
+            //
+            // Whether the region runs is *not* asked here (design principles 3.1):
+            // the writes are the front end's promise, and the
+            // GATE below is what makes them live. Reading
+            // `liveNodesOf` here would make the promise conditional on a liveness walk that runs
+            // before the GATE exists, and then a body whose writes are not (yet) live would collect
+            // none of them and no GATE would ever be built.
+            std::unordered_map<uint32_t, std::vector<runtime::gc_node_ref_t>> chains;
+            for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                if (!draft.alive(id)) {
+                    continue;
+                }
+                const auto ref = static_cast<runtime::gc_node_ref_t>(id);
+                // A branch written as a statement is a statement of the region it is written in,
+                // and it joins that region's chain as the JOIN that closes it: the BRCH stands
+                // outside its arms, so an edge from it would cross the branch's cut (the branch-arm
+                // invariant refuses that), while the JOIN is a node of the region and runs once the
+                // arm that is taken is done -- which is what orders the statements after the branch
+                // behind it (`region_roots.branch_statement_kinds`: the box an arm writes must hold
+                // its value by the time the next statement reads it).
+                runtime::gc_node_ref_t statement = runtime::kInvalidNodeRef;
+                if (nodeKindOf(draft.ref(id)) == runtime::GCNodeKind::Brch) {
+                    // A branch that joins no value: the JOIN that closes it has no value type, so
+                    // the branch is a statement of the region it is written in (design principles
+                    // 3.1, 3.7). A branch whose JOIN joins a value nobody reads is not this shape
+                    // (`region_roots.branch_value_dropped`), which is why the test is on the JOIN.
+                    const runtime::gc_node_ref_t join = runtime::branchJoinOf(draft, ref);
+                    if (join != runtime::kInvalidNodeRef && draft.alive(join) &&
+                        isVoidGraphExitType(nodeTypeOf(draft.ref(join)))) {
+                        statement = join;
+                    }
+                } else if (writesForRegionOf(body, draft.ref(id))) {
+                    statement = ref;
+                }
+                if (statement == runtime::kInvalidNodeRef || !draft.alive(statement)) {
+                    continue;
+                }
+                const uint32_t region = runtime::decidingRegionOfDraft(draft, statement);
+                const runtime::gc_node_ref_t exit = exitOf(region);
+                // A statement that only *reads* the exit runs whenever the exit does; when the
+                // reader takes another value the exit runs for no one, so the statement is hung
+                // here like any other.
+                const bool exitIsRead =
+                    exit != runtime::kInvalidNodeRef && readerTakesExit(region, exit);
+                if (exit == runtime::kInvalidNodeRef || (exit == statement && exitIsRead)) {
+                    continue; // a write that is what the region hands out already runs with it
+                }
+                if (!exitInRegion(region, exit)) {
+                    continue; // the exit is not a node of this region: the seed answers this write
+                }
+                // A statement already on its region's chain is hung on the exit anyway. "It is
+                // already carried, so it needs no second reason to run" is true of the write
+                // **inside a region that runs** and false of the region itself: a `sync` block
+                // whose value nobody takes runs only because something reads what it holds, and the
+                // something is this GATE. Hanging every write, chained or not, is also what
+                // the design asks for: the region's exit reads the region's writes
+                // (`test/ cases/opt/e9/rc23_seed429_sync_arm.cml`: `q(5)` is the last statement of
+                // the block `case _ => sync { q(5); return 0; }`, and with it hung on the exit the
+                // block's own GATE is read, the arm runs and `q(5)` prints).
+                // A statement that reads the exit is not hung a second time when its own value is
+                // read: the exit is a value it reads, so it runs whenever its reader runs, and its
+                // reader is behind the exit -- an edge from it would close a cycle the graph
+                // refuses, and a second reason for it to run would say nothing new. That reading
+                // holds only while the exit runs (`exitIsRead`) and only while something takes the
+                // statement's value (`normUsersOf`): a statement nobody reads runs for no one, and
+                // then the exit is not what carries it. `arm_read`'s printed form is that shape --
+                // `{ let cml1 = t + 1; t = cml1; report('int', before, cml1); cml1 }`, where the
+                // `report` call takes the value the arm hands out and nothing takes the call: the
+                // call was left off the arm's exit and the printed program printed one line of the
+                // two the origin printed.
+                //
+                // A write into the exit is the exception, and it is the whole reason this reading
+                // is asked rather than assumed: the box a region hands out is a value the write
+                // *changes*, not one it is behind, so the box carries nothing of it
+                // (`writesTheExit` above, and `refwrite_shapes.cml`'s `r6`).
+                if (exitIsRead && reachesBack(statement, exit) &&
+                    !writesTheExit(statement, exit) &&
+                    (!draft.normUsersOf(statement).empty() ||
+                     !draft.withUsersOf(statement).empty())) {
+                    continue;
+                }
+                chains[region].push_back(statement);
+            }
+            // A branch or a loop written in a region is one of that region's writes when the region
+            // it owns writes (operators, calls, branches and loops alike).
+            // The GATE inside the arm carries the arm's write but cannot make the arm run --
+            // an arm runs because its owner runs -- so what makes it run is the owner being one of
+            // the enclosing region's GATE's inputs. Walked to a fixpoint, because an arm may hold a
+            // loop whose body writes, and then the loop's owner is a write of the arm.
+            const auto markOwnerOf = [&draft, &chains](uint32_t region) {
+                if (region == 0 || region >= draft.regionCount()) {
+                    return false;
+                }
+                const runtime::gc_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, region);
+                if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
+                    return false;
+                }
+                const runtime::DraftNodeHeader *header = draft.header(owner);
+                if (header == nullptr) {
+                    return false;
+                }
+                // The JOIN and not the BRCH, for the reason the collection above names: the BRCH
+                // stands outside its arms and an edge that names it crosses the branch's cut, while
+                // the JOIN is a node of the region the branch is written in and runs once the arm
+                // that is taken is done.
+                runtime::gc_node_ref_t statement = runtime::kInvalidNodeRef;
+                if (header->kind == runtime::GCNodeKind::Brch) {
+                    statement = runtime::branchJoinOf(draft, owner);
+                } else if (header->kind == runtime::GCNodeKind::Loop) {
+                    statement = owner;
+                }
+                if (statement == runtime::kInvalidNodeRef || !draft.alive(statement)) {
+                    return false;
+                }
+                std::vector<runtime::gc_node_ref_t> &bucket =
+                    chains[runtime::decidingRegionOfDraft(draft, statement)];
+                if (std::ranges::find(bucket, statement) != bucket.end()) {
+                    return false;
+                }
+                bucket.push_back(statement);
+                return true;
+            };
+            for (bool grew = true; grew;) {
+                grew = false;
+                std::vector<uint32_t> owing;
+                owing.reserve(chains.size());
+                for (const auto &[region, writes] : chains) {
+                    if (!writes.empty()) {
+                        owing.push_back(region);
+                    }
+                }
+                for (uint32_t region : owing) {
+                    grew = markOwnerOf(region) || grew;
+                }
+            }
+            // One GATE, one region: its `norm` is the value the region hands out first and the
+            // region's writes after it, in that order, with no edge between the writes (the
+            // author's "这些写之间不加边"). Nothing is invented as a sync predecessor; an order
+            // that has to be kept is `orderEffectsOnOneResource`'s, laid by the order the
+            // statements are written in.
+            //
+            // The GATE has to be reachable from the graph's exit, or it carries nothing: the
+            // execution walk refuses a region whose result nothing the exit depends on reads, and a
+            // write hanging off an unreachable GATE would be exactly the silent effect the promise
+            // is about. So the value the region hands out is re-pointed at the GATE -- the owner's
+            // input where the owner reads it (the JOIN's `with`, the LOOP's), and the JOIN's place
+            // in its block's chain where it does not (a branch written as a statement joins no
+            // value). A region whose GATE can be made reachable neither way is left as it was.
+            const auto gateOf =
+                [&](uint32_t region,
+                    const std::vector<runtime::gc_node_ref_t> &writes) -> runtime::gc_node_ref_t {
+                const runtime::gc_node_ref_t result = exitOf(region);
+                if (result == runtime::kInvalidNodeRef || !draft.alive(result)) {
+                    return runtime::kInvalidNodeRef;
+                }
+                // The value the region hands out is not always the node the region's own exit
+                // names. A branch carries a `var` its arms write as the branch's value:
+                // the arm `then sync { x = 3; x = 4; println(1); println(2) }` hands the JOIN the
+                // value the write stored, while its own exit is the `sync` block's GATE over the
+                // block's tail
+                // -- the second `println`, whose type is `void`. The JOIN then reads the write's
+                // value and never the arm's exit, so the arm's statements would be hung on a node
+                // nothing reads (`test/cases/linear/runtime/order_edges_regions.cml`: the two
+                // prints did not run and the graph lost them). What the region hands out is what
+                // its reader takes from it -- for an arm, the JOIN's `with` slot of that arm -- and
+                // the GATE below forwards that value with the region's writes beside it, which is
+                // the very node the reader was reading.
+                runtime::gc_node_ref_t owner  = runtime::kInvalidNodeRef;
+                runtime::gc_node_ref_t join   = runtime::kInvalidNodeRef;
+                runtime::gc_node_ref_t reader = runtime::kInvalidNodeRef;
+                bool readerReadsGiven         = false;
+                runtime::gc_node_ref_t given  = result;
+                if (region != 0) {
+                    owner = runtime::decidingOwnerOfDraft(draft, region);
+                    if (owner == runtime::kInvalidNodeRef || !draft.alive(owner)) {
+                        return runtime::kInvalidNodeRef;
+                    }
+                    if (const runtime::DraftNodeHeader *header = draft.header(owner);
+                        header != nullptr && header->kind == runtime::GCNodeKind::Brch) {
+                        join = runtime::branchJoinOf(draft, owner);
+                        if (join != runtime::kInvalidNodeRef && !draft.alive(join)) {
+                            join = runtime::kInvalidNodeRef;
+                        }
+                    }
+                    reader           = join != runtime::kInvalidNodeRef ? join : owner;
+                    const auto reads = [&draft](
+                                           std::span<const runtime::gc_node_ref_t>
+                                               inputs,
+                                           runtime::gc_node_ref_t target) {
+                        return std::ranges::find(inputs, target) != inputs.end();
+                    };
+                    readerReadsGiven = reads(draft.normInputsOf(reader), given) ||
+                                       reads(draft.withInputsOf(reader), given);
+                    if (!readerReadsGiven && join != runtime::kInvalidNodeRef &&
+                        draft.region(region).kind == runtime::GCRegionKind::Arm) {
+                        // The arm's own slot: the arm reads nothing here, the JOIN does.
+                        const uint32_t index = draft.region(region).index;
+                        const auto slots     = draft.withInputsOf(join);
+                        if (index < slots.size() && slots[index] != runtime::kInvalidNodeRef &&
+                            draft.alive(slots[index]) &&
+                            nodeTypeOf(draft.ref(slots[index])) != nullptr) {
+                            given            = slots[index];
+                            readerReadsGiven = true; // the slot is the reader's own input
+                        }
+                    }
+                }
+                Type *type = nodeTypeOf(draft.ref(given));
+                if (type == nullptr) {
+                    return runtime::kInvalidNodeRef;
+                }
+                // The value first, then the writes. A write the value already reaches is upstream
+                // of the exit, so it runs whenever the exit does: adding it back would only draw a
+                // second edge to what is already behind the value.
+                std::vector<runtime::gc_node_ref_t> norm;
+                norm.push_back(given);
+                for (runtime::gc_node_ref_t write : writes) {
+                    if (!draft.alive(write) || std::ranges::find(norm, write) != norm.end()) {
+                        continue;
+                    }
+                    if (reachesBack(given, write)) {
+                        continue;
+                    }
+                    norm.push_back(write);
+                }
+                if (norm.size() < 2) {
+                    return runtime::kInvalidNodeRef; // nothing for the GATE to carry
+                }
+                if (region == 0) {
+                    // The body has no region result (`setRegionResult` takes only ids above 0): its
+                    // exit is the graph's own field, and every field naming the value the body
+                    // hands on moves to the GATE. The GATE forwards that value as its first input,
+                    // so the graph still returns the same value -- what changes is that the writes
+                    // are read by the node that returns it. A field that named another node stays
+                    // as it is: `exit`, `output` and `return` are three answers to three questions,
+                    // and the draft is the place that wrote them.
+                    const runtime::gc_node_ref_t gate = draft.addGateNode(type);
+                    draft.setNodeRegion(gate, 0);
+                    draft.setNormInputs(gate, norm);
+                    const runtime::GCReturnKind kind = draft.returnKind();
+                    if (draft.exitNode() == result) {
+                        draft.setExitNode(gate);
+                    }
+                    if (draft.outputNode() == result) {
+                        draft.setOutputNode(gate);
+                    }
+                    if (draft.returnNode() == result) {
+                        draft.setReturnNode(gate, kind);
+                    }
+                    return gate;
+                }
+                // Who reads what the region hands out. For an arm, the region's `owner` is the BRCH
+                // -- the node whose running is the arm's running -- while the value the arm hands
+                // out is read by the JOIN the branch closes, as that JOIN's `with` input: an arm's
+                // value is nobody's norm input and the BRCH's inputs are the condition. A GATE hung
+                // on the BRCH would therefore be read by nothing, and the arm's writes would be
+                // laid on a carrier that never runs; the reader asked here is the JOIN, which is
+                // the "the JOIN's `with`" this function's own rule names. The region's value is
+                // re-pointed at the GATE in that input, so the arm runs -- and its writes run --
+                // exactly when the value it hands out is read.
+                //
+                // The owner's inputs are read before the GATE is made: the spans look into the
+                // draft and a new node may move what they point at.
+                std::vector<runtime::gc_node_ref_t> readerNorm(
+                    draft.normInputsOf(reader).begin(),
+                    draft.normInputsOf(reader).end());
+                std::vector<runtime::gc_node_ref_t> readerWith(
+                    draft.withInputsOf(reader).begin(),
+                    draft.withInputsOf(reader).end());
+                std::vector<runtime::gc_node_ref_t> joinSync;
+                if (!readerReadsGiven) {
+                    if (join == runtime::kInvalidNodeRef) {
+                        return runtime::kInvalidNodeRef; // nothing would read the GATE
+                    }
+                    joinSync.assign(
+                        draft.syncInputsOf(join).begin(),
+                        draft.syncInputsOf(join).end());
+                }
+                const runtime::gc_node_ref_t gate = draft.addGateNode(type);
+                draft.setNodeRegion(gate, region);
+                draft.setNormInputs(gate, norm);
+                if (readerReadsGiven) {
+                    for (runtime::gc_node_ref_t &input : readerNorm) {
+                        if (input == given) {
+                            input = gate;
+                        }
+                    }
+                    for (runtime::gc_node_ref_t &input : readerWith) {
+                        if (input == given) {
+                            input = gate;
+                        }
+                    }
+                    draft.setNormInputs(reader, readerNorm);
+                    draft.setWithInputs(reader, readerWith);
+                } else {
+                    // Nothing reads what the region hands out, so there is no data input to
+                    // re-point and the GATE takes the JOIN's place in the block's chain instead:
+                    // the JOIN's old sync predecessor becomes the GATE's, and the JOIN waits on the
+                    // GATE. That is one order edge on a JOIN that joins no value, which carries no
+                    // type and is legal there. This is the `match` arm of
+                    // `test/cases/opt/e9/rc23_seed429_sync_arm.cml`, whose JOIN joins no value at
+                    // all.
+                    //
+                    // Legal only when the JOIN is in the GATE's own region: a sync edge that joins
+                    // two blocks is what the commit refuses ("sync edge 28 -> 5 joins two blocks:
+                    // 28 is in the block of region 2 and 5 in region 0"). A region whose exit
+                    // nothing of its own reads is then left as it is, like any other unreachable
+                    // GATE
+                    // (`reachesBack`, above), rather than given a carrier that crosses a block cut.
+                    if (draft.nodeRegion(join) != region) {
+                        return runtime::kInvalidNodeRef;
+                    }
+                    if (!joinSync.empty()) {
+                        draft.setSyncInputs(gate, joinSync);
+                    }
+                    const std::span<const runtime::gc_node_ref_t> one{&gate, 1};
+                    draft.setSyncInputs(join, one);
+                }
+                draft.setRegionResult(region, gate);
+                return gate;
+            };
+            // Ascending, so that the GATEs -- and the ids a dump prints -- are laid the same way
+            // every time the same program is built.
+            std::vector<uint32_t> owing;
+            owing.reserve(chains.size());
+            for (const auto &[region, writes] : chains) {
+                if (!writes.empty()) {
+                    owing.push_back(region);
+                }
+            }
+            std::sort(owing.begin(), owing.end());
+            for (uint32_t region : owing) {
+                gateOf(region, chains.at(region));
+            }
+        }
+    }
+    regionWrites_.clear();
+}
+
 void Builder::settleEffectfulGraphs() {
     // Whether a call is an effect depends on its callee's body, which may be written later,
     // in another module, or be the caller itself: the set of effectful graphs is the least
@@ -322,28 +1039,43 @@ void Builder::settleEffectfulGraphs() {
 
 void Builder::reportResourceViolation(
     const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
-    const camel::core::sem::ResourceSignature &measured,
-    camel::source::origin_id_t noteOrigin) {
+    const camel::core::sem::ResourceSignature &measured, camel::source::origin_id_t noteOrigin) {
     // What the clause does not promise, said in the terms the clause is written in: the caller of
     // this function can see only the clause, so the report names the resources the body reaches
     // that the clause leaves out.
     std::vector<std::string> unnamed;
+    // A promise that names `any` at its target has already said it may reach anything: nothing the
+    // body reaches is left out of it.
+    const bool anyPromised =
+        std::any_of(promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
+            return cls == sem::ResourceClass::Unknown;
+        });
     for (const auto &use : measured.ambient) {
         const bool promisedUse =
             std::any_of(promised.ambient.begin(), promised.ambient.end(), [&](const auto &other) {
                 return other.name == use.name;
             });
-        const bool anyPromised = std::any_of(
-            promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
-                return cls == sem::ResourceClass::Unknown;
-            });
         if (!promisedUse && !anyPromised) {
             unnamed.push_back(sem::resourceDisplayName(use.name));
         }
     }
+    for ([[maybe_unused]] uint8_t capture : measured.captures) {
+        if (!anyPromised) {
+            // A capture is a variable of the function around this one: it lives longer than this
+            // call, so writing it is an effect of this one too (design principles 3.3).
+            unnamed.push_back("a variable it captured from the function around it");
+        }
+    }
+    for (sem::ResourceClass cls : measured.anyOf) {
+        if (!anyPromised) {
+            // A class the clause has no name for, or a cell of this function's own making that
+            // outlives the call because a closure holding it was handed out.
+            unnamed.push_back(std::format("any {}", sem::resourceClassName(cls)));
+        }
+    }
     for (const auto &use : measured.params) {
-        const bool promisedUse = std::any_of(
-            promised.params.begin(), promised.params.end(), [&](const auto &other) {
+        const bool promisedUse =
+            std::any_of(promised.params.begin(), promised.params.end(), [&](const auto &other) {
                 return other.index == use.index;
             });
         if (!promisedUse && !use.name.empty()) {
@@ -372,10 +1104,88 @@ void Builder::reportResourceViolation(
     unnamed.erase(std::unique(unnamed.begin(), unnamed.end()), unnamed.end());
     builder.commit(
         graph->funcType()->toString(),
-        unnamed.empty() ? std::string("an effect outside the program")
-                        : strutil::join(unnamed, ", ", [](const std::string &name) {
-                              return name;
-                          }));
+        unnamed.empty()
+            ? std::string("an effect outside the program")
+            : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
+}
+
+void Builder::reportSpellingNotDeclared(const compile_graph_ptr_t &graph) {
+    // The capability half of the same promise the resource check makes (design principles 9.5).
+    // Anchored at the declaration, like the resource report, and with a note at the first node
+    // whose own reach reads the spelling: that is the place the writer has to look at.
+    camel::source::origin_id_t firstRead = 0;
+    for (draft_node_ref_t id = 0; id < graph->view().nodeSlotCount(); ++id) {
+        if (!graph->view().alive(id)) {
+            continue;
+        }
+        const node_handle_t node = graph->view().ref(id);
+        const auto reach         = footprintOf(graph.get(), id);
+        if (!reach.has_value() || !reach->spelling) {
+            continue;
+        }
+        firstRead = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+        break;
+    }
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::SpellingNotDeclared);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    if (sourceContext != nullptr) {
+        const auto origin = sourceContext->debugMap().graphOrigin(graph->graphId());
+        if (origin != camel::source::kInvalidOriginId) {
+            builder.atOrigin(origin);
+        }
+    }
+    if (firstRead != 0) {
+        builder.relatedOrigin(
+            firstRead,
+            "the first reading of the spelling in this body: it is what the type would have to "
+            "declare");
+    }
+    // No type text: by the time this runs, a body that wrote no clause has its settled set written
+    // to its type, so quoting the type here would show the very `spelling` the message says is
+    // missing. The position is the declaration and the note is the read.
+    builder.commit();
+}
+
+void Builder::reportResourceConflict(
+    const ResourceConflict &conflict, DraftGraphBuilder *leftOwner, DraftGraphBuilder *rightOwner) {
+    // Anchored at the declaration that wrote no clause when the two met: the position cannot repair
+    // the one that already says what it writes, and a clause is the repair this asks for. Both are
+    // named, because what the position needs is for the two to agree.
+    DraftGraphBuilder *leftUnwritten  = conflict.leftUnwritten ? leftOwner : nullptr;
+    DraftGraphBuilder *rightUnwritten = conflict.rightUnwritten ? rightOwner : nullptr;
+    DraftGraphBuilder *anchor         = leftUnwritten != nullptr ? leftUnwritten : rightUnwritten;
+    if (anchor == nullptr) {
+        anchor = leftOwner != nullptr ? leftOwner : rightOwner;
+    }
+    if (anchor == nullptr) {
+        return;
+    }
+    const auto nameOf = [](DraftGraphBuilder *graph, const camel::core::type::Type *type) {
+        return graph != nullptr ? graph->name() : camel::core::type::typeToString(type);
+    };
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::ResourceInferenceConflict);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    const auto originOf       = [&](DraftGraphBuilder *graph) {
+        return sourceContext != nullptr && graph != nullptr
+                   ? sourceContext->debugMap().graphOrigin(graph->graphId())
+                   : camel::source::kInvalidOriginId;
+    };
+    const auto origin = originOf(anchor);
+    if (origin != camel::source::kInvalidOriginId) {
+        builder.atOrigin(origin);
+    }
+    DraftGraphBuilder *other = anchor == leftOwner ? rightOwner : leftOwner;
+    const auto otherOrigin   = originOf(other);
+    if (otherOrigin != camel::source::kInvalidOriginId) {
+        builder.relatedOrigin(
+            otherOrigin,
+            "the other value this position is given: the two have to write the same resources");
+    }
+    builder.commit(
+        nameOf(leftOwner, conflict.left),
+        nameOf(rightOwner, conflict.right),
+        camel::core::type::typeToString(conflict.left),
+        camel::core::type::typeToString(conflict.right));
 }
 
 void Builder::reportDroppedEffectsOfBodies() {
@@ -394,6 +1204,27 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // What the exit depends on, through data, control and sync edges.
     std::unordered_set<draft_node_ref_t> needed;
     std::vector<draft_node_ref_t> work;
+    const auto reach = [&] {
+        while (!work.empty()) {
+            const draft_node_ref_t id = work.back();
+            work.pop_back();
+            for (auto inputs :
+                 {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+                for (draft_node_ref_t input : inputs) {
+                    if (needed.insert(input).second) {
+                        work.push_back(input);
+                    }
+                }
+            }
+            // A statement of a `sync` block is used by the one written after it (and the block's
+            // value by its chain tail): liveness follows a sync edge as it follows a data input.
+            for (draft_node_ref_t input : draft.syncInputsOf(id)) {
+                if (needed.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    };
     for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
         if (root != runtime::kInvalidNodeRef && needed.insert(root).second) {
             work.push_back(root);
@@ -402,107 +1233,202 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     if (work.empty()) {
         return; // the body did not build (an error was reported)
     }
-    while (!work.empty()) {
-        const draft_node_ref_t id = work.back();
-        work.pop_back();
-        for (auto inputs :
-             {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
-            for (draft_node_ref_t input : inputs) {
-                if (needed.insert(input).second) {
-                    work.push_back(input);
-                }
-            }
-        }
-        // A statement of a `sync` block is used by the one written after it (and the block's
-        // value by its chain tail): liveness follows a sync edge as it follows a data input.
-        for (draft_node_ref_t input : draft.syncInputsOf(id)) {
-            if (needed.insert(input).second) {
-                work.push_back(input);
-            }
-        }
-    }
-    std::vector<draft_node_ref_t> dropped;
+    reach();
+
+    // Which graphs hold an effect that runs. `settleEffectfulGraphs` reads this, so it is asked
+    // whether anything is reported here or not. A statement that does not run is not reported: the
+    // rule of design principles 3.1 makes what a region writes a root of
+    // that region, so a call, a loop and a block run with the region they are written in even when
+    // nothing takes the value they give. What such a statement leaves behind is a value nobody
+    // uses, and that is a value -- never an effect that failed to run.
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id) || !isEffectNode(graph.get(), draft.ref(id))) {
             continue;
         }
         if (needed.contains(id)) {
             effectfulGraphs_.insert(graph.get());
-        } else if (
-            graph != rootGraph_ || (id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
-            // On the root graph, the top level of the module being reported only: another
-            // module's top-level value that this program does not use is not a mistake.
-            // An effect whose value is a `T!` nothing takes is answered by the warning for the
-            // lost error (UnusedFallibleValue), which takes precedence over this one.
-            if (!unusedFallibleValues_.contains(draft.ref(id))) {
-                dropped.push_back(id);
-            }
         }
     }
     if (!report) {
         return;
     }
-    // One warning per dropped chain: an effect whose result feeds another dropped effect
-    // (`println(log(1))`, the statements of a dropped sync block) is reported through the
-    // last one.
-    const auto feedsDroppedEffect = [&](draft_node_ref_t start) {
-        std::unordered_set<draft_node_ref_t> seen{start};
-        std::vector<draft_node_ref_t> stack{start};
-        while (!stack.empty()) {
-            const draft_node_ref_t id = stack.back();
-            stack.pop_back();
-            for (auto users :
-                 {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id),
-                  draft.syncUsersOf(id)}) {
-                for (draft_node_ref_t user : users) {
-                    if (!seen.insert(user).second) {
-                        continue;
-                    }
-                    if (std::ranges::find(dropped, user) != dropped.end()) {
-                        return true;
-                    }
-                    stack.push_back(user);
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    // A write to a variable whose value nothing reads (design principles 3.1 and 3.5:
+    // assigning to a `var` is not an effect). What such a write drops is a value, and a
+    // dropped value is what this says: the same thing one rule says about any value nobody uses
+    // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. A write is not an
+    // effect, and whether the statement it stands in runs is a fact about that statement, not about
+    // this value (design principles 3.1 and 3.3: a write of a handle is
+    // used by the region it is written into, by the same rule as an outside write).
+    //
+    // What makes such a write's value dead is that no read takes it, and the walk above does not
+    // answer that: it answers whether a read goes *through the write's own node*. There are two
+    // ways a read takes the value and leaves that node with no user of its own.
+    //
+    // The first is the fold (Builder::collapseNonEscapingVariableReads): a read of a `var` the
+    // builder could keep out of a cell takes the value the write stores and not the write -- the
+    // read is handed the write's second operand -- so the write's node ends up with no consumer
+    // while the value it stored is read by everything after it. Asking the walk alone reported
+    // exactly those writes (`t = t + 1` followed by a read of `t`, the ordinary way a counter is
+    // written), which made the warning contradict its own text and `-Werror` refuse a legal
+    // program.
+    //
+    // The second is a variable that kept its cell: there the read is a `:var/get` of the cell and
+    // the edge runs from the write to that read, because the store's result is the cell's new
+    // state. `needed` cannot answer this one either -- a `sync` body chains every statement into
+    // the next one's CTRL and SYNC inputs, so the walk holds a store whose result nobody reads.
+    //
+    // So the value is read when any of these holds: the node computing the stored value has a user
+    // other than the write; the write has a user that takes its result as a value; or the stored
+    // value is a root the walk started from (the result of a body is a node and not an edge to one
+    // -- `setGraphReturnFromResult` names `returnNode` as the value itself -- so a returned value
+    // has no user to be found). A compound assignment (`+=`, `-=`, ...) computes the value it
+    // stores itself, so it has no operand to ask about and the walk is its whole answer.
+    const auto storedValueIsRead = [&](draft_node_ref_t writeId, GCT::AssignmentForm form) {
+        if (form != GCT::AssignmentForm::Plain && form != GCT::AssignmentForm::Owned) {
+            return false;
+        }
+        const auto operands = draft.normInputsOf(writeId);
+        if (operands.size() < 2) {
+            return false;
+        }
+        // The stored value itself, taken by anything that is not this write.
+        for (auto users : {draft.normUsersOf(operands[1]), draft.withUsersOf(operands[1])}) {
+            for (draft_node_ref_t user : users) {
+                if (user != writeId && draft.alive(user)) {
+                    return true;
                 }
             }
         }
-        return false;
+        // The write's result, taken as a value: the `:var/get` of a variable that kept its cell,
+        // and every read standing after it. Another store of the same variable is not a read --
+        // `t = 1; t = 2` hands the cell's state on and reads neither value -- so a store is
+        // skipped.
+        for (auto users : {draft.normUsersOf(writeId), draft.withUsersOf(writeId)}) {
+            for (draft_node_ref_t user : users) {
+                if (!draft.alive(user)) {
+                    continue;
+                }
+                node_handle_t userNode = draft.ref(user);
+                if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
+                    return true;
+                }
+                if (!writeNodes_.contains(userNode)) {
+                    return true;
+                }
+            }
+        }
+        // The stored value as a root of the walk, asked only of a write the walk does not hold: a
+        // write it does hold hands its own operand into the set, and that says nothing about a
+        // read.
+        return !needed.contains(writeId) && needed.contains(operands[1]);
     };
-    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    for (draft_node_ref_t id : dropped) {
-        if (feedsDroppedEffect(id)) {
+    // Whether this graph is the whole story of the cell a write stores into: a cell of this graph,
+    // not a `var` parameter (a `Port`, whose value the caller reads after the call: `func swap(var
+    // x: int, v: int)` stores `v` for its caller and nothing in its own body reads it), and used by
+    // no one but the writes of this body. Any other user -- a read of the cell, a closure that
+    // captured it, a call it was handed to as a `var` argument -- is a way for the value to be read
+    // that this graph cannot see, and then nothing here can say the value is read by nobody.
+    const auto cellIsThisGraphsAlone = [&](draft_node_ref_t writeId) {
+        const auto operands = draft.normInputsOf(writeId);
+        if (operands.empty()) {
+            return false;
+        }
+        const draft_node_ref_t cell = operands[0];
+        if (!draft.isNamedBy(draft.ref(cell)) || !draft.alive(cell)) {
+            return false;
+        }
+        if (nodeKindOf(draft.ref(cell)) == runtime::GCNodeKind::Port) {
+            return false;
+        }
+        for (auto users :
+             {draft.normUsersOf(cell), draft.withUsersOf(cell), draft.ctrlUsersOf(cell)}) {
+            for (draft_node_ref_t user : users) {
+                if (!draft.alive(user)) {
+                    continue;
+                }
+                node_handle_t userNode = draft.ref(user);
+                if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
+                    return false;
+                }
+                if (!writeNodes_.contains(userNode)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
             continue;
         }
+        if (graph == rootGraph_ && !(id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
+            continue; // another module's top-level write, reported by that module's own pass
+        }
         node_handle_t node = draft.ref(id);
-        std::string subject;
-        switch (nodeKindOf(node)) {
-        case runtime::GCNodeKind::Oper: {
-            const std::string &name = graph->operTarget(node)->name();
-            subject = name.starts_with("__assn") ? std::string("The assignment")
-                                                 : std::format("The call of '{}'", name);
-        } break;
-        case runtime::GCNodeKind::Func:
-            subject = std::format("The call of '{}'", graph->funcTarget(node)->name());
-            break;
-        case runtime::GCNodeKind::Join:
-            subject = "The branch";
-            break;
-        case runtime::GCNodeKind::Loop:
-            subject = "The loop";
-            break;
-        default:
-            subject = "The call";
-            break;
+        if (nodeKindOf(node) != runtime::GCNodeKind::Oper) {
+            continue;
+        }
+        const auto target = graph->operTarget(node);
+        if (target == nullptr) {
+            continue;
+        }
+        // The stores this builder made: a node of another kind, an ordinary call, or a store of
+        // another body is not one of them.
+        const auto write = writeNodes_.find(node);
+        if (write == writeNodes_.end()) {
+            continue;
+        }
+        if (storedValueIsRead(id, write->second)) {
+            continue;
+        }
+        // A write that does not run cannot have a reader: nothing it would store is ever there, so
+        // the report stands wherever the cell lives. A write that runs is another matter. Then,
+        // when its cell leaves this graph -- a `var` parameter a caller reads after the call, a
+        // module-level `var` another body reads -- some read this graph cannot see may take the
+        // value, and nothing here can say it is read by nobody. A `sync` block is where a write
+        // whose value nobody reads still runs, because it is a statement of the chain; that is why
+        // this is asked of the write that runs and not of the walk above, which holds it there.
+        if (needed.contains(id) && !cellIsThisGraphsAlone(id)) {
+            continue;
         }
         camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
         if (origin == camel::source::kInvalidOriginId && sourceContext) {
             origin = sourceContext->debugMap().graphOrigin(graph->graphId());
         }
-        diags_->of(SemanticDiag::EffectNotExecuted)
-            .atOrigin(origin)
-            .commit(subject, "nothing depends on it and it is not in a sync block");
+        diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
     }
-    // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
-    // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no
+    // A write to a `var` built as a value stores nothing: the
+    // name is rebound to the value, so the value nobody reads is a value node with no user, and
+    // that is the same fact the check above reads off a store that the graph no longer has. A
+    // value the region goes on to hand on -- the body's result, a statement of a sync chain -- is
+    // seeded into `needed` and is read; a value nothing takes at all is the dropped one. What is
+    // reported, and where, is what the store's own report said: the assignment as written.
+    for (const auto &[value, origin] : ssa_.writes()) {
+        if (value == nullptr || nodeGraphOf(value) != graph.get() ||
+            needed.contains(nodeIdOf(value))) {
+            continue;
+        }
+        bool read = false;
+        for (auto users :
+             {draft.normUsersOf(nodeIdOf(value)), draft.withUsersOf(nodeIdOf(value))}) {
+            for (draft_node_ref_t user : users) {
+                if (draft.alive(user)) {
+                    read = true;
+                    break;
+                }
+            }
+            if (read) {
+                break;
+            }
+        }
+        if (read) {
+            continue;
+        }
+        diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
+    }
+    // A `fail` written as a statement whose value nothing takes (design principles 3.9).
+    // It gives no value and is no
     // effect of its own, so where its value is not wanted nothing runs it and the fault is never
     // raised -- which is what the writer has to be told, because the program was meant to stop
     // there. Inside a `sync` block the statement is on the chain and runs; on the path the data
@@ -527,8 +1453,8 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             .atOrigin(origin)
             .commit("nothing needs it and it is not in a sync block");
     }
-    // The statements a `fail` of this block leaves behind (design principles 3.9; the author's
-    // ruling of 2026-10-26): they are reached only if the `fail` is not run at all, which the walk
+    // The statements a `fail` of this block leaves behind (design principles 3.9):
+    // they are reached only if the `fail` is not run at all, which the walk
     // over `needed` above has just answered -- a `fail` nothing needs does not run, and then these
     // statements do run (FailNotExecuted tells the writer why). Where the `fail` is needed, it
     // raises its fault first and nothing after it is reached, whatever the statements are.
@@ -553,7 +1479,7 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
         return conditions;
     }
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    const auto &draft = graph->transaction().graph();
+    const auto &draft  = graph->transaction().graph();
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id)) {
             continue;
@@ -598,9 +1524,10 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
             const auto arguments = draft.normInputsOf(id);
             const std::optional<slot_t> id =
                 arguments.empty() ? std::nullopt : staticValueOf(draft.ref(arguments.back()));
-            const GenericRuleEntry *entry = id.has_value() && context_ != nullptr
-                                                ? genericRuleEntry(*context_, static_cast<uint64_t>(*id))
-                                                : nullptr;
+            const GenericRuleEntry *entry =
+                id.has_value() && context_ != nullptr
+                    ? genericRuleEntry(*context_, static_cast<uint64_t>(*id))
+                    : nullptr;
             if (entry != nullptr) {
                 conditions.push_back(RuleCondition{nullptr, where, entry});
             }
@@ -680,7 +1607,7 @@ std::string Builder::describeEffect(
         // function, and the report says which one so that the condition is still found.
         subject = std::format("{} in the function '{}'", subject, inside->name());
     }
-return subject;
+    return subject;
 }
 
 bool Builder::calleeIsGeneric(const std::string &name) const {
@@ -807,16 +1734,15 @@ void Builder::reportEffectfulConditions() {
         }
         return rule;
     };
-    const auto report = [&](const std::string &subject, const std::string &rule,
+    const auto report = [&](const std::string &subject,
+                            const std::string &rule,
                             camel::source::origin_id_t origin,
                             camel::source::origin_id_t where) {
-        auto diagnostic =
-            diags_->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
+        auto diagnostic = diags_->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
         if (where != camel::source::kInvalidOriginId) {
             // Where the rule is written: the effect is what the report is about, and the rule is
             // what makes it one, so an editor offers both places.
-            diagnostic.relatedOrigin(
-                where, std::format("the rule '{}' is declared here", rule));
+            diagnostic.relatedOrigin(where, std::format("the rule '{}' is declared here", rule));
         }
         diagnostic.commit(subject, rule);
     };
@@ -885,7 +1811,7 @@ void Builder::reportEffectInRuleInstance(
     if (effect == nullptr) {
         return;
     }
-    auto sourceContext   = context_ ? context_->sourceContext() : nullptr;
+    auto sourceContext                = context_ ? context_->sourceContext() : nullptr;
     camel::source::origin_id_t origin = nodeDraftOf(effect)->nodeOrigin(nodeIdOf(effect));
     if (origin == camel::source::kInvalidOriginId && sourceContext) {
         origin = sourceContext->debugMap().graphOrigin(inside->graphId());
@@ -900,7 +1826,8 @@ void Builder::reportEffectInRuleInstance(
     auto diagnostic = sink->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
     if (entry.where != camel::source::kInvalidOriginId) {
         diagnostic.relatedOrigin(
-            entry.where, std::format("the rule '{}' is declared here", entry.name));
+            entry.where,
+            std::format("the rule '{}' is declared here", entry.name));
     }
     Diagnostic reported =
         diagnostic.commit(describeEffect(inside, effect, inside != condition), entry.name);
@@ -936,9 +1863,8 @@ void Builder::reportUnusedFallibleValues() {
     // because the error it may hold is lost without a trace. `evaluated` is the statement the value
     // is: in a sync block the statements run, and outside one a statement whose value nothing takes
     // does not run (design principles 3.1) -- and the error it would have given is lost either way,
-    // which is what this warning is about. The statement not running is what the other warning
-    // (EffectNotExecuted) is about, and this one takes precedence over it: one statement, one
-    // diagnostic.
+    // which is what this warning is about. Nothing else reports that statement: a statement whose
+    // value nobody takes is one diagnostic, this one.
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     const auto warn =
         [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type, const char *remark) {
@@ -946,7 +1872,6 @@ void Builder::reportUnusedFallibleValues() {
             if (origin == camel::source::kInvalidOriginId && sourceContext) {
                 origin = sourceContext->debugMap().graphOrigin(graph->graphId());
             }
-            unusedFallibleValues_.insert(node);
             diags_->of(SemanticDiag::UnusedFallibleValue)
                 .atOrigin(origin)
                 .commit(type->toString(), remark);
@@ -1016,12 +1941,27 @@ void Builder::reportUnusedFallibleValues() {
             }
             // "Ordered" here means a statement of a `sync` block: the edge that says so is a
             // sync edge, and the old control edge still carries it where one is left.
-            const bool ordered =
-                !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            const bool ordered = !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            // The arms of a JOIN that joins nothing that actually give a value: the written arm
+            // of an `if` without `else` and the `null` the empty arm hands over are two WITH
+            // inputs, so the number of inputs says nothing -- the `null` placeholder is a void
+            // value no arm could have written and no error can be lost in it.
+            const auto givesAValue = [&](draft_node_ref_t armId) {
+                node_handle_t armValue = draft.ref(armId);
+                if (nodeIsKind(armValue, runtime::GCNodeKind::Gate) &&
+                    !normInputsOf(armValue).empty()) {
+                    armValue = draft.ref(normInputsOf(armValue).front());
+                }
+                return !isVoidGraphExitType(nodeTypeOf(armValue));
+            };
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
-                isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
+                isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id)) &&
+                std::ranges::count_if(draft.withInputsOf(id), givesAValue) == 1) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
-                // dropped where the arm ends.
+                // dropped where the arm ends. A branch with two arms is answered where its arms
+                // end instead (`ExitInUnusedBranch`, `unused_arm_exit`): both arms hand a value to
+                // a JOIN that joins nothing, and the JOIN is a statement of the region when a
+                // write reaches the exit, so `ordered` alone does not tell the two shapes apart.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
                     node_handle_t value = draft.ref(armId);
                     if (nodeIsKind(value, runtime::GCNodeKind::Gate) &&
@@ -1035,8 +1975,8 @@ void Builder::reportUnusedFallibleValues() {
                 }
                 continue;
             }
-            if (isExit(id) || !draft.normUsersOf(id).empty() ||
-                !draft.withUsersOf(id).empty() || discardedValues_.contains(node) ||
+            if (isExit(id) || !draft.normUsersOf(id).empty() || !draft.withUsersOf(id).empty() ||
+                discardedValues_.contains(node) ||
                 (!ordered && nodeIsKind(node, runtime::GCNodeKind::Join))) {
                 // A branch whose value nothing takes is answered where its arms end -- their
                 // exits are reported, and an `if` without `else` is answered above -- so what is
@@ -1047,7 +1987,11 @@ void Builder::reportUnusedFallibleValues() {
                 // A statement something is ordered after runs, in a sync block as anywhere else;
                 // one nothing depends on does not, and then the warning says both that the value
                 // is lost and that the statement that would have given it never runs.
-                warn(graph, node, type, ordered ? "" : " (nothing depends on it, so it does not run)");
+                warn(
+                    graph,
+                    node,
+                    type,
+                    ordered ? "" : " (nothing depends on it, so it does not run)");
             }
         }
     }
@@ -1111,6 +2055,12 @@ void Builder::markNonRetainingReads() {
     //     array: a number, a bool, a string or nothing (`len`, `contains`, `==`, `<`, `[]`
     //     of an array of numbers, `format`). A call, a branch, a closure, a literal holding
     //     the value, a `let` used later by such a node: any of them keeps `r` a `:var/get`.
+    //     Two things are read through rather than counted, and only where `r` can hand an array
+    //     out: a pure computation that stands off the chain (5.3 leaves it off, so its place in
+    //     the chain says nothing about when it runs -- its own readers are the ones that count),
+    //     and a GATE, which forwards a value into the chain without observing it and is built at
+    //     the chain's end. A value copied by value has no array to hand out, so for it every user
+    //     is counted as before.
     //  4. No node made between `r` and its last user may write the variable: no operator
     //     that is neither pure nor state-only (the assignments, `:op/assn_owned` among them,
     //     effects), no call and no branch (their bodies may write it through a capture). The
@@ -1180,15 +2130,66 @@ void Builder::markNonRetainingReads() {
         draft_node_ref_t lastUser = id;
         bool keeps                = false;
         size_t users              = 0;
+        // The nodes that decide the read: the nodes reading it, and -- through a pure computation
+        // that reads it -- the nodes reading that computation, because such a node runs when its
+        // own readers need it and its result is consumed where they are (design principles 3.1;
+        // edges.cn.md 5.3 keeps a pure infallible computation off the chain, so standing off the
+        // chain says nothing about when it runs). Both are walked so that condition 4 counts the
+        // last reader of the *result*, not the last node that happens to name the read: a `len`
+        // read by a `println` written after the next append is consumed after it.
+        //
+        // What a node reached this way can do is order, not observe: a reader of a computation
+        // that hands out no reference cannot hold the array, so it decides nothing here, and a
+        // GATE forwards a value into the block's chain without observing it -- `closeChainOver`
+        // builds it at the chain's end, so counting it would place the last reader after every
+        // writer in the block. A node that reads the array itself is the one that decides it, and
+        // only a pure computation is not an observer.
+        //
+        // All of this is about a value that can hand an array out. A value copied by value has
+        // nothing to hand out, and there the read keeps the form it always had.
+        const bool handsOutReference = !referenceFree(nodeTypeOf(read));
+        std::vector<std::pair<draft_node_ref_t, bool>> pending;
         for (auto inputs : {normUsersOf(read), withUsersOf(read)}) {
             for (draft_node_ref_t userId : inputs) {
-                node_handle_t user = draft.ref(userId);
-                ++users;
-                lastUser = std::max(lastUser, userId);
-                if (!nodeIsKind(user, runtime::GCNodeKind::Oper) || !chainedNodes_.contains(user) ||
-                    !table.isPure(nodeGraphOf(user)->operTarget(user)->uri()) ||
-                    !referenceFree(nodeTypeOf(user))) {
-                    keeps = true; // condition 3
+                pending.emplace_back(userId, false);
+            }
+        }
+        std::vector<draft_node_ref_t> seen;
+        while (!pending.empty() && !keeps) {
+            const auto [userId, reached] = pending.back();
+            pending.pop_back();
+            if (std::ranges::find(seen, userId) != seen.end()) {
+                continue;
+            }
+            seen.push_back(userId);
+            node_handle_t user = draft.ref(userId);
+            if (handsOutReference && nodeIsKind(user, runtime::GCNodeKind::Gate)) {
+                for (auto inputs : {normUsersOf(user), withUsersOf(user)}) {
+                    for (draft_node_ref_t next : inputs) {
+                        pending.emplace_back(next, true);
+                    }
+                }
+                continue;
+            }
+            ++users;
+            lastUser               = std::max(lastUser, userId);
+            const bool computation = nodeIsKind(user, runtime::GCNodeKind::Oper) &&
+                                     table.isPure(nodeGraphOf(user)->operTarget(user)->uri()) &&
+                                     referenceFree(nodeTypeOf(user));
+            if (!computation) {
+                keeps = keeps || !reached; // condition 3: a node reading the array itself
+                continue;
+            }
+            if (chainedNodes_.contains(user)) {
+                continue; // a pure computation the chain holds: it runs where it stands
+            }
+            if (!handsOutReference) {
+                keeps = true; // condition 3, as it always was for a value copied by value
+                continue;
+            }
+            for (auto inputs : {normUsersOf(user), withUsersOf(user)}) {
+                for (draft_node_ref_t next : inputs) {
+                    pending.emplace_back(next, true);
                 }
             }
         }
@@ -1233,7 +2234,7 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     }
     if (valueTypeOf(nodeTypeOf(node))->code() == TypeCode::Never) {
         // A statement of the bottom type `never` is not a value somebody forgot to bind (design
-        // principles 3.9; the author's ruling of 2026-10-26 on a `fail` written as a statement of
+        // principles 3.9, a `fail` written as a statement of
         // its own): it gives no value at all, so there is nothing to use and no "it changes
         // nothing" to say either. Whether it is executed at all is the effect rule's question,
         // and a `fail` nobody needs has a warning of its own (FailNotExecuted).
@@ -1260,9 +2261,20 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     // it, as `xs->append<5>` did before 11.3: the fix is to bind the variable to the result.
     std::string fix;
     const std::string text = sourceTextOf(call);
+    // The name a closure captured is a PORT and not a variable once the capture is by value
+    // (design principles 3.5, 197), but it is still the name of a variable of the body the closure
+    // stands in: the sentence below is about what the program meant to do, and the capture rule is
+    // the one that answers whether the write is allowed. Asking only for a variable made the report
+    // fall back to the generic sentence, which names nothing the reader can act on.
+    node_handle_t target = nullptr;
     if (call->size() >= 2 && call->at(1)->type() == GCT::NodeKind::DREF &&
-        nodeAt(call->at(1)->name()).has_value() &&
-        isVariable(resolveNodeByRef(call->at(1)->name()))) {
+        nodeAt(call->at(1)->name()).has_value()) {
+        target = resolveNodeByRef(call->at(1)->name());
+    }
+    // A name built as a value is assignable just as the cell was, so the advice to
+    // write the result to it still holds: the same reading, with the name standing for its value.
+    if (target != nullptr &&
+        (isVariable(target) || capturePortOfAVariable(target) || nameIsSsa(call->at(1)->name()))) {
         const std::string variable = call->at(1)->name();
         fix = text.empty() ? std::format(
                                  "; to change the variable '{0}', bind it to the result: "
@@ -1522,6 +2534,40 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     throw BuildAbortException();
 }
 
+std::string Builder::describeTypeOfPlaceholders(const Type *type, const GCT::Tree *written) const {
+    if (type == nullptr) {
+        return {};
+    }
+    const std::string text = type->toString();
+    const std::string mark = "typeof#";
+    std::string described;
+    described.reserve(text.size());
+    for (size_t i = 0; i < text.size();) {
+        if (text.compare(i, mark.size(), mark) != 0) {
+            described += text[i++];
+            continue;
+        }
+        size_t end = i + mark.size();
+        while (end < text.size() && std::isdigit(static_cast<unsigned char>(text[end])) != 0) {
+            ++end;
+        }
+        if (end == i + mark.size()) {
+            described += text[i++];
+            continue;
+        }
+        const std::string digits = text.substr(i + mark.size(), end - (i + mark.size()));
+        const GCT::node_ptr_t expression =
+            written != nullptr ? written->typeOfOperandOf(mark + digits) : nullptr;
+        if (expression == nullptr) {
+            described += "typeof(#" + digits + ")";
+        } else {
+            described += "typeof(" + sourceTextOf(expression) + ")";
+        }
+        i = end;
+    }
+    return described;
+}
+
 std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
     const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
     if (sourceContext == nullptr || expr == nullptr) {
@@ -1691,12 +2737,12 @@ namespace {
 /// Why an array literal cannot be an array type that states one dimension: the length it writes.
 /// This decides nothing -- `arrayLiteralFitsShape` already decided, and the elements are each
 /// reported by whoever builds the value -- it says which side is what, because a rank-one length
-/// that does not match used to arrive here as the fallback sentence "the value cannot become that
+/// that does not match would otherwise get the fallback sentence "the value cannot become that
 /// type", which names neither the length nor the side that wrote it, for a literal whose elements
 /// all fit.
 std::string arrayLengthReason(const data_ptr_t &data, Type *type) {
-    const auto *stated  = type != nullptr ? tt::as_ptr<ArrayType>(type) : nullptr;
-    const auto written  = data != nullptr ? std::dynamic_pointer_cast<ArrayData>(data) : nullptr;
+    const auto *stated = type != nullptr ? tt::as_ptr<ArrayType>(type) : nullptr;
+    const auto written = data != nullptr ? std::dynamic_pointer_cast<ArrayData>(data) : nullptr;
     if (stated == nullptr || written == nullptr) {
         return {};
     }
@@ -1725,8 +2771,8 @@ void Builder::rejectLiteralData(
         reason = reasonGiven;
     } else if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
         reason = notFit;
-    } else if (const std::string lengthMismatch = arrayLengthReason(data, type);
-               !lengthMismatch.empty()) {
+    } else if (
+        const std::string lengthMismatch = arrayLengthReason(data, type); !lengthMismatch.empty()) {
         reason = lengthMismatch;
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
@@ -1757,7 +2803,7 @@ void Builder::rejectLiteralData(
     }
     diags_->of(SemanticDiag::LiteralNotRepresentable)
         .atOrigin(where)
-        .commit(text, type->toString(), reason);
+        .commit(text, describeTypeOfPlaceholders(type, tree_), reason);
     throw BuildAbortException();
 }
 
@@ -1943,7 +2989,9 @@ Builder::SpeculativeInstantiation::SpeculativeInstantiation(Builder &builder)
     // it holds is bounded by the body, not by the program the rule is applied to; the only reader
     // takes the first error and looks no further.
     inner_ = std::make_shared<Diagnostics>(
-        outer_->moduleName(), outer_->modulePath(), outer_->sourceContext());
+        outer_->moduleName(),
+        outer_->modulePath(),
+        outer_->sourceContext());
     self_.speculative_ = this;
 }
 
@@ -2007,8 +3055,8 @@ void Builder::SpeculativeInstantiation::attach() {
 Builder::BodyDiagnostics::BodyDiagnostics(Builder &builder)
     : self_(builder), scope_(builder.speculative_) {
     if (scope_ != nullptr) {
-        outer_        = self_.diags_;
-        self_.diags_  = scope_->inner_;
+        outer_       = self_.diags_;
+        self_.diags_ = scope_->inner_;
     }
 }
 

@@ -1,10 +1,18 @@
-// A function declared inside another one reaches the variables around it. Which capture of the
-// enclosing function a use is cannot be read from the body's own graph, and the measurement used
-// to give up there, which skipped the clause the function wrote. The use is now read as touching
-// any variable, so the `pure` of `bump` is refused at its clause.
+// A function declared inside another one reaches the state around it, and the `pure` it wrote is
+// refused at its clause: it writes `n`, and a body that writes anything has resources.
+//
+// `n` is a module `var` here, not a `var` of `main`. The shape this case used to pin -- `bump`
+// assigning a `var` of the function that declares it -- is refused earlier now, by
+// `ClosureAssignsCapturedName` (0x03000213, design principles 3.5, 197; the author's ruling of
+// 2026-11-16), so the write could no longer reach this rule at all. The declaration inside a body
+// and the refusal of the clause are the two things this case is about, and both are unchanged.
+// What is lost with the old shape is the "the capture cannot be placed" reading: that path is
+// pinned by `err.wide_parameters` and `err.many_parameters_pure`, which reach it through a
+// parameter index rather than through a captured `var`.
+
+var n = 0
 
 func main(): int sync {
-    var n = 0
     func bump(x: int): int pure sync {
         n = n + x
         return n

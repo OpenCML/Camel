@@ -23,13 +23,20 @@ expect_exit = 0
 timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
-# Three arguments of one `println` are calls of a function with a `with <var>` parameter; each
-# splice left the `:var/peek` and the block's gate beside the statement that really follows.
+# Three arguments of one `println` are calls of a function value whose context argument is a `Ref`
+# handle; each splice left the block's gate beside the statement that really follows. The context
+# argument used to be `with <var total: int>`, which a partial application may not bind any more: a
+# function value from a partial application has nowhere to write a `var` context parameter back
+# (design principles 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name
+# had when it was made, not the name (the ruling of 2026-11-16, items 197 and 198), so `add<t>` was
+# refused at the binding -- by `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) until
+# `VarContextParameterCannotBeBound` (0x03000216) gave the rule its own report. A handle is a value,
+# so the same three calls, the same accumulator and the same chain are still exercised.
 
 [[tests]]
 name = "var_parameter.reference"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "The values with nothing but the executor: three calls through a `with <var>` partial application, and the accumulator after them."
+desc = "The values with nothing but the executor: three calls through a partial application whose context argument is a `Ref` handle, and the accumulator after them. The context argument is a handle since 2026-11-16, when a `var` context parameter stopped being bindable by a partial application (design principles 3.5; `SemanticDiag::ClosureAssignsCapturedName` was the refusal at `add<t>`); the reading is the one this entry had."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -38,7 +45,7 @@ args = ["${case}", "${backend}"]
 [[tests]]
 name = "var_parameter.opt"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`std::opt` inlines the three calls: the chain of the block keeps one follower per statement and the values do not change."
+desc = "`std::opt` inlines the three calls: the chain of the block keeps one follower per statement and the values do not change. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -47,7 +54,7 @@ args = ["${case}", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_twice"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -56,11 +63,11 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_inline"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`std::opt::inline` alone splices the same bodies and writes the same chain."
+desc = "`std::cxx::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 
 # The call that builds the `tee` is destructured by a `let`, so the statement the chain names after
 # it is the `accs` that takes the tuple apart, while the two `println`s after it waited on the call
@@ -96,11 +103,11 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 [[tests]]
 name = "tee_result_is_tuple.opt_inline"
 case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
-desc = "`std::opt::inline` alone splices the same bodies and writes the same chain."
+desc = "`std::cxx::inline` alone splices the same bodies and writes the same chain."
 expect_stdout_exact = "6\n6\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
-args = ["${case}", "std::opt::inline", "${backend}"]
+args = ["${case}", "std::cxx::inline", "${backend}"]
 
 # The timed loop sits in an arm of a branch, and the place the splice writes for the body's tail is
 # the one the branch's `brch` gave it. The program's own `println` is not in a sync block and nothing
@@ -112,7 +119,7 @@ args = ["${case}", "std::opt::inline", "${backend}"]
 [[tests]]
 name = "perf_fib_smoke.reference"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "The timed helper's twenty rounds with nothing but the executor: the numbers are the measurement, the lines and the exit code are the behavior."
+desc = "The timed helper's twenty rounds with nothing but the executor, and the summary line the case writes after them: the numbers are the measurement, the lines and the exit code are the behavior. The summary used to be dropped -- a bare `->println` statement whose value nobody takes -- and runs now, because a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15)."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "${backend}"]
@@ -121,19 +128,21 @@ verify_script = """
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
     assert(!input.normalized.stderr.includes('PassInternalError'), 'the graph was refused by the seal')
     const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
-    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
-    for (let i = 0; i < lines.length; i += 1) {
+    assert(lines.length === 21, `expected the 20 measured rounds and the summary line, got ${lines.length}`)
+    for (let i = 0; i < 20; i += 1) {
         const round = String(20 - i).padStart(3)
         const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
         assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
     }
+    const summary = lines[20].replace(/[0-9]+\.[0-9]{4}/g, '<T>')
+    assert(summary === 'jit perf fib(20): <T> +/- <T> ms', `the summary line is '${lines[20]}'`)
 }
 """
 
 [[tests]]
 name = "perf_fib_smoke.opt"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "`std::opt` inlines the closure the helper is given: the seal reports no fork, and the run still reports the twenty rounds and exits 0."
+desc = "`std::opt` inlines the closure the helper is given: the seal reports no fork, and the run still reports the twenty rounds, the summary line and exits 0."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "${backend}"]
@@ -142,33 +151,39 @@ verify_script = """
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
     assert(!input.normalized.stderr.includes('PassInternalError'), 'the pass built a graph the seal refused')
     const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
-    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
-    for (let i = 0; i < lines.length; i += 1) {
+    assert(lines.length === 21, `expected the 20 measured rounds and the summary line, got ${lines.length}`)
+    for (let i = 0; i < 20; i += 1) {
         const round = String(20 - i).padStart(3)
         const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
         assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
     }
+    const summary = lines[20].replace(/[0-9]+\.[0-9]{4}/g, '<T>')
+    assert(summary === 'jit perf fib(20): <T> +/- <T> ms', `the summary line is '${lines[20]}'`)
 }
 """
 
 [[tests]]
 name = "perf_fib_smoke.opt_twice"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. Its cost bound is stated, not inherited: `timeout_ms / 4` was the same 5000 ms as the `cpu_budget_ms` written here, but the derived bound is judged on the wall clock where the host cannot report CPU time, and this entry's reading is the work's own CPU time (`test/tools/run-tests.mjs#TIMEOUT_MARGIN`, and the ruling of 2026-11-02 that a bound is derived from a measurement, not from a constant). The number does not move: the entry is red against 5000 ms either way until the optimizer's cost is answered (docs/handover/reviews/2026-11-19-the-0.2.45-blocker-list-by-severity.cn.md, S3-2), and it is to be re-derived from `test/tools/opt-cost/measure.mjs`'s table once it is."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "std::opt", "${backend}"]
+cpu_budget_ms = 5000
+timeout_ms = 20000
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
     assert(!input.normalized.stderr.includes('PassInternalError'), 'the pass built a graph the seal refused')
     const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
-    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
-    for (let i = 0; i < lines.length; i += 1) {
+    assert(lines.length === 21, `expected the 20 measured rounds and the summary line, got ${lines.length}`)
+    for (let i = 0; i < 20; i += 1) {
         const round = String(20 - i).padStart(3)
         const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
         assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
     }
+    const summary = lines[20].replace(/[0-9]+\.[0-9]{4}/g, '<T>')
+    assert(summary === 'jit perf fib(20): <T> +/- <T> ms', `the summary line is '${lines[20]}'`)
 }
 """
 
@@ -190,8 +205,8 @@ verify_script = """
 [[tests]]
 name = "nn_grad_check.spliced_body_chain_is_one_chain"
 case = "../../../cases/modules/autodiff/nn_grad_check.cml"
-desc = "`std::opt::inline` splices `check` six times: each copy's `:io/println` has exactly one SYNC predecessor and one SYNC successor, and the same pairs carry the control edge beside them."
-args = ["${case}", "std::opt::inline", "std::gir"]
+desc = "`std::cxx::inline` splices `check` six times: each copy's `:io/println` has exactly one SYNC predecessor and one SYNC successor, and the same pairs carry the control edge beside them."
+args = ["${case}", "std::cxx::inline", "std::gir"]
 verify_script = """
 ({ input, assert }) => {
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)

@@ -47,11 +47,11 @@ For the detailed rules see "Programs whose `main` takes parameters or returns a 
 
 Evaluation is driven by dependencies, and there is no fixed order of execution: an expression is evaluated if and only if its result is needed, that is, it reaches the function's return through data edges or control edges. Expressions that do not depend on each other have no order between them and may run out of order or in parallel.
 
-**A call with side effects that is outside a sync block and whose result is not used does not execute.** This is a natural consequence of evaluation by dependency; it is legal, not an error. The compiler gives the warning `SemanticDiag::EffectNotExecuted`, so that a forgotten `sync` does not go unnoticed:
+**Reads on demand, writes with their region.** A read -- of a variable or of an outside resource -- executes if and only if its result is needed. A **write to a resource outside the program is used by the region it is written in** (design principles 3.1): when the region runs, its writes to outside resources run, whether or not anything uses their results, and no `sync` is needed. A function body is a region, so a bare `println(x)` in a body that is not `sync` still runs:
 
 ```cml
 func greet(): int {
-    println('hello from greet')     // result unused and not in a sync block: not executed
+    println('hello from greet')     // a write in the body region: it runs, used result or not
     return 1
 }
 
@@ -62,19 +62,13 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> greet.cml:2:5
-   |
- 2 |     println('hello from greet')     // result unused and not in a sync block: not executed
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
 
-The warning goes to standard error and the program runs as usual. Turn it off with `-Wno-effect-not-executed`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../cli.md)).
+A statement that writes runs with the region it is written in, whether or not anything needs what it gives: what a region writes is a root of that region (the ruling of 2026-11-17), so a call, a loop and a block run and nothing is reported for them. What is dropped for lack of a reader is a **read**: an external read whose result nobody uses does not run, and nothing is reported for it either -- a statement that does not run is not an effect that failed to run. A write inside a region that does not run -- an arm that is not taken -- goes with that region.
+
+The warning goes to standard error and the program runs as usual. Turn one off with `-Wno-unused-assigned-value`, all of them with `-Wnone`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../cli.md)).
 
 ## 4.3 `sync`
 
@@ -105,11 +99,11 @@ func greet(): int sync {
 
 ### 4.3.2 A function's behaviour is decided by the function itself
 
-A function is compiled into its own subgraph. A call only places this subgraph node into a larger graph and does not change its structure. So when a function whose body is not a sync block is called from a sync block, evaluation inside the function body is still by dependency:
+A function is compiled into its own subgraph. A call only places this subgraph node into a larger graph and does not change its structure. So when a function whose body is not a sync block is called from a sync block, the body is still **a region**, and the writes in it run:
 
 ```cml
 func log(x: int): int {
-    println(x)          // result unused, and the function body is not a sync block: not executed
+    println(x)          // the result is wanted by nobody, but it is a write: the body region runs it
     return x + 1
 }
 
@@ -122,10 +116,12 @@ func main(): int sync {
 ```
 
 ```text
+1
+2
 3
 ```
 
-(There is also a `SemanticDiag::EffectNotExecuted` warning pointing at `println(x)`.) The body of `main` is a sync block, and the two calls of `log` execute in order; but `println(x)` belongs to `log`'s own function body. To print, write `log` as `func log(x: int): int sync { ... }`.
+The body of `main` is a sync block, and the two calls of `log` execute in order, each printing its argument first (`1`, `2`); then `main` prints `3`. `println(x)` belongs to `log`'s own function body, and that body is a region, so it runs -- no `sync`, and no warning (4.2: reads on demand, writes with their region).
 
 ### 4.3.3 `sync` on a function body (function modifier)
 
@@ -133,12 +129,12 @@ func main(): int sync {
 
 ```cml
 func f(): int {
-    println('f')        // not executed: the function body is not a sync block
+    println('f')        // runs: the body is a region
     return 1
 }
 
 func g(): int sync {
-    println('g')        // executed: the function body is a sync block
+    println('g')        // runs, and in order with its neighbours
     return 2
 }
 
@@ -149,9 +145,12 @@ func main(): int sync {
 ```
 
 ```text
+f
 g
 3
 ```
+
+Both `f` and `g` print: a body without `sync` means only that the statements in it have no order from `sync`, not that its writes do not run.
 
 To make a function body execute in order, write the `sync` in the function body position; the body of a lambda is a block, and the `sync` is written before it: `(x: int) => sync { ... }`. A lambda head has no modifier (`sync (x: int) => ...` is a syntax error), and neither has a function type: `sync` is a property of a block, not of a type.
 
@@ -187,14 +186,15 @@ func main(): int sync {
 ```
 
 - When a write is not in a sync block and nothing reads the variable afterwards, the modification does not execute (evaluation by dependency).
-- A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
-- Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. A call through a function value is no exception as long as the call site can see the body of the value it calls: a lambda bound to a name in the same function is such a value, and `f()` in the example below is a write of the captured `c`, exactly as the call of a named function is. Only a function value whose body the call site cannot see can be recognised by its type alone (`var` parameters): a value passed as an argument, a value obtained as a return value, and a value stored in a container or in a structure and taken out again.
+- A write that is not in a sync block is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`. A `var` is not a resource, so the writes of one carry no ordering edges between them ([design principles](../../design-principles.en.md) 3.1, 3.5): the order a reader sees is a data dependency -- a read sees the value of the write written before it.
+- Tracking of modifications covers what a function writes through a call: when a function writes a `var`, the call site is recorded as a write to that variable. A call through a function value is no exception as long as the call site can see the body of the value it calls: a lambda bound to a name in the same function is such a value, and `f()` in the example below is a write of `c`, exactly as the call of a named function is. Only a function value whose body the call site cannot see can be recognised by its type alone (`var` parameters): a value passed as an argument, a value obtained as a return value, and a value stored in a container or in a structure and taken out again. What such a body may write is the module's `var` or the content of a `Ref`: a closure captures a value, not a place, so an assignment to a name of the call that made it is refused where it is written (`SemanticDiag::ClosureAssignsCapturedName`, [design principles](../../design-principles.en.md) 3.5), and the state that really has to be shared is a `Ref`.
 
 ```cml
+var c = 0
+
 func read(): int {
-    var c = 0
-    let f = (): void => sync { c += 1 }
-    f()                 // recorded as a write of the captured `c`
+    let f = (): void => sync { c = c + 1 }
+    f()                 // recorded as a write of `c`
     return c            // this read is what runs that write
 }
 
@@ -208,16 +208,17 @@ func main(): int sync {
 1
 ```
 
-With nothing reading `c` afterwards, the write does not run, and the call is reported as one that is never executed. The body prints `c` after writing it, so a body that ran would print `1`; the program prints only the `0` of `main`:
+With nothing reading `c` afterwards the call still runs, because it writes: what a region writes is a root of that region (the ruling of 2026-11-17). The body prints `c` after writing it, so the program prints the `1` of the body and then the `0` of `main`, and nothing is reported:
 
 ```cml
+var c = 0
+
 func drop(): int {
-    var c = 0
     let f = (): void => sync {
-        c += 1
+        c = c + 1
         println(c)      // would print 1 if the write ran
     }
-    f()                 // nothing reads `c` afterwards: the write does not run
+    f()                 // nothing reads `c` afterwards: the call does not run
     return 0
 }
 
@@ -228,13 +229,7 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> drop.cml:7:5
-   |
- 7 |     f()                 // nothing reads `c` afterwards: the write does not run
-   |     ^^^
-help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
-
+1
 0
 ```
 
@@ -288,6 +283,8 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 help: Ensure the index is within the valid range of the collection.
 ```
 
+The path in the location line is the one written on the command line: `camel fault.cml` prints `fault.cml:4:15`, `.\fault.cml` prints `.\fault.cml:4:15`, and an absolute path is printed as an absolute path. The compiler does not rewrite it, so the same source gives the same diagnostic on any machine.
+
 The operator that isolates a fault at a subgraph boundary is `attempt` ([6.10.1](06_expressions.md#6101-fault-isolation-attempt)).
 
 **`exit(n)`** ends the program immediately with exit code `n`; earlier output is written out as usual.
@@ -333,7 +330,7 @@ A program is processed by the sequence of passes on the command line: `camel fil
 | `std::jit` | Bytecode VM with JIT compilation; graphs that cannot be compiled are executed by the interpreter |
 | `std::prl` | Parallel scheduling: nodes that do not depend on each other can execute concurrently |
 | `std::macro` | Evaluates macro calls ahead of time |
-| `std::opt`, `std::opt::inline`, `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::opt` | Optimisation |
+| `std::opt`, `std::cxx::inline`, `std::cxx::fold`, `std::cxx::cse`, `std::cxx::dce`, `std::opt` | Optimisation |
 | `std::rgir`, `std::gir` | Print the graph (DOT format) without running it |
 | `std::stats` | Prints statistics of the graph and passes the graph on unchanged |
 | `onnx::export`, `std::cpp` | Translate to an ONNX model, to C++ source |

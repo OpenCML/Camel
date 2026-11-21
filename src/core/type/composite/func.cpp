@@ -93,7 +93,11 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         withConstIndices_,
         resources_));
     parts.hasWithRest = hasWithRest_;
-    return FunctionType::allocate<OpenFunctionType>(parts);
+    // An open signature stays out of the table (intern.h, "What is not"), but the types it names
+    // are the ones a graph reads through it -- `->funcType()->exitType()`, the result of a rule
+    // whose right side is a function value -- so they are interned here, on the same rule as the
+    // closed signature: a component is never left at the 0 that stands for "no type".
+    return FunctionType::allocate<OpenFunctionType>(FunctionType::frozenParts(parts));
 }
 
 // ---- Construction ----
@@ -144,7 +148,47 @@ template <> FunctionType *FunctionType::allocate<FunctionType>(const Parts &part
     return new (mem) FunctionType(parts, false);
 }
 
-FunctionType *FunctionType::intern(const Parts &parts) {
+Type *FunctionType::internComponent(Type *type) {
+    if (type == nullptr || type->isInterned()) {
+        return type;
+    }
+    if (type->code() == TypeCode::Function) {
+        auto *signature = static_cast<FunctionType *>(type);
+        // An open signature whose body has not decided its result is the builder's working object,
+        // not a type yet (intern.h, "What is not"): the table never holds one, and freezing it here
+        // would put a snapshot of a signature still being built into the enclosing type. It is left
+        // as it is, keeps id 0, and the assertion in `typeIdOf` is what reports a graph that
+        // recorded it.
+        if (signature->isOpen() && !signature->hasExitType()) {
+            return type;
+        }
+        // The interned form of a signature is the closed one of its own parts (this is what
+        // `Type::closed` answers for an open signature, done here for a signature that is already
+        // closed and was simply built beside the table).
+        return intern(signature->parts());
+    }
+    // Nothing else the table does not hold can be interned from here: a type is registered by its
+    // own constructor, and an object built beside the table has a twin there only if some
+    // constructor made one. It stays as it is, with id 0.
+    return type;
+}
+
+FunctionType::Parts FunctionType::frozenParts(const Parts &parts) {
+    Parts frozen    = parts;
+    frozen.exitType = internComponent(parts.exitType);
+    for (auto &[type, isVar] : frozen.params) {
+        type = internComponent(type);
+    }
+    return frozen;
+}
+
+FunctionType *FunctionType::intern(const Parts &unfrozen) {
+    // The components first. The key below holds each of them by TypeId (intern.h: typeKeyWord), so
+    // a component the table does not hold is a word the table cannot compare: `kNoTypeId` is 0, and
+    // every `TypeId` key that reads it reads one and the same type. The result type of a rule whose
+    // right side is a function value is exactly such a component -- the closure's signature, which
+    // the builder made open and never registered -- so a signature used to record a result of 0.
+    const Parts parts = frozenParts(unfrozen);
     // The key is everything a signature consists of (see intern.h; the component types by id):
     // the counts, the result type, each parameter with its `var` mark, and the
     // names. Parameter names are in the key because a type prints them, but `equals` ignores them
@@ -306,6 +350,8 @@ OpenFunctionType *FunctionType::asOpen() const {
 OpenFunctionType *OpenFunctionType::copyOf(const FunctionType *type) {
     return FunctionType::allocate<OpenFunctionType>(type->parts());
 }
+
+void OpenFunctionType::setExitType(Type *type) { exitType_ = internComponent(type); }
 
 // ---- Queries ----
 

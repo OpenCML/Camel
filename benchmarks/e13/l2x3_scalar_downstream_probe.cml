@@ -34,7 +34,15 @@ func main(): int sync {
         b2: reshape<[1]>([0.2])
     }
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
-    println('exported step')
-    return 0
+    let r = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
+    return match r {
+        case error e => sync {
+            println(e)
+            return 1
+        }
+        case _ => sync {
+            println('exported step')
+            return 0
+        }
+    }
 }

@@ -20,8 +20,10 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
 #include "camel/profile/profile.h"
+#include "camel/runtime/canonical.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
+#include "camel/runtime/storage_reuse.h"
 #include "camel/utils/command_line.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
@@ -272,7 +274,27 @@ int runCommand(int argc, char *argv[]) {
     // the external resources the program still holds are released first, before the context
     // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
-        ~ReleaseExternalResources() { camel::core::rtdata::disposeAllForeignResources(); }
+        ~ReleaseExternalResources() {
+            // `--gc-check foreign`: what the program had not released when it stopped, read before
+            // anything is disposed, and the counters of a lifetime that is a count (design
+            // principles 3.3: a `Ref<T>` box is freed by the last handle to go).
+            const bool reportForeign = camel::core::mm::allocatorChecks().printForeignResources;
+            const auto foreignBefore = camel::core::rtdata::foreignResourceStats();
+            const size_t disposed    = camel::core::rtdata::disposeAllForeignResources();
+            if (reportForeign) {
+                const auto anchor = camel::core::rtdata::countedCreationAnchor();
+                std::cout << "FOREIGN_RESOURCES"
+                          << " created=" << foreignBefore.createdControlBlocks
+                          << " counted=" << foreignBefore.createdCountedBlocks
+                          << " released=" << foreignBefore.releasedControlBlocks
+                          << " live=" << foreignBefore.liveControlBlocks << " disposed=" << disposed
+                          << " finalized=" << foreignBefore.finalizedWrappers
+                          << " creations=" << anchor.creations << " checks=" << anchor.checks
+                          << " found=" << anchor.found << " missing=" << anchor.missing
+                          << " rows=" << anchor.rows << " rows_seen=" << anchor.rowsSeen << '\n';
+                std::cout.flush();
+            }
+        }
     } releaseExternalResources;
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);
 
@@ -380,7 +402,7 @@ int runCommand(int argc, char *argv[]) {
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
                 !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags &&
-                !Inspect::dumpAttrs) {
+                !Inspect::dumpAttrs && !Inspect::dumpTies && !Inspect::dumpCopies) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -388,13 +410,17 @@ int runCommand(int argc, char *argv[]) {
         }
 
         if (selectedCommand == Command::Inspect) {
+            // A module that does not parse is a diagnostic against that module, not an exception
+            // out of the command: `compileForLoad` is the one place that decides it
+            // (camel/core/module/userdef.h), and the question below is the one report every
+            // compile of a module ends at.
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
-                mainModule->compile(CompileStage::GCT);
+                camel::core::module::compileForLoad(mainModule, CompileStage::GCT);
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
-                Inspect::dumpAttrs) {
-                mainModule->compile(CompileStage::Done);
+                Inspect::dumpAttrs || Inspect::dumpTies || Inspect::dumpCopies) {
+                camel::core::module::compileForLoad(mainModule, CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
             // once, before the first one: did anything fail? A dump of a partial tree is not an
@@ -419,7 +445,9 @@ int runCommand(int argc, char *argv[]) {
             }
         } else {
             phase::Scope phaseScope("compile", entryModuleName);
-            mainModule->compile(CompileStage::Done);
+            // The same one exit as every other load of a module (see the `inspect` branch above):
+            // the report this command ends at is `failIfModuleErrors`, below.
+            camel::core::module::compileForLoad(mainModule, CompileStage::Done);
         }
 
         if (selectedCommand == Command::Inspect) {
@@ -454,6 +482,31 @@ int runCommand(int argc, char *argv[]) {
                     camel::runtime::fact::computeFacts(facts, *ctx->runtimeProgram());
                     camel::runtime::fact::dumpFacts(facts, *ctx->runtimeProgram(), os);
                 }
+            }
+            if (Inspect::dumpTies) {
+                // The tie groups the canonical numbering met (design principles 9, "the graph
+                // interface does not see the spelling"). A part of a group too wide to enumerate
+                // is a known limitation of the numbering, and this is where it is reported: the
+                // numbering does not arrange such a part in the order the nodes were created in
+                // without saying so.
+                if (ctx->runtimeProgram()->root()) {
+                    const camel::runtime::CanonicalProgram numbering(
+                        *ctx->runtimeProgram(),
+                        *ctx->runtimeProgram()->root());
+                    os << numbering.tiesText();
+                }
+            }
+            if (Inspect::dumpCopies) {
+                // What the plan decided about every update node (design principles 10.5): whether
+                // an append, a path assignment or a sort rebinding reuses the storage of the value
+                // it is given or allocates new storage. The decision is the plan's, made once
+                // (camel/runtime/exec_plan.h, StorageReuse); this only prints it. Read with
+                // `camel/runtime/storage_reuse.h`: the tool reports, it does not make an update
+                // in-place.
+                camel::runtime::dumpStorageReuse(
+                    *ctx->runtimeProgram(),
+                    os,
+                    ctx->sourceContext().get());
             }
             if (Inspect::dumpAttrs) {
                 // The imports are loaded first, as for --ops: a module registers its attribute
@@ -825,11 +878,12 @@ int runCommand(int argc, char *argv[]) {
                << "\n]" << endl;
         } else {
             // Not a diagnostic: a state this version does not build. The text of the exception is
-            // printed with it (it used to be printed bare: a line reading `bad any_cast`), and the
+            // printed with it (never bare, as in a line reading `bad any_cast`), and the
             // program is not blamed, and the text never asks the reader to send it.
             os << "camel: internal error: " << e.what()
-               << "\nThis is a defect of the compiler, not an error of the program. No shape the program "
-                   "can write reaches it."
+               << "\nThis is a defect of the compiler, not an error of the program. No shape the "
+                  "program "
+                  "can write reaches it."
                << endl;
         }
         ASSERT(false, e.what());

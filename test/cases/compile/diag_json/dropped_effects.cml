@@ -1,9 +1,12 @@
 /**
- * Outside a sync block an effectful expression whose result nothing uses does not run
- * (docs/design-principles.cn.md 3.1). That is legal; the compiler warns about each one
- * (SemanticDiag::EffectNotExecuted) and the program runs as written. Lines marked DROPPED get
- * the warning; nothing in a sync block does, nor does a pure expression.
- * Output: `kept 1` and `0 5`.
+ * Which effects run is design principles 3.1, and a call is one of the nodes the author's ruling of
+ * 2026-11-17 names ("算子、调用、分支、循环一样"): a call to a callee that writes a resource outside
+ * the program is one of its region's writes, and the region's `GATE` reads it -- so `noisy(1)` and
+ * `noisy(2)` run, and so does the bare `println` (the ruling of 2026-11-15). A call whose callee
+ * writes only a `var` cell writes no resource outside the program (design principles 3.3), so
+ * `modify(i)` at line 34 is still reported; line 35 is UnusedAssignedValue; line 37 runs with its
+ * body (the ruling of 2026-11-16), and `branch_value_dropped` still reports that branch.
+ * Output: `operator`, `noisy` three times (lines 32, 33 and 36), `4`, `arm`, `kept 1`, `0 5`.
  */
 
 func noisy(x: int): int sync {
@@ -27,13 +30,13 @@ func quiet(x: int): int {
 func dropped(): int {
     var i = 5
     var j = 5
-    println('operator')              // DROPPED line 31: an impure operator
-    noisy(1)                         // DROPPED line 32: a function whose sync body prints
-    let unused = noisy(2)            // DROPPED line 33: bound to a name nothing reads
-    modify(i)                        // DROPPED line 34: a write nothing reads afterwards
-    j = 7                            // DROPPED line 35: an assignment nothing reads afterwards
-    println(noisy(4))                // DROPPED line 36: one warning, for the outer call
-    if quiet(0) > 0 then sync {      // DROPPED line 37: a branch with an effectful arm
+    println('operator')              // RUNS line 33: a write of stdout, and this region runs
+    noisy(1)                         // RUNS line 34: a call whose callee writes stdout
+    let unused = noisy(2)            // RUNS line 35: the same call, bound to a name nothing reads
+    modify(i)                        // WARNED line 36: writes a `var` cell, which is not outside
+    j = 7                            // WARNED line 37: an assignment nothing reads afterwards
+    println(noisy(4))                // RUNS line 38: the write runs, and reads its argument
+    if quiet(0) > 0 then sync {      // RUNS line 39: a branch statement, and the arm it takes
         println('arm')
     } else sync {
         println('other arm')

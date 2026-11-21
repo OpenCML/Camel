@@ -1,0 +1,48 @@
+// A fusion pass, written in Camel, over the model in case-study-variants/.
+//
+// It finds every `tensor:matmul` in the function's graphs and the elementwise node that reads it,
+// reports the pair, and commits. What it cannot do is put one fused operator in the two nodes'
+// place: a transaction can `replace`, `erase`, `eval`, `order`, `inline`, `outline` and
+// `add_constant` (modules/graph/module.cpp, the txn table), and there is no way to write a node
+// whose operator is one this graph does not already have. So the pass reports the sites and
+// commits the graph unchanged; whether that commit is accepted is what this probe measures.
+import { flatten } from array
+import { Graph, Node, graphs_of, nodes, inputs, value_users, kind, op, op_name, id, open, commit } from graph
+import { is_function } from types
+
+func op_text(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func all_nodes(gs: Graph[]): Node[] {
+    return flatten(gs->map<nodes>)
+}
+
+func is_matmul(n: Node): bool {
+    return op_text(n) == 'tensor:matmul@1.1' || op_text(n) == 'tensor:matmul'
+}
+
+// What a fusion would fold into the matmul: the nodes that read its result, by operator.
+func report(sites: Node[]): void {
+    sites->foreach<(n: Node): void => println(
+        `fusion site ${id(n)}: ${op_text(n)} -> ${len(value_users(n))} reader(s)`)>
+    sites->foreach<(n: Node): void => value_users(n)->foreach<(m: Node): void => println(
+        `  reader ${id(m)}: ${op_text(m)}`)>>
+}
+
+func commit_unchanged::<F>(f: F): F! sync {
+    let t = open(f)
+    return commit(t)
+}
+
+/// @param note what the pass writes on stderr before the count
+with <note: string = 'fusion'>
+export func fuse::<F>(f: F): F! when is_function::<F>() sync {
+    let sites = all_nodes(graphs_of(f))->filter<is_matmul>
+    println(`fusion: ${note}: ${len(sites)} matmul site(s)`)
+    report(sites)
+    return commit_unchanged(f)
+}

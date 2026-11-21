@@ -38,15 +38,15 @@
 #include <cstdio>
 #include <cstring>
 #include <format>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <ranges>
-#include <iostream>
 #include <span>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -274,7 +274,9 @@ class EncodeSession {
             }
             for (auto &prepared : prepared_) {
                 CAMEL_LOG_INFO_S(
-                    "GIREncode", "Finalize runtime graph '{}'.", prepared.source->name());
+                    "GIREncode",
+                    "Finalize runtime graph '{}'.",
+                    prepared.source->name());
                 finalizeRuntimeGraph(prepared);
                 prepared.constructed = true;
             }
@@ -291,8 +293,8 @@ class EncodeSession {
                 if (prepared.runtime == nullptr) {
                     continue;
                 }
-                const auto transaction = camel::runtime::GraphTransaction::borrow(
-                    prepared.source->view());
+                const auto transaction =
+                    camel::runtime::GraphTransaction::borrow(prepared.source->view());
                 const DraftGraphRead draftFace(*transaction, prepared.liveNodes);
                 const FrozenGraphRead frozenFace(*prepared.runtime);
                 const std::string difference = firstDifference(draftFace, frozenFace);
@@ -396,14 +398,13 @@ class EncodeSession {
         prepared.staticSlots.assign(sourceStaticSlots.begin(), sourceStaticSlots.end());
 
         // The front-end freeze dissolves a GATE that waits on nothing and has a value user: it is
-        // plain forwarding, and both places a graph is submitted dissolve it (the review of
-        // 2026-10-26, docs/handover/reviews/questions-2026-10-26-late.md, answer 3 -- "没有任何
-        // 等待、只有数据使用者的 GATE 就是纯转发，运行时提交与前端冻结都把它溶解掉"). The
-        // runtime commit already does it (src/runtime/draft_session.cpp, dissolveUnorderedGates);
+        // plain forwarding, and both places a graph is submitted dissolve it.
+        // The runtime commit already does it (src/runtime/draft_session.cpp, dissolveUnorderedGates);
         // this is the freeze's half, so validateRuntimeGraphPayload below never sees such a gate.
         // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
         // structural check's. A gate that still waits -- on the sync chain's tail or on a control
         // input -- and one with no value input are not this case and keep their node.
+        graph->edit().normalizeChainPlaces();
         graph->edit().dissolveUnorderedGates();
 
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
@@ -426,8 +427,7 @@ class EncodeSession {
                         sourceId));
             }
         }
-        prepared.payloadShape =
-            describeDraftNativePayload(graph->view(), liveNodesOf(prepared));
+        prepared.payloadShape = describeDraftNativePayload(graph->view(), liveNodesOf(prepared));
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
@@ -461,8 +461,8 @@ class EncodeSession {
                 ruleGraphPtrs,
                 // A graph compiled from the IR is not lifted from another: the lift is a runtime
                 // operator's own build (draft.cpp passes the list), and the compile-time one lifts
-                // into a program of its own (modules/transforms/jvp_instantiate.cpp), so nothing
-                // to reserve here.
+                // into a program of its own (the `jvp_instantiate.cpp` that was under
+                // `modules/transforms/`, since deleted), so nothing to reserve here.
                 {},
                 prepared.payloadShape,
                 prepared.staticSlots,
@@ -580,8 +580,8 @@ class EncodeSession {
             auto *arrayType = static_cast<ArrayType *>(type);
             // As in draft_session's cloneStaticSlot: the copy is of the whole value's shape, which
             // is part of the value (design principles 5.4), and holds every element.
-            auto *cloned = ::Array::create(
-                camel::core::mm::autoSpace(), arrayType, array->shapeSpan());
+            auto *cloned =
+                ::Array::create(camel::core::mm::autoSpace(), arrayType, array->shapeSpan());
             objectCache.emplace(object, cloned);
             for (size_t i = 0; i < array->numel(); ++i) {
                 cloned->set<slot_t>(
@@ -815,7 +815,8 @@ class EncodeSession {
             prepared.bytes,
             prepared.runtimeId,
             camel::runtime::GCGraphDerivation{
-                camel::runtime::kInvalidGraphId, source->view().flags()},
+                camel::runtime::kInvalidGraphId,
+                source->view().flags()},
             debugRecord,
             source->view().funcType(),
             source->view().frameSlotTypes(),
@@ -853,6 +854,8 @@ class EncodeSession {
     }
 
     graph_ptr_t rootGraph_;
+    // program-holder-exempt: borrow-or-foreign-type -- a reference to the program the encoder
+    // was handed; its caller owns it for the encode.
     camel::runtime::Program &program_;
     camel::runtime::GraphIdAllocator *freshIds_;
     std::vector<PreparedGraph> prepared_;

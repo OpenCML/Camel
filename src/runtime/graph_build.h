@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -21,6 +22,7 @@
 namespace camel::runtime {
 
 class GraphDraft;
+class GraphTransaction;
 class Program;
 
 /// The graph's cold data: its names and the names it captures.
@@ -223,5 +225,30 @@ void validateRuntimeGraphCalls(
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
-} // namespace camel::runtime
+/// The promise a graph makes twice (graph_edges.cpp, `EdgeChecker::checkPortTypes`): its ports are
+/// the parameters its own signature declares. A call site is checked against the port node and the
+/// value a graph hands on against the signature, so a graph that publishes both must publish one
+/// answer -- and a draft that writes a new signature over port nodes it did not touch
+/// (`GraphDraft::setFuncType`) published a graph that says one type to its callers and another to
+/// its own body.
+///
+/// Asked of *every* graph a commit encodes, in every build, as the call and payload checks are
+/// (`validateRuntimeGraphCalls` above): a graph that is wrong from the moment it is made is exactly
+/// what a check placed only on republished graphs misses. The commit asks it beside those two, for
+/// every graph it encoded and not only for one it edited. Throws std::runtime_error naming the
+/// parameter, the declared type and the type the port node carries.
+void validateRuntimeGraphPortTypes(
+    const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
+/// What the commit delivered, read back against the draft it encoded: `graph`, the graph the
+/// program holds for `transaction`'s draft, must hold exactly the draft's edges -- the four kinds
+/// (a data port in its normal and its context run, a control input, an order edge, a sync edge),
+/// both ways, in the numbering the encoder gave the draft's nodes. `name` is the graph's name, for
+/// the sentence. Throws std::runtime_error naming the edge that disagrees: a graph the commit made
+/// without an edge its draft holds is an edit the caller wrote and will never see, and this is the
+/// only place that knows both sides of it. A debug build runs this at every commit; a Release build
+/// runs it in a test that asks for it (`camel::runtime::setDraftDeliveryCheckEnabled`).
+void verifyDraftDelivery(
+    const GraphTransaction &transaction, const GCGraph &graph, std::string_view name);
+
+} // namespace camel::runtime

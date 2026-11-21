@@ -1,12 +1,19 @@
 // The corpus of the common-subexpression comparison: the same value written twice, an
-// expression over two separately written literals, a value read twice with a write between the
-// reads, and a function that shares nothing.
+// expression over two separately written literals, one name whose value changes between two
+// products written alike, and a function that shares nothing.
 //
 //   shared     `x * 7` written twice: identical once the two 7 literals are one value
 //   literals   `3 + 4` written twice: the two sums are one expression once the literals are one
-//   written    two reads of a cell with a write between them: two values, so the two products
-//              must stay two nodes, whatever the 3 literals do
+//   written    `cell * 3` written twice with `cell = cell + 1` between them: the second `cell` is
+//              another value, so the two products are two computations and must stay two nodes,
+//              whatever the 3 literals do
 //   apart      `x + 1` and `x + 2`: two constants of different value, no expression to merge
+//
+// Every name here is a value, not a cell: a `var` whose every use stays in the region that
+// declared it is bound to the value and an assignment rebinds it. So `written` asks the sweep a
+// value question -- the text `cell * 3` is written twice and is computed twice, because the name
+// between the two is another value, while the `3` written twice is one value after the sweep.
+// The number is the source's own: `written(4)` is `4 * 3 + 5 * 3 = 27`.
 
 func shared(x: int): int {
     let a = x * 7

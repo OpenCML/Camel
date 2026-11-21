@@ -10,7 +10,6 @@ kind = "benchmark"
 case = "../../cases/para/core/asian_option_mc.cml"
 args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
 # bound, by the rule:
@@ -63,7 +62,6 @@ kind = "benchmark"
 case = "../../cases/para/core/asian_option_mc.cml"
 args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 70.24 s CPU read above (the higher of 70.12 s and 70.24 s) rounded up: 1.64x the
 # busiest. The timeout below stays as the liveness bound (the rule quoted on
@@ -85,7 +83,6 @@ kind = "benchmark"
 case = "../../cases/para/core/merge_sort.cml"
 args = ["--block-limit", "8192", "--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 53.07 s CPU read above (the higher of 51.12 s and 53.07 s) rounded up: 1.64x the
 # busiest. The timeout below stays as the liveness bound (the rule quoted on
@@ -100,7 +97,6 @@ kind = "benchmark"
 case = "../../cases/para/core/merge_sort.cml"
 args = ["--block-limit", "16384", "--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 69.90 s CPU read above (the higher of 69.90 s and 61.85 s) rounded up: 1.65x the
 # busiest. The timeout below stays as the liveness bound (the rule quoted on
@@ -115,7 +111,6 @@ kind = "benchmark"
 case = "../../cases/para/core/monte_carlo_pi.cml"
 args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_nvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 31.51 s CPU read above (the higher of 31.37 s and 31.51 s) rounded up: 1.65x the
 # busiest. The timeout below stays as the liveness bound (the rule quoted on
@@ -130,7 +125,6 @@ kind = "benchmark"
 case = "../../cases/para/core/monte_carlo_pi.cml"
 args = ["--timeit", "std::prl/1", "--output-format", "json", "${case}", "${run_prl}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # 1.63x the 32.16 s CPU read above (the highest of 31.63 s, 31.69 s and 32.16 s) rounded up: 1.65x
 # the busiest. The timeout below stays as the liveness bound (the rule quoted on

@@ -342,16 +342,16 @@ This is behaviour laid down by the language (design principles, 3.6), not a defe
 
 This is where Camel differs most from other languages, and it is worth reading slowly.
 
-### 6.1 An effect that nothing depends on does not run
+### 6.1 Reads on demand, writes with their region
 
 In most languages, statements run one after another. In Camel, by default, **evaluation is driven by dependencies**: an expression is evaluated because someone needs its result. Expressions that do not depend on each other have no order and can run in parallel.
 
-This has a consequence: **outside a sync block, a call whose result nobody uses does not run**, even if it has side effects. [`examples/06_unused_effect.cml`](examples/06_unused_effect.cml):
+That rule is about **reads**. **A write is different: a write to a resource outside the program is used by the region it is written in** ([design principles 3.1](../design-principles.en.md#31-evaluation-by-dependency)) -- when the region runs, its writes to outside resources run, whether or not anything uses their results, and no `sync` is needed. A function body is a region, so a `println` nothing uses still prints inside a function `main` calls. [`examples/06_unused_effect.cml`](examples/06_unused_effect.cml):
 
 ```cml
 
 func greet(): int {
-    println('hello from greet')     // not used, not in a sync block: never runs
+    println('hello from greet')     // nothing uses the result, but this is a write: the body is a region and runs it
     return 1
 }
 
@@ -366,19 +366,13 @@ camel docs/tutorial/examples/06_unused_effect.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/06_unused_effect.cml:5:5
-   |
- 5 |     println('hello from greet')     // not used, not in a sync block: never runs
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
 
-Only `1` is printed. The return value `1` of `greet` does not depend on that `println`, so in the graph it is a node that nobody needs. This is not an error; it is a rule of the language. The compiler gives a warning so that a forgotten `sync` gets seen.
+Both lines are printed. The return value of `println` is still needed by nobody, but it is a **write**, and a write needs no reader. Removing `sync` or adding it changes nothing here: `sync` decides order, not whether something runs (6.2).
+
+What really does not run? A **read**: an external read whose result nobody uses does not run, and nothing is reported for it (chapter 5 has a `get_env` example). And a write inside a region that does not run -- a branch nobody needs, an arm that is not taken -- goes with that region; a call, a loop and a block that write run with the region they are written in (the ruling of 2026-11-17).
 
 ### 6.2 Sync blocks
 
@@ -404,51 +398,53 @@ In a sync block it does not matter what you call or whether it has side effects,
 
 ```cml
 func f(c: bool): int sync {
-    if c then { println(1); println(2) }   // the arm is not a sync block: only println(2) executes
+    if c then { println(1); println(2) }   // the arm is not a sync block, but it is a region: both print
     return 0
 }
 ```
 
-The `if` itself is on the sync chain, its arm is not: the arm is evaluated by dependency, the `println(1)` whose value nobody uses does not execute, and `println(2)` is the arm's value, which is the `if`'s value, so it executes. To print both, write `sync` on the arm: `if c then sync { println(1); println(2) }`.
+The `if` itself is on the sync chain, its arm is not -- does that mean the arm is evaluated by dependency and `println(1)` does not run? No: the arm is a region, and a write to `stdout` in it is used by that region, so `println(1)` runs although nobody wants its value. What the arm's missing `sync` decides is only the order: without it the two statements have no order, and which one is the `if`'s value is decided by the data edges (here `println(2)`).
 
 ### 6.3 A function's behaviour is decided by the function itself
 
-The body of `main` is a sync block, so will a `println` inside a function it calls run? No. A function is compiled into a subgraph of its own, and a call only places that subgraph node into a larger graph; it does not change its structure. [`examples/06_callee_decides.cml`](examples/06_callee_decides.cml):
+The body of `main` is a sync block, so will a `println` inside a function it calls run -- the one whose result nobody uses? Yes. A function is compiled into a subgraph of its own, and the `println` sits in that subgraph's body region; a region runs its writes. [`examples/06_callee_decides.cml`](examples/06_callee_decides.cml):
 
 ```cml
 
 func log(x: int): int {
-    println(x)          // result unused, body is not a sync block: not executed
+    println(x)          // the result is needed by nobody, but it is a write in the body region: it runs
     return x + 1
 }
 
 func main(): int sync {
     let a = log(1)
     let b = log(a)
-    println(b)          // prints 3, and nothing else
+    println(b)          // prints 3
     return 0
 }
 ```
 
 ```text
+1
+2
 3
 ```
 
-The two calls of `log` did run in order (`b` is 3), but `println(x)` belongs to the body of `log` itself, and that is not a sync block (the compiler gives the `EffectNotExecuted` warning all the same). To print, declare `log` as `func log(x: int): int sync { ... }`.
+The two calls of `log` run in order (`b` is 3), and each call prints its argument first: `1`, then `2`, then `main` prints `3`. This is exactly "a function's behaviour is decided by the function itself": `main`'s `sync` does not reach into `log`'s body, and `log` does not change because of its caller -- its body is a region, and the writes in it run.
 
 ### 6.4 `sync` and the function body
 
-When `sync` is written in the **function body** position (`func g(): int sync { ... }`), it modifies the block that is the function body: the statements of the block execute in the order they are written. A function body without `sync` is not a sync block, and effects such as `println` in it do not run (evaluation by dependency). [`examples/06_sync_body.cml`](examples/06_sync_body.cml):
+When `sync` is written in the **function body** position (`func g(): int sync { ... }`), it modifies the block that is the function body: the statements of the block execute in the order they are written. A function body without `sync` is not a sync block, but it is still **a region**, and writes such as `println` in it run -- `sync` decides order, not whether something runs. [`examples/06_sync_body.cml`](examples/06_sync_body.cml):
 
 ```cml
 
 func f(): int {
-    println('f')        // not executed: the body is not a sync block
+    println('f')        // runs: the body is a region
     return 1
 }
 
 func g(): int sync {
-    println('g')        // executed: the body is a sync block
+    println('g')        // runs, and in order with its neighbours
     return 2
 }
 
@@ -459,9 +455,12 @@ func main(): int sync {
 ```
 
 ```text
+f
 g
 3
 ```
+
+Both `f` and `g` print: `f`'s body not being a sync block means only that the statements in `f` have no order from `sync`, not that its writes do not run.
 
 When the body of a lambda has to run in order, write the `sync` before the block: `(x: int) => sync { ... }`. A lambda head has no `sync`.
 
@@ -507,7 +506,7 @@ func main(): int sync {
 
 The body of `twice` is a sync block, so the two calls of `bump` and `return c` execute in the order they are written. A few more points:
 
-- A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
+- A write that is not in a sync block is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`. A write to a `var` is a value and not an effect, so nothing orders the writes among themselves either: what a read sees is the value of the write written before it.
 - If nobody reads the variable any more after the write, that modification does not run — this is still evaluation by dependency.
 
 The everyday advice is simple: write computation as `let`s and pure functions; put input and output in sync blocks; keep `var` for the few places that really need in-place updates.
@@ -517,6 +516,7 @@ The everyday advice is simple: write computation as `let`s and pure functions; p
 [`examples/07_closures.cml`](examples/07_closures.cml):
 
 ```cml
+import state
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -539,9 +539,9 @@ func main(): int sync {
     let ops = [inc, dbl]                     // functions in an array
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
-    var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<(x) => sync { total = total + x }>
-    println(total)
+    let total = state::ref(0)                // shared state: a handle a closure may capture
+    [1, 2, 3]->foreach<(x) => sync { state::set(total, state::get(total) + x) }>
+    println(state::get(total))
     return 0
 }
 ```
@@ -554,7 +554,7 @@ func main(): int sync {
 ```
 
 - Functions are values: they can be bound to a name, passed as arguments, returned, and put in an array. A function type is written `(x: int) => int`.
-- A lambda captures variables from the enclosing scope, and the capture is by reference. The last lambda writes to the captured `total`, so it has the function modifier `sync` in front of it (declaring that it has side effects), and its body is also a sync block (`=> sync { ... }`).
+- A lambda captures variables from the enclosing scope, and it captures the **value**: it holds what the name had when the lambda was made, not the name (`design principles` 3.5). So a lambda cannot assign a captured name (`total = total + x` inside one is the compile error `SemanticDiag::ClosureAssignsCapturedName`), and shared mutable state is a `Ref` instead: the last lambda writes the box the handle `total` points at, so it has the function modifier `sync` in front of it (declaring that it has side effects), and its body is also a sync block (`=> sync { ... }`).
 - Functions with the same name and different parameter types are overloads; a name that stands for a set of overloads can be used as a value only where the expected function type selects one of them (passed to a function whose parameter type is written out); elsewhere wrap it in a lambda. A library operator with one signature (such as `trim`) is a value directly: `xs->map<trim>`.
 
 ## 8. Generics
@@ -986,7 +986,7 @@ GRAPH_STATS {"graphs":7,"nodes":70,"edges":85,"opers":18,"direct_calls":4,"indir
 The two lines of numbers differ: `std::opt` changed the graph (there are fewer direct calls and more operator nodes — functions were inlined at their call sites), while the result of the program is unchanged. To save the whole graph pass by pass, use `--dump-after-each-pass`:
 
 ```bash
-camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::opt::inline std::opt::fold std::fvm
+camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::cxx::inline std::cxx::fold std::fvm
 ```
 
 The directory `snap` then contains `00_input.rgir.dot`, `01_std.opt.inline.rgir.dot`, `02_std.opt.fold.rgir.dot` and the corresponding `.stats.json` files: the input graph, and the graph after each pass.

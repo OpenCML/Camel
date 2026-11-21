@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Test-only: the local algebra of std::opt::algebra written as rules, saturated and extracted.
+ * Test-only: the local algebra of std::cxx::algebra written as rules, saturated and extracted.
  * test::saturate runs under the default numeric policy (the order and grouping of a sum or
  * product may change), test::saturate_safe under the strict one. For each function of the
  * corpus it prints "SATURATE <name> add=<n> mul=<n>": the operators left after extraction.

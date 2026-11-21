@@ -197,7 +197,7 @@ std::string TokenBuffer::docAbove(size_t index) const {
     }
     // The documentation of a declaration is decided by syntax, not by white space: the `///`
     // lines written above it belong to it, and a blank line between the last of them and the
-    // declaration changes nothing (the author's ruling of 2026-10-26). A blank line is the
+    // declaration changes nothing. A blank line is the
     // absence of a token, so the run of comments is read back from the declaration in the token
     // stream, which is what makes a blank line inside a block of `///` lines part of the block
     // rather than a gap in it.

@@ -2,29 +2,30 @@ id = "tools.autodiff_migration_ledger"
 order = 918
 tier = "fast"
 tags = ["feat", "tools", "autodiff"]
-desc = "The autodiff migration ledger is a ratchet: `pass` may only rise, `with`/`array`/`other` and the two denominators may only fall, and the numbers it reads are the ones the page records. It is gated because a ruler that reads nothing reports a number that never changes: the wording classifier read `with=0 array=0 other=118` after the refusal it was reading was withdrawn, so the three classes are now counted from the case sources and the rule files, and only `pass` follows the host binary."
+desc = "The autodiff migration ledger compares this run with the last one recorded and holds one direction: every case the record names must still pass, and a fall names the case that fell. The record is the list of case paths that passed (`test/cases/tools/autodiff_migration_ledger/baseline.json`), not a count, because a count says how many fell and a list says which one; `--record` writes it and refuses to drop a name without `--force`. The six recorded numbers and the three classification columns are gone: they counted spellings in the case sources, a comment is not a spelling, a case that explained itself moved class with nothing rewritten, and whoever moves a reading also moves the target it is compared against. It is gated because a ruler nobody compares is a promise nobody keeps, and this tool is run by hand otherwise; the comparison is the whole point."
 
 # The plan is named by `test/plan-selection.json` (`scripts/autodiff-migration-ledger.mjs`), which the
 # runner self-test requires of every plan file: a plan no case path selects is a plan `--changed`
 # never runs, and the self-test says so by name. That is how this file's first version was caught.
 #
-# `scripts/autodiff-migration-ledger.mjs` is run by hand and by nobody else, so nothing noticed when
-# its diagnostic extraction stopped matching anything: `runCase` looked for a line starting with
-# `error[`, and the one-line diagnostic form this tree prints is
-# `(module)path:line:col: [Error]: message (name=..., code=0x...)` (render.h). Every failing case then
-# had an empty first diagnostic, every one of them landed in `other`, and the ratchet red with
-# `other 6 -> 106` on a tree where nothing had changed. The check runs the tool with `--ledger-check`
-# and reads its own `[LEDGER-CHECK] ok`, so the extraction cannot go blind again without failing here.
+# What this test holds is the comparison, not the table: `--ledger-check` reads
+# `test/cases/tools/autodiff_migration_ledger/baseline.json` and reds when a case the record names no
+# longer passes. The record is written by `--record` on the build host and never by this plan, and a
+# run that cannot start the binary is refused rather than compared against an unchanged record.
+#
+# The tool's per-case diagnostic column is a hint for a reader, and nothing compares it: a case passes
+# on the exit code its own plan expects, so a wording that stops matching costs the hint and not the
+# verdict. That reading is recorded by name in `test/tools/check-diagnostic-form-readers.mjs`.
 
 [[tests]]
 name = "tools.autodiff_migration_ledger.ratchet"
-desc = "`--ledger-check` reads `total=144 library=135 with=56 array=69 other=10`, which is what `LEDGER_RECORDED` holds, and holds the recorded floor of `pass=22` -- the ledger reads a case's expectation from the plans that actually hold it, so the five cases that pin `expect_exit = 1` in `feat/compile` and `feat/linear` are compared against their own plans and turn over -- and says so instead of reding a number nothing moved. One case moved class on 2026-11-05 without a case arriving: the library's `grad` landed as a composition on `first_with_as_param`, so `has_aux_library_plain.cml` now declares the function it differentiates as a `with` one (`with <x: float> func cube_at()`) instead of handing `grad` a lambda -- `with` 55 -> 56, `other` 11 -> 10, and the three numbers the case reads (`8.0`, `(12.0)`, `12.0`) are unchanged. Before that the three classes moved once for a measurement correction (the ledger strips both comment forms before it looks for a spelling, so four cases that were classified by the words of their explanation are now classified by their code: `array` 72 -> 69, `with` 54 -> 55, `other` 9 -> 11), and before that every number here fell by one with `ab9b5bf1a`'s cut: that merge carried `stdlib/rulesets/transpose.cml#sum_axis_t` (one `array` law) and `test/cases/modules/autodiff/rules_angle_args_sum_axis_jvp.cml` (one passing case). The denominators are a decision, so the decision is restated here rather than left to drift."
+desc = "`--ledger-check` compares this run with the record case by case and says `ok` while every case the record names still passes; a case that fell is printed with its own `want` and `got`, so the red names the case and not only a number. The record is a run of one binary, so `pass=n/a` (no built tree) is refused rather than compared."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/autodiff-migration-ledger.mjs"
 args = ["${case}", "--ledger-check"]
 expect_exit = 0
-expect_stdout_contains = ["[LEDGER-CHECK] ok: total=144 library=135", "with=56 array=69 other=10 -- pass 没有降，三类与记录的读数一致"]
+expect_stdout_contains = ["[LEDGER-CHECK] ok: every case the record names still passes"]
 # It runs alone: for the length of the run, `test/cases/modules/autodiff/` holds files that are not
 # there before or after it (`<case>.ledger-probe.cml`, written and deleted per case), and two other
 # checks walk that tree -- `plan-inventory.mjs`'s case ledger and `check-doc-links.mjs`'s citations --

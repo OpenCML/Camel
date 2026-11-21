@@ -308,7 +308,7 @@ not touch (`x * 1.0`, `x + -0.0`, `x - 0.0`, `x / 1.0`, double negation, commuta
 of each value). No rule enters the file before `check` passes it: `check_library.cml` runs the
 check over every rule of it (the plan `modules.rules`). The float laws that depend on a
 permission (`x*c1 + x*c2`, `(x*c1)*c2`) can now be written with `#requires`; the ones that need a
-condition (`x*c + x*c` for a whole `c`) still wait for `when`; `std::opt::algebra` keeps doing
+condition (`x*c + x*c` for a whole `c`) still wait for `when`; `std::cxx::algebra` keeps doing
 them.
 
 ## 6. The rest of the engine
@@ -417,3 +417,21 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
 
 
 
+
+## Invocation matching policy
+
+`rewrite`, `run`, and `saturate` append `ordered: bool = false` to their `with`
+configuration. `modules/rewrite/module.cpp` passes it through `applyRewrite` or
+`saturateKernel` into `DraftWritings`. `DraftWritings::matchFrom` receives a false
+commuted-search flag in ordered mode, so recursive operand swaps and the exact
+associative-chain remainder path are disabled, even after a guard rejects a binding.
+Existing class-alternative traversal and repeated-variable equality are unchanged.
+The default keeps declared algebraic fallback. A two-way rule in saturation already
+supplies its reverse; explicit commutativity rules can create exchanged alternatives
+in ordered mode. This is a binding policy, not an extraction policy.
+
+`RewriteRecord` retains the choice for `why_not`, including generic instances.
+The existing diagnostic walker reports a positional mismatch or guard rejection;
+it does not enumerate every default algebraic search path. Matching choice changes
+neither numeric permissions nor deletion protection, and supplies no additional
+fault/effect preservation guarantee.

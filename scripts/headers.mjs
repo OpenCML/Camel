@@ -308,8 +308,14 @@ function undecorate(line) {
 function splitText(text) {
     const bom = text.startsWith('\uFEFF') ? '\uFEFF' : ''
     const body = bom ? text.slice(1) : text
-    const crlf = body.includes('\r\n')
-    const normalized = crlf ? body.replace(/\r\n/g, '\n') : body
+    // The dominant ending, not "contains a CRLF": one stray CRLF used to flip a whole file to CRLF
+    // on the way out (a single `\r` in `modules/transforms/vmap.cpp` rewrote all 857 of its lines),
+    // and `.gitattributes` says the tree is LF because the tests compare bytes. A file that is
+    // mostly CRLF is still written as CRLF.
+    const crlfCount = (body.match(/\r\n/g) || []).length
+    const lfCount = (body.match(/\n/g) || []).length - crlfCount
+    const crlf = crlfCount > lfCount
+    const normalized = body.replace(/\r\n/g, '\n')
     const finalNewline = normalized.endsWith('\n')
     const lines = normalized.split('\n')
     if (finalNewline) lines.pop()

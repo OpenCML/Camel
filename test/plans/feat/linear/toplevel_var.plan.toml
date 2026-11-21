@@ -262,7 +262,7 @@ assert(out === '105 | 106', `unexpected output: ${out}`)
 
 [[tests]]
 name = "argument_order.default"
-desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: default."
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a `Ref` a closure writes (design principles 3.5: a closure captures a handle, not a name) and a var parameter. Pipeline: default."
 kind = "behavior"
 case = "../../../cases/linear/toplevel_var/argument_order.cml"
 args = ["${case}"]
@@ -276,7 +276,7 @@ assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3,
 
 [[tests]]
 name = "argument_order.nvm"
-desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: nvm."
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a `Ref` a closure writes (design principles 3.5: a closure captures a handle, not a name) and a var parameter. Pipeline: nvm."
 kind = "behavior"
 case = "../../../cases/linear/toplevel_var/argument_order.cml"
 args = ["${case}", "std::nvm"]
@@ -290,7 +290,7 @@ assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3,
 
 [[tests]]
 name = "argument_order.fvm"
-desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: fvm."
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a `Ref` a closure writes (design principles 3.5: a closure captures a handle, not a name) and a var parameter. Pipeline: fvm."
 kind = "behavior"
 case = "../../../cases/linear/toplevel_var/argument_order.cml"
 args = ["${case}", "std::fvm"]
@@ -304,7 +304,7 @@ assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3,
 
 [[tests]]
 name = "argument_order.jit"
-desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: jit."
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a `Ref` a closure writes (design principles 3.5: a closure captures a handle, not a name) and a var parameter. Pipeline: jit."
 kind = "behavior"
 case = "../../../cases/linear/toplevel_var/argument_order.cml"
 args = ["${case}", "std::jit"]
@@ -318,7 +318,7 @@ assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3,
 
 [[tests]]
 name = "argument_order.opt"
-desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: opt."
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a `Ref` a closure writes (design principles 3.5: a closure captures a handle, not a name) and a var parameter. Pipeline: opt."
 kind = "behavior"
 case = "../../../cases/linear/toplevel_var/argument_order.cml"
 args = ["${case}", "std::opt"]
@@ -332,7 +332,7 @@ assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3,
 
 [[tests]]
 name = "argument_order.opt_jit"
-desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: opt_jit."
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a `Ref` a closure writes (design principles 3.5: a closure captures a handle, not a name) and a var parameter. Pipeline: opt_jit."
 kind = "behavior"
 case = "../../../cases/linear/toplevel_var/argument_order.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -456,7 +456,7 @@ case = "../../../cases/linear/toplevel_var/err_pure_parameter.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["uses err_pure_parameter::cnt"]
+expect_output_contains = ["uses var err_pure_parameter::cnt"]
 
 [[tests]]
 name = "grad_refused"

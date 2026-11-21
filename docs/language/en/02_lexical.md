@@ -72,7 +72,8 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Clauses of a declaration | `on` | the `on` of a tag declaration, before its list of positions (a position name follows) |
 | Clauses of a declaration | `read_by` | the `read_by` of a tag declaration, after its list of positions (the passes that read the tag follow) |
 | Clauses of a declaration | `when` | a condition: after the signature of a function or a rule and before its body, and at the end of a tag declaration (`func f(x: T): T when is_integer::<T>()`) |
-| Clauses of a declaration | `uses` | the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses fs`, `uses s, t`) |
+| Clauses of a declaration | `uses` | the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses s` reads, `uses var fs` writes, written the way a `var` parameter is) |
+| Clauses of a declaration | `spelling` | the leading word of a resource clause: it declares that the body may read the spelling of the program (a graph's or a function's name, a node's source position, creation order and creation numbers, the text a node shows). It is the mechanism an effect uses, written before `pure`/`uses` in that clause (design principles 9.5) |
 | Clauses of a declaration | `pure` | the `pure` of a resource clause: a promise to touch no resource at all (the same position as `uses`) |
 | Clauses of a declaration | `join` | a trailing clause of a fact declaration: how two facts merge (after the fact body, one per line) |
 | Clauses of a declaration | `meet` | a trailing clause of a fact declaration: how equivalent writings meet |
@@ -91,6 +92,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |
 | Type and pattern positions | `indices` | in the same head: the `indices` after `in` (a value follows, and it walks the positions of its elements) |
 | Type and pattern positions | `unordered` | in a resource declaration, after the name: `unordered` (`resource net unordered`: the effects on it keep no written order) |
+| Type and pattern positions | `readonly` | in a resource declaration, after the name: `readonly` (`resource graph readonly`: it is only ever read, so it conflicts with no access and orders none; `uses var` on it is a type error) |
 | Tag position names | `field` | after the `on` of a tag declaration: the tag holds for a struct field |
 | Tag position names | `nodes` | after the `on` of a tag declaration: the tag holds for the nodes written lexically in a region |
 | Tag position names | `param` | after the `on` of a tag declaration: the tag holds for a function parameter |

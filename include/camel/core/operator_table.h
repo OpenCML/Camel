@@ -76,6 +76,10 @@ class Data;
 using data_ptr_t = std::shared_ptr<Data>;
 } // namespace camel::core::data
 
+namespace camel::core::type {
+class FunctionType;
+} // namespace camel::core::type
+
 namespace camel::core {
 
 /// Index of an operator in the OperatorTable.
@@ -87,7 +91,7 @@ inline constexpr OperId kNoOper = 0;
 
 /// The operators the core recognises by identity, with their ids fixed at compile time. The
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
-/// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
+/// `body->oper == oper::VarGet` asks the question by operator id, not by comparing the uri.
 ///
 /// Besides the variables, the list holds the operators the compiler emits itself, as the
 /// lowering of a construct (`__enum_make__`, `__throw__`, `__set_index__`): the builder refers
@@ -96,62 +100,47 @@ inline constexpr OperId kNoOper = 0;
 /// `__iter__`, whose overloads are chosen by the operand types) has no one id and is referred
 /// to by the name of its group.
 namespace oper {
-inline constexpr OperId VarNew          = 1; // ":var/new"  `var v = e`
-inline constexpr OperId VarGet          = 2; // ":var/get"  reading a variable
-inline constexpr OperId VarPeek         = 3; // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId VarTake         = 4; // ":var/take" the value, moved out of the variable
-inline constexpr OperId AssnOwned       = 5; // ":op/assn_owned"
-inline constexpr OperId SetField        = 6; // ":op/set_field"
-inline constexpr OperId SetIndex        = 7; // ":op/set_index"
-inline constexpr OperId TagIsNull       = 8; // ":op/tag_is_null"
-inline constexpr OperId TagNullValue    = 9; // ":op/tag_null_value"
-inline constexpr OperId TagIsError      = 10; // ":op/tag_is_error"
-inline constexpr OperId TagErrorValue   = 11; // ":op/tag_error_value"
-inline constexpr OperId TagErrorInfo    = 12; // ":op/tag_error_info"
-inline constexpr OperId TagThrow        = 13; // ":op/tag_throw"
-inline constexpr OperId EnumMake        = 14; // ":enum/make"
-inline constexpr OperId EnumTag         = 15; // ":enum/tag"
-inline constexpr OperId EnumField       = 16; // ":enum/field"
-inline constexpr OperId CopyArray       = 17; // ":struct/copy_arr"
-inline constexpr OperId AppendOwned     = 18; // ":struct/append_arr_owned"
-inline constexpr OperId MacroCmp        = 19; // ":macro/cmp"
+inline constexpr OperId VarNew        = 1;  // ":var/new"  `var v = e`
+inline constexpr OperId VarGet        = 2;  // ":var/get"  reading a variable
+inline constexpr OperId VarPeek       = 3;  // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId VarTake       = 4;  // ":var/take" the value, moved out of the variable
+inline constexpr OperId AssnOwned     = 5;  // ":op/assn_owned"
+inline constexpr OperId SetField      = 6;  // ":op/set_field"
+inline constexpr OperId SetIndex      = 7;  // ":op/set_index"
+inline constexpr OperId TagIsNull     = 8;  // ":op/tag_is_null"
+inline constexpr OperId TagNullValue  = 9;  // ":op/tag_null_value"
+inline constexpr OperId TagIsError    = 10; // ":op/tag_is_error"
+inline constexpr OperId TagErrorValue = 11; // ":op/tag_error_value"
+inline constexpr OperId TagErrorInfo  = 12; // ":op/tag_error_info"
+inline constexpr OperId TagThrow      = 13; // ":op/tag_throw"
+inline constexpr OperId EnumMake      = 14; // ":enum/make"
+inline constexpr OperId EnumTag       = 15; // ":enum/tag"
+inline constexpr OperId EnumField     = 16; // ":enum/field"
+inline constexpr OperId CopyArray     = 17; // ":struct/copy_arr"
+inline constexpr OperId AppendOwned   = 18; // ":struct/append_arr_owned"
+inline constexpr OperId MacroCmp      = 19; // ":macro/cmp"
 /// A cell with no value in it yet, of the type its single `with` argument names. What a local of a
 /// generator body becomes: its value is written where the statement stands, and not in the body
 /// that creates the stream (design principles 5.4).
-inline constexpr OperId VarNewEmpty     = 20; // ":var/new/empty"
+inline constexpr OperId VarNewEmpty = 20; // ":var/new/empty"
 /// The cell a call wrote, taken after the call: what a read of a variable written by a call through
 /// a function value takes as its version when the call's value carries no version of its own (it
 /// may be `void`). The result is the cell itself; the call is an input so that taking the value
 /// makes the call run (design principles 3.1).
-inline constexpr OperId VarAfter        = 21; // ":var/after"
-/// `:op/keep(x, v)`: the value `v`, with `x` as an input whose value no result takes. A pass that
-/// removes the last use of a node whose running is observed (an effect, or a computation that may
-/// fault) routes that node through this operator instead of dropping it, so the node stays in the
-/// data-use set the liveness function reads while `v` stands where the node's value did (design
-/// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
-/// effect and may fault -- because an operator a pass could drop, merge, move or compute early
-/// would undo the reason it was inserted.
+inline constexpr OperId VarAfter = 21; // ":var/after"
+/// Id 22 is free and stays free: it held the keeper operator a pass wrote when a removal took
+/// the last use of a node whose running is observed. The keeper is a `GATE` now -- one data port
+/// reading the value that was there, the value passed through (design principles 3.3,
+/// docs/design/effects/edges.cn.md 5.3) -- so the operator is gone, and no other operator takes
+/// its id: reusing it would make the deletion a rename.
 ///
-/// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
-/// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
-/// chain. That shape is not hypothetical, so the operator is not unreachable today: `std::opt` over
-/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes.
-/// What 3.3 still leans on for the graphs the builder writes is the chain: an effect written inside
-/// a `sync` block has a place in it, and a pass that removes the statement hands that place on
-/// instead of reaching for this operator (rewrite.h, replaceNode). This operator is for the read
-/// that has no such place -- and a graph that keeps neither is refused at the commit ("effect node
-/// ... with neither a read of its value nor a place in its chain"), which is what
-/// `test::keepshape` measures.
-///
-/// The insertion is also exercised by construction, in src/passes/test/keepnode.cpp and
-/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1 reads_the_divisor=1`,
-/// and the same pass with the insertion switched off reads `keep=0`. An earlier version of this
-/// comment said no program reached the insertion. The counts that refuted it are 3 of the 5
-/// programs under test/cases/opt/effects/ (each holding two nodes) and 7 in the whole
-/// test/cases/opt tree; both counts, their per-file node counts and their names are pinned by
-/// `keep_shape.reachability`, so a rule that starts or stops writing this node is a red run.
-inline constexpr OperId Keep            = 22; // ":op/keep"
-inline constexpr OperId kWellKnownCount = 23; // kNoOper included
+/// Of that shape, one half is necessary and the other has been measured in one use: a sync
+/// predecessor naming the node was part of it, and a measurement showed that the
+/// predecessor can be dropped here -- built with it and running, then built again without it and
+/// still holding. Whether another use needs the
+/// predecessor has not been measured, so this paragraph is not a statement that the keeper needs
+/// no order: it says which half was measured and where.
+inline constexpr OperId kWellKnownCount = 22; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -184,7 +173,6 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":macro/cmp",
     ":var/new/empty",
     ":var/after",
-    ":op/keep",
 };
 
 /**
@@ -222,8 +210,8 @@ struct OperatorTraits {
     /// otherwise. Passes read it: `src/runtime/graph.cpp#nodeMayFault` answers with it (beside
     /// `elementwise`, for shapes the type states in full), and `nodeIsFreelySchedulable` hands
     /// that answer to whoever may drop, move or recompute a node -- a node the program observes
-    /// is kept alive with `:op/keep` when a removal takes its last read
-    /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`).
+    /// is kept alive by a `GATE` when a removal takes its last read
+    /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`, `#keepThroughValue`).
     bool mayFault = true;
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
@@ -255,7 +243,7 @@ struct OperatorTraits {
  * whose result a type can fix: the shape of a tensor whose type carries its shape, its element
  * count, one of its dimensions. `statics` holds the arguments that are constants (aligned with
  * `types`); `allocator` holds any object the value needs. Returns nullopt when the types do not
- * fix the result. std::opt::fold uses these to turn such results into constants once shape
+ * fix the result. std::cxx::fold uses these to turn such results into constants once shape
  * specialization has put the facts into the types.
  */
 using TypeFolder = std::function<std::optional<slot_t>(
@@ -368,8 +356,8 @@ class OperatorTable {
     /// makers and its `fact` this way: what they make holds the functions of the rule's sides,
     /// which the collector does not trace, and installing the facts of a declaration is the
     /// declaration itself.
-    void declareUnfoldable(
-        std::string_view protocol, std::initializer_list<std::string_view> operators);
+    void
+    declareUnfoldable(std::string_view protocol, std::initializer_list<std::string_view> operators);
 
     // ---- Queries --------------------------------------------------------------------------
 
@@ -422,6 +410,17 @@ class OperatorTable {
     bool hasExternalEffect(OperId id) const;
     bool hasExternalEffect(std::string_view uri) const;
 
+    /// True when running the operator **writes** a resource a running region owes (design
+    /// principles 3.1, 3.3): the region that runs it owes its running, so the write is a root of
+    /// that region (camel/runtime/region_roots.h). Two kinds of write answer true -- one whose
+    /// resource reaches outside the program (the console, the file system, a module's own state)
+    /// and one to a `Handle`, a `Ref` the program owns whose reader may stand in a graph this one
+    /// cannot see. Reading `console` or `fs` reaches outside without being a write, and this
+    /// answers false for it. True for an undeclared operator, whose conservative reading is a write
+    /// of the global resource (design principles 3.3).
+    bool writesForTheRegion(OperId id) const;
+    bool writesForTheRegion(std::string_view uri) const;
+
     // ---- In-place forms (design principles 11.3) --------------------------------------
     //
     // An operator returns a new value and never changes its arguments (`sort` returns a new
@@ -456,6 +455,25 @@ class OperatorTable {
     /// Whether the operator `uri` was declared to reuse an operand.
     bool reusesOperand(std::string_view uri) const;
 
+    // ---- What the result is, when it is not a value of the operator's own ---------------------
+    //
+    // The operator's result is a value one of its operands already holds instead of a value the
+    // operator makes: the element read answers the slot the array holds (`__index_arr__`), and the
+    // field read answers the slot the variant holds (`__enum_field__`). It is therefore a carrier
+    // of that operand's value, as a JOIN, a GATE and a port are carriers of theirs -- it makes no
+    // reference of its own, and the reference of the value it hands on is the holder's. Declared
+    // where the operator is registered, beside `declareReusesOperand`, and read by the plan --
+    // `forwardsItsValue` (src/execute/exec_plan.cpp) -- so there is one fact and one place to write it.
+
+    /// Declares that `uri` answers a value an operand already holds; `onlyOutsideArrays` restricts
+    /// that to the results that are not arrays (a row of a higher-rank value is its own).
+    void declareHandsOnOperandValue(std::string_view uri, bool onlyOutsideArrays = false);
+
+    /// Whether the operator `uri` declares it, and whether it holds only for a result that is not
+    /// an array. False for an operator nobody declared.
+    bool handsOnOperandValue(std::string_view uri) const;
+    bool handsOnOnlyOutsideArrays(std::string_view uri) const;
+
     // ---- Conversions (the fact a rule's key is read from) -----------------------------------
     //
     // A conversion of the language is written `op/<source>to<destination>` and its rule is filed
@@ -470,7 +488,7 @@ class OperatorTable {
     /// The types `uri` converts between, or nullopt when it is not a declared conversion.
     std::optional<ConversionTypes> conversionTypesOf(std::string_view uri) const;
 
-    /// True when the operator is a declared conversion. The question `find("to")` used to answer.
+    /// True when the operator is a declared conversion (the question `find("to")` answers).
     bool isConversion(std::string_view uri) const { return conversionTypesOf(uri).has_value(); }
 
     // ---- Decorators that grant attributes (language reference 7.6) -------------------------
@@ -555,8 +573,8 @@ class OperatorTable {
         /// derived from a Camel declaration is the *callee's* name: the declaration may be a kernel
         /// the module never exports (`array:sum_kernel` is `#impl(sum_kernel)`), and whether a
         /// program can write that name is a fact about the module's exports that a graph does not
-        /// carry, so the printer uses a derived shape only for an operator of the core (`:` prefix),
-        /// whose names every program has in scope.
+        /// carry, so the printer uses a derived shape only for an operator of the core (`:`
+        /// prefix), whose names every program has in scope.
         bool declaredByModule = false;
         /// Whether the declaration this shape was read off is body-less: a kernel the module
         /// declares for its C++ side (`#impl(sum_kernel)` and the `#op('array:sum_l')` that names
@@ -669,9 +687,19 @@ class OperatorTable {
         std::string_view protocol,
         std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators);
 
+    /// Declares the faults of the operator `uri` — the one place "it may fault" is stated
+    /// (design principles 3.3, docs/design/op-semantics/README.cn.md 4.2). An empty list declares
+    /// the operator has no fault path at all, which is what a pure one needs to be freely
+    /// schedulable (design principles 3.4); an operator that declares none may fault. The
+    /// record gets the table the way it gets a trait -- the same facts one step further, with no
+    /// version of its own, because a fault table says what the operator can raise and not what a
+    /// new release of it is. Writing a non-empty table where the record already says it never
+    /// faults throws std::invalid_argument (check 2 of declareSemantics).
+    void declareFaults(std::string_view uri, std::vector<sem::FaultSpec> faults);
+
     /// The declared semantics, or nullptr when nobody declared any. Lock-free; the record
-    /// stays valid until the process exits. A record that only carries traits (set without
-    /// declareSemantics) is not semantics: this returns nullptr for it.
+    /// stays valid until the process exits. A record that only carries the effect facts (set or
+    /// declareFaults without declareSemantics) is not semantics: this returns nullptr for it.
     const sem::OperatorSemantics *semantics(OperId id) const {
         return entries_[id].declared.load(std::memory_order_acquire);
     }
@@ -687,6 +715,21 @@ class OperatorTable {
     /// Whether the operator declares an access to a resource of class `cls` (`writesOnly`: a
     /// write). An undeclared operator declares none.
     bool touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly = false) const;
+
+    /// The operator's access list (sem::OperatorSemantics::accessList): what it touches besides
+    /// its operands' values, one (resource, mode) per item, or -- for an operator that declares
+    /// none -- the conservative reading, one write of the global resource. Empty means the
+    /// operator is pure. `camel inspect --ops` prints it and the reference checker compares it
+    /// with the `uses` clause a declaration writes, so a declaration and its reader cannot mean
+    /// two different lists.
+    std::vector<sem::ResourceAccess> accessList(OperId id) const;
+
+    /// Whether the operator itemizes the accesses accessList returns: false for one that declares
+    /// none, whose list is the conservative reading of writing the global resource.
+    bool declaresAccesses(OperId id) const {
+        const sem::OperatorSemantics *facts = record(id);
+        return facts != nullptr && facts->resources.has_value();
+    }
 
     /// Whether the operator declares a write to a cell or to an object changed in place: state
     /// of the program itself (not ambient state, not a module's objects).
@@ -731,6 +774,12 @@ class OperatorTable {
         /// The operator may return its operand (declareReusesOperand): an elementwise operator
         /// that writes into an operand it owns, rather than allocating a result.
         bool reusesOperand = false;
+        /// The operator answers a value an operand already holds (declareHandsOnOperandValue):
+        /// the element read hands on the slot the array holds. `handsOnOnlyOutsideArrays` says
+        /// that holds only when the result is not an array -- a row of a higher-rank value is a
+        /// value of its own. Guarded by mutex_, written at module load time only.
+        bool handsOnOperandValue      = false;
+        bool handsOnOnlyOutsideArrays = false;
         /// The types this operator converts between (declareConversion), or nullopt when it is
         /// not a conversion. Guarded by mutex_, written at module load time only.
         std::optional<ConversionTypes> conversion;
@@ -774,7 +823,6 @@ class OperatorTable {
     std::atomic<uint64_t> epoch_{0};
 };
 
-
 /**
  * The one place the kernel's argument order is decided. An operator registered with
  * `withAfterNorm` has a kernel that reads the ordinary arguments and then the with-arguments as one
@@ -790,5 +838,58 @@ void joinKernelArguments(std::string_view uri, std::vector<T> &norm, std::vector
         with.clear();
     }
 }
+
+/**
+ * The clause a function value's type writes: what a call through that value reaches, which is also
+ * what a higher-order operator reaches through the value at the operand its declaration names.
+ *
+ * A clause is present iff the type writes one (`Concrete`); a type that writes none (`Generic`)
+ * answers nullopt, and every caller keeps the conservative reading there -- never "touches
+ * nothing", because an unread clause is not an empty one. `pure` is not an absence: it is the clause
+ * that names nothing, so it comes back as a `Concrete` signature whose `pure()` is true and whose
+ * reach is the empty set. That distinction is the whole point of this one function, and it is why
+ * the two answers are `has_value()` and `->pure()` rather than a single bool.
+ */
+std::optional<sem::ResourceSignature> functionValueClause(const type::FunctionType *value);
+
+/**
+ * Where a clause's `with` parameters land once the value stands at an operand of a node: the value
+ * itself takes a slot, so the clause starts one past it. A call through a value keeps the value as
+ * its first `with` input (`with` 0), and a higher-order operator's function operand is the `with`
+ * operand its declaration names; a value taken as an ordinary operand leaves the base at 0.
+ *
+ * This is the base both sides use: the runtime passes `1` for a call and `index + 1` for an
+ * operand, the builder `isWith && isCall ? 1 : 0`, and it is written here so that one reading
+ * answers for both.
+ */
+size_t functionValueWithBase(sem::ResourceBinding::Kind kind, size_t index);
+
+/**
+ * A function value's clause together with where it lands: `clause` is the reading above, and the
+ * other two are what a `with` parameter of the clause needs to reach the node's operand. One answer
+ * for every reader, so a call through a value and a higher-order operator's operand cannot disagree
+ * about the same type; an absent clause means the caller keeps its conservative reading.
+ */
+struct FunctionValueClause {
+    std::optional<sem::ResourceSignature> clause;
+    size_t withArgBase = 0;
+    size_t withCount   = 0;
+};
+
+/**
+ * One rule, read wherever a call stands (design principles 3.3): a call through a function value
+ * takes its accesses from the value's type (`Builder::reachOfCall`, `Builder::isEffectNode`'s `Call`
+ * case, `Resolver::call`), and a higher-order operator's call is that same reading with the value at
+ * the operand its declaration names (`sem::ResourceSpec::functionOperand`) -- the builder's ordering
+ * (`Builder::reachOfOper`) and effect check (`Builder::isEffectNode`'s operator case), both through
+ * `Builder::functionValueAt`; the node-role registry; the effect summary (`EffectWalk::ofNodes`);
+ * and `Resolver::fromFunctionOperand`. The clause itself is read once (`functionValueClause`, above),
+ * and every one of those readers asks this reading for it -- through `functionValueClauseAt` here,
+ * or the clause alone where the base and the count are not needed -- rather than reading the type's
+ * `resources()` itself. The one reader that does read the signature itself is `declaredClauseAt`,
+ * because a call site that writes no clause has to be judged there and not declined.
+ */
+FunctionValueClause functionValueClauseAt(
+    const type::FunctionType *value, sem::ResourceBinding::Kind kind, size_t index);
 
 } // namespace camel::core

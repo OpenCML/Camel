@@ -72,6 +72,7 @@
 
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/enum.h"
@@ -82,6 +83,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/resources.h"
 #include "camel/runtime/retype.h"
 
 #include <algorithm>
@@ -93,6 +95,8 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace sem = camel::core::sem;
 
 namespace {
 
@@ -159,8 +163,22 @@ struct Wrapper {
     size_t tag         = 0;
 };
 
+/// The function a static slot of `graph` holds, or nullptr when the node is not a value of a
+/// function type or the slot holds no function.
+///
+/// Only a value of a function type can be a boxed function: a static area holds whatever the node
+/// that names it put there, in the order the graph declared it. `main` in
+/// `test/cases/opt/e9/rc00_seed27.cml` holds the argument `3` of the call beside the closure, and
+/// read as a function pointer that slot is `0x3`: `Function::graph()` then reads the graph table
+/// of address 11, which is the SIGSEGV `std::opt` took on that program (measured: the trace of this
+/// function printed `graph='main' kind=Data typecode=Int64 slot=0x3`). The callers already have the
+/// answer for a value that is not a function of the program -- they refuse that family by name and
+/// say why -- so the question this function asks is the node's type, and the answer is nullptr.
 ::Function *staticFunctionOf(const GCGraph &graph, const GCNode &node) {
     if (node.dataIndex >= 0 || !graph.staticArea()) {
+        return nullptr;
+    }
+    if (node.dataType() == nullptr || node.dataType()->code() != TypeCode::Function) {
         return nullptr;
     }
     const size_t index = size_t(-node.dataIndex);
@@ -307,9 +325,90 @@ template <class Draft> DraftNodeInit snapshotOf(const Draft &draft, gc_node_ref_
     return init;
 }
 
+/// The clause a function publishes once its captures are its parameters: every `uses capture N` the
+/// type wrote has to be said again as a use of the parameter the N-th capture is now.
+///
+/// A signature names its resources in the callee's own numbering (`resource_semantics.h`, the note
+/// on `ResourceSignature`: with parameters first, then ordinary ones), and a capture is a position
+/// of the graph's own closure -- "only an inferred closure type has them". The pass hands the
+/// captured values to the function as trailing ordinary parameters and removes the closure, so
+/// after the rewrite there is no capture N to name: the value the body reaches is the parameter at
+/// the position this pass put it in. Leaving the clause at `capture N` while the body reads
+/// `parameter P` is a declaration of one thing and a body of another, and the effect-containment
+/// check (analysis 4.1, at each call site the footprint must not exceed what the type declares)
+/// refuses the program for it -- rightly, because the promise a caller reads would be about a slot
+/// the callee no longer has.
+///
+/// What the moved use says -- its class, its name and its mode -- is what the body reaches through
+/// that capture, read from the footprint of the graph *before* the rewrite (which binds those
+/// accesses to the capture; the rewritten body binds the same accesses to the parameter). This
+/// moves a use; it does not widen one.
+sem::ResourceSignature capturesAsParameters(
+    const sem::ResourceSignature &declared, const camel::runtime::GraphFootprint &footprint,
+    const std::map<size_t, size_t> &moved) {
+    if (declared.mode != sem::ResourceSignature::Mode::Concrete) {
+        // A type that promises nothing covers whatever the body does; there is no clause to move.
+        return declared;
+    }
+    sem::ResourceSignature clause = declared;
+    const auto say = [&clause](size_t index, const sem::Resource &resource, sem::AccessMode mode) {
+        const auto found =
+            std::find_if(clause.params.begin(), clause.params.end(), [&](const auto &use) {
+                return use.index == static_cast<uint8_t>(index);
+            });
+        if (found == clause.params.end()) {
+            clause.params.push_back(
+                sem::ResourceSignature::ParamUse{
+                    .index = static_cast<uint8_t>(index),
+                    .cls   = resource.cls,
+                    .name  = resource.name,
+                    .mode  = mode});
+            return;
+        }
+        // One parameter, one resource: two uses of it are one use, with the wider mode
+        // (the same joining the builder does when it writes a clause).
+        if (found->cls != resource.cls) {
+            found->cls = sem::ResourceClass::Unknown;
+        }
+        if (found->name.empty()) {
+            found->name = resource.name;
+        }
+        found->mode = sem::uniteAccess(found->mode, mode);
+    };
+    for (const sem::ResourceAccess &access : footprint.accesses) {
+        if (access.binding.kind != sem::ResourceBinding::Kind::Capture) {
+            continue;
+        }
+        const auto to = moved.find(access.binding.index);
+        if (to == moved.end()) {
+            continue; // a capture that did not become a parameter stays one
+        }
+        if (to->second > 0xFF) {
+            // A signature numbers a use in one byte, so a use of the 256th parameter cannot be
+            // written down. Nothing is said rather than something wrong: the check then reports
+            // this call site, which is the honest reading of a clause that cannot name it.
+            continue;
+        }
+        say(to->second, access.resource, access.mode);
+    }
+    for (const auto &position : moved) {
+        const uint8_t was = static_cast<uint8_t>(position.first);
+        clause.captures.erase(
+            std::remove(clause.captures.begin(), clause.captures.end(), was),
+            clause.captures.end());
+    }
+    std::sort(clause.params.begin(), clause.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    return clause;
+}
+
 /// A function's captures become its trailing ordinary parameters: the pass calls such a function
-/// with the values the closure captured, so the body reads them where it read its ports.
-template <class Draft> void parameterizeCaptures(Draft &draft) {
+/// with the values the closure captured, so the body reads them where it read its ports. The
+/// clause comes with them (`capturesAsParameters`): the type says the functions' captures, so a
+/// capture moved into the parameter list is a use the type has to state in its new place.
+template <class Draft>
+void parameterizeCaptures(Draft &draft, const camel::runtime::GraphFootprint &footprint) {
     const std::vector<gc_node_ref_t> captures(
         draft.closureNodes().begin(), draft.closureNodes().end());
     if (captures.empty()) {
@@ -351,15 +450,24 @@ template <class Draft> void parameterizeCaptures(Draft &draft) {
             factory.addNormArg(name, type->normTypeAt(i), type->normIsVarAt(i));
         }
     }
-    for (gc_node_ref_t capture : captures) {
+    // Where each capture lands: the captures come after every parameter the function already
+    // has, in the order the graph holds them, and one whose type the draft cannot state is left
+    // where it is -- so the number a capture becomes is counted, not assumed to be its own
+    // position.
+    std::map<size_t, size_t> moved;
+    for (size_t position = 0; position < captures.size(); ++position) {
+        const gc_node_ref_t capture   = captures[position];
         const DraftNodeHeader *header = draft.header(capture);
         if (header == nullptr || header->dataType == nullptr) {
             continue;
         }
+        const size_t landsAt = withCount + type->normTypesCount() + moved.size();
+        moved.emplace(position, landsAt);
         draft.removeClosureNode(capture);
         draft.appendNormPort(capture);
         factory.addNormArg(std::string(), header->dataType, false);
     }
+    factory.setResources(capturesAsParameters(type->resources(), footprint, moved));
     factory.setExitType(type->hasExitType() ? type->exitType() : ty::Type::Void());
     draft.setFuncType(factory.build());
     draft.setClosureType(nullptr);
@@ -385,6 +493,26 @@ template <class Draft> gc_node_ref_t emitCallThroughValue(
     std::span<const gc_node_ref_t> arguments, std::span<const gc_node_ref_t> withArguments,
     gc_node_ref_t value, ty::Type *resultType, uint32_t region, gc_node_ref_t place) {
     const gc_cnt_t count = static_cast<gc_cnt_t>(family.variants.size());
+    // The nodes of the dispatch are written in `region` -- the region the call itself is in, and
+    // the one the arms below are regions of -- and not in the region the draft happens to be
+    // inserting into. Those are the same for a graph this pass writes itself, but not for a call
+    // through a value in a loop body: there the insert point was the form or the root, so the
+    // `BRCH`, the cases it tests against and the `JOIN` landed in region 0 while the arms and the
+    // call were in the body. The order that came out put the branch before the loop and the loop's
+    // own test before the values it reads, so the round never entered -- and a defect that looks
+    // like "the loop does not run" is one a program that prints nothing in it never shows.
+    //
+    // The guard puts the insert point back on every way out, the throw below included. An exit that
+    // missed it would leave every node this pass writes afterwards in the wrong region, which is a
+    // defect in another graph entirely.
+    struct InsertRegionScope {
+        Draft &target;
+        uint32_t outer;
+        ~InsertRegionScope() { target.setInsertRegion(outer); }
+    } regionScope{draft, draft.insertRegion()};
+    if (draft.insertRegion() != region) {
+        draft.setInsertRegion(region);
+    }
 // A value this pass dispatches on has to be the enum of its function type, and that is checked
     // here, where the tag is about to be read. `:enum/tag` and `:enum/field` read a tagged pair; a
     // value that is still a plain reference to a function has no tag at those offsets, and reading
@@ -1409,7 +1537,10 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 return false;
             }();
             if (captured) {
-                parameterizeCaptures(draft);
+                // The body's resources read before the rewrite: what the closure reaches through
+                // each capture is what it will reach through the parameter that capture becomes,
+                // and that is what the clause has to say afterwards (`capturesAsParameters`).
+                parameterizeCaptures(draft, camel::runtime::footprintOf(*program, graph));
             }
 
             // The values this graph builds, and the calls through them.
@@ -1533,7 +1664,7 @@ DefunctionalizeRewritePass::apply(const camel::runtime::Program *program, std::o
                 init.withInputs = std::span<const gc_node_ref_t>{};
                 draft.rewriteNode(id, init);
                 ++rewroteValues;
-                // The static function under a closure is not a value any more: the closure packed
+                // The static function under a closure is not a value: the closure packed
                 // it into a tag. It is dropped rather than left holding a type it no longer has.
                 if (isClosure) {
                     const auto norms = graph->normInputsOf(ref);

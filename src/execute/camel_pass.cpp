@@ -305,6 +305,18 @@ class CamelPass final : public GraphIRPass {
         return produced;
     }
 
+    /// A pass written in Camel rewrites a graph only through the graph module's API (`open`,
+    /// `replace`, `erase`, `add_constant` and the rest of stdlib/graph.cml). That API cannot make a
+    /// node that carries an access, splice a body in or change what a node is, so the two commit
+    /// checks of the effect analysis are theorems for it, and they
+    /// are not asked of it (docs/design/effects/analysis.cn.md 4.1).
+    ///
+    /// This is the fact, and it holds in every build. Which builds act on it is not this answer's
+    /// to give: the caller asks `camelPassCommitChecksEnabled` as well, so a shipped build reads the
+    /// theorem, and a debug or test build checks it. A pass whose
+    /// rewriting interface widens has to answer false here; nothing about the build changes that.
+    bool rewritesThroughTheGraphModuleOnly() const override { return true; }
+
   private:
     std::string module_;
     std::string function_;
@@ -402,11 +414,12 @@ void registerCamelPass(
                     return std::make_unique<CamelPass>(ctx, module, function, genericParams, args);
                 };
                 // The tags written on the declaration are read from the module once its functions are
-                // built: a generic one is not built by the lookup above.
-                try {
-                    lookup.module->compile(camel::core::module::CompileStage::Done);
-                } catch (...) {
-                }
+                // built: a generic one is not built by the lookup above. A module that does
+                // not compile is a diagnostic against it, recorded by the one place that
+                // decides that (`compileForLoad`, camel/core/module/userdef.h); it is not this
+                // registration's to report, so the answer is not read here.
+                (void)camel::core::module::compileForLoad(
+                    lookup.module, camel::core::module::CompileStage::Done);
                 declareReads(lookup.module, module, function);
                 registerModulePass(module + "::" + function, std::move(generic));
                 return;

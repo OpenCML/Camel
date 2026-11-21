@@ -89,16 +89,23 @@ export const CONTEXT_KEYWORDS = [
     {
         word: 'uses',
         group: 'clause',
-        zh: '资源子句：函数签名或函数类型里声明效应集合的 `uses`（`uses fs`、`uses s, t`）',
-        en: "the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses fs`, `uses s, t`)",
-        evidence: ['if (atWord(0, "uses") || atWord(0, "pure")) {'],
+        zh: '资源子句：函数签名或函数类型里声明效应集合的 `uses`（`uses s` 读、`uses var fs` 写，与 `var` 形参同一种写法）',
+        en: "the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses s` reads, `uses var fs` writes, written the way a `var` parameter is)",
+        evidence: ['if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {'],
+    },
+    {
+        word: 'spelling',
+        group: 'clause',
+        zh: '资源子句的前置词：声明这段正文可以读程序的写法（图或函数的名字、节点的源位置、创建顺序与创建号、节点显示成的文字）。它与效应同一套机制，写在同一个子句里、`pure`/`uses` 之前（设计原则 9.5）',
+        en: "the leading word of a resource clause: it declares that the body may read the spelling of the program (a graph's or a function's name, a node's source position, creation order and creation numbers, the text a node shows). It is the mechanism an effect uses, written before `pure`/`uses` in that clause (design principles 9.5)",
+        evidence: ['if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {'],
     },
     {
         word: 'pure',
         group: 'clause',
         zh: '资源子句：承诺不使用任何资源的 `pure`（与 `uses` 同一位置）',
         en: 'the `pure` of a resource clause: a promise to touch no resource at all (the same position as `uses`)',
-        evidence: ['if (atWord(0, "pure")) {'],
+        evidence: ['while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {'],
     },
     {
         word: 'join',
@@ -218,6 +225,13 @@ export const CONTEXT_KEYWORDS = [
         zh: '资源声明里，名字之后的 `unordered`（`resource net unordered`：这个资源上的效应不保持书写顺序）',
         en: 'in a resource declaration, after the name: `unordered` (`resource net unordered`: the effects on it keep no written order)',
         evidence: ['} else if (atWord(0, "unordered")) {'],
+    },
+    {
+        word: 'readonly',
+        group: 'type',
+        zh: '资源声明里，名字之后的 `readonly`（`resource graph readonly`：它只被读，所以不与任何访问冲突、也不产生顺序；`uses var` 是类型错误）',
+        en: 'in a resource declaration, after the name: `readonly` (`resource graph readonly`: it is only ever read, so it conflicts with no access and orders none; `uses var` on it is a type error)',
+        evidence: ['} else if (atWord(0, "readonly")) {'],
     },
     {
         word: 'field',

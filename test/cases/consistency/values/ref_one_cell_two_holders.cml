@@ -1,0 +1,17 @@
+/**
+ * One reference, two holders: the closure writes the cell and the call that made it reads the same
+ * cell afterwards, in both directions.
+ */
+
+import state
+
+func main(): int sync {
+    let n = state::ref(0)
+    let bump = (): int => sync { return state::update(n, (x: int) => x + 1) }
+    println(bump())
+    println(bump())
+    println(state::get(n))
+    state::set(n, 10)
+    println(bump())
+    return 0
+}

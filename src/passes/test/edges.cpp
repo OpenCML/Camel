@@ -9,12 +9,13 @@
 
 #include "camel/passes/test/edges.h"
 
-#include "camel/passes/test/anchor.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/runtime/draft_session.h"
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/cycle.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/graph.h"
 #include "runtime/graph_build.h"
 
 #include <algorithm>
@@ -66,8 +67,8 @@ const Program *commitEdit(
         // The identity is what can be looked at here; the type is held by the static_assert in
         // draft_session.h. Nothing here names the graph's type: what the session hands out is
         // what a pass edits, and the test is about the one it hands out, not about its name.
-        auto *first     = &session.edit(program->root());
-        auto *second    = &session.edit(program->root());
+        auto *first  = &session.edit(program->root());
+        auto *second = &session.edit(program->root());
         blankNode(*first);
         auto *afterEdit = &session.edit(program->root());
         if (first == second && first == afterEdit) {
@@ -117,8 +118,8 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    auto &transaction = session.edit(program->root());
-    auto &draft       = transaction.edit();
+    auto &transaction          = session.edit(program->root());
+    auto &draft                = transaction.edit();
     const gc_node_ref_t first  = anchorNode(transaction);
     const gc_node_ref_t second = anchorNode(transaction);
     const gc_node_ref_t third  = anchorNode(transaction);
@@ -137,7 +138,7 @@ EdgesOrderOkTestPass::apply(const camel::runtime::Program *program, std::ostream
         os << "EDGES accepted\n";
         // The graph holds the edge in its own array, and the per-node reader (the one every
         // scheduler and pass uses) agrees with that array node for node.
-        size_t seen = 0;
+        size_t seen    = 0;
         size_t ordered = 0;
         bool sorted    = true;
         for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
@@ -171,15 +172,16 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
     // graph; the draft only writes the edges a rewrite asks for. Since the encoder drops an order
     // edge whose user takes no order (planDraftPayload), a bad graph built through a draft is never
     // written at all: the case would print "wrote=1" and then watch the commit accept a graph
-    // without the edge. So the case builds the bad graph *here*, on the frozen records, and hands it
-    // to the seal check. The draft's half is asserted to be "no longer produced" instead.
+    // without the edge. So the case builds the bad graph *here*, on the frozen records, and hands
+    // it to the seal check. The draft's half is asserted to be "no longer produced" instead.
     RuntimeGraphDraftSession session(context_, program);
-    auto &transaction = session.edit(program->root());
-    auto &draft       = transaction.edit();
+    auto &transaction          = session.edit(program->root());
+    auto &draft                = transaction.edit();
     const gc_node_ref_t anchor = anchorNode(transaction);
     // A constant is a pure node: nothing about it can be ordered.
     const gc_node_ref_t constant = draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<float>(1.0f), camel::core::type::Type::Float32());
+        camel::core::rtdata::toSlot<float>(1.0f),
+        camel::core::type::Type::Float32());
     os << "ORDER wrote=" << (draft.appendOrderDependency(constant, anchor) ? 1 : 0) << "\n";
     // The encoder's own reading: the edge was asked for and the plan drops it, because the node it
     // would order takes no order -- so the graph the draft hands the commit does not have it.
@@ -191,8 +193,8 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
     // The bad graph itself: two pure nodes and an order edge on the user of them. It is written
     // straight into the frozen form the seal check reads, so nothing in the builder can drop it.
     GCGraphPayloadShape shape;
-    shape.nodeCount       = 2;
-    shape.orderEdgeCount  = 1;
+    shape.nodeCount      = 2;
+    shape.orderEdgeCount = 1;
     std::vector<GraphId> noGraphs;
     const auto sameType = camel::core::type::Type::Float32()->typeId();
     GCGraph *bad        = GCGraphBuildAccess::create(
@@ -213,15 +215,15 @@ EdgesOrderPureTestPass::apply(const camel::runtime::Program *program, std::ostre
         [&](GCGraphPayloadArena &arena) {
             for (gc_node_ref_t ref = 0; ref < 2; ++ref) {
                 GCNode node;
-                node.kind   = GCNodeKind::Data;
-                node.typeId = sameType;
+                node.kind        = GCNodeKind::Data;
+                node.typeId      = sameType;
                 arena.nodes[ref] = node;
             }
-            arena.nodes[2] = GCNode{};
+            arena.nodes[2]      = GCNode{};
             arena.orderEdges[0] = GCGraphOrderEdge{.user = 0, .pred = 1};
-            arena.entryNode  = 0;
-            arena.exitNode   = 1;
-            arena.outputNode = 0;
+            arena.entryNode     = 0;
+            arena.exitNode      = 1;
+            arena.outputNode    = 0;
         },
         std::span<const slot_t>{});
     try {
@@ -241,8 +243,8 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    auto &transaction = session.edit(program->root());
-    auto &draft       = transaction.edit();
+    auto &transaction        = session.edit(program->root());
+    auto &draft              = transaction.edit();
     const gc_node_ref_t exit = draft.exitNode();
     if (exit == kInvalidNodeRef) {
         os << "ORDER no_exit=1\n";
@@ -274,8 +276,8 @@ EdgesOrderScheduleTestPass::apply(const camel::runtime::Program *program, std::o
         // The single order edge between two nodes the layout holds: did the order move `first`
         // behind `second`? (It is listed as the exit's first control input, so without the order
         // edge it comes first.)
-        size_t orderedPairs = 0;
-        size_t orderedOk    = 0;
+        size_t orderedPairs  = 0;
+        size_t orderedOk     = 0;
         size_t droppedAbsent = 0;
         for (const GCGraphOrderEdge &edge : root->orderEdges()) {
             const bool userRuns = position(edge.user) != topo.size();
@@ -307,6 +309,38 @@ struct OrderChain {
     gc_node_ref_t b = kInvalidNodeRef;
     gc_node_ref_t c = kInvalidNodeRef;
 };
+
+gc_node_ref_t chainAnchorNode(camel::runtime::GraphTransaction &transaction) {
+    auto &draft                               = transaction.edit();
+    const camel::runtime::gc_node_ref_t value = draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<float>(1.0f),
+        camel::core::type::Type::Float32());
+    const camel::runtime::gc_node_ref_t node =
+        draft.addOperNode(camel::core::type::Type::Float32(), nullptr, ":io/println");
+    draft.setNormInputs(node, std::span<const camel::runtime::gc_node_ref_t>(&value, 1));
+    // The anchor is a statement of the block it lands in, and it is written after what that block
+    // already holds: it runs after them. A statement a draft appends without giving it that place
+    // leaves two writes to one resource with no path between them, which the commit's order check
+    // refuses (design principles 3.3) -- and the graph the front end builds has the same shape, so
+    // an anchor that skipped this read like a program rather than like a test.
+    const uint32_t block        = camel::runtime::controlRegionOf(draft, node);
+    gc_node_ref_t previousBlock = kInvalidNodeRef;
+    for (gc_node_ref_t id = 0; id < node; ++id) {
+        if (!draft.alive(id) || camel::runtime::controlRegionOf(draft, id) != block) {
+            continue;
+        }
+        // The block's last statement, not a value it computes: an order edge's two ends are
+        // effects or nodes that may fault (edges.cn.md 4.6), which is the same question the
+        // front end's walk asks of the nodes it orders.
+        if (!camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+            previousBlock = id;
+        }
+    }
+    if (previousBlock != kInvalidNodeRef) {
+        (void)draft.appendOrderDependency(node, previousBlock);
+    }
+    return node;
+}
 
 /// Writes the chain into the root graph and commits it. Returns the committed program, or null
 /// when the program has no root.
@@ -381,8 +415,8 @@ EdgesOrderReplaceTestPass::apply(const camel::runtime::Program *program, std::os
     }
     printOrderEdges(withChain, rootId, os);
     RuntimeGraphDraftSession session(context_, withChain);
-    auto &transaction = session.edit(withChain->graph(rootId));
-    auto &draft       = transaction.edit();
+    auto &transaction               = session.edit(withChain->graph(rootId));
+    auto &draft                     = transaction.edit();
     const gc_node_ref_t replacement = anchorNode(transaction);
     draft.takeStatementPlace(chain.b, replacement);
     draft.eraseNode(chain.b);
@@ -420,8 +454,8 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
         os << "MERGE skip=1\n";
         return program;
     }
-    const GraphId rootId      = program->root()->id();
-    const GCGraph *rootBefore = program->graph(rootId);
+    const GraphId rootId       = program->root()->id();
+    const GCGraph *rootBefore  = program->graph(rootId);
     const GCGraph *otherBefore = program->graph(other->id());
     RuntimeGraphDraftSession first(context_, program);
     RuntimeGraphDraftSession second(context_, program);
@@ -431,16 +465,16 @@ CommitMergeTestPass::apply(const camel::runtime::Program *program, std::ostream 
     os << "MERGE stale=" << (context_->currentRuntimeProgram() == one ? 1 : 0) << "\n";
     // The second session started from the program the first replaced; its graph (and nothing it
     // wrote) changed in the program of the context, so the commit merges instead of forking.
-    const Program *two = second.commit();
+    const Program *two   = second.commit();
     const bool installed = context_->currentRuntimeProgram() == two;
     // The root the first commit made has one more node than the program it started from; the
     // merge keeps that version (or a version of the same content) and adds the second's graph.
     const GCGraph *mergedRoot  = two->graph(rootId);
     const GCGraph *mergedOther = two->graph(other->id());
     const bool keptFirst       = mergedRoot != nullptr && one->graph(rootId) != nullptr &&
-                           mergedRoot->nodeCount() == one->graph(rootId)->nodeCount() &&
-                           mergedRoot->nodeCount() > rootBefore->nodeCount();
-    const bool keptSecond = mergedOther != nullptr && mergedOther != otherBefore;
+                                 mergedRoot->nodeCount() == one->graph(rootId)->nodeCount() &&
+                                 mergedRoot->nodeCount() > rootBefore->nodeCount();
+    const bool keptSecond      = mergedOther != nullptr && mergedOther != otherBefore;
     os << "MERGE installed=" << (installed ? 1 : 0) << " first_kept=" << (keptFirst ? 1 : 0)
        << " second_kept=" << (keptSecond ? 1 : 0)
        << " root_edited=" << (mergedRoot != rootBefore ? 1 : 0) << "\n";
@@ -490,17 +524,11 @@ EdgesSyncForkTestPass::apply(const camel::runtime::Program *program, std::ostrea
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
-    const auto markStatement = [&](gc_node_ref_t node) {
-        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
-    };
     // One statement two statements follow: what the splice leaves behind when it cannot move a
     // statement to the end of the chain growing from it (docs/design/effects/edges.cn.md 5.3).
-    const gc_node_ref_t first  = anchorNode(transaction);
-    const gc_node_ref_t second = anchorNode(transaction);
-    const gc_node_ref_t third  = anchorNode(transaction);
-    markStatement(first);
-    markStatement(second);
-    markStatement(third);
+    const gc_node_ref_t first         = chainAnchorNode(transaction);
+    const gc_node_ref_t second        = chainAnchorNode(transaction);
+    const gc_node_ref_t third         = chainAnchorNode(transaction);
     const gc_node_ref_t afterFirst[1] = {first};
     draft.setSyncInputs(second, afterFirst);
     draft.setSyncInputs(third, afterFirst);
@@ -524,20 +552,19 @@ EdgesSyncForkGateTestPass::apply(const camel::runtime::Program *program, std::os
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
-    const auto markStatement = [&](gc_node_ref_t node) {
-        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
-    };
     // 5.3's other shape: the one chain end hands its value on, and a GATE does that for each block
     // that ends on it -- so two GATEs may follow one statement. It is an end of the chain, not a
     // continuation of it, and the seal check accepts it.
-    const gc_node_ref_t tail = anchorNode(transaction);
-    markStatement(tail);
+    const gc_node_ref_t tail = chainAnchorNode(transaction);
     for (float written : {2.0f, 3.0f}) {
         const gc_node_ref_t value = draft.materializeStaticValue(
-            camel::core::rtdata::toSlot(written), camel::core::type::Type::Float32());
+            camel::core::rtdata::toSlot(written),
+            camel::core::type::Type::Float32());
         const gc_node_ref_t gate = draft.addGateNode(camel::core::type::Type::Float32());
         draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
-        markStatement(gate);
+        const uint32_t block = draft.addRegion(GCRegionKind::Block, 0);
+        draft.setNodeRegion(gate, block);
+        draft.setRegionResult(block, gate);
         const gc_node_ref_t afterTail[1] = {tail};
         draft.setSyncInputs(gate, afterTail);
     }
@@ -560,21 +587,19 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
     }
     const GraphId rootId = program->root()->id();
     RuntimeGraphDraftSession session(context_, program);
-    auto &transaction = session.edit(program->root());
-    auto &draft       = transaction.edit();
-    // The chain's tail: a statement a `sync` block wrote. A pass stands in for the builder here, so
-    // it records the same fact the builder records (kGCNodeFlagSyncStatement): the seal check reads
-    // it back, and a sync edge may only join statements of the block.
-    const gc_node_ref_t tail = anchorNode(transaction);
-    draft.setNodeRuntimeFlags(tail, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
-    // The value the GATE lets out, and the GATE itself. The GATE is the block's value, which the
-    // same flag covers: the chain's tail reaches the value through the GATE (5.3).
+    auto &transaction        = session.edit(program->root());
+    auto &draft              = transaction.edit();
+    const gc_node_ref_t tail = chainAnchorNode(transaction);
+    // The value the GATE lets out, and the GATE itself: the chain's tail reaches the value through
+    // the GATE (5.3).
     const gc_node_ref_t value = draft.materializeStaticValue(
         camel::core::rtdata::toSlot<float>(2.0f),
         camel::core::type::Type::Float32());
     const gc_node_ref_t gate = draft.addGateNode(camel::core::type::Type::Float32());
     draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
-    draft.setNodeRuntimeFlags(gate, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
+    const uint32_t block = draft.addRegion(GCRegionKind::Block, 0);
+    draft.setNodeRegion(gate, block);
+    draft.setRegionResult(block, gate);
     // The wait is the chain's tail, written as a sync edge (docs/design/effects/edges.cn.md 5.3: a
     // GATE has one data port and one sync predecessor, and no control input at all).
     const bool wrote = draft.setSyncPredecessor(gate, tail);
@@ -606,7 +631,75 @@ EdgesSyncGateTestPass::apply(const camel::runtime::Program *program, std::ostrea
         os << "SYNCGATE frozen_sync_edges=" << syncEdges << " gates=" << gates
            << " gates_waiting_on_the_chain=" << gatesWaited << " gates_with_ctrl=" << gatesCtrl
            << "\n";
-        return next;
+
+        RuntimeGraphDraftSession handover(context_, next);
+        auto &handoverTransaction = handover.edit(next->root());
+        auto &chain               = handoverTransaction.edit();
+        size_t gatesBefore        = 0;
+        for (gc_node_ref_t id = 0; id < chain.nodeSlotCount(); ++id) {
+            const DraftNodeHeader *header = chain.header(id);
+            gatesBefore += header != nullptr && header->kind == GCNodeKind::Gate ? 1 : 0;
+        }
+        const gc_node_ref_t first  = chainAnchorNode(handoverTransaction);
+        const gc_node_ref_t middle = chainAnchorNode(handoverTransaction);
+        const gc_node_ref_t last   = chainAnchorNode(handoverTransaction);
+        chain.setSyncPredecessor(middle, first);
+        chain.setSyncPredecessor(last, middle);
+        chain.appendOrderDependency(middle, first);
+        const gc_node_ref_t shared = chain.materializeStaticValue(
+            camel::core::rtdata::toSlot<float>(7.0f),
+            camel::core::type::Type::Float32());
+        const gc_node_ref_t plainReader = chain.addCopyNode(camel::core::type::Type::Float32());
+        chain.setNormInputs(plainReader, std::span<const gc_node_ref_t>(&shared, 1));
+        chain.takeStatementPlace(middle, shared);
+        chain.eraseNode(middle);
+        const gc_node_ref_t orphan      = chainAnchorNode(handoverTransaction);
+        const gc_node_ref_t orphanValue = chain.materializeStaticValue(
+            camel::core::rtdata::toSlot<float>(8.0f),
+            camel::core::type::Type::Float32());
+        chain.takeStatementPlace(orphan, orphanValue);
+        chain.eraseNode(orphan);
+
+        const std::vector<gc_node_ref_t> committedRefs = handover.committedNodeRefs(next->root());
+        const Program *committed                       = handover.commit();
+        const GCGraph *changed                         = committed->graph(rootId);
+        const gc_node_ref_t firstRef                   = committedRefs[first];
+        const gc_node_ref_t lastRef                    = committedRefs[last];
+        const gc_node_ref_t sharedRef                  = committedRefs[shared];
+        const gc_node_ref_t readerRef                  = committedRefs[plainReader];
+        gc_node_ref_t chainGate                        = kInvalidNodeRef;
+        size_t gatesAfter                              = 0;
+        for (auto it = changed->nodes().begin(); it != changed->nodes().end(); ++it) {
+            const GCNode *node = changed->node(it.ref());
+            if (node->kind != GCNodeKind::Gate) {
+                continue;
+            }
+            ++gatesAfter;
+            const auto inputs = changed->normInputsOf(it.ref());
+            if (inputs.size() == 1 && inputs.front() == sharedRef) {
+                chainGate = it.ref();
+            }
+        }
+        const bool predecessor  = chainGate != kInvalidNodeRef &&
+                                  changed->syncPredsOf(chainGate).size() == 1 &&
+                                  changed->syncPredsOf(chainGate).front().pred == firstRef;
+        const bool successor    = chainGate != kInvalidNodeRef &&
+                                  changed->syncPredsOf(lastRef).size() == 1 &&
+                                  changed->syncPredsOf(lastRef).front().pred == chainGate;
+        const auto readerInputs = changed->normInputsOf(readerRef);
+        const bool sharedValueDirect =
+            readerInputs.size() == 1 && readerInputs.front() == sharedRef;
+        const bool orderOnGate  = chainGate != kInvalidNodeRef &&
+                                  changed->orderPredsOf(chainGate).size() == 1 &&
+                                  changed->orderPredsOf(chainGate).front().pred == firstRef;
+        const bool orderOnValue = !changed->orderPredsOf(sharedRef).empty();
+        os << "SYNCPLACE middle_gate=" << (chainGate != kInvalidNodeRef ? 1 : 0)
+           << " predecessor=" << (predecessor ? 1 : 0) << " successor=" << (successor ? 1 : 0)
+           << " gate_delta=" << (gatesAfter - gatesBefore)
+           << " shared_value_direct=" << (sharedValueDirect ? 1 : 0)
+           << " order_on_gate=" << (orderOnGate ? 1 : 0)
+           << " order_on_value=" << (orderOnValue ? 1 : 0) << "\n";
+        return committed;
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";
         return program;
@@ -625,15 +718,10 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
-    auto &transaction = session.edit(program->root());
-    auto &draft       = transaction.edit();
-    const auto markStatement = [&](gc_node_ref_t node) {
-        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
-    };
-    const gc_node_ref_t a = anchorNode(transaction);
-    const gc_node_ref_t b = anchorNode(transaction);
-    markStatement(a);
-    markStatement(b);
+    auto &transaction             = session.edit(program->root());
+    auto &draft                   = transaction.edit();
+    const gc_node_ref_t a         = chainAnchorNode(transaction);
+    const gc_node_ref_t b         = chainAnchorNode(transaction);
     const gc_node_ref_t afterA[1] = {a};
     const gc_node_ref_t afterB[1] = {b};
     draft.setSyncInputs(a, afterB);
@@ -647,9 +735,8 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
         hasA = hasA || node == a;
         hasB = hasB || node == b;
     }
-    os << "SYNCCYCLE a=" << a << " b=" << b << " found="
-       << (closes == kInvalidNodeRef ? 0 : 1) << " on_cycle_a=" << (hasA ? 1 : 0)
-       << " on_cycle_b=" << (hasB ? 1 : 0) << "\n";
+    os << "SYNCCYCLE a=" << a << " b=" << b << " found=" << (closes == kInvalidNodeRef ? 0 : 1)
+       << " on_cycle_a=" << (hasA ? 1 : 0) << " on_cycle_b=" << (hasB ? 1 : 0) << "\n";
     try {
         const Program *next = session.commit();
         os << "EDGES accepted\n";
@@ -658,6 +745,356 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
         os << "EDGES refused: " << error.what() << "\n";
         return program;
     }
+}
+
+namespace {
+
+/// The graph the edge cases edit and the pair of statements they write the one sync edge between: a
+/// user that is a statement of the body and waits on nothing yet, and a predecessor the user cannot
+/// reach that no chain holds. So the edge fills one place of one chain, adds no node, removes none,
+/// and closes no loop -- the whole difference between the graph before and after is that edge.
+struct EdgePair {
+    GCGraph *target    = nullptr;
+    gc_node_ref_t user = kInvalidNodeRef;
+    gc_node_ref_t pred = kInvalidNodeRef;
+    size_t operators   = 0;
+    size_t statements  = 0;
+};
+
+EdgePair findEdgePair(const Program *program) {
+    EdgePair found;
+    if (program == nullptr || program->root() == nullptr) {
+        return found;
+    }
+    // A graph that is not the program's root, edited the way a pass over a function value edits it
+    // (`graph.open` in modules/graph/txn.cpp roots the session at the function's graph and commits
+    // detached): the shape the commit's delivery sits on.
+    GCGraph *target = program->root();
+    for (const GraphId ref : program->root()->refs()) {
+        GCGraph *called = const_cast<Program *>(program)->graph(ref);
+        if (called != nullptr && called != program->root()) {
+            target = called;
+            break;
+        }
+    }
+    found.target = target;
+    std::vector<gc_node_ref_t> statements;
+    std::vector<gc_node_ref_t> sameRegion;
+    gc_node_ref_t maxRef = 0;
+    for (auto it = target->nodes().begin(); it != target->nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const GCNode *node      = target->node(ref);
+        maxRef                  = std::max(maxRef, ref);
+        // One region only: an edge that crosses an arm of a branch is a graph the seal refuses,
+        // and the body is the one region every statement of it is in. The user must be a statement
+        // a sync edge may end on: one that can fault or has an effect, not a pure operator; the
+        // predecessor may be any node a chain may start with.
+        if (node == nullptr || target->nodeRegion(ref) != 0) {
+            continue;
+        }
+        sameRegion.push_back(ref);
+        if (node->kind != GCNodeKind::Oper) {
+            continue;
+        }
+        ++found.operators;
+        if (camel::runtime::graph::is_chain_statement(*target, ref)) {
+            statements.push_back(ref);
+        }
+    }
+    found.statements = statements.size();
+    // The statement of the body that waits on nothing yet: a chain is a run, so the edge goes into
+    // a place that is free, and the graph has one sync edge more after the edit than before.
+    for (const gc_node_ref_t ref : statements) {
+        if (target->syncPredsOf(ref).empty()) {
+            found.user = ref;
+            break;
+        }
+    }
+    if (found.user == kInvalidNodeRef) {
+        return found;
+    }
+    // Nothing the user already reaches can become its predecessor: the edge would close a loop
+    // (the seal refuses it), so the reach is walked first over every kind of user an edge has.
+    std::vector<gc_node_ref_t> reach;
+    std::vector<char> seen(static_cast<size_t>(maxRef) + 1, 0);
+    reach.push_back(found.user);
+    seen[found.user] = 1;
+    for (size_t at = 0; at < reach.size(); ++at) {
+        const gc_node_ref_t from = reach[at];
+        for (auto users :
+             {target->normUsersOf(from),
+              target->withUsersOf(from),
+              target->ctrlUsersOf(from),
+              target->syncUsersOf(from),
+              target->orderUsersOf(from)}) {
+            for (const gc_node_ref_t next : users) {
+                if (next < seen.size() && !seen[next]) {
+                    seen[next] = 1;
+                    reach.push_back(next);
+                }
+            }
+        }
+    }
+    // A node the user does not reach, that waits on nothing and nothing waits on: it can start a
+    // chain. A statement first, since a chain is a run of statements; a node that only computes a
+    // value the user reads is upstream of it and closes no loop either.
+    for (const gc_node_ref_t ref : statements) {
+        if (found.pred == kInvalidNodeRef && ref != found.user && !seen[ref] &&
+            target->syncUsersOf(ref).empty() && target->syncPredsOf(ref).empty()) {
+            found.pred = ref;
+        }
+    }
+    for (const gc_node_ref_t ref : sameRegion) {
+        if (found.pred != kInvalidNodeRef || ref == found.user || seen[ref] ||
+            !target->syncUsersOf(ref).empty()) {
+            continue;
+        }
+        const GCNode *node = target->node(ref);
+        if (node != nullptr && node->kind != GCNodeKind::Join && node->kind != GCNodeKind::Func) {
+            found.pred = ref;
+        }
+    }
+    return found;
+}
+
+/// Every edge of `graph` as one line of text: the two data-port runs, the control run, and the two
+/// side arrays, each edge as `kind:user>pred;`. Two graphs made by two runs of one edit are the
+/// same graph, edge for edge, exactly when this line is the same; a digest would say that too and
+/// say nothing about which edge differed, which is what a red reading has to show.
+std::string spelledEdges(const GCGraph &graph) {
+    std::string text;
+    const auto add = [&text](const char *kind, gc_node_ref_t user, gc_node_ref_t pred) {
+        text += kind;
+        text += std::to_string(user);
+        text += '>';
+        text += std::to_string(pred);
+        text += ';';
+    };
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const GCNode *node      = graph.node(ref);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            continue;
+        }
+        for (const gc_node_ref_t pred : graph.normInputsOf(ref)) {
+            add("norm:", ref, pred);
+        }
+        for (const gc_node_ref_t pred : graph.withInputsOf(ref)) {
+            add("with:", ref, pred);
+        }
+        for (const gc_node_ref_t pred : graph.ctrlInputsOf(ref)) {
+            add("ctrl:", ref, pred);
+        }
+        for (const GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+            add("order:", edge.user, edge.pred);
+        }
+        for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+            add("sync:", edge.user, edge.pred);
+        }
+    }
+    return text.empty() ? std::string("none") : text;
+}
+
+} // namespace
+
+// An edit whose only difference is one sync edge, and a session that changes nothing. What the
+// commit delivers is the draft's own answer to whether it still is the graph it was decoded from;
+// the order and sync edges are the graph's own arrays beside the node columns, not ports and not
+// entries of a node, and a comparison that reads everything but those two arrays answered "the same
+// graph" for an edit that wrote an edge -- which is what a commit would decide delivery by, and
+// then release the copy it had encoded and hand back the graph the edit never reached. The edit
+// here is written between two statements the graph already has, so no node is added, removed or
+// changed and the edge is the whole difference; `reused` is the object identity of the graph, so a
+// commit that threw the copy away shows as `reused=1` with the edge missing, and one that kept it
+// as `reused=0` with the edge there.
+const camel::runtime::Program *
+EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const EdgePair pair = findEdgePair(program);
+    os << "EDITONLY oper=" << pair.operators << " statements=" << pair.statements << "\n";
+    if (pair.user == kInvalidNodeRef || pair.pred == kInvalidNodeRef) {
+        os << "EDITONLY no_pair\n";
+        return program;
+    }
+    GCGraph *target          = pair.target;
+    const GraphId targetId   = target->id();
+    const gc_node_ref_t user = pair.user;
+    const gc_node_ref_t pred = pair.pred;
+    os << "EDITONLY pair user=" << user << " pred=" << pred << "\n";
+
+    const GCGraph *base = target;
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction   = session.edit(target);
+        auto &draft         = transaction.edit();
+        const bool wrote    = draft.setSyncPredecessor(user, pred);
+        const size_t before = base->syncEdges().size();
+        try {
+            const Program *next  = session.commit(true);
+            const GCGraph *after = next->graph(targetId);
+            const auto preds     = after->syncPredsOf(user);
+            os << "EDITONLY sync wrote=" << (wrote ? 1 : 0) << " before=" << before
+               << " after=" << after->syncEdges().size() << " sync_in=" << preds.size()
+               << " mine=" << ((preds.size() == 1 && preds[0].pred == pred) ? 1 : 0)
+               << " reused=" << (after == base ? 1 : 0) << "\n";
+            program = next;
+            target  = next->graph(targetId);
+        } catch (const std::exception &error) {
+            os << "EDITONLY refused: " << error.what() << "\n";
+            return program;
+        }
+    }
+    // Nothing at all: the graph must stay the one it was. The draft wrote nothing and the commit
+    // found nothing to close in it, so the commit makes no version of it at all -- this is the
+    // optimization the case above must not take away, and the draft's own record is what keeps it.
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        (void)session.edit(target);
+        try {
+            const Program *next = session.commit(true);
+            os << "EDITONLY untouched reused=" << (next->graph(targetId) == target ? 1 : 0) << "\n";
+            return next;
+        } catch (const std::exception &error) {
+            os << "EDITONLY refused: " << error.what() << "\n";
+            return program;
+        }
+    }
+}
+
+// The same edit twice on one program, once alone and once beside a write nothing reads: the two
+// graphs the commits make must be the same graph edge for edge. A commit whose answer depends on a
+// write somewhere else in the transaction is not reproducible -- two programs that differ only in
+// an unrelated write would commit to different graphs -- and the shape that was measured is the one
+// where the unrelated write was what made the commit notice the edit at all (`by_cpp` green because
+// something else happened to change, rather than because the edge was legal). The unrelated write
+// here is a node nothing reads and nothing runs, so it adds no edge: the node count differs between
+// the two runs and the four edge lists must not.
+const camel::runtime::Program *
+EdgesCommitDifferentialTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const EdgePair pair = findEdgePair(program);
+    os << "DIFF oper=" << pair.operators << " statements=" << pair.statements << "\n";
+    if (pair.user == kInvalidNodeRef || pair.pred == kInvalidNodeRef) {
+        os << "DIFF no_pair\n";
+        return program;
+    }
+    GCGraph *target          = pair.target;
+    const GraphId targetId   = target->id();
+    const gc_node_ref_t user = pair.user;
+    const gc_node_ref_t pred = pair.pred;
+    os << "DIFF pair user=" << user << " pred=" << pred << "\n";
+    // One run of the edit. `unrelated` adds the write nothing reads; everything else is the same
+    // session, the same draft and the same edge. The session commits detached, so both runs start
+    // from the program this pass was given.
+    const auto run = [&](bool unrelated, std::string &error) -> std::string {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction = session.edit(target);
+        auto &draft       = transaction.edit();
+        if (!draft.setSyncPredecessor(user, pred)) {
+            error = "the draft refused the one edge the case is about";
+            return {};
+        }
+        if (unrelated) {
+            // A node nothing reads and nothing runs: it changes the graph and it is no edge.
+            blankNode(transaction);
+        }
+        try {
+            const Program *next  = session.commit(true);
+            const GCGraph *after = next->graph(targetId);
+            if (after == nullptr) {
+                error = "the program the commit made does not hold the graph";
+                return {};
+            }
+            return spelledEdges(*after);
+        } catch (const std::exception &exception) {
+            error = exception.what();
+            return {};
+        }
+    };
+    std::string error;
+    const std::string alone = run(false, error);
+    if (!error.empty()) {
+        os << "DIFF refused: " << error << "\n";
+        return program;
+    }
+    const std::string withUnrelatedWrite = run(true, error);
+    if (!error.empty()) {
+        os << "DIFF refused: " << error << "\n";
+        return program;
+    }
+    // The two lines are what a red reading shows: the edge list of each committed graph, in full.
+    os << "DIFF a " << alone << "\n";
+    os << "DIFF b " << withUnrelatedWrite << "\n";
+    os << "DIFF same=" << (alone == withUnrelatedWrite ? 1 : 0) << "\n";
+    return program;
+}
+
+// The commit's delivery check (camel/runtime/graph_build.h, `verifyDraftDelivery`). The first half
+// commits the one-edge edit with the check on -- a Release build does not run it unless a test asks
+// -- and prints that the commit was accepted. The second half hands the check a pair that
+// disagrees: a draft that holds the edge, and the graph the commit made before it was written. That
+// is the state an encoding that lost an edge leaves behind, and the check must name it: the graph,
+// the kind of edge, the two nodes. It reports by throwing (never by an ASSERT, which `NDEBUG` makes
+// nothing of), so a shipped build that runs it can still say what is wrong.
+const camel::runtime::Program *
+EdgesDeliveryCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const EdgePair pair = findEdgePair(program);
+    if (pair.user == kInvalidNodeRef || pair.pred == kInvalidNodeRef) {
+        os << "DELIVERY no_pair\n";
+        return program;
+    }
+    GCGraph *target        = pair.target;
+    const GraphId targetId = target->id();
+    os << "DELIVERY pair user=" << pair.user << " pred=" << pair.pred << "\n";
+    setDraftDeliveryCheckEnabled(true);
+    const Program *next = program;
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction = session.edit(target);
+        auto &draft       = transaction.edit();
+        if (!draft.setSyncPredecessor(pair.user, pair.pred)) {
+            os << "DELIVERY no_pair\n";
+            return program;
+        }
+        try {
+            next = session.commit(true);
+            os << "DELIVERY commit checked=" << (draftDeliveryCheckEnabled() ? 1 : 0)
+               << " accepted=" << (next->graph(targetId) != nullptr ? 1 : 0) << "\n";
+        } catch (const std::exception &error) {
+            os << "DELIVERY refused: " << error.what() << "\n";
+            return program;
+        }
+    }
+    // The pair that disagrees: the same edit written into a draft of the graph the commit started
+    // from, and that graph itself handed to the check as what was installed. That is exactly the
+    // state an encoding that lost the edge leaves -- the draft holds it, the graph does not -- and
+    // nothing commits here.
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction = session.edit(target);
+        auto &draft       = transaction.edit();
+        if (!draft.setSyncPredecessor(pair.user, pair.pred)) {
+            os << "DELIVERY no_second_pair\n";
+            return next;
+        }
+        try {
+            verifyDraftDelivery(transaction, *target, target->name());
+            os << "DELIVERY missed\n";
+        } catch (const std::exception &error) {
+            os << "DELIVERY refused: " << error.what() << "\n";
+        }
+    }
+    return next;
 }
 
 // One node read in every kind there is, and the two readings of its users. The draft keeps one
@@ -678,31 +1115,27 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     RuntimeGraphDraftSession session(context_, program);
     auto &transaction = session.edit(program->root());
     auto &draft       = transaction.edit();
-    const auto markStatement = [&](gc_node_ref_t node) {
-        draft.setNodeRuntimeFlags(node, static_cast<uint8_t>(kGCNodeFlagSyncStatement));
-    };
     // The one node all five kinds reach: a value port (twice, so the five counts are not all
     // equal), a context port, a control input, a place on a `sync` block's chain, and an order
     // edge that goes out of it.
-    const gc_node_ref_t source = anchorNode(transaction);
-    markStatement(source);
+    const gc_node_ref_t source = chainAnchorNode(transaction);
     for (size_t i = 0; i < 2; ++i) {
         const gc_node_ref_t reader = draft.addCopyNode(camel::core::type::Type::Float32());
         draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&source, 1));
     }
     // A GATE reads a value of its own and a context port of `source`; its wait is a control input,
     // the kind the seal accepts on a gate.
-    const gc_node_ref_t wait = anchorNode(transaction);
+    const gc_node_ref_t wait     = anchorNode(transaction);
     const gc_node_ref_t constant = draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<float>(4.0f), camel::core::type::Type::Float32());
+        camel::core::rtdata::toSlot<float>(4.0f),
+        camel::core::type::Type::Float32());
     const gc_node_ref_t contextual = draft.addGateNode(camel::core::type::Type::Float32());
     draft.setNormInputs(contextual, std::span<const gc_node_ref_t>(&constant, 1));
     draft.setCtrlInputs(contextual, std::span<const gc_node_ref_t>(&wait, 1));
     draft.setWithInputs(contextual, std::span<const gc_node_ref_t>(&source, 1));
     const gc_node_ref_t controller = anchorNode(transaction);
     draft.setCtrlInputs(controller, std::span<const gc_node_ref_t>(&source, 1));
-    const gc_node_ref_t follower = anchorNode(transaction);
-    markStatement(follower);
+    const gc_node_ref_t follower = chainAnchorNode(transaction);
     if (!draft.setSyncPredecessor(follower, source)) {
         os << "EDGE_USERS wrote=0\n";
         return program;
@@ -718,7 +1151,7 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     // The runtime ref of every live node of the draft, read before the commit, which encodes the
     // drafts as they are now.
     const std::vector<gc_node_ref_t> committed = session.committedNodeRefs(program->root());
-    const auto runtimeRefOf = [&](gc_node_ref_t id) {
+    const auto runtimeRefOf                    = [&](gc_node_ref_t id) {
         return id < committed.size() ? committed[id] : kInvalidNodeRef;
     };
     const auto ordered = [](std::vector<gc_node_ref_t> refs) {
@@ -739,11 +1172,11 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             continue;
         }
         std::array<std::vector<gc_node_ref_t>, 5> &sets = draftUsers[id];
-        sets[0] = draftReading(draft.normUsersOf(id));
-        sets[1] = draftReading(draft.withUsersOf(id));
-        sets[2] = draftReading(draft.ctrlUsersOf(id));
-        sets[3] = draftReading(draft.syncUsersOf(id));
-        sets[4] = draftReading(draft.orderUsersOf(id));
+        sets[0]                                         = draftReading(draft.normUsersOf(id));
+        sets[1]                                         = draftReading(draft.withUsersOf(id));
+        sets[2]                                         = draftReading(draft.ctrlUsersOf(id));
+        sets[3]                                         = draftReading(draft.syncUsersOf(id));
+        sets[4]                                         = draftReading(draft.orderUsersOf(id));
     }
     const Program *next = nullptr;
     try {
@@ -768,7 +1201,8 @@ EdgeUsersTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             root->orderUsersOf(ref)};
         for (size_t kind = 0; kind < graphReading.size(); ++kind) {
             const std::vector<gc_node_ref_t> fromGraph(
-                graphReading[kind].begin(), graphReading[kind].end());
+                graphReading[kind].begin(),
+                graphReading[kind].end());
             if (ordered(fromGraph) != draftUsers[id][kind]) {
                 ++disagreeingNodes;
                 break;

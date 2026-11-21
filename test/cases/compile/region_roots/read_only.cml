@@ -1,0 +1,15 @@
+/**
+ * The other half of the rule, and the reason the predicate is a *write* and not "has an effect"
+ * (design principles 3.1): a read of a resource outside the program is a dependency like a read of a
+ * variable -- it runs when something needs its value, and here nothing does. So this call does not
+ * run. Nothing is reported for it: a statement that does not run is not an effect that failed to
+ * run, and the diagnostic that used to say so went with the region roots (the author's ruling of
+ * 2026-11-17).
+ */
+
+import { get_env } from env
+
+func main(): int {
+    get_env("CAMEL_REGION_ROOTS_NO_SUCH_VARIABLE")
+    return 0
+}

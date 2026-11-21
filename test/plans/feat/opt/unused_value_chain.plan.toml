@@ -10,7 +10,7 @@ tags = ["feat", "opt", "control", "dce"]
 # sum and, with it, the only route from the block's GATE to the prints. The GATE is the end of the
 # chain, not an unused node: what it waits on has to reach the exit through it.
 #
-# The entries lock three things: the two prints still run in written order through `std::opt::dce`,
+# The entries lock three things: the two prints still run in written order through `std::cxx::dce`,
 # `std::opt` and `std::opt std::nvm`; the block's GATE keeps the wait that carries the chain while
 # the unread value itself is still removed; and the same shape without an effect (`unused_pure_chain`)
 # is still optimized away whole, so "keep everything" cannot pass in place of the fix.
@@ -32,9 +32,9 @@ expect_stdout_exact = "5\n6\n"
 
 [[tests]]
 name = "unused_effect_chain.dce"
-desc = "`std::opt::dce` alone keeps both prints: the unread value it removes ran them, so the block's GATE is left waiting on the last print instead of on the removed value."
+desc = "`std::cxx::dce` alone keeps both prints: the unread value it removes ran them, so the block's GATE is left waiting on the last print instead of on the removed value."
 case = "../../../cases/opt/generic/unused_effect_chain.cml"
-args = ["${case}", "std::opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::dce", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["stdout_normalized"]
 expect_stdout_exact = "5\n6\n"
@@ -59,7 +59,7 @@ expect_stdout_exact = "5\n6\n"
 name = "unused_effect_chain.graph"
 desc = "After dce the two prints are still there and still reach the exit through the block's GATE, the GATE still waits on the chain, and the unread value (`:op/add_l`, `:op/sub_l`) is gone: the value is removed, not kept."
 case = "../../../cases/opt/generic/unused_effect_chain.cml"
-args = ["${case}", "std::opt::dce", "std::jgir"]
+args = ["${case}", "std::cxx::dce", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -101,7 +101,7 @@ expect_stdout_exact = "5\n6\n"
 name = "unused_effect_chain_param.dce"
 desc = "The block value is not a constant, and both prints still run through dce: what decides is that nothing reads the value, not that a pass could fold it."
 case = "../../../cases/opt/generic/unused_effect_chain_param.cml"
-args = ["${case}", "--arg", "x=3", "std::opt::dce", "${backend}"]
+args = ["${case}", "--arg", "x=3", "std::cxx::dce", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["stdout_normalized"]
 expect_stdout_exact = "5\n6\n"
@@ -117,7 +117,7 @@ expect_stdout_exact = "5\n6\n"
 name = "unused_pure_chain.dce_graph"
 desc = "The control: the same shape with no effect is dead whole, and dce leaves the program's result alone (one constant, no operator, no gate). A fix that keeps unread values to be safe fails here."
 case = "../../../cases/opt/generic/unused_pure_chain.cml"
-args = ["${case}", "std::opt::dce", "std::jgir"]
+args = ["${case}", "std::cxx::dce", "std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');

@@ -1,0 +1,47 @@
+/**
+ * A write whose value nobody reads is reported in a `sync` body and outside one alike, and a write
+ * whose value somebody reads is reported in neither.
+ *
+ * The question the diagnostic asks is about the value, not about the write's node. A read of a `var`
+ * takes the value a write stores, and in a body that is not a `sync` block the builder hands that
+ * read the value itself (Builder::collapseNonEscapingVariableReads), so the write's node is left
+ * with no consumer of its own while its value is read by everything after it. Asking the node
+ * answered the opposite of what the text says for the ordinary `t = t + 1` of a counter, and
+ * `camel -Werror` refused the program with that report. Whether a write runs at all is the other
+ * question, and nothing asks it any more: a statement that does not run is not reported (2026-11-17).
+ */
+
+func dropped_nsync(): int {
+    var t = 0
+    println("a")
+    t = 1
+    return 0
+}
+
+func dropped_sync(): int sync {
+    var t = 0
+    println("b")
+    t = 1
+    return 0
+}
+
+func read_nsync(): int {
+    var t = 0
+    println("c")
+    t = t + 1
+    return t
+}
+
+func read_sync(): int sync {
+    var t = 0
+    println("d")
+    t = t + 1
+    return t
+}
+
+func main(): int sync {
+    dropped_nsync()
+    dropped_sync()
+    println(read_nsync(), read_sync())
+    return 0
+}

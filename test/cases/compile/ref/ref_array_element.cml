@@ -1,0 +1,51 @@
+/**
+ * A `Ref` held by an array: `xs[i]` hands on the box the array holds, and it takes no reference of
+ * its own for it.
+ *
+ * The reference plan counts an operator's output as a value born with a reference of its own, and
+ * gives that reference back where the value is last read. An element read makes no such value --
+ * `Array::getSlot` answers the slot the array holds (src/builtin/operators/struct.cpp
+ * #__index_arr__), so the array is what holds the box. Read as a producer, `xs[0]` looked like a
+ * value born at the index, and the reference given back there was one nobody had taken: the box
+ * was released while the array, and the name bound to it, still held it. What followed was a write
+ * through a released handle and `state::get` answering "the value is not a reference".
+ *
+ * Every shape below says the correct answer, so a case that only stopped crashing would not pass:
+ *
+ *   in_one_body  a write and two reads in one body, each through an element ........ 72 and 2
+ *   two_names    written through an element, read through the box's own name ....... 5
+ *   carried      r7's shape: the box escapes into a closure through an element,
+ *                and a later call reads it .......................................... 2
+ */
+
+import state
+
+/// Written and read in one body, both elements reached through the array.
+func in_one_body(): int {
+    let xs = [state::ref(1), state::ref(2)]
+    state::set(xs[0], 7)
+    return state::get(xs[0]) * 10 + state::get(xs[1])
+}
+
+/// One box, two names: the write goes through the element, the read through the name.
+func two_names(): int {
+    let r = state::ref(0)
+    let xs = [r]
+    state::set(xs[0], 5)
+    return state::get(r)
+}
+
+/// The closure carries an array that holds the box, and a later call reads the element.
+func carried(): () => int {
+    let xs = [state::ref(0)]
+    state::set(xs[0], 2)
+    return (): int => state::get(xs[0])
+}
+
+func main(): int sync {
+    let a = in_one_body()
+    let b = two_names()
+    let f = carried()
+    println(`a=${a} b=${b} r7=${f()}`)
+    return 0
+}

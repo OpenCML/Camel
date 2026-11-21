@@ -1,0 +1,61 @@
+// The cotangent of a **broadcast** difference read through the library's reverse path -- `vjp`,
+// which is `transpose . split . reinterp<jvp>` -- and the gate on the shape the forward half has to
+// hand the reverse law.
+//
+//     e    = m - w         (2x2) - (2): a difference that broadcasts
+//     loss = sum(e * e)
+//
+//     m = [[1, 2], [3, 4]]       w = [0.5, 1.0]
+//     e = [[0.5, 1.0], [2.5, 3.0]]           loss = 0.25 + 1 + 6.25 + 9 = 16.5
+//     dL/dw = -2 * [e00 + e10, e01 + e11]    = [-6, -8]      numel 2
+//
+// **Why this case exists.** `jvp_subtract`'s tangent is written `subtract_stated(dx, dw, shape(x),
+// shape(w))` and not `dx - dw`: the reverse law has to reduce each cotangent to the shape of the
+// operand it answers for, and on the reverse side that operand is a **tangent** -- a `float[...]`,
+// which states no extents (design principles 5.4) -- so the two shapes travel as operands of the
+// value half, where both operands are values. The reading below is what says the two lists arrive:
+// `dL/dw` is two numbers, the sum of what `w` fed, and not the `[2, 2]` cotangent it arrived on.
+//
+// The shape is a reading and not a coincidence of digits: the unreduced answer is
+// `[-1, -2, -5, -6]` (numel 4) and the answer reduced along the wrong axis is `[-6, -6]` or
+// `[-8, -8]`. The first two differ from `[-6, -8]` in the values, the second two in one value each,
+// and `numel` separates the first from both. A law that answered the cotangent unchanged would be
+// green on neither line, so this entry cannot pass on a program that stopped reducing.
+//
+// The engine's leg is the second reading, taken through its own pullback (`with_grad`), which
+// reduces with `sum_to` at the operator that accumulated the gradient: the two legs must agree to
+// the last bit, and every number here is exact in binary floating point.
+import { numel, sum } from tensor
+import { vjp } from vjp
+import { with_grad } from autodiff
+import { abs, max } from math
+
+// The engine's leg: `with_grad` differentiates the first `with` parameter.
+with <w: float[2]>
+func loss_with(m: float[2, 2]): float {
+    let e = m - w
+    return sum(e * e)
+}
+
+func main(): int sync {
+    let m = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let w = [0.5, 1.0] as float[2]
+
+    // The library's leg: a closure that captures the batch, differentiated by `vjp`.
+    let step = (ww: float[2]): float => {
+        let e = m - ww
+        return sum(e * e)
+    }
+    let (value, pullback) = vjp(step)(w)
+    let cotangents = pullback(1.0)
+    let library = cotangents.0
+
+    // The engine's leg: the same arithmetic with the weight as the `with` parameter.
+    let (engine_value, engine) = with_grad(loss_with)<[0.5, 1.0] as float[2]>(m)
+
+    `broadcast difference vjp value={} dL/dw numel={} dL/dw={}`->format<value, numel(library), library>->println
+    `broadcast difference engine value={} dL/dw numel={} dL/dw={}`->format<engine_value, numel(engine), engine>->println
+    let d = max(abs(library[0] - engine[0]), abs(library[1] - engine[1]))
+    `broadcast difference max_abs_diff library_vs_engine w={:.12e}`->format<d>->println
+    return 0
+}

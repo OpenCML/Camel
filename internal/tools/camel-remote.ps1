@@ -38,13 +38,20 @@
 #     re-patched instead, because otherwise the run silently measures the earlier run's sources;
 #   * at the start of each run the host removes the checkouts whose worktree no longer exists here
 #     (each one holds a 130-220 MB build directory), prunes day-old scratch directories under /tmp,
-#     prints the free space it has, and refuses to build under 5 GB;
+#     prints the free space it has, and refuses to build under 5 GB. A checkout is removed only when
+#     three readings agree: this machine's `git worktree list` answered and does not name it, no
+#     directory of that name is left beside the worktrees, and nothing on the host is using it (its
+#     per-checkout lock is free, no process's cwd or executable is inside it, it was not written in
+#     the last ten minutes). A reading that failed is never read as "gone": the run then removes
+#     nothing and says why. `internal/tools/camel-remote-cleanup.test.ps1` is the proof of that;
 #   * `-Clean` drops one checkout by name when a task is finished.
 #
 # Exit code is the exit code of the build or of the plan run, or -- when -Check was given and the
-# plan was green -- of the first checker that failed. 4 means the -NoBuild guard refused before
-# anything ran; 3 means the host is short of disk; 2 means the worktree, the push or the transfer
-# failed, or -Check named a checker that does not exist.
+# plan was green -- of the first checker that failed. 5 means the gpu observation read a case red
+# that its baseline does not name (see "the gpu layer is observed, and never gates"; the known reds
+# never decide a run). 4 means the -NoBuild guard refused before anything ran; 3 means the host is
+# short of disk; 2 means the worktree, the push or the transfer failed, or -Check named a checker
+# that does not exist.
 #
 # --- where the machine-specific values live ---------------------------------
 # Nothing in this file names a host, a drive or a user's home. The ssh alias, the ssh/scp binaries,
@@ -119,6 +126,21 @@
 #     entries that leaves out instead of leaving it to the reader: the line after "N run" names every
 #     `planStage` entry this run skipped, and a run that named one prints that it is not part of
 #     `all`. Both read the table as it stands, so a new `planStage` entry appears there by itself;
+#   * there is a second marking that keeps an entry out of `all`, for the other reason a check can be
+#     asked for by name rather than started by every gate: `namedOnly`. `e9-full` is that entry -- the
+#     E9 differential at the tier its ratchet is defined at, 500 seeds and 31,680 cells, half an hour
+#     on this host -- and it is out of `all` because a stage that every `all` started is a stage
+#     people learn to skip, which is the same reason `test/tools/e9diff/README.md` gives for the tool
+#     having no plan of the two slower tiers. Its reason is its cost, not a missing reading, so the
+#     closing summary names it on a line of its own (`named-only check(s) not run by -Check all`)
+#     rather than under the plan-stage line;
+#   * an entry marked `reportOnly` is not a wall yet: it runs on every gate and prints one line a
+#     lane can paste, `check=<name> findings=<n> mode=report`, where the number is the checker's own
+#     count and never a second count kept here. Its exit code does not decide the run's, so `-Check
+#     all` stays green while the number is still coming down; the closing summary tags it `report
+#     only`, because a red check that does not fail the run must not be read as a green one either.
+#     An entry becomes a wall by losing that marking, and the checker's own `--enforce` is the mode
+#     it then runs in;
 #   * the stages are build -> plan -> checks, so one call answers both questions and a failing plan
 #     still gets its checkers (their readings are not thrown away with the plan's);
 #   * the run exits non-zero when any checker failed, and the exit code is the plan's when it failed,
@@ -132,6 +154,67 @@
 # not the default. A current install carries the toolchain's libstdc++.so.6 in its `libs/` and
 # finds it through its own `$ORIGIN` rpath, so no stage needs a library export of its own; the one
 # global export further down serves older installs still sitting in host checkouts.
+#
+# --- the gpu layer is observed, and never gates a known red -----------------
+# test/plans/gpu is in no timed gate. The fast layer is test/plans/smoke + test/plans/feat, and
+# `gpu/**` is under neither, so the red cases of test/plans/gpu/tiles.plan.toml -- bit-exactness
+# assertions that move with the driver and with whoever else is on the card, plus cases that have
+# been red long enough that nobody remembers them being green -- were read by no gate at all. They
+# ran only when a -Changed directory rule named that plan file and "a plan file named as a target
+# runs in full" skipped the layer, which is why they stayed red. A red nobody reads is not one that
+# was decided; it is one that was never looked at.
+#
+# So the gate reads them, and decides only what is news. `gpu-plans` reuses the `reportOnly` shape of
+# the table below -- one machine-readable line, an exit code kept out of `checkfail` -- but it is a
+# plan run and not a checker, so it is emitted as a block of its own after the checkers instead of a
+# table row. `N run` in the closing summary is the static layer's count (20 under `-Check all`), and
+# a twenty-first row would have changed a number every lane compares. The number it prints is the
+# runner's own [SUMMARY] reduced to one line, never a second count kept here, and it is `unknown` --
+# not zero -- when the runner printed no summary at all. It runs on the caller's -Jobs, after the
+# checkers, and under the host's plan lock: it *is* a plan run and not a reader of one, so a number
+# taken beside five other lanes would not be comparable.
+#
+# What it prints is `check=gpu-plans total=<n> pass=<n> fail=<n> skip=<n> red=[<names>]
+# red_more=<n> seconds=<n> state=<read|noslot|nosummary> mode=report`. `state` says whether the layer
+# was read at all: `noslot` is a host whose plan lock was never obtained (no reading, and no red
+# invented from it), `nosummary` is an observation that could not read its own runner.
+#
+# --- and the ratchet is what keeps it from being background noise -------------
+# A report-only reading with no ratchet is a reading nobody has to act on: the layer could grow a new
+# red every week and every gate would still be green, and a list that is allowed to grow is a list
+# nobody reads. So the red set is compared with one that was written down,
+# `internal/tools/gpu-plans.exceptions.txt` (one case name per line, `#` for provenance, the same
+# plain-text shape the repository's exception lists use), and the comparison is the hard part of the
+# rule:
+#
+#   * a red the file names is a known red: printed on every gate, and it decides nothing. It is
+#     known because a GPU reading depends on the card, the driver and the co-tenants (docs/
+#     test-plans.md, "CUDA visibility", and "A card that is not device 0"): a bit-exactness assertion
+#     that fails on this host must not block a merge;
+#   * a red the file does not name is news, and news decides this run: exit 5. The file says what
+#     was red when it was written, so a case that is red now and is not in it is a change -- and a
+#     change is what a gate is for. `red_more>0` (a reading that named only part of its reds) is
+#     news too: the names it did not print are exactly the ones nobody would look at, so the
+#     comparison refuses rather than passing over them;
+#   * a name in the file that is no longer red is accepted as it is, and the run says the file can be
+#     trimmed. A fix must not have to wait for the bookkeeping to land in the same change, and a
+#     stale entry is not a failure -- it is a line to delete;
+#   * a sweep that was never taken (`state=noslot`) decides nothing and says so; a sweep whose runner
+#     printed no summary (`state=nosummary`) is a fault in this observation, printed as one, and it
+#     decides nothing either -- the exit code is for a gpu case that turned red, not for a host that
+#     was busy or a tool that broke.
+#
+# **This does not stand in for the fix, and it does not guard the layer.** The line makes a red gpu
+# case visible, the ratchet makes the *next* one visible without a person watching, and nothing here
+# repairs a case: the names in the baseline stay red until someone fixes them. The layer becomes
+# guarded by fixing them and trimming the file to empty; only then is this observation a wall, and it
+# becomes one by having nothing left to report, not by losing `reportOnly`.
+#
+# Two selection traps, each of which would print the same false green this line exists to remove:
+# `test/plans/gpu` is a directory, so it is read at a tier, and the default tier is `fast` while the
+# cases this observation exists for are `tier = "slow"` -- so `--tier all` is passed rather than the
+# caller's `-Tier`; and a run that selected nothing prints the same three numbers as a green one,
+# which is why the reading above is `unknown` when there is no summary line to reduce.
 #
 # --- the plan's stderr travels with its stdout ------------------------------
 # A plan's reason for being red is written to stderr by the runner ("this run selected no test at
@@ -232,6 +315,44 @@ param(
     # Rewrite the goldens of the named plans instead of checking them: runs the golden tool,
     # not the runner, because a golden mismatch cannot be fixed through the checking path.
     [switch]$UpdateGolden,
+    # Re-record the front-end AST snapshot instead of checking it: runs
+    # `test/tools/parsecheck/check.py snapshot --update` on the host, after the build and before the
+    # plan, and brings `test/plans/feat/parse/golden/ast_hashes.txt` back into this tree.
+    #
+    # This exists because `-UpdateGolden` cannot record that file: `--update-golden` rewrites only
+    # `kind = "snapshot"` goldens, while `frontend.ast_snapshot` is `tool = "python"` and the runner
+    # never passes `--update` to it. A `.cml` case added to the tree therefore had no way of getting
+    # into the record through the gate at all -- the record had to be made by hand on the host, which
+    # a lane cannot do, and a lane that skipped it left a red window on the base branch. The record is
+    # a file of *this* tree, so the tool runs where the sources are and the file travels back on the
+    # same stream as the reading (base64, between two markers), which needs no second connection.
+    #
+    # The stage runs before the plan on purpose: the plan reads the record, so a record that failed
+    # must stop the run rather than be read later as a plan that failed. `-Plan <the parse plan>`
+    # beside it is the verification, and needs no separate call.
+    #
+    # It prints the build time of the binary it records with -- `out/<tag>/bin/camel-parsecheck built
+    # YYYY-MM-DD HH:mm` -- because the one failure mode this stage cannot show on its own is a stale
+    # binary: with `-NoBuild` beside it, the record is taken by whatever the host built last, which may
+    # be days older than the tree asking for it, and the line then says `(NOT REBUILT -- may be
+    # stale)` instead of looking like a fresh build. A record whose provenance is invisible is how a
+    # golden gets silently re-recorded from the wrong parser.
+    [switch]$UpdateAstHashes,
+    # With -UpdateAstHashes, re-hash only these files (globs, repeatable) instead of the whole list.
+    # `--only` restricts what is rewritten, not what the record must cover, so the check that follows
+    # still reads every line: recording the whole list also *replaces* every line that no longer
+    # matches, which would turn a golden into whatever the tree happens to produce, while a name
+    # selected here can only move the lines it names.
+    [string[]]$AstOnly = @(),
+    # With -UpdateAstHashes, a `test/plans/feat/parse/golden/ast_hashes.txt` path this recording may
+    # take the row out of (repeatable). A re-record is a whole-table rewrite: a row leaves the record
+    # when the tree that records does not hold its file, which is how a bulk re-record on a tree
+    # missing seven `.cml` files deleted their seven rows on 2026-11-17 (`agents/test.md`). The
+    # write-back therefore refuses to drop a row while that file is still here, and refuses a bulk
+    # re-record that drops any row at all; this switch is how a case that really is deleted leaves
+    # the record, and each name is printed as it is written. Names are paths as the record spells
+    # them (`test/cases/parse/x.cml`), and the host takes them as `--drop`.
+    [string[]]$AstDrop = @(),
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
@@ -240,11 +361,36 @@ param(
     # An unknown name is exit 2 before anything runs; see "what the panel sees" and the -Check
     # section of the header for the stages and the exit code.
     [string[]]$Check = @(),
+    # Leave the gpu observation out. Every run that takes a reading also runs test/plans/gpu once and
+    # prints one `check=gpu-plans ... mode=report` line (see the header, "the gpu layer is observed,
+    # and never gates"); it never decides the exit code. This switch is for a run that wants the
+    # gate's own readings without that extra sweep -- and it names what it left out, because an
+    # absent line and a green one read the same from the outside.
+    [switch]$NoGpuWatch,
+    # Which dirty tracked files a run may carry from the MAIN checkout. The patch this script sends
+    # is `git diff HEAD`, i.e. the working tree, not the commit: a file somebody edited and did not
+    # commit is built and measured as part of the change. In a lane's own worktree that is the point
+    # -- the author is measuring the edit. In the main checkout it is never the point, because the
+    # main checkout is where a commit is made, so a dirty file there belongs to somebody else's
+    # unfinished work and a green gate would be reporting "measured" about a mixture of two changes.
+    # A machine-local value (the gate settings file is git-ignored) usually belongs here.
+    [string[]]$AllowDirty = @('internal/tools/camel-remote.ps1'),
     # The toolchain's libstdc++ directory, put first on the single LD_LIBRARY_PATH this run exports
     # (see the header). A current build carries its own copy in `libs/` with a `$ORIGIN` rpath, so
     # the export only serves the older installs still sitting in host checkouts. Empty means the
     # local settings file decides.
-    [string]$LibStdCxxDir = ''
+    [string]$LibStdCxxDir = '',
+# A file inside this tree that the host sends back after the run: base64 between two markers on the
+# same stream as RUN_EXIT, which is the channel `-UpdateAstHashes` already uses (one channel, so one
+# place to fix it). Relative to -Path and it must stay inside the tree.
+#
+# What it is for: a check that needs two runs -- `-UpdateGolden` writes a record, the next run
+# compares against it -- cannot leave the record on the host, because the host checkout is reset to
+# the patch on every run: an untracked file written by one run is gone by the next (measured
+# 2026-11-16: the golden written by `-UpdateGolden` was reported missing by the run right after it).
+# Pair this with a path `.gitignore` covers (e.g. `out/trace-golden/...`), so a fetched record can
+# never be committed by accident.
+[string]$FetchFile = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -254,6 +400,10 @@ $ErrorActionPreference = 'Stop'
 # camel-gate.local.json beside this script (git-ignored), and a run that needs a setting the file
 # does not carry stops here, with the file to create, instead of reaching the wrong machine.
 . (Join-Path $PSScriptRoot 'camel-gate-config.ps1')
+# The host-checkout sweep's reading: which worktrees still exist, read so that a failed reading is
+# kept apart from an empty one. Its own file because it is the one decision here that can delete
+# another lane's work, and `camel-remote-cleanup.test.ps1` has to be able to call it.
+. (Join-Path $PSScriptRoot 'camel-remote-live.ps1')
 $cfg = Get-CamelGateConfig -LocalConfig $LocalConfig -ScriptRoot $PSScriptRoot -Override @{
     stateDir         = $StateDir
     hostLibStdCxxDir = $LibStdCxxDir
@@ -311,6 +461,18 @@ $checkers = [ordered]@{
     # plan-debt` -- and it is left out of `all`: with no plan selected it has no reading to judge
     # against, and it says so (exit 2) rather than passing over nothing.
     'plan-debt'           = @{ script = 'scripts/check-plan-debt.mjs'; args = @(); compiler = $false; planStage = $true }
+    # The E9 differential at the tier its ratchet is defined at: 500 seeds, 99 cells each, 31,680
+    # cells, and the three numbers a merge is judged by, compared with
+    # `test/tools/e9diff/baseline.json`. Until this row existed that run was reachable only from a
+    # hand-written shell on the host, which on the books is the same as not being reachable -- while
+    # `test/tools/e9diff/README.md` says why it has no plan of the two slower tiers: "a full run is
+    # 25 minutes on this host, and a gate that starts one by itself is a gate people learn to skip".
+    # Both halves of that reason survive here: there is still no plan, and `all` still does not
+    # start it. It is `namedOnly` -- asked for by name, like the plan-stage checks, and out of `all`
+    # for its own reason: it is slow, and it is a reading somebody asks for, not a static layer. The
+    # script adds no judgement of its own; the tool decides against its baseline and its exit code
+    # is this entry's (`scripts/check-e9-full.mjs`).
+    'e9-full'             = @{ script = 'scripts/check-e9-full.mjs'; args = @('--matrix', 'full'); compiler = $true; namedOnly = $true }
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
@@ -323,6 +485,70 @@ $checkers = [ordered]@{
     # the gate's criteria are untouched and it runs in the same environment as every other command
     # in this script, with no per-stage prefix of its own.
     'gate-static'         = @{ script = 'scripts/release-gate.mjs'; args = @('--only', 'static'); compiler = $true }
+    # A plan field the entry's kind never evaluates is not a test: the entry reads as a comparison and
+    # makes none (`docs/test-plans.md`, "Fields a Kind Does Not Read"; the shape it was written for was
+    # a `negative` entry carrying `compare_to`, green for seven months while it checked only an exit
+    # code). It lives under test/tools/ because its subject is the plan tree, and its table is checked
+    # against `validateTest` by `--verify-runner`, so the guard cannot outlive the code it describes.
+    # A wall rather than a report-only entry: it is pure static analysis, deterministic, a few
+    # seconds, and its count is already ratcheted in test/tools/plan-fields-baseline.json -- findings
+    # may not grow past that file, and a missing baseline is itself a red rather than a pass over
+    # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
+    # going red is what says it went up.
+    'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
+    # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
+    # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
+    # tool `frontend.ast_snapshot` itself starts -- with the line
+    # `test/plans/feat/parse/golden/ast_hashes.txt` records for each compared with the reading the
+    # file gives now. A `.cml` whose reading moved, or a `.cml` nobody registered, is a red on the
+    # base branch that the merge position has to find and patch after the fact; that happened five
+    # times (`1dad3104f` is the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
+    # was right and the reader was late. This is the reader: one process, one line per stale file,
+    # from the lane's own worktree, before the push.
+    #
+    # `compiler = $true`: it starts the install's `camel-parsecheck`, beside the `camel` the
+    # `--camel` argument names, so it reads the install this run built and -NoBuild guarded. A
+    # `.cml` edit is in the build stamp's fingerprint (`scripts/common.js`, `sourceFingerprint`),
+    # so `-NoBuild` after one needs `-AllowStale` -- the parser's reading of a file does not depend
+    # on the tree its binary was built from, which is the one thing that stamp cannot know.
+    'ast-hashes'          = @{ script = 'scripts/check-ast-hashes.mjs'; args = @(); compiler = $true }
+    # A comment says what the code does and why; it does not record how the project got there. This
+    # checker reads comment text only -- after `//`, inside `/* */`, with `#` in CMake -- so a date or
+    # a path that is data in a string literal is not its business, and it counts a comment that names
+    # a dated ruling, a handover page, a role or a lane, a slice code, a host path. A wall with a
+    # threshold of zero: the tree carries none of those comments, so the first one added is this
+    # run's red, and the checker's own exit 1 -- with the `file:line` list it prints above it -- is
+    # what the gate returns.
+    'process-traces'      = @{ script = 'scripts/check-process-traces.mjs'; args = @(); compiler = $false }
+    # --- report only -----------------------------------------------------------
+    # The checks the target architecture asks for before they are walls: they run on every gate and
+    # publish their own reading, and their exit code does not decide the run's. `findings` is the
+    # `sed -E` expression that reduces the checker's own summary line to its count, so the number
+    # printed here is the number the checker printed -- the list is one work item, and the number
+    # coming down is what this line exists to show. `--enforce` is deliberately absent: the checker
+    # offers it as the mode this entry becomes once its list is empty, and a lane that switched it
+    # on now would gate the baseline each entry printed on 2026-11-14.
+    'program-holders'       = @{ script = 'scripts/check-program-holders.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-program-holders: ([0-9]+) C\+\+ Program holder.*/\1/p' }
+    # The three layering rows of the target architecture's section 7 (守护), each read as its own
+    # script: only the semantic layer enumerates a kind of edge; an effect is answered by the fact
+    # layer and not assembled from `isPure`/`hasExternalEffect`; an operator's URI is spelled in its
+    # definition and its registry, not in business code. Each script's header comment states the
+    # rule it derives its boundary from -- the declaring header, the fact that answers the
+    # question, the files that define and register an operator -- because that boundary is the part
+    # a reader has to be able to argue with.
+    'edge-kind-layer'       = @{ script = 'scripts/check-edge-kind-layer.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-edge-kind-layer: ([0-9]+) edge-kind call.*/\1/p' }
+    'effect-facts'          = @{ script = 'scripts/check-effect-facts.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-effect-facts: ([0-9]+) effect-atom call.*/\1/p' }
+    'operator-uri-literals' = @{ script = 'scripts/check-operator-uri-literals.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-operator-uri-literals: ([0-9]+) operator URI literal.*/\1/p' }
+    # The capture census: the two numbers the closure-capture work is accepted by -- `:var/new` nodes
+    # and capture ports bound by reference -- read out of `std::jgir` (the JSON GIR; `std::stats`
+    # carries neither an operator breakdown nor a capture table) over `test/cases/**`, with the
+    # fingerprint of the file set it counted (`list_sha`, the paths and their content hashes) printed
+    # beside them. It is a reading and not a wall: the author's target is 0/0 and there is no baseline
+    # yet, so a red here would invent the threshold it claims to hold. `findings` reduces its summary
+    # line to `capture_ports`, the number that line leads with; the script's `--enforce` is the mode
+    # this entry becomes once the reading is 0/0. The script's header states the scope, the counting
+    # rule and what the repository-wide corpus would add (`--all`).
+    'capture-census'        = @{ script = 'scripts/check-capture-census.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-capture-census: ([0-9]+) reference capture port.*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both
@@ -335,8 +561,12 @@ foreach ($requested in $Check) {
         # A `planStage` entry reads the plan stage's own record, so it is not part of the static
         # layer `all` means: it would refuse (exit 2) on every call that selects no plan, which is
         # what `-Check all` is for. It is asked for by name, beside the plan it reads.
+        # A `namedOnly` entry is out of `all` for the other reason a check can be: it is a deliberate
+        # reading -- `e9-full` is a 25-minute differential -- and a stage that every `all` started
+        # would be a stage people learn to skip. Both marks mean "named by the caller", so both are
+        # skipped here, and the closing summary names which ones and why.
         foreach ($known in $checkers.Keys) {
-            if ($checkers[$known].planStage) { continue }
+            if ($checkers[$known].planStage -or $checkers[$known].namedOnly) { continue }
             if ($checkNames -notcontains $known) { $checkNames += $known }
         }
     } elseif ($checkers.Contains($requested)) {
@@ -359,6 +589,91 @@ $checkList = $checkNames -join ' '
 $checkHasAll = $Check -contains 'all'
 $planStageNames = @($checkers.Keys | Where-Object { $checkers[$_].planStage })
 $planStageSkipped = @($planStageNames | Where-Object { $checkNames -notcontains $_ })
+# The same reading for the entries `all` leaves out because they are asked for, not because they
+# have nothing to read: a run that printed one count over both reasons would say "named-stage" about
+# a check whose reason is its cost.
+$namedOnlyNames = @($checkers.Keys | Where-Object { $checkers[$_].namedOnly })
+$namedOnlySkipped = @($namedOnlyNames | Where-Object { $checkNames -notcontains $_ })
+
+# The gpu observation, beside the table and deliberately not in it: it is a plan run, so it is no
+# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (20
+# under -Check all), which a twenty-first row would have changed for every lane that compares that
+# number. It reuses the report-only shape instead (one machine-readable line, an exit code that never
+# reaches `checkfail`) and is emitted as a block of its own after the checkers; the header section
+# "the gpu layer is observed, and never gates a known red" states what it is, what it is not, and how
+# its baseline ratchet decides.
+#
+# It rides any run that takes a reading -- a plan, -Changed, or the check stage -- and not a
+# build-only run (nothing to compare) or a -UpdateGolden run (an authoring pass that rewrites goldens
+# and reads none of them back). `-NoGpuWatch` is the explicit way out, and it says so out loud: a
+# missing line and a green one read the same from the outside.
+$gpuObservationName = 'gpu-plans'
+# The recorded red set, read here rather than on the host: the worktree's copy is the one a lane
+# edits when it records or clears a red, and this side is where the exit code is decided.
+$gpuBaselineRel = 'internal/tools/gpu-plans.exceptions.txt'
+$gpuBaselinePath = Join-Path $Path $gpuBaselineRel
+$gpuReadingWanted = $Plan.Count -gt 0 -or $Changed -or $checkNames.Count -gt 0
+$gpuWanted = (-not $NoGpuWatch) -and (-not $UpdateGolden) -and $gpuReadingWanted
+if ($NoGpuWatch -and $gpuReadingWanted) {
+    Write-Host "[camel-remote] -NoGpuWatch: the gpu plans were not run, so this run prints no gpu reading (test/plans/gpu is observed and never gates a known red; see the header)"
+}
+
+# `-UpdateAstHashes` may not take a row out of the AST record while the file that row records is
+# still here, and a bulk re-record may not take one out at all. This is that rule as a function, so
+# it can be read and exercised without a host: it takes the record's lines before and after and
+# answers what would be dropped, in three classes. The write-back below prints the answer and writes
+# nothing when it refuses.
+#
+# The three conditions of the failure -- the record gets shorter, the rows it loses still name a
+# `.cml` file this tree has, and no `-AstDrop` named them -- are `StillHere` and `Refused`. The bulk
+# condition is the one that does not depend on where a file is: on 2026-11-17 `eaa3ecb8c` recorded
+# with the bulk flag on a tree that was missing the seven `test/cases/compile/var/loop_*.cml` a
+# parallel lane had just added, and those rows went with the files (4400 lines to 4393). Those files
+# were in neither that tree nor its base branch, so no `Test-Path` could have seen the loss; a bulk
+# rewrite could have known it was rewriting the whole table. `27de8a3df` put the rows back by hand,
+# and `agents/test.md` now carries the rule this function enforces.
+function Get-AstDropVerdict {
+    param(
+        [AllowEmptyCollection()][string[]]$Before = @(),
+        [AllowEmptyCollection()][string[]]$After = @(),
+        [AllowEmptyCollection()][string[]]$Drop = @(),
+        [string]$Root = '.',
+        [bool]$Bulk = $true
+    )
+    # A line is `<16 hex> <ok|no> <path>`, and the question is about the paths: a hash that moved is
+    # one line lost and one line gained, never a row that went, so a set of whole lines would call
+    # every re-read row a deletion.
+    $pathOf = { param($line) $fields = $line -split ' ', 3; if ($fields.Count -lt 3) { '' } else { $fields[2] } }
+    $rows = [ordered]@{}
+    foreach ($line in $Before) {
+        $path = & $pathOf $line
+        if ($path -and -not $rows.Contains($path)) { $rows[$path] = $line }
+    }
+    $kept = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($line in $After) {
+        $path = & $pathOf $line
+        if ($path) { [void]$kept.Add($path) }
+    }
+    # A probe is recorded under a name of the record's own (`probes/probe_xxx.cml`) and no file
+    # answers to it: a line that goes is a probe probes.py no longer makes, not a file the
+    # repository lost.
+    $dropped = @($rows.Keys | Where-Object { -not $kept.Contains($_) -and -not $_.StartsWith('probes/') })
+    $unnamed = @($dropped | Where-Object { $Drop -notcontains $_ })
+    $stillHere = @($unnamed | Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf })
+    $deleted = @($unnamed | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) })
+    [pscustomobject]@{
+        Rows      = $rows
+        OldCount  = @($Before).Count
+        NewCount  = @($After).Count
+        Dropped   = $dropped
+        Named     = @($dropped | Where-Object { $Drop -contains $_ })
+        StillHere = $stillHere
+        Deleted   = $deleted
+        Unused    = @(@($Drop) | Where-Object { $_ -and $dropped -notcontains $_ })
+        Bulk      = $Bulk
+        Refused   = ($stillHere.Count -gt 0 -or ($Bulk -and $deleted.Count -gt 0))
+    }
+}
 
 # A reading taken on a loaded host is not comparable to one taken on a quiet one: this machine also
 # runs every other lane's build, and several lanes at -Jobs 8 is more work than there are cores. So
@@ -400,6 +715,18 @@ $name = Split-Path -Leaf $Path
 $branch = (git -C $Path rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -eq 'HEAD') {
     Write-Host "[camel-remote] detached HEAD in $name; check out a branch first"
+    exit 2
+}
+# `-AstOnly` selects which lines a recording rewrites; with no recording there is no stage that could
+# read it, and a request nobody carries out must not look like one that ran.
+if ($AstOnly.Count -gt 0 -and -not $UpdateAstHashes) {
+    Write-Host "[camel-remote] -AstOnly names what -UpdateAstHashes rewrites; give -UpdateAstHashes, or drop -AstOnly"
+    exit 2
+}
+# The same rule for the other side of the same stage: `-AstDrop` is a permission the write-back
+# reads, and with no write-back there is nothing that could honour it.
+if ($AstDrop.Count -gt 0 -and -not $UpdateAstHashes) {
+    Write-Host "[camel-remote] -AstDrop names a row -UpdateAstHashes may lose; give -UpdateAstHashes, or drop -AstDrop"
     exit 2
 }
 
@@ -657,6 +984,22 @@ $syncedAt = $null
 # what was asked for.
 $checksStartedAt = $null
 $checkResults = @()
+# The gpu observation's own reading, kept apart from the check results: it is not one of the checks
+# and it does not pass through `$checkers`, but its `red=[...]` is what the ratchet below compares
+# with the recorded red set. Null means the observation did not run (a -NoGpuWatch run, a build-only
+# run) or never printed a reading.
+$gpuReading = $null
+# Why each red is red, by case name: the `-evidence` line that follows the reading. Empty when the
+# host printed none (an older host script), which reads as "no reason recorded for any case".
+$gpuEvidence = @{}
+# The AST snapshot's own exit (`-UpdateAstHashes`) and the file it sent back. The record is written to
+# this tree only after the host says it made one, so a failed stage leaves the tree as it was.
+$astExit = $null
+$astCapture = $null
+$astPayloadText = $null
+# The file `-FetchFile` asks for: same shape as the AST record above.
+$fetchCapture = $null
+$fetchPayloadText = $null
 $lastRunPublish = [datetime]::MinValue
 
 # One line per run for the panel's run registry. `slot` stays null (the host does not report which
@@ -730,6 +1073,17 @@ try {
     # than a list that says nothing, so the widening to the whole layer has no branch left to take.
     # It is computed before the push: a base nobody can read must cost a push and a build nothing.
     $untracked = @(git -C $Path ls-files --others --exclude-standard)
+    # A file `-FetchFile` brought back last run is named here even when it is ignored, because the two
+    # halves of the two-run check need it to travel: the fetch writes it under a path `.gitignore`
+    # covers (so a record can never be committed by accident), and `--exclude-standard` then leaves
+    # it out of the tar -- the next run would compare against nothing. Naming it adds it to the tar
+    # and nothing else: it is never staged, and a run without `-FetchFile` does not mention it.
+    if ($FetchFile -ne '') {
+        $fetchLocal = Join-Path $Path $FetchFile
+        if (Test-Path -LiteralPath $fetchLocal) {
+            $untracked = @($untracked | Where-Object { $_ -ne $FetchFile }) + @($FetchFile)
+        }
+    }
     $changedListFile = Join-Path $scratch 'changed.txt'
     if ($Changed -and -not $UpdateGolden) {
         $changedList = @()
@@ -816,6 +1170,62 @@ try {
     }
     $stagingPushed = $true
 
+    # --- what this run would measure, said before it travels --------------------
+    # The patch below carries the WORKING TREE (`git diff HEAD`), not the commit, so every reading a
+    # gate prints is about "the commit plus whatever else is uncommitted in this checkout". In a lane
+    # worktree that is exactly what the author wants. In the main checkout it is an accident waiting
+    # to happen: two of them in one night (a half-finished rename, and a probe dropped into
+    # src/runtime/draft.cpp) turned a build into somebody else's compile error, and a green run would
+    # have been just as wrong in the other direction. So the main checkout -- the checkout whose
+    # --git-dir is the common directory, i.e. not a linked worktree -- refuses a dirty tree outside
+    # $AllowDirty, and every run prints which files it is about to carry, so that "measured" can be
+    # read off the output instead of assumed.
+    $dirtyTracked = @()
+    try {
+        $dirtyTracked = @(git -C $Path status --porcelain --untracked-files=no 2>$null |
+            ForEach-Object { $_.Substring(3).Trim() } |
+            Where-Object { $_ -ne '' })
+    } catch {
+        $dirtyTracked = @()
+    }
+    $gitDir = ''
+    $commonDir = ''
+    try {
+        $gitDir = (git -C $Path rev-parse --absolute-git-dir 2>$null).Trim()
+        $commonDir = (git -C $Path rev-parse --path-format=absolute --git-common-dir 2>$null).Trim()
+    } catch {
+        $gitDir = ''
+        $commonDir = ''
+    }
+    $isMainCheckout = ($gitDir -ne '' -and $gitDir -eq $commonDir)
+    if ($dirtyTracked.Count -gt 0) {
+        # A comma also separates, because `pwsh -File` hands every argument over as one string: the
+        # array syntax the parameter asks for is read literally there, so a whitelist written that
+        # way matches nothing and refuses every run. Measured, not predicted: it did exactly that.
+        $allowed = @($AllowDirty | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne '' })
+        $foreign = @($dirtyTracked | Where-Object {
+            $rel = $_
+            -not ($allowed | Where-Object { $rel -eq $_ -or $rel -like $_ })
+        })
+        $carried = @($dirtyTracked | Where-Object { $foreign -notcontains $_ })
+        if ($carried.Count -gt 0) {
+            Write-Host ("[camel-remote] carrying {0} allowed dirty file(s): {1}" -f $carried.Count, ($carried -join ', '))
+        }
+        if ($foreign.Count -gt 0) {
+            Write-Host ("[camel-remote] {0} dirty file(s) that -AllowDirty does not name:" -f $foreign.Count)
+            foreach ($rel in $foreign) { Write-Host ("[camel-remote]   {0}" -f $rel) }
+            if ($isMainCheckout) {
+                Set-BuildPhase 'starting' ("[camel-remote] refusing: {0} dirty file(s) in the main checkout" -f $foreign.Count)
+                Write-Host '[camel-remote] refusing to send: the main checkout is dirty outside -AllowDirty, so a'
+                Write-Host '[camel-remote] reading taken now would be about this commit plus somebody else''s unfinished'
+                Write-Host '[camel-remote] work, and "this commit was measured" would not be true. Commit it, revert it,'
+                Write-Host '[camel-remote] or name it in -AllowDirty if it really is part of this change.'
+                exit 5
+            }
+            Write-Host '[camel-remote] continuing: this is a linked worktree, where a dirty tree is the point.'
+        }
+    }
+
     # `git diff --output=` writes the patch as raw bytes; `>` in PowerShell would write UTF-16.
     git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
 
@@ -836,6 +1246,14 @@ try {
     $changedCount = ([regex]::Matches($patchText, '(?m)^diff --git ')).Count
     Write-Host ("[camel-remote] {0}: pushed {1}, {2} changed file(s), {3} untracked ({4:N1} s)" -f `
         $name, $branch, $changedCount, $untracked.Count, $sw.Elapsed.TotalSeconds)
+    if ($changedCount -gt 0) {
+        # The names, not just the count: a count cannot tell "my one file" from "mine and a probe".
+        $changedNames = @([regex]::Matches($patchText, '(?m)^diff --git a/(\S+) ') |
+            ForEach-Object { $_.Groups[1].Value })
+        Write-Host ("[camel-remote] measuring: {0}" -f ($changedNames -join ', '))
+    } else {
+        Write-Host '[camel-remote] measuring: the commit alone (no tracked change)'
+    }
     Set-BuildPhase 'starting' ("[camel-remote] {0}: {1} changed file(s), {2} untracked; sending to {3}" -f `
         $name, $changedCount, $untracked.Count, $sshHost)
 
@@ -847,16 +1265,23 @@ try {
     # What the checkout should be at afterwards, and which host checkouts are still wanted. `-s` on
     # the patch and `-f` on the tar are the fast path's guard: a clean tree needs neither.
     $headSha = (git -C $Path rev-parse HEAD).Trim()
-    $liveNames = @()
-    try {
-        $liveNames = @(git -C $Path worktree list --porcelain 2>$null |
-            Where-Object { $_ -like 'worktree *' } |
-            ForEach-Object { Split-Path -Leaf $_.Substring(9).Trim() })
-    } catch {
-        # An old git without --porcelain: keep every checkout rather than delete the wrong one.
-        $liveNames = @($name)
+    # Which host checkouts are still wanted. The old code here was
+    #   try { git ... --porcelain 2>$null | ... } catch { $liveNames = @($name) }
+    # whose comment said "keep every checkout rather than delete the wrong one" and whose body did
+    # the opposite: a native command's non-zero exit does not throw, so the catch never ran, the
+    # list came back empty, and the line after it appended this run's own name -- the sweep was then
+    # told that exactly one checkout exists and removed all the others. On 2026-11-17 that killed
+    # three measurements (25/500, 200/500, 300/500) on the host where they were running. The
+    # reading now reports whether it answered, and an unanswered reading removes nothing.
+    $live = Get-CamelLiveWorktrees -Path $Path
+    $liveNames = @($live.Names)
+    $liveTrustedFlag = if ($live.Trusted) { '1' } else { '0' }
+    if ($live.Trusted) {
+        # Printed every run: when a checkout does go, this is the line that says what the run knew.
+        Write-Host ("[camel-remote] live worktrees: {0}" -f ($liveNames -join ' '))
+    } else {
+        Write-Host ("[camel-remote] not cleaning up host checkouts this run: {0}; 'could not read which worktrees exist' is not 'there are no other worktrees'" -f $live.Why)
     }
-    if ($liveNames -notcontains $name) { $liveNames += $name }
 
     Set-BuildPhase 'starting' "[camel-remote] syncing $name on $sshHost"
 
@@ -908,6 +1333,56 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         "fi"
     } else { ':' }
 
+    # The AST snapshot record, when `-UpdateAstHashes` asks for one. A single-quoted here-string: the
+    # shell's `$R` and `$?` must reach the host verbatim, and only the build tag is substituted
+    # (`out/latest` for a Release run, `out/debug` for a Debug one -- the install this run built, not
+    # whichever one happens to be newest). The recorded file leaves base64-encoded between two
+    # markers, so it costs no second connection and cannot be mangled by the line filter above it.
+    #
+    # The `[machine]` line comes first and names the build time of the binary that does the recording:
+    # a stale binary is the one failure mode this stage cannot show in its own output, and with
+    # `-NoBuild` the record is taken by whatever the host built last. `-NoBuild` therefore appends
+    # `(NOT REBUILT -- may be stale)` to that line rather than leaving it looking like a fresh build.
+    $astBuiltNote = if ($NoBuild) { ' (NOT REBUILT -- may be stale)' } else { '' }
+    $astOnlyArgs = ($AstOnly | ForEach-Object { " --only '$_'" }) -join ''
+    # The rows the recording may lose, by path as the record spells it: the host's guard refuses a
+    # drop it was not told about, and this is what tells it (`check.py`, `--drop`).
+    $astDropArgs = ($AstDrop | ForEach-Object { " --drop '$_'" }) -join ''
+# The file `-FetchFile` asks for, sent back the same way the AST record is: base64 between two
+# markers, after the plan. It runs after `RUN_EXIT` so a record the plan wrote is complete, and it
+# names the path when the host has nothing there -- a fetch that silently sends nothing would look
+# exactly like a run whose comparison passed.
+$fetchRel = ($FetchFile -replace '\\', '/')
+$fetchStage = if ($FetchFile -ne '') {
+@'
+if [ -f "$R/FETCHREL" ]; then
+echo '__CAMEL_REMOTE_FETCH_BEGIN__'
+base64 "$R/FETCHREL"
+echo '__CAMEL_REMOTE_FETCH_END__'
+else
+echo 'FETCH_MISSING=FETCHREL'
+echo '[camel-remote] -FetchFile: the host has no FETCHREL (whatever writes it must run in this same run)'
+fi
+'@.Replace('FETCHREL', $fetchRel)
+} else { ':' }
+    $astStage = if ($UpdateAstHashes) {
+        @'
+echo '__CAMEL_REMOTE_AST_START__'
+echo "[machine] out/TAG/bin/camel-parsecheck built $(date -r out/TAG/bin/camel-parsecheck '+%Y-%m-%d %H:%M')NOTE"
+echo '[camel-remote] recording the AST snapshot (frontend.ast_snapshot) on the host'
+CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --updateONLYDROP 2>&1
+astc=$?
+echo "AST_UPDATE_EXIT=$astc"
+if [ $astc -ne 0 ]; then
+    echo '__CAMEL_REMOTE_AST_FAILED__'
+    exit $astc
+fi
+echo '__CAMEL_REMOTE_AST_FILE_BEGIN__'
+base64 "$R/test/plans/feat/parse/golden/ast_hashes.txt"
+echo '__CAMEL_REMOTE_AST_FILE_END__'
+'@.Replace('TAG', $verifyTag).Replace('NOTE', $astBuiltNote).Replace('ONLY', $astOnlyArgs).Replace('DROP', $astDropArgs)
+    } else { ':' }
+
     # One block per checker: a header naming it and the command it runs, the command's own stdout and
     # stderr verbatim, and a footer naming its exit code. The footer is also what this script reads
     # back, so the console shows one line per checker and the run can summarise them at the end;
@@ -928,6 +1403,27 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         # interpreter because their generators are python (see the table above).
         $interp = if ($entry.interpreter) { $entry.interpreter } else { 'node' }
         $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg"
+        if ($entry.reportOnly) {
+            # The same invocation, with one difference that is the whole point of the entry: its
+            # output is captured so the reading can be reduced out of the checker's own summary, and
+            # its exit code is kept out of `checkfail`, so a report that finds something does not
+            # turn the gate red. The reading is `unknown` when the checker printed no summary (a
+            # missing script, an early refusal) -- never a zero this run did not measure.
+            $readingFile = "$remoteScratch/check-$checkName.out"
+            $checkBlocks += @"
+
+echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
+out='$readingFile'
+$shownCommand > "`$out" 2>&1
+c=`$?
+cat "`$out"
+n=`$(sed -nE '$($entry.findings)' "`$out" | head -n 1)
+rm -f "`$out"
+echo "check=${checkName} findings=`${n:-unknown} mode=report"
+echo "[camel-remote] --- ${checkName}: exit `$c ---"
+"@
+            continue
+        }
         $checkBlocks += @"
 
 echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
@@ -938,8 +1434,214 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
 "@
     }
 
+    # --- the gpu observation -------------------------------------------------
+    # The shape of a `reportOnly` entry, for a thing that is not a checker: the plan run's output is
+    # captured, one machine-readable line is printed, and the exit code never reaches `checkfail`.
+    # Three differences are the reading's own, and each is why the line can be trusted:
+    #   * it is a plan run (`scripts/test.js`, on the caller's -Jobs), and it takes the host's plan
+    #     lock for itself -- it is a second plan run and not a reader of the first one, and a number
+    #     taken while five other lanes are running plans is a different number;
+    #   * `--tier all` rather than the caller's `-Tier`: `test/plans/gpu` is a directory, so it is read
+    #     at a tier, and the default `fast` layer would leave out the slow cases this observation
+    #     exists for (the header states this trap);
+    #   * the reading is the runner's own [SUMMARY] reduced here, never a count of our own: `fail=`
+    #     is its `fail:`, `red=` is the names its own `[FAIL]` lines print, and a run that printed no
+    #     summary reads `unknown` because a zero nobody measured is the reading of a green run.
+    # `awk` prints the failing tests' own block (the `[FAIL]` line and the indented detail under it)
+    # and nothing about the tests that passed, because the line already counts those.
+    $gpuBlock = ''
+    if ($gpuWanted) {
+        $gpuReadingFile = "$remoteScratch/$gpuObservationName.out"
+        $shownGpu = "node scripts/test.js test/plans/gpu --jobs $Jobs --tier all"
+        $gpuBlock = @"
+
+# --- the gpu layer: observed, never gating (see the header) -----------------
+echo '[camel-remote] --- $($gpuObservationName): $shownGpu ---'
+exec 5>/tmp/camel-host-test.lock
+if ! flock -w 1800 5; then
+    # No slot is not a red: this observation decides nothing, so it says it did not read and goes.
+    echo '[camel-remote] $($gpuObservationName): no host test slot within 1800 s, so the gpu layer was not read'
+    echo "check=$($gpuObservationName) total=unknown pass=unknown fail=unknown skip=unknown red=[unknown] red_more=0 seconds=0 state=noslot mode=report"
+else
+    # The sweep's own clock, because the checks stage's seconds now carry it: a lane comparing that
+    # number with an earlier run's has to be able to see what the extra time was.
+    gpu_started_ns=`$(date +%s%N)
+    $shownGpu > '$gpuReadingFile' 2>&1
+    gpu_code=`$?
+    gpu_ms=`$(( (`$(date +%s%N) - gpu_started_ns) / 1000000 ))
+    gpu_seconds=`$(( gpu_ms / 1000 ))
+    gpu_esc=`$(printf '\033')
+    gpu_clean=`$(sed "s/`${gpu_esc}\[[0-9;]*m//g" '$gpuReadingFile')
+    gpu_summary=`$(printf '%s\n' "`$gpu_clean" | grep -E '^\[SUMMARY\]' | head -n 1)
+    if [ -n "`$gpu_summary" ]; then
+        gpu_total=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/^\[SUMMARY\] total: ([0-9]+).*/\1/p')
+        gpu_pass=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/.*, pass: ([0-9]+).*/\1/p')
+        gpu_fail=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/.*, fail: ([0-9]+).*/\1/p')
+        # The runner prints `skip:` and `known failures:` only when they are non-zero; an absent one
+        # is a measured zero and not an unknown, so those two default to 0.
+        gpu_skip=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/.*, skip: ([0-9]+).*/\1/p')
+        gpu_skip=`${gpu_skip:-0}
+        gpu_reds=`$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^\[FAIL\] ([^ ]+).*/\1/p')
+        gpu_nfail=`$(printf '%s\n' "`$gpu_reds" | grep -c . || true)
+        # EVERY name, not the first twenty. A truncated list was read as the whole list by the
+        # ratchet below, and that made `no longer red ... can be trimmed` print for recorded names
+        # that were red in the very same run (2026-11-18: seven of fifteen). The count is in `fail=`;
+        # `red_more` now says how many names the line withheld, and it is 0. `printf "%s", $0`, not
+        # `printf "%s"`: a missing argument prints nothing, which read as "no red names" while
+        # `fail=` said sixteen. The `$0` is escaped because this text is a PowerShell here-string and
+        # an unescaped `$0` arrives at the host as nothing at all.
+        gpu_red=`$(printf '%s\n' "`$gpu_reds" | awk 'NR>1{printf ","} {printf "%s", `$0}')
+        gpu_more=0
+        # WHY each red is red, one `<name>|<reason>` per fail, so a recorded entry can be checked
+        # against the reason it was recorded for and not only against its name. The reason is the
+        # diagnostic's own code (`code=0x040001B0`) when the failure printed one -- that is the
+        # language's own name for the diagnostic and it does not drift with the wording -- and the
+        # assertion's own words otherwise. `-` says the reading carried neither.
+        gpu_evidence=''
+        for gpu_dir in `$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^[[:space:]]*\[INFO\] full output: (\S+).*/\1/p'); do
+            gpu_case=`$(basename "`$gpu_dir")
+            # The three files are all written for a failing case and a diagnostic may land in any of
+            # them: a refusal written to stdout, a Python assertion to stderr. `resident_graph_transfers`
+            # asserts `p.stderr` on a program whose refusal went to stdout, so its output.txt carries
+            # the assertion and not the code -- reading only output.txt made it look like a red for a
+            # different reason than the one recorded, which was this reading's own error.
+            gpu_why=`$(grep -ohE 'code=0x[0-9A-Fa-f]{8}' "`$gpu_dir/output.txt" "`$gpu_dir/stdout.txt" "`$gpu_dir/stderr.txt" 2>/dev/null | head -n 1 | sed 's/^code=//')
+            if [ -z "`$gpu_why" ]; then
+                gpu_why=`$(grep -ohE 'AssertionError: .*' "`$gpu_dir/output.txt" "`$gpu_dir/stdout.txt" "`$gpu_dir/stderr.txt" 2>/dev/null | head -n 1 |
+                    sed -e 's/^AssertionError: *//' -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-40)
+            fi
+            # A plan-level exact-output assertion prints neither a code nor an assertion, so the two
+            # sides of its comparison are read from the test's own record: `meta.json` carries
+            # `expect_stdout_exact differs: ... expected "...", got "..."` JSON-escaped onto one line.
+            # Only the FIRST line of each side is kept -- that is where an outlined count moves, and a
+            # window from the middle of a long output names nothing -- and the pair is the reason, so a
+            # red that starts differing elsewhere is news. The arrow is `->` and not a character: this
+            # string travels back to PowerShell (see the local side's `-evidence` parse) and is
+            # compared byte for byte, so a byte an encoding may rewrite would turn every one of these
+            # into "recorded for another reason" for good, which is silent rather than loud.
+            if [ -z "`$gpu_why" ]; then
+                gpu_diff=`$(grep -o 'differs: .*' "`$gpu_dir/meta.json" 2>/dev/null | head -n 1)
+                gpu_exp=`$(printf '%s' "`$gpu_diff" | sed -nE 's/.*expected \\"([^\\]*).*/\1/p' |
+                    sed -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-24)
+                gpu_act=`$(printf '%s' "`$gpu_diff" | sed -nE 's/.*got \\"([^\\]*).*/\1/p' |
+                    sed -e 's/[^A-Za-z0-9]\{1,\}/-/g' -e 's/^-*//' | cut -c1-24)
+                if [ -n "`$gpu_exp" ] && [ -n "`$gpu_act" ]; then
+                    gpu_why="exact-output-diff:`$gpu_exp->`$gpu_act"
+                fi
+            fi
+            [ -z "`$gpu_why" ] && gpu_why=-
+            gpu_evidence="`$gpu_evidence`$gpu_case|`$gpu_why;"
+        done
+        gpu_state=read
+        if [ "`${gpu_nfail:-0}" -gt 0 ]; then
+            printf '%s\n' "`$gpu_clean" | awk '/^\[FAIL\]/ {p=1} p && /^\[/ && !/^\[FAIL\]/ {p=0} p'
+        fi
+    else
+        # No summary line: the runner refused before it measured anything (a target it could not
+        # resolve, an install it could not start). Its tail is the reason, so the reason travels
+        # instead of a zero this run did not measure.
+        printf '%s\n' "`$gpu_clean" | tail -n 20
+        gpu_total=unknown; gpu_pass=unknown; gpu_fail=unknown; gpu_skip=unknown
+        gpu_red=unknown; gpu_more=0; gpu_state=nosummary
+    fi
+    rm -f '$gpuReadingFile'
+    # `state` is what the local side ratchets on: `read` is a reading, the other two are "the layer
+    # was not read" (a busy host, a runner that said nothing), which is never turned into a red.
+    echo "check=$($gpuObservationName) total=`${gpu_total:-unknown} pass=`${gpu_pass:-unknown} fail=`${gpu_fail:-unknown} skip=`${gpu_skip:-unknown} red=[`${gpu_red}] red_more=`${gpu_more:-0} seconds=`${gpu_seconds:-0} state=`${gpu_state:-read} mode=report"
+    # The reading says which cases are red; this line says why each one is. It is a second line on
+    # purpose: the shape of the `check=` line above is what every lane and the tools' own tests read,
+    # and a recorded entry can be checked against its reason without changing that shape.
+    if [ -n "`$gpu_evidence" ]; then
+        echo "check=$($gpuObservationName)-evidence [`${gpu_evidence%;}]"
+    fi
+    echo "[camel-remote] --- $($gpuObservationName): exit `$gpu_code ---"
+fi
+exec 5>&-
+"@
+    }
+
     # Housekeeping first: a checkout whose local worktree is gone is only disk, and this run needs
-    # room to build. LIVE is the list of worktrees that still exist on the workstation.
+    # room to build. Which ones are gone was decided on the workstation, in camel-remote-live.ps1;
+    # this half adds the one check only the host can make -- that nothing is using the checkout --
+    # and does nothing at all when the workstation could not read its worktree list.
+    #
+    # Three conditions, and a checkout is removed only when all three hold:
+    #   (a) the workstation's `git worktree list` answered and does not name it (trusted=1);
+    #   (b) no directory with that name exists beside its worktrees (also trusted=1:
+    #       camel-remote-live.ps1 folds the filesystem reading into that one flag);
+    #   (c) nothing on the host is using it: its own per-checkout lock is free, no process's cwd or
+    #       executable lies inside it, and nothing in it changed in the last ten minutes.
+    # Anything else keeps the checkout and prints why. A failed reading is never read as "gone": the
+    # cost of keeping a dead checkout is disk, and the cost of the opposite is somebody's whole run.
+    #
+    # A single-quoted here-string: the shell's `$` must reach the host verbatim, and this fragment is
+    # also what internal/tools/camel-remote-cleanup.test.ps1 extracts and runs.
+    $cleanupGuard = @'
+# --- host cleanup guard: extracted and run by internal/tools/camel-remote-cleanup.test.ps1 ---
+cleanup_host_checkouts() {
+    local root="$1"
+    local live="$2"
+    local trusted="$3"
+    local skip="$4"
+    reclaimed=0
+    if [ "$trusted" != 1 ]; then
+        echo '[camel-remote] not removing host checkouts this run: the workstation could not say which worktrees exist, and a failed reading is not an empty one'
+        return 0
+    fi
+    local d dd n key lockf busy p t
+    for d in "$root"/*/; do
+        [ -d "$d" ] || continue
+        dd="${d%/}"
+        n=$(basename "$dd")
+        case "$n" in "$skip"|bin) continue;; esac
+        # The runner's scratch root lives next to the checkouts and is regenerated every run:
+        # removing it here is not a cleanup, and it would invalidate the cached size measurement.
+        case "$n" in *-test-tmp) continue;; esac
+        # A bare repository is not a checkout: HEAD and objects sit at its top level, and removing it
+        # would take the staging remote every lane pushes through.
+        if [ -f "$dd/HEAD" ] && [ -d "$dd/objects" ]; then continue; fi
+        # (a)+(b) the workstation's readings, which are only worth acting on when they answered.
+        case " $live " in *" $n "*) continue;; esac
+        # (c1) The run's own lock. Every checkout this script creates is created while its holder has
+        # the lock open, so a free lock means no run is inside this one -- which also covers a
+        # worktree created a second after this run read its list, the case a snapshot cannot see.
+        key=$(printf '%s' "$dd" | cksum | cut -d' ' -f1)
+        lockf="/tmp/camel-tree-$key.lock"
+        if ! flock -n "$lockf" true 2>/dev/null; then
+            echo "[camel-remote] keeping host checkout $n: a run holds its lock (or its lock file cannot be opened)"
+            continue
+        fi
+        # (c2) A build, a test, or a person inside it. The executable matters as much as the
+        # directory: a plan runs out/latest/bin/camel from a checkout whose cwd can be elsewhere.
+        busy=''
+        for p in /proc/[0-9]*; do
+            t=$(readlink "$p/cwd" 2>/dev/null) || t=''
+            case "$t" in "$dd"|"$dd"/*) busy="$p cwd=$t"; break;; esac
+            t=$(readlink "$p/exe" 2>/dev/null) || t=''
+            case "$t" in "$dd"|"$dd"/*) busy="$p exe=$t"; break;; esac
+        done
+        if [ -n "$busy" ]; then
+            echo "[camel-remote] keeping host checkout $n: a process is using it ($busy)"
+            continue
+        fi
+        # (c3) Something in it changed within ten minutes: a run that has just handed over, or one
+        # that died half-written. Ten minutes costs nothing; a wrong delete costs a whole run.
+        if [ -n "$(find "$dd" -maxdepth 3 -mmin -10 -print -quit 2>/dev/null)" ]; then
+            echo "[camel-remote] keeping host checkout $n: a file in it changed in the last 10 minutes"
+            continue
+        fi
+        # The lock is taken again for the removal itself: a run that grabbed it in the last
+        # millisecond must not have its checkout disappear underneath it.
+        if flock -n "$lockf" rm -rf "$dd" 2>/dev/null; then
+            reclaimed=1
+            echo "[camel-remote] removing host checkout $n, its worktree is gone"
+        else
+            echo "[camel-remote] keeping host checkout $n: a run took its lock while it was being removed"
+        fi
+    done
+}
+# --- end host cleanup guard ---
+'@
     $remoteScript = @"
 set -u
 R=`$HOME/camel-work/$name
@@ -962,21 +1664,10 @@ fi
 C=`$HOME/$($cfg.hostClangEnv)
 V=`$HOME/$($cfg.hostBuildEnv)
 B=`$HOME/$($cfg.hostBenchEnv)
-LIVE='$($liveNames -join ' ')'
-reclaimed=0
-for d in "`$HOME/$($cfg.hostWorkRoot)"/*/; do
-    n=`$(basename "`$d")
-    case "`$n" in $bareLeaf|bin) continue;; esac
-    # The runner's scratch root lives next to the checkouts and is regenerated every run: removing
-    # it here is not a cleanup, and it must not invalidate the cached checkout-size measurement.
-    case "`$n" in *-test-tmp) continue;; esac
-    case " `$LIVE " in *" `$n "*) continue;; esac
-    echo "[camel-remote] removing host checkout `$n, its worktree is gone"
-    rm -rf "`$d"
-    reclaimed=1
-done
+$cleanupGuard
+cleanup_host_checkouts "`$HOME/$($cfg.hostWorkRoot)" '$($liveNames -join ' ')' '$liveTrustedFlag' '$bareLeaf'
 find /tmp -maxdepth 1 -name 'camel-remote-*' -mtime +0 -exec rm -rf {} + 2>/dev/null || true
-freekb=`$(df -P -k "`$HOME" | awk 'NR==2{print `$4}')
+freekb=`$(df -P -k "`$HOME" 2>/dev/null | awk 'NR==2{print `$4}')
 # The footprint of the checkouts is informational, but measuring it walks every file under
 # ~/camel-work (43 GB here, ~50 s on a loaded host, once per run). Keep the number in a small
 # cache and recompute it only when it is an hour old or a cleanup above actually removed something.
@@ -985,8 +1676,19 @@ sizeage=`$(( `$(date +%s) - `$(stat -c %Y "`$sizecache" 2>/dev/null || echo 0) )
 if [ "`$reclaimed" = 1 ] || [ ! -s "`$sizecache" ] || [ "`$sizeage" -gt 3600 ]; then
     du -sm "`$HOME/$($cfg.hostWorkRoot)" 2>/dev/null | cut -f1 > "`$sizecache"
 fi
-echo "[camel-remote] host: `$((freekb/1048576)) GB free, `$(cat "`$sizecache" 2>/dev/null) MB of checkouts"
-if [ "`$freekb" -lt 5242880 ]; then echo '[camel-remote] under 5 GB free on the host; run -Clean on the worktrees that are done'; exit 3; fi
+size_mb=`$(cat "`$sizecache" 2>/dev/null)
+# `[ "" -lt 5242880 ]` is an error, not a small number: bash takes the else branch and the disk
+# guard silently does not run, which is a broken reading that looks like "there is room". Say so
+# instead, and never print the empty answer as `0 GB free`.
+case "`$freekb" in
+    ''|*[!0-9]*)
+        echo "[camel-remote] host: free space unknown (df answered '`$freekb'), `${size_mb:-?} MB of checkouts; the low-disk guard did not run"
+        ;;
+    *)
+        echo "[camel-remote] host: `$((freekb/1048576)) GB free, `${size_mb:-?} MB of checkouts"
+        if [ "`$freekb" -lt 5242880 ]; then echo '[camel-remote] under 5 GB free on the host; run -Clean on the worktrees that are done'; exit 3; fi
+        ;;
+esac
 mkdir -p "`$R"
 # `git clone` refuses a non-empty destination, and a half-removed checkout (a leftover tmp/ or
 # test/results/) leaves exactly that: on 2026-10-24 a lane's run died with exit 2 because the
@@ -1109,6 +1811,9 @@ if [ '$NoBuild' != 'True' ]; then
     exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
     if [ `$code -ne 0 ]; then echo '__CAMEL_REMOTE_BUILD_FAILED__'; exit `$code; fi
 fi
+# The AST snapshot record (only with -UpdateAstHashes): before the plan, because the plan reads the
+# record this stage writes.
+$astStage
 $vscodeDeps
 # One plan run at a time, the way the build has two slots and for the same reason: the readings a
 # gate produces are only comparable when the machine is not carrying six other lanes' tests. The
@@ -1134,6 +1839,7 @@ $planMarker
 $runPlan 2>&1
 code=`$?
 echo "RUN_EXIT=`$code"
+$fetchStage
 # Released here, before the checkers: they read a finished run and need no exclusion.
 exec 7>&- 2>/dev/null
 # --- the checkers -----------------------------------------------------------
@@ -1149,6 +1855,12 @@ $checkBlocks
         if [ `$code -eq 0 ]; then code=`$checkfail; fi
     fi
 fi
+# --- the gpu observation ----------------------------------------------------
+# After the checkers and outside their `if`: it is not one of the checks, so it does not need -Check
+# to be asked for, and it is not counted by `N run`. Its own block explains what it reads; the one
+# thing it does not do is touch `code` -- `checkfail` is untouched by it, so no reading it prints can
+# decide this run.
+$gpuBlock
 # The scratch directory goes with the run: doing it here saves a connection, and a run that dies
 # before this line leaves something the day-old prune in /tmp sweeps up.
 cd /tmp && rm -rf '$remoteScratch'
@@ -1178,6 +1890,53 @@ exit `$code
             $line = "$_"
             # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
             $cleanLine = ($line -replace $ansiPattern, '').Trim()
+            # -UpdateAstHashes sends the recorded file back on this stream, base64 between two markers.
+            # It is a file and not a reading, so it is not printed: the lines are collected and the
+            # file is written once the run has ended (the markers bracket the payload in order, so a
+            # truncated stream leaves `$astCapture` non-null and nothing is written).
+            if ($line -match '__CAMEL_REMOTE_AST_FILE_BEGIN__') {
+                $astCapture = New-Object System.Text.StringBuilder
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_AST_FILE_END__') {
+                # The payload is complete: capture ends here and everything after this line (the plan's
+                # own output) goes to the console again. Leaving `$astCapture` open would swallow the
+                # plan and decode the two together -- which is how the first run of this switch failed.
+                $astPayloadText = $astCapture.ToString()
+                $astCapture = $null
+                return
+            }
+            if ($null -ne $astCapture) {
+                [void]$astCapture.Append($cleanLine)
+                return
+            }
+            # -FetchFile sends one file back the same way the AST record travels: base64 between
+            # two markers, collected here and written after the run (so a truncated stream writes
+            # nothing rather than half a record).
+            if ($line -match '__CAMEL_REMOTE_FETCH_BEGIN__') {
+                $fetchCapture = New-Object System.Text.StringBuilder
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_FETCH_END__') {
+                $fetchPayloadText = $fetchCapture.ToString()
+                $fetchCapture = $null
+                return
+            }
+            if ($null -ne $fetchCapture) {
+                [void]$fetchCapture.Append($cleanLine)
+                return
+            }
+            if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
+                $astExit = [int]$Matches[1]
+                $run.lastLine = if ($astExit -eq 0) {
+                    '[camel-remote] the AST snapshot was recorded on the host'
+                } else {
+                    "[camel-remote] recording the AST snapshot failed on the host (exit $astExit)"
+                }
+                Publish-Run
+                Write-Host $line
+                return
+            }
             if ($line -match '__CAMEL_REMOTE_PLAN_START__') {
                 if ($null -eq $planStartedAt) {
                     $planStartedAt = Get-Date
@@ -1257,6 +2016,37 @@ exit `$code
                 # the test one, and either holder shows the run on the host.
                 Set-BuildPhase 'checks' $run.lastLine
                 return
+            }
+            # The gpu observation's reading: one machine-readable line, kept apart from the checks
+            # because it is not one of them, and kept at all because its `red=[...]` is what the
+            # ratchet below compares with the recorded red set. The line still falls through to the
+            # tail below, because it is one of the lines a lane reads.
+            if ($cleanLine -match '^check=([A-Za-z0-9._-]+) total=(\S+) pass=(\S+) fail=(\S+) skip=(\S+) red=\[([^\]]*)\] red_more=(\d+) seconds=(\S+) state=(\S+) mode=report$') {
+                if ($Matches[1] -eq $gpuObservationName) {
+                    $gpuReading = [pscustomobject]@{
+                        total   = $Matches[2]
+                        pass    = $Matches[3]
+                        fail    = $Matches[4]
+                        skip    = $Matches[5]
+                        red     = @($Matches[6] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+                        redMore = [int]$Matches[7]
+                        seconds = $Matches[8]
+                        state   = $Matches[9]
+                    }
+                }
+            }
+            # The reason line that follows the reading: `<name>|<reason>` per red, `;` between them.
+            # A name is checked against the reason it was recorded for, so a case that is red for a
+            # different reason than the one written down is news rather than a known red.
+            if ($cleanLine -match '^check=([A-Za-z0-9._-]+)-evidence \[(.*)\]$') {
+                if ($Matches[1] -eq $gpuObservationName) {
+                    foreach ($entry in @($Matches[2] -split ';' | Where-Object { $_.Trim() })) {
+                        $parts = $entry.Split('|', 2)
+                        if ($parts.Count -eq 2) {
+                            $gpuEvidence[$parts[0].Trim()] = $parts[1].Trim()
+                        }
+                    }
+                }
             }
             # The per-checker footer: the name and the exit code of one checker, kept for the run's
             # own summary. The line itself is printed, because that is what a lane reads.
@@ -1350,14 +2140,130 @@ exit `$code
     $run.phase = if ($code -eq 0) { 'done' } else { 'fail' }
     Publish-Run
 
+    # The AST snapshot record (`-UpdateAstHashes`): the host sent back the file it recorded, and this is
+    # where it lands in this tree. All three conditions must hold -- the stage said it recorded, the
+    # stream carried the payload to its end marker, and the run did not fail -- so a failed or truncated
+    # stage leaves the file exactly as it was. The text is written as UTF-8 without a BOM and with LF
+    # endings, because the record is compared byte for byte by `check.py` on a Linux host.
+    #
+    # A fourth condition now precedes the write: the record may not lose a row while the file that row
+    # records is still here (`$astStillHere` below). This is the tree the record belongs to, so it is
+    # the only place the question "does that file exist" has the answer that matters -- the host
+    # records from its own checkout, which can be missing files this tree has (`eaa3ecb8c`,
+    # `agents/test.md`). A row that goes has to be named by -AstDrop, and a bulk re-record may not
+    # lose one at all; the refusal prints the rows it would have dropped, with their recorded hash,
+    # and writes nothing.
+# The file `-FetchFile` asked for. Written after the run, on the same rule as the AST record:
+# the host sent it base64 between two markers, a payload that does not decode is reported and
+# nothing is written, and a directory the path needs is created first.
+if ($null -ne $fetchPayloadText -and $FetchFile -ne '') {
+    $fetchPayload = ($fetchPayloadText -replace '\s', '')
+    $fetchTarget = Join-Path $Path $FetchFile
+    if ($fetchPayload.Length -eq 0 -or $fetchPayload.Length % 4 -ne 0 -or
+        $fetchPayload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
+        Write-Host ("[camel-remote] -FetchFile: the file did not arrive intact ({0} chars); nothing was written" -f $fetchPayload.Length)
+        $code = 2
+    } else {
+        $fetchDir = Split-Path -Parent $fetchTarget
+        if ($fetchDir -and -not (Test-Path -LiteralPath $fetchDir)) {
+            New-Item -ItemType Directory -Path $fetchDir -Force | Out-Null
+        }
+        $fetchText = [System.Text.Encoding]::UTF8.GetString(
+            [System.Convert]::FromBase64String($fetchPayload)) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($fetchTarget, $fetchText, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host ("[camel-remote] -FetchFile: {0} bytes written to {1}" -f $fetchText.Length, $fetchTarget)
+    }
+}
+
+    if ($null -ne $astPayloadText -and $astExit -eq 0) {
+        $astPayload = ($astPayloadText -replace '\s', '')
+        $astTarget = Join-Path $Path 'test/plans/feat/parse/golden/ast_hashes.txt'
+        # A payload that is not base64 means the stream carried something else (a shell message on
+        # stdout, a last line cut in half). Writing a half-decoded record would be worse than writing
+        # none: it is reported, the file is left alone, and the run is red -- exit 2 is the transfer's
+        # failure, which is what this is.
+        if ($astPayload.Length -eq 0 -or $astPayload.Length % 4 -ne 0 -or
+            $astPayload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
+            Write-Host ("[camel-remote] AST snapshot: the record did not arrive intact ({0} chars, length mod 4 = {1}); the file was left alone: {2}" -f `
+                $astPayload.Length, ($astPayload.Length % 4),
+                $astPayload.Substring(0, [Math]::Min(80, $astPayload.Length)))
+            $code = 2
+        } else {
+            $astText = [System.Text.Encoding]::UTF8.GetString(
+                [System.Convert]::FromBase64String($astPayload)) -replace "`r`n", "`n"
+            $astBefore = if (Test-Path -LiteralPath $astTarget) { @(Get-Content -LiteralPath $astTarget) } else { @() }
+            $astNewLines = @($astText -split "`n" | Where-Object { $_ -ne '' })
+            # What this write would take out of the record, and whether it is allowed to (`Get-AstDropVerdict`
+            # above carries the rule). `$astBefore.Count` is the record's line count before the write, which
+            # is the number a reader compares: a re-record that makes the file shorter is the reading the
+            # guard exists to stop from being silent.
+            $astVerdict = Get-AstDropVerdict -Before $astBefore -After $astNewLines -Drop $AstDrop -Root $Path -Bulk ($AstOnly.Count -eq 0)
+            if ($astVerdict.Refused) {
+                $astWhy = if ($astVerdict.StillHere.Count -gt 0) {
+                    "and {0} of them name a .cml file this tree still has" -f $astVerdict.StillHere.Count
+                } else {
+                    'and this is a bulk re-record (no -AstOnly), which may not lose a row'
+                }
+                Write-Host ("[camel-remote] AST snapshot: refusing the write-back: the record would go from {0} line(s) to {1}, {2}" -f `
+                    $astVerdict.OldCount, $astVerdict.NewCount, $astWhy)
+                foreach ($astPath in @($astVerdict.StillHere + $astVerdict.Deleted)) {
+                    Write-Host ("[camel-remote]   - {0}" -f $astVerdict.Rows[$astPath])
+                }
+                Write-Host "[camel-remote] re-record on a tree that holds them (git merge origin/develop first), or name the rows that really should go: -AstDrop '<path>'"
+                Write-Host ("[camel-remote] nothing was written; {0} is unchanged ({1} line(s))" -f $astTarget, $astVerdict.OldCount)
+                $code = 2
+            } else {
+                [System.IO.File]::WriteAllText($astTarget, $astText, (New-Object System.Text.UTF8Encoding($false)))
+                $astAfter = @(Get-Content -LiteralPath $astTarget)
+                $astBeforeSet = [System.Collections.Generic.HashSet[string]]::new()
+                foreach ($astLine in $astBefore) { [void]$astBeforeSet.Add($astLine) }
+                $astAfterSet = [System.Collections.Generic.HashSet[string]]::new()
+                foreach ($astLine in $astAfter) { [void]$astAfterSet.Add($astLine) }
+                $astAdded = @($astAfter | Where-Object { -not $astBeforeSet.Contains($_) })
+                $astRemoved = @($astBefore | Where-Object { -not $astAfterSet.Contains($_) })
+                Write-Host ("[camel-remote] AST snapshot: {0} lines recorded, {1} added and {2} removed ({3})" -f `
+                    $astAfter.Count, $astAdded.Count, $astRemoved.Count, $astTarget)
+                foreach ($astLine in $astAdded) { Write-Host ("[camel-remote]   + {0}" -f $astLine) }
+                foreach ($astLine in $astRemoved) { Write-Host ("[camel-remote]   - {0}" -f $astLine) }
+                if ($astVerdict.Deleted.Count -gt 0) {
+                    Write-Host ("[camel-remote] AST snapshot: dropped {0} row(s) whose .cml file no longer exists (删掉 {0} 条，对应文件已不存在): {1}" -f `
+                        $astVerdict.Deleted.Count, ($astVerdict.Deleted -join ', '))
+                }
+                if ($astVerdict.Named.Count -gt 0) {
+                    Write-Host ("[camel-remote] AST snapshot: {0} row(s) dropped as named by -AstDrop: {1}" -f `
+                        $astVerdict.Named.Count, ($astVerdict.Named -join ', '))
+                }
+                if ($astVerdict.Unused.Count -gt 0) {
+                    Write-Host ("[camel-remote] AST snapshot: -AstDrop named {0} path(s) that no row was dropped for: {1}" -f `
+                        $astVerdict.Unused.Count, ($astVerdict.Unused -join ', '))
+                }
+            }
+        }
+    }
+
     # One line per checker: the output above is the command's own, and this list says which name
     # each exit code belongs to, next to the run's exit code.
+    #
+    # The gpu observation's footer travels on the same regex as a checker's, so its reading arrives
+    # in `$checkResults` too. It is taken out here rather than left in: `N run` below is the static
+    # layer's count (20 under -Check all), and the observation is a plan run that is not one of those
+    # checks -- a twenty-first name in that count would change a number every lane compares. It is
+    # listed on its own line instead, with the same "report only" tag and a word about the count, so
+    # that a green check summary is not read over a gpu layer somebody forgot to look at.
+    $gpuObserved = @($checkResults | Where-Object { $_.name -eq $gpuObservationName })
+    $checkResults = @($checkResults | Where-Object { $_.name -ne $gpuObservationName })
     if ($checkResults.Count -gt 0) {
-        $checkFailed = @($checkResults | Where-Object { $_.exit -ne 0 })
+        # A report-only entry's exit code does not decide the run, so it must not be counted in
+        # `failed` here -- and it must not vanish either, because a number nobody sees cannot be
+        # watched coming down. It is counted as run, and named as report only in the list below.
+        $checkFailed = @($checkResults | Where-Object { $_.exit -ne 0 -and -not $checkers[$_.name].reportOnly })
         $checksSeconds = if ($null -ne $checksStartedAt) { [math]::Round(($finishedAt - $checksStartedAt).TotalSeconds) } else { 0 }
         Write-Host ("[camel-remote] checks: {0} run, {1} failed ({2} s)" -f `
             $checkResults.Count, $checkFailed.Count, $checksSeconds)
-        foreach ($result in $checkResults) { Write-Host ("[camel-remote]   {0} exit {1}" -f $result.name, $result.exit) }
+        foreach ($result in $checkResults) {
+            $only = if ($checkers[$result.name].reportOnly) { ' (report only: does not decide the run)' } else { '' }
+            Write-Host ("[camel-remote]   {0} exit {1}{2}" -f $result.name, $result.exit, $only)
+        }
 
         # `N run` above is the static layer, not the whole table, and that count has been read as
         # "every check ran" while a named-stage check had not run at all. So the count is followed by
@@ -1368,10 +2274,139 @@ exit `$code
             Write-Host ("[camel-remote] checks: {0} named-stage check(s) not run by -Check all: {1} (use -Check <name>)" -f `
                 $planStageSkipped.Count, ($planStageSkipped -join ', '))
         }
+        # The other reason `all` leaves an entry out: the check is a deliberate reading and costs
+        # minutes, so it is asked for by name. Named here, or a run that says "N run" would be read
+        # as "everything ran" while the slowest reading in the table never started.
+        if ($checkHasAll -and $namedOnlySkipped.Count -gt 0) {
+            Write-Host ("[camel-remote] checks: {0} named-only check(s) not run by -Check all: {1} (use -Check <name>; each is a reading somebody asks for, not a stage of the static layer)" -f `
+                $namedOnlySkipped.Count, ($namedOnlySkipped -join ', '))
+        }
         # The other direction, for a run that named one: it did run, and it is still not part of
         # `all`. Without this line the same "all green" sentence is read over a check `all` never runs.
         foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].planStage })) {
             Write-Host ("[camel-remote] checks: {0} is a named-stage check, not part of -Check all; it ran because it was named" -f $result.name)
+        }
+        foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].namedOnly })) {
+            Write-Host ("[camel-remote] checks: {0} is a named-only check, not part of -Check all; it ran because it was named" -f $result.name)
+        }
+    }
+    # The gpu reading, named as what it is: one line, and the two things a reader could otherwise get
+    # wrong -- that it was one of the checks above (it was not) and that a red there decides this run
+    # (it does not). Printed after the check list so it is read after the count it is not part of.
+    foreach ($result in $gpuObserved) {
+        Write-Host ("[camel-remote]   {0} exit {1} (report only: does not decide the run, and is not one of the checks counted above)" -f `
+            $result.name, $result.exit)
+    }
+
+    # --- the gpu ratchet -----------------------------------------------------
+    # The reading alone would be background noise: a list that is allowed to grow is a list nobody
+    # reads. So the red set is compared with the one written down in `$gpuBaselineRel`, and the
+    # comparison decides the only thing this observation is allowed to decide -- a case that is red
+    # now and was not recorded then. The four outcomes, all of them stated in the header section "the
+    # gpu layer is observed, and never gates a known red":
+    #   * every red is recorded -> the run is told so and nothing changes (a known bit-exactness red
+    #     never blocks a merge);
+    #   * a red is not recorded, or the reading named only part of its reds (`red_more>0`, so the
+    #     names it did not print cannot be compared) -> exit 5, when nothing else already made the
+    #     run red;
+    #   * a recorded name is no longer red -> accepted, and the run says the file can be trimmed, so
+    #     a fix never waits for the bookkeeping;
+    #   * no reading at all (`state=noslot`, `state=nosummary`, or no observation) -> nothing is
+    #     compared and nothing is invented, and the reason is printed when there is one.
+    if ($null -ne $gpuReading) {
+        $gpuBaselineFound = Test-Path -LiteralPath $gpuBaselinePath
+        # An entry is `name` or `name :: reason`. The reason is compared, not printed and forgotten:
+        # a name recorded for one failure and red for another is news (see the comparison below).
+        $gpuBaseline = @()
+        $gpuReason   = @{}
+        if ($gpuBaselineFound) {
+            foreach ($entry in @(Get-Content -LiteralPath $gpuBaselinePath |
+                    ForEach-Object { "$_".Trim() } |
+                    Where-Object { $_ -and -not $_.StartsWith('#') })) {
+                if ($entry -match '^(\S+)(?:\s*::\s*(.*?))?\s*$') {
+                    $entryName   = $Matches[1]
+                    $entryReason = if ($Matches.ContainsKey(2)) { "$($Matches[2])".Trim() } else { '' }
+                    $gpuBaseline += $entryName
+                    $gpuReason[$entryName] = $entryReason
+                }
+            }
+        }
+        if ($gpuReading.state -ne 'read') {
+            $why = if ($gpuReading.state -eq 'noslot') {
+                'the host gave it no plan slot, so the gpu layer was not read'
+            } else {
+                'the sweep printed no summary, so the gpu layer was not read'
+            }
+            Write-Host "[camel-remote] gpu-plans: $why; nothing was compared with $gpuBaselineRel"
+            if ($gpuReading.state -ne 'noslot') {
+                # A sweep that cannot read its own runner is a fault in this observation. It is said
+                # out loud and it decides nothing: the exit code is for a gpu case that turned red,
+                # not for a tool that broke -- a merge must not wait on that, and the line above is
+                # how the break is seen.
+                Write-Host "[camel-remote] gpu-plans: that is a fault in this observation and not a gpu red; the layer is unguarded this run"
+            }
+        } else {
+            $gpuReds = @($gpuReading.red)
+            # A reading that named only part of its reds cannot be compared by name, and the names it
+            # did not print are exactly the ones nobody would look at: they count as news, and -- this
+            # is what was wrong before -- a recorded name it did not print is NOT evidence that the
+            # name stopped being red. `red_more` is 0 when the reading named every red.
+            $gpuIncomplete = $gpuReading.redMore -gt 0
+            $gpuNew     = @($gpuReds | Where-Object { $gpuBaseline -notcontains $_ })
+            $gpuStill   = @($gpuBaseline | Where-Object { $gpuReds -contains $_ })
+            # Recorded for one reason, red for another: the entry says what the gate should accept,
+            # and the gate now measures that claim instead of trusting the name. An entry with no
+            # reason recorded cannot be checked, and says so rather than pretending.
+            $gpuChanged = @($gpuStill | Where-Object {
+                    $gpuReason[$_] -and $gpuEvidence.ContainsKey($_) -and
+                    $gpuEvidence[$_] -ne '-' -and $gpuEvidence[$_] -ne $gpuReason[$_] })
+            # A case whose failure printed no code and no assertion says nothing about why it is
+            # red. That is not the same as "red for another reason": it is a reading that does not
+            # reach the reason, and it is said to be that rather than turned into a verdict.
+            $gpuUnchecked = @($gpuStill | Where-Object {
+                    $gpuReason[$_] -and (-not $gpuEvidence.ContainsKey($_) -or $gpuEvidence[$_] -eq '-') })
+            # Only a reading that named every red may say a recorded name is gone.
+            $gpuGone = if ($gpuIncomplete) {
+                @()
+            } else {
+                @($gpuBaseline | Where-Object { $gpuReds -notcontains $_ })
+            }
+            $gpuKnown = $gpuReds.Count - $gpuNew.Count
+            Write-Host ("[camel-remote] gpu-plans: {0} red, {1} recorded, {2} new, {3} recorded for another reason, {4} recorded name(s) no longer red" -f `
+                $gpuReds.Count, $gpuKnown, $gpuNew.Count, $gpuChanged.Count, $gpuGone.Count)
+            if (-not $gpuBaselineFound) {
+                Write-Host "[camel-remote] gpu-plans: there is no $gpuBaselineRel in this worktree, so every red above reads as new"
+            }
+            if ($gpuIncomplete) {
+                Write-Host "[camel-remote] gpu-plans: the reading named only part of its reds ($($gpuReading.redMore) not named), so a recorded name it did not print is not shown to have stopped: nothing was called no longer red"
+            }
+            if ($gpuChanged.Count -gt 0) {
+                foreach ($name in $gpuChanged) {
+                    Write-Host "[camel-remote] gpu-plans: RED FOR ANOTHER REASON: $name was recorded for '$($gpuReason[$name])', red now for '$($gpuEvidence[$name])' -- the entry no longer says what is wrong, so this is news and not a known red"
+                }
+                if ($code -eq 0) { $code = 5 }
+            }
+            # An entry with no reason cannot be checked against anything, and says so rather than
+            # passing for a verified one.
+            $gpuNoReason = @($gpuStill | Where-Object { -not $gpuReason[$_] })
+            if ($gpuNoReason.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: recorded with no reason, so nothing checks what they are red for: $($gpuNoReason -join ', ') -- write 'name :: reason' in $gpuBaselineRel"
+            }
+            if ($gpuUnchecked.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: the failure printed neither a diagnostic code nor an assertion, so the recorded reason could not be checked: $($gpuUnchecked -join ', ')"
+            }
+            if ($gpuNew.Count -gt 0 -or $gpuIncomplete) {
+                $listing = if ($gpuNew.Count -gt 0) { $gpuNew -join ', ' } else { 'none named' }
+                if ($gpuIncomplete) {
+                    $listing += " (and $($gpuReading.redMore) more case(s) the line did not name)"
+                }
+                Write-Host "[camel-remote] gpu-plans: NOT RECORDED, so this run is red: $listing"
+                Write-Host "[camel-remote] gpu-plans: fix the case, or record it in $gpuBaselineRel when it is red for the host's reason and not the code's (docs/test-plans.md, 'CUDA visibility')"
+                if ($code -eq 0) { $code = 5 }
+            }
+            if ($gpuGone.Count -gt 0) {
+                Write-Host "[camel-remote] gpu-plans: no longer red, and accepted as it is: $($gpuGone -join ', ') -- $gpuBaselineRel can be trimmed"
+            }
         }
     }
 
@@ -1394,7 +2429,8 @@ exit `$code
         # code covers a dead connection and a red checker. The timestamps are the build's, so
         # history shows slot wait + compile, never transfer + queue folded into compile time; a
         # checks run is credited with its own stage, because it is work this entry must not hide.
-        $recordedExit = if ($null -ne $buildExit -and $checkNames.Count -eq 0) { $buildExit } else { $code }
+        $recordedExit = if ($null -ne $astExit -and $astExit -ne 0) { $astExit }
+            elseif ($null -ne $buildExit -and $checkNames.Count -eq 0) { $buildExit } else { $code }
         $buildStartForPanel = if ($null -ne $buildStartedAt) { $buildStartedAt } elseif ($null -ne $syncedAt) { $syncedAt } else { $startedAt }
         $queueForPanel = if ($null -ne $queueStartedAt) { $queueStartedAt } else { $startedAt }
         $buildEndForPanel = if ($null -ne $buildFinishedAt -and $checkNames.Count -eq 0) { $buildFinishedAt } else { $finishedAt }

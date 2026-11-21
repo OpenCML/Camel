@@ -1,0 +1,53 @@
+/**
+ * The ECOOP end-to-end case: an effect, a closure that captures a parameter and a local, a loop
+ * with a body region of its own, and a self-written `apply` the closure is handed to as a value.
+ *
+ * `run` builds `f`: it captures `base` (a parameter of `run`) and `label` (a local of `run`), and
+ * every call prints one line. The loop calls it once per round through `apply`, and after the loop
+ * the same value is handed to `apply` once more -- a function value used as a value, not only
+ * called where it is written.
+ *
+ * Expected output, base 10 and three rounds:
+ *
+ *   step 0 -> 11
+ *   step 1 -> 12
+ *   step 2 -> 13
+ *   step 3 -> 14
+ *   total 86 tail 14
+ *
+ * `twice` and `thrice` are two statements that read nothing of each other and write nothing: the
+ * second writing of this program (`program-writing-b.cml`) swaps them and renames `label` and `f`,
+ * and both writings have to give one canonical graph, which is what `passes::report` measures.
+ *
+ * The closure writes `weight + x` twice on purpose -- once for the line it prints, once for the
+ * value it returns -- so that a pass has a real redundancy to find: `passes::dedupe` makes the two
+ * one node and the output does not move.
+ */
+
+/// The self-written higher-order function: it takes the closure as a value and calls it once.
+func apply(f: (x: int) => int, x: int): int sync {
+    return f(x)
+}
+
+func run(n: int, base: int): int sync {
+    let label = 'step'
+    let twice = base * 2
+    let thrice = base * 3
+    let f = (x: int): int => sync {
+        let weight = base + 1
+        let value = weight + x
+        '{} {} -> {}'->format<label, x, weight + x>->println
+        return value
+    }
+    let (_, total) = loop i = 0, total = twice + thrice while i < n do sync {
+        (i + 1, total + apply(f, i))
+    }
+    let tail = apply(f, n)
+    'total {} tail {}'->format<total, tail>->println
+    return total
+}
+
+func main(): int sync {
+    let _ = run(3, 10)
+    return 0
+}

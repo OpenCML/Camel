@@ -23,7 +23,7 @@ program's inputs, and each consumer says what an open parameter means:
 
 | Consumer | An open parameter is |
 |---|---|
-| a rewriting pass (`std::opt::*`, `std::macro`, `std::opt::inline`) | an unknown value, as in any function |
+| a rewriting pass (`std::cxx::*`, `std::macro`, `std::cxx::inline`) | an unknown value, as in any function |
 | a dump (`std::rgir`, `std::gir`) | a PORT node named like the parameter |
 | a scheduling pass | an error: `EntryArgumentMissing` |
 | `onnx::export` | an input of the model |

@@ -1,0 +1,397 @@
+// Two rewrites of the training program, written in Camel against the graph module.
+//
+// Neither rewrite reads how the program is written. A pass is handed the program's entry function
+// value and edits the graphs that value reaches; a node is chosen by what it is -- the operator it
+// runs, the type it carries, whether it is a constant -- and by a count that has to be one. No choice
+// takes the first of a list: `nodes` returns node-id order, which is the order the writer created the
+// nodes in, so renaming a value or swapping two independent declarations would silently change which
+// node a rewrite edits.
+import { flatten } from array
+import { Graph, Node, commit, erase, graphs_of, inline, inputs, is_constant, nodes, op, op_name, open, order, order_inputs, replace, shape_text, type_name, type_of } from graph
+import { is_function } from types
+
+// What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
+// answer to "is this an operator node", so no rendered text is compared to decide it.
+func looks(n: Node): string {
+    let operator = match op(n) {
+        case null => '-'
+        case o => op_name(o)
+    }
+    let carried = match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+    return operator + ' : ' + carried
+}
+
+// Whether the node is a constant carrying the type named.
+func constant_of(n: Node, wanted: string): bool {
+    let carried = match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+    return is_constant(n) && carried == wanted
+}
+
+// Whether the node runs the printing operator.
+func is_print(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':io/println'
+    }
+}
+
+// Every node of every graph the entry function value reaches. A program is a root graph whose one
+// call goes to the entry function, so its graphs are reached by following calls, never by comparing
+// a graph name.
+func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
+    return flatten(graphs_of(p)->map<nodes>)
+}
+
+/// The one node satisfying `keep`, or nothing when there is none or more than one: a rewrite picks by
+/// what a node is, and refuses an answer that is not unique.
+///
+/// A rewrite that gets `null` here must REFUSE, never hand the program back unchanged: a no-op prints
+/// the program's own output and the reading the row existed to make is simply gone -- `break_rate`
+/// answered that way once and the record showed three lines of the program in a row that was supposed
+/// to be a refusal. Every `case null` below returns `error(...)` for that reason.
+func only::<F, K>(p: F, keep: K): Node? when is_function::<K>() {
+    let found = all_nodes(p)->filter<keep>
+    return if len(found) == 1 then found[0] else null
+}
+
+// Erases the nodes given and commits: the changed function is the answer.
+func erased::<F>(p: F, hits: Node[]): F! sync {
+    let t = open(p)
+    hits->foreach<(n: Node): void => erase(t, n)>
+    return commit(t)
+}
+
+// Puts `new` in the place of `old` and commits.
+func swapped::<F>(p: F, old: Node, new: Node): F! sync {
+    let t = open(p)
+    replace(t, old, new)
+    return commit(t)
+}
+
+/// Lists every node the program is made of: the operator each one runs, and the type it carries.
+export func list::<F>(p: F): F! sync {
+    all_nodes(p)->foreach<(n: Node) => println(looks(n))>
+    return p
+}
+
+/// Drops every printing call of the program: a rewrite that loses an effect.
+export func drop_print::<F>(p: F): F! sync {
+    let prints = all_nodes(p)->filter<(n: Node): bool => is_print(n)>
+    return if len(prints) == 0 then p else erased(p, prints)
+}
+
+// The `float` constants of one graph.
+func floats_in(g: Graph): Node[] {
+    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'float')>
+}
+
+// The constants of type `f32[4, 1]` in one graph: the targets the rewrite passes in the rate's place.
+func targets_in(g: Graph): Node[] {
+    return nodes(g)->filter<(n: Node): bool => constant_of(n, 'f32[4, 1]')>
+}
+
+// Whether one graph holds both of the constants the rewrite pairs, each exactly once.
+func holds_the_pair(g: Graph): bool {
+    return len(floats_in(g)) == 1 && len(targets_in(g)) == 1
+}
+
+// The one graph of the list, or nothing when the count is not one.
+func one_graph(found: Graph[]): Graph? {
+    return if len(found) == 1 then found[0] else null
+}
+
+// The one node of the list, or nothing when the count is not one.
+func one_node(found: Node[]): Node? {
+    return if len(found) == 1 then found[0] else null
+}
+
+/// Passes the targets where the learning rate goes: a rewrite that breaks a type.
+///
+/// The rate is the one constant of type `float` in the graph that also holds the one constant of type
+/// `f32[4, 1]` (the targets), and the rewrite refuses when no single graph holds that pair. The count
+/// that has to be one is taken per graph, not over the whole program: the count over `all_nodes` used
+/// to find exactly one `float` constant, and it no longer does once the gradient is the library's,
+/// because a derivative carries constants of its own -- the seed `grad` reads `vjp` at, and the ones
+/// the transpose builds. Those are not the learning rate, and the graph the rate is written in still
+/// holds exactly one.
+///
+/// A count that is not one is a refusal, not a no-op: returning the program unchanged makes it run
+/// with exit 0, and the reading the pass existed to make is simply gone -- this row answered that way
+/// for one round, and the record printed the program's own output where a refusal belonged. Silence
+/// costs more than a refusal: a refusal names the count it wanted, and a rewrite that quietly declines
+/// to pick names nothing at all.
+export func break_rate::<F>(p: F): F! sync {
+    let where = graphs_of(p)->filter<holds_the_pair>
+    return match one_graph(where) {
+        case null => error('InvalidArgument', 'break_rate: no single graph holds the rate and the targets')
+        case g => match one_node(floats_in(g)) {
+            case null => error('InvalidArgument', 'break_rate: the rate graph holds no single float rate')
+            case r => match one_node(targets_in(g)) {
+                case null => error('InvalidArgument', 'break_rate: the rate graph holds no single f32[4, 1] targets')
+                case w => swapped(p, r, w)
+            }
+        }
+    }
+}
+
+// ---- two rewrites that add a printing call (the ECOOP paper's item (1)) ----
+//
+// `inline` is the edit that can make a node carrying an access: `replace`, `erase` and `add_constant`
+// cannot, and `inline` splices a body whose code prints. Every rewrite below splices one body in and
+// lets `commit` judge it; they differ in nothing but the place the body lands in, which is what makes
+// the pairs a reading of the checks rather than of the print.
+//
+// The place is what decides the ordering, and it is the only thing a pass can decide it with today:
+// `order` takes two nodes of the program the transaction was *opened* on, and the node `inline`
+// answers with names the transaction (modules/graph/txn.cpp, `orderKernel` -> `draftOf`), so a pass
+// cannot write an order edge to the node it just spliced. An `at` that is a statement of the block's
+// chain therefore orders the body by construction, and an `at` that is a pure node only picks the
+// region and leaves the body's ordering to `order`, which is exactly where the two cases part.
+
+/// The body every rewrite splices in: it prints, and it hands the printed string on.
+func announce(): string sync {
+    return println('announced')
+}
+
+/// The type text a node carries, or `-` where it has none.
+func type_text(n: Node): string {
+    return match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+}
+
+/// Whether the node runs the model update of the training step: `step` has one, and no other graph of
+/// the program has any, so this names the graph without reading how it is written.
+func is_update(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == 'nn:sgd'
+    }
+}
+
+// ---- the reading that has no landing place, and why it is kept as a note ----
+//
+// This file carried `step_print_at_grad` too: the same print spliced at the node that *takes* the
+// gradient, which is the second argument of the `nn:sgd` node -- the result of calling the function
+// `grad(loss)<layer, y>` returns. That splice cannot be made on a program whose gradient is the
+// library's `grad`: the node is a call of a function value, `graph.inline` answers `the callee of the
+// call is not known in this graph: run std::defunctionalize on it first` (RuntimeDiag::InvalidArgument,
+// at this file's `spliced_at`), and the pass it names refuses the values involved instead of
+// defunctionalizing them -- `DEFUNCTIONALIZE types=7 values=16 calls=0 refused=7`, and for the
+// gradient's own type `<layer: Linear, y: f32[?, ?]> (X: f32[?, ?]) => float pure` the reason is `the
+// value is read by a node that is not a call`.
+//
+// The author's answer of 2026-11-20 (`e4c2e646b`, "ECOOP item 1 lands at a pure node of step, not at
+// the gradient call") says where item (1) does land: at a **pure** node of `step`. `step` has exactly
+// one, `nn:sgd` (`step`'s graph: two ports, the loss as a function value, the `vjp::grad` instance, the
+// call, three more ports, and the update), and `step_print` below splices there and is refused with
+// `PassEffectOrder` -- which is the paper's reading. So the gradient node was the wrong place twice
+// over: nothing can be spliced at it, and item (1) never wanted it.
+
+/// The training inputs of the entry function: the program's only constant of type `f32[4, 2]`, and it
+/// stands in no chain.
+func is_inputs(n: Node): bool {
+    return constant_of(n, 'f32[4, 2]')
+}
+
+/// The entry function's print of the model's weights: the one printing call whose operand is a
+/// tensor. Chosen by what it prints and not by where it stands, so the three prints of the program
+/// are not told apart by the order they were written in.
+///
+/// "Is a tensor" is `shape_text`, not the printed type: the test used to be
+/// `type_text(ins[0]) == 'f32[...]'`, which held while the weight's shape was stated in full. Once
+/// the gradient is the library's, `Linear.weight` is `f32[?, ?]` -- an array of known element type
+/// and unknown extent -- so the text is `f32[?, ?]`, the comparison failed, and the three rewrites
+/// that anchor on this print returned the program unchanged: `print_ordered` and `print_appended`
+/// printed the program's own three lines, and `print_appended_reversed` printed them where it should
+/// have been refused. Selecting by a type's *text* is what let a migration change a reading; selecting
+/// by the fact that the value is an array of known element type does not.
+func is_weight_print(n: Node): bool {
+    let ins = inputs(n)
+    return if !is_print(n) then false
+        else if len(ins) != 1 then false
+        else shape_text(ins[0]) != null
+}
+
+/// The printing call whose operand is a string the program already holds. `train.cml` has none of that
+/// shape; `train-step-sync.cml` has the one the training step writes.
+func is_literal_print(n: Node): bool {
+    let ins = inputs(n)
+    return if !is_print(n) then false
+        else if len(ins) != 1 then false
+        else is_constant(ins[0]) && type_text(ins[0]) == 'string'
+}
+
+/// Splices `announce` in at `at` and commits. Whether the print is ordered is `at`'s to say.
+func spliced_at::<F>(p: F, at: Node): F! sync {
+    let t = open(p)
+    inline(t, at, announce)
+    return commit(t)
+}
+
+/// 甲: a print added to `main` at a pure node, so the print is unordered against the three prints the
+/// entry function already has. `commit` is expected to refuse it (the conflict check,
+/// `RuntimeDiag::PassEffectOrder`).
+export func print_unordered::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_inputs(n))
+    return match at {
+        case null => error('InvalidArgument', 'print_unordered: no single training-input constant to splice at')
+        case a => spliced_at(p, a)
+    }
+}
+
+/// 甲对照: the same body, the same print, spliced at a statement of the block's chain instead of at a
+/// pure node -- the statement hands its place over, so the print is ordered there and `commit` is
+/// expected to accept it. The statement it takes over is the entry function's print of the weights,
+/// which is why the edited program prints the announcement where that line was.
+export func print_ordered::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_weight_print(n))
+    return match at {
+        case null => error('InvalidArgument', 'print_ordered: no single print of the model weights')
+        case a => spliced_at(p, a)
+    }
+}
+
+/// 甲 append: the same body spliced at the same pure node as `print_unordered`, and the body then
+/// ordered *after* the last printing call `main` has (the weight print). `order` lifts its two ends
+/// to the region they share (`3fd76e564`), so the edge reaches the body `inline` answered with; the
+/// body therefore lands beside the print instead of taking its place, and `main` prints four lines:
+/// its own three, then this one. `print_unordered` is this edit with the one edge left out, which is
+/// what makes the pair a reading of the check rather than of the print.
+export func print_appended::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_inputs(n))
+    let last = only(p, (n: Node): bool => is_weight_print(n))
+    return match at {
+        case null => error('InvalidArgument', 'print_appended: no single training-input constant to splice at')
+        case a => match last {
+            case null => error('InvalidArgument', 'print_appended: no single print of the model weights to order after')
+            case l => {
+                let t = open(p)
+                let added = inline(t, a, announce)
+                order(t, l, added)
+                commit(t)
+            }
+        }
+    }
+}
+
+/// The same edit with the one edge the other way round: the announcement is said to run *before*
+/// the print it is ordered against. `commit` is expected to accept it, and the new line is in front
+/// of the line it was ordered against.
+export func print_appended_reversed::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_inputs(n))
+    let last = only(p, (n: Node): bool => is_weight_print(n))
+    return match at {
+        case null => error('InvalidArgument', 'print_appended_reversed: no single training-input constant to splice at')
+        case a => match last {
+            case null => error('InvalidArgument', 'print_appended_reversed: no single print of the model weights to order before')
+            case l => {
+                let t = open(p)
+                let added = inline(t, a, announce)
+                order(t, added, l)
+                commit(t)
+            }
+        }
+    }
+}
+
+/// The printing call that stands first in the block's chain: the one no other print is ordered
+/// before. A reverse edge against the *last* print puts the new line between two prints and leaves
+/// it unordered against the earlier ones, so the row that can be accepted is the one ordered against
+/// this node.
+func head_print(g: Graph): Node? {
+    let prints = nodes(g)->filter<is_print>
+    let heads = prints->filter<(n: Node): bool => len(order_inputs(n)->filter<is_print>) == 0>
+    return if len(heads) == 1 then heads[0] else null
+}
+
+/// The one graph of the program that prints at all: `main`, named by what it does and not by its
+/// spelling. `train.cml`'s other three graphs (`loss`, `step`, `run`) print nothing.
+func printing_graph::<F>(p: F): Graph? when is_function::<F>() {
+    let gs = graphs_of(p)->filter<(g: Graph): bool => len(nodes(g)->filter<is_print>) > 0>
+    return if len(gs) == 1 then gs[0] else null
+}
+
+/// 甲 prepend: the same splice, ordered *before* the first printing call of `main`. The reverse
+/// direction of `print_appended`, anchored where a reverse edge can be complete: the new line comes
+/// before all three of the program's own lines.
+export func print_prepended::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_inputs(n))
+    let head = match printing_graph(p) {
+        case null => null
+        case g => head_print(g)
+    }
+    return match at {
+        case null => error('InvalidArgument', 'print_prepended: no single training-input constant to splice at')
+        case a => match head {
+            case null => error('InvalidArgument', 'print_prepended: no single head print of the printing graph')
+            case h => {
+                let t = open(p)
+                let added = inline(t, a, announce)
+                order(t, added, h)
+                commit(t)
+            }
+        }
+    }
+}
+
+/// 乙: a print added to `step` at the node of the model update. `step`'s type declares nothing, and the
+/// reading is not the one the paper predicted: `commit` refuses, but with `RuntimeDiag::PassEffectOrder`
+/// -- the pair it names is the call of the gradient value and the print. `loss_print` below is the same
+/// edit on a graph whose body is operations alone, and that one is refused by `PassEffectBeyondType`.
+///
+/// This is where the ECOOP paper's item (1) lands: the author's answer of 2026-11-20 (`e4c2e646b`, "item
+/// 1 lands at a pure node of step, not at the gradient call") names a pure node of `step`, and `step`
+/// has exactly one -- this one, `nn:sgd`. Both programs refuse the splice, and the refusal's *name* is
+/// what the move changed: on the program whose gradient is the engine's operator the same splice is
+/// refused by `PassEffectBeyondType` ("committed a graph that reaches past the effect its own type
+/// declares: node 10 of graph 'step' (:io/println)"), and on the program whose gradient is the
+/// library's macro it is refused by `PassEffectOrder`, whose pair is the call of the gradient value and
+/// the print. Same edit, same place, two diagnoses -- the one thing about item (1) the move did change,
+/// and it changed it by changing what a call statement is made of. What the move does not leave is a
+/// place for splicing *at* the gradient instead; see the note above `is_inputs`.
+export func step_print::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_update(n))
+    return match at {
+        case null => error('InvalidArgument', 'step_print: no single model-update node in the program')
+        case a => spliced_at(p, a)
+    }
+}
+
+/// Whether the node runs the sum the loss takes of the squared error: `loss` has one, and no other
+/// graph of the program has any.
+func is_sum(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == 'tensor:sum'
+    }
+}
+
+/// The same print in `loss`, whose type declares nothing either but whose body is made of operations
+/// alone: no call whose footprint the analysis cannot name. This is the reading that separates "the
+/// effect check declined this graph" from "the effect check does not run on this build".
+export func loss_print::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_sum(n))
+    return match at {
+        case null => error('InvalidArgument', 'loss_print: no single sum node in the program')
+        case a => spliced_at(p, a)
+    }
+}
+
+/// 乙对照: the same print added to `step`, in the program whose `step` prints and therefore declares
+/// the write to stdout, and spliced at a statement of `step`'s own chain so it takes that place and is
+/// ordered there. Expected to be accepted. Run it on `train-step-sync.cml`.
+export func step_print_ordered::<F>(p: F): F! sync {
+    let at = only(p, (n: Node): bool => is_literal_print(n))
+    return match at {
+        case null => error('InvalidArgument', 'step_print_ordered: no single print of a string literal')
+        case a => spliced_at(p, a)
+    }
+}

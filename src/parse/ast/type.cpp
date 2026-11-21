@@ -78,23 +78,38 @@ std::string to_string(TypeOp op) {
 }
 
 const std::string ResourceClauseLoad::toString() const {
-    if (pure_) {
-        return "ResourceClause: pure";
-    }
     std::string result = "ResourceClause: ";
+    if (spelling_) {
+        result += "spelling";
+        if (pure_ || !uses_.empty()) {
+            result += " ";
+        }
+    }
+    if (pure_) {
+        return result + "pure";
+    }
     for (size_t i = 0; i < uses_.size(); ++i) {
-        result += (i > 0 ? ", " : "") + uses_[i].toString();
+        result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
+                  uses_[i].resource.toString();
     }
     return result;
 }
 
 const std::string ResourceClauseLoad::geneCode() const {
-    if (pure_) {
-        return "pure";
+    std::string result;
+    if (spelling_) {
+        result = "spelling";
+        if (pure_ || !uses_.empty()) {
+            result += " ";
+        }
     }
-    std::string result = "uses ";
+    if (pure_) {
+        return result + "pure";
+    }
+    result += "uses ";
     for (size_t i = 0; i < uses_.size(); ++i) {
-        result += (i > 0 ? ", " : "") + uses_[i].toString();
+        result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
+                  uses_[i].resource.toString();
     }
     return result;
 }

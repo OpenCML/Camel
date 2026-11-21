@@ -22,7 +22,7 @@ export resource process
 /// external resources are released. Nothing that is written after the call runs. It gives no
 /// value at all: its type is the bottom type `never` (design principles 3.9).
 /// @example exit(2)
-export func exit(code: int): never uses process
+export func exit(code: int): never uses var process
 
 /// The name of the user the process runs as.
 /// @effect reads the environment

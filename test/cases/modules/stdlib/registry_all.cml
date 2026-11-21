@@ -22,6 +22,10 @@ import test_support
 import random
 import re
 import sim
+// `state` is a declaration module too (`stdlib/state.cml`): `Ref<T>` and the four operators
+// `ref`, `get`, `set` and `update` are declared there, and the module keeps the kernels, the
+// resource contract of each operator and the storage in C++.
+import state
 import statistics
 import str
 import this

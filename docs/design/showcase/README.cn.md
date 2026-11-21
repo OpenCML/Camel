@@ -126,9 +126,9 @@
 机器是 AMD EPYC 7343（32 硬件线程、503 GiB）、Ubuntu 22.04；Python 3.10.12、PyTorch
 2.14.1+cu130、Camel v0.2.24（提交 `ab9cb4579` 干净构建）。主机是共享的：测量期间 1 分钟负载
 31.7→34.1，所以小于约 0.3 ms 的差异不算数，绝对值也不能当成跨机器常数。命令、版本、方差与
-早期数字的讨论见示例的 [README](../../../examples/models/naive-in-expert-out/README.cn.md)，
-原始 JSON 在
-[`results/2026-10-23-linux.json`](../../../examples/models/naive-in-expert-out/results/2026-10-23-linux.json)。
+早期数字的讨论见示例的 [README](../../../examples/models/naive-in-expert-out/README.cn.md)；
+当原始记录用的 `results/2026-10-23-linux.json` 留在跑出它的那台机器上，不进仓库（示例的
+`results/` 被 `.gitignore` 排除，理由见示例 README：一份原始记录只属于那一次运行）。
 
 **Camel 侧还缺什么**
 

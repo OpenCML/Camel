@@ -67,7 +67,7 @@ export func eval(expression: string): PyObject!
 
 /// Runs the Python script at the path.
 /// @fails error value `PythonError` when the file cannot be read or the script raises
-/// @example 'scripts/hello.py'->run_file
+/// @example 'test/cases/modules/std/python/hello.py'->run_file
 export func run_file(path: string): void!
 
 /// Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs

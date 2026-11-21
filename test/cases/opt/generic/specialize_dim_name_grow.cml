@@ -6,7 +6,7 @@
  * the recursive call passes `concat(xs, xs[0 .. 1])`, which is longer.
  *
  * the rule predicts exactly two instances, `f32[2]` and `f32[?]`, whatever
- * kMaxTypeSpecializationsPerRecursiveFunction is set to. Measured, std::opt::specialize makes no
+ * kMaxTypeSpecializationsPerRecursiveFunction is set to. Measured, std::cxx::specialize makes no
  * instance at all: a parameter written `f32[n]` is not a refinement at a call, so no instance key
  * is built for the entry call either and the widening is never reached. The count, the graph and
  * the isolation probes are recorded in the tests that name this file and in

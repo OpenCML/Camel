@@ -1,0 +1,1855 @@
+===== capture-all: the ECOOP section 6 readings and the e2e lane, one run =====
+# the build every reading below ran on:
+#   tree       /home/zjwei/camel-work/cap8
+#   git HEAD   714cf0d93e3c3d5f10a4b94b3ac1cf840cd9a21a
+#   camel      /home/zjwei/camel-work/cap8/out/latest/bin/camel
+#   config       Release
+#   revision     714cf0d93e3c3d5f10a4b94b3ac1cf840cd9a21a
+#   dirty        False (0 path(s))
+#   builtAt      2026-11-20T10:27:51.473Z
+#   footprint    261120_095154_6cb6fa721
+#   fingerprint  3a1d3c5275c5aa2a95a99480e8524955c9b63ca2b983663cc13450c7052b4b70 of 1349 files under src, include, modules, tools, stdlib, third_party, cmake, CMakeLists.txt, conanfile.txt
+#   buildOptions 3181e491475bf62ba3b1d939ca95000975b94f2814866713f2f86b3198a02970 platform linux/x64
+#                cmake {"CAMEL_ENABLE_PYTHON": "ON", "CAMEL_ENABLE_PYTHON_BINDINGS": "ON", "CAMEL_PACKAGE_MINIMAL": "OFF", "CAMEL_TENSOR_BLAS": "ON", "ENABLE_FASTVM_JIT": "ON"}
+#                env   {"CAMEL_SKIP_PYTHON": "0", "CAMEL_TARGET_ARCH": "native"}
+#   version    Camel v0.2.45 (Build 261120_095154_6cb6fa721)
+#   note       the footprint's NAME is not this run's sha: it is stamped once per fingerprint and
+#              keeps the sha of the build that first produced it, so a docs-only commit moves
+#              `revision` and leaves the name alone. The sha to read is `revision`, and `linked at`
+#              compares against that one and not against the name.
+#   linked at  714cf0d93, and this tree is exactly those sources
+#
+# The sections this run took came from the build above. The sections it did not take are
+# another build's readings, kept byte for byte, and each of them names that build on its own
+# `# build=` line: this record has TWO coordinates, and the line below says which is which.
+#   sections   taken in this run: [1,2,4,8]; every other section is unchanged from the
+#              run at 6cb6fa721
+# The scratch directory the module roots and the pass copies live in is /tmp/camel-capture-all.3177439.R3kPBF: this run's own,
+# named here because a diagnostic quotes it and because two runs would otherwise share one.
+
+=== [1] the six writings of the case-study program, and the counterexample ===
+# build=714cf0d93
+# The writing form is the library's: `let dloss = grad(loss)` then `dloss<layer, y>(X)`.
+# The six are the ways of writing the program that change no meaning; `train-reorder-output` is
+# the counterexample, which moves the prints and so moves the order edges and must differ.
+# The reading is the canonical document of each, so it is the graph and not the file name.
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train.cml std::jgir canonical=true > train.json
+doc=train exit=0 bytes=89317 md5=32e09afb5f8c8282136f85efae223288 sha256=cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e621c105ffab77424
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-rename.cml std::jgir canonical=true > train-rename.json
+doc=train-rename exit=0 bytes=89317 md5=32e09afb5f8c8282136f85efae223288 sha256=cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e621c105ffab77424
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-swap.cml std::jgir canonical=true > train-swap.json
+doc=train-swap exit=0 bytes=89317 md5=32e09afb5f8c8282136f85efae223288 sha256=cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e621c105ffab77424
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-inline.cml std::jgir canonical=true > train-inline.json
+doc=train-inline exit=0 bytes=89317 md5=32e09afb5f8c8282136f85efae223288 sha256=cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e621c105ffab77424
+
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-a.cml std::jgir canonical=true > loss-a.json
+doc=loss-a exit=0 bytes=89317 md5=32e09afb5f8c8282136f85efae223288 sha256=cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e621c105ffab77424
+
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-b.cml std::jgir canonical=true > loss-b.json
+doc=loss-b exit=0 bytes=89317 md5=32e09afb5f8c8282136f85efae223288 sha256=cce5fc876176df484bd77e205a4d05cf413f7e5c0a89518e621c105ffab77424
+
+### camel docs/handover/reports/eval-round10/case-study-variants/train-reorder-output.cml std::jgir canonical=true > train-reorder-output.json
+doc=train-reorder-output exit=0 bytes=89317 md5=2d1290def10ad5861da61fe4e0905b32 sha256=59987becff3747ad31a7cbfdf0198680e0c1e1326636aff64bf7ed6bd1db6c5d
+
+# the six against the baseline, then the counterexample against it
+train-rename           same
+train-swap             same
+train-inline           same
+loss-a                 same
+loss-b                 same
+train-reorder-output   differs first_difference_byte=29709
+
+# --- [A] the six rewrites of the e2e program: each one's canonical hash against the program's ---
+# A hash is only comparable beside its definition, so it is written here:
+#   canonical hash = sha256 of the bytes `camel <program> std::jgir canonical=true` writes to
+#                    stdout (the pass prints the document; canonical=true fixes its key order,
+#                    which docs/cli.md's pass-parameter table says makes two runs compare byte
+#                    for byte). There is no --hash option: this is the document's own digest.
+#   the second reading = the `e2e canonical=<sha256>` line `passes::report` prints, which is a
+#                    digest the pass computes over its own canonical node text. Two independent
+#                    digests, so a row that agrees in both is not one tool agreeing with itself.
+# The program is e2e/program.cml as the tree ships it. Each rewrite changes only how the same
+# program is written, and must print the same five lines; the rewrites are in docs/handover/reports/eval-round10/case-study-variants:
+#   lift     the closure's body lifted into a named declaration, the lambda calls it
+#   direct   the call through a known function value made a direct call (`let ap = apply`)
+#   merge    a copy of a function declared, and the copy called
+#   drop     a dead pure statement added -- text that produces no node
+#   unreach  a function nobody calls -- text that produces no node, but does it produce a graph?
+#   unsync-a the `sync` dropped from the closure's body
+#   unsync-b the `sync` dropped from `apply`
+# Seven rows and not six: this program writes `sync` twice, and removing it in one place and in
+# the other are two different edits. The dispatch's six names count the intent, not the placement.
+
+### camel docs/handover/reports/eval-round10/e2e/program.cml std::jgir canonical=true > e2e-program.json
+doc=e2e-program exit=0 bytes=22456 md5=7b62056beadfb53e87be455eb3d90021 sha256=591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-lift.cml std::jgir canonical=true > e2e-lift.json
+doc=e2e-lift exit=0 bytes=24584 md5=34ef74f275d94db290edeafa35e69d79 sha256=d6ea6a0d4266634be784c94aa01cb7a3749954e1be25de20a59eeeb9ff67d565
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-direct.cml std::jgir canonical=true > e2e-direct.json
+doc=e2e-direct exit=0 bytes=22997 md5=563eadcdb54cba0c512bcf9b51e61f00 sha256=91ebe034c6699bbb0601c0fb0fc97d04be3d1b54165b30c9827733963269a043
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-merge.cml std::jgir canonical=true > e2e-merge.json
+doc=e2e-merge exit=0 bytes=22456 md5=7b62056beadfb53e87be455eb3d90021 sha256=591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-drop.cml std::jgir canonical=true > e2e-drop.json
+doc=e2e-drop exit=0 bytes=22456 md5=7b62056beadfb53e87be455eb3d90021 sha256=591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-unreach.cml std::jgir canonical=true > e2e-unreach.json
+doc=e2e-unreach exit=0 bytes=23502 md5=c334ae01124e1f511393bb4693d9d540 sha256=de8569bb46ecdc586cfde2d1d3aa8a5598c06f4a0cda5ba3deb6f2206b8d3289
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-unsync-a.cml std::jgir canonical=true > e2e-unsync-a.json
+doc=e2e-unsync-a exit=0 bytes=22113 md5=5fc5c29e76cdf71e520b00665c30a2f6 sha256=14ab6d129b5206008d8c16221a7b6dbc8aa7d09d303c5df50daa798104b3df33
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-unsync-b.cml std::jgir canonical=true > e2e-unsync-b.json
+doc=e2e-unsync-b exit=0 bytes=21989 md5=fb651589ba6e3bb79248fe09f5c4831f sha256=ece33fbf983e3944dd43d787b28aa3912cffca9a850ceb8f034833182c4d67a7
+
+# the seven against the program's own document (both digests are on each doc= line above)
+lift                   differs first_difference_byte=1592
+direct                 differs first_difference_byte=4097
+merge                  same
+drop                   same
+unreach                differs first_difference_byte=1592
+unsync-a               differs first_difference_byte=20458
+unsync-b               differs first_difference_byte=2562
+
+# the second reading: what `passes::report` hashes on the same eight programs. It reads the
+# document as the program hands it over, with no instrumentation pass in front of it: that pass
+# adds its own nodes, and a digest over an instrumented graph would not be the program's.
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/e2e/program.cml passes::report std::nvm
+### exit=0
+program e2e graphs=5 nodes=53
+program e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-lift.cml passes::report std::nvm
+### exit=0
+lift e2e graphs=6 nodes=58
+lift e2e canonical=df00af533f9b86f6a2e4f4f6219ae37e17061530b4b8e0782090365b1c7e543a
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-direct.cml passes::report std::nvm
+### exit=0
+direct e2e graphs=5 nodes=54
+direct e2e canonical=9c4251f0dbba8ad9238a6dcefa0a63d710c7c17b8b9bce6a39e9f1afca9c6563
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-merge.cml passes::report std::nvm
+### exit=0
+merge e2e graphs=5 nodes=53
+merge e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-drop.cml passes::report std::nvm
+### exit=0
+drop e2e graphs=5 nodes=53
+drop e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-unreach.cml passes::report std::nvm
+### exit=0
+unreach e2e graphs=6 nodes=56
+unreach e2e canonical=ed7fa4fe1b080e25ef8c43c634e92f0fa188dd4f9f2871d94fcd6d63d6c6d84d
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-unsync-a.cml passes::report std::nvm
+### exit=0
+unsync-a e2e graphs=5 nodes=53
+unsync-a e2e canonical=cb072765bed98dac319d206d89bb57f57417401a2f097471499a4ba27df31e62
+### CAMEL_PACKAGES=docs/handover/reports/eval-round10/e2e camel docs/handover/reports/eval-round10/case-study-variants/e2e-unsync-b.cml passes::report std::nvm
+### exit=0
+unsync-b e2e graphs=5 nodes=52
+unsync-b e2e canonical=06efefcbaf5ab68e292e86d9a74efba37e426124b0c36c81a3245e877b2fadba
+
+# the other half of every row: a rewrite that changes no meaning must not move the output
+### camel docs/handover/reports/eval-round10/e2e/program.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-lift.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-direct.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-merge.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-drop.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-unreach.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-unsync-a.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+### camel docs/handover/reports/eval-round10/case-study-variants/e2e-unsync-b.cml
+### exit=0
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+
+lift                   same
+direct                 same
+merge                  same
+drop                   same
+unreach                same
+unsync-a               same
+unsync-b               same
+# Read the two halves together: a rewrite whose document is the program's document AND whose
+# output is the program's output is a rewrite that changed nothing this program can observe.
+=== [2] the scale of train.cml ===
+# build=714cf0d93
+# Node = `graphs[*].nodes` summed; edge = one entry of a node's `inputs`, which is what a
+# reference is in a canonical document (it has no `edges` array); region = `graphs[*].regions`;
+# bytes = the canonical document itself. The two programs are printed apart: the six writings'
+# baseline, and the copy the tree ships under examples/case-study/.
+
+### camel examples/case-study/train.cml std::jgir canonical=true > case.json
+doc=case exit=0 bytes=93172 md5=575d25ccdec6e9257f4bb17389c15df1 sha256=d03f2d5256aac774425fcafb4390de2f363dd5310495d5ce24a38e0d4e7ff742
+
+train        graphs=59 nodes=211 edges=169 regions=1 bytes=89317
+             per graph, in the document's order: 2 3 4 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 3 3 4 2 3 17 14 8 16 3 14 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3 14 2 3 6 11
+             entry=g33 root=g0
+case         graphs=59 nodes=217 edges=190 regions=2 bytes=93172
+             per graph, in the document's order: 2 3 4 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 3 3 4 2 3 26 14 8 13 3 14 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3 14 2 3 6 11
+             entry=g33 root=g0
+# The program's own count, as the compiler answers it and not as the document counts: `std::stats`
+# reports the graphs and nodes of the program this build compiles. It is taken on the shipped
+# program and on the variants' baseline, and the document is consumed by `std::jgir` so that
+# nothing here runs the program. Where the two counts part, the document has dropped something
+# the program holds -- and that is the reading, not a discrepancy to fix.
+### camel examples/case-study/train.cml std::stats std::jgir canonical=true
+    GRAPH_STATS {"graphs":59,"nodes":217,"edges":179,"opers":68,"direct_calls":10,"indirect_calls":4,"closures":5,"branches":1,"loops":0,"bytes":8152,"specializations":0,"cycle_dropped_sessions":0}  file=examples/case-study/train.cml
+### exit=0
+### camel docs/handover/reports/eval-round10/case-study-variants/train.cml std::stats std::jgir canonical=true
+    GRAPH_STATS {"graphs":59,"nodes":211,"edges":162,"opers":63,"direct_calls":9,"indirect_calls":4,"closures":5,"branches":0,"loops":1,"bytes":7852,"specializations":0,"cycle_dropped_sessions":0}  file=docs/handover/reports/eval-round10/case-study-variants/train.cml
+### exit=0
+=== [3] the three backends on the training program ===
+# build=6cb6fa721
+# The program is the one the tree ships, examples/case-study/train.cml. The paper's sentence is
+# that the three backends print the same thing; the comparison at the end is the reading.
+
+### camel examples/case-study/train.cml std::nvm
+### exit=0
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+
+### camel examples/case-study/train.cml std::fvm
+### exit=0
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+
+### camel examples/case-study/train.cml std::jit
+### exit=0
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+
+# the three outputs against each other (the masked text: the program itself prints no time, and
+# a comparison of the raw files would part on one if it ever did)
+nvm against fvm  same
+nvm against jit  same
+=== [4] the rows of tab:lang, under the library's grad ===
+# build=714cf0d93
+# `edits-ecoop.cml` is copied into the scratch root as `eco.cml`: a module's name is its file's
+# stem, so a pass library reaches a command under that name. The file in the tree is not renamed
+# and not edited. The program is the six writings' baseline.
+#   print_unordered  a print spliced at a pure node of main -- expected refused (order check)
+#   print_ordered    the same body spliced at a statement of the chain -- expected accepted, and
+#                    the announcement takes that line's place, so main still prints three lines
+#   print_appended   the same body at the same pure node as print_unordered, then ordered *after*
+#                    the third print -- expected accepted, and main prints four lines (the
+#                    additive form the take-over row above cannot show)
+#   print_appended_reversed  the same edge anchored at the third print instead -- refused: the
+#                    line lands between two prints and nothing orders it against the earlier one
+#   print_prepended  the same splice ordered *before* the first print of the chain -- expected
+#                    accepted, with the new line first (the reverse edge anchored where it can
+#                    be complete: against the head, not against the third)
+#   loss_print       the same print in loss, whose body has no call the analysis cannot name --
+#                    expected refused (effect check, PassEffectBeyondType)
+#   drop_print       every println erased -- expected accepted, and nothing printed
+#   break_rate       the targets tensor put in the learning-rate slot -- expected refused by the
+#                    check on the edge's types
+# The break_rate row selects the one constant of type float and the one of type f32[4, 1]; a row
+# whose selection is not one node now REFUSES and names the count, instead of returning the
+# program unchanged -- a no-op printed the program's own output where a refusal belonged, and the
+# record could not tell a rewrite that declined to pick from a pass that never ran. The same rule
+# fixed the weight print's selector: it was `type_text(...) == 'f32[...]'`, which held while the
+# weight's shape was stated in full and fails once `Linear.weight` is `f32[?, ?]`; it is now
+# `shape_text(...) != null`, "the operand is an array of known element type", and the three
+# rewrites anchored on that print stopped being no-ops on 2026-11-20.
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::print_unordered std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 3 of graph 'main' (a call of 'run'), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write unknown / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /tmp/camel-capture-all.3177439.R3kPBF/eco.cml:159:12
+     |
+ 159 |     return println('announced')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::print_ordered std::nvm
+loss before: 3.7500
+loss after:  0.0000
+announced
+### exit=0
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::print_appended std::nvm
+loss before: 3.7500
+loss after:  0.0000
+[[1.9999925], [-0.99998784]]
+announced
+### exit=0
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::print_appended_reversed std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 3 of graph 'main' (a call of 'run'), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write unknown / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /tmp/camel-capture-all.3177439.R3kPBF/eco.cml:159:12
+     |
+ 159 |     return println('announced')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::print_prepended std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 3 of graph 'main' (a call of 'run'), in one region of graph 'main', has no order against node 19 of graph 'main' (:io/println), and at least one of the two writes (write unknown / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /tmp/camel-capture-all.3177439.R3kPBF/eco.cml:159:12
+     |
+ 159 |     return println('announced')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::loss_print std::nvm
+error[RuntimeDiag::PassEffectBeyondType]: 'graph::commit' committed a graph that reaches past the effect its own type declares: node 16 of graph 'loss' (:io/println), in a graph whose type declares nothing, makes an access the type does not cover (write stdout): the commit would publish a body that reaches past its own declared effect
+    --> /tmp/camel-capture-all.3177439.R3kPBF/eco.cml:159:12
+     |
+ 159 |     return println('announced')
+     |            ^^^^^^^
+help: A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::drop_print std::nvm
+### exit=0
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/train.cml eco::break_rate std::nvm
+error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'main' breaks its edge invariants (1 violation(s)):
+  graph 'main' node 3 (10): passes a f32[4, 1] as ordinary argument 2 of 'run', which takes a float.
+   --> /tmp/camel-capture-all.3177439.R3kPBF/train.cml:28:1
+    |
+ 28 | func main(): int sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+ 29 |     let X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]] as f32[4, 2]
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   ...
+ 36 | }
+    | ^
+note: the error was made by <graph::commit>, which records no position
+help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+
+### exit=1
+
+
+# --- [B] the three graph checks: exit, acyclic, scoped -- which layer refuses each, verbatim ---
+# The three are the first three of the six a commit asks (docs/design/graph-editing/README.cn.md
+# 8.1). A bad edit meets two layers before a graph changes: the operator's own step check, which
+# runs where the edit is made, and the commit, which is the seal in src/runtime/graph.cpp. Every
+# row below names the layer that answered, because 'refused' without the layer is not a reading.
+# The programs are the repo's own commit-check fixtures -- the same two files the repo's test::
+# passes use -- so a reader can put the two readings side by side and see the same text twice.
+
+#   move_exit     replace(exit, a node an arm computes)     expected: the step check, an anchor
+#   self_read     replace(a value, the exit that reads it)  expected: the step check, a cycle
+#   cross_region  replace(the exit's value, an arm's node)  expected: the commit, the exit region
+#   cross_arm     replace(an arm's body-read value, another arm's node)  expected: the commit,
+#                 the branch-arm invariant -- the exit is untouched, so the exit rule cannot be
+#                 the one that answers
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/identity_at_exit.cml bad::move_exit std::nvm
+move_exit: graph of 6 nodes; the exit is 5 (region kind RegionKind::Root); the node moved in is 1 (region kind RegionKind::Arm)
+error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.replace': the node anchors its graph (an exit, an output, a return or the end of a branch arm).
+   --> /tmp/camel-capture-all.3177439.R3kPBF/bad.cml:49:5
+    |
+ 49 |     replace(t, pair[0], pair[1])
+    |     ^^^^^^^
+help: The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/identity_at_exit.cml bad::self_read std::nvm
+self_read: the exit is 5 and the value it reads is 4; replacing that value with the exit
+error[RuntimeDiag::InvalidArgument]: Invalid argument of 'graph.replace': the replacement is the node itself or is computed from it.
+   --> /tmp/camel-capture-all.3177439.R3kPBF/bad.cml:68:5
+    |
+ 68 |     replace(t, pair[1], pair[0])
+    |     ^^^^^^^
+help: The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/identity_at_exit.cml bad::cross_region std::nvm
+cross_region: the exit reads 4 (region kind RegionKind::Root); replacing that value with 1 (region kind RegionKind::Arm)
+cross_region: the step check accepted the replace; committing
+error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'f' has its exit at node 5, which is in region 1 instead of the function body: that region runs only when its owner says so, so a value nothing asks for never runs there, and the read never happens.
+   --> /tmp/camel-capture-all.3177439.R3kPBF/identity_at_exit.cml:21:1
+    |
+ 21 | func main(): int {
+    | ^^^^^^^^^^^^^^^^^^
+ 22 |     return 48
+    |     ^^^^^^^^^
+ 23 | }
+    | ^
+note: the error was made by <graph::commit>, which records no position
+help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+
+### exit=1
+
+### CAMEL_PACKAGES=/tmp/camel-capture-all.3177439.R3kPBF camel /tmp/camel-capture-all.3177439.R3kPBF/sibling_arm.cml bad2::cross_arm std::nvm
+cross_arm: the reader 3 is in region kind RegionKind::Arm; it reads 2 (region kind RegionKind::Root); that read becomes 5 (region kind RegionKind::Arm)
+cross_arm: the step check accepted the replace; committing
+error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: GraphInvalid: Runtime graph 'pick' breaks the branch-arm invariant: OPER 7 (:op/add_l) runs between BRCH 3 and its JOIN 2 and belongs to two arms, 1 and 0: it would run only when arm 1 is taken, and arm 0 reads it (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+   --> /tmp/camel-capture-all.3177439.R3kPBF/sibling_arm.cml:17:1
+    |
+ 17 | func main(): int {
+    | ^^^^^^^^^^^^^^^^^^
+ 18 |     return pick(true, 4) * 10
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 19 | }
+    | ^
+note: the error was made by <graph::commit>, which records no position
+help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+
+### exit=1
+
+# The commit's own reading of the two rows this op set cannot hand it, quoted from the repo's
+# fixtures. These are the fixtures' drafts and not edits made above; the layer is the reading,
+# and leaving the row out would make the layer look absent:
+### camel /tmp/camel-capture-all.3177439.R3kPBF/fold_function_type.cml test::commit_cycle std::nvm
+commit_cycle: the draft's input setters do not look for a cycle, the commit does
+commit_cycle: graph 'doubled' node 2 now reads itself
+commit_cycle: refused at the commit: Runtime graph 'doubled' breaks its edge invariants (1 violation(s)):
+  graph 'doubled' node 2 (11): lies on a cycle of inputs: 2(11) <- 2
+3
+### exit=48
+
+### camel /tmp/camel-capture-all.3177439.R3kPBF/sibling_arm.cml test::commit_sibling_arm std::nvm
+commit_sibling_arm: the seal asks whether a node reads only what runs when it runs (`validateRuntimeBranchArms`, src/runtime/branch_arms.cpp), not only whether it reads a port of a region it is not in (`checkGraphCrossReferences`, src/runtime/graph_edges.cpp)
+commit_sibling_arm: graph 'pick' arm 1 of BRCH 3 now ends in node 8, which reads node 7 of arm 2
+commit_sibling_arm: refused at the commit: Runtime graph 'pick' breaks the branch-arm invariant: OPER 7 (:op/add_l) runs between BRCH 3 and its JOIN 2 and belongs to two arms, 1 and 0: it would run only when arm 1 is taken, and arm 0 reads it (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+commit_sibling_arm: graph 'pick' arm 1 of BRCH 3 now ends in node 8, which reads node 5 of the same arm
+commit_sibling_arm: the copy that reads a value of its own arm was published
+### exit=50
+
+### camel /tmp/camel-capture-all.3177439.R3kPBF/loop_body_read.cml test::commit_loop_body_read std::nvm
+commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph, so a read across either is the same question -- a node reads only what runs whenever it runs
+commit_loop_body_read: graph 'main' has LOOP 17 with its body at region 2 and no BRCH anywhere; the body computes node 14, the function body computed node 3, and node 11 of the body reads it
+commit_loop_body_read: graph 'main' now has COPY 24 in the body (region 0) reading node 14 of the body of LOOP 17 (region 2)
+commit_loop_body_read: refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (:op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+commit_loop_body_read: graph 'main' now has COPY 24 in the body (region 0) reading node 3 of the same region
+commit_loop_body_read: the copy that reads a value of its own region was published
+commit_loop_body_read: graph 'main' now has COPY 25 in the body of LOOP 17 (region 2) reading node 24 of the function body
+commit_loop_body_read: the copy in the loop's body that reads a value of the function body was published
+10
+20
+30
+30
+### exit=60
+
+### camel /tmp/camel-capture-all.3177439.R3kPBF/identity_at_exit.cml test::commit_exit_region std::nvm
+commit_exit_region: the seal asks it (`validateRuntimeGraphPayloadImpl`, src/runtime/graph.cpp), whatever the draft added
+commit_exit_region: graph 'f' now reads its value at node 3, which is in arm 1 of the branch at node 2 and not in the function body
+commit_exit_region: refused at the commit: Runtime graph 'f' has its exit at node 3, which is in region 1 instead of the function body: that region runs only when its owner says so, so a value nothing asks for never runs there, and the read never happens.
+### exit=48
+
+# The two rows this op set cannot construct, written as the reason and not as a dropped row:
+#   a pure exit violation -- the only edit that would put the exit inside an arm is naming the
+#     exit in replace, and the step check refuses that because an exit anchors its graph. The
+#     other route (make the exit READ an arm's value) does reach the commit and its exit text, but
+#     it also makes the body read what the arm wrote, so it is not a pure exit violation.
+#   a cycle at the commit -- the step check refuses every cycle these ops can close ('the
+#     replacement is the node itself or is computed from it'), so the commit never sees one; the
+#     commit's cycle text is the test::commit_cycle row above.
+# The accepted twins are in the same two fixtures (a copy that reads a value of its own arm, and
+# one of its own region, is published), so a refusal here is about the read, not about editing.
+=== [5] the optimization table: the MLP and the char-transformer ===
+# build=6cb6fa721
+# Two kinds of row per pass, printed apart:
+#   the document  -- `<prog> <pass> std::jgir canonical=true`, WITH NO --arg on either program:
+#                    the canonical document is read from the program as written, and a document
+#                    compared against one taken with another --arg set is not a comparison.
+#   the run       -- the program actually runs, with the arguments each program documents.
+#                    The MLP's data comes from probes/gen_mlp_data.py (same seed, same shapes),
+#                    64 train / 16 val, 2 epochs; the transformer's is its own committed corpus.
+# The transformer cannot run on this build: its loss goes through the library's vjp, which stops
+# at a missing forward rule -- the diagnostic names `tensor:layer_norm` on this pin, and it is
+# quoted where it is printed below rather than here, because a diagnostic's text moves between
+# pins and a sentence that quotes it from memory goes stale without saying so. Its run row shows
+# the diagnostic once per pass, and its table row is the document alone. That is the reading.
+# (This note said `jvp has no forward transform` until 2026-11-20; that is the wording of an
+# earlier pin, and the run below has printed the newer one since the forward-rule work landed.)
+
+# --- the MLP: showcase/c2-mlp-mnist/train.cml ---
+### camel showcase/c2-mlp-mnist/train.cml std::jgir canonical=true > mlp-baseline.json
+doc=mlp-baseline exit=0 bytes=161340 md5=accdb811e724b4a9bf26870ecc81bd04 sha256=9b0a390c01fb7f3ea4caa48b9def23cfaa939a80f9da2ae7e809dbed88ecb7e7
+
+### camel showcase/c2-mlp-mnist/train.cml opt::cse std::jgir canonical=true > mlp-cse.json
+doc=mlp-cse exit=0 bytes=159220 md5=2577ac2d8ec52bf832964f842602ede0 sha256=f814d7b18cac2cce19d172464c6b9421e67dfe91f9e9c8e322819654befdcc59
+
+### camel showcase/c2-mlp-mnist/train.cml opt::fold std::jgir canonical=true > mlp-fold.json
+doc=mlp-fold exit=0 bytes=161223 md5=6c8e429c7ce394af1e3ec2eb527c5be6 sha256=fde9a2ecd10e560abd601829f98471690d373d3e315c2c4bf47d3c9882f713ef
+
+### camel showcase/c2-mlp-mnist/train.cml opt::dce std::jgir canonical=true > mlp-dce.json
+doc=mlp-dce exit=0 bytes=161340 md5=accdb811e724b4a9bf26870ecc81bd04 sha256=9b0a390c01fb7f3ea4caa48b9def23cfaa939a80f9da2ae7e809dbed88ecb7e7
+
+### camel showcase/c2-mlp-mnist/train.cml opt::saturate std::jgir canonical=true > mlp-saturate.json
+doc=mlp-saturate exit=0 bytes=164102 md5=94f987f0f8a0148613e13fcf77e6a5f6 sha256=f77e8fd4a0857d9406b3e737bf224fbabcc9bef4da7e94bfd1f6f7cfcc10cde1
+
+# the document rows against the baseline
+opt::cse               differs first_difference_byte=263
+opt::fold              differs first_difference_byte=263
+opt::dce               same
+opt::saturate          differs first_difference_byte=263
+
+# the MLP's runs: does the pass leave the output alone (seconds= is masked)
+### python3 docs/handover/reports/eval-round10/probes/gen_mlp_data.py --out /tmp/camel-capture-all.2220966.qOsHxq/mlp-data
+wrote /tmp/camel-capture-all.2220966.qOsHxq/mlp-data train 64 val 16 hidden 128 order 128
+
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::cse std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::fold std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::dce std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+### camel --arg data=/tmp/camel-capture-all.2220966.qOsHxq/mlp-data --arg steps=2 --arg batch=16 --arg lr=0.001 --arg log_every=1 --arg threads=1 showcase/c2-mlp-mnist/train.cml opt::saturate std::nvm
+### exit=0
+c2 config steps=2 batch=16 lr=0.001 threads=1 params=101770 batches=4
+c2 init val_loss=2.626463508 val_accuracy=0.125000000
+c2 step=0 loss=2.593523677
+c2 step=1 loss=2.882916447
+c2 trained steps=2 seconds=<masked> val_loss=2.490763096 val_accuracy=0.062500000
+c2 checkpoint val_loss=2.490763096 val_accuracy=0.062500000 l1_drift=0.000000000
+c2 leaves { w1: w1, b1: b1, w2: w2, b2: b2 }
+
+# each run against the baseline run (the masked text, so the run's own seconds= is not the
+# difference: that field moves every run and says nothing about the pass)
+opt::cse               same
+opt::fold              same
+opt::dce               same
+opt::saturate          same
+
+# --- the char-transformer: showcase/c3-char-transformer/train.cml ---
+### camel showcase/c3-char-transformer/train.cml std::jgir canonical=true > tr-baseline.json
+doc=tr-baseline exit=0 bytes=276924 md5=0e189332766fce28e536e4cedec57008 sha256=360e2ebe782bf2ae70ae07a10e9d63bdf29b9d5d6d392583cc73ac8c5d28694b
+--- stderr (tr-baseline)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-baseline)
+
+### camel showcase/c3-char-transformer/train.cml opt::cse std::jgir canonical=true > tr-cse.json
+doc=tr-cse exit=0 bytes=274055 md5=4910065d934d1200b4a2c701f53ac8e6 sha256=d75e2eed7625838a9d47738f606a933fd560c2cf3be55461e70f5f65dafe47d8
+--- stderr (tr-cse)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-cse)
+
+### camel showcase/c3-char-transformer/train.cml opt::fold std::jgir canonical=true > tr-fold.json
+doc=tr-fold exit=0 bytes=326597 md5=82b57661c5ea737646747e85dedc65c2 sha256=c4dc05e54b8842143be128ccf04f4e2afd7881e98632cf103fba6fe97bb1b0fb
+--- stderr (tr-fold)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-fold)
+
+### camel showcase/c3-char-transformer/train.cml opt::dce std::jgir canonical=true > tr-dce.json
+doc=tr-dce exit=0 bytes=276924 md5=0e189332766fce28e536e4cedec57008 sha256=360e2ebe782bf2ae70ae07a10e9d63bdf29b9d5d6d392583cc73ac8c5d28694b
+--- stderr (tr-dce)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-dce)
+
+### camel showcase/c3-char-transformer/train.cml opt::saturate std::jgir canonical=true > tr-saturate.json
+doc=tr-saturate exit=0 bytes=277154 md5=dd6a522efd7cc72f32633057f447eb32 sha256=b5feb32ea6650bb9d298eb3526cc9ba42f37b7bb6744372e22f337cdd86284a6
+--- stderr (tr-saturate)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-saturate)
+
+# the document rows against the baseline
+opt::cse               differs first_difference_byte=337
+opt::fold              differs first_difference_byte=337
+opt::dce               same
+opt::saturate          differs first_difference_byte=337
+
+# the transformer's run, with its own documented arguments
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+READING_REFUSAL {"transform":"jvp","function":"block","cause":"rule","uri":"tensor:layer_norm"}
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward rule for `tensor:layer_norm` (the operator has no forward rule bound at all).
+    --> showcase/c3-char-transformer/train.cml:178:34
+     |
+ 178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
+     |                                  ^^^^^^^^^^
+note: raised here
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
+     |
+ 134 |     let forward = split(jvp(f))
+     |                         ---
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::cse std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+READING_REFUSAL {"transform":"jvp","function":"block","cause":"rule","uri":"tensor:layer_norm"}
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward rule for `tensor:layer_norm` (the operator has no forward rule bound at all).
+    --> showcase/c3-char-transformer/train.cml:178:34
+     |
+ 178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
+     |                                  ^^^^^^^^^^
+note: raised here
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
+     |
+ 134 |     let forward = split(jvp(f))
+     |                         ---
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::fold std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+READING_REFUSAL {"transform":"jvp","function":"block","cause":"rule","uri":"tensor:layer_norm"}
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward rule for `tensor:layer_norm` (the operator has no forward rule bound at all).
+    --> showcase/c3-char-transformer/train.cml:178:34
+     |
+ 178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
+     |                                  ^^^^^^^^^^
+note: raised here
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
+     |
+ 134 |     let forward = split(jvp(f))
+     |                         ---
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::dce std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+READING_REFUSAL {"transform":"jvp","function":"block","cause":"rule","uri":"tensor:layer_norm"}
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward rule for `tensor:layer_norm` (the operator has no forward rule bound at all).
+    --> showcase/c3-char-transformer/train.cml:178:34
+     |
+ 178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
+     |                                  ^^^^^^^^^^
+note: raised here
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
+     |
+ 134 |     let forward = split(jvp(f))
+     |                         ---
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+### camel --arg corpus=showcase/c3-char-transformer/corpus.txt --arg mode=train --arg steps=2 --arg lr=0.001 --arg seed=1 showcase/c3-char-transformer/train.cml opt::saturate std::nvm
+### exit=1
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+c3 config steps=2 mode=train lr=0.0010 seed=1 chars=4278 context=8 width=16 heads=2 classes=28
+c3 init loss=3.430878
+READING_REFUSAL {"transform":"jvp","function":"block","cause":"rule","uri":"tensor:layer_norm"}
+error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: jvp has no forward rule for `tensor:layer_norm` (the operator has no forward rule bound at all).
+    --> showcase/c3-char-transformer/train.cml:178:34
+     |
+ 178 |     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
+     |                                  ^^^^^^^^^^
+note: raised here
+    --> /home/zjwei/camel-work/cap8/out/latest/stdlib/vjp.cml:134:25
+     |
+ 134 |     let forward = split(jvp(f))
+     |                         ---
+help: The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
+
+# --- the transformer's output, byte for byte, before and after each pass ---
+# This is the column the paper quotes for the transformer. Each row is `cmp`, so `same` means
+# every byte of the two outputs is equal, and any other answer names the first byte that parts;
+# 'the output looks the same' is not a reading and is not what this line says.
+# Three forms per row, because the transformer's own run stops before it prints anything:
+#   run raw     the program's own stdout+stderr with the pass and without it, unmasked. Today it
+#               is the same diagnostic both times, so this is a byte equality of two sentences.
+#   run masked  the same with `seconds=<n>` masked. The mask is what makes the comparison a
+#               reading of the pass rather than of a clock, so on a build where this program
+#               runs, this is the column to quote and the raw one will part on that field.
+#   document    the canonical document of the program with the pass and without it: the pass's
+#               output in the sense the rest of this section uses, and it is deterministic.
+# The section [5] note above stands: the transformer cannot run on this build (its loss goes
+# through the library's vjp, which stops at a missing forward rule), so the run rows are
+# equal because the same refusal is printed both times -- that is the fact, not an assumption
+# that the pass changes nothing at runtime. The two lines above the row say which diagnostic
+# was printed, so a reader does not have to take this sentence's word for what it said.
+opt::cse       run raw  same                                 run masked  same                                 document  differs first_difference_byte=337
+opt::fold      run raw  same                                 run masked  same                                 document  differs first_difference_byte=337
+opt::dce       run raw  same                                 run masked  same                                 document  same
+opt::saturate  run raw  same                                 run masked  same                                 document  differs first_difference_byte=337
+
+# --- the same four passes on the case-study program, whole ---
+# The rows above are two showcases. The paper's table is also asked for on the case-study
+# program as written, so the same four passes run on examples/case-study/train.cml -- the whole
+# program, no --arg, the document read from it as written. It has no run row here because its
+# output is section [3]'s three backends, which is the same program.
+### camel examples/case-study/train.cml opt::cse std::jgir canonical=true > case-cse.json
+doc=case-cse exit=0 bytes=93172 md5=575d25ccdec6e9257f4bb17389c15df1 sha256=d03f2d5256aac774425fcafb4390de2f363dd5310495d5ce24a38e0d4e7ff742
+
+### camel examples/case-study/train.cml opt::fold std::jgir canonical=true > case-fold.json
+doc=case-fold exit=0 bytes=93172 md5=575d25ccdec6e9257f4bb17389c15df1 sha256=d03f2d5256aac774425fcafb4390de2f363dd5310495d5ce24a38e0d4e7ff742
+
+### camel examples/case-study/train.cml opt::dce std::jgir canonical=true > case-dce.json
+doc=case-dce exit=0 bytes=93172 md5=575d25ccdec6e9257f4bb17389c15df1 sha256=d03f2d5256aac774425fcafb4390de2f363dd5310495d5ce24a38e0d4e7ff742
+
+### camel examples/case-study/train.cml opt::saturate std::jgir canonical=true > case-saturate.json
+doc=case-saturate exit=0 bytes=93172 md5=f14f9d0499c6ba64b9688596d140a779 sha256=6be140cdd86f0ea2d90093fe278642711ba7d34ed42dcb4de40e2c51427a146d
+
+# each against the case-study program's own document, which section [2] took
+opt::cse               same
+opt::fold              same
+opt::dce               same
+opt::saturate          differs first_difference_byte=1029
+
+# --- the nodes before and after each pass ---
+# Node = the sum of `graphs[*].nodes` of the canonical document, the count section [2] defines.
+# The two columns are two documents of the same program -- the one with no pass and the one with
+# that pass -- so both numbers are read and neither is a proxy: the before column is a
+# determinate count and repeats exactly, and the after column likewise.
+# A row whose delta is 0 is a pass that left the count alone, which is a reading too; it is not a
+# missing measurement, and the document row above says whether it changed anything else.
+prog  pass          nodes     after    delta
+case  -               217         -        -
+case  cse             217       217       +0
+case  fold            217       217       +0
+case  dce             217       217       +0
+case  saturate        217       217       +0
+mlp   -               355         -        -
+mlp   cse             355       344      -11
+mlp   fold            355       355       +0
+mlp   dce             355       355       +0
+mlp   saturate        355       355       +0
+tr    -               657         -        -
+tr    cse             657       642      -15
+tr    fold            657       675      +18
+tr    dce             657       657       +0
+tr    saturate        657       657       +0
+
+# --- the regions of each program, counted by kind ---
+# Region = one entry of `graphs[*].regions`. The kinds are the runtime's GCRegionKind names as
+# the document spells them: body, arm, loop_cond, loop_body, inline, block. The loop_body column
+# is the answer to 'is LoopBody > 0' -- it is the count itself, so a 0 and a 3 are different
+# readings and neither is the boolean.
+# Two shapes of the document have to be known to read a zero: the body region is written only
+# when it carries a fact (the tags on the function), and a graph with no region besides the body
+# writes no regions key at all. So a program of straight-line code shows every column 0 because
+# it has no region to count -- the same 0 a broken count would give, which is why the total is
+# printed beside the columns and why section [2] counts the same field.
+prog  pass            body        arm  loop_cond  loop_body     inline      block  regions
+case  -                  0          2          0          0          0          0        2
+case  cse                0          2          0          0          0          0        2
+case  fold               0          2          0          0          0          0        2
+case  dce                0          2          0          0          0          0        2
+case  saturate           0          2          0          0          0          0        2
+mlp   -                  0         12          3          3          0          0       18
+mlp   cse                0         12          3          3          0          0       18
+mlp   fold               0         12          3          3          0          0       18
+mlp   dce                0         12          3          3          0          0       18
+mlp   saturate           0         12          3          3          0          0       18
+tr    -                  0         12          1          1          0          0       14
+tr    cse                0         12          1          1          0          0       14
+tr    fold               0         12          1          1          0          0       14
+tr    dce                0         12          1          1          0          0       14
+tr    saturate           0         12          1          1          0          0       14
+
+# --- the time of each pass: nine fresh processes, the median ---
+# The reading is the pass window itself (--time-phases: the entry named `pass` whose detail is
+# the pass as the pipeline spelled it), so the terminator's printing is not in it. Wall follows
+# the host's load and CPU time does not; both are printed with the load line beside them, and
+# the exit code of every process is printed with the median, because a pass that failed still
+# leaves a `pass` phase and its window would otherwise read as a fast one.
+# Absolute milliseconds here are only comparable with rows taken at the same load. The load at
+# this block's start and its end is printed, and the median plus the range is the reading the
+# paper's table takes; the nine samples are in the phase files under /tmp/camel-capture-all.2220966.qOsHxq.
+#   /proc/loadavg 22.21 26.40 24.29 13/10271 2223306
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-cse-<n>.json   (nine times, a fresh process each)
+case-cse             n=9 of 9  median_wall_ms=   34.71 [   34.21,    37.25]  median_cpu_ms=   34.58 [   34.21,    36.34]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-fold-<n>.json   (nine times, a fresh process each)
+case-fold            n=9 of 9  median_wall_ms=   31.03 [   30.70,    31.86]  median_cpu_ms=   31.02 [   30.70,    31.85]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-dce-<n>.json   (nine times, a fresh process each)
+case-dce             n=9 of 9  median_wall_ms=   29.30 [   28.85,    29.88]  median_cpu_ms=   29.30 [   28.85,    29.85]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-case-saturate-<n>.json   (nine times, a fresh process each)
+case-saturate        n=9 of 9  median_wall_ms=   79.64 [   78.73,    81.25]  median_cpu_ms=   79.60 [   78.69,    81.19]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-cse-<n>.json   (nine times, a fresh process each)
+mlp-cse              n=9 of 9  median_wall_ms=  124.14 [  122.97,   126.36]  median_cpu_ms=  124.14 [  122.96,   125.70]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-fold-<n>.json   (nine times, a fresh process each)
+mlp-fold             n=9 of 9  median_wall_ms=   32.32 [   31.64,    32.86]  median_cpu_ms=   32.32 [   31.64,    32.86]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-dce-<n>.json   (nine times, a fresh process each)
+mlp-dce              n=9 of 9  median_wall_ms=   29.60 [   28.40,    29.90]  median_cpu_ms=   29.60 [   28.40,    29.88]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-mlp-saturate-<n>.json   (nine times, a fresh process each)
+mlp-saturate         n=9 of 9  median_wall_ms=   66.03 [   64.97,    66.51]  median_cpu_ms=   66.03 [   64.94,    66.47]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::cse std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-cse-<n>.json   (nine times, a fresh process each)
+tr-cse               n=9 of 9  median_wall_ms=  184.47 [  181.83,   185.72]  median_cpu_ms=  184.18 [  181.82,   185.53]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::fold std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-fold-<n>.json   (nine times, a fresh process each)
+tr-fold              n=9 of 9  median_wall_ms=   39.99 [   39.48,    43.36]  median_cpu_ms=   39.96 [   39.48,    43.32]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::dce std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-dce-<n>.json   (nine times, a fresh process each)
+tr-dce               n=9 of 9  median_wall_ms=   31.71 [   31.29,    32.23]  median_cpu_ms=   31.69 [   31.28,    32.23]  
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml opt::saturate std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-tr-saturate-<n>.json   (nine times, a fresh process each)
+tr-saturate          n=9 of 9  median_wall_ms=   95.32 [   93.99,    97.51]  median_cpu_ms=   95.32 [   93.99,    97.51]  
+#   /proc/loadavg 21.65 26.00 24.21 21/10270 2225940
+=== [6] the fusion ===
+# build=6cb6fa721
+# The transform is `greedy::fuse`, a pass written in Camel (test/cases/opt/writings/
+# greedy_fuse.cml.in), copied into the scratch root as `greedy.cml`. The reading below is the
+# strict one: the two writings of one program must fuse to ONE canonical form.
+
+### python3 test/cases/opt/writings/greedy_fusion_writings.py --camel /home/zjwei/camel-work/cap8/out/latest/bin/camel --require-one-form
+programs: /tmp/camel-capture-all.2220966.qOsHxq/fusion
+transform: test/cases/opt/writings/greedy_fuse.cml.in -> /tmp/camel-capture-all.2220966.qOsHxq/fusion/greedy.cml
+control (torch.fx, run on the ECOOP side; this host has no torch): test/cases/opt/writings/fx_greedy_fusion.py present
+the transform asks no writing-visible query (id/name/origin/show): PASS
+the two writings differ by exactly this swap of two adjacent lines (2 <-> 3):
+  2: let a = x * 2
+  3: let b = y * 3
+writings: base, different, renamed, swapped, swapped_renamed
+
+reading: raw_one_form -- the two writings, before the transform
+  canonical[left] base__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
+  canonical[right] swapped__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__raw.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/swapped__raw.json = true
+nodes=14 edges=13
+canonical: 5446 bytes, sha256=e68d3eb674bc0f5f (both sides)
+
+reading: changes_the_graph -- the same program, fused and unfused -- a transform that fused nothing reads as a no-op
+  canonical[left] base__raw.json: 5446 bytes, sha256=e68d3eb674bc0f5fcd0434a27af1a19480df1c66ee8f01fd4b1b6a8543a72d4d
+  canonical[right] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__raw.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json = false
+nodes=14 edges=13   (base__raw.json)
+nodes=13 edges=11   (base__fused.json)
+canonical: first difference at byte 188 (line 11, column 16); 5446 bytes vs 5023 bytes
+the node and edge relation is not one
+symmetric difference
+  nodes only in base__raw.json (14) and only in base__fused.json (13):
+    - 1 x DATA 2 : int @ body
+    + 1 x DATA 3 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body
+    - 1 x PORT param normal#0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body
+    + 1 x DATA 5 : int @ body
+    + 1 x DATA 3 : int @ body
+    - 1 x CALL : int @ body
+    + 1 x DATA 2 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body
+    ... 15 further node class(es) moved
+  edges only in base__raw.json (13) and only in base__fused.json (11):
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:1--> DATA 5 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:0--> DATA 3 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/add_l@1.0 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> DATA 2 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:0--> PORT param normal#0 : int @ body
+    - 1 x CALL : int @ body --in:context:0--> DATA {"graph": "g1", "k": "func"} callee=<graph> : func @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> PORT param normal#1 : int @ body
+    + 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:0--> PORT param normal#0 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> DATA 2 : int @ body
+    ... 12 further edge class(es) moved
+
+reading: renamed -- the same program with every local renamed, both fused
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] renamed__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/renamed__fused.json = true
+nodes=13 edges=11
+canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
+
+reading: swapped -- two adjacent statements swapped, both fused -- THE CRITERION
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] swapped__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/swapped__fused.json = true
+nodes=13 edges=11
+canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
+
+  => the two writings of one program are ONE canonical form (swapped)
+
+reading: swapped_and_renamed -- both changes at once, both fused
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] swapped_renamed__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/swapped_renamed__fused.json = true
+nodes=13 edges=11
+canonical: 5023 bytes, sha256=ee16c59be72bce0a (both sides)
+
+  => the two writings of one program are ONE canonical form (swapped_and_renamed)
+
+reading: different_constant -- `y * 4` for `y * 3`, both fused -- the comparator must be able to say no
+  canonical[left] base__fused.json: 5023 bytes, sha256=ee16c59be72bce0ae45ec2fa9327f4bcd5adefe73d34f62a0d8d8d02be481f72
+  canonical[right] different__fused.json: 5023 bytes, sha256=7bb09cf32a818ebc66bf50193b2a801d649bfe6be8f0adc68d1ed6dfdca7c64a
+same_graph /tmp/camel-capture-all.2220966.qOsHxq/fusion/base__fused.json /tmp/camel-capture-all.2220966.qOsHxq/fusion/different__fused.json = false
+nodes=13 edges=11
+canonical: first difference at byte 4408 (line 220, column 18); 5023 bytes vs 5023 bytes
+the node and edge relation is not one
+symmetric difference
+  nodes only in base__fused.json (13) and only in different__fused.json (13):
+    + 1 x OPER :op/add_l@1.0 : int @ body
+    - 1 x DATA 3 : int @ body
+    + 1 x DATA {"graph": "g1", "k": "func"} callee=<graph> : func @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body
+    - 1 x FUNC callee=<graph> : int @ body
+    + 1 x DATA 4 : int @ body
+    + 1 x DATA 3 : int @ body
+    + 1 x PORT param normal#0 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body
+    + 1 x DATA 5 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body
+    ... 14 further node class(es) moved
+  edges only in base__fused.json (11) and only in different__fused.json (11):
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/add_l@1.0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    - 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:1--> OPER :op/mul_l@1.0 : int @ body
+    + 1 x OPER :op/add_l@1.0 : int @ body --in:normal:0--> OPER :op/mul_l@1.0 : int @ body
+    - 1 x FUNC callee=<graph> : int @ body --in:normal:1--> DATA 5 : int @ body
+    - 1 x FUNC callee=<graph> : int @ body --in:normal:0--> DATA 3 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:1--> DATA 2 : int @ body
+    - 1 x OPER :op/mul_l@1.0 : int @ body --in:normal:0--> PORT param normal#0 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:1--> DATA 5 : int @ body
+    + 1 x FUNC callee=<graph> : int @ body --in:normal:0--> DATA 3 : int @ body
+    ... 10 further edge class(es) moved
+
+
+the two writings of one program are ONE canonical form: PASS
+the greedy fusion is not a no-op, a rename fuses to the same graph, and a different constant does not: PASS
+### exit=0
+
+# the two losses, each fused, and each against its own unfused document
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/loss-a.cml greedy::fuse std::jgir canonical=true > fused-loss-a.json
+doc=fused-loss-a exit=0 bytes=89019 md5=e0b62d41525f711248f38b04d40638d6 sha256=9ed6dc88a90d5fabd5937c08f544fd0462fd99c118bb5c19a464ac9270c68319
+
+fused loss-a against unfused differs first_difference_byte=264
+### CAMEL_PACKAGES=/tmp/camel-capture-all.2220966.qOsHxq camel /tmp/camel-capture-all.2220966.qOsHxq/loss-b.cml greedy::fuse std::jgir canonical=true > fused-loss-b.json
+doc=fused-loss-b exit=0 bytes=89019 md5=e0b62d41525f711248f38b04d40638d6 sha256=9ed6dc88a90d5fabd5937c08f544fd0462fd99c118bb5c19a464ac9270c68319
+
+fused loss-b against unfused differs first_difference_byte=264
+# and the two fused documents against each other
+fused loss-a against fused loss-b  same
+=== [7] commit and normalization time (this section floats: it is the only one that does) ===
+# build=6cb6fa721
+# Three probes in docs/handover/reports/eval-round10/probes, each run as an ordinary pass on examples/case-study/train.cml:
+#   canonical_once::run    one normalization, one call of `nodes(graph_of)`
+#   canonical_walk::walk   one normalization per graph, the way a pass that walks every graph
+#                          pays it
+#   commit_only::touch     `open` + `commit` with no edit in between (it includes open)
+# Nine fresh processes each, because a repeat inside one process drifts upward; the number is
+# the `pass` phase's wall and CPU time from --time-phases, median with the range beside it.
+# This whole section floats by construction: these are times, and the host's load line, which is
+# printed here because a time with no load beside it cannot be read, moves with the host too.
+
+# the host's load, which is part of this section for the reason above
+#   /proc/loadavg 21.65 26.00 24.21 16/10301 2226177
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_once::run std::jgir canonical=true --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/ph-once-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=1.69 cpu_ms=1.69 total_ms=95.32
+run=2 wall_ms=1.56 cpu_ms=1.56 total_ms=95.33
+run=3 wall_ms=1.56 cpu_ms=1.56 total_ms=92.30
+run=4 wall_ms=1.45 cpu_ms=1.45 total_ms=95.70
+run=5 wall_ms=1.58 cpu_ms=1.58 total_ms=90.79
+run=6 wall_ms=1.55 cpu_ms=1.55 total_ms=90.19
+run=7 wall_ms=1.66 cpu_ms=1.66 total_ms=95.32
+run=8 wall_ms=1.68 cpu_ms=1.68 total_ms=95.37
+run=9 wall_ms=1.58 cpu_ms=1.58 total_ms=92.20
+canonical_once::run    n=9 median_wall_ms=1.58 [1.45, 1.69] median_cpu_ms=1.58
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml canonical_walk::walk std::jgir canonical=true --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/ph-walk-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=17.71 cpu_ms=17.71 total_ms=130.15
+run=2 wall_ms=17.30 cpu_ms=17.30 total_ms=128.94
+run=3 wall_ms=17.36 cpu_ms=17.36 total_ms=132.72
+run=4 wall_ms=17.12 cpu_ms=17.12 total_ms=128.82
+run=5 wall_ms=17.49 cpu_ms=17.49 total_ms=130.13
+run=6 wall_ms=17.29 cpu_ms=17.29 total_ms=128.58
+run=7 wall_ms=17.71 cpu_ms=17.71 total_ms=130.52
+run=8 wall_ms=17.60 cpu_ms=17.58 total_ms=127.49
+run=9 wall_ms=17.45 cpu_ms=17.45 total_ms=129.48
+canonical_walk::walk   n=9 median_wall_ms=17.45 [17.12, 17.71] median_cpu_ms=17.45
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel examples/case-study/train.cml commit_only::touch std::jgir canonical=true --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/ph-commit-<n>.json   (nine times, a fresh process each)
+run=1 wall_ms=1.57 cpu_ms=1.57 total_ms=91.80
+run=2 wall_ms=1.66 cpu_ms=1.66 total_ms=90.01
+run=3 wall_ms=1.60 cpu_ms=1.60 total_ms=91.04
+run=4 wall_ms=1.56 cpu_ms=1.56 total_ms=92.52
+run=5 wall_ms=1.54 cpu_ms=1.54 total_ms=94.32
+run=6 wall_ms=1.68 cpu_ms=1.68 total_ms=96.76
+run=7 wall_ms=1.54 cpu_ms=1.54 total_ms=97.14
+run=8 wall_ms=1.57 cpu_ms=1.57 total_ms=92.09
+run=9 wall_ms=1.57 cpu_ms=1.57 total_ms=91.21
+commit_only::touch     n=9 median_wall_ms=1.57 [1.54, 1.68] median_cpu_ms=1.57
+
+#   /proc/loadavg 21.35 25.87 24.17 12/10388 2226761
+# --- what one commit costs against the size of the program ---
+# `commit_only::touch` opens a transaction on the program and commits it with no edit in
+# between, so the number is the checks and the publish of a program nothing changed: the floor a
+# commit of a change is read against. It includes `open` -- the pass window is the only window
+# the recorder has, and there is no scope inside a pass -- and the row below it pays the same
+# `open`, so the pair still isolates the edit.
+# Five sizes, nine fresh processes each, with the program's own node count on the row so the
+# sizes are read and not assumed: the three the paper names, then the two bigger ones. The two
+# bigger ones are the benchmark models, which import `camel_bench` and so take benchmarks/common
+# as a module root (see its definition at the top); neither is a showcase, so their entry point
+# is a model rather than a training loop -- the reading is the commit path, which does not care.
+#   /proc/loadavg 21.35 25.87 24.17 13/10388 2226762
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common camel benchmarks/resnetbn/model.cml std::jgir canonical=true > scale-resnetbn.json
+doc=scale-resnetbn exit=0 bytes=577824 md5=eb5748b090028cc66ca4d97deb31e3be sha256=fd79a994c9f663c1f322cad45e01adc62e5d6d53435560b17a69775365fdb9ed
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common camel benchmarks/resnet/model.cml std::jgir canonical=true > scale-resnet.json
+doc=scale-resnet exit=0 bytes=335262 md5=f1c28a1b9de2b658ef9eebb0f0ab82a3 sha256=4a955f0fc440b14863e1a036b35d84fece46736aa32e27072143d16a9ab461bf
+
+
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-case-<n>.json   (nine times, a fresh process each)
+commit-case          n=9 of 9  median_wall_ms=    1.59 [    1.55,     1.67]  median_cpu_ms=    1.59 [    1.55,     1.67]  nodes=217
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c2-mlp-mnist/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-mlp-<n>.json   (nine times, a fresh process each)
+commit-mlp           n=9 of 9  median_wall_ms=    1.62 [    1.55,     1.64]  median_cpu_ms=    1.62 [    1.55,     1.64]  nodes=355
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-tr-<n>.json   (nine times, a fresh process each)
+commit-tr            n=9 of 9  median_wall_ms=    1.95 [    1.89,     2.08]  median_cpu_ms=    1.95 [    1.89,     2.08]  nodes=657
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common:/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel benchmarks/resnetbn/model.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-resnetbn-<n>.json   (nine times, a fresh process each)
+commit-resnetbn      n=9 of 9  median_wall_ms=    2.09 [    2.03,     2.14]  median_cpu_ms=    2.09 [    2.03,     2.14]  nodes=1099
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/benchmarks/common:/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel benchmarks/resnet/model.cml commit_only::touch std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-resnet-<n>.json   (nine times, a fresh process each)
+commit-resnet        n=9 of 9  median_wall_ms=    1.78 [    1.74,     1.83]  median_cpu_ms=    1.78 [    1.74,     1.83]  nodes=688
+
+# --- the same commit with ONE node changed, on the char-transformer ---
+# `commit_one::poke` is `commit_only::touch` plus exactly one edit: it adds one constant node to
+# the graph the entry function value has and commits. No existing node moves and no second graph
+# is touched, so this is the smallest edit there is; it is not what a rewriting pass pays, and
+# the paper's sentence is about this one.
+# The document below is the proof the edit landed: it is the transformer after the poke, and its
+# node count is the untouched program's plus one. The probe itself prints nothing, because a
+# line per run would be charged inside the window it measures.
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes camel showcase/c3-char-transformer/train.cml commit_one::poke std::jgir canonical=true > tr-poked.json
+doc=tr-poked exit=0 bytes=277115 md5=abbc362428b80330086fa205e390d24a sha256=8f9e79ecff6621185fe3c55ae7256c526f0b19c76561827209880bee00cabfe2
+--- stderr (tr-poked)
+warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
+    --> showcase/c3-char-transformer/train.cml:269:9
+     |
+ 269 |         return 0
+     |         ^^^^^^^^
+note: the value of this 'if' is not used
+    --> showcase/c3-char-transformer/train.cml:268:5
+     |
+ 268 |     if mode == 'forward' then {
+     |     ---------------------------
+ 269 |         return 0
+     |         --------
+ 270 |     }
+     |     -
+help: An arm of an 'if' or 'match' is a graph of its own: 'return' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the 'return' has no effect and the function goes on with the next statement. To return from the function through a branch, make the 'if' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+
+--- end stderr (tr-poked)
+
+# the edit: 657 nodes before, 658 after, +1 node(s)
+### CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/probes /home/zjwei/camel-work/cap8/out/latest/bin/camel showcase/c3-char-transformer/train.cml commit_one::poke std::gir --time-phases=/tmp/camel-capture-all.2220966.qOsHxq/t-commit-tr-poke-<n>.json   (nine times, a fresh process each)
+commit-tr-poke       n=9 of 9  median_wall_ms=    2.51 [    2.48,     2.71]  median_cpu_ms=    2.51 [    2.48,     2.71]  nodes=658
+#   /proc/loadavg 21.41 25.80 24.16 10/10308 2228057
+=== [8] loss-a against loss-b: the two documents, what is NOT in them, and the numbering ===
+# build=714cf0d93
+# READ THIS FIRST. This section used to say the derivative graph is a graph of the canonical
+# document ('the derivative is a library transform that runs at compile time, so the derivative
+# graph is a graph of the canonical document'), and it used to describe the program as it was
+# before the migration: five graphs, 57 nodes, and ONE autodiff:grad@1.0 node built by
+# modules/autodiff's GradResolver. Both statements are stale on this tree, and the second one
+# was stale in a way that flattered nothing: 13c93a5f8 moved the gradient into the library's
+# `grad`, so the operator the old text counted does not exist in either loss's document any
+# more -- the front end expands the macro and no derivative graph is a graph of the record.
+# The count is not restated here. It is measured three lines below, by `std::stats` and by
+# walking the document: the `graphs=... nodes=... grad_nodes=... indirect_calls=...` line is
+# that reading, and grad_nodes is 0 on this build for both losses.
+# So this section is two readings and nothing more, and neither of them is a comparison of two
+# derivative graphs -- that reading has no entry point today:
+#   (1) the two losses' PROGRAM documents, and
+#   (2) the numbering once std::opt has run.
+# The question page that records this is docs/handover/questions/
+# 2026-11-20-the-two-derivative-graphs-are-not-in-the-canonical-document.cn.md
+
+loss-a.json
+  g0 id=g0   nodes=2   regions=0  signature=1
+  g1 id=g1   nodes=3   regions=0  signature=3
+  g2 id=g2   nodes=4   regions=0  signature=5
+  g3 id=g3   nodes=2   regions=0  signature=6
+  g4 id=g4   nodes=2   regions=0  signature=7
+  g5 id=g5   nodes=2   regions=0  signature=9
+  g6 id=g6   nodes=2   regions=0  signature=11
+  g7 id=g7   nodes=2   regions=0  signature=12
+  g8 id=g8   nodes=2   regions=0  signature=14
+  g9 id=g9   nodes=2   regions=0  signature=15
+  g10 id=g10  nodes=2   regions=0  signature=17
+  g11 id=g11  nodes=2   regions=0  signature=19
+  g12 id=g12  nodes=2   regions=0  signature=20
+  g13 id=g13  nodes=2   regions=0  signature=21
+  g14 id=g14  nodes=2   regions=0  signature=22
+  g15 id=g15  nodes=2   regions=0  signature=23
+  g16 id=g16  nodes=2   regions=0  signature=25
+  g17 id=g17  nodes=2   regions=0  signature=27
+  g18 id=g18  nodes=2   regions=0  signature=28
+  g19 id=g19  nodes=2   regions=0  signature=29
+  g20 id=g20  nodes=2   regions=0  signature=30
+  g21 id=g21  nodes=2   regions=0  signature=31
+  g22 id=g22  nodes=2   regions=0  signature=33
+  g23 id=g23  nodes=2   regions=0  signature=35
+  g24 id=g24  nodes=2   regions=0  signature=36
+  g25 id=g25  nodes=2   regions=0  signature=37
+  g26 id=g26  nodes=2   regions=0  signature=38
+  g27 id=g27  nodes=2   regions=0  signature=39
+  g28 id=g28  nodes=3   regions=0  signature=40
+  g29 id=g29  nodes=3   regions=0  signature=3
+  g30 id=g30  nodes=4   regions=0  signature=41
+  g31 id=g31  nodes=2   regions=0  signature=39
+  g32 id=g32  nodes=3   regions=0  signature=40
+  g33 id=g33  nodes=17  regions=0  signature=1
+  g34 id=g34  nodes=14  regions=0  signature=47
+  g35 id=g35  nodes=8   regions=0  signature=49
+  g36 id=g36  nodes=16  regions=1  signature=52
+  g37 id=g37  nodes=3   regions=0  signature=3
+  g38 id=g38  nodes=14  regions=0  signature=3
+  g39 id=g39  nodes=1   regions=0  signature=8
+  g40 id=g40  nodes=1   regions=0  signature=8
+  g41 id=g41  nodes=1   regions=0  signature=8
+  g42 id=g42  nodes=2   regions=0  signature=18
+  g43 id=g43  nodes=2   regions=0  signature=18
+  g44 id=g44  nodes=2   regions=0  signature=18
+  g45 id=g45  nodes=2   regions=0  signature=26
+  g46 id=g46  nodes=2   regions=0  signature=26
+  g47 id=g47  nodes=2   regions=0  signature=26
+  g48 id=g48  nodes=2   regions=0  signature=34
+  g49 id=g49  nodes=2   regions=0  signature=34
+  g50 id=g50  nodes=2   regions=0  signature=34
+  g51 id=g51  nodes=2   regions=0  signature=39
+  g52 id=g52  nodes=3   regions=0  signature=39
+  g53 id=g53  nodes=3   regions=0  signature=3
+  g54 id=g54  nodes=14  regions=0  signature=42
+  g55 id=g55  nodes=2   regions=0  signature=39
+  g56 id=g56  nodes=3   regions=0  signature=39
+  g57 id=g57  nodes=6   regions=0  signature=54
+  g58 id=g58  nodes=11  regions=0  signature=50
+loss-b.json
+  g0 id=g0   nodes=2   regions=0  signature=1
+  g1 id=g1   nodes=3   regions=0  signature=3
+  g2 id=g2   nodes=4   regions=0  signature=5
+  g3 id=g3   nodes=2   regions=0  signature=6
+  g4 id=g4   nodes=2   regions=0  signature=7
+  g5 id=g5   nodes=2   regions=0  signature=9
+  g6 id=g6   nodes=2   regions=0  signature=11
+  g7 id=g7   nodes=2   regions=0  signature=12
+  g8 id=g8   nodes=2   regions=0  signature=14
+  g9 id=g9   nodes=2   regions=0  signature=15
+  g10 id=g10  nodes=2   regions=0  signature=17
+  g11 id=g11  nodes=2   regions=0  signature=19
+  g12 id=g12  nodes=2   regions=0  signature=20
+  g13 id=g13  nodes=2   regions=0  signature=21
+  g14 id=g14  nodes=2   regions=0  signature=22
+  g15 id=g15  nodes=2   regions=0  signature=23
+  g16 id=g16  nodes=2   regions=0  signature=25
+  g17 id=g17  nodes=2   regions=0  signature=27
+  g18 id=g18  nodes=2   regions=0  signature=28
+  g19 id=g19  nodes=2   regions=0  signature=29
+  g20 id=g20  nodes=2   regions=0  signature=30
+  g21 id=g21  nodes=2   regions=0  signature=31
+  g22 id=g22  nodes=2   regions=0  signature=33
+  g23 id=g23  nodes=2   regions=0  signature=35
+  g24 id=g24  nodes=2   regions=0  signature=36
+  g25 id=g25  nodes=2   regions=0  signature=37
+  g26 id=g26  nodes=2   regions=0  signature=38
+  g27 id=g27  nodes=2   regions=0  signature=39
+  g28 id=g28  nodes=3   regions=0  signature=40
+  g29 id=g29  nodes=3   regions=0  signature=3
+  g30 id=g30  nodes=4   regions=0  signature=41
+  g31 id=g31  nodes=2   regions=0  signature=39
+  g32 id=g32  nodes=3   regions=0  signature=40
+  g33 id=g33  nodes=17  regions=0  signature=1
+  g34 id=g34  nodes=14  regions=0  signature=47
+  g35 id=g35  nodes=8   regions=0  signature=49
+  g36 id=g36  nodes=16  regions=1  signature=52
+  g37 id=g37  nodes=3   regions=0  signature=3
+  g38 id=g38  nodes=14  regions=0  signature=3
+  g39 id=g39  nodes=1   regions=0  signature=8
+  g40 id=g40  nodes=1   regions=0  signature=8
+  g41 id=g41  nodes=1   regions=0  signature=8
+  g42 id=g42  nodes=2   regions=0  signature=18
+  g43 id=g43  nodes=2   regions=0  signature=18
+  g44 id=g44  nodes=2   regions=0  signature=18
+  g45 id=g45  nodes=2   regions=0  signature=26
+  g46 id=g46  nodes=2   regions=0  signature=26
+  g47 id=g47  nodes=2   regions=0  signature=26
+  g48 id=g48  nodes=2   regions=0  signature=34
+  g49 id=g49  nodes=2   regions=0  signature=34
+  g50 id=g50  nodes=2   regions=0  signature=34
+  g51 id=g51  nodes=2   regions=0  signature=39
+  g52 id=g52  nodes=3   regions=0  signature=39
+  g53 id=g53  nodes=3   regions=0  signature=3
+  g54 id=g54  nodes=14  regions=0  signature=42
+  g55 id=g55  nodes=2   regions=0  signature=39
+  g56 id=g56  nodes=3   regions=0  signature=39
+  g57 id=g57  nodes=6   regions=0  signature=54
+  g58 id=g58  nodes=11  regions=0  signature=50
+# and the derivative's own node, counted where it actually is
+graphs=59 nodes=211 grad_nodes=0 indirect_calls=4
+# the two documents against each other
+loss-a against loss-b  same
+
+# (2) the numbering after std::opt. The reading is a triple and the three lines are read
+# together or not at all: equal per-graph node counts with unequal bytes means the two graphs are
+# ISOMORPHIC and the difference is the numbering; 'bytes differ' alone cannot tell that from a
+# graph that really differs, and those are different findings.
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-a.cml std::opt std::jgir canonical=true > opt-loss-a.json
+doc=opt-loss-a exit=0 bytes=138284 md5=fd8fd84dc4c25efa852300fbddbd5b47 sha256=92968d7cbd2cde6dcc3248aeeb59e9eec8da5c658ba4b89bbc1336fbff4f7fec
+
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-b.cml std::opt std::jgir canonical=true > opt-loss-b.json
+doc=opt-loss-b exit=0 bytes=138284 md5=ba229c00c7b5425923e9cdee22e4746e sha256=77546883cae83d87efcd54a9dbae681b5ce4f064865ea21599618a2a11f2fbf6
+
+loss-a after opt  graphs=60 per_graph=[46, 3, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4, 2, 3, 46, 14, 16, 34, 16, 6, 11, 3, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 14, 2, 3] bytes=138284 sha256=92968d7cbd2cde6dcc3248aeeb59e9eec8da5c658ba4b89bbc1336fbff4f7fec
+loss-b after opt  graphs=60 per_graph=[46, 3, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 4, 2, 3, 46, 14, 16, 34, 16, 6, 11, 3, 14, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 3, 3, 14, 2, 3] bytes=138284 sha256=77546883cae83d87efcd54a9dbae681b5ce4f064865ea21599618a2a11f2fbf6
+per_graph_node_counts_equal = True
+same_bytes = False
+same_signatures = True
+loss-a after opt against loss-b after opt  differs first_difference_byte=20690
+# std::opt is deterministic, so the difference above is the two writings and not the run:
+### camel docs/handover/reports/eval-round10/case-study-variants/loss-a.cml std::opt std::jgir canonical=true > opt-loss-a-again.json
+doc=opt-loss-a-again exit=0 bytes=138284 md5=fd8fd84dc4c25efa852300fbddbd5b47 sha256=92968d7cbd2cde6dcc3248aeeb59e9eec8da5c658ba4b89bbc1336fbff4f7fec
+
+loss-a after opt, twice  same
+
+# --- the SECOND derivative on the four backends: NOT TAKEN in this run, and what it waits for ---
+# This block is a placeholder and it prints no measurement: no line below is a second derivative.
+# What is owed here, in the author's own words (review page of 2026-11-20 02:30): the second
+# derivative of `x*x` at 2, of `x^3` at 2, and a Hessian example, each on std::nvm, std::fvm,
+# std::jit and std::tf, with whether the four agree. Section [8] above compares the two losses'
+# documents and reports that no derivative graph is IN them on this build -- `grad_nodes=0` on
+# the line that counts them, because the derivative is the library's macro and the front end
+# expands it. So even the first derivative is not a graph of the canonical document here, and a
+# second derivative needs `grad(grad(f))`, whose outer `grad` is refused on every build in
+# develop today.
+# PENDING: to be taken after lane-jvp-closure lands in develop. That is the lane that lands the
+# `liftedShapeOf` rule in modules/transforms/jvp.cpp, and the rule is what the outer `grad` needs
+# -- not a branch's head sha, which is why the two readings below are printed and the rule is the
+# one that decides: a sha can be an ancestor of HEAD while the rule is still absent, and a
+# placeholder that only watched a sha would then read as 'the product arrived' when it had not.
+#   wait state: the rule liftedShapeOf is NOT in modules/transforms/jvp.cpp of this tree, so the block is owed
+#   exactly as this line says. Nothing in this run stands in for it.
+#   the lane lane-jvp-closure is not in this checkout (a lane's own commits do not travel to the host), so
+#   its head cannot be read here; re-take this block on the tree that holds it.
+=== [9] the e2e lane: all of e2e/capture.sh, run unchanged ===
+# build=6cb6fa721
+# This is that script, not a copy of its commands: if the two ever drift, this section says so.
+# It moves to the worktree root and to the e2e directory itself, which is where `passes` is
+# found beside the program. Its own header prints the build it ran on. The three versions of the
+# instrumentation -- every one of them `inline` + `order` on the same program, differing in the
+# edge alone -- are the three sections that run them, and their readings are these:
+#   instrument_ordered   `inline` beside the closure's print, then `order(before, added)`: the
+#                        accepted form, the five lines with `# tick` after each of the four
+#   instrument_unordered the same edit with no order edge: refused, `PassEffectOrder`, the message
+#                        quoted verbatim in NOTES.md's 'Item 4' (same two nodes, same position)
+#   instrument_reversed  the same edge the other way round: accepted, and the marker runs in front
+#                        of each line (before `3fd76e564` it was accepted and never ran)
+
+===== build =====
+{
+  "schema": 3,
+  "config": "Release",
+  "tag": "latest",
+  "footprint": "261120_095154_6cb6fa721",
+  "builtAt": "2026-11-20T09:55:01.522Z",
+  "revision": "6cb6fa72157240729f04a9a8b787b222b96c473a",
+  "dirty": false,
+  "dirtyCount": 0,
+  "dirtyPaths": [],
+  "git": true,
+  "fingerprint": {
+    "version": 1,
+    "roots": [
+      "src",
+      "include",
+      "modules",
+      "tools",
+      "stdlib"
+
+===== A: before the edit =====
+### camel program.cml std::nvm
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml std::jgir canonical=true | sha256sum
+591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5  -
+
+### camel program.cml passes::report std::nvm
+e2e graphs=5 nodes=53
+e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+===== B: the same program, written differently =====
+### camel program-writing-b.cml std::nvm
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program-writing-b.cml std::jgir canonical=true | sha256sum
+591ca3b92b609c1f63bd0e08cca3ab277211281d4e0b7ca5f82bdedb608386b5  -
+
+### camel program-writing-b.cml passes::report std::nvm
+e2e graphs=5 nodes=53
+e2e canonical=558bd6979bbb970a44c235df84798dd90226a131d84deff7587a58f5b5712e19
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+===== the edit that runs: the marker, once per closure call =====
+### camel program.cml passes::instrument std::nvm
+# tick
+# tick
+# tick
+# tick
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument passes::report std::nvm
+e2e graphs=5 nodes=55
+e2e canonical=de98a8b6489a3c15a044b7995d85ee5eedcce81600c9ff398df13c6c176abcf3
+# tick
+# tick
+# tick
+# tick
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument std::jgir canonical=true | sha256sum
+fe1e102cbe7a45778458b34023fa2c47c2cedd976f4010dd45b120d1ff8f4a71  -
+
+### camel program-writing-b.cml passes::instrument passes::report std::nvm
+e2e graphs=5 nodes=55
+e2e canonical=de98a8b6489a3c15a044b7995d85ee5eedcce81600c9ff398df13c6c176abcf3
+# tick
+# tick
+# tick
+# tick
+total 86 tail 14
+### exit=0
+
+### camel program-writing-b.cml passes::instrument std::jgir canonical=true | sha256sum
+fe1e102cbe7a45778458b34023fa2c47c2cedd976f4010dd45b120d1ff8f4a71  -
+
+===== the edit that runs: the dedupe, output unchanged =====
+### camel program.cml passes::dedupe passes::report std::nvm
+e2e graphs=5 nodes=52
+e2e canonical=034e7b20e073b2b0fbe418b2f2abced8dda2702ebf46913cfc29adf95606a3a9
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::dedupe std::jgir canonical=true | sha256sum
+6723e24b26ac1b189917772362f3336d7f1fbea3387ea5061e6fee6915bbf33f  -
+
+### camel program-writing-b.cml passes::dedupe passes::report std::nvm
+e2e graphs=5 nodes=52
+e2e canonical=034e7b20e073b2b0fbe418b2f2abced8dda2702ebf46913cfc29adf95606a3a9
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program-writing-b.cml passes::dedupe std::jgir canonical=true | sha256sum
+6723e24b26ac1b189917772362f3336d7f1fbea3387ea5061e6fee6915bbf33f  -
+
+===== the edits the commit refuses =====
+### camel program.cml passes::instrument_unordered std::nvm
+error[RuntimeDiag::PassEffectOrder]: 'graph::commit' committed a graph whose conflicting effects are not ordered: node 9 of graph '__g_441__' (:io/println), in one region of graph '__g_441__', has no order against node 13 of graph '__g_441__' (:io/println), and at least one of the two writes (write stdout / write stdout): no data edge, no sync edge, no order edge and no region's GATE input makes one wait for the other, so the commit would publish two effects on one resource that the program leaves free to happen in either order
+    --> /home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/e2e/passes.cml:146:12
+     |
+ 146 |     return println('# tick')
+     |            ^^^^^^^
+help: Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+### exit=1
+
+### camel program.cml passes::instrument_ordered std::nvm
+step 0 -> 11
+# tick
+step 1 -> 12
+# tick
+step 2 -> 13
+# tick
+step 3 -> 14
+# tick
+total 86 tail 14
+### exit=0
+
+===== and the one it accepts and drops: the marker never runs =====
+### camel program.cml passes::instrument_reversed std::nvm
+# tick
+step 0 -> 11
+# tick
+step 1 -> 12
+# tick
+step 2 -> 13
+# tick
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument_reversed passes::report std::nvm
+e2e graphs=5 nodes=56
+e2e canonical=0e2ba7d31fe75cb4f283e75e0040b8a45582d14b0e6e743c8e33881ed1d42968
+# tick
+step 0 -> 11
+# tick
+step 1 -> 12
+# tick
+step 2 -> 13
+# tick
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### camel program.cml passes::instrument_reversed passes::dump std::nvm
+graph 0 nodes=2 exit=1
+0 - () => int region=RegionKind::Root anchor=false free=true key=-|() => int|
+1 - int region=RegionKind::Root anchor=true free=false key=-|int|
+graph 1 nodes=4 exit=3
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - (x: int) => int region=RegionKind::Root anchor=false free=true key=-|(x: int) => int|
+2 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+3 - int region=RegionKind::Root anchor=true free=false key=-|int|,2
+graph 2 nodes=31 exit=29
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,2
+4 - int region=RegionKind::Root anchor=false free=true key=-|int|
+5 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,4
+6 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,3,5
+7 - (int, int) region=RegionKind::Root anchor=false free=true key=-|(int, int)|
+8 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+9 - int region=RegionKind::Root anchor=false free=true key=-|int|
+10 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,8,9
+11 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+12 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|
+13 - string region=RegionKind::Root anchor=false free=true key=-|string|
+14 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|,12
+15 - int region=RegionKind::LoopBody anchor=false free=false key=-|int|,14,8
+16 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,11,15
+17 - (int, int) region=RegionKind::LoopBody anchor=false free=true key=-|(int, int)|,7
+18 - (int, int) region=RegionKind::LoopBody anchor=false free=false key=-|(int, int)|,17
+19 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+20 - int region=RegionKind::Root anchor=false free=true key=-|int|
+21 :op/lt_l bool region=RegionKind::LoopCond anchor=false free=true key=:op/lt_l|bool|,19,20
+22 - int region=RegionKind::Root anchor=false free=true key=-|int|
+23 - (int, int) region=RegionKind::Root anchor=false free=false key=-|(int, int)|,0,6
+24 - int region=RegionKind::Root anchor=true free=true key=-|int|,23
+25 - string region=RegionKind::Root anchor=false free=true key=-|string|
+26 - int region=RegionKind::Root anchor=false free=false key=-|int|,14,20
+27 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,25
+28 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,27
+29 - int region=RegionKind::Root anchor=true free=false key=-|int|,24
+30 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+graph 3 nodes=5 exit=4
+0 - int region=RegionKind::Root anchor=true free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 - int region=RegionKind::Root anchor=false free=false key=-|int|,1,2
+4 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+graph 4 nodes=14 exit=12
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,0,1
+3 - int region=RegionKind::Root anchor=false free=true key=-|int|
+4 :op/add_l int region=RegionKind::Root anchor=true free=true key=:op/add_l|int|,2,3
+5 - string region=RegionKind::Inline anchor=false free=true key=-|string|
+6 :io/println string region=RegionKind::Inline anchor=false free=false key=:io/println|string|,5
+7 - string region=RegionKind::Root anchor=false free=true key=-|string|
+8 - string region=RegionKind::Root anchor=false free=true key=-|string|
+9 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,2,3
+10 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,7
+11 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,10
+12 - int region=RegionKind::Root anchor=true free=false key=-|int|,4,6
+13 - string region=RegionKind::Inline anchor=false free=false key=-|string|,6
+# tick
+step 0 -> 11
+# tick
+step 1 -> 12
+# tick
+step 2 -> 13
+# tick
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+===== the reading the edit's choice is checked against =====
+### camel program.cml passes::dump std::nvm
+graph 0 nodes=2 exit=1
+0 - () => int region=RegionKind::Root anchor=false free=true key=-|() => int|
+1 - int region=RegionKind::Root anchor=true free=false key=-|int|
+graph 1 nodes=4 exit=3
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - (x: int) => int region=RegionKind::Root anchor=false free=true key=-|(x: int) => int|
+2 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+3 - int region=RegionKind::Root anchor=true free=false key=-|int|,2
+graph 2 nodes=31 exit=29
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,2
+4 - int region=RegionKind::Root anchor=false free=true key=-|int|
+5 :op/mul_l int region=RegionKind::Root anchor=false free=true key=:op/mul_l|int|,1,4
+6 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,3,5
+7 - (int, int) region=RegionKind::Root anchor=false free=true key=-|(int, int)|
+8 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+9 - int region=RegionKind::Root anchor=false free=true key=-|int|
+10 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,8,9
+11 - int region=RegionKind::LoopBody anchor=false free=true key=-|int|
+12 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|
+13 - string region=RegionKind::Root anchor=false free=true key=-|string|
+14 - (x: int) => int uses var stdout region=RegionKind::Root anchor=false free=true key=-|(x: int) => int uses var stdout|,12
+15 - int region=RegionKind::LoopBody anchor=false free=false key=-|int|,14,8
+16 :op/add_l int region=RegionKind::LoopBody anchor=false free=true key=:op/add_l|int|,11,15
+17 - (int, int) region=RegionKind::LoopBody anchor=false free=true key=-|(int, int)|,7
+18 - (int, int) region=RegionKind::LoopBody anchor=false free=false key=-|(int, int)|,17
+19 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+20 - int region=RegionKind::Root anchor=false free=true key=-|int|
+21 :op/lt_l bool region=RegionKind::LoopCond anchor=false free=true key=:op/lt_l|bool|,19,20
+22 - int region=RegionKind::Root anchor=false free=true key=-|int|
+23 - (int, int) region=RegionKind::Root anchor=false free=false key=-|(int, int)|,0,6
+24 - int region=RegionKind::Root anchor=true free=true key=-|int|,23
+25 - string region=RegionKind::Root anchor=false free=true key=-|string|
+26 - int region=RegionKind::Root anchor=false free=false key=-|int|,14,20
+27 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,25
+28 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,27
+29 - int region=RegionKind::Root anchor=true free=false key=-|int|,24
+30 - int region=RegionKind::LoopCond anchor=false free=true key=-|int|
+graph 3 nodes=5 exit=4
+0 - int region=RegionKind::Root anchor=true free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 - int region=RegionKind::Root anchor=false free=true key=-|int|
+3 - int region=RegionKind::Root anchor=false free=false key=-|int|,1,2
+4 - int region=RegionKind::Root anchor=true free=false key=-|int|,0
+graph 4 nodes=11 exit=10
+0 - int region=RegionKind::Root anchor=false free=true key=-|int|
+1 - int region=RegionKind::Root anchor=false free=true key=-|int|
+2 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,0,1
+3 - int region=RegionKind::Root anchor=false free=true key=-|int|
+4 :op/add_l int region=RegionKind::Root anchor=true free=true key=:op/add_l|int|,2,3
+5 - string region=RegionKind::Root anchor=false free=true key=-|string|
+6 - string region=RegionKind::Root anchor=false free=true key=-|string|
+7 :op/add_l int region=RegionKind::Root anchor=false free=true key=:op/add_l|int|,2,3
+8 :str/format string region=RegionKind::Root anchor=false free=false key=:str/format|string|,5
+9 :io/println string region=RegionKind::Root anchor=false free=false key=:io/println|string|,8
+10 - int region=RegionKind::Root anchor=true free=false key=-|int|,4
+step 0 -> 11
+step 1 -> 12
+step 2 -> 13
+step 3 -> 14
+total 86 tail 14
+### exit=0
+
+### e2e capture.sh exit=0
+=== [10] [C] std::prl: 200 runs of the case and of the e2e program, and what is compared ===
+# build=6cb6fa721
+# The question is whether the scheduler's parallel execution is observable in the output. The
+# comparison is over RAW BYTES: nothing is masked. Neither program prints a time, a path or a
+# pid, so there is nothing to mask -- and a mask here would hide the very thing asked about, so
+# this section says that instead of masking quietly. The count per group is 200, and the number
+# that actually ran is printed on each summary line: a count is a copy of the loop's own value,
+# not a claim about how long the loop ran.
+# Three groups: the case alone; the e2e program alone; the e2e program through its two passes
+# (instrument then report), because a run whose passes walk the graph is the run in which work
+# could be ordered differently.
+
+### 200 runs, a fresh process each: /home/zjwei/camel-work/cap8/out/latest/bin/camel examples/case-study/train.cml std::prl
+case-prl               stdout sha256=5cd621c316969fc92cd0e5a0d907ea2189067db21aa1e13936f7df9e5c731325 bytes=69 runs=200
+case-prl               stderr sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 runs=200
+case-prl               exit   code=0 runs=200
+case-prl               runs=200 distinct_stdout=1 distinct_stderr=1 distinct_exit=1 => byte-identical
+
+### 200 runs, a fresh process each: /home/zjwei/camel-work/cap8/out/latest/bin/camel docs/handover/reports/eval-round10/e2e/program.cml std::prl
+e2e-prl                stdout sha256=8c43fab1f44428deeddfa7f93e4da95bb517c0e650a26f39e328826c5ac3afff bytes=69 runs=200
+e2e-prl                stderr sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 runs=200
+e2e-prl                exit   code=0 runs=200
+e2e-prl                runs=200 distinct_stdout=1 distinct_stderr=1 distinct_exit=1 => byte-identical
+
+### 200 runs, a fresh process each: CAMEL_PACKAGES=/home/zjwei/camel-work/cap8/docs/handover/reports/eval-round10/e2e /home/zjwei/camel-work/cap8/out/latest/bin/camel docs/handover/reports/eval-round10/e2e/program.cml passes::instrument passes::report std::prl
+e2e-prl-passes         stdout sha256=035d2a8403053c8786ed89f7d68d28639b4634c0f018690eb85e3e562e2f0231 bytes=146 runs=200
+e2e-prl-passes         stderr sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 runs=200
+e2e-prl-passes         exit   code=0 runs=200
+e2e-prl-passes         runs=200 distinct_stdout=1 distinct_stderr=1 distinct_exit=1 => byte-identical
+
+# The three groups must not agree with each other: they are different programs (the case prints
+# three loss lines, the e2e prints five step/total lines, the third adds the pass's own two).
+# That is the control for 'identical within a group' not being 'everything prints the same':
+case against e2e (must differ)             differs first_difference_byte=1
+e2e against e2e+passes (must differ)       differs first_difference_byte=1
+=== [11] [E] the scheduling seed: the switch does not exist, and where the random actually lives ===
+# build=6cb6fa721
+# One of the five readings has no row, and this section says so with the searches that would have
+# found a switch. Three sentences in this order: what was searched; the hits and why none of them
+# is a seed; where the random actually lives.
+
+# 1. what was searched
+### git grep -rn 'seed' -- src/passes/sched/ src/passes/sched/fastvm include/camel/passes/sched/
+src/passes/sched/fastvm/jit/mir/mir_builder.h:684:    // SysV AMD64 restores jitCtx from r13 before helper/trampoline calls. The entry wrapper seeds
+src/passes/sched/fastvm/jit/mir/mir_encode.cpp:571:            // r13 is seeded once by the SysV entry wrapper and survives helper calls.
+### git grep -n 'seed' -- docs/cli.md
+(no hit)
+### /home/zjwei/camel-work/cap8/out/latest/bin/camel --help | grep -iE 'seed|thread'   (the option table itself)
+        camel [-P] [-S <scheduler type>] [-t <max threads>] [--max-recursion-depth <calls>]
+        -t, --threads <max threads>
+                    max threads
+
+# 2. the hits, each excluded: both are JIT comments about a register, not about scheduling.
+#    src/passes/sched/fastvm/jit/mir/mir_builder.h:684   'The entry wrapper seeds ...'
+#    src/passes/sched/fastvm/jit/mir/mir_encode.cpp:571  'r13 is seeded once by the SysV entry
+#                                                         wrapper'
+#    Neither is a value a caller can set: r13 is the register the wrapper restores jitCtx from.
+#    The only 'seed' a program can pass is its own argument -- the transformer's --arg seed=1 in
+#    section [5] seeds that program's data, not the scheduler.
+
+# 3. where the random actually lives
+### git grep -n 'mt19937\|random_device' -- include/camel/utils/random.h
+include/camel/utils/random.h:8: * and a seeded program prints numbers drawn from a generator. The engine std::mt19937_64 is
+include/camel/utils/random.h:12: * the functions here on a std::mt19937_64 instead.
+include/camel/utils/random.h:39:using Engine = std::mt19937_64;
+
+# => a 100-seed sweep cannot be run: there is no --seed option, the only scheduler knobs are the
+#    thread count (-t/--threads) and CAMEL_TF_LINEAR / FANOUT_ALL / BYTECODE, and none of them is a
+#    seed. origin/lane-determinism is fully merged (0 commits ahead of develop) and carries no
+#    switch either. This is a reason and not a gap: no row was dropped to make the section short,
+#    and the 200 runs of [10] are not offered as a substitute for the seeds that section asked for.
+
+===== capture-all: the end =====

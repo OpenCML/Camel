@@ -257,8 +257,8 @@ slot_t cloneStaticSlot(
         // `subtract: ...`) and a reader that asks for the width of an element got one the value
         // has not (`to_bytes`). A native multidimensional array is its element type and its shape
         // (design principles 5.4), and an unstated element type means the type does not say which
-        // one the value has — not that the value has none — so the clone takes the value's, the rule
-        // the `nn`/`optim` tensor leaf already follows.
+        // one the value has — not that the value has none — so the clone takes the value's, the
+        // rule the `nn`/`optim` tensor leaf already follows.
         if (array != nullptr && array->isCompact()) {
             auto *clonedArray =
                 static_cast<::Array *>(array->clone(mm::autoSpace(), arrayType, false));
@@ -317,13 +317,9 @@ slot_t cloneStaticSlot(
                 coll,
                 mm::autoSpace(),
                 [&](slot_t inner, Type *innerType) {
-                    return shouldTraverseStaticSlotType(innerType) ? cloneStaticSlot(
-                                                                         context,
-                                                                         inner,
-                                                                         innerType,
-                                                                         program,
-                                                                         objectCache)
-                                                                     : inner;
+                    return shouldTraverseStaticSlotType(innerType)
+                               ? cloneStaticSlot(context, inner, innerType, program, objectCache)
+                               : inner;
                 });
             objectCache.emplace(object, cloned);
             return toSlot<Object *>(cloned);
@@ -419,7 +415,8 @@ std::vector<GraphId> collectDraftDependencyGraphs(const GraphTransaction &transa
         }
         const DraftNodeHeader *header = draft.header(id);
         if (header && header->kind == GCNodeKind::Loop) {
-            // A loop names no graph: its rounds are a region of this graph (design principles 3.10).
+            // A loop names no graph: its rounds are a region of this graph (design
+            // principles 3.10).
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {
@@ -511,29 +508,29 @@ GCGraph *encodeDraftGraph(
     // The node chunks are blocks of their own: the graph space can run out while they are made.
     GCGraph *encoded = nullptr;
     try {
-    encoded = GCGraphBuildAccess::constructInPlace(
-        target,
-        bytes,
-        draft.id(),
-        GCGraphDerivation{draft.typeSpecializationRoot(), draft.flags()},
-        [&] {
-            auto *record = createGraphDebugRecord(identity.mangledName, identity.name);
-            recordDraftDebugData(record, draft);
-            return record;
-        }(),
-        draft.funcType(),
-        draft.frameSlotTypes(),
-        staticDataType,
-        draft.closureType(),
-        draft.outerGraphId(),
-        dependencies,
-        subGraphs,
-        staticGraphRefs,
-        ruleGraphs,
-        draft.liftedFromRefs(),
-        payloadShape,
-        [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
-        staticSlots);
+        encoded = GCGraphBuildAccess::constructInPlace(
+            target,
+            bytes,
+            draft.id(),
+            GCGraphDerivation{draft.typeSpecializationRoot(), draft.flags()},
+            [&] {
+                auto *record = createGraphDebugRecord(identity.mangledName, identity.name);
+                recordDraftDebugData(record, draft);
+                return record;
+            }(),
+            draft.funcType(),
+            draft.frameSlotTypes(),
+            staticDataType,
+            draft.closureType(),
+            draft.outerGraphId(),
+            dependencies,
+            subGraphs,
+            staticGraphRefs,
+            ruleGraphs,
+            draft.liftedFromRefs(),
+            payloadShape,
+            [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
+            staticSlots);
     } catch (const mm::MemoryExhausted &e) {
         throw GraphSpaceExhausted(
             e,
@@ -541,13 +538,17 @@ GCGraph *encodeDraftGraph(
             identity.name,
             draftGraphOrigin(context, identity, transaction));
     }
-    // The same four checks the frozen graph gets (camel/runtime/graph_ref_check.h), run on the graph
-    // this draft produced: a draft can hold a number its own graph cannot resolve, and a graph that
-    // is refused by EdgeChecker and published here would be two answers to one question. A refusal
-    // names the graph, the node or region, and the reference, and the pipeline reports it against
-    // the pass that built the draft.
-    if (const auto violations = camel::runtime::checkGraphCrossReferences(*encoded); !violations.empty()) {
-        std::string message = std::format("the draft of graph '{}' cannot be encoded: {}", identity.name, violations.front());
+    // The same four checks the frozen graph gets (camel/runtime/graph_ref_check.h), run on the
+    // graph this draft produced: a draft can hold a number its own graph cannot resolve, and a
+    // graph that is refused by EdgeChecker and published here would be two answers to one question.
+    // A refusal names the graph, the node or region, and the reference, and the pipeline reports it
+    // against the pass that built the draft.
+    if (const auto violations = camel::runtime::checkGraphCrossReferences(*encoded);
+        !violations.empty()) {
+        std::string message = std::format(
+            "the draft of graph '{}' cannot be encoded: {}",
+            identity.name,
+            violations.front());
         for (size_t i = 1; i < violations.size(); ++i) {
             message += std::format("; {}", violations[i]);
         }
@@ -568,9 +569,7 @@ size_t draftGraphBytes(
     const std::vector<GraphId> staticRefPlaceholders(
         collectDraftStaticGraphRefs(context, transaction, staticDataType).size(),
         kInvalidGraphId);
-    const std::vector<GraphId> ruleGraphPlaceholders(
-        draft.ruleGraphs().size(),
-        kInvalidGraphId);
+    const std::vector<GraphId> ruleGraphPlaceholders(draft.ruleGraphs().size(), kInvalidGraphId);
     const std::vector<GraphId> liftedFromPlaceholders(
         draft.liftedFromRefs().size(),
         kInvalidGraphId);
@@ -597,7 +596,7 @@ uint64_t draftGraphOrigin(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
     const GraphTransaction &transaction) {
     const auto &draft = transaction.graph();
-    uint64_t origin    = 0;
+    uint64_t origin   = 0;
     if (const auto source = context ? context->sourceContext() : nullptr) {
         origin = source->debugMap().graphOrigin(draft.id());
     }
@@ -684,9 +683,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     // A node record's own typeId counts by its canonical id: two records whose types are one type
     // under `equals` (the names in a type's key erased) are the same content, which is the whole
     // point of a type having no identity but its structure.
-    const auto &table      = camel::core::type::TypeTable::instance();
-    const auto sameNodes = [&sameArray, &table](
-                               const GCNode *x, const GCNode *y, size_t n) {
+    const auto &table    = camel::core::type::TypeTable::instance();
+    const auto sameNodes = [&sameArray, &table](const GCNode *x, const GCNode *y, size_t n) {
         if (n == 0) {
             return true;
         }
@@ -701,7 +699,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             if (std::memcmp(rx, ry, kTypeAt) != 0 ||
                 table.canonicalIdOf(x[i].typeId) != table.canonicalIdOf(y[i].typeId) ||
                 std::memcmp(
-                    rx + kTypeAt + kTypeBytes, ry + kTypeAt + kTypeBytes,
+                    rx + kTypeAt + kTypeBytes,
+                    ry + kTypeAt + kTypeBytes,
                     sizeof(GCNode) - kTypeAt - kTypeBytes) != 0) {
                 return false;
             }
@@ -711,7 +710,14 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
         a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
         a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
-        a->entryNode != b->entryNode ||
+        // The two side arrays: an order edge and a sync edge are not ports and not entries of the
+        // node columns, they are their own payload arrays (graph.h, GCGraphNativePayload). A
+        // comparison that read everything but them answered "the same graph" for a graph whose
+        // only difference was one of these edges, and the commit then released the copy it had
+        // encoded and handed back the graph the edit never reached.
+        a->orderEdgeCount != b->orderEdgeCount || a->syncEdgeCount != b->syncEdgeCount ||
+        !sameArray(a->orderEdges, b->orderEdges, a->orderEdgeCount) ||
+        !sameArray(a->syncEdges, b->syncEdges, a->syncEdgeCount) || a->entryNode != b->entryNode ||
         a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
         a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
         table.canonicalId(before.funcType()) != table.canonicalId(after.funcType()) ||
@@ -738,7 +744,8 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         }
     }
     // The equivalences between nodes are content: a saturated graph is not the graph it was.
-    if (a->writingCount != b->writingCount || !sameArray(a->writings, b->writings, a->writingCount)) {
+    if (a->writingCount != b->writingCount ||
+        !sameArray(a->writings, b->writings, a->writingCount)) {
         return false;
     }
     if (a->regionCount != b->regionCount || a->regionPortCount != b->regionPortCount ||
@@ -1013,8 +1020,7 @@ size_t RuntimeSpecializationKeyHasher::operator()(const RuntimeSpecializationKey
         hashCombine(seed, binding.value);
         // The type enters as its canonical id, the same relation the key compares by
         // (specializations.h): hashing the object would put two equal keys in two buckets.
-        hashCombine(
-            seed, camel::core::type::TypeTable::instance().canonicalId(binding.type));
+        hashCombine(seed, camel::core::type::TypeTable::instance().canonicalId(binding.type));
         hashCombine(seed, binding.runtimeFlags);
     }
     return seed;
@@ -1028,7 +1034,7 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     const camel::core::context::context_ptr_t &context, const Program *program,
     GCGraph *runtimeRoot, [[maybe_unused]] std::source_location location)
-    : context_(context), program_(program), runtimeRoot_(runtimeRoot) {
+    : context_(context), program_(*context, program), runtimeRoot_(runtimeRoot) {
     ASSERT(context_ != nullptr, "Runtime graph draft session requires a valid context.");
     ASSERT(program_ != nullptr, "Runtime graph draft session requires a program.");
     ASSERT(runtimeRoot_ != nullptr, "Runtime graph draft session requires a runtime root graph.");
@@ -1036,7 +1042,8 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     // that program's (mayPublish_ in the header): remembered here, because a later commit cannot
     // tell an overtaken session from one that was never over the context's program.
     mayPublish_ = context_->currentRuntimeProgram() == program_;
-    work_ = std::make_unique<Program>(*program_);
+    work_       = ProgramHold(*context_, context_->reserveProgram());
+    *work_      = *program_;
 #ifndef NDEBUG
     // The safepoint check finds this session through DraftRootsDebug and reports the call site
     // when a draft is left unrooted. The session is a cell of its own so that a move of the
@@ -1057,6 +1064,15 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 #endif
 }
 
+// Missing-only, and that is the rule for a splice rather than an accident of the call: a graph this
+// session's program already holds keeps the version it holds, so the body a splice copies in reads
+// the caller's version of every graph both programs have. This is the only place that rule is
+// written. The two routes that copy a body into a program of its own -- `remat` and
+// `first_with_as_param` -- follow the source graph's program instead, because the value they hand
+// back names it, and the two rules agree while the copy's program is a satellite of the source's,
+// which is every case reachable today. Two live programs holding one GraphId at two versions would
+// tell them apart; when autodiff's retarget makes that shape reachable, the reading that separates
+// the two rules belongs here, beside this line.
 void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
     work_->adoptMissing(program);
 }
@@ -1076,6 +1092,26 @@ void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
         // a group that inlines through such a session calls these graphs.
         work_->bindTaken(graph->id(), graph);
     }
+}
+
+void RuntimeGraphDraftSession::noteMadeGraph(GCGraph *graph) {
+    if (graph == nullptr || runtimeRoot_ == nullptr) {
+        return;
+    }
+    // The graph is the session's from here on: a draft must be able to read it (a draft that calls
+    // the function value `outline` made reads the made graph), and the collector must not free it
+    // while the session is open, which is what `adoptGraph` answers.
+    adoptGraph(graph);
+    const auto known = std::ranges::any_of(
+        madeGraphs_, [&](const GCGraph *made) { return made->id() == graph->id(); });
+    if (known) {
+        return;
+    }
+    madeGraphs_.push_back(graph);
+    // A closure collected before this graph was made is the closure of an earlier session; the
+    // count in the cache's key says that too, and this closes the window inside one commit, which
+    // is where a graph is made and the closure is asked for again.
+    closureCache_.valid = false;
 }
 
 bool RuntimeGraphDraftSession::hasDraft(const GCGraph *graph) const {
@@ -1118,7 +1154,7 @@ GraphTransaction &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
             "DraftSession",
             "Decoded runtime graph '{}' into editable draft.",
             graph->name());
-        it->second = std::move(entry);
+        it->second         = std::move(entry);
         const size_t index = toValue(graph->id());
         if (index >= draftedIds_.size()) {
             draftedIds_.resize(index + 1, 0);
@@ -1169,10 +1205,10 @@ void RuntimeGraphDraftSession::traceStaticSlots(
     // object. Without it a key names whatever is at the old address next.
     std::vector<std::pair<slot_t, slot_t>> moves;
     for (auto &[graph, entry] : drafts_) {
-        auto &draft              = entry->transaction->edit();
-        const auto slots         = draft.staticSlots();
-        const auto types         = draft.staticSlotTypes();
-        const size_t slotCount   = std::min(slots.size(), types.size());
+        auto &draft            = entry->transaction->edit();
+        const auto slots       = draft.staticSlots();
+        const auto types       = draft.staticSlotTypes();
+        const size_t slotCount = std::min(slots.size(), types.size());
         // Slot 0 is the static tuple itself (appendStaticSlot reserves it as Void); the values
         // start at 1.
         for (size_t i = 1; i < slotCount; ++i) {
@@ -1209,7 +1245,8 @@ void RuntimeGraphDraftSession::traceStaticSlots(
     for (auto &[key, graph] : specializationCache_) {
         RuntimeSpecializationKey retargeted = key;
         for (RuntimeSpecializationBindingKey &binding : retargeted.bindings) {
-            if (binding.value == NullSlot || binding.type == nullptr || !binding.type->isGCTraced()) {
+            if (binding.value == NullSlot || binding.type == nullptr ||
+                !binding.type->isGCTraced()) {
                 continue;
             }
             for (const auto &[from, to] : moves) {
@@ -1326,11 +1363,11 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
     if (!runtimeRoot_) {
         return closure;
     }
-    // The closure depends on what the drafts refer to and on the table the ids are read in:
-    // while neither changed it is the one collected last.
+    // The closure depends on what the drafts refer to and on the table the ids are read in, on the
+    // graphs the transaction made: while none of those changed it is the one collected last.
     if (closureCache_.valid && closureCache_.epoch == *refsEpoch_ &&
         closureCache_.table == work_->version() && closureCache_.drafts == drafts_.size() &&
-        closureCache_.root == runtimeRoot_) {
+        closureCache_.made == madeGraphs_.size() && closureCache_.root == runtimeRoot_) {
         return closureCache_.graphs;
     }
 
@@ -1359,6 +1396,13 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         return found;
     };
     reach(runtimeRoot_->id());
+    // What this transaction made is delivered too, and no draft has to name it (design 2.5: the
+    // draft is `f`, the graphs `f` reaches, and the graphs this edit made). They are seeded before
+    // the walk so that what they call is reached like anything else -- a made graph stands in the
+    // program it is delivered into, and its callees have to be there beside it.
+    for (const GCGraph *made : madeGraphs_) {
+        reach(made->id());
+    }
     for (size_t head = 0; head < queue.size(); ++head) {
         const GraphId id = queue[head];
         GCGraph *graph   = work_->graph(id);
@@ -1399,6 +1443,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectCommitClosure() const {
         .epoch  = *refsEpoch_,
         .table  = work_->version(),
         .drafts = drafts_.size(),
+        .made   = madeGraphs_.size(),
         .root   = runtimeRoot_,
         .graphs = closure,
     };
@@ -1411,9 +1456,10 @@ RuntimeGraphDraftSession::draftRefs(GCGraph *graph) const {
     DraftRefs &refs   = draftRefs_[graph];
     if (!refs.valid || refs.revision != draft.revision()) {
         refs.graphs.clear();
-        visitDraftGraphs(context_, *drafts_.at(graph)->transaction, [&](GraphId ref, const Program *home) {
-            refs.graphs.emplace_back(ref, home);
-        });
+        visitDraftGraphs(
+            context_,
+            *drafts_.at(graph)->transaction,
+            [&](GraphId ref, const Program *home) { refs.graphs.emplace_back(ref, home); });
         refs.revision = draft.revision();
         refs.valid    = true;
     }
@@ -1474,6 +1520,28 @@ std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *
     return draftRuntimeNodeRefs(*found->second->transaction);
 }
 
+namespace {
+
+/// Whether a commit reads back what it delivered against the draft it encoded
+/// (`verifyDraftDelivery`, graph_build.h). On in a Debug build, off in a Release one until a test
+/// asks for it: the check walks every edge of every graph a commit encodes, and a Release build is
+/// measured. It is never an `ASSERT` -- what it reports is a value the caller can see, and a claim
+/// that a graph holds what its draft holds has to hold in the build that ships too.
+std::atomic<bool> draftDeliveryCheck =
+#ifndef NDEBUG
+    true;
+#else
+    false;
+#endif
+
+} // namespace
+
+bool draftDeliveryCheckEnabled() { return draftDeliveryCheck.load(std::memory_order_relaxed); }
+
+void setDraftDeliveryCheckEnabled(bool enabled) {
+    draftDeliveryCheck.store(enabled, std::memory_order_relaxed);
+}
+
 void RuntimeGraphDraftSession::validateDraftPorts() const {
     for (const auto &[graph, entry] : drafts_) {
         if (entry == nullptr || entry->transaction == nullptr) {
@@ -1490,13 +1558,15 @@ void RuntimeGraphDraftSession::validateDraftPorts() const {
             for (size_t port = 0; port < ports.size(); ++port) {
                 const gc_node_ref_t input = ports[port];
                 if (input == kInvalidNodeRef || draft.header(input) == nullptr) {
-                    throw std::runtime_error(std::format(
-                        "an ordinary port of operator node {} of graph '{}' reads port {} of a node "
-                        "the graph does not have ({})",
-                        static_cast<unsigned>(id),
-                        graph->name(),
-                        static_cast<unsigned>(port),
-                        static_cast<unsigned>(input)));
+                    throw std::runtime_error(
+                        std::format(
+                            "an ordinary port of operator node {} of graph '{}' reads port {} of a "
+                            "node "
+                            "the graph does not have ({})",
+                            static_cast<unsigned>(id),
+                            graph->name(),
+                            static_cast<unsigned>(port),
+                            static_cast<unsigned>(input)));
                 }
             }
         }
@@ -1509,7 +1579,8 @@ const Program *RuntimeGraphDraftSession::commitChecked() {
         std::string names;
         for (GraphId id : differing) {
             const GCGraph *graph = program_->graph(id);
-            names += (names.empty() ? "'" : ", '") + (graph ? graph->name() : std::string("?")) + "'";
+            names +=
+                (names.empty() ? "'" : ", '") + (graph ? graph->name() : std::string("?")) + "'";
         }
         const std::string message = std::format(
             "The commit conflicts with a newer program: {} graph(s) the session used have "
@@ -1521,9 +1592,17 @@ const Program *RuntimeGraphDraftSession::commitChecked() {
     return commit();
 }
 
-const Program *RuntimeGraphDraftSession::commit(bool detached) {
+const Program *RuntimeGraphDraftSession::commit(bool detached) { return runCommit(false, detached); }
+
+const Program *RuntimeGraphDraftSession::prepared() { return runCommit(true, false); }
+
+const Program *RuntimeGraphDraftSession::runCommit(bool staged, bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
+    }
+    if (!staged) {
+        // The staged program is what `prepared` handed its caller; this run makes its own.
+        staged_.reset();
     }
 
     // A port written at a node the draft does not have cannot be encoded: the writer of the graph
@@ -1541,7 +1620,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // detached program: the ONNX export, a tile region, a gradient) rewrites that program and
     // hands the commit back to its owner; publishing it would replace the program that is
     // running with somebody's private copy.
-    const Program *current = context_->currentRuntimeProgram();
+    const Program *current    = context_->currentRuntimeProgram();
     const bool contextProgram = mayPublish_ || current == program_;
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
@@ -1594,7 +1673,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         }
         work_->setRoot(current->root());
         runtimeRoot_        = work_->root();
-        program_            = current;
+        program_            = ProgramHold(*context_, current);
         closureCache_.valid = false;
     }
 
@@ -1607,18 +1686,47 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (!drafted && (graph->flags() & kGraphFlagGatesDissolved)) {
             continue;
         }
-        if (ensureDraft(graph).edit().dissolveUnorderedGates() > 0) {
+        (void)ensureDraft(graph);
+        DraftEntry &entry = *drafts_.at(graph);
+        auto &draft       = entry.transaction->edit();
+        // What the session left in this draft, read before the commit closes it: `mutations` counts
+        // the calls that may have changed a draft since it was decoded, and everything below is one
+        // of them whatever it finds. This is the draft's own answer to "is the graph this draft was
+        // decoded from still this draft", and it is the answer the commit acts on. The encoder's
+        // answer is not asked: an encoding that dropped an edge made an edit look like no edit, and
+        // a write somewhere else in the same transaction could flip that reading back (the graph
+        // this commit made, then read against the draft, is what `verifyDraftDelivery` checks).
+        // Measured against the count the last commit left, so a second commit over the same draft
+        // is not read as a write of its own closing.
+        const bool written    = draft.mutations() > entry.deliveredMutations;
+        const bool normalized = draft.writings().empty() && draft.normalizeChainPlaces() > 0;
+        const bool dissolved  = draft.dissolveUnorderedGates() > 0;
+        // An order edge whose two ends a rewrite left in different control regions is written on
+        // the node that owns the region the deeper end runs in (docs/design/effects/edges.cn.md
+        // 4.6). It is the last thing a commit does to the edges: dissolving gates above splices
+        // order edges over the nodes it removes.
+        const bool rehomed = draft.rehomeOrderEdges() > 0;
+        if (written || normalized || dissolved || rehomed) {
             edited_.insert(graph);
-        } else if (!drafted) {
-            GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
+        } else {
+            // The draft wrote nothing and the commit found nothing to close in it: it is the graph
+            // it was decoded from, so the graph keeps its version.
+            edited_.erase(graph);
+            if (!drafted) {
+                GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 #ifndef NDEBUG
-            // Before the draft is destroyed: the Debug record must never name a freed draft.
-            noteDraftClosed(*debugRoots_, *drafts_.at(graph)->transaction);
+                // Before the draft is destroyed: the Debug record must never name a freed draft.
+                noteDraftClosed(*debugRoots_, *drafts_.at(graph)->transaction);
 #endif
-            drafts_.erase(graph);
-            draftedIds_[toValue(graph->id())] = 0;
-            draftRefs_.erase(graph);
+                drafts_.erase(graph);
+                draftedIds_[toValue(graph->id())] = 0;
+                draftRefs_.erase(graph);
+                continue;
+            }
         }
+        // The draft keeps the count this commit read, whatever it did to the draft: what comes next
+        // is the session's writing, not this commit's closing.
+        entry.deliveredMutations = draft.mutations();
     }
 
     // The program after the commit holds every graph of the closure: the version it has now, or
@@ -1647,7 +1755,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         ensureDraft(graph);
         const DraftEntry &entry = *drafts_.at(graph);
         const size_t bytes      = draftGraphBytes(context_, *entry.transaction, graph);
-        GCGraph *copy           = allocateGraph(context_, entry.identity, *entry.transaction, bytes);
+        GCGraph *copy = allocateGraph(context_, entry.identity, *entry.transaction, bytes);
         fresh.emplace(graph, copy);
         allocatedBytes.emplace(graph, bytes);
         order.push_back(graph);
@@ -1655,7 +1763,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     };
     const auto encode = [&](GCGraph *graph) {
         const DraftEntry &entry = *drafts_.at(graph);
-        auto &draft = entry.transaction->edit();
+        auto &draft             = entry.transaction->edit();
         draft.setFlags(draft.flags() | kGraphFlagGatesDissolved);
         encodeDraftGraph(
             context_,
@@ -1669,13 +1777,9 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
 
     std::vector<GCGraph *> first;
     for (GCGraph *graph : closure) {
-        // A graph that was asked for editing and not changed is the graph it was.
-        if (heldBefore(graph) && edited_.contains(graph)) {
-            const auto draft = drafts_.find(graph);
-            if (draft != drafts_.end() && draft->second->transaction->graph().mutations() == 0) {
-                edited_.erase(graph);
-            }
-        }
+        // `edited_` is what the draft said: a rewrite wrote into it, or the commit's own closing of
+        // it did (the loop above). A graph the draft holds as the graph it was decoded from is not
+        // one of them, and keeps the version it has.
         if (!heldBefore(graph) || edited_.contains(graph)) {
             first.push_back(graph);
             allocate(graph);
@@ -1685,29 +1789,31 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         encode(*it);
     }
 
-    // The graphs that have a new version where the program had one. An edited graph encoded
-    // back to its own content is left as it is, unless it holds function values.
+    // The graphs that have a new version where the program had one. What is delivered is not a
+    // question a comparison of encodings may answer: a graph that got here has a draft whose
+    // content is not the graph the program holds, and that draft's encoding is the version. The
+    // comparison this replaces (`sameContent(old, encoded)`) did answer it, and an encoding that
+    // carried less than the draft made an edit look like no edit: the commit released the copy it
+    // had just encoded and handed back the graph the edit never reached. Whether a write somewhere
+    // else in the transaction happened to change the encoding decided whether the edge lived.
+    // `sameContent` still answers the other question -- whether the version needs a new revision
+    // (`changed`, below) -- and `verifyDraftDelivery` checks the encoding against the draft itself.
     std::vector<GCGraph *> replaced;
     for (GCGraph *graph : first) {
         if (!heldBefore(graph)) {
-            continue;
-        }
-        GCGraph *copy = fresh.at(graph);
-        if (graph->staticGraphRefs().empty() && sameContent(*graph, *copy)) {
-            committed->bind(graph->id(), graph);
-            fresh.erase(graph);
-            context_->releaseRuntimeGraph(copy);
-            edited_.erase(graph);
             continue;
         }
         replaced.push_back(graph);
     }
     if (!replaced.empty()) {
         // A function value names a graph in the program it was made in, and runs what that
-        // program holds of everything the graph calls. So a graph that holds a function value
-        // of a graph that reaches a new version (by calls or by function values) needs a new
-        // version too, which names the commit's program. The graphs that reach a new version
-        // are found backwards over the calls and the function values of the closure.
+        // program holds of everything the graph calls. So a graph that reaches a graph with a
+        // new version -- by calling it, or by holding a function value of it -- needs a new
+        // version too, whichever graph of the closure it is: entered from the program this
+        // commit hands back, such a graph would otherwise be the version the old program holds
+        // (it is one graph version in two programs), and its calls would name the old callees
+        // there. The graphs that reach a new version are found backwards over the calls and the
+        // function values of the closure.
         constexpr uint32_t kNone = UINT32_MAX;
         uint32_t maxId           = 0;
         for (GCGraph *graph : closure) {
@@ -1769,18 +1875,43 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             if (fresh.contains(holder)) {
                 continue;
             }
-            for (size_t r = 0; r < holder->refs().size(); ++r) {
-                if (!(holder->refRoles(r) & kGraphRefStatic)) {
-                    continue;
-                }
-                const uint32_t held = indexOfId(holder->refs()[r]);
-                if (held != kNone && reaches[held]) {
-                    allocate(holder);
-                    encode(holder);
-                    break;
-                }
+            const uint32_t at = indexOfId(holder->id());
+            if (at == kNone || !reaches[at]) {
+                continue;
             }
+            allocate(holder);
+            encode(holder);
         }
+    }
+
+    // The copy is the same graph to the fact store; a new revision only for a graph that was
+    // edited and not encoded back to the same content (what a graph refers to is the fact
+    // engine's business: closureRevision). This is all `sameContent` decides: a revision is a
+    // number about the content that was delivered, and the content is the copy.
+    //
+    // It is made before the staged return and not after it, because a revision is what every
+    // reading of a body is keyed by: `footprintOf` caches by `(closureRevision(program, graph),
+    // epoch)`, so a staged copy left at the revision of the graph it was encoded from answers a
+    // later round with the footprint of a body it no longer has -- the same key, a different body.
+    // This is another defect met on the way and fixed here; it is not the cause of the two red
+    // cases this branch follows: the staged measurement of the same program still reproduces them.
+    for (const auto &[graph, copy] : fresh) {
+        const bool changed = edited_.contains(graph) && !sameContent(*graph, *copy);
+        GCGraphBuildAccess::inheritRevision(copy, graph, changed);
+    }
+
+    if (staged) {
+        // The encode and nothing after it: the program these drafts would publish, before the
+        // checks that judge it and before anything is delivered. A pass that has to state the type
+        // its own edit needs -- `tiles`, whose bodies now hold a device submission and so reach the
+        // ambient `tiles:driver` -- reads the body here, through the same `bodySignature` the
+        // commit's check reads, and states the widened type on the draft before the commit that
+        // judges it ( the pass declares the widened type at
+        // the commit). A staged run delivers nothing and makes no revision: the program of this
+        // session is still the one it was opened over, and only the encode's copies are new.
+        staged_.reset();
+        staged_ = ProgramHold(*context_, committed);
+        return staged_.get();
     }
 
     for (GCGraph *graph : order) {
@@ -1793,14 +1924,101 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
     }
-    // The copy is the same graph to the fact store; a new revision only for a graph that was
-    // edited and not encoded back to the same content (what a graph refers to is the fact
-    // engine's business: closureRevision).
-    for (const auto &[graph, copy] : fresh) {
-        const bool changed = edited_.contains(graph) && !sameContent(*graph, *copy);
-        GCGraphBuildAccess::inheritRevision(copy, graph, changed);
+    // The promise a graph makes twice: its ports are the parameters its own signature declares
+    // (`validateRuntimeGraphPortTypes`, src/runtime/graph_edges.cpp). Asked of every graph this
+    // commit encoded, as the two checks above are, and not only of a graph it edited: a graph that
+    // is wrong from the moment it is made is exactly what a check placed on republished graphs
+    // misses -- which is how the compiler's own specializations carried a shifted port list unseen
+    // until a check was pointed at them.
+    for (GCGraph *graph : order) {
+        if (auto it = fresh.find(graph); it != fresh.end()) {
+            validateRuntimeGraphPortTypes(*committed, it->second, graphState_);
+        }
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
+
+    // What the commit delivered, read back against the draft it encoded (`verifyDraftDelivery`,
+    // src/runtime/graph_build.h): the graph the program is about to hold, edge by edge, both ways.
+    // A commit is the last place that knows both sides, and a graph that does not hold an edge its
+    // draft holds is an edit the caller wrote and will never see -- the shape this replaces, where
+    // a comparison of encodings decided what was delivered and answered "the same graph" for an
+    // edit whose only trace was an edge the comparison did not read. On in a Debug build, and in a
+    // test that asks for it (`setDraftDeliveryCheckEnabled`), because it walks every edge of every
+    // graph the commit encoded; a graph that is not one of those is not one this commit changed.
+    if (draftDeliveryCheckEnabled()) {
+        std::vector<GCGraph *> delivered(first);
+        std::unordered_set<GCGraph *> seen(first.begin(), first.end());
+        for (GCGraph *graph : order) {
+            if (seen.insert(graph).second) {
+                delivered.push_back(graph);
+            }
+        }
+        for (GCGraph *graph : delivered) {
+            const auto draft = drafts_.find(graph);
+            if (draft == drafts_.end() || draft->second->transaction == nullptr) {
+                continue;
+            }
+            const GCGraph *installed = committed->graph(graph->id());
+            if (installed == nullptr) {
+                continue;
+            }
+            verifyDraftDelivery(
+                *draft->second->transaction,
+                *installed,
+                draft->second->identity.name);
+        }
+    }
+
+    // The commit checks of the effect analysis and of the calculus (docs/design/effects/analysis.cn.md
+    // 4.1), asked of every graph this commit changed, through the one function every commit path
+    // uses (`camel::runtime::commitViolation`): a pass written in Camel reaches a rewrite only through
+    // the graph module, and the graph module's `commit` is this commit, so this is the single place
+    // both paths answer the same question. A rewrite through the draft API that splices nodes in
+    // reaches it here too.
+    //
+    // Asked by what the draft added, not by what the build is:
+    // a draft that added an access is asked the effect and order
+    // checks in every build, and a draft that added none owes no answer about them in any build --
+    // the public edits of the graph module (`replace`, `erase`, `add_constant`, `eval`) make no node
+    // that carries an access, and `replace` promises that what the node it removed ordered stays
+    // ordered (stdlib/graph.cml). The exit check and the seal's acyclicity check are asked of every
+    // commit, from the seal this commit runs just below (`validateRuntimeGraphPayload`): they are
+    // properties of the graph published, not of what the commit added.
+    //
+    // What is judged is what the commit made: a node whose reference the graph the draft was decoded
+    // from does not have. The regions it answers for are those nodes' regions and every region
+    // around them (`commitViolation`), because an owner node stands for what is under it and a
+    // splice deep inside a branch changes what the branch carries outside.
+    for (const auto &[graph, copy] : fresh) {
+        if (!edited_.contains(graph)) {
+            continue;
+        }
+        std::vector<gc_node_ref_t> made;
+        for (gc_node_ref_t ref = 0; ref < copy->nodeCount(); ++ref) {
+            if (graph == nullptr || ref >= graph->nodeCount() || graph->node(ref) == nullptr) {
+                made.push_back(ref);
+            }
+        }
+        // The other half of the tier (docs/design/graph-editing/README.cn.md 8.1): the existing
+        // nodes the draft changed in place through the low-level interface -- an operand added or
+        // taken away, an operator swapped -- which owes the effect and the order checks although it
+        // made no node at all. `made` alone cannot see it, and a commit that read only `made`
+        // published an edit that dropped an ordering without asking anything.
+        std::vector<gc_node_ref_t> changed;
+        if (const auto at = drafts_.find(graph); at != drafts_.end() && at->second->transaction) {
+            const std::span<const gc_node_ref_t> edits =
+                at->second->transaction->edit().lowLevelEdits();
+            changed.assign(edits.begin(), edits.end());
+        }
+        // `graph` is the version this session started from, and `program_` is the program that holds
+        // it: the reading of what the commit started from is taken there and not in `*committed`
+        // (`resources.h`, `beforeProgram`), because this commit is publishing new declarations for
+        // the callees it rewrote.
+        if (const auto violation =
+                commitViolation(*committed, *copy, made, changed, graph, program_)) {
+            throw GraphCommitRefused(*violation);
+        }
+    }
 
     // The table is a cache, not an owner (specializations.h): an entry whose specialization the
     // program does not hold names a graph the snapshot collected, and an entry whose callee got a
@@ -1808,15 +2026,14 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // the program forgets them: it keeps the specializations its root reaches, and a session that
     // needs another makes that one again. Nothing here binds a graph the closure does not reach,
     // so a specialization nothing calls is collected with the snapshot it was in.
-    committed->specializations().eraseIf(
-        [&](const ProgramSpecializationKey &key, GraphId id) {
-            const GCGraph *specialized = committed->graph(id);
-            if (specialized == nullptr) {
-                return false;
-            }
-            const GCGraph *base = committed->graph(key.baseGraph);
-            return base != nullptr && base->revision() == key.baseRevision;
-        });
+    committed->specializations().eraseIf([&](const ProgramSpecializationKey &key, GraphId id) {
+        const GCGraph *specialized = committed->graph(id);
+        if (specialized == nullptr) {
+            return false;
+        }
+        const GCGraph *base = committed->graph(key.baseGraph);
+        return base != nullptr && base->revision() == key.baseRevision;
+    });
 
     // Publishing is a compare-and-swap against the program the commit was made on top of: the
     // graphs are encoded for that program, and the table replaces it only while it is still the
@@ -1846,7 +2063,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             rebased->setRoot(rebased->graph(committed->root()->id()));
             rebased->specializations() = committed->specializations();
             committed                  = rebased;
-            expected  = now;
+            expected                   = now;
         }
     }
     if (!published) {
@@ -1861,12 +2078,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             retargetFunctions(graph, *committed);
         }
     }
-// The commit decided above whether this session installs (a session over the program's root,
+    // The commit decided above whether this session installs (a session over the program's root,
     // a shape some back end runs, nothing detached) and published with a compare-and-swap; a
     // commit that did not publish stays a private program that remembers what it was made from.
-    program_            = committed;
+    program_            = ProgramHold(*context_, committed);
     runtimeRoot_        = program_->root();
-    work_               = std::make_unique<Program>(*program_);
+    work_               = ProgramHold(*context_, context_->reserveProgram());
+    *work_              = *program_;
     closureCache_.valid = false;
 #ifndef NDEBUG
     noteDraftsCleared(*debugRoots_);
@@ -1883,32 +2101,28 @@ GraphDraftGroup::GraphDraftGroup(
     : context_(context) {
     ASSERT(context_ != nullptr, "Graph draft group requires a valid context.");
     ASSERT(base != nullptr, "Graph draft group requires the program it is made over.");
-    program_  = context_->reserveProgram();
-    *program_ = *base;
-    program_->makeSatellite();
-    // The group holds its program in C++, not through a value the collector can reach, and a
-    // group made while a program runs is reserved while `running_` is not zero -- which is the
-    // branch of reserve() that does not root what it makes. So the holder roots it, here, for as
-    // long as the group lives: without this the graphs of the group are graphs the collector
+    // The group holds its program in C++, not through a value the collector can reach, and a group
+    // made while a program runs is reserved while `running_` is not zero -- which is the branch of
+    // reserve() that does not root what it makes. So the holder roots it, through ProgramHold,
+    // from the reservation itself: without this the graphs of the group are graphs the collector
     // never traces, and a safepoint that falls between the reservation and the bind into a
     // program the context knows leaves the old addresses of their static values in the slots
     // (--gc-check poison reports it as a use-after-safepoint; measured on the two `modules.nn`
-    // large-bytecode cases, whose rule expansion runs a group per instantiated rule).
-    context_->pinRuntimeProgram(program_);
+    // large-bytecode cases, whose rule expansion runs a group per instantiated rule). The copy
+    // from `base` happens with that root already taken: it binds graphs into the program.
+    program_  = ProgramHold(*context_, context_->reserveProgram());
+    *program_ = *base;
+    program_->makeSatellite();
 }
 
-GraphDraftGroup::~GraphDraftGroup() {
-    if (program_ != nullptr) {
-        context_->unpinRuntimeProgram(program_);
-    }
-}
+GraphDraftGroup::~GraphDraftGroup() = default;
 
 GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
     const GraphId id    = context_->graphIds().allocate();
     auto member         = std::make_unique<Member>();
     member->transaction = GraphTransaction::open(id);
-    member->transaction->edit().setProgram(program_);
-    member->identity    = RuntimeDraftIdentity{
+    member->transaction->edit().setProgram(program_.get());
+    member->identity = RuntimeDraftIdentity{
         .sourceGraph = nullptr,
         .mangledName = std::move(mangledName),
         .name        = std::move(name),
@@ -1924,7 +2138,7 @@ void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphTransaction> trans
     ASSERT(transaction != nullptr, "Graph draft group member transaction cannot be null.");
     auto &draft = transaction->edit();
     draft.setId(id);
-    draft.setProgram(program_);
+    draft.setProgram(program_.get());
     member(id).transaction = std::move(transaction);
 }
 
@@ -1935,8 +2149,11 @@ void GraphDraftGroup::encode() {
     std::unordered_map<GraphId, GCGraph *> graphs;
     std::unordered_map<GraphId, size_t> bytes;
     for (GraphId id : order_) {
-        Member &m         = member(id);
+        Member &m   = member(id);
         auto &graph = m.transaction->edit();
+        if (graph.writings().empty()) {
+            graph.normalizeChainPlaces();
+        }
         bytes.emplace(id, draftGraphBytes(context_, *m.transaction, nullptr));
         graphs.emplace(id, allocateGraph(context_, m.identity, *m.transaction, bytes.at(id)));
     }
@@ -1949,9 +2166,13 @@ void GraphDraftGroup::encode() {
     }
     for (GraphId id : order_) {
         const Member &m = member(id);
-        auto &draft = m.transaction->edit();
-        GCGraph *graph =
-            encodeDraftGraph(context_, m.identity, *m.transaction, program_, graphs.at(id), bytes.at(id));
+        GCGraph *graph = encodeDraftGraph(
+            context_,
+            m.identity,
+            *m.transaction,
+            program_.get(),
+            graphs.at(id),
+            bytes.at(id));
         validateRuntimeGraphPayload(*program_, graph);
     }
     for (GraphId id : order_) {

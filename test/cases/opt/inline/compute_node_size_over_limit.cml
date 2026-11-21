@@ -1,7 +1,7 @@
 /**
  * The same `main` as `compute_node_size_at_limit.cml` with one `println` more: nine compute
  * nodes, one over the limit of "small", so the inliner leaves the call of `main` as a call (the
- * pipeline that shows both sides of the limit is std::opt::devirtualize then std::opt::inline,
+ * pipeline that shows both sides of the limit is std::cxx::devirtualize then std::cxx::inline,
  * which does not fold the `reshape` of the example away). The refusal of an export that hides
  * its request behind that call reports the number and the reason (see the onnx plan).
  */
@@ -20,7 +20,9 @@ func spin(n: int): int sync {
 }
 
 func main(): int sync {
-    let _ = export_model<out: 'tmp/test/onnx/compute_node_size_over_limit.onnx'>(double, reshape<[2]>([1.0, 2.0]))
+    // Unbound on purpose: this `main` is measured by the number of compute nodes it holds, and
+    // reading the refusal would add nodes to the number the case is about.
+    export_model<out: 'tmp/test/onnx/compute_node_size_over_limit.onnx'>(double, reshape<[2]>([1.0, 2.0]))
     let x = cpu_count()
     println(x)
     println(x)

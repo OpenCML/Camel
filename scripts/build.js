@@ -27,7 +27,7 @@ function versionTupleFromRollupMm(mm) {
 }
 
 /**
- * Read PY_MAJOR_VERSION / PY_MINOR_VERSION from SDK include/patchlevel.h (authoritative for headers/libs).
+ * Read PY_MAJOR_VERSION / PY_MINOR_VERSION from the SDK's `patchlevel.h` (its `include` directory; authoritative for headers/libs).
  * @param {string} sdkRoot
  * @returns {[number, number] | null}
  */

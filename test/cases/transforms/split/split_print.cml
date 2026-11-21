@@ -1,0 +1,23 @@
+// A function that prints, put through the *library's* `grad` (`stdlib/vjp.cml#grad`), which is
+// `split(jvp(first_with_as_param(f)))` -- so the cut has to take a body whose last statement is a
+// print.
+//
+//   f(x) = x*x,  f'(x) = 2x,  so the derivative at 3 is 6.0, and the body prints `3.0` once --
+//   once, because the forward half runs once per call of the derivative.
+//
+// `println(x)` and not `'x={}'->format<x>->println`: `format` makes a `string` out of a
+// differentiated value, and that is a separate refusal of its own (a string has no gradient
+// channel). This case is only about the statement the print stands in.
+
+import { grad } from vjp
+
+with <x: float>
+func noisy(): float {
+    println(x)
+    return x * x
+}
+
+func main(): int sync {
+    println(grad(noisy)<3.0>())
+    return 0
+}

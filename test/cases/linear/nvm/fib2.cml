@@ -1,19 +1,23 @@
 /**
  * Verifies nested sync recursion keeps local mutable state coherent while the recursive tree executes through inner closures.
+ *
+ * The counter is a `Ref`: a closure cannot assign a name of the body around it (design principles
+ * 3.5), while a handle is a value it may capture.
  */
 
 import { now } from time
+import state
 
 func fib(idx: int): int sync {
-    var cnt = 0
+    let cnt = state::ref(0)
     func fibonacci(n: int): int sync {
-        cnt += 1
+        state::set(cnt, state::get(cnt) + 1)
         return if n <= 1 then n else sync {
             fibonacci(n - 1) + fibonacci(n - 2)
         }
     }
     let res = fibonacci(idx)
-    'Total calls made: {}'->format<cnt>->println
+    'Total calls made: {}'->format<state::get(cnt)>->println
     return res
 }
 

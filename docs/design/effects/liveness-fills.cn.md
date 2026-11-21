@@ -20,7 +20,7 @@
 | 2 | `src/passes/opt/generic/gates.cpp#bypassValueGate`（第 32–33 行） | `222cf318c`（32 行）、`21f2f3be8`（33 行） | 门节点的旁路判定 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧）；用户集在 44、45、67、78 行另读，不进 facts |
 | 3 | `src/execute/fusion_group.cpp#isPrivateTo`（第 92–94 行） | `a882b3aaf` | 融合组的成员判定 | `hasDataUser`、`isWaitedOn`、`isSyncStatement`（3） | 用户：`withOutputsOf`（92 行）、`ctrlOutputsOf`（93 行）；输入：`syncPredsOf`（94 行）；另手扫 `syncEdges`（95–102 行）；norm 用户在 82–85 行另读 |
 | 4 | `src/runtime/draft_inline.cpp#inlineCallableInDraft`（第 1754–1755 行） | `f9e2ecc63` | 内联拼接：一次调用的等待 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`controlFrontier`（1739–1748 行，`include/camel/runtime/control.h#controlFrontier`）、`syncInputsOf`；用户集在 1765–1769 行另读 |
-| 5 | `src/runtime/writings.cpp#extract`（第 1147–1148 行） | `38b5880fa` | 写作折叠：成员迁移 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧） |
+| 5 | `src/runtime/writings_extract.cpp#extract`（第 1147–1148 行） | `38b5880fa` | 写作折叠：成员迁移 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧） |
 | 6 | `src/runtime/graph.cpp#isUnanchoredPure`（第 1300–1319 行） | `61f5b677b` | 无锚纯节点的判定 | 不建 facts（0）；直接读 6 组 | 输入 3 组：`ctrlInputsOf`、`orderInputsOf`、`syncInputsOf`；用户 3 组：`ctrlUsersOf`、`orderUsersOf`、`syncUsersOf`（1316–1318 行） |
 
 第 6 行不是填充点：它读同一批边，但不经过结构体。
@@ -88,7 +88,7 @@
 | 同步 | `syncUsersOf` / `syncInputsOf` | `syncUsersOf`（用户）/ `syncPredsOf`（前驱，边记录） |
 | 顺序 | `orderUsersOf` / `orderInputsOf` | `orderUsersOf`（用户）/ `orderPredsOf`（前驱，边记录） |
 
-图侧的 `syncUsersOf`、`orderUsersOf` 是本轮补的（`src/runtime/graph.h`、`src/runtime/graph.cpp`）；`isUnanchoredPure` 那 6 组因此两侧都读得到。前驱侧两侧的形状不同：草稿侧返回节点号，图侧返回边记录（取 `.pred`）。
+图侧的 `syncUsersOf`、`orderUsersOf` 是本轮补的（`include/camel/runtime/graph.h`、`src/runtime/graph.cpp`）；`isUnanchoredPure` 那 6 组因此两侧都读得到。前驱侧两侧的形状不同：草稿侧返回节点号，图侧返回边记录（取 `.pred`）。
 
 ## 7. 行号的用法
 

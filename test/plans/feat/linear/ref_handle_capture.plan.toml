@@ -1,0 +1,82 @@
+id = "linear.ref_handle_capture"
+order = 358
+tier = "fast"
+tags = ["feat", "linear", "var", "ref", "capture", "graph"]
+
+# The one reading that was missing from the corpus: a `var` whose value is a `state::Ref`, read and
+# written from inside a closure. No other case puts a `Ref` in a `var` at all (every `state::ref` in
+# `test/cases` is a `let`), so the semantic correction -- a cell holding a Ref is a holder, and the
+# cell should go -- was measured only on a probe under `docs/handover/`, which no plan selects.
+# These two entries are the guard: one reads the graph the compiler builds, one runs the program.
+
+[[tests]]
+name = "ref_handle_capture.graph"
+desc = "A `var` holding a `state::Ref` is a holder, not a cell: reading or writing the name from a closure's body captures the handle, so the graph builds no `:var/new` for either declaration and the port the closure captures carries a value (`Ref<int>`), not a cell (`var Ref<int>`). The program is translated with `std::jgir` and the document is read: zero `:var/new` and zero `:var/new/empty` nodes over every graph, and the two closures' capture tables hold exactly two ports, both named `box` and typed `Ref<int>`. The cell put back for either declaration fails this entry even when it still answers the right number. Pipeline: std::jgir."
+kind = "behavior"
+case = "../../../cases/linear/byref/ref_handle_capture.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+assert(doc.format === 'camel.gir', `not a GIR document: ${doc.format}`)
+const names = doc.graphs.map((g) => g.name)
+for (const name of ['read_through_closure', 'write_through_closure']) {
+    assert(names.includes(name), `no graph for ${name}: ${names.join(', ')}`)
+}
+// The cell the two declarations used to need. Both operators are counted: `:var/new/empty` is the
+// other one a declaration can build, and a reading that left it out would call a cell that came
+// back through that door zero.
+const cells = []
+const ports = []
+for (const graph of doc.graphs) {
+    for (const node of graph.nodes) {
+        if (node.label === ':var/new' || node.label === ':var/new/empty') {
+            cells.push(`${graph.name}:${node.label}`)
+        }
+    }
+    for (const id of graph.capturePorts) {
+        const port = graph.nodes.find((n) => n.id === id)
+        assert(port, `capture table of ${graph.name} names a node it does not hold: ${id}`)
+        ports.push({ graph: graph.name, name: port.parameter.name, type: port.outputType })
+    }
+}
+assert(cells.length === 0, `a cell was built for a local holding a Ref: ${cells.join(', ')}`)
+// Two closures, one per shape, each capturing the one name: the handle is what crosses the
+// boundary. A capture port typed `var Ref<int>` is the cell coming back, so the type is read and
+// not only the count.
+assert(ports.length === 2, `expected two capture ports, got ${ports.length}: ${JSON.stringify(ports)}`)
+for (const port of ports) {
+    assert(port.name === 'box', `unexpected capture port: ${JSON.stringify(port)}`)
+    assert(port.type === 'Ref<int>', `the closure captured a ${port.type}, not the handle: ${JSON.stringify(port)}`)
+}
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "ref_handle_capture.runs"
+desc = "The handle a closure captured is the box's handle: the read through the first closure answers the value `state::set` wrote (`5`), and the write through the second closure lands in the same box (`9`). `--gc-check foreign` reads the boxes at exit: two made, two released, none live and none missing, so a handle read after the cell that used to stand here was released is not what answers. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/ref_handle_capture.cml"
+args = ["--gc-check", "foreign", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split('\n')
+const line = lines.find((l) => l.startsWith('FOREIGN_RESOURCES '))
+assert(line !== undefined, `the counted boxes are read at exit: ${lines.join(' | ')}`)
+const program = lines.filter((l) => !l.startsWith('FOREIGN_RESOURCES '))
+assert(program.join(' | ') === '5 | 9', `unexpected output: ${program.join(' | ')}`)
+const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map((w) => w.split('=')).map(([k, v]) => [k, Number(v)]),
+)
+assert(counts.created === 2, `the program made two boxes, one per shape: ${line}`)
+assert(counts.released === 2, `both boxes were released: ${line}`)
+assert(counts.live === 0, `no box outlived the program: ${line}`)
+assert(counts.missing === 0, `every counted box was found where it was counted: ${line}`)
+}
+"""
+timeout_ms = 20000

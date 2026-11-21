@@ -7,18 +7,9 @@
  * reverse never enters: see `err_assignment_reverse` and `err_assignment_other_payload`.
  */
 
-// A `var` captured by a closure and written inside a `sync` body (section 7 of the primer).
-func make_best(): (x: float) => float {
-    var best: float? = null
-    return (x: float): float => sync {
-        let m = best ?? x
-        let hi = if x > m then x else m
-        best = hi
-        hi
-    }
-}
-
-// The null slot: `null` enters a `T?` place as it enters an annotated `let`.
+// A `var` of the form written twice in its own function: `gone = null` writes the null slot. The
+// writes are of this call and read in it, which is what the ruling of 2026-11-15 calls a name for
+// values -- no cell leaves the call, and no closure captures one (design principles 3.5).
 func clear(): int? sync {
     var gone: int? = 7
     gone = null
@@ -46,9 +37,26 @@ func show(r: int!): string {
     }
 }
 
+// A running maximum: the helper takes the value the place holds and gives the new one back, so each
+// `best = ...` is an entering assignment and the next call reads the value the line before wrote.
+// The shape this case used to carry -- a closure capturing `best` and writing it -- is refused by
+// the ruling of 2026-11-15 (design principles 3.5, "a closure may not assign an outer name").
+func improve(best: float?, x: float): float {
+    let m = best ?? x
+    return if x > m then x else m
+}
+
 func main(): int sync {
-    let f = make_best()
-    println(f(2.0), f(-1.0), f(1.5), f(3.0))
+    var best: float? = null
+    let r1 = improve(best, 2.0)
+    best = r1
+    let r2 = improve(best, -1.0)
+    best = r2
+    let r3 = improve(best, 1.5)
+    best = r3
+    let r4 = improve(best, 3.0)
+    best = r4
+    println(r1, r2, r3, r4)
     println(clear() ?? -1)
     println(five() ?? -1)
     println(show(lifted(7)))

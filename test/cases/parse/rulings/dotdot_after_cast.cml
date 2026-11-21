@@ -1,0 +1,18 @@
+// The `..` of an interval written after the type of a conversion. `let r = n as int` with `..5` on
+// the next line is the range from the conversion to 5: the marks of a type (`?`, `!`, `..`) stop at
+// a line break, so nothing there takes the `..` for a mark. On one line it is not that -- a `..` on
+// the same line is the stream mark of the type that stands before it, whatever white space stands
+// between them -- so `n as int..5` is a `..` written where a type stands and is refused by name
+// (rulings/stream_type_as_interval.cml, SyntaxDiag::AsRightSideIsType). The formatter writes the
+// conversion in parentheses, `(n as int)..5`, which is the spelling that diagnostic names and which
+// reads back as the same tree. Before that rule it wrote this file back as `let r = n as int..5`,
+// and `camel-parsecheck fuzz` reported "the formatted text does not parse" on that text
+// (iteration 929, a mutation of the ruling case above with the line break inserted).
+
+func main(): int sync {
+    let n = 3
+    let r = n as int
+    ..5
+    println(r)
+    return 0
+}

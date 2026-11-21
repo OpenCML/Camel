@@ -21,6 +21,7 @@
 
 #include "camel/runtime/program.h"
 #include "camel/runtime/graph.h"
+#include "runtime/graph_build.h" // GCGraphDebugRecord, which freeGraph deletes
 
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
@@ -30,6 +31,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <unordered_set>
+#include <utility>
 
 namespace camel::runtime {
 
@@ -299,7 +301,10 @@ void GCGraphManager::releaseDetached() {
 void GCGraphManager::pin(const Program *program) {
     mm::NoCollectionScope noCollection;
     std::lock_guard lock(mutex_);
-    if (program && std::find(pinned_.begin(), pinned_.end(), program) == pinned_.end()) {
+    // Counted: every pin is one name in `pinned_`, and unpin() drops one. A program two holders
+    // root at once (a session's committed program, when it is the context's too) stays rooted
+    // until both are done with it.
+    if (program != nullptr) {
         pinned_.push_back(program);
         rebuildGcRoots();
     }
@@ -312,6 +317,38 @@ void GCGraphManager::unpin(const Program *program) {
         pinned_.erase(it);
         rebuildGcRoots();
     }
+}
+
+ProgramHold::ProgramHold(camel::core::context::Context &context, const Program *program)
+    : context_(&context), program_(const_cast<Program *>(program)) {
+    if (program_ != nullptr) {
+        context_->pinRuntimeProgram(program_);
+    }
+}
+
+ProgramHold::~ProgramHold() { reset(); }
+
+ProgramHold::ProgramHold(ProgramHold &&other) noexcept
+    : context_(std::exchange(other.context_, nullptr)),
+      program_(std::exchange(other.program_, nullptr)) {}
+
+ProgramHold &ProgramHold::operator=(ProgramHold &&other) noexcept {
+    if (this != &other) {
+        reset();
+        context_ = std::exchange(other.context_, nullptr);
+        program_ = std::exchange(other.program_, nullptr);
+    }
+    return *this;
+}
+
+void ProgramHold::reset() {
+    if (program_ != nullptr) {
+        if (context_ != nullptr) {
+            context_->unpinRuntimeProgram(program_);
+        }
+        program_ = nullptr;
+    }
+    context_ = nullptr;
 }
 
 void GCGraphManager::settle(const Program *keep) {

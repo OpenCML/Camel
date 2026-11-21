@@ -101,6 +101,14 @@ args = ["${case}", "test::edges_sync_gate"]
 expect_stdout_contains = ["SYNCGATE wrote=1 ctrl=0", "EDGES accepted", "SYNCGATE frozen_sync_edges=1 gates=1 gates_waiting_on_the_chain=1 gates_with_ctrl=0"]
 
 [[tests]]
+name = "sync_chain_place_is_handed_to_a_gate"
+desc = "A three-statement chain A -> B -> C replaces B by a shared pure value. The replacement has real sync and order edges to inherit, so the draft must produce A -> GATE(value) -> C and put the order edge on that GATE, never on the pure value. Exactly one GATE is added; the value's ordinary COPY reader stays direct. A second replacement with no old sync edges must not invent a chain place or another GATE, which separates a legal handover from manufacturing a position."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_sync_gate"]
+expect_stdout_contains = ["EDGES accepted", "SYNCPLACE middle_gate=1 predecessor=1 successor=1 gate_delta=1 shared_value_direct=1 order_on_gate=1 order_on_value=0"]
+expect_output_not_contains = ["refused"]
+
+[[tests]]
 name = "sync_chain_fork_is_refused"
 desc = "The other half of the same rule: one statement follows one other at most *and* one statement follows it. A statement two statements of its block follow is a chain that forks, which is no chain, so a rewrite that leaves the graph in that state -- an inline splice that cannot put a statement in its place without making the graph wait on itself -- is refused by the seal, which names the statement the two follow, rather than freezing a chain the layout may walk one way and silently drop the other."
 case = "../../../cases/opt/generic/generic_passes.cml"
@@ -142,3 +150,75 @@ desc = "The users of a node in the five kinds a pass asks about -- a value port,
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edge_users"]
 expect_stdout_contains = ["EDGES accepted", "EDGE_USERS norm=2 with=1 ctrl=1 sync=1 order=1", "disagree=0"]
+
+[[tests]]
+name = "an_edit_that_writes_only_an_edge_reaches_the_graph"
+desc = "The commit keeps the copy it encoded only while that copy differs from the graph it would replace, and `sameContent` decides. The order and sync edges are the graph's own arrays beside the node columns -- not ports, not entries of a node -- so a comparison that reads the columns, the ports and the regions but not those two arrays answers `the same graph` for an edit that wrote an edge, and the commit releases the copy it encoded and hands back the graph the edit never reached. The pass writes one sync edge between two statements the graph already has, so no node is added, removed or changed and the edge is the whole difference, and prints what the graph the commit made holds: `after` one more than `before`, the user's sync input present, and `reused=0` (the graph object is not the one it was). A second session changes nothing at all and must keep the graph where it is (`reused=1`, the copy released): that is the reason the comparison exists, and a fix that always made a new version would take it away."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_edit_only"]
+verify_script = '''
+({ input, assert }) => {
+  const lines = input.normalized.stdout.trim().split('\n')
+  const pair = lines.find(l => l.startsWith('EDITONLY pair '))
+  assert(pair !== undefined, input.normalized.stdout)
+  const sync = lines.find(l => l.startsWith('EDITONLY sync '))
+  assert(sync !== undefined, input.normalized.stdout)
+  assert(sync.includes('wrote=1'), 'the sync edge was not written: ' + sync)
+  assert(sync.includes('reused=0'), 'the commit kept the old graph over an edge-only edit: ' + sync)
+  assert(sync.includes('mine=1'), 'the edge the session wrote is not the one the graph holds: ' + sync)
+  assert(sync.includes('sync_in=1'), 'the user does not wait on one edge: ' + sync)
+  const untouched = lines.find(l => l.startsWith('EDITONLY untouched '))
+  assert(untouched !== undefined, input.normalized.stdout)
+  assert(untouched.includes('reused=1'),
+    'a session that changed nothing made a new version: ' + untouched)
+}
+'''
+
+[[tests]]
+name = "the_same_edit_commits_the_same_with_and_without_an_unrelated_write"
+desc = "Difference test for the page `2026-11-15-can-a-commit-depend-on-unrelated-writes`: one edit, committed twice from one program, once alone and once beside a write nothing reads (a node nothing reads and nothing runs, which adds no edge). The two graphs the commits make must hold the same edges -- the four kinds, compared edge for edge -- because a commit whose answer depends on another write in the same transaction is a commit that cannot be reproduced. The 'DIFF a' and 'DIFF b' lines are the full edge list of each committed graph, so a red reading names the edge that differs instead of a digest."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_commit_differential"]
+verify_script = '''
+({ input, assert }) => {
+  const lines = input.normalized.stdout.trim().split('\n')
+  const pair = lines.find(l => l.startsWith('DIFF pair '))
+  assert(pair !== undefined, input.normalized.stdout)
+  const user = /user=(\d+)/.exec(pair)[1]
+  const pred = /pred=(\d+)/.exec(pair)[1]
+  const a = lines.find(l => l.startsWith('DIFF a '))
+  const b = lines.find(l => l.startsWith('DIFF b '))
+  assert(a !== undefined && b !== undefined, input.normalized.stdout)
+  assert(a.includes('sync:' + user + '>' + pred),
+    'the edit alone did not reach the committed graph: ' + a)
+  assert(b.includes('sync:' + user + '>' + pred),
+    'the edit beside an unrelated write did not reach the committed graph: ' + b)
+  const same = lines.find(l => l.startsWith('DIFF same='))
+  assert(same !== undefined, input.normalized.stdout)
+  assert(same.includes('same=1'),
+    'the same edit committed to two different graphs: ' + same + ' / ' + a + ' / ' + b)
+}
+'''
+
+[[tests]]
+name = "the_commit_reads_its_graph_back_and_names_a_lost_edge"
+desc = "The commit's delivery check (src/runtime/graph_build.h, verifyDraftDelivery): the graph a commit made, read back against the draft it encoded, edge by edge and both ways. The first half commits the one-edge edit with the check on (a Release build runs it only when a test asks, and it throws rather than asserting, so a shipped build that runs it can still say what is wrong); the second half hands the check a draft that holds one sync edge the graph does not -- the state an encoding that lost an edge leaves behind -- and the refusal has to name the graph, the kind of edge and the two nodes."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_delivery_check"]
+verify_script = '''
+({ input, assert }) => {
+  const lines = input.normalized.stdout.trim().split('\n')
+  const pair = lines.find(l => l.startsWith('DELIVERY pair '))
+  assert(pair !== undefined, input.normalized.stdout)
+  const accepted = lines.find(l => l.startsWith('DELIVERY commit '))
+  assert(accepted !== undefined, input.normalized.stdout)
+  assert(accepted.includes('checked=1'), 'the delivery check was not on: ' + accepted)
+  assert(accepted.includes('accepted=1'), 'the check refused a commit it must accept: ' + accepted)
+  const refused = lines.find(l => l.startsWith('DELIVERY refused: '))
+  assert(refused !== undefined, 'the check did not report the lost edge: ' + input.normalized.stdout)
+  assert(refused.includes('is not the draft it encoded'), 'the sentence does not name the shape: ' + refused)
+  assert(refused.includes('sync edge from node'), 'the sentence does not name the edge: ' + refused)
+  assert(refused.includes('is in the draft and not in the graph'),
+    'the sentence does not say which side lost it: ' + refused)
+}
+'''

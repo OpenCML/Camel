@@ -1,0 +1,75 @@
+/**
+ * A graph a transform clones at run time is read in the program that clone belongs to.
+ *
+ * `remat(q)` copies `q`'s `user` graph into a graph of the transform's own program, and hands back
+ * a function value that names that program. `user` calls `target`, and `drop_one` removes
+ * `target`'s `+ 1`; the copy's program was made over the commit's, so the copy reaches the `target`
+ * without the `+ 1` and computes 15, while the program the rewrite was taken from keeps its own
+ * `target` and `user(5)` computes 18.
+ *
+ * The two numbers on the `clone` line are one reading: the run and the graph query must agree. A
+ * copy whose calls were read in the program the run was handed -- the source graph's program, the
+ * program the clone was *not* made in -- computes 18 while `graphs_of` still reports the callee
+ * without the `+ 1`, and the line reads "clone: 18 ones=0".
+ */
+import { remat } from transforms
+import { Rule, rewrite } from rewrite
+import { Graph, Node, constant, graph_of, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { ends_with } from str
+
+rule drop_one(x: int) { x + 1 => x }
+
+func target(x: int): int {
+    return x + 1
+}
+
+func user(n: int): int spelling {
+    return target(n) * 3
+}
+
+/// The text of a node's operator, or '' for a node that is not an operator.
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+/// Whether a node is the constant 1.
+func isOne(n: Node): bool {
+    return match constant::<int>(n) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of a `target`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool spelling {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+func isTarget(g: Graph): bool spelling {
+    return name(g)->ends_with<'target'>
+}
+
+/// The graph of `target` that `p` reaches.
+func targetIn::<F>(p: F): Graph {
+    let found = graphs_of(p)->filter<isTarget>
+    return found[0]
+}
+
+func main(): int spelling sync {
+    let rules: Rule[] = [drop_one]
+    let q = user->rewrite<rules> !! user
+    let marked = remat(q)
+    println(`clone: ${marked(5)} ones=${addOnes(targetIn(marked))}`)
+    println(`given: ${user(5)} ones=${addOnes(targetIn(user))}`)
+    println(`copy: ${name(graph_of(marked))}`)
+    return 0
+}

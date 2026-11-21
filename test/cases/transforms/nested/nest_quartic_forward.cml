@@ -1,0 +1,33 @@
+// The forward half of the nest, pinned so it cannot regress: `jvp(jvp(f))` for f(x) = x^4 at x = 2,
+// seed 1.
+//
+//     f'(x) = 4x^3   ->  f'(2) = 32
+//     f''(x) = 12x^2 ->  f''(2) = 48
+//
+// `jvp(jvp(f))` takes (x, dx) and their tangents `(dx, d(dx))` and answers the pair of the pair:
+//
+//     jvp(jvp(f))(2.0, 1.0, 1.0, 0.0) = ((16.0, 32.0), (32.0, 48.0))
+//
+// so the answer's value half is `(y, t0) = (16, 32)` -- the value and the first derivative -- and its
+// tangent half is `(32, 48)`: the first derivative again, and `t1 = 48 = f''(2)`. Read the two
+// numbers separately: `t0` is lifted once and `t1` twice, so a nest that confused the layers would
+// answer 32 twice.
+//
+// This case is the *green* half of the second-order question. `nest_quartic.cml` beside it is the
+// refused half (`grad(grad(f))`), and the type question behind that refusal is written down in
+// docs/handover/questions/2026-11-20-whether-jvp-of-a-closure-answering-function-is-a-pair-or-a-lifted-closure.cn.md.
+import rulesets.jvp
+import { jvp } from transforms
+
+func quartic(x: float): float {
+    return x * x * x * x
+}
+
+func main(): int sync {
+    let g = jvp(jvp(quartic))
+    let (pair, slope) = g(2.0, 1.0, 1.0, 0.0)
+    let (y, t0) = pair
+    let (_, t1) = slope
+    'nested_quartic_forward y={} t0={} t1={}'->format<y, t0, t1>->println
+    return 0
+}

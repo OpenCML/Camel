@@ -5,7 +5,7 @@
 // and stays.
 //
 // The dead values are not in the compiled graph by themselves: a `let` of the source that no
-// expression reads is never built, so the pass needs a pass before it — `std::opt::inline` here —
+// expression reads is never built, so the pass needs a pass before it — `std::cxx::inline` here —
 // to leave values nobody reads.
 
 func ignore(a: int): int {

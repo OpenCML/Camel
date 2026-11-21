@@ -9,7 +9,7 @@ desc = "`npm run clean` removes exactly the build trees, installs, test scratch 
 # implementation. The case plants a checkout under `${test_tmp}`, runs every tier flag with
 # `--dry-run`, runs the default for real, and checks the exact paths that went and the exact paths
 # that stayed -- including a `.cmo` in the fake checkout's git index, the tracked `unloadable.cmo`
-# fixture, `stdlib/keep.cml`, the fake `.git`, and a file outside the `run-*` scratch.
+# fixture, the fake checkout's `stdlib/` directory's `keep.cml`, the fake `.git`, and a file outside the `run-*` scratch.
 
 [[tests]]
 name = "clean.tiers"

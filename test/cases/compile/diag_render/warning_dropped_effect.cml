@@ -1,4 +1,0 @@
-func main(): int {
-    println('never printed')
-    return 0
-}

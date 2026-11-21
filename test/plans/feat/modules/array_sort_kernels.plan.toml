@@ -2,7 +2,7 @@ id = "modules.array_sort_kernels"
 order = 379
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "profile"]
-desc = "The sort of `array`: one Camel function over `argsort`, with a kernel per element type that does the same without the index array (`array:sort_i` for `i32`, `array:sort_d` for `float`, ...). The kernels give the same bits as the body, the compiler rewrites `v = v->sort` to their in-place forms, and `std::profile` shows one row per element type and form and no row for a sort as a whole."
+desc = "The sort of `array`: one Camel function over `argsort`, with a kernel per element type that does the same without the index array (`array:sort_i` for `i32`, `array:sort_d` for `float`, ...). The kernels give the same bits as the body on every back end, the inputs are left as they were, and an update at the old value's last use (`v = v->sort`) is the execution plan's reuse decision -- in place, or by the array's own count when it can only count -- read off the plan and not off a rewrite of the front end."
 
 # The values: the four element types the sort has a kernel for, the kernel against its body
 # `xs[argsort(xs)]`, the in-place forms the compiler introduces for `v = v->sort`, and the order of
@@ -21,31 +21,65 @@ expect_stdout_exact = "sort [1, 2, 3] [10, 20, 30] [1.5, 2.5, 3.5] [-2.5, 1.5, 3
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# ---- where in-place is decided, which is the plan's reuse and not the operator table ----
+#
+# This entry used to count `std::profile`'s operator rows: the returning form of the sort once per
+# element type (twice for the two floats, which the body sorts too) and `array:sort_*_in_place` once
+# each -- that is, that the compiler rewrote `v = v->sort` into the in-place operator. That rewrite
+# is `Builder::inPlaceRebindingOf`, a mechanism of the statement shape from when a `var` was a cell.
+# Since stage S1 of the direct-SSA plan a same-region local `var` is a value, so there is no cell to
+# take the array out of and the rewrite cannot run at all; the author's answer of 2026-11-18
+# (`docs/handover/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules
+# that in-place is the execution plan's reuse decision and not the front end's: at `sort(v)`, when
+# that is the old `v`'s last use, the plan takes the in-place form (`StorageReuse::Input`, and
+# `ByArrayCount` when it can only count) -- design principles 10.5, "an update at the old value's
+# last use is in place". The front-end rewrite and `inPlaceCalls_` are to be deleted with it.
+#
+# So what this entry asks now is the plan's verdict on this program, read with the ruler the plan
+# page names for exactly that question: `camel inspect --copies`. The four `v = v->sort` rebindings
+# are the old value's last use, so they are the four updates the plan must place on the input's
+# storage; the six `sort(...)` calls above them leave their argument live -- `input` prints `s_i`,
+# `s_l`, `s_f` and `s_d` after the sorts, and the two floats are sorted twice -- so those may stay
+# copies.
+#
+# The values this program prints are pinned by `array_sort_kernels` above (four back ends, exact
+# stdout, the `in_place` line among them), so changing this entry's assertion did not drop the "the
+# sort is still correct" half of what the two entries prove together.
+#
+# What it read on `6e4b48362`, where the red this entry was owned for (lane H) comes from: `COPIES
+# main updates 10 in-place 0 by-count 0 declared 0 copied 10`, one `... sort_kernel copied` per site
+# -- the plan placed none of them on the input's storage then.
+#
+# It holds as written since `02939ffb7` (stage S3b), and that is the reading moving and not this
+# entry: the same ruler reads this program `COPIES main updates 10 in-place 4 by-count 0 declared 0
+# copied 6` -- the four `v = v->sort` rebindings handed the storage they were given, the six sorts
+# whose argument is printed afterwards still copying -- so all three assertions are met (`updates
+# === 10`, `in-place + by-count >= 4`, `copied <= 6`). S3b changed no line of this file; the same
+# mechanism is read on a second program by `new_values.sort_rebinding.copies`.
+
 [[tests]]
 name = "array_sort_kernels.paths"
-desc = "In that run `std::profile` counts each element type's own operator apart: the returning form of the sort for `i32`, `int`, `f32` and `float` (once, once, twice, twice), the in-place form of each (once), and `argsort` for the same four (once, once, twice, twice) -- exactly those `array:` rows, so the element type is fixed where the executor is chosen and no row is a sort as a whole."
+desc = "`camel inspect --copies` on that program: the plan's verdict on each `sort` is a reuse decision, and the four `v = v->sort` rebindings are the old value's last use, so they are `in-place` or `by-count` (design principles 10.5) while the six `sort(...)` calls whose argument is printed afterwards may copy. This is where in-place lives after stage S1 of the direct-SSA plan: `Builder::inPlaceRebindingOf` no longer runs (`v` is a value and not a cell), and the author's answer of 2026-11-18 moved the decision to the execution plan. The values the same program prints are `array_sort_kernels`'s, four back ends and exact stdout."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_sort_kernels.cml"
-args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
+args = ["inspect", "--copies", "${case}"]
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
-async ({ input, assert }) => {
-    const fs = await import('node:fs')
-    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
-    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
-    const shown = JSON.stringify(Object.fromEntries(Object.entries(calls).filter(([uri]) => uri.startsWith('array:'))))
-    const expected = {
-        'array:sort_i': 1, 'array:sort_l': 1, 'array:sort_f': 2, 'array:sort_d': 2,
-        'array:sort_i_in_place': 1, 'array:sort_l_in_place': 1, 'array:sort_f_in_place': 1,
-        'array:sort_d_in_place': 1,
-        'array:argsort_i': 1, 'array:argsort_l': 1, 'array:argsort_f': 2, 'array:argsort_d': 2,
-    }
-    for (const [uri, count] of Object.entries(expected)) {
-        assert(calls[uri] === count, `${uri} ran ${calls[uri]} times, not ${count}: ${shown}`)
-    }
-    const rows = Object.keys(calls).filter((uri) => uri.startsWith('array:')).sort()
-    assert(rows.length === Object.keys(expected).length,
-        `the array rows are ${JSON.stringify(rows)}, expected exactly the ${Object.keys(expected).length}: ${shown}`)
+({ input, assert }) => {
+    const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+    const tally = lines.find((l) => /^COPIES main updates \d+ in-place \d+ by-count \d+ declared \d+ copied \d+$/.test(l))
+    assert(tally, `main's tally is not in the reading: ${JSON.stringify(lines)}`)
+    const [updates, inPlace, byCount, copied] = tally.match(/\d+/g).map(Number)
+    // Ten sort sites, and the plan is asked about all ten: four rebindings of a name
+    // (`v_i = v_i->sort`) and six calls on an array that is still read afterwards.
+    assert(updates === 10, `the sort sites the plan was asked about: ${tally}`)
+    // The four rebindings are the old value's last use, so the update is in place: proved
+    // (`in-place`) or counted (`by-count`), never copied (design principles 10.5).
+    assert(inPlace + byCount >= 4,
+        `four rebindings of the old value's last use must reuse its storage (in-place or by-count): ${tally}`)
+    // The other six sorts leave their argument live, so they may copy -- and only they.
+    assert(copied <= 6, `only the six sorts whose argument is still read may copy: ${tally}`)
 }
 """
 timeout_ms = 60000

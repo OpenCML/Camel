@@ -2,10 +2,10 @@ id = "compile.extent_of"
 order = 1008
 tier = "fast"
 tags = ["feat", "compile", "extents", "transforms"]
-desc = "What `extent_of` is today: `dim<axis>` answers one dimension's length of a shape, from the value; a type that states every extent folds that answer at compile time, and a type that states none keeps it as a node. There is no name that answers it from a **type alone**, which is what a transpose law needs (`docs/handover/questions/2026-11-04-what-answers-a-length-from-a-type-alone.cn.md`)"
+desc = "What `extent_of` is today: `dim<axis>` answers one dimension's length of a shape, from the value; a type that states every extent folds that answer at compile time, and a type that states none keeps it as a node. There is no name that answers it from a **type alone**, which is what a transpose law needs (`docs/handover/reviews/2026-11-04-what-answers-a-length-from-a-type-alone.cn.md`)"
 
 # The question `extent_of` was named for, asked of the three names that exist
-# (`docs/handover/questions/2026-11-04-what-answers-a-length-from-a-type-alone.cn.md`, section one).
+# (`docs/handover/reviews/2026-11-04-what-answers-a-length-from-a-type-alone.cn.md`, section one).
 #
 # Every entry here is a reading of today's tree and all of them pass. They are here so that the day a
 # type-to-length channel lands, the new name can be held to the same numbers, and so that "it folds

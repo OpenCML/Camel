@@ -63,8 +63,8 @@ GenerationalAllocatorWithGC::RuntimeStats GenerationalAllocatorWithGC::stats() c
         result.elderReservedBytes = elder.reservedBytes;
         result.elderSegments      = elder.segments;
     }
-    result.rememberedSetSize  = rememberedSet_.size();
-    result.rootSourceCount    = rootSourceCountUnlocked();
+    result.rememberedSetSize = rememberedSet_.size();
+    result.rootSourceCount   = rootSourceCountUnlocked();
     return result;
 }
 
@@ -229,8 +229,7 @@ bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
 }
 
 bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
-    const GrowableFreeListAllocator &allocator, rtdata::Object *object,
-    std::string_view regionName,
+    const GrowableFreeListAllocator &allocator, rtdata::Object *object, std::string_view regionName,
     AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
     std::string_view path) const {
     if (!allocator.contains(object)) {
@@ -637,7 +636,8 @@ void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
 
         rtdata::Object *object = entry.object ? entry.object : payloadOf<rtdata::Object>(header);
         const type::Type *objectType = entry.type ? entry.type : knownObjectTypeUnlocked(header);
-        if (objectType && collectYoungReferenceEdges(object, objectType).empty()) {
+        if (objectType && collectYoungReferenceEdges(object, objectType).empty() &&
+            !hasGraphCarrierRefsUnlocked(object, objectType)) {
             issues.push_back(makeIssue(
                 "Remembered set contains an owner with no current young references",
                 {},

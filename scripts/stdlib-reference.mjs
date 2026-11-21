@@ -254,6 +254,16 @@ const MODULES = [
         declaration: true,
     },
     {
+        name: 'state',
+        title: '`state`: an explicit mutable reference',
+        kind: 'cpp',
+        // The declarations, in stdlib/state.cml: `Ref<T>` and the four operators `ref`, `get`,
+        // `set` and `update`. The module keeps the kernels and the resource contract of each
+        // operator (design principles 10.4), so nothing here is computed.
+        source: 'state.cml',
+        declaration: true,
+    },
+    {
         name: 're',
         title: '`re`: regular expressions',
         kind: 'cpp',
@@ -759,9 +769,19 @@ function readDeclarations(file, module, options = {}) {
             } else if (/^#impl\(/.test(trimmed)) {
                 // `#impl(kernel)`: a Camel definition that carries a native kernel for speed. The
                 // definition is what the page documents; the kernel is private to the module.
+            } else if (/^#macro\b/.test(trimmed)) {
+                // `#macro` is a tag the language defines on a function declaration, not a marker
+                // this page owns, so a signature file may carry it beside `#op(...)`: the standard
+                // library's transforms are macro functions, which is what lets `std::macro`
+                // evaluate a transform ahead of the run (the author's ruling of 2026-11-15 night,
+                // 4ae2c0179). A C++ module's transforms -- `jvp`, `split`, `transpose`, `vmap`,
+                // `first_with_as_param` -- have no other declaration to carry it, because the
+                // file's declarations are the only place a program reads them (`stdlib/
+                // signatures/<module>.cml`, beside `#op('module:function')`). The page does not
+                // render the tag; what it records is the declaration and its doc comment.
             } else if (module.kind === 'cpp') {
-                // A signature file writes `#op(...)` and nothing else: another tag there is a typo,
-                // not a declaration.
+                // A signature file writes `#op(...)` or the language's `#macro` and nothing else:
+                // another tag there is a typo, not a declaration.
                 throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
             }
             continue
@@ -817,7 +837,13 @@ function readDeclarations(file, module, options = {}) {
                 pendingUri = null
                 continue
             }
-            const result = readResultType(after, lines, i)
+            // A declaration may write the capability clauses it takes after its result type
+            // (`export func name(g: Graph): string spelling`, design principles 9.5). The clause is
+            // not part of the type, so the result every comparison reads is the type alone and the
+            // clause is printed back where the declaration wrote it (signatureText).
+            const stated = readResultType(after, lines, i)
+            const spelling = /\bspelling\s*$/.test(stated)
+            const result = spelling ? stated.replace(/\s+spelling\s*$/, '').trim() : stated
             const entry = {
                 module: module.name,
                 name,
@@ -827,6 +853,7 @@ function readDeclarations(file, module, options = {}) {
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
+                spelling,
                 inferred: result === '' && module.kind === 'camel',
                 // A body-less `export func` in a library module written in Camel declares one of
                 // the module's native operators (`array`'s sorts and primitives): there is no
@@ -942,9 +969,13 @@ function parseHeader(module) {
 // ---- the document -------------------------------------------------------------------------
 
 function signatureText(entry) {
-    if (entry.value) return `${entry.name}: ${entry.result}`
+    // The clause a declaration writes after its result type (`... => string spelling`) states the
+    // capability the body takes, not part of the type: the page prints it where the declaration
+    // writes it, after the result, and every comparison reads `entry.result` without it.
+    const clause = entry.spelling ? ' spelling' : ''
+    if (entry.value) return `${entry.name}: ${entry.result}${clause}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
-    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}`
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}${clause}`
 }
 
 function renderDoc() {
@@ -1739,6 +1770,136 @@ function uriMatches(pattern, uri) {
     return new RegExp(`^${source}$`).test(uri)
 }
 
+// The index of the top-level occurrence of the word `word` in `text`, or -1. A clause written
+// after a result type is at depth 0; the same word inside a parameter's function type is not.
+function topLevelIndex(text, word) {
+    const pattern = new RegExp(`^${word}\\b`)
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) depth--
+        else if (depth === 0 && (i === 0 || /\s/.test(text[i - 1])) && pattern.test(text.slice(i, i + word.length + 1))) {
+            return i
+        }
+    }
+    return -1
+}
+
+// The access list a declaration writes in its `uses` clause (design principles 3.3;
+// docs/design/effects/plan.cn.md 2.1, 4.3): one item per resource it touches, `uses var fs` for an
+// access that writes `fs` and `uses fs` for one that only reads it. Null
+// when the declaration writes no clause at all, which states nothing about what the operator
+// touches -- an operator nobody itemized is read as writing the global resource, and a reading
+// cannot contradict a declaration that says nothing.
+function declaredAccesses(text) {
+    const at = topLevelIndex(text || '', 'uses')
+    if (at < 0) return null
+    let rest = text.slice(at + 'uses'.length)
+    const when = topLevelIndex(rest, 'when')
+    if (when >= 0) rest = rest.slice(0, when)
+    const items = []
+    for (const part of splitTopLevel(rest) || []) {
+        const trimmed = part.trim()
+        if (trimmed === '') continue
+        const write = /^var\s+/.test(trimmed)
+        const name = trimmed.replace(/^var\s+/, '').trim()
+        if (name !== '') items.push({ name, write })
+    }
+    return items
+}
+
+// The access list of an operator, for a diagnostic: what it touches and how.
+function describeAccesses(accesses) {
+    return accesses
+        .map((access) => {
+            const what = access.binding === 'ambient' ? access.name || access.class : `its ${access.binding} operand`
+            return `${what} (${access.mode})`
+        })
+        .join(', ')
+}
+
+// The two access lists side by side, item by item: what a declaration writes in its `uses` clause
+// and what the operator registers (`camel inspect --ops` prints it, `accesses`). An item names
+// either a parameter of the declaration -- the operand the C++ side binds the access to, printed
+// as "with 0" or "norm 1" -- or a resource outside the program, which the operator names with its
+// module (`uses driver` in module `tiles` is `tiles:driver`). Both directions are compared: an item
+// the operator does not touch, and a resource it touches that the clause does not name. Purity is
+// the empty list, so `@pure` is compared the same way.
+function compareAccesses(entry, op, declared, declaredPure) {
+    const problems = []
+    const where = `${entry.file}:${entry.line}: '${entry.name}' (${op.uri})`
+    const accesses = op.accesses || []
+    const paramName = (access) => {
+        const found = /^(with|norm) (\d+)$/.exec(access.binding || '')
+        if (!found) return null
+        const list = found[1] === 'with' ? entry.with : entry.norm
+        const spelling = list[Number(found[2])]
+        return spelling === undefined ? null : parameterName(spelling)
+    }
+    if (declaredPure && accesses.length !== 0) {
+        problems.push(`${where} is @pure but touches ${describeAccesses(accesses)}`)
+    }
+    if (declaredPure || declared === null) return problems
+    const byName = new Map()
+    const ambient = []
+    for (const access of accesses) {
+        const name = paramName(access)
+        if (name !== null) {
+            byName.set(name, access)
+            continue
+        }
+        if (access.binding === 'ambient') {
+            ambient.push(access)
+            // The C++ side names an ambient resource the way the module that declares it writes
+            // it (`tiles:driver`, `process:process`), while a clause writes a resource of its own
+            // module bare (`uses driver`), one of another through that module (`uses io::fs`) or
+            // the name the module was given (`uses fs`). All of those spellings name one resource.
+            const qualified = access.name
+            const bare = qualified.slice(qualified.lastIndexOf(':') + 1)
+            for (const spelling of [
+                qualified,
+                qualified.replace('::', ':'),
+                bare,
+                `${entry.module}:${bare}`,
+                `${entry.module}::${bare}`,
+            ]) {
+                byName.set(spelling, access)
+            }
+        }
+    }
+    const covered = new Set()
+    for (const item of declared) {
+        const access = byName.get(item.name)
+        if (access === undefined) {
+            problems.push(
+                `${where} declares \`uses ${item.write ? 'var ' : ''}${item.name}\` but the operator touches no such resource`,
+            )
+            continue
+        }
+        covered.add(access)
+        // An entry that carries `var` says the call writes its resource, so the operator it declares
+        // has to write it too -- an ambient resource included: what the program does not own is read
+        // or written as the operator that touches it says, and an entry that always had to say `var`
+        // said nothing about which (design principles 3.3). The other direction is left alone: a read
+        // entry on a resource the operator writes is an upper bound, and a body that reaches past it
+        // is what the promise check refuses.
+        if (item.write && access.mode === 'read') {
+            problems.push(`${where} declares a write of \`${item.name}\` and the operator only reads it`)
+        }
+    }
+    for (const access of ambient) {
+        if (!covered.has(access)) {
+            problems.push(`${where} touches \`${access.name}\` (${access.mode}) and its declaration does not name it`)
+        }
+    }
+    return problems
+}
+
 function countsAgree(declared, registered) {
     // -1: any number, -2: the resolver does not tell.
     return declared === registered || declared < 0 || registered < 0
@@ -2257,16 +2418,37 @@ function compareMatchPieces(declared, operator, what) {
     return { same: true }
 }
 
+// A type function expanded into a pack, with the container around it kept for comparison. For
+// example, `(...ElementOf<A>)[]` has body `ElementOf<A>` and suffix `[]`; the registered form may
+// write the body out as a `match type` and keep a trailing comma inside the pack.
+function matchTypeExpansion(text) {
+    const source = (text || '').trim()
+    if (!source.startsWith('(...')) return null
+    const close = partnerBracket(source, 0)
+    if (close < 0) return null
+    return {
+        body: source.slice(4, close).trim().replace(/,$/, '').trim(),
+        suffix: source.slice(close + 1).trim(),
+    }
+}
+
 // The `match type` form a text stands for: the text itself, or the definition of the name it
 // applies when the library defines that name as a type function. null when the text is a name this
 // reader has no definition for, or a type function applied to a subject the type layer would have
 // evaluated: neither is a form this comparison reads, and both stay with the exception classes.
 function matchTypeForm(text) {
     const source = withoutConditions(text)
+    const expansion = matchTypeExpansion(source)
+    if (expansion !== null) {
+        const inner = matchTypeForm(expansion.body)
+        return inner === null ? null : { ...inner, suffix: expansion.suffix }
+    }
     const direct = parseMatchType(source)
-    if (direct !== null) return direct
+    if (direct !== null) return { ...direct, suffix: '' }
     const applied = applyTypeFunction(source)
-    return applied === null ? null : parseMatchType(applied)
+    if (applied === null) return null
+    const evaluated = parseMatchType(applied)
+    return evaluated === null ? null : { ...evaluated, suffix: '' }
 }
 
 // `Name<arguments>` with `Name` a type function, instantiated as the definition writes it. The
@@ -2302,6 +2484,12 @@ function matchTypeVerdict(declaredText, operatorText) {
     const mine = matchTypeForm(declaredText)
     const theirs = matchTypeForm(operatorText)
     if (mine === null || theirs === null) return null
+    if (mine.suffix !== theirs.suffix) {
+        return {
+            same: false,
+            why: `the declaration's container \`${mine.suffix}\` and the operator's \`${theirs.suffix}\` differ`,
+        }
+    }
     const subject = compareMatchPieces(mine.subject, theirs.subject, 'subject')
     if (subject.same !== true) {
         return {
@@ -2554,6 +2742,8 @@ const EXCEPTIONS = {
                 'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
             'jvp (transforms:jvp)#parameter':
                 'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
+            'update (state:update)#parameter':
+                'parameter 2 is `(x: T) => T pure`, a function type the operator applies inside itself; the declaration writes it `(x: T) => T`, so the two sides are one function type and this checker does not compare a function type',
             'first_with_as_param (transforms:first_with_as_param)#parameter':
                 'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
             'remat (transforms:remat)#parameter':
@@ -2624,6 +2814,10 @@ const EXAMPLE_STOPS = {
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
         'stdlib/fs.cml#write_bytes#1':
             'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
+        'stdlib/state.cml#set#1':
+            'the example writes through `r`, a handle the surrounding program holds: an example program has no box to write',
+        'stdlib/state.cml#update#1':
+            'the example updates through `r`, a handle the surrounding program holds: an example program has no box to update',
         'stdlib/graph.cml#constant#1':
             '`n` is a node of the surrounding pass, and no example program has one',
         'stdlib/graph.cml#erase#1':
@@ -2631,6 +2825,20 @@ const EXAMPLE_STOPS = {
         'stdlib/graph.cml#eval#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
         'stdlib/graph.cml#replace#1':
+            '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
+        'stdlib/graph.cml#name#1':
+            'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
+        'stdlib/graph.cml#origin#1':
+            'the example reads the origin of `n`, which is a node of the surrounding pass, and the reading needs the `spelling` capability no example program can declare (design principles 9.5)',
+        'stdlib/graph.cml#show#1':
+            'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
+        'stdlib/graph.cml#creation_id#1':
+            'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
+        'stdlib/graph.cml#outline#1':
+            '`t` is an open transaction and `ns` a group of its graph\'s nodes: a doc example has neither',
+        'stdlib/graph.cml#order#1':
+            '`t` is an open transaction and `a`, `b` are nodes of its graph: a doc example has neither',
+        'stdlib/graph.cml#inline#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
         'stdlib/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
@@ -3306,13 +3514,18 @@ function verifyOps() {
                 // operator's purity is registered in C++ and a declaration need not repeat it
                 // (design principles 6.4, 10.4), so there is nothing to compare. A tag that *is*
                 // written is a claim about the operator, and it has to agree with it.
-                if (entry.purity === null) {
-                    continue
-                }
-                if (declaredPure !== (op.purity === 'pure')) {
+                if (entry.purity !== null && declaredPure !== (op.purity === 'pure')) {
                     problems.push(
                         `${entry.file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
                     )
+                }
+                // The access list, item by item: the `uses` clause a declaration writes against
+                // the accesses the operator registers. An operator that itemizes none is read as
+                // writing the global resource (design principles 3.3), and that reading says
+                // nothing a declaration could agree or disagree with, so only a declaration of an
+                // operator that itemizes its accesses is compared. `@pure` is the empty list.
+                if (op.accesses_declared === true) {
+                    problems.push(...compareAccesses(entry, op, declaredAccesses(entry.result), declaredPure))
                 }
             }
         }

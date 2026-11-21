@@ -1,0 +1,87 @@
+/**
+ * `layer_norm`'s forward rule, read on numbers derived by hand.
+ *
+ * `layer_norm(x, gamma, beta)` -- the spelling with no eps, which is the one
+ * `showcase/c3-char-transformer/train.cml` writes -- over
+ * `x = [[-3, 0, 3], [2, 5, 8]]`, with `gamma = [1, 2, -1]` and `beta = [0.5, -0.5, 1]`. gamma's
+ * three elements are the trailing block of `x`, so the normalization has **two lanes of width
+ * three**, one per row, and every mean below is taken over a lane and never across lanes.
+ *
+ * The rows were chosen so that the lane arithmetic is exact and the two lanes are told apart by
+ * their mean alone: the first sits 3 either side of `0`, the second 3 either side of `5`, so
+ * `var = (9 + 0 + 9) / 3 = 6` on both lanes and
+ *
+ *   k = inv = 1 / sqrt(6 + 1e-5) = 0.4082479502573796
+ *   xhat = (-3k, 0, 3k) = (-1.2247438507721387, 0, 1.2247438507721387)   on both lanes
+ *
+ * Equal xhat on two lanes of different mean is the point: a mean taken over the whole tensor
+ * (`(3 + 0 + 3 + 2 + 5 + 8) / 6 = 2.5`) would answer neither lane, and the two lanes' tangents
+ * below differ through `J dx` while sharing the `dgamma * xhat` and `dbeta` terms.
+ *
+ * The tangent is `d(y) = gamma * (J dx) + dgamma * xhat + dbeta` per element, with
+ * `J dx = inv * (dx - mean(dx) - xhat * mean(xhat . dx))` -- the means over the lane:
+ *
+ *   lane 0, dx = (1, 2, 0): mean(dx) = 1, mean(xhat . dx) = -k,
+ *     J dx = k * ((1, 2, 0) - (1, 1, 1) - (-3k, 0, 3k) * (-k)) = k * (-3k^2, 1, -1 + 3k^2)
+ *   lane 1, dx = (1, 1, -2): mean(dx) = 0, mean(xhat . dx) = -3k,
+ *     J dx = k * ((1, 1, -2) - (9k^2, 0, -9k^2)) = k * (1 - 9k^2, 1, -2 + 9k^2)
+ *
+ * with `3k^2 = 0.4999991666680556` and `9k^2 = 1.499997500004167`, and the three terms are
+ *
+ *   lane 0: gamma*(J dx) = (-0.20412363492263155, 0.8164959005147592, 0.20412431533474804)
+ *           dgamma*xhat  = (-0.6123719253860693, 0, 2.4494877015442773)
+ *           dbeta        = (0.25, 0, -0.5)
+ *           total        = (-0.5664955603087009, 0.8164959005147592, 2.153612016879025)
+ *   lane 1: gamma*(J dx) = (-0.20412295451051513, 0.8164959005147592, 0.20412499574686446)
+ *           dgamma*xhat  = (-0.6123719253860693, 0, 2.4494877015442773)
+ *           dbeta        = (0.25, 0, -0.5)
+ *           total        = (-0.5664948798965844, 0.8164959005147592, 2.1536126972911416)
+ *
+ * and the value is `gamma * xhat + beta = (-0.7247438507721387, -0.5, -0.22474385077213865)` on
+ * both lanes.
+ *
+ * Three laws this one is separated from, each by a number and not by a shape:
+ *
+ *   * the middle of `J`: `J = inv * (I - e eT / n - xhat xhatT / n)` is rank one at width three,
+ *     and a tangent that dropped the `xhat xhatT / n` term would answer lane 0's first element
+ *     `k * (1 - 1) = 0` instead of `-0.20412363492263155`. (At **width two** `J` is the zero
+ *     matrix whenever `eps` is small -- `e` and `xhat` span the lane -- so a case of width two
+ *     would pin the `dgamma` and `dbeta` terms and nothing about the input's derivative at all.)
+ *   * the lane: a mean over the whole tensor, as above.
+ *   * the eps: `inv` is the declaration's `1e-5`, and both calls of this law inherit that one
+ *     default (`layer_norm`'s and `layer_norm_grad`'s, `modules/tensor/kernels/reduce.cpp` and
+ *     `modules/tensor/ops/gradient_ops.cpp`). `k` moves in its seventh digit if either default
+ *     moves, so the numbers below are also the keeper of that agreement -- the one
+ *     `layerNormVjp` already relies on.
+ *
+ * `normed` declares its three parameters as `float[...]`, which is the shape
+ * `showcase/c3-char-transformer/train.cml`'s own `block` gives them: the law's neutral gain and
+ * bias are read off the operands it was handed, so the case is written against the operands whose
+ * extents are not known at compile time rather than only against the easy declared ones.
+ *
+ * Nothing here is exact in binary floating point, because `1/sqrt(6 + 1e-5)` is not; every figure
+ * above is the same expression evaluated in the same order the kernels evaluate it
+ * (`stdlib/rulesets/jvp.cml#jvp_layer_norm` reproduces the kernel's order), so the entry pins
+ * text rather than a tolerance.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { layer_norm } from tensor
+
+func normed(x: float[...], gamma: float[...], beta: float[...]): float[...] {
+    return layer_norm(x, gamma, beta)
+}
+
+func main(): int sync {
+    let xs = [[-3.0, 0.0, 3.0], [2.0, 5.0, 8.0]] as float[2, 3]
+    let gamma = [1.0, 2.0, -1.0] as float[3]
+    let beta = [0.5, -0.5, 1.0] as float[3]
+    let dxs = [[1.0, 2.0, 0.0], [1.0, 1.0, -2.0]] as float[2, 3]
+    let dgamma = [0.5, -1.0, 2.0] as float[3]
+    let dbeta = [0.25, 0.0, -0.5] as float[3]
+    // The lifted signature is `(..values, ..their tangents)` (`modules/transforms/jvp.cpp`), so
+    // the three values come first and the three tangents after them.
+    let (value, tangent) = jvp(normed)(xs, gamma, beta, dxs, dgamma, dbeta)
+    'layer_norm jvp value={} tangent={}'->format<value, tangent>->println
+    return 0
+}

@@ -68,10 +68,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "recursion_depth_limit.inline_nvm"
-desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::opt::inline); depth(200) printed before it, nothing after."
+desc = "Non-tail recursion past the default limit of 1000 open calls stops with MaxRecursionDepthExceeded at the recursive call expression, the same position on every back end (NodeVM after std::cxx::inline); depth(200) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/linear/runtime/recursion_depth_limit.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
@@ -84,68 +84,68 @@ timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.nvm"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body it is absent from the graph (design principles 3.1). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (nvm)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (nvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_output_not_contains = ["DROPPED"]
+expect_output_not_contains = ["never runs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n6\nKEPT main end', `unexpected output: ${out}`)
+assert(out === 'main start\nplain\nnested 1\nnested 2\nsuffix\nreturned first\nreturned\n6\nmain end', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.fvm"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body it is absent from the graph (design principles 3.1). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (fvm)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (fvm)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_output_not_contains = ["DROPPED"]
+expect_output_not_contains = ["never runs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n6\nKEPT main end', `unexpected output: ${out}`)
+assert(out === 'main start\nplain\nnested 1\nnested 2\nsuffix\nreturned first\nreturned\n6\nmain end', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.jit"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body it is absent from the graph (design principles 3.1). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (jit)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (jit)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "${run_jit}"]
 expect_exit = 0
-expect_output_not_contains = ["DROPPED"]
+expect_output_not_contains = ["never runs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n6\nKEPT main end', `unexpected output: ${out}`)
+assert(out === 'main start\nplain\nnested 1\nnested 2\nsuffix\nreturned first\nreturned\n6\nmain end', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 10000
 
 [[tests]]
 name = "effects_outside_sync.tf"
-desc = "An effectful call whose result is unused runs only when the function body is a sync block (suffix spelling); in a plain body it is absent from the graph (design principles 3.1). The nested sync block is the one case still open (docs/technical/18_sync_control_semantics.md section 2.5): its current behaviour is locked, not endorsed. Same output on every scheduler (tf)."
+desc = "Every print of this case runs, whatever the body is: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so an effectful call whose result is unused runs in a plain body too, and a nested sync block no longer drops its tail. Same output on every scheduler (tf)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["${case}", "std::tf"]
 expect_exit = 0
-expect_output_not_contains = ["DROPPED"]
+expect_output_not_contains = ["never runs"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === 'KEPT main start\nKEPT suffix\nKEPT returned\n6\nKEPT main end', `unexpected output: ${out}`)
+assert(out === 'main start\nplain\nnested 1\nnested 2\nsuffix\nreturned first\nreturned\n6\nmain end', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 10000

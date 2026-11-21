@@ -3,9 +3,14 @@
 
 #include "fault.h"
 
-#include "camel/passes/test/anchor.h"
 #include "../opt/generic/rewrite.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/graph.h"
+
+#include <utility>
+#include <vector>
 
 using camel::passes::test::anchorNode;
 using camel::passes::test::blankNode;
@@ -104,21 +109,6 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
     using camel::runtime::DraftEdgeKind;
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
-    // One-off reading: the flags every node of the input graph carries. The `kGCNodeFlagSyncStatement`
-    // mark lives on the committed node, not on the draft, so this is where it can be seen.
-    for (const camel::runtime::GCGraph *graph : program->graphs()) {
-        if (graph == nullptr) {
-            continue;
-        }
-        for (uint32_t node = 0; node < graph->nodeCount(); ++node) {
-            const camel::runtime::GCNode *committed =
-                graph->node(static_cast<camel::runtime::gc_node_ref_t>(node));
-            if (committed != nullptr &&
-                committed->hasFlag(camel::runtime::kGCNodeFlagSyncStatement)) {
-                out << "order_only_effect: marked node=" << node << " graph=" << node << "\n";
-            }
-        }
-    }
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(owner);
         auto &draft       = transaction.edit();
@@ -133,9 +123,7 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             if (!uri.starts_with(":io/")) {
                 continue;
             }
-            // The mark the effect carries, before any edge goes: a test reading of this pass has to
-            // show that the node under test is marked, not assume it because the program wrote it in
-            // a `sync` block (a reading that assumes its own instrument works is no reading).
+            // Identify the effect before stripping its credentials.
             out << "order_only_effect: node=" << id << " uri=" << uri
                 << " runtimeFlags=" << static_cast<int>(header->runtimeFlags) << "\n";
             // A node to hang the order edge on: the effect's own chain predecessor when it has one,
@@ -186,9 +174,8 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             // The effect keeps one edge and only one: an order edge out of it, to a node of its own
             // region (an order edge that enters a region breaks edges.cn.md 4.6 first, and that
             // refusal is not the one this instrument is for). Order is not a credential (3.1,
-            // edges.cn.md 1.5; the author struck it on 2026-11-01), so what is left of the effect is
-            // the mark alone, and the order edge is what keeps the node from being dropped as dead
-            // before the credential check sees it.
+            // edges.cn.md 1.5); it only keeps the node from being dropped as dead before the
+            // credential check sees it.
             camel::runtime::gc_node_ref_t other = camel::runtime::kInvalidNodeRef;
             for (camel::runtime::gc_node_ref_t candidate = 0; candidate < draft.nodeSlotCount();
                  ++candidate) {
@@ -207,4 +194,162 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
         }
     }
     return program;
+}
+
+namespace {
+
+/// The static function a call's callee slot names, or nullptr. The walk is the one
+/// `tryResolveStaticValue` makes for the same question (src/runtime/draft_inline.cpp): through the
+/// GATE a `let`'s value gets and the COPY/CAST a rewrite leaves between a value and its user, to
+/// the DATA node that stands for a constant of the static area. Only a callee this resolves is one
+/// `std::cxx::devirtualize` can rewrite, which is what makes the retarget below a case about that
+/// pass.
+///
+/// The draft is a template parameter rather than a named type: a signature that names the type is a
+/// new direct connection to it, which the ledger of graph-store step 2 b counts
+/// (test/plans/feat/runtime/graph_draft_ledger, baseline.json), and this pass needs a draft, not an
+/// address of one.
+template <typename Draft>
+::Function *staticCalleeOf(const Draft &draft, camel::runtime::gc_node_ref_t ref) {
+    using camel::runtime::gc_node_ref_t;
+    using camel::runtime::GCNodeKind;
+    using camel::runtime::kInvalidNodeRef;
+    for (int hop = 0; hop < 8 && ref != kInvalidNodeRef; ++hop) {
+        const auto *header = draft.header(ref);
+        if (header == nullptr) {
+            return nullptr;
+        }
+        if (header->kind == GCNodeKind::Gate) {
+            const auto in = draft.normInputsOf(ref);
+            if (in.empty()) {
+                return nullptr;
+            }
+            ref = in.back();
+            continue;
+        }
+        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Cast) {
+            const auto in = draft.normInputsOf(ref);
+            if (in.empty()) {
+                return nullptr;
+            }
+            ref = in.front();
+            continue;
+        }
+        if (header->kind != GCNodeKind::Data || header->dataIndex >= 0) {
+            return nullptr;
+        }
+        // Only a value whose type says it is a function is one (the same test devirtualize makes
+        // before it reads the slot: the static area holds every kind of constant).
+        if (header->dataType == nullptr ||
+            header->dataType->code() != camel::core::type::TypeCode::Function) {
+            return nullptr;
+        }
+        const auto slots = draft.staticSlots();
+        const auto index = static_cast<size_t>(-static_cast<int64_t>(header->dataIndex));
+        if (index == 0 || index >= slots.size()) {
+            return nullptr;
+        }
+        ::Function *function = camel::core::rtdata::fromSlot<::Function *>(slots[index]);
+        return function != nullptr && function->graph() != nullptr ? function : nullptr;
+    }
+    return nullptr;
+}
+
+/// Whether calling `candidate` where `call` stands would be a call site that does not fit its
+/// callee: a different number of ordinary arguments (`arity`), or the same number with an argument
+/// no port takes. The judgement of "fits" is the repository's (`camel::runtime::typesCompatible`,
+/// the relation the seal uses along an edge), so a case built with this pass asks about the same
+/// relation the compiler asks about. The draft is a template parameter for the reason given above.
+template <typename Draft>
+bool givesMismatchedCall(
+    const Draft &draft, camel::runtime::gc_node_ref_t call, const ::Function *candidate,
+    bool arity) {
+    const camel::runtime::GCGraph *target = candidate->graph();
+    if (target == nullptr) {
+        return false;
+    }
+    const auto args  = draft.normInputsOf(call);
+    const auto ports = target->normPorts();
+    if (arity) {
+        return ports.size() != args.size();
+    }
+    if (ports.size() != args.size() || ports.empty()) {
+        return false;
+    }
+    bool any = false;
+    for (size_t i = 0; i < ports.size(); ++i) {
+        const camel::runtime::GCNode *port = target->node(ports[i]);
+        const auto *arg                    = draft.header(args[i]);
+        if (port == nullptr || arg == nullptr) {
+            return false;
+        }
+        if (!camel::runtime::typesCompatible(port->dataType(), arg->dataType)) {
+            any = true;
+        }
+    }
+    return any;
+}
+
+/// Points the first call through a static function at another static function of the same graph
+/// whose signature the call site does not fit, and commits. Nothing else is touched: the arguments,
+/// the result edge and the type the call hands on stay as they were, so the graph is a call site
+/// that contradicts the type of the function it names.
+const camel::runtime::Program *retargetFirstCall(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    bool arity) {
+    using namespace camel::runtime;
+    RuntimeGraphDraftSession session(context, program);
+    for (GCGraph *owner : session.collectReachableRuntimeGraphs()) {
+        auto &transaction = session.edit(owner);
+        auto &draft       = transaction.edit();
+        // The static functions this graph holds, in node order: what a call of it may be pointed
+        // at without adding anything to the graph.
+        std::vector<std::pair<gc_node_ref_t, ::Function *>> functions;
+        for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            if (::Function *function = staticCalleeOf(draft, id)) {
+                functions.emplace_back(id, function);
+            }
+        }
+        if (functions.size() < 2) {
+            continue;
+        }
+        for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            const auto *header = draft.header(id);
+            if (header == nullptr || header->kind != GCNodeKind::Call) {
+                continue;
+            }
+            const auto withs = draft.withInputsOf(id);
+            if (withs.empty() || staticCalleeOf(draft, withs.front()) == nullptr) {
+                continue;
+            }
+            for (const auto &candidate : functions) {
+                if (candidate.first == withs.front() ||
+                    !givesMismatchedCall(draft, id, candidate.second, arity)) {
+                    continue;
+                }
+                // The callee slot is the first `with` input (a CALL's inputs are the callee, then
+                // its `with` arguments; a FUNC is the same list without the callee).
+                draft.replaceInput(
+                    DraftEdgeKind::Data,
+                    id,
+                    withs.front(),
+                    candidate.first,
+                    PortRole::Context);
+                return session.commit();
+            }
+        }
+    }
+    return program;
+}
+
+} // namespace
+
+const camel::runtime::Program *
+RecalleeArityTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return retargetFirstCall(context_, program, /*arity=*/true);
+}
+
+const camel::runtime::Program *
+RecalleeTypeTestPass::apply(const camel::runtime::Program *program, std::ostream &) {
+    return retargetFirstCall(context_, program, /*arity=*/false);
 }

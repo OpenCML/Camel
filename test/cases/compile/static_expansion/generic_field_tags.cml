@@ -1,0 +1,38 @@
+/**
+ * The three names of `fields P` are bound in a generic body as they are in a concrete one: `n`
+ * reads the field, `F` is its type, and `tags` is the compile-time record of its field tags.
+ * Both the comprehension and the fold walk the named `Box` at instantiation.
+ */
+
+tag width(w: int) on field
+
+type Box = {
+    #width(8) low: int,
+    high: int,
+}
+
+func comprehension_total::<P>(p: P): int {
+    let readings = (static for n, F, tags in fields P => {
+        let value: F = p.[n]
+        match type typeof(tags) {
+            case { width: { w: int } } => value + tags.width.w
+            case _ => value
+        }
+    })
+    return readings.0 + readings.1
+}
+
+func loop_total::<P>(p: P): int {
+    return static loop acc = 0 for n, F, tags in fields P do
+        acc + p.[n] + (match type typeof(tags) {
+            case { width: { w: int } } => tags.width.w
+            case _ => 0
+        })
+}
+
+func main(): int sync {
+    let box: Box = { low: 1, high: 2 }
+    println(comprehension_total(box))
+    println(loop_total(box))
+    return 0
+}

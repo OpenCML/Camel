@@ -56,7 +56,7 @@ The relation between lines and nodes is many to many, and the debugger never hid
 |------|--------------|
 | One line, several nodes (`println(f(x) + g(x))`) | The line is entered once (2.1); node steps walk the nodes |
 | One line, nodes in several graphs (a generic function's instances; a function inlined at several places) | A line breakpoint binds to all of them |
-| A node whose source is in another function (after `std::opt::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
+| A node whose source is in another function (after `std::cxx::inline`) | The frame is the graph that runs; the location is the source it came from, and the frame says "inlined" (5.3) |
 | A line with code but no node | The code is not executed: nothing depends on it, or a pass removed it. A breakpoint there is unverified and says which (3.2) |
 | A node without a line | Reached by node steps only |
 | A node a fusion group runs | The group's earlier members do not execute; the stop is at the tail and says which group ran (below) |
@@ -250,7 +250,7 @@ REPL prints them under the stop. A variable whose node is not in the graph says 
 
 ### 4.3 Inlined calls
 
-After `std::opt::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
+After `std::cxx::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
 keep their origins, so the debugger knows which *function of the source* a node was written in
 (the innermost function whose span contains the node's span), though not at which call it was
 inlined (10: there is no "inlined at" chain). Stepping uses the source function as a frame
@@ -479,9 +479,6 @@ the dispatch point the compiler kept the loop's program counter on the stack ins
 register (the inline code that had been there calls nothing). A register-preserving calling
 convention for the hook did not change that. Hence the second instance.
 
-The switch interpreter (`casevm.cpp`, for builds without computed goto) has no hooks: it does
-not compile at present (it includes a header that no longer exists), so no build uses it.
-
 Cost without a debugger: `std::nvm`, one load of a pointer per node (as before: the node hook
 it replaces was one atomic load) and one per call; `std::fvm`, one load of a pointer per
 nested activation (a call of a function value, an element call of a higher-order operator;
@@ -509,7 +506,7 @@ are not stops.
   the program is the same program; what cannot be observed this way is a defect that depends
   on the interleaving. A stop-the-world mode showing the node of each worker is possible
   later; it needs hooks in the task bodies. `DESIGN-QUESTION(parallel-debugging)`.
-- **Passes that rewrite the graph** (`std::opt::inline`, `std::opt`, `std::macro`, ...) run as asked.
+- **Passes that rewrite the graph** (`std::cxx::inline`, `std::opt`, `std::macro`, ...) run as asked.
   Positions survive because nodes keep their origins through rewrites (10); breakpoints are
   answered again against the graph the scheduler is given (3.1). What is lost: the name of a
   `let` bound to a call that was inlined or a value that was folded (its node is gone: the
@@ -623,7 +620,7 @@ has ruled since, which say so.
 4. `tail-call-stack`: show the stack as it is, marking replaced frames (recommended), or keep
    a shadow record of replaced callers for display.
 5. `inlined-frames`: one frame marked as inlined code, stepping by source function
-   (recommended), or have `std::opt::inline` record call sites so that virtual frames can be shown.
+   (recommended), or have `std::cxx::inline` record call sites so that virtual frames can be shown.
    (Rule 12.1 folds arms into the frame of their function; whether a function inlined into
    another should then be shown as a frame of its own has not been ruled.)
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
@@ -657,7 +654,7 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 | Faults: stop with the diagnostic, isolated faults by filter | implemented, tested on both back ends |
 | DAP adapter (7.3) | implemented, tested |
 | `std::jit`, `std::prl` | run as `std::fvm` with a notice; tested |
-| After `std::opt::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
+| After `std::cxx::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
 | Graph view over DAP | OpenCML-Ext uses `camel/structuredGraph` and immutable pass snapshots; source/type and hierarchy UI tested |
 | Graphical debugger | OpenCML-Ext + native VS Code debugging; standalone Web frontend retired after migration acceptance |
 | Conditional breakpoints, hit counts, logpoints, set value, restart, attach | not done |

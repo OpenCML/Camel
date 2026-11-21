@@ -1,6 +1,24 @@
 // Functions as values: returning a closure, composing functions, a table of operations,
-// `with` parameters, and a counter that keeps its own state.
+// `with` parameters, and state threaded through a function as values.
 // Run: camel examples/functions/closures.cml
+//
+// State a closure would keep for itself is state the program writes as values that go in and come
+// back out (design principles 3.5): a closure captures the VALUE a name had when it was made, not
+// the name, so it can hold state but it cannot write it. The shape this example used to show -- a
+// factory returning a closure that increments its own `var count` -- is still a compile error, and
+// the report has moved from the escape to the assignment (the author's ruling of 2026-11-16):
+//
+//     func make_counter(): () => int {
+//         var count = 0
+//         return (): int => sync { count = count + 1 return count }
+//     }
+//
+//     error: 'count' is assigned inside a closure, and a closure holds the value the name had when
+//     it was made, not the name. (SemanticDiag::ClosureAssignsCapturedName, 0x03000213)
+//
+// The report names three rewrites, and the counter below uses the second: pass the state as a
+// value, in as a parameter and back out as the result. A cell a program really must share, rather
+// than thread, is written with `Ref<T>`.
 
 type IntFn = (x: int) => int
 
@@ -23,13 +41,11 @@ func scale(x: int): int {
     return x * factor
 }
 
-// Each call makes a new counter with its own `count`.
-func make_counter(): () => int {
-    var count = 0
-    return (): int => sync {
-        count = count + 1
-        return count
-    }
+// One count, taken as a value and given back as the next one: three calls read 1, 2 and 3, and a
+// second count that starts at 0 reads 1 -- the same reading the factory gave, with nothing kept
+// between the calls.
+func tick(count: int): int {
+    return count + 1
 }
 
 func main(): int sync {
@@ -45,8 +61,10 @@ func main(): int sync {
     let piped = 7->scale<10>
     println(direct, piped)
 
-    let next = make_counter()
-    let other = make_counter()
-    println(next(), next(), next(), other())
+    let once = tick(0)
+    let twice = tick(once)
+    let thrice = tick(twice)
+    let other = tick(0)
+    println(once, twice, thrice, other)
     return 0
 }

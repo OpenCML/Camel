@@ -21,7 +21,7 @@
  * may give a LOOP node s typed collection slots. Each round the body then also produces one
  * value per slot, and the loop collects them into one array per slot, in round order. The
  * node's value is (state_1, ..., state_k, array_1, ..., array_s): the state components first,
- * so a consumer that does not care about the tape can read the state where it used to. The
+ * so a consumer that does not care about the tape can read the state at its usual position. The
  * payload's collectionCount is s; the element type of slot c is the s-th trailing component
  * of the body region's result tuple; and the node's value type is the tuple that names both. The
  * count is explicit because the state type alone cannot tell e.g. k = 2 from k = 1 plus a
@@ -161,6 +161,8 @@ class LoopView {
     EffectSummary effects() const;
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- a view of a graph of a program the
+    // caller holds; it is made and dropped inside the call that reads the loop.
     const Program *program_;
     const GCGraph *graph_;
     gc_node_ref_t node_;

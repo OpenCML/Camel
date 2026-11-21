@@ -228,7 +228,7 @@ class Builder {
     Value visitConstData(syntax::cst::ConstData context);
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
-    Value visitTypeOfType(syntax::cst::TypeOfType context);
+    Value visitTypeOfExpr(syntax::cst::TypeOfExpr context);
     Value visitPackType(syntax::cst::PackType context);
     Value visitMatchTypeType(syntax::cst::MatchTypeType context);
     Value visitTypeArm(syntax::cst::TypeArm context);

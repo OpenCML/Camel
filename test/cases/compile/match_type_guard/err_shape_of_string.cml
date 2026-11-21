@@ -1,0 +1,16 @@
+/// `ShapeOf<string>` is a type function applied to a type it is not defined for, and it is reported
+/// as one (design principles 5.5, ruling of 2026-11-14).
+///
+/// Before `match type` cases could carry a guard, the last case of `ShapeOf` was a bare `case _`,
+/// and it answered `int[0]` for every type whose shape states no dimension -- a string as readily
+/// as an integer. The arm is guarded now (`case _ when is_numeric::<T>() => int[0]`), so the empty
+/// shape is a number's shape alone and a string selects no case at all.
+import { ShapeOf, is_same } from types
+
+func main(): int sync {
+    // The empty shape of a number is still answered (the same file, one line up in the library).
+    println(is_same::<ShapeOf<int>, int[0]>())
+    // A string is not a tensor of any shape: the type function is not applicable to it.
+    println(is_same::<ShapeOf<string>, int[0]>())
+    return 0
+}

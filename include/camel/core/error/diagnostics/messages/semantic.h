@@ -248,6 +248,12 @@ enum class SemanticDiag : uint32_t {
     HandleTypeNotNominal = 0x0001A3,
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
+    /// A clause writes a resource its declaration says nothing ever writes.
+    ReadonlyResourceWritten = 0x000217,
+    // 0x00020C held `ExternalResourceNeedsVar`, the rule that a clause must write `var` before every
+    // external resource. An external resource is read or written like any other resource (design
+    // principles 3.3), so the rule is gone and the number is not reused.
+    VariableInUses = 0x00020D,
 
     // `std::cml`, the source printer (step S1). 0x1A5 and up.
     /// A graph holds a construct the printer does not turn into source.
@@ -444,6 +450,8 @@ enum class SemanticDiag : uint32_t {
     // semantic space instead of being placed next to a group that has no room left.
     /// The resources a body uses are not within what its `pure`/`uses` signature promises.
     UsesPromiseViolated = 0x0001F1,
+    /// The other half of the same check: a body reads the spelling of the program and its type does not write the capability.
+    SpellingNotDeclared = 0x0001D5,
     // Where the rule itself can be said: 0x1F2 and up. Constructs that left the grammar are
     // ordinary syntax errors instead; these four are language rules, so each one names the rule
     // rather than saying "not supported".
@@ -466,20 +474,26 @@ enum class SemanticDiag : uint32_t {
     /// A `const` case whose constant has no type to take.
     FactConstCaseTypeRequired = 0x0001F7,
     /// A case whose pattern names no variable.
-    FactCaseBindsNoVariable    = 0x0001F8,
-    TypeFunctionNotApplicable  = 0x0001FE,
-    StatementAfterReturn       = 0x000201,
-    YieldRequiresStreamHead    = 0x000206,
-    LoopBodyNeedsNextState     = 0x000208,
-    RuleLeftIsNotAnOperator    = 0x000204,
-    DuplicateRuleForOperator   = 0x000205,
-    RuleRightUsesOuterVariable = 0x000207,
-    ExtentOfNeedsStatedShape   = 0x00020B,
+    FactCaseBindsNoVariable           = 0x0001F8,
+    TypeFunctionNotApplicable         = 0x0001FE,
+    StatementAfterReturn              = 0x000201,
+    YieldRequiresStreamHead           = 0x000206,
+    LoopBodyNeedsNextState            = 0x000208,
+    RuleLeftIsNotAnOperator           = 0x000204,
+    DuplicateRuleForOperator          = 0x000205,
+    RuleRightUsesOuterVariable        = 0x000207,
+    ExtentOfNeedsStatedShape          = 0x00020B,
+    RefContentHoldsRef                = 0x000211,
+    ResourceInferenceConflict         = 0x000212,
+    ClosureAssignsCapturedName        = 0x000213,
+    CapturedVarWrittenAfterTheClosure = 0x000214,
+    CapturedVarHandedToVarParameter   = 0x000215,
+    VarContextParameterCannotBeBound  = 0x000216,
+    OperatorAccessesUndeclared        = 0x000218,
 
     // Warnings
     IgnoredSideEffect = 0x100002,
-    EffectNotExecuted = 0x100004,
-    // 0x90 and up, clear of what other work adds after EffectNotExecuted.
+    // 0x90 and up, clear of the warnings above.
     ExitInUnusedBranch = 0x100090,
     // Design principles log 2.11: 0xC0 and up.
     UnusedFallibleValue = 0x1000C0,
@@ -502,8 +516,8 @@ enum class SemanticDiag : uint32_t {
     /// A type parameter is declared at the head of a declaration and written nowhere in its
     /// signature, so no argument could ever give it a type.
     TypeVariableUnused = 0x1001A5,
-    // `never` as an argument and `fail` as a statement (design principles 3.9; the author's ruling of
-    // 2026-10-26). An argument of type `never` never gives a value, and an argument is evaluated
+    // `never` as an argument and `fail` as a statement (design principles 3.9). An argument of type
+    // `never` never gives a value, and an argument is evaluated
     // before the call it is written in, so such a call never runs: its own type is `never` and no
     // overload is chosen for it. A `fail` written as a statement of its own is no effect, so it runs
     // only where its value is wanted, and a statement after it is never reached.
@@ -517,6 +531,10 @@ enum class SemanticDiag : uint32_t {
     /// A statement written after a `fail` in the same block: the `fail` never returns, so the statement
     /// is never reached.
     StatementAfterFail = 0x1001C2,
+    /// A write to a variable whose value nothing reads (design principles 3.1 and 3.5: assigning to a
+    /// `var` is not an effect, so a write nothing reads is a value nothing uses -- one rule for one
+    /// thing, and the words are the words of a dropped value, not of an effect).
+    UnusedAssignedValue = 0x1001C3,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

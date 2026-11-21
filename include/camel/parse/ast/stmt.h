@@ -129,15 +129,18 @@ class TypeDeclLoad : public StmtLoad {
     std::vector<std::string> params_;
 };
 
-/// A resource declaration (design effects plan 3.1, design principles 3.3):
+/// A resource declaration (design effects plan 3.1, design principles 3.3, 9.12):
 ///
 ///   resource fs
 ///   resource io = [stdout, fs]
 ///   resource net unordered
+///   resource graph readonly
 ///
 /// A single resource names ambient state that no value carries; `unordered` says a call's
-/// accesses to it may be reordered (step 8 gives that meaning); the list form makes the name a
-/// group of the resources and groups it lists, expanded where it is used.
+/// accesses to it may be reordered (step 8 gives that meaning); `readonly` says nothing ever
+/// writes it, so it conflicts with no access and orders none (9.12: reading a graph is an effect);
+/// the list form makes the name a group of the resources and groups it lists, expanded where it
+/// is used. A declaration writes at most one modifier after the name.
 class ResourceDeclLoad : public StmtLoad {
   public:
     ResourceDeclLoad(Reference ref) : StmtLoad(StmtType::Resource), ref_(ref) {}
@@ -146,6 +149,9 @@ class ResourceDeclLoad : public StmtLoad {
 
     bool unordered() const { return unordered_; }
     void setUnordered(bool unordered) { unordered_ = unordered; }
+
+    bool readonly() const { return readonly_; }
+    void setReadonly(bool readonly) { readonly_ = readonly; }
 
     void addMember(Reference member) { members_.push_back(std::move(member)); }
     const std::vector<Reference> &members() const { return members_; }
@@ -159,6 +165,7 @@ class ResourceDeclLoad : public StmtLoad {
   private:
     Reference ref_;
     bool unordered_ = false;
+    bool readonly_  = false;
     bool group_     = false;
     std::vector<Reference> members_;
 };

@@ -1,0 +1,22 @@
+/**
+ * The content rule of `Ref<T>` inside a container: the box holds a record, one of its fields is a
+ * record, and that one holds a closure that captured a reference. `refInsideType` only reads types,
+ * and a closure's captures are not in its type, so the walk over the value stopped at the record and
+ * this program was accepted with no report -- one box that can never be freed, the same leak the
+ * direct case is refused for.
+ */
+
+import state
+
+type Inner = { cb: () => int }
+type Outer = { inner: Inner, n: int }
+
+func main(): int sync {
+    let n = state::ref(0)
+    let h = (): int => state::get(n)
+    let p: Outer = { inner: { cb: h }, n: 1 }
+    let box = state::ref(p)
+    let q = state::get(box)
+    println(q.inner.cb())
+    return 0
+}

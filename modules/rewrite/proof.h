@@ -46,11 +46,15 @@ struct RewriteRecord {
         nodeRefsByGraph;
     /// The numeric policy the run applied the rules with: `why_not` matches under the same one,
     /// so a permission the run did not grant is not granted to its answer either.
-    bool strict = false;
+    bool strict  = false;
+    bool ordered = false;
+    camel::runtime::DeletionProtection protection;
     /// The program the run started from. A decoded draft keeps each node's runtime id as its draft
     /// id (draft.cpp, GraphDraft::decode), so a node handle into this program names a step of the
     /// record by its own id; a node of the program the run produced is found through the map
     /// above instead. Kept as a traced reference by `Proof`.
+    // program-holder-exempt: heap-self-tracking -- the record is owned by ProofObject, whose
+    // updateRefs relocates this program as its own `input_` slot.
     const camel::runtime::Program *input = nullptr;
 };
 
@@ -104,8 +108,8 @@ class ProofObject final : public rtdata::Object {
     /// object file that defines it -- the module's. The debugger is such a reader: its
     /// `explain` TU calls the inline accessors above on a `ProofObject`, and `-fsanitize=vptr`
     /// (part of the UBSan leg) turns every such call into a lookup of `typeinfo for ProofObject`,
-    /// which the debugger does not link (2026-11-02: Debug + ASan/UBSan failed to link
-    /// `camel-db` on exactly that symbol, while the Release leg, with no sanitizer, never asked
+    /// which the debugger does not link (a Debug + ASan/UBSan build fails to link
+    /// `camel-db` on exactly that symbol, while a Release build, with no sanitizer, never asks
     /// for it). With no key function the type info is emitted with vague linkage in every object
     /// file that needs it, so the reader gets its own copy and the module keeps its one.
     bool equals(const rtdata::Object *other, const Type *type, bool deep = false) const override {
@@ -138,6 +142,8 @@ class ProofObject final : public rtdata::Object {
     camel::runtime::RewriteStats stats_;
     /// Traced: the proof keeps the program the run started from alive as long as a chain may name
     /// one of its nodes. Relocated in updateRefs like any other reference into the graph space.
+    // program-holder-exempt: heap-self-tracking -- ProofObject is a heap object, and
+    // updateRefsImpl relocates input_ (proof.cpp).
     const camel::runtime::Program *input_ = nullptr;
     std::optional<Chain> chain_;
 };

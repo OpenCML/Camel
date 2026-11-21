@@ -14,7 +14,7 @@ DDPM 项目已经能用 Camel 写完整的训练流程：模型、损失、`with
 
 ### 1.1 参数树只能靠代码生成
 
-`tools/generate-model-params.py` 按 `tools/model_schema.py` 为每种参数结构生成一个模块。以前馈层为例（`src/params_ff.cml`，节选）：
+示例工程的 `generate-model-params.py` 按同工程的 `model_schema.py` 为每种参数结构生成一个模块（这些文件在示例工程里，不在本仓库）。以前馈层为例（该工程的 `params_ff.cml`，节选）：
 
 ```cml
 export type FF = { up: Tensor<f32>, gate_w: Tensor<f32>, down: Tensor<f32> }
@@ -41,7 +41,7 @@ export func stepFF(p: FF, g: FF, m: FF, v: FF, rate: float, bc1: float, bc2: flo
 
 ### 1.2 一个训练步在主机与设备之间往返
 
-`src/train_gpu.cml` 的一步：
+该工程的 `train_gpu.cml` 的一步：
 
 ```cml
 let clean = read_batch('data/train-images-idx3-ubyte', offset, batch)   // 主机读文件

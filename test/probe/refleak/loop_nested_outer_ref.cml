@@ -1,0 +1,26 @@
+import state
+
+// The give-back goes to the outermost loop, and that is a choice the reading has to tell apart from
+// the obvious one (author review 2026-11-16, item 6).
+//
+// `box` is read inside the inner loop and by nothing after either loop. The inner loop is left once
+// per round of the outer one, so a give-back written at the inner loop's exit would run twice and
+// release the box twice: `released=2`. Written at the outer loop's exit it runs once, after the last
+// round that could read the value: `released=1`, `live=0`. The box is read on every round either
+// way, so the four rounds print the same thing in both worlds -- the count is what differs, which is
+// why this shape is here beside the single loop that only proves a give-back exists at all.
+func nested_read_only(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 2 do sync {
+        loop j = 0 while j < 2 do sync {
+            state::set(box, state::get(box) + 1)
+            j + 1
+        }
+        i + 1
+    }
+    return 0
+}
+
+func main(): int sync {
+    return nested_read_only()
+}

@@ -70,6 +70,8 @@ gradientSignature(type::FunctionType *function, bool withValue, bool hasAux = fa
 
 /// The graph of a gradient and the program of the graphs built with it.
 struct GradientGraph {
+    // program-holder-exempt: long-lived-cache -- tracking here would root every gradient ever
+    // built (buildGradientGraph, test/plans/feat/mm/graph_space).
     const camel::runtime::Program *program = nullptr;
     camel::runtime::GCGraph *graph         = nullptr;
 };

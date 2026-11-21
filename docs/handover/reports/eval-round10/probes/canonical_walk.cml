@@ -1,0 +1,20 @@
+// Measurement probe (ECOOP round 10, item 1): the canonical walk, and nothing else.
+//
+// `graph::nodes` answers the canonical order of a graph -- the walk the canonical document and
+// `same_graph` use (`modules/graph/read.cpp` asks `canonicalNodeOrder`). This pass does that walk
+// once per graph the entry function value reaches and prints how many nodes it read, so
+// `camel --timeit canonical_walk::walk/<N> <program>` measures the canonicalization path from a
+// fresh graph, N times, with the pass window around this and nothing else.
+//
+// The printed count is also the check that the walk ran: a pass whose result nobody reads could
+// have its read dropped, and a line per run is the evidence that it did not.
+import { sum } from array
+import { Graph, graphs_of, nodes } from graph
+import { is_function } from types
+
+/// Reads the canonical order of every graph the entry function value reaches.
+export func walk::<F>(p: F): F! when is_function::<F>() sync {
+    let counts = graphs_of(p)->map<(g: Graph): int => len(nodes(g))>
+    println(sum(counts))
+    return p
+}

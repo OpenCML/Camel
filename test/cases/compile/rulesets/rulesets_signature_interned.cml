@@ -1,0 +1,15 @@
+/**
+ * Nothing but the ruleset, so the reading is the rule modules' own: `std::rulesets sig=true` prints
+ * one line per component of each rule's `<rule>__rhs` signature -- the result and each parameter --
+ * with whether the type table holds that component (`interned=yes|no|absent`).
+ *
+ * The right side of a rule here is a function value (`x + w => (dx: float, dw: float) => dx`), so
+ * the signature's result type is a closure type, and a closure type built on a path that interns
+ * only itself leaves its own result out of the table: `typeId() == 0`. The plan asserts that every
+ * component of every `__rhs` signature is in the table, one component at a time.
+ */
+import rulesets.jvp
+
+func main(): int sync {
+    return 0
+}

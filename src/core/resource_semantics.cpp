@@ -88,6 +88,23 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode) {
     return ResourceSpec{.accesses = {ambientAccess(std::move(name), mode)}, .externalEffect = true};
 }
 
+ResourceSpec externalUnorderedAmbient(std::string name, AccessMode mode) {
+    ResourceAccess access = ambientAccess(std::move(name), mode);
+    access.unordered      = true;
+    return ResourceSpec{.accesses = {std::move(access)}, .externalEffect = true};
+}
+
+ResourceAccess globalAccess(AccessMode mode) {
+    // The class is Unknown on purpose: this is the reading of an operator that declares nothing,
+    // not something a module may write (design principles 3.3, the "global" resource).
+    return ResourceAccess{
+        .resource = Resource{.cls = ResourceClass::Unknown, .name = "global"},
+        .binding  = ResourceBinding{.kind = ResourceBinding::Kind::Ambient},
+        .region   = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
+        .mode     = mode,
+    };
+}
+
 ResourceSpec
 conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect) {
     ResourceSpec spec;
@@ -220,6 +237,15 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
         spec.result.operand == 0xFF) {
         return std::format("a result that is {} names its operand", resultAliasName(k));
     }
+    if (spec.functionOperand) {
+        // One statement of the accesses, not two: an operator that takes them from a function
+        // operand has none of its own to itemize (design principles 3.3).
+        if (!spec.accesses.empty() || spec.externalEffect) {
+            return std::string(
+                "an operator whose accesses are a function operand's itemizes none of its own, "
+                "and declares no external effect either");
+        }
+    }
     return std::nullopt;
 }
 
@@ -298,15 +324,29 @@ std::string toString(const ResourceSpec &spec) {
     if (spec.externalEffect) {
         part("external");
     }
+    if (spec.functionOperand) {
+        // The accesses are not itemized here: they are the function's that the operand carries.
+        // Said in words, because "none" would be a different statement.
+        const ResourceBinding &at = *spec.functionOperand;
+        part(std::format(
+            "accesses of the function in {} {}",
+            at.kind == ResourceBinding::Kind::Norm ? "norm" : "with",
+            at.index));
+    }
     return out;
 }
 
 ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     ResourceSignature sig;
-    sig.mode    = ResourceSignature::Mode::Concrete;
-    sig.result  = spec.result;
+    sig.mode      = ResourceSignature::Mode::Concrete;
+    sig.result    = spec.result;
     sig.allocates = spec.allocates;
-    sig.external  = spec.externalEffect;
+    // An operator whose accesses are a function operand's is one that may reach outside the
+    // program and says nothing about where: the signature a reader that has only the table can
+    // honestly publish is "an effect it does not itemize" (design principles 3.3). The reader that
+    // has the value narrows it -- that is what `functionOperand` is for.
+    sig.external  = spec.externalEffect || spec.functionOperand.has_value();
+    sig.spelling  = spec.spelling;
     for (const ResourceAccess &access : spec.accesses) {
         switch (access.binding.kind) {
         case ResourceBinding::Kind::Norm:
@@ -348,9 +388,12 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
             if (found == sig.ambient.end()) {
                 sig.ambient.push_back(
                     ResourceSignature::AmbientUse{
-                        .name = access.resource.name, .mode = access.mode});
+                        .name      = access.resource.name,
+                        .mode      = access.mode,
+                        .unordered = access.unordered});
             } else {
-                found->mode = uniteAccess(found->mode, access.mode);
+                found->mode      = uniteAccess(found->mode, access.mode);
+                found->unordered = found->unordered || access.unordered;
             }
             break;
         }
@@ -385,8 +428,8 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
         return targetMode == AccessMode::ReadModifyWrite || targetMode == sourceMode;
     };
     for (const auto &use : source.params) {
-        const bool covered = std::any_of(
-            target.params.begin(), target.params.end(), [&](const auto &t) {
+        const bool covered =
+            std::any_of(target.params.begin(), target.params.end(), [&](const auto &t) {
                 return t.index == use.index && t.cls == use.cls && t.name == use.name &&
                        coversMode(t.mode, use.mode);
             });
@@ -398,8 +441,8 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
         }
     }
     for (const auto &use : source.ambient) {
-        const bool covered = std::any_of(
-            target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
+        const bool covered =
+            std::any_of(target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
                 return t.name == use.name && coversMode(t.mode, use.mode);
             });
         if (!covered) {
@@ -426,7 +469,61 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     if (source.external && !target.external) {
         return false;
     }
+    // Reading the spelling is not read here: it is a capability the check of a body's declaration
+    // owns (Builder::checkInferredResources), where the clause the writer made is in hand. Comparing
+    // it here would refuse every body written in place against a position whose type promises
+    // `pure`, and a lambda has no clause to write the capability in (design principles 5.9, 9.5).
     return true;
+}
+
+bool reachesOutside(ResourceClass cls) {
+    switch (cls) {
+    case ResourceClass::Variable:
+    case ResourceClass::Object:
+    case ResourceClass::Handle:
+        return false;
+    case ResourceClass::Ambient:
+    case ResourceClass::Foreign:
+    case ResourceClass::Unknown:
+        break;
+    }
+    return true;
+}
+
+bool writesForTheRegion(const ResourceSignature &signature) {
+    // A declared external effect that itemizes nothing is the write an undeclared operator is read
+    // as, and it is a write the region owes: the operator says it reaches outside the program and
+    // says nothing about where, so there is no access to place. A write the region does not owe is
+    // a write a pass may drop, and an effect that can be dropped is not an effect -- `foreach` on a
+    // callback that prints is the case that makes this visible (its result is the null slot, so
+    // nothing else keeps the call alive).
+    if (signature.external && signature.params.empty() && signature.ambient.empty() &&
+        signature.anyOf.empty()) {
+        return true;
+    }
+    // A write that reaches state outside the program, and a write of a handle: the two questions
+    // design principles 3.1 asks of a region's roots. The classes come from `reachesOutside`,
+    // which is also what `OperatorSemantics::external` reads, so "outside the program" is one
+    // class test for the effect and for the write.
+    for (const ResourceSignature::ParamUse &use : signature.params) {
+        if (writes(use.mode) && (reachesOutside(use.cls) || use.cls == ResourceClass::Handle)) {
+            return true;
+        }
+    }
+    for (const ResourceSignature::AmbientUse &use : signature.ambient) {
+        // An ambient resource is state the program does not own, by definition: writing one is a
+        // write outside the program whatever its name (`stdout`, `fs`, a module's own state).
+        if (writes(use.mode)) {
+            return true;
+        }
+    }
+    for (ResourceClass cls : signature.anyOf) {
+        // A resource the walk could not name: read conservatively, as an undeclared operator is.
+        if (reachesOutside(cls)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string resourceDisplayName(std::string_view key) {
@@ -441,8 +538,8 @@ std::span<const std::string_view> standardResourceNames() {
     // Design principles 3.3: the state the language gives every program, with the names a
     // declaration uses for it. `rng`, `tensor:generator` and the other module resources are
     // declared by their modules, not here.
-    static constexpr std::array<std::string_view, 6> names{
-        "stdout", "stderr", "stdin", "clock", "env", "fs"};
+    static constexpr std::array<std::string_view, 6>
+        names{"stdout", "stderr", "stdin", "clock", "env", "fs"};
     return names;
 }
 
@@ -499,21 +596,24 @@ std::string toString(const ResourceSignature &signature) {
     }
     std::string out = "uses ";
     bool first      = true;
-    const auto add  = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    // An entry is named the way it is written (design principles 3.3): a resource the call writes
+    // carries `var`, and one it only reads does not, so a reader of the signature can tell the
+    // two promises apart.
+    const auto add = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : signature.params) {
-        add(std::format("#{}", use.index));
+        add(writes(use.mode), std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        add(resourceDisplayName(use.name));
+        add(writes(use.mode), resourceDisplayName(use.name));
     }
     for (ResourceClass cls : signature.anyOf) {
-        add(std::format("any {}", resourceClassName(cls)));
+        add(false, std::format("any {}", resourceClassName(cls)));
     }
     for (uint8_t capture : signature.captures) {
-        add(std::format("capture {}", capture));
+        add(false, std::format("capture {}", capture));
     }
     return out;
 }

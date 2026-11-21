@@ -7,10 +7,9 @@
  * A transform says what it built (or why it built nothing) on `readings()`, one line per step:
  * `REINTERP jvp function=f skip=body`. The line is for a reader, and it was also the only thing a
  * plan could assert, so the wording of a refusal became the criterion -- a word renamed in
- * `split.cpp` turned a green case red without anything about the transform changing (2026-11-04:
- * the transposed leg's `skip=` words). The same defect had already been fixed once on the other
- * side: `transpose` names its refusals with `TransposeRefusalCause` and spells them from one table
- * (`transpose.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
+ * `split.cpp` turned a green case red without anything about the transform changing. The same
+ * defect is avoided on the other side: `transpose` names its refusals with `TransposeRefusalCause` and spells them from one table
+ * (`transpose/walk.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
  * instead of the text (`test/tools/transpose_refusal/check.py`).
  *
  * This is the same fact for the readings, and it adds the other half:
@@ -18,8 +17,8 @@
  * * `RefusalCause` -- the causes a `REINTERP` line may refuse by, declared once;
  * * `refusalCauseName` -- the one place a cause is spelled, and therefore the only spelling the
  *   printed line has (`skip=` + this word);
- * * `RefusalReading` -- the cause *and the place it names* (the operator's URI, the rule, the callee,
- *   the construct) as a value, written by `noteRefusal` as one machine-readable line
+ * * `RefusalReading` -- the cause *and the place it names* (the operator's URI, the rule, the
+ * callee, the construct) as a value, written by `noteRefusal` as one machine-readable line
  *   (`READING_REFUSAL {json}`, the shape `src/passes/trans/stats/stats.cpp` established with
  *   `GRAPH_STATS`).
  *
@@ -30,8 +29,7 @@
  * `test/tools/reading_refusal/check.py`).
  *
  * A record is written by the site that writes the line, from the same values. Nothing parses the
- * log back: the defect the transpose change removed was exactly that second reading
- * (`docs/handover/questions/questions-2026-10-29.md`, A3).
+ * log back: parsing the printed line is exactly the second reading a plan must not do.
  */
 
 #pragma once
@@ -111,10 +109,10 @@ inline const char *refusalCauseName(RefusalCause cause) {
 }
 
 /// A refusal as a value: the cause, and the place of the program it names it at. The place fields
-/// are the ones a `REINTERP` line states about a refusal -- the operator's URI, the rule's name, the
-/// callee's name, the construct the plumbing could not copy -- and a site fills the ones its line
-/// states. A reading that names a node or a parameter one day adds that field then: a field nothing
-/// records is a promise nothing keeps.
+/// are the ones a `REINTERP` line states about a refusal -- the operator's URI, the rule's name,
+/// the callee's name, the construct the plumbing could not copy -- and a site fills the ones its
+/// line states. A reading that names a node or a parameter one day adds that field then: a field
+/// nothing records is a promise nothing keeps.
 struct RefusalReading {
     std::string_view transform; // "jvp" | "split" | "vmap"
     std::string_view function;
@@ -193,15 +191,17 @@ inline void appendJsonMember(std::string &out, const char *name, std::string_vie
 } // namespace detail
 
 /// The machine-readable half of a refusal, on the diagnostic side and beside the line that says it
-/// in words. One line per refusal, `READING_REFUSAL {json}`: a plan reads the cause and the place it
-/// names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the `expect_refusal`
-/// assertions in the plans).
+/// in words. One line per refusal, `READING_REFUSAL {json}`: a plan reads the cause and the place
+/// it names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the
+/// `expect_refusal` assertions in the plans).
 ///
-/// It always writes to `readings()` and not to the stream the caller handed the transform. A
+/// It always writes to `verdicts()` and not to the stream the caller handed the transform -- and
+/// `verdicts()` is the one channel `readings=true` does not reach (`readings.h`): a refusal has to be
+/// readable without a parameter, and this record is one line per refusal. A
 /// transform's readings are the diagnostic channel even when a caller collects the line elsewhere
-/// (`modules/transforms/module.cpp`'s `reinterp` pass hands `apply`'s stream down), so the record has
-/// to be readable in one place; a plan reads stderr, and a record that followed the line to whatever
-/// stream that caller had would be a record no plan can find.
+/// (`modules/transforms/module.cpp`'s `reinterp` pass hands `apply`'s stream down), so the record
+/// has to be readable in one place; a plan reads stderr, and a record that followed the line to
+/// whatever stream that caller had would be a record no plan can find.
 inline void noteRefusal(const RefusalReading &reading) {
     std::string json = "{";
     json += "\"transform\":";
@@ -210,7 +210,9 @@ inline void noteRefusal(const RefusalReading &reading) {
     detail::appendJsonString(json, reading.function);
     json += ",\"cause\":";
     const char *word = refusalCauseName(reading.cause);
-    detail::appendJsonString(json, word != nullptr ? std::string_view(word) : std::string_view("none"));
+    detail::appendJsonString(
+        json,
+        word != nullptr ? std::string_view(word) : std::string_view("none"));
     if (!reading.uri.empty()) {
         detail::appendJsonMember(json, "uri", reading.uri);
     }
@@ -224,7 +226,7 @@ inline void noteRefusal(const RefusalReading &reading) {
         detail::appendJsonMember(json, "construct", reading.construct);
     }
     json += "}";
-    readings() << "READING_REFUSAL " << json << '\n';
+    verdicts() << "READING_REFUSAL " << json << '\n';
 }
 
 } // namespace camel::transforms

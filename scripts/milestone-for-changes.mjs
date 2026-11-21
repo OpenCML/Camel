@@ -27,7 +27,7 @@
 //
 //   node scripts/milestone-for-changes.mjs                  # git diff --name-only against the base
 //   node scripts/milestone-for-changes.mjs --base origin/develop
-//   node scripts/milestone-for-changes.mjs src/passes/opt/parser.cpp test/cases/...
+//   node scripts/milestone-for-changes.mjs src/parse/syntax/parser.cpp test/cases/...
 //   node scripts/milestone-for-changes.mjs --plan           # print one `node scripts/test.js <file>` per line
 //
 // Exit 0 lists at least one milestone plan and found no hole; 1 found a hole (named); 2 could not

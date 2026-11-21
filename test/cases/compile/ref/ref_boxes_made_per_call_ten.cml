@@ -1,0 +1,36 @@
+/**
+ * A box made inside a call, dropped by the call: one body, run once per element of a range, and the
+ * box never leaves the call that made it.
+ *
+ * Read with `--gc-check foreign` when the program stops, the counters say whether the boxes of the
+ * calls that are over were released while the program ran:
+ *
+ *   live <= 3        nothing accumulated: the number of live blocks does not follow the range;
+ *   created == released + live   each block is released or live, and counted once.
+ *
+ * `ref_boxes_made_per_call_thousand.cml` is the same program over a range a hundred times longer,
+ * and its reading is the judgement of the pair: a mechanism that released a box only when the
+ * process stopped would answer the ten with ten and the thousand with a thousand, and a mechanism
+ * that took a holder for every slot without giving the producing one back answers `released` = 0 on
+ * both. The bound is what the four back ends read today -- two blocks on fvm, jit and prl, three on
+ * nvm, the boxes of the last calls, whose handle died with a frame no collection has looked at
+ * since; what it holds them to is that the number does not grow with the range.
+ *
+ * `live` = 0 is not reached and not asserted: a box is freed when its last handle goes only if the
+ * handle count follows the holders, and it does not yet (see
+ * `docs/handover/reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md`).
+ */
+
+import state
+
+func burn(i: int): int {
+    let r = state::ref(i)
+    return state::get(r)
+}
+
+func main(): int sync {
+    let kept = state::ref(41)
+    let total = [burn(i) for i in 0..10]
+    println(len(total), state::get(kept))
+    return 0
+}

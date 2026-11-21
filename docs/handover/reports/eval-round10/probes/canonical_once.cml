@@ -1,0 +1,14 @@
+// Measurement probe (ECOOP round 10, item 1): one canonical solve of the whole program.
+//
+// `graph::nodes` asks `canonicalNodeOrder`, and one call on the entry's graph numbers every graph
+// the program reaches (that is the `CanonicalWalk` the canonical document and `same_graph` use).
+// `canonical_walk.cml` asks it once per graph -- what a pass pays when it walks `graphs_of` -- and
+// this asks it once, which is the cost of one canonicalization of the program.
+import { graph_of, nodes } from graph
+import { is_function } from types
+
+/// Reads the canonical order of the program once.
+export func run::<F>(p: F): F! when is_function::<F>() sync {
+    println(len(nodes(graph_of(p))))
+    return p
+}

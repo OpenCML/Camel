@@ -156,9 +156,9 @@
 
 - **默认流水线。** 不给出任何遍时运行 `std::default`；它是 `std::nodevm`（节点虚拟机）的别名，本文其余地方用的 `std::nvm` 是同一个遍的另一个别名（同样，`std::fvm` 是 `std::fastvm`，`std::jit` 是 `std::fastvm::jit`，`std::tf` 与 `std::prl` 是 `std::taskflow`）。给出的遍都没有消耗图时，在它们之后也运行这个默认遍。`.opencmlrc`（`passes.fallback`）可以改变它。
 - **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍和别名列在 stderr 上（`Pass <std::no_such_pass> not found, available passes are:`，然后是 `Available aliases are:`），退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。`module::pass` 这样的名字按它所指的模块区分：模块在、但没有这个遍，报告为 `RuntimeDiag::PassNotProvidedByModule`（模块声明了该函数却没有 `export` 时是 `RuntimeDiag::PassNotExportedByModule`），只写出模块和它确实提供的遍，不再列出全部遍；模块在、但加载或编译失败，报告为 `RuntimeDiag::InvalidPassParameter`，带上加载器或编译器的原因（编译错误还带它的文件与位置）。
-- **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::opt::inline` 在节点虚拟机上运行程序，永远不会运行 `std::opt::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
+- **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::cxx::inline` 在节点虚拟机上运行程序，永远不会运行 `std::cxx::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
 - **语言不限制遍的顺序，而顺序可能有影响。** 一个遍并不承诺得到与另一种顺序相同的图：它修改图，并且可能有副作用。“任意遍序列给出相同行为”不是 Camel 的性质。
-- **标准优化遍**（`std::opt::devirtualize`、`std::opt::specialize`、`std::opt::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
+- **标准优化遍**（`std::cxx::devirtualize`、`std::cxx::specialize`、`std::cxx::inline`、`std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce`、`std::opt`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
 - **`std::macro` 是可选的。** 没有它，`#macro` 函数就是一个随程序运行的普通函数。
 - **建立在遍之上的库可以有前置条件。** `autodiff` 库要求先运行 `std::macro`，`grad` / `with_grad` / `vjp` 才能展开：没有运行过宏的图缺少求导所需的信息。这是该库的约束，不是语言核心的约束。
 
@@ -170,11 +170,11 @@
 
 | 遍 | 参数（默认值） |
 | --- | --- |
-| `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
-| `std::opt::dce` | `values_only: bool = false`（只删除无人读取的常量与纯运算，不动 GATE 与 SYNC；用作同类遍（例如用 Camel 写的遍）的对照基准） |
-| `std::opt::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify strict=true`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
-| `std::opt`、`std::opt::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::opt::specialize`、`std::opt::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
-| `std::opt`、`std::opt::fold`、`opt::fold` | `constant_budget: int = 8388608`（折叠可物化成常量的字节数：数组按元素数×元素大小加形状开销计，超过上限的值保留生成它的计算——程序含义不变，只是少折了一些；0 表示一个都不物化） |
+| `std::opt`、`std::cxx::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
+| `std::cxx::dce` | `values_only: bool = false`（只删除无人读取的常量与纯运算，不动 GATE 与 SYNC；用作同类遍（例如用 Camel 写的遍）的对照基准） |
+| `std::cxx::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify strict=true`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
+| `std::opt`、`std::cxx::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::cxx::specialize`、`std::cxx::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
+| `std::opt`、`std::cxx::fold`、`opt::fold` | `constant_budget: int = 8388608`（折叠可物化成常量的字节数：数组按元素数×元素大小加形状开销计，超过上限的值保留生成它的计算——程序含义不变，只是少折了一些；0 表示一个都不物化） |
 | `std::fvm`、`std::jit` | `stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`segments: bool = false`（打印当前计划的分段（不是理论上可以切成的分段）：每段的条目与链、每条链等谁，以及每个算子落在哪一段），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
@@ -190,14 +190,14 @@
 
 ### 常用遍
 
-- `std::opt::inline`：只做内联的重写遍；默认目标策略是 `std::opt::hybrid`
-- `std::opt::small` / `std::opt::arm` / `std::opt::hybrid`：显式的内联目标策略
-- `std::opt::specialize`：运行时原生的特化遍
+- `std::cxx::inline`：只做内联的重写遍；默认目标策略是 `std::cxx::hybrid`
+- `std::cxx::small` / `std::cxx::arm` / `std::cxx::hybrid`：显式的内联目标策略
+- `std::cxx::specialize`：运行时原生的特化遍
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
-- `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify strict=true`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
-- `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
-- `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；证明路径读顺序边与同一个 `sync` 块的链，同步边本身是一条链、没有冗余且带“用到”，所以从不删掉。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被数据路径、`sync` 链或另一条控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
-- `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
+- `std::cxx::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify strict=true`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::cxx::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
+- `std::cxx::fold` / `std::cxx::cse` / `std::cxx::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
+- `std::cxx::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；证明路径读顺序边与同一个 `sync` 块的链，同步边本身是一条链、没有冗余且带“用到”，所以从不删掉。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被数据路径、`sync` 链或另一条控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
+- 这组遍在归到 `cxx::` 之前用的名字（`std::opt::fold`、`std::opt::inline`、`std::inline` 及六个内联策略旧名）**不是别名**：写了它们报"不认识的遍"，`Pass <std::opt::fold> not found, available passes are: ...`，退出码 1。保留下来的只有 `std::opt`——默认流水线自己的名字，也就是"默认做优化"这个选择，今天指向 C++ 版
 - `std::defunctionalize`：让每个函数值都有设计稿要的形式，从而程序里不再留下闭包、也不再留下通过函数值的调用。程序赋予值的那个函数类型变成一个 `enum`：程序当成值用的每个函数是其中一个变体，该函数捕获的值就是这个变体的数据，于是标签就在值的类型里。通过值的调用变成对被指函数的直接调用，捕获值作为末尾的实参；只有在运行期才知道的标签变成对它的一个 `match`——`:enum/tag`、每个变体一条臂（从值里取出该变体的捕获值）、一个 `JOIN`；在构造处就知道的标签直接折掉，只有一个变体的家族也直接折掉。它不是优化遍：它改变哪些调用是直接调用，而不改变代码有多少；流水线会在 `std::opt` 之前跑它，不需要程序写出来——`camel m.cml std::opt std::fvm` 就是"想让通过函数值的调用变成直接调用"的程序的全部流水线。写出来时它只在写的位置跑，并报出它做了什么、留下了什么（`report=true`）；流水线插入的那一步什么也不写，免得报告落在程序自己的输出里。它改的是程序写出来的值：外壳自己拿着的入口函数值原样保留，所以没有哪个程序的入口点被重新编码。它看不全的家族保留原来的形式，并报出那个类型和原因（`RuntimeDiag::DefunctionalizationIncomplete`，`0x04100017`）：值被不是调用的节点读（`map` 这类高阶算子会在算子内部调用它）、函数既被直接调用又被当成值、调用的被调方还在等东西、值交给了一个声明成另一种函数类型的形参（比如 lambda 返回它写下的值，而形参说的是 `void`）、类型是入口函数的实参、或者类型里装着这一遍留下来的另一个家族。它不猜：猜一个调用到达哪个函数会改变哪些效应执行。
 - `std::fvm`：高性能字节码虚拟机调度器
 - `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS、arm64 Linux；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致。这种构建里写出 `std::jit` 会在程序运行之前于 stderr 报一次警告 `RuntimeDiag::JitWithoutCodeGenerator`（`0x04100018`，阶段 `pass:std::jit`），说明这个遍在这里做了什么；它不阻止运行，`-Wno-jit-without-code-generator` 可以关掉，`-Werror` 可以把它变成错误
@@ -206,7 +206,7 @@
 
 ### 遍的顺序：`std::macro` 在内联遍之前
 
-作用于函数的宏算子（`autodiff` 的 `grad`、`with_grad`、`vjp`）变换的是函数编译出来的图。请先运行 `std::macro`（`camel m.cml std::macro std::opt std::fvm`）：它提前展开这些算子，后面的遍再优化展开的结果。不运行 `std::macro`，或者把它放在 `std::opt::inline` / `std::opt` 之后，算子就随程序运行；为了让这种情况仍然正确，内联遍不向未展开的宏算子将要变换的函数里内联任何东西（当算子的函数实参不是常量，例如是一个参数时，则是所有函数）。这样的流水线给出相同的结果，但这些函数没有得到优化。见 `docs/technical/26_autodiff_as_graph_rewrite.md` §2。
+作用于函数的宏算子（`autodiff` 的 `grad`、`with_grad`、`vjp`）变换的是函数编译出来的图。请先运行 `std::macro`（`camel m.cml std::macro std::opt std::fvm`）：它提前展开这些算子，后面的遍再优化展开的结果。不运行 `std::macro`，或者把它放在 `std::cxx::inline` / `std::opt` 之后，算子就随程序运行；为了让这种情况仍然正确，内联遍不向未展开的宏算子将要变换的函数里内联任何东西（当算子的函数实参不是常量，例如是一个参数时，则是所有函数）。这样的流水线给出相同的结果，但这些函数没有得到优化。见 `docs/technical/26_autodiff_as_graph_rewrite.md` §2。
 
 ### `std::macro` 报告什么
 
@@ -258,16 +258,15 @@
 
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|
-| `SemanticDiag::EffectNotExecuted` | `0x03100004` | 调用、赋值或分支 | 它有副作用，但没有东西依赖它，它也不在同步块里，所以永远不会运行。这是合法的（求值由依赖驱动）；报告它是为了让人看到被遗忘的 `sync`。每条被丢弃的链一个警告（`println(log(1))` 报告的是 `println`）。在同步块内从不报告 |
-| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写一个变量（`var` 实参，或被捕获的变量），而且不在同步块里：写排在它之前的读之后，但没有东西让它运行，所以只有之后有人读这个变量时它才运行 |
+| `SemanticDiag::IgnoredSideEffect` | `0x03100002` | 调用或分支 | 它写的是一个**被捕获**的变量，而且不在同步块里：没有东西让它为了自己而运行，所以只有之后有人读这个变量时它才运行。`var` 实参不按这一条报告：它是传进来、再传回去的值，写就在调用处完成（设计原则 3.1、3.5） |
+| `SemanticDiag::UnusedAssignedValue` | `0x031001C3` | 赋值 | 一次赋值存进变量的值没有人读。赋值不是效应，所以它丢下的是一个值，按「结果没人用」那一类报告。删掉这条写，或者在它之后读这个变量 |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | 没有源码位置（属于命令行的问题） | 有遍写在消耗图的遍之后；它们不会运行。与程序的警告一起打印（JSON 模式下是 stderr 数组的最后一个元素） |
-| `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | 表达式 | `std::opt::fold`（也包括 `std::opt` 内部的）遇到一个操作数全是常量而求值会出故障的表达式（`1 / 0`）。它不被折叠：有没有这个遍，程序的行为相同；运行到达该表达式时，故障连同位置一起报告。在这个遍运行之后打印到 stderr，每个表达式一次，在下一个遍之前 |
+| `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | 表达式 | `std::cxx::fold`（也包括 `std::opt` 内部的）遇到一个操作数全是常量而求值会出故障的表达式（`1 / 0`）。它不被折叠：有没有这个遍，程序的行为相同；运行到达该表达式时，故障连同位置一起报告。在这个遍运行之后打印到 stderr，每个表达式一次，在下一个遍之前 |
 
-对 `EffectNotExecuted` 来说，什么算效应：在算子特性注册表里既不是纯的也不是仅状态的算子（与效应追踪记录的是同一个集合）、对带 `var` 参数的函数的调用、对自身结果依赖某个效应的函数的调用，以及有这样的分支臂的分支。通过函数值进行的调用凭它类型上的资源识别，不凭类型上的某个标记：签名里写了资源就是碰该资源，没写子句就是什么都没承诺（按最宽读），只有 `pure` 才说明这次调用不是效应。
 
 - **编译没有错误的程序** 把它的警告打印到 **stderr**，只打印一次，在编译之后、第一个遍运行之前，使用默认日志级别即可（不需要 `-v`）。默认的 `text` 格式下，警告的写法与错误相同，以 `warning[SemanticDiag::IgnoredSideEffect]: ...` 开头，带源码行和 `help:`；`short` 格式下每个警告一行：`(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`（没有源码位置的警告写作 `():?:?: [Warn]: ...`）。使用 `--output-format json` 时，stderr 上是一个 JSON 数组，其中的对象与下文的错误数组相同（`"severity":"Warn"`）。没有警告时什么都不写（没有空数组）。
 - **两种模式下 stdout 都与没有警告时相同**：程序的输出，以及只在有错误时才出现的诊断数组。解析 stdout 的工具不受影响。
-- **有错误的模块** 把它的警告与错误一起显示在 stdout 上，警告在前（JSON 模式下在同一个数组里）；它们不在 stderr 上重复。`EffectNotExecuted` 在模块有错误时不报告。
+- **有错误的模块** 把它的警告与错误一起显示在 stdout 上，警告在前（JSON 模式下在同一个数组里）；它们不在 stderr 上重复。
 - `camel check` 以同样的方式打印它们。`--timeit`、`camel inspect`、`camel-cpp` 和调试器不打印警告。
 
 ### JSON 诊断（`--output-format json`）
@@ -323,12 +322,12 @@
 
 | 上限 | 值 | 可调 | 到达时 |
 |---|---|---|---|
-| `std::opt::inline`、`std::opt::specialize`、`std::opt::devirtualize`、`std::opt` 的增长（特化和内联复制的节点；`std::opt` 的所有轮次共用一个预算） | 4096 个节点 | 遍的参数 `growth_budget=<nodes>`，如 `std::opt growth_budget=8192`、`std::opt::inline growth_budget=0` | 不再特化或内联；剩下的调用仍是调用。带 `-v` 时有日志 |
-| `std::opt::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
+| `std::cxx::inline`、`std::cxx::specialize`、`std::cxx::devirtualize`、`std::opt` 的增长（特化和内联复制的节点；`std::opt` 的所有轮次共用一个预算） | 4096 个节点 | 遍的参数 `growth_budget=<nodes>`，如 `std::opt growth_budget=8192`、`std::cxx::inline growth_budget=0` | 不再特化或内联；剩下的调用仍是调用。带 `-v` 时有日志 |
+| `std::cxx::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
 | `std::opt` 的轮数 | 16 | 否 | 程序按现状传下去。带 `-v` 时有日志 |
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
 | 非尾递归，在每个调度器上相同：`std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的调用一样计数）和 `std::tf` / `std::prl`（计数随元素转到运行它的工作线程上） | 1000 个打开的调用 | `--max-recursion-depth <n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 1001 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (1000) exceeded when evaluating graph '...'.`），建议给出选项 |
-| `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::opt::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::opt::inline std::jit`：`depth(999)` 运行，`depth(1000)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
+| `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::cxx::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::cxx::inline std::jit`：`depth(999)` 运行，`depth(1000)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
 | `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
 | `std::macro` 对 `#macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`（1 到 1000000） | 求值失败：在该调用处给出运行时故障 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
@@ -337,7 +336,7 @@
 | 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `--meta-space-limit-mb <megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
 | 自动空间（运行期的值，受垃圾回收管理） | 宿主机的内存 | 否 | `RuntimeDiag::MemoryExhausted`（阶段 `pass:<scheduler>`），说明宿主机拒绝了这次分配 |
 
-**递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::opt::inline`）也改变被计数的内容，因为它们改变了图。
+**递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及 `std::tf` 上都是如此：默认值下是 `depth(999)`。改变存在哪些调用的遍（`std::cxx::inline`）也改变被计数的内容，因为它们改变了图。
 
 **设置它。** 命令行上的 `--max-recursion-depth <n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。没有选项时，每个调度器都在 1000 处停下，并行调度器同样计数（设计原则 3.9）。
 
@@ -350,7 +349,7 @@
 | `std::fvm`，通过函数值的调用或高阶算子的元素调用 | 同上，再加上原生栈上解释器循环的一次嵌套激活 | 嵌套激活约占 1.7 KiB 原生栈 | 4587 次嵌套激活；然后是诊断（不做检查时在 4890 处崩溃） |
 | `std::tf` | 每张图一个的池（堆）里的帧，加上原生栈上的求值器 | 约 520 字节原生栈 | 14875 次调用；然后是诊断（不做检查时在 15858 处崩溃） |
 
-**默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::tf` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::opt::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::tf` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。`std::tf` 的工作线程在所有平台上都以指定的栈大小创建，至少 8 MiB：不指定大小创建的线程在 macOS 上只有 512 KiB，在 Windows 上由宿主加载 `libcamel` 时（`python.exe`）只有宿主的 1 MiB（`include/camel/utils/big_stack_thread.h`、`cmake/TaskflowWorkerStack.cmake`）。macOS 这一侧尚未运行过。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
+**默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::tf` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::cxx::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::tf` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。`std::tf` 的工作线程在所有平台上都以指定的栈大小创建，至少 8 MiB：不指定大小创建的线程在 macOS 上只有 512 KiB，在 Windows 上由宿主加载 `libcamel` 时（`python.exe`）只有宿主的 1 MiB（`include/camel/utils/big_stack_thread.h`、`cmake/TaskflowWorkerStack.cmake`）。macOS 这一侧尚未运行过。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
 
 `std::nvm` 和 `std::fvm` 的帧池按上限确定大小：每个可能打开的调用 4 KiB（默认值下约 4 MiB），最多 256 MiB；它一次性保留，只有用到的部分才被触及。帧非常大的函数的递归可能在计数到达之前就把它填满；那是同一条带位置的诊断，说明帧池已满。运行时间不受上限影响。`--native-stack-guard off` 关闭原生栈检查；它用于测量栈实际在哪里结束（上面的崩溃点），不供正常使用。
 
@@ -403,7 +402,7 @@
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`：打印图构造树（GCT）  
 - `-g`, `-G`, `--gir`, `--graph-ir`：打印图中间表示（GIR）  
 - `--tns`, `--topo-node-seq`：打印拓扑排序后的节点序列  
-- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名，例如 `OPERATOR {"module":"<builtin>","name":"__add__","uri":":op/add_l","with":0,"norm":2,"purity":"pure","signature":"(i64, i64) => i64"}`
+- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名，然后是算子的**访问列表**（每个它触及的资源一条，带这次访问的读/写模式）以及由它推出的三件事：访问列表是否逐条声明（`accesses_declared`）、是否触及程序之外的状态（`external`）、是否可能中止（`may_fault`）。没有逐条声明的算子按"写全局资源"读，打印的就是那一条。例如 `OPERATOR {"module":"<builtin>","name":"__add__","uri":":op/add_l","with":0,"norm":2,"purity":"pure","signature":"(i64, i64) => i64","accesses":[],"accesses_declared":true,"external":false,"may_fault":false}`
 - `--gen`, `--gene-code`：从 AST 生成代码  
 - `-p`, `-P`, `--pass-until <n>`：执行到指定的图优化阶段为止  
 - 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`

@@ -29,6 +29,7 @@
 #include "camel/core/mm/gen.h"
 #include "camel/core/operator.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tagged.h"
@@ -36,11 +37,19 @@
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/runtime/draft.h"
+#include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_outline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/region_roots.h"
 #include "src/passes/opt/generic/rewrite.h"
 
+#include <algorithm>
 #include <format>
+#include <span>
+#include <string>
+#include <vector>
 
 using namespace camel::core::context;
 using namespace camel::core::type;
@@ -76,6 +85,8 @@ struct TxnState {
 
     /// The Program the transaction was opened on. The transaction keeps it alive (the foreign
     /// resource traces it) until the transaction is released.
+    // program-holder-exempt: heap-self-tracking -- the transaction's descriptor trace relocates
+    // base as the Txn slot "program", so the collector follows it.
     const Program *base;
     RuntimeGraphDraftSession session;
     bool detached = false;
@@ -148,22 +159,37 @@ TxnState &openState(ArgsView &norm, size_t index, const char *site) {
     return *wrapper->resourceAs<TxnState>();
 }
 
-/// The transaction that owns the draft of the graph a Node handle names, and the node. The handle
-/// must belong to the Program the transaction was opened on. The transaction, not the draft: a
-/// caller that hands the draft on to a rewrite loses the only thing that says which graph it edits.
+/// The transaction that owns the draft of the graph a Node handle names, and the node. A handle
+/// names its node one of two ways, and both are this transaction's: as a node of the Program the
+/// transaction was opened on, or as a node of a draft the transaction holds -- `inline`, `outline`
+/// and `eval` all answer `Handle::createInTransaction`, which names the transaction and no program
+/// (a node the transaction just made exists in no published program, so a program-backed handle
+/// would claim one that is not there). A handle of another program, or of a transaction another
+/// session holds, is refused. The transaction, not the draft: a caller that hands the draft on to a
+/// rewrite loses the only thing that says which graph it edits.
 std::pair<camel::runtime::GraphTransaction &, camel::runtime::gc_node_ref_t>
 draftOf(TxnState &state, const Handle *node, const char *site) {
-    if (node->program() != state.base) {
+    const bool made = node->transaction() != nullptr;
+    if (!made && node->program() != state.base) {
         err::throwRuntimeFault(
             err::RuntimeDiag::InvalidArgument,
             site,
             "the node belongs to another program than the transaction");
     }
-    GCGraph *graph = state.base->graph(node->graph());
-    if (graph == nullptr || !graph->containsNodeRef(node->index())) {
+    // A node of the program is in a graph the program holds; a node of the draft is in a graph the
+    // session works on, which is the program's until an edit makes one of its own.
+    GCGraph *graph = made ? state.session.work().graph(node->graph())
+                          : state.base->graph(node->graph());
+    if (graph == nullptr || (!made && !graph->containsNodeRef(node->index()))) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node is not in its graph");
     }
     auto &transaction = state.session.edit(graph);
+    if (made && node->transaction() != &transaction) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node belongs to another program than the transaction");
+    }
     if (!transaction.edit().alive(node->index())) {
         err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node was removed");
     }
@@ -227,6 +253,11 @@ slot_t replaceKernel(ArgsView &, ArgsView &norm, Context &) {
             "graph.replace",
             "the replacement is the node itself or is computed from it");
     }
+    // A named edit of the table (docs/design/graph-editing/README.cn.md 8.1), whose answer to the
+    // effect and the order checks is a theorem about `replace` itself: the nodes this touches are
+    // therefore not the low-level changes that would make the commit answer for them
+    // (`GraphDraft::NamedEdit`).
+    const camel::runtime::GraphDraft::NamedEdit named(draft);
     camel::passes::generic::replaceNode(transaction, fromRef, toRef);
     return NullSlot;
 }
@@ -248,6 +279,9 @@ slot_t eraseKernel(ArgsView &, ArgsView &norm, Context &) {
             "graph.erase",
             "the value of the node is still read");
     }
+    // A named edit: what `erase` re-sequences is the erase's, not a low-level change of the graph
+    // (see replaceKernel above).
+    const camel::runtime::GraphDraft::NamedEdit named(draft);
     camel::passes::generic::replaceNode(transaction, ref, kInvalidNodeRef);
     return NullSlot;
 }
@@ -362,13 +396,475 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
+/// Whether `target` runs before `start`: whether walking up the inputs of `start` -- values, `with`,
+/// control, sync and order -- reaches `target`. An input edge `u -> v` says `u` runs before `v`
+/// (design principles 3.1), so this is the reading an order edge asks before it is written: an edge
+/// that ordered `before` before `after` while the graph already computes `before` from `after` puts
+/// the graph on a cycle of runs. The seal check refuses that cycle, and a commit that wrote it would
+/// be refused with a message about a graph this operator made; asking here names the operator's own
+/// mistake instead.
+bool runsBefore(camel::runtime::GraphTransaction &transaction, gc_node_ref_t target,
+                gc_node_ref_t start) {
+    auto &draft = transaction.edit();
+    if (start == target) {
+        return true;
+    }
+    std::vector<gc_node_ref_t> work{start};
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    while (!work.empty()) {
+        const gc_node_ref_t node = work.back();
+        work.pop_back();
+        if (node == target) {
+            return true;
+        }
+        if (node >= seen.size() || seen[node] || draft.header(node) == nullptr) {
+            continue;
+        }
+        seen[node] = true;
+        for (auto group :
+             {draft.normInputsOf(node),
+              draft.withInputsOf(node),
+              draft.ctrlInputsOf(node),
+              draft.syncInputsOf(node),
+              draft.orderInputsOf(node)}) {
+            work.insert(work.end(), group.begin(), group.end());
+        }
+    }
+    return false;
+}
+
+/// How deep the region `region` lies: the body is 0, every region one more than the region it is in.
+uint32_t regionDepthOf(const camel::runtime::GraphDraft &draft, uint32_t region) {
+    uint32_t depth = 0;
+    for (uint32_t steps = 0; region != 0 && region < draft.regionCount() &&
+                             steps <= draft.regionCount();
+         ++steps) {
+        const camel::runtime::GCRegion &one = draft.region(region);
+        if (one.parent == region) {
+            break; // a region that is its own parent: the walk would not end
+        }
+        region = one.parent;
+        ++depth;
+    }
+    return depth;
+}
+
+/// The region both ends of an edge are judged in: the innermost region that holds both, which is
+/// the body when the two lie in different branches.
+uint32_t commonRegionOf(
+    const camel::runtime::GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b) {
+    uint32_t regionA = draft.nodeRegion(a);
+    uint32_t regionB = draft.nodeRegion(b);
+    uint32_t depthA  = regionDepthOf(draft, regionA);
+    uint32_t depthB  = regionDepthOf(draft, regionB);
+    while (depthA > depthB && regionA != 0) {
+        regionA = draft.region(regionA).parent;
+        --depthA;
+    }
+    while (depthB > depthA && regionB != 0) {
+        regionB = draft.region(regionB).parent;
+        --depthB;
+    }
+    while (regionA != regionB && regionA != 0 && regionB != 0) {
+        regionA = draft.region(regionA).parent;
+        regionB = draft.region(regionB).parent;
+    }
+    return regionA;
+}
+
+/// Whether a region only records where its code came from: an inlined body, or a block carrying
+/// tags or a decorator. Such a region "holds no execution of its own" -- it is a grouping mark a
+/// pass may dissolve, and its nodes are the nodes of the region around it
+/// (docs/design/effects/edges.cn.md 5.8) -- so it is looked through wherever the graph is read.
+bool regionIsLookedThrough(camel::runtime::GCRegionKind kind) {
+    return kind == camel::runtime::GCRegionKind::Inline ||
+           kind == camel::runtime::GCRegionKind::Block;
+}
+
+/// The node that stands for `ref` in the region `common`, walking out of the regions it is in.
+///
+/// The commit asks order completeness per region, and a node of an arm or of a part of a loop is
+/// judged where its owner stands: the owner stands in the region around it for everything under
+/// it. So one end of an order edge that lies deeper is lifted to that owner, step by step, until it
+/// reaches the region the two ends share.
+///
+/// A region that is looked through has no owner to lift to, and the pure `GATE` standing at its
+/// boundary is no node of its own either: a gate orders the value it reads and runs nothing
+/// (design principles 3.1), so what the end names there is the value behind it (`ungated`). That is
+/// the whole of why an edge into such a region used to say nothing: the caller ordered the
+/// forwarder, and the write it forwards stayed unordered with the access on the other side.
+gc_node_ref_t representativeIn(
+    const camel::runtime::GraphDraft &draft, gc_node_ref_t ref, uint32_t common) {
+    gc_node_ref_t at = ref;
+    uint32_t region  = draft.nodeRegion(at);
+    if (region != common && region != 0 && region < draft.regionCount() &&
+        regionIsLookedThrough(draft.region(region).kind)) {
+        const gc_node_ref_t behind = camel::runtime::ungated(draft, at);
+        if (behind != kInvalidNodeRef && behind != at && draft.alive(behind)) {
+            at     = behind;
+            region = draft.nodeRegion(at);
+        }
+    }
+    for (uint32_t steps = 0; region != common && region != 0 && region < draft.regionCount() &&
+                             steps <= draft.regionCount();
+         ++steps) {
+        const camel::runtime::GCRegion &one = draft.region(region);
+        if (one.owner != kInvalidNodeRef && one.owner != at && draft.alive(one.owner)) {
+            at     = one.owner;
+            region = draft.nodeRegion(at);
+            continue;
+        }
+        if (one.parent == region) {
+            break;
+        }
+        region = one.parent;
+    }
+    return at;
+}
+
+/// `order(t, before, after)`: adds an order edge, so that when both nodes run `before` runs before
+/// `after`. An order edge only orders and never makes a node run (design principles 3.1), which is
+/// why the whole promise is the edge and nothing else is written. Refused when the two nodes are not
+/// two nodes of one graph, and when the edge would close a cycle; an edge that is there already
+/// changes nothing and is not a refusal, because the promise the caller asks for holds.
+///
+/// Two ends in one region are the edge they name. Two ends in different regions are lifted to the
+/// nodes that stand for them in the region they share: the commit reads access
+/// by region, so the edge is written between the pair that region sees, and `order` speaks
+/// the same words the check does.
+slot_t orderKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.order";
+    TxnState &state         = openState(norm, 0, site);
+    const auto *before      = norm.get<Handle *>(1);
+    const auto *after       = norm.get<Handle *>(2);
+    // Both ends are read the same way, and not only the second: a node this transaction just made
+    // (`inline`, `outline` and `eval` answer one) names the transaction and not a program, and
+    // ordering the body a splice just wrote among the accesses already there is the caller's, as
+    // the documentation of `inline` promises. Two ends that resolve to one transaction are two
+    // nodes of one draft; anything else is two graphs, whichever way the handles name them.
+    auto [beforeTransaction, beforeRef] = draftOf(state, before, site);
+    auto [afterTransaction, afterRef]   = draftOf(state, after, site);
+    if (&beforeTransaction != &afterTransaction) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the two nodes are not nodes of the same graph");
+    }
+    auto &draft = afterTransaction.edit();
+    if (beforeRef == afterRef) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the two nodes are the same node");
+    }
+    // The pair the region the two ends share sees. Two ends in one region name that pair already;
+    // two ends in different regions are lifted out of the regions they lie in, because the check
+    // judges an access where the region runs it, not where the code was written (see
+    // `representativeIn`). When both ends stand on one node there the accesses are one access and
+    // the edge would be a self edge: the pair is left as it was named, so the caller sees what the
+    // edge it wrote does.
+    if (draft.nodeRegion(beforeRef) != draft.nodeRegion(afterRef)) {
+        const uint32_t common = commonRegionOf(draft, beforeRef, afterRef);
+        const gc_node_ref_t liftedBefore = representativeIn(draft, beforeRef, common);
+        const gc_node_ref_t liftedAfter  = representativeIn(draft, afterRef, common);
+        if (liftedBefore != liftedAfter) {
+            beforeRef = liftedBefore;
+            afterRef  = liftedAfter;
+        }
+    }
+    if (runsBefore(afterTransaction, afterRef, beforeRef)) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the graph computes 'before' from 'after' already: the edge would form a cycle");
+    }
+    // A named edit: an order edge adds an ordering and never makes a node run, so the table asks
+    // this edit no question about the effect or the ordering (`GraphDraft::NamedEdit`).
+    {
+        const camel::runtime::GraphDraft::NamedEdit named(draft);
+        draft.appendOrderDependency(afterRef, beforeRef);
+    }
+    return NullSlot;
+}
+
+/// The node a region's value and its writes leave by: the graph's own exit for the body, and the
+/// region's result for a control region (both are a `GATE` when the region writes).
+gc_node_ref_t exitOfRegion(const camel::runtime::GraphDraft &draft, uint32_t region) {
+    if (region != 0 && region < draft.regionCount()) {
+        return draft.region(region).result;
+    }
+    if (draft.exitNode() != kInvalidNodeRef) {
+        return draft.exitNode();
+    }
+    if (draft.outputNode() != kInvalidNodeRef) {
+        return draft.outputNode();
+    }
+    return draft.returnNode();
+}
+
+/// Hangs the code a splice brought on the exit `GATE` of the region it landed in, so that the region
+/// that runs the code waits for what it writes (design principles 3.1: "每个区域的出口是 `GATE`，
+/// 第一个普通输入是区域的值，其余是区域的写").
+///
+/// A body spliced at a node that holds no place in its block's chain lands in an `Inline` region
+/// beside it, and nothing in the block reads that region: the body's value has no user, so nothing
+/// makes its statements run. The region it landed in does run whenever the node's region does, so
+/// what it writes is that region's write and belongs on that region's exit `GATE` -- the front end
+/// lays that `GATE` once (`Builder::layRegionWriteEdges`) and every rewrite that brings a region its
+/// first write owes it as well. A `GATE` only orders and makes nothing run, so the statements hung
+/// on it keep the wait they have among themselves; the ordering of those writes against the accesses
+/// already there is still `order`'s to say, which is what `inline`'s documentation promises.
+///
+/// The nodes carried are the splice's own nodes in that region that arrange themselves nowhere: an
+/// effect or a computation that may fault, which is exactly the set the model does not let a pass
+/// move (design principles 3.4, the reading the splice's own order edges take). A `GATE` is not one
+/// of them -- it runs nothing of its own and only forwards a value, so hanging it would add a wait on
+/// what the write already waits for -- and neither is a node that owns a region: that one stands in
+/// the region for what is under it. Nothing else is carried -- a pure value runs when something reads
+/// it -- and a region with no `GATE` yet owes one the front end lays and this operator cannot, so
+/// that case is left as it is (the count answers how many were carried, so a caller can tell).
+size_t hangSplicedStatements(
+    camel::runtime::GraphDraft &draft, gc_node_ref_t atRef, size_t slotsBefore) {
+    const uint32_t region = camel::runtime::decidingRegionOfDraft(draft, atRef);
+    const gc_node_ref_t exit = exitOfRegion(draft, region);
+    if (exit == kInvalidNodeRef || !draft.alive(exit)) {
+        return 0;
+    }
+    const camel::runtime::DraftNodeHeader *const exitHeader = draft.header(exit);
+    if (exitHeader == nullptr || exitHeader->kind != GCNodeKind::Gate ||
+        draft.normInputsOf(exit).empty()) {
+        return 0; // the region has no exit GATE of its own: nothing to hang a write on
+    }
+    std::vector<gc_node_ref_t> carried;
+    for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
+         ++id) {
+        const camel::runtime::DraftNodeHeader *const header = draft.header(id);
+        if (!draft.alive(id) || header == nullptr || header->kind == GCNodeKind::Dead ||
+            header->kind == GCNodeKind::Gate || header->kind == GCNodeKind::Brch ||
+            header->kind == GCNodeKind::Join || header->kind == GCNodeKind::Loop) {
+            continue;
+        }
+        if (!draft.regionWithin(draft.nodeRegion(id), region) ||
+            camel::runtime::nodeIsFreelySchedulable(draft, id)) {
+            continue;
+        }
+        const std::span<const gc_node_ref_t> reads = draft.normInputsOf(exit);
+        if (std::ranges::find(reads, id) == reads.end()) {
+            carried.push_back(id);
+        }
+    }
+    for (const gc_node_ref_t id : carried) {
+        draft.appendInput(camel::runtime::DraftEdgeKind::Data, exit, id);
+    }
+    return carried.size();
+}
+
+/// `inline(t, at, fn)`: the body of the function value `fn` spliced into the region `at` is in,
+/// answering the node that holds the body's value. `at` decides the place as well
+/// (docs/design/graph-editing/README.cn.md 7 and 15.3):
+///
+/// * `at` is the call `fn` is made at -- the shape `replace(call, inline(call, ...))` expands in
+///   place: the body is spliced where the call stood, takes over its place in the block's chain
+///   and its order edges, and the call is gone. The call's own arguments are the actuals.
+/// * `at` is another statement of its block's chain -- an effect or a node that may fault -- it
+///   hands that place over to the code the body becomes and is gone afterwards. `fn` takes no
+///   arguments: there is no call site whose arguments could be bound.
+/// * `at` stands in no chain -- a pure node -- it only selects the region: the body lands in an
+///   Inline region inside `at`'s, and `at` itself and its readers are left as they are. The body's
+///   writes are writes of the region it landed in, so that region's exit `GATE` waits for them
+///   (`hangSplicedStatements`); where they run among the accesses already there is `order`'s to
+///   say, which is the caller's (the operator writes no order edge into that region).
+///
+/// Only a function value that captures nothing is expanded: the captures of a callee are values of
+/// the frame the value was made in, and a splice into another graph cannot name them.
+slot_t inlineKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.inline";
+    TxnState &state         = openState(norm, 0, site);
+    const auto *at          = norm.get<Handle *>(1);
+    auto *function          = norm.get<::Function *>(2);
+    GCGraph *calleeGraph    = function != nullptr ? function->graph() : nullptr;
+    if (calleeGraph == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument, site, "the function value has no graph to expand");
+    }
+    if (!calleeGraph->closureNodes().empty()) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the function value captures variables: run `std::defunctionalize` on it and expand "
+            "the call it leaves");
+    }
+    // The graph may come from another program than the transaction's (a pass holds the program it
+    // was handed and the library it was written in): the draft has to see it to name it.
+    if (function->program() != nullptr && function->program() != state.base) {
+        state.session.adoptProgram(*function->program());
+    }
+    auto [transaction, atRef] = draftOf(state, at, site);
+    auto &draft               = transaction.edit();
+    const camel::runtime::DraftNodeHeader *const atHeader = draft.header(atRef);
+    const bool atIsCall = atHeader != nullptr && (atHeader->kind == GCNodeKind::Func ||
+                                                  atHeader->kind == GCNodeKind::Call);
+    if (atIsCall) {
+        if (atHeader->kind == GCNodeKind::Call &&
+            !camel::runtime::devirtualizeStaticCallInDraft(state.session, transaction, atRef, true)) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the callee of the call is not known in this graph: run `std::defunctionalize` on "
+                "it first");
+        }
+    }
+    // `at` is the call this very function is made at: its arguments are the actuals, and the splice
+    // does the whole of the expansion -- the body takes the call's place in the chain and the order
+    // edges, and the call is erased (draft_inline.h, inlineCallableInDraft). A call of *another*
+    // function is a statement like any other and takes the branch below: what is expanded there is
+    // the function value the operator was given.
+    if (atIsCall && draft.calleeGraphOf(atRef) == calleeGraph) {
+        const camel::runtime::DraftInlineResult inlined =
+            camel::runtime::inlineCallableInDraft(state.session, transaction, atRef);
+        if (!inlined) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the call cannot be expanded here (a callee that writes a captured variable keeps "
+                "the value it hands on, and is left as it is)");
+        }
+        return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
+    }
+    // Every other `at`: the body is made as a call of its own. `fn` takes no argument, because the
+    // operator carries no argument list yet: the declaration would need one.
+    if (!calleeGraph->normPorts().empty() || !calleeGraph->withPorts().empty()) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the function value takes arguments: expand it at a call of it, which has them");
+    }
+    camel::core::type::Type *const valueType = camel::runtime::callValueTypeOf(*calleeGraph, 0);
+    if (valueType == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument, site, "the function value has no result type");
+    }
+    const bool takesPlace = camel::runtime::occupiesChainPlace(draft, atRef);
+    if (takesPlace && !camel::passes::generic::isReplaceable(transaction, atRef)) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node anchors its graph (an exit, an output, a return or the end of a branch arm)");
+    }
+    // The call the body is spliced out of: the splice replaces a call node by the body it names, so
+    // the place is written on this call and the splice hands it on to the body's own code. The
+    // region is `at`'s either way -- that is the one thing `at` always says. What the splice makes
+    // is every node from `slotsBefore` on, which is what a caller that has to keep the body's
+    // effects alive reads.
+    const size_t slotsBefore = draft.nodeSlotCount();
+    const gc_node_ref_t call = draft.addFuncNode(calleeGraph->id(), valueType);
+    draft.setNodeRegion(call, draft.nodeRegion(atRef));
+    draft.setNodeOrigin(call, draft.nodeOrigin(atRef));
+    if (takesPlace) {
+        draft.takeStatementPlace(atRef, call);
+    }
+    const camel::runtime::DraftInlineResult inlined =
+        camel::runtime::inlineCallableInDraft(state.session, transaction, call);
+    if (!inlined) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the function's body cannot be spliced into this graph");
+    }
+    if (takesPlace) {
+        // The statement is gone and the body's value is what it held: the node `at` named is
+        // replaced by the code the body became.
+        draft.replaceAllValueUses(atRef, inlined.valueExit);
+        draft.replaceAllCtrlUses(atRef, inlined.valueExit);
+        draft.eraseNode(atRef);
+    } else {
+        // `at` stands in no chain, so the body's value has no reader and nothing in the block
+        // reaches the region the body landed in. What it writes is a write of the region it landed
+        // in all the same, and that region's exit `GATE` is what makes the region wait for it; the
+        // ordering among the accesses already there is still `order`'s to say.
+        hangSplicedStatements(draft, atRef, slotsBefore);
+    }
+    return toSlot(Handle::createInTransaction(transaction, inlined.valueExit, mm::autoSpace()));
+}
+
+/// `outline(t, ns)`: the group `ns` of one graph becomes a graph of its own and a call of it takes
+/// the place of the value the group handed on; that call is what the operator answers. It is
+/// `inline`'s reverse (docs/design/graph-editing/README.cn.md 7, 15.3), and the graph it makes is a
+/// graph this transaction *made* -- in no program before the edit -- so the commit delivers it
+/// through `noteMadeGraph` and not through what the drafts reach (2.5, 8.1).
+///
+/// What the group's boundary has to be, and how the graph is built from it, is
+/// `camel::runtime::outlineDraftNodes` (draft_outline.h): a group of operations whose values come
+/// from outside it and go out through one node, no anchor, no access, no ordering or chain place.
+/// The boundary is read before anything is made, so a group that is not that is refused with the rule
+/// it broke and the draft is as the operator found it.
+slot_t outlineKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "graph.outline";
+    TxnState &state         = openState(norm, 0, site);
+    auto *array             = norm.get<Array *>(1);
+    const size_t count      = array->size();
+    if (count == 0) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the group is empty");
+    }
+    std::vector<gc_node_ref_t> group;
+    group.reserve(count);
+    camel::runtime::GraphId graphId = camel::runtime::GraphId::Invalid;
+    for (size_t i = 0; i < count; ++i) {
+        auto *handle = array->get<Handle *>(i);
+        if (handle == nullptr || handle->kind() != HandleKind::Node) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument, site, "the group holds a node that is no node");
+        }
+        // A node read from a draft names the transaction and no program; one read from a program
+        // must be this transaction's program.
+        if (handle->program() != nullptr && handle->program() != state.base) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "a node of the group belongs to another program than the transaction");
+        }
+        if (graphId == camel::runtime::GraphId::Invalid) {
+            graphId = handle->graph();
+        } else if (graphId != handle->graph()) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the group names nodes of two graphs: a group is outlined out of one graph");
+        }
+        group.push_back(handle->index());
+    }
+    GCGraph *graph = state.base->graph(graphId);
+    if (graph == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
+    }
+    auto &transaction = state.session.edit(graph);
+    for (const gc_node_ref_t ref : group) {
+        if (!transaction.edit().alive(ref)) {
+            err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "a node was removed");
+        }
+    }
+    const std::string name = std::format(
+        "{}$outline{}", graph->name(), static_cast<unsigned>(std::ranges::min(group)));
+    try {
+        const camel::runtime::DraftOutlineResult outlined =
+            camel::runtime::outlineDraftNodes(state.session, transaction, group, name);
+        // A node the graph did not have: the call the group's value is now read from, whose callee
+        // is the graph this edit made (read back with `callee`).
+        return toSlot(Handle::createInTransaction(transaction, outlined.call, mm::autoSpace()));
+    } catch (const mm::MemoryExhausted &) {
+        throw;
+    } catch (const std::exception &failure) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, failure.what());
+    }
+}
+
 /// The changed function (of the type that was opened, `F`), or the error value `GraphInvalid` when a
 /// graph it edited breaks an invariant (the message names it). The transaction is over either
 /// way. The commit is a value: it never installs the context's program, whoever the transaction
 /// was opened on (design principles 9.1: a transform gives a new value and changes nothing
 /// another holder sees). Only the pass driver installs a program, the one a pass hands on
 /// (src/execute/camel_pass.cpp).
-slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
+slot_t commitKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     auto *wrapper = norm.get<ForeignResourceObject *>(0);
     if (wrapper->disposed()) {
         return makeError(
@@ -385,6 +881,14 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
         result                   = functionOf(*state, committed, resultType);
     } catch (const mm::MemoryExhausted &) {
         throw;
+    } catch (const camel::runtime::GraphCommitRefused &refused) {
+        // The two commit checks of analysis 4.1 refused the graphs this commit changed: one line,
+        // the same one the reading made, recorded where a diagnostic is read and handed back as the
+        // error value this `commit` answers, because a commit that cannot keep its promises is a
+        // refused commit and not a broken invariant of the graph's edges.
+        camel::runtime::reportCommitViolation(
+            ctx.shared_from_this(), "graph::commit", refused.violation());
+        result = makeError("GraphInvalid", refused.what(), "<graph::commit>");
     } catch (const std::exception &failure) {
         result = makeError("GraphInvalid", failure.what(), "<graph::commit>");
     }
@@ -463,6 +967,9 @@ const std::vector<TxnOp> &txnOps() {
         {"commit", commitKernel},
         {"abort", abortKernel},
         {"eval", evalKernel},
+        {"order", orderKernel},
+        {"inline", inlineKernel},
+        {"outline", outlineKernel},
     };
     return ops;
 }

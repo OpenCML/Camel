@@ -44,7 +44,7 @@ chain = CASES / "opt/generic/control_chain.cml"
 raw = export(chain)
 assert all(not redundant(g) for g in raw["graphs"]), "compiler left a redundant control edge"
 assert any(n["kind"] == "GATE" for g in raw["graphs"] for n in g["nodes"])
-for pipeline in ([], ["std::inline"], ["std::opt"], ["std::opt::order"]):
+for pipeline in ([], ["std::cxx::inline"], ["std::opt"], ["std::cxx::order"]):
     for backend in ("std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl"):
         assert run(chain, *pipeline, backend).split() == ["1", "2"]
 
@@ -54,9 +54,9 @@ assert sum(e["kind"] == "control" for e in graph["edges"]) == 4
 assert not redundant(graph), "integrated optimizer left transitive controls"
 
 branch = CASES / "opt/progen/findings/inline_untaken_arm_fault.cml"
-before = export(branch, "std::inline")
-after = export(branch, "std::inline", "std::opt::order")
-assert after == export(branch, "std::inline", "std::opt::order", "std::opt::order"), "cleanup is not idempotent"
+before = export(branch, "std::cxx::inline")
+after = export(branch, "std::cxx::inline", "std::cxx::order")
+assert after == export(branch, "std::cxx::inline", "std::cxx::order", "std::cxx::order"), "cleanup is not idempotent"
 for old, new in zip(before["graphs"], after["graphs"]):
     assert old["nodes"] == new["nodes"], "cleanup changed nodes or branch metadata"
     assert [e for e in old["edges"] if e["kind"] != "control"] == [
@@ -65,7 +65,7 @@ for old, new in zip(before["graphs"], after["graphs"]):
     boundary_edges = lambda g: [e for e in g["edges"] if e["source"] in boundaries or e["target"] in boundaries]
     assert boundary_edges(old) == boundary_edges(new), "branch boundary edges changed"
 for backend in ("std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl"):
-    assert run(branch, "std::inline", "std::opt::order", backend).strip() == ""
+    assert run(branch, "std::cxx::inline", "std::cxx::order", backend).strip() == ""
 
 with tempfile.TemporaryDirectory() as folder:
     source = Path(folder) / "long_chain.cml"

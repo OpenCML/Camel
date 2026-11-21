@@ -1,0 +1,35 @@
+/**
+ * `reshape`'s target shape is the shape the *node* wrote, and the tangent has to land in it.
+ *
+ * `rules_angle_args_reshape.cml` reshapes to `[2, 2]`, which is the one shape a law could have
+ * written as a constant, so it answers the same number whether the law bound the port or stated it.
+ * This reading is the one that separates them: `[8, 2, 8]` is a shape a law's text cannot have on
+ * its left side, so only a law that names the operator's second port answers it.
+ *
+ * The value and the tangent are derived by hand, not read off a run:
+ *
+ *   reshape  f(x) = sum(reshape<[8, 2, 8]>(x)) on x = [1.0, 2.0, ..., 128.0]
+ *            f = 128 * 129 / 2 = 8256.0, and a reshape moves no element, so along
+ *            dx = [0.5] * 128 the tangent is 128 * 0.5 = 64.0.
+ *
+ * What a law that states the shape instead answers: `reshape<[2, 2]>(dx)`, which is 128 elements
+ * asked into four positions -- `TensorDimensionMismatch: [128] -> [2, 2]`, the whole program
+ * stopped. The wrong shape is a wrong number, not a missing one, which is why this reading exists.
+ *
+ * One program, one reading, for the reason `rules_angle_args_reshape.cml` gives.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { reshape, sum } from tensor
+
+func loss_reshape_shape(x: float[...]): float {
+    return sum(reshape<[8, 2, 8]>(x))
+}
+
+func main(): int sync {
+    let xs = [float(i + 1) for i in 0..128]
+    let (value, tangent) =
+        jvp(loss_reshape_shape)(xs as float[], [0.5 for i in 0..128] as float[])
+    'rules_angle_args reshape-shape value={} tangent={}'->format<value, tangent>->println
+    return 0
+}

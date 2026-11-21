@@ -26,6 +26,8 @@
 //     collections, one for the rest, every copy under `--tier all`;
 //   * the identity of a sweep copy: two source plans that both have a test named `shapes` keep
 //      four distinct names, and one source test reused under two sweeps keeps two;
+//   * the entries a sweep does not cover, counted: how many `negative` entries its source plans
+//      declare, how many it copies, and how many it leaves out (the line below `[calibration]`);
 //   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
 //      mean, and the runner reports that failure instead of throwing on the missing metric;
 //   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
@@ -46,12 +48,17 @@ import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
+import { measuredInstall, negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
 import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
 const runner = path.join(path.dirname(here), 'run-tests.mjs')
+// What this host records about a death is the host's, and two checks below read a fixture that
+// states one death in each of the two vocabularies: a POSIX host reports the signal and no exit
+// status, Windows reports the exit status and no signal (signal.plan.toml, `abrt`/`abrt_as_exit`).
+const IS_WINDOWS = process.platform === 'win32'
 const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
 // The width every child run of this self-test is taken at. A runner that is not told takes
 // `availableParallelism` -- 32 on the gate host -- and then its readings move with its neighbours:
@@ -68,7 +75,7 @@ const SELFTEST_JOBS = '4'
 // whole thing cost in CPU and in wall time. The three numbers belong together because the bound
 // this self-test runs under rose twice on readings that were never the same kind, and a host that
 // reports its own cost is the only thing that stops the next raise from being a guess.
-// See docs/handover/questions/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
+// See docs/handover/reviews/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
 const cost = { children: 0, cpuStart: process.cpuUsage(), wallStart: process.hrtime.bigint() }
 // What each child run was actually started with, counted at the spawn and never read back from
 // `SELFTEST_JOBS`. The distinction is the whole point of the [calibration] line: the constant says
@@ -136,6 +143,13 @@ function statusLines(output) {
     return [...output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)].map((match) => `${match[1]} ${match[2]}`)
 }
 
+// This fixture's own status lines: the entries whose name carries `needle`, in the order the run
+// printed them. A run of eight fixtures has eight fixtures' lines, and a claim about one of them has
+// to be read off that one.
+function statusLinesMatching(output, needle) {
+    return statusLines(output).filter((line) => line.includes(needle))
+}
+
 function summaryLine(output) {
     return output.match(/^\[SUMMARY\].*$/m)?.[0] || 'none'
 }
@@ -152,16 +166,114 @@ function readIntervals(file) {
     return intervals
 }
 
-// --- the back-end matrix ---------------------------------------------------------------------
-const matrix = runRunner([path.join(here, 'matrix.plan.toml')])
-const output = matrix.output
+// The intervals the probe recorded under the names `pattern` matches, and nothing else: several
+// fixtures of one run write to one log, and a count read off the whole log would be the count of the
+// run rather than the count of the fixture. The names are the probe's (`p1`, `s1`), not the tests'
+// (`parallel.p1`, `serial.first`): selftest_probe.mjs logs the name it was handed.
+function intervalsNamed(file, pattern) {
+    const kept = new Map()
+    // A run that never started writes no log, and a missing log is a reading of zero intervals --
+    // not a crash of this file, which has to reach its own `problems` list to say so.
+    if (!fs.existsSync(file)) return kept
+    for (const [name, entry] of readIntervals(file)) {
+        if (pattern.test(name)) kept.set(name, entry)
+    }
+    return kept
+}
+
+// One plan's own lines. The runner prints `[PLAN] : <plan id>` when a plan's first entry starts and
+// that plan's results in plan order under it, so the lines between two headers are one plan's: its
+// status lines, its failure notes, its repair hints. This is what lets several fixtures share one
+// run without the second one's reading being taken off the first one's lines -- an "unexpected
+// test" or a "no runner error" is a claim about a plan, and it stays one.
+function planSection(output, planId) {
+    const marker = `[PLAN] : ${planId}`
+    const start = output.indexOf(marker)
+    if (start < 0) return ''
+    const rest = output.slice(start + marker.length)
+    const next = rest.indexOf('[PLAN] :')
+    return next < 0 ? rest : rest.slice(0, next)
+}
+
+// --- is there an install to measure? -----------------------------------------------------------
+// Every check below reads the output of a child run, and a child run does not start without an
+// install: `preflightBuild` prints `[FAIL] no Release binary at <out/latest/bin/camel.exe>` and
+// exits 2. Asked once per check, that single state came back as a page of reds in the shape
+// "expected PASS, got undefined" and "unexpected summary (none)" -- none of them about the code,
+// all of them about a binary that is not there, and two of them were tracked for a day as a defect
+// that did not exist. So the question is asked once, here, before any check starts, and it is
+// answered with ONE red that says what was not measured, why, and what to do about it.
+//
+// It is a red (`[FAIL]`, exit 1) and not a `[SKIP]`: `[SKIP]` is this project's word for a host
+// state that makes a measurement a plan DID run impossible (no CUDA card, no driver), and it leaves
+// the run green. Here nothing ran, because this tree was not built -- a skip would report "green,
+// nothing to see", and a red does not have to mean "the code is wrong" as long as it says which of
+// the two it is. The line below says "not measured", not "failed", for exactly that reason.
+//
+// This is also not a deletion of the checks: with an install present every one of them runs, and a
+// run in which the install disappears halfway still reddens the check that lost its summary.
+const install = measuredInstall()
+if (!install.present) {
+    console.error(
+        `[FAIL] self-test: not measured -- no testable install: no ${install.label} binary at ` +
+            `${install.exe}, and preflightBuild (test/tools/run-tests.mjs) refuses to start a run ` +
+            `without one, so no child ran and none of this file's checks was evaluated.`
+    )
+    console.error(
+        '    Not measured: the back-end matrix, the plan-schema refusals, the known_fail gate, ' +
+            'expect_signal, the per-test scratch directory, parallel and serial execution, the tier ' +
+            'filter, the sweep sample, --changed, a failing benchmark, the gate split, CUDA ' +
+            'visibility, and the GPU card a test is given.'
+    )
+    console.error(`    Build it first: ${install.buildCommand}`)
+    process.exit(1)
+}
+
+// --- the runs, grouped by what they claim -----------------------------------------------------
+// A child run is not free: before it starts anything it asks the checkout what it is (`git status`
+// twice, the watcher over every directory), reads the plans it selected, prunes `test/results` and
+// writes its own record. On the gate host that fixed cost is 0.3 s of the 0.4 s an empty fixture
+// costs, and it is the reason this file used to be the slowest single entry of the gate: 39 starts
+// paid it 39 times. What a run can carry is decided by what it *reports*, and it reports one exit
+// code plus one status line per entry, so the claims below group by the configuration a run is
+// taken at -- its exit code, its width, its tier, its environment and its entry point -- and
+// inside one configuration each claim is read off its own entries (its own plan, its own names, its
+// own message) and never off a neighbour's.
+//
+// 39 subjects, 22 runs. The 17 starts that are gone were not 17 claims: a subject is not a
+// configuration. Nine green fixtures were one run, four failing ones another, the three sweep
+// samples were already in the same runs as the tier fixture that owns their layer, the two claims
+// taken at `--jobs 1` were one run, and `tier.plan.toml` was started twice for the same reading
+// (`--tier fast` and no `--tier` at all: the runner's default tier IS fast, so those two runs were
+// one run twice -- the only genuine duplicate in the 39).
+//
+// What this costs is one line per fixture: an exact `[SUMMARY]` counts the run, not the fixture, so
+// a per-fixture count is read as the count of that fixture's own entries and refusals. Nothing is
+// asserted less: every name, message and count below is the one it was, and each is attributed to
+// the plan it belongs to.
+
+// --- the fixtures whose failure is the point: one run, four subjects ---------------------------
+// The back-end matrix, the plan-schema refusals, the `known_fail` gate and the failing benchmark all
+// expect exit 1, all run at the default width and tier, and none of them claims that nothing
+// started -- so they are one run. Each is read off its own lines: the matrix's 36 named entries out
+// of its own `[PLAN] : selftest.matrix` section (which is what keeps "no unexpected test" a claim
+// about the matrix), the eight refusals by the plan file each message names, and the benchmark by
+// the failure note of its one entry.
+const failures = runRunner([
+    path.join(here, 'matrix.plan.toml'),
+    path.join(here, 'strict'),
+    path.join(here, 'knownfail'),
+    path.join(here, 'benchmark_failure.plan.toml'),
+])
+const output = failures.output
+const matrixOutput = planSection(output, 'selftest.matrix')
 const backends = ['nvm', 'fvm', 'jit', 'prl']
 const expected = {
     plain: 'PASS',
     starts_with: 'PASS',
-    starts_with_fails: 'FAIL',
+    starts_with_fails: 'XFAIL',
     exact: 'PASS',
-    exact_fails: 'FAIL',
+    exact_fails: 'XFAIL',
     exact_legacy: 'PASS',
 }
 const expectAll = (name, status, exceptions = {}) => {
@@ -170,22 +282,30 @@ const expectAll = (name, status, exceptions = {}) => {
     }
 }
 expectAll('agree', 'PASS')
-expectAll('stdout_differs', 'PASS', { jit: 'FAIL' })
+// The six entries whose failure is the point are marked `known_fail` in the plan, so they report
+// `[XFAIL]` and are counted as known failures. One entry is red on purpose and stays red:
+// `known_but_passes` is the fixture for a mark that has healed, and marking it would be the same
+// mistake the other way round. If one of the marked ones ever passes, the runner reports
+// "marked known_fail on '<backend>' but passes: remove the mark" and this fixture turns red --
+// which is what keeps "expected to fail" from becoming "never fails".
+expectAll('stdout_differs', 'PASS', { jit: 'XFAIL' })
 expectAll('stdout_differs_known', 'PASS', { jit: 'XFAIL' })
 expectAll('known_but_passes', 'PASS', { prl: 'FAIL' })
-expectAll('column_differs', 'PASS', { fvm: 'FAIL' })
-expectAll('exit_differs', 'PASS', { prl: 'FAIL' })
+expectAll('column_differs', 'PASS', { fvm: 'XFAIL' })
+expectAll('exit_differs', 'PASS', { prl: 'XFAIL' })
 expectAll('fields_not_listed', 'PASS')
 expected['not_contains'] = 'PASS'
-expected['not_contains_fails'] = 'FAIL'
+expected['not_contains_fails'] = 'XFAIL'
 
 const actual = {}
-for (const [, status, name] of output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)) {
+for (const [, status, name] of matrixOutput.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)) {
     actual[name] = status
 }
 for (const [name, status] of Object.entries(expected)) {
     if (actual[name] !== status) problems.push(`${name}: expected ${status}, got ${actual[name]}`)
 }
+// The matrix's own entries are the 36 named above and no other: read out of this plan's section,
+// so a neighbour's entry in the same run cannot make the matrix look larger than it is.
 for (const name of Object.keys(actual)) {
     if (!(name in expected)) problems.push(`unexpected test ${name}`)
 }
@@ -198,17 +318,21 @@ const mustContain = [
     'stdout does not start with "2\\n"',
     "stdout contains '42'",
     'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
-    '[SUMMARY] total: 36, pass: 28, fail: 7, known failures: 1',
+    // One summary for the run, so the arithmetic is read once, over all four fixtures: 36 matrix
+    // entries + 4 strict + 6 known_fail + 1 benchmark; 28 + 1 + 0 + 0 passed, 1 + 3 + 5 + 1 failed,
+    // and 7 + 0 + 1 + 0 were marked known. A lost or doubled entry anywhere in the four moves this
+    // line, and the per-fixture counts are read below from the entries and refusals themselves.
+    '[SUMMARY] total: 47, pass: 29, fail: 10, known failures: 8',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)
 }
 // Failures fail the run; a known failure alone would not.
-if (matrix.status !== 1) problems.push(`runner exit ${matrix.status}, expected 1`)
+if (failures.status !== 1) problems.push(`runner exit ${failures.status}, expected 1`)
 
 // A failed run keeps its root and says where: the per-test directories are gone, but what a
-// program wrote outside them (or a report left later) is evidence, not garbage.
-const matrixRoot = path.join(scratchRoot, `run-${matrix.pid}`)
+// program wrote outside them (or a report left later) is evidence, not garbage. One run, one root.
+const matrixRoot = path.join(scratchRoot, `run-${failures.pid}`)
 if (!output.includes(`[INFO] test scratch kept: ${matrixRoot}`)) {
     problems.push('the failed run did not print the kept test root')
 }
@@ -219,13 +343,8 @@ fs.rmSync(matrixRoot, { recursive: true, force: true })
 // Four plan files share one directory: a misspelled key, a known key of the wrong type, a CPU
 // budget with no liveness bound beside it, and a valid plan. The three invalid plans must fail
 // with the file, the test and the key named; the valid one must still run, so the error fails the
-// plan and not the run.
-const strictDir = path.join(here, 'strict')
-const strict = runRunner([strictDir])
-if (strict.status !== 1) problems.push(`strict: runner exit ${strict.status}, expected 1`)
-if (!strict.output.includes('[SUMMARY] total: 4, pass: 1, fail: 3')) {
-    problems.push(`strict: unexpected summary (${summaryLine(strict.output)})`)
-}
+// plan and not the run. The directory is one of the four targets of the `failures` run above.
+const strict = failures
 if (!strict.output.includes('[PASS] valid')) problems.push('strict: the valid plan did not run')
 if (!strict.output.includes('[FAIL] <invalid plan>')) {
     problems.push('strict: an invalid plan was not reported as a failing plan')
@@ -241,11 +360,6 @@ for (const text of [
 ]) {
     if (!strict.output.includes(text)) problems.push(`strict: output lacks: ${text}`)
 }
-const strictRoot = path.join(scratchRoot, `run-${strict.pid}`)
-if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
-    problems.push('strict: the failed run did not print the kept test root')
-}
-fs.rmSync(strictRoot, { recursive: true, force: true })
 
 // --- the `known_fail` gate: a marked case carries an owner, a wall and a sentence --------------
 // The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
@@ -258,12 +372,7 @@ fs.rmSync(strictRoot, { recursive: true, force: true })
 // the case and the missing (or unusable) field named; the complete one must load, run, and report
 // `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason would make
 // the five pass and this block red, which is the direction that matters.
-const knownfailDir = path.join(here, 'knownfail')
-const knownfail = runRunner([knownfailDir])
-if (knownfail.status !== 1) problems.push(`known_fail gate: runner exit ${knownfail.status}, expected 1`)
-if (!knownfail.output.includes('[SUMMARY] total: 6, pass: 0, fail: 5, known failures: 1')) {
-    problems.push(`known_fail gate: unexpected summary (${summaryLine(knownfail.output)})`)
-}
+const knownfail = failures
 // The five readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
 // printed below is read off the output and not off this file's intentions.
 const knownfailReadings = [
@@ -312,28 +421,69 @@ if (!/\[INFO\] known_fail_owner\s+the runner self-test\b/.test(knownfail.output)
 }
 knownfailVerdict.push(`all-three=${/^\[XFAIL\] complete\b/m.test(knownfail.output) ? 'accepted' : 'MISSING'}`)
 console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
-fs.rmSync(path.join(scratchRoot, `run-${knownfail.pid}`), { recursive: true, force: true })
+// The two directories' refusals are counted where their plans are read, which is the one thing the
+// single summary cannot say: it counts the run. Each refusal names its own plan file, so the count
+// per directory is read from those lines and not from a total. Three in `strict/`, five here, and
+// the fifth of the signal fixture's plans is refused for want of a signal in its own run.
+const refusedIn = (dir) =>
+    (failures.output.match(new RegExp(`\\[INFO\\] runner error: test/tools/selftest/${dir}/`, 'g')) || []).length
+if (refusedIn('strict') !== 3) {
+    problems.push(`strict: ${refusedIn('strict')} plan(s) refused, expected 3`)
+}
+if (refusedIn('knownfail') !== 5) {
+    problems.push(`known_fail gate: ${refusedIn('knownfail')} plan(s) refused, expected 5`)
+}
 
 // --- expect_signal: a run that is meant to die of a named signal -------------------------------
 // "This process dies of SIGABRT" had no way to be written: `expect_exit` compares an exit code a
 // killed process does not have, and `known_fail` says the run is wrong today -- it turns the entry
 // red the day the process stops dying, which is the opposite of what such an entry means. The
 // fixture dies three ways, and only the first is green: of the signal the entry names, of a signal
-// it does not name, and not at all. The last two are the discrimination, and the fourth plan writes
+// it does not name, and not at all. The last two are the discrimination, and the fifth entry writes
 // no signal at all, which must be refused where the plan is read.
+//
+// The green entry is stated twice by the fixture, because what a host records about a death is the
+// host's: POSIX ends the child with `signal = 'SIGABRT'` and no exit code, and Windows has no signal
+// to report at all -- the same abort ends it with exit status 134. Each host reads the entry it can
+// record and skips the other one BY NAME, with the host's answer printed as the reason, so the two
+// hosts read the same five entries and the same summary; and the abort itself is measured on both,
+// in the shape that host has for it. Skipping is not how this fixture turns green: an entry that
+// vanished would be a lost measurement, and this check fails if either the pass or the skip is missing.
 const signalDir = path.join(here, 'signal')
 const signal = runRunner([signalDir])
 if (signal.status !== 1) problems.push(`expect_signal: runner exit ${signal.status}, expected 1`)
-if (!signal.output.includes('[SUMMARY] total: 4, pass: 1, fail: 3')) {
+if (!signal.output.includes('[SUMMARY] total: 5, pass: 1, fail: 3, skip: 1')) {
     problems.push(`expect_signal: unexpected summary (${summaryLine(signal.output)})`)
 }
-if (!signal.output.includes('[PASS] abrt')) {
-    problems.push(`expect_signal: the expected signal did not pass:\n${signal.output}`)
+// The abort in this host's vocabulary, and the skip that says which vocabulary this run could not
+// read. Both are asserted: a run in which neither entry passed is not the reading this fixture
+// describes, and a run in which neither entry was reported as skipped has lost one silently.
+const abrtRead = IS_WINDOWS ? 'abrt_as_exit' : 'abrt'
+const abrtSkipped = IS_WINDOWS ? 'abrt' : 'abrt_as_exit'
+if (!new RegExp(`^\\[PASS\\] ${abrtRead}\\b`, 'm').test(signal.output)) {
+    problems.push(
+        `expect_signal: the abort was not read as ${abrtRead} on this host:\n${signal.output}`
+    )
 }
-if (!signal.output.includes('expected signal SEGV, got signal SIGABRT')) {
+if (!new RegExp(`^\\[SKIP\\] ${abrtSkipped}\\b`, 'm').test(signal.output)) {
+    problems.push(
+        `expect_signal: ${abrtSkipped} was neither run nor skipped by name on this host:\n${signal.output}`
+    )
+}
+if (!signal.output.includes(IS_WINDOWS ? 'no signal deaths to report' : 'reports deaths by signal')) {
+    problems.push(
+        `expect_signal: the skip reason did not name this host's reading:\n${signal.output}`
+    )
+}
+// The other direction, in the same words: a death by a signal the entry did not name is reported as
+// the death that happened, and each host names that death its own way.
+const wrongDeath = IS_WINDOWS
+    ? 'expected signal SEGV, got exit 134'
+    : 'expected signal SEGV, got signal SIGABRT'
+if (!signal.output.includes(wrongDeath)) {
     problems.push(`expect_signal: a death by another signal was not reported that way:\n${signal.output}`)
 }
-if (!signal.output.includes('expected signal 6, got exit 0')) {
+if (!signal.output.includes('expected signal 15, got exit 0')) {
     problems.push(`expect_signal: a run that ended normally was not reported as not having died:\n${signal.output}`)
 }
 if (!signal.output.includes('expect_signal must name a signal')) {
@@ -341,59 +491,98 @@ if (!signal.output.includes('expect_signal must name a signal')) {
 }
 fs.rmSync(path.join(scratchRoot, `run-${signal.pid}`), { recursive: true, force: true })
 
+//  --- the fixtures that are green on purpose: one run, eight subjects --------------------------
+// Eight fixtures expect exit 0 at the default width and tier, and each of them claims something
+// about its own entries: the payload a `verify_script_path` receives, a scratch directory per test,
+// the order and the overlap of a parallel run, a serial mark overlapping nothing, the identity of a
+// sweep copy, the CUDA visibility of a Python child, and a plan file named as a target running in
+// full. They are one run because a run reports one exit code and one status line per entry -- the
+// exit is read once, here, and every claim below is read off the entries that make it
+// (`parallel.*`, `serial.*`, `poison:...`, `tier.*`), out of that plan's own lines, or out of its
+// own intervals in the probe log.
+//
+// `tier.plan.toml` is that eighth subject, and it is where the file lost two starts rather than
+// one: it used to be started twice, once with no `--tier` and once with `--tier fast`, and the
+// runner's default tier IS fast (`test/tools/run-tests.mjs`, `tier: 'fast'`) -- so those two runs
+// took the same reading of the same configuration, which is the one genuine duplicate among the 39.
+// The explicit tiers this fixture is about are read further down, each in its own run.
+const markerFile = path.join(scratchRoot, `marker-from-another-run-${process.pid}.txt`)
+const intervalLog = path.join(probeLogDir, `selftest-intervals-${process.pid}.log`)
+// One probe log per self-test process, appended to by every fixture that runs `selftest_probe.mjs`,
+// so each reading below is filtered to the names it is about (`intervalsNamed`).
+fs.rmSync(intervalLog, { force: true })
+// A file another run keeps, under tmp/test and outside every `run-<pid>` root: this run must
+// neither read it nor remove it, and neither must the second run of the scratch fixture below.
+fs.mkdirSync(scratchRoot, { recursive: true })
+fs.writeFileSync(markerFile, 'a file another run keeps')
+const green = runRunner(
+    [
+        path.join(here, 'verify_payload.plan.toml'),
+        path.join(here, 'scratch.plan.toml'),
+        path.join(here, 'parallel.plan.toml'),
+        path.join(here, 'serial.plan.toml'),
+        path.join(here, 'sweep_names', 'collision.plan.toml'),
+        path.join(here, 'sweep_names', 'reuse.plan.toml'),
+        path.join(here, 'cuda-visibility', 'visibility.plan.toml'),
+        path.join(here, 'tier', 'tier.plan.toml'),
+    ],
+    { SELFTEST_PROBE_LOG: intervalLog, SELFTEST_MARKER: markerFile }
+)
+if (green.status !== 0) problems.push(`green fixtures: runner exit ${green.status}, expected 0`)
+// One summary for eight fixtures: 1 payload + 3 scratch + 6 parallel + 3 serial + 4 collision +
+// 4 reuse + 5 visibility + 5 tier = 31 entries, every one of them passing. Every one of those
+// entries is named below, so a lost or doubled entry moves this line and its own fixture's reading.
+if (!green.output.includes('[SUMMARY] total: 31, pass: 31, fail: 0')) {
+    problems.push(`green fixtures: unexpected summary (${summaryLine(green.output)})`)
+}
+// Naming a plan file is the intent, and eight of them were named: the run has to say so, because
+// that is what makes all five entries of `tier.plan.toml` run at a tier that selects two of them.
+if (!green.output.includes('named plan target(s) run in full: 8')) {
+    problems.push(`green fixtures: the run did not say the named plans run in full (${summaryLine(green.output)})`)
+}
+
 //  --- the verify payload ----------------------------------------------------------------
 // The fixture's script asserts that `case_path` is the resolved case path and that the other
 // documented fields are present. Before the fix `case_path` was undefined here, so this plan
 // failed with `undefined !== <path>`.
-const payloadPlan = path.join(here, 'verify_payload.plan.toml')
-const payload = runRunner([payloadPlan])
-if (payload.status !== 0) problems.push(`verify payload: runner exit ${payload.status}, expected 0`)
-if (!payload.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
-    problems.push(`verify payload: unexpected summary (${summaryLine(payload.output)})`)
+if (!green.output.includes('[PASS] payload.case_path')) {
+    problems.push(`verify payload: case_path was not delivered:\n${green.output}`)
 }
-if (!payload.output.includes('[PASS] payload.case_path')) {
-    problems.push(`verify payload: case_path was not delivered:\n${payload.output}`)
-}
-fs.rmSync(path.join(scratchRoot, `run-${payload.pid}`), { recursive: true, force: true })
 
 // --- the per-test scratch directory -----------------------------------------------------------
 // A model written by one test must not be visible to another; a second run must inherit nothing
 // from the first; and the scratch directory must be under this run's own tmp/test/run-<pid>.
 const scratchPlan = path.join(here, 'scratch.plan.toml')
-// Unique per self-test process: two runners may run the self-test at the same time, and each
-// keeps its own marker under tmp/test (outside every run-<pid> root).
-const markerFile = path.join(scratchRoot, `marker-from-another-run-${process.pid}.txt`)
-for (const attempt of [1, 2]) {
-    fs.mkdirSync(scratchRoot, { recursive: true })
-    fs.writeFileSync(markerFile, 'a file another run keeps')
-    const scratch = runRunner([scratchPlan], { SELFTEST_MARKER: markerFile })
-    const where = `scratch run ${attempt}`
-    if (scratch.status !== 0) problems.push(`${where}: runner exit ${scratch.status}, expected 0`)
+// The second run is the one claim of this fixture that cannot share a run: "a second run inherits
+// nothing from the first" needs a first run, and the first one is inside `green` above. What it
+// asserts is the same three entries plus the two facts about the root and the marker, read again --
+// so a runner that reused one fixed scratch directory would fail here and only here.
+fs.writeFileSync(markerFile, 'a file another run keeps')
+const scratchAgain = runRunner([scratchPlan], { SELFTEST_MARKER: markerFile })
+for (const [where, run] of [
+    ['scratch run 1', green],
+    ['scratch run 2', scratchAgain],
+]) {
+    if (run.status !== 0) problems.push(`${where}: runner exit ${run.status}, expected 0`)
     for (const name of ['scratch.write', 'scratch.absent', 'scratch.other_run_untouched']) {
-        if (!scratch.output.includes(`[PASS] ${name}`)) problems.push(`${where}: ${name} did not pass`)
-    }
-    if (!scratch.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
-        problems.push(`${where}: unexpected summary (${summaryLine(scratch.output)})`)
+        if (!run.output.includes(`[PASS] ${name}`)) problems.push(`${where}: ${name} did not pass`)
     }
     // The test checked, from inside, that its scratch directory is under a `run-*` root of
     // tmp/test (scratch.other_run_untouched). Here the run's own root, named for its process,
     // must be gone after a successful run.
-    const runRoot = path.join(scratchRoot, `run-${scratch.pid}`)
+    const runRoot = path.join(scratchRoot, `run-${run.pid}`)
     if (fs.existsSync(runRoot)) problems.push(`${where}: the successful run kept its root ${runRoot}`)
     if (!fs.existsSync(markerFile)) problems.push(`${where}: removed a file another run keeps`)
+}
+if (!scratchAgain.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
+    problems.push(`scratch run 2: unexpected summary (${summaryLine(scratchAgain.output)})`)
 }
 fs.rmSync(markerFile, { force: true })
 
 // --- parallel execution: same output, overlapping tests --------------------------------------
 const parallelPlan = path.join(here, 'parallel.plan.toml')
-const parallelLog = path.join(probeLogDir, `selftest-parallel-${process.pid}.log`)
-fs.rmSync(parallelLog, { force: true })
-const parallel = runRunner(['--jobs', '4', parallelPlan], { SELFTEST_PROBE_LOG: parallelLog })
-if (parallel.status !== 0) problems.push(`parallel run: runner exit ${parallel.status}, expected 0`)
-if (!parallel.output.includes('[SUMMARY] total: 6, pass: 6, fail: 0')) {
-    problems.push(`parallel run: unexpected summary (${summaryLine(parallel.output)})`)
-}
-const parallelIntervals = fs.existsSync(parallelLog) ? readIntervals(parallelLog) : new Map()
+const parallel = green
+const parallelIntervals = intervalsNamed(intervalLog, /^p[1-6]$/)
 if (parallelIntervals.size !== 6) {
     problems.push(`parallel run: ${parallelIntervals.size} of 6 tests recorded an interval`)
 }
@@ -408,35 +597,21 @@ for (let i = 0; i < parallelEntries.length; i++) {
 }
 if (!overlapped) problems.push('parallel run: no two tests overlapped, so nothing ran in parallel')
 
-// The same plan serially: the status lines, in order, must be identical to the parallel run's.
-fs.rmSync(parallelLog, { force: true })
-const serialSamePlan = runRunner(['--jobs', '1', parallelPlan], { SELFTEST_PROBE_LOG: parallelLog })
-if (serialSamePlan.status !== 0) problems.push(`serial run of parallel.plan: exit ${serialSamePlan.status}`)
-const parallelOrder = statusLines(parallel.output)
-const serialOrder = statusLines(serialSamePlan.output)
-if (parallelOrder.join('\n') !== serialOrder.join('\n')) {
-    problems.push(
-        `parallel output order differs from serial:\n  parallel: ${parallelOrder.join(', ')}\n  serial:   ${serialOrder.join(', ')}`
-    )
-}
+// The same plan serially, in the run taken at `--jobs 1` below: the status lines, in order, must be
+// identical to the parallel run's. Declared here so the two readings of the same plan are compared
+// where the plan is, not where the run is.
+const parallelOrder = statusLinesMatching(parallel.output, 'parallel.')
 const expectedOrder = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']
     .map((name) => `PASS parallel.${name}`)
     .join('\n')
 if (parallelOrder.join('\n') !== expectedOrder) {
     problems.push(`parallel run printed tests out of plan order: ${parallelOrder.join(', ')}`)
 }
-fs.rmSync(parallelLog, { force: true })
 
 // --- a serial-marked test overlaps nothing ----------------------------------------------------
 const serialPlan = path.join(here, 'serial.plan.toml')
-const serialLog = path.join(probeLogDir, `selftest-serial-${process.pid}.log`)
-fs.rmSync(serialLog, { force: true })
-const serial = runRunner(['--jobs', '4', serialPlan], { SELFTEST_PROBE_LOG: serialLog })
-if (serial.status !== 0) problems.push(`serial-marked run: runner exit ${serial.status}, expected 0`)
-if (!serial.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
-    problems.push(`serial-marked run: unexpected summary (${summaryLine(serial.output)})`)
-}
-const serialIntervals = fs.existsSync(serialLog) ? readIntervals(serialLog) : new Map()
+const serial = green
+const serialIntervals = intervalsNamed(intervalLog, /^s[1-3]$/)
 if (serialIntervals.size !== 3) {
     problems.push(`serial-marked run: ${serialIntervals.size} of 3 tests recorded an interval`)
 }
@@ -450,22 +625,38 @@ for (let i = 0; i < serialEntries.length; i++) {
         }
     }
 }
-fs.rmSync(serialLog, { force: true })
+// Its three entries, by name: one serial-marked pair and the ordinary test that queues behind them.
+const serialLines = statusLinesMatching(serial.output, 'serial.')
+if (serialLines.join(', ') !== 'PASS serial.first, PASS serial.second, PASS serial.parallel_neighbour') {
+    problems.push(`serial-marked run ran: ${serialLines.join(', ')}`)
+}
 
 // --- the tier filter, and the named plan that ignores it ---------------------------------------
 // With the DIRECTORY as the target the layer selects test by test; with the FILE as the target
 // the plan runs in full, because naming the plan is the intent.
+//
+// A layer is a run's own property: one run is one `--tier`, so the four layers are four runs and
+// they cannot be fewer. What they carry is not only this fixture: the sweep fixture below samples
+// its copies per layer, so its entries ride in the same run as the tier fixture's -- same tier,
+// same width, and their names are their own (`poison:...` against `tier.*`). That is three starts
+// less, and no reading of either fixture moves.
 const tierDir = path.join(here, 'tier')
 const tierPlan = path.join(tierDir, 'tier.plan.toml')
-const tierFast = runRunner(['--tier', 'fast', tierDir])
+const sweepDir = path.join(here, 'sweep')
+const tierFast = runRunner(['--tier', 'fast', tierDir, sweepDir])
 const tierSlow = runRunner(['--tier', 'slow', tierDir])
-const tierMilestone = runRunner(['--tier', 'milestone', tierDir])
-const tierAll = runRunner(['--tier', 'all', tierDir])
-if (!tierFast.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0')) {
+const tierMilestone = runRunner(['--tier', 'milestone', tierDir, sweepDir])
+const tierAll = runRunner(['--tier', 'all', tierDir, sweepDir])
+// The tier fixture's own entries, by name: the sweep's entries in the same run do not start with
+// `tier.`, so a fixture that widened or narrowed moves this reading and nothing else.
+const tierLinesFast = statusLines(tierFast.output).filter((line) => line.includes('tier.'))
+const tierLinesMilestone = statusLines(tierMilestone.output).filter((line) => line.includes('tier.'))
+const tierLinesAll = statusLines(tierAll.output).filter((line) => line.includes('tier.'))
+if (!tierFast.output.includes('[SUMMARY] total: 15, pass: 15, fail: 0')) {
     problems.push(`--tier fast (directory): unexpected summary (${summaryLine(tierFast.output)})`)
 }
-if (statusLines(tierFast.output).join(', ') !== 'PASS tier.fast, PASS tier.default') {
-    problems.push(`--tier fast (directory) ran: ${statusLines(tierFast.output).join(', ')}`)
+if (tierLinesFast.join(', ') !== 'PASS tier.fast, PASS tier.default') {
+    problems.push(`--tier fast (directory) ran: ${tierLinesFast.join(', ')}`)
 }
 if (!tierSlow.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
     problems.push(`--tier slow (directory): unexpected summary (${summaryLine(tierSlow.output)})`)
@@ -475,29 +666,32 @@ if (statusLines(tierSlow.output).join(', ') !== 'PASS tier.slow') {
 }
 // The milestone layer is its own name, not a synonym for slow: the fast and the slow runs above
 // must not have selected it.
-if (!tierMilestone.output.includes('[SUMMARY] total: 1, pass: 1, fail: 0')) {
+if (!tierMilestone.output.includes('[SUMMARY] total: 6, pass: 6, fail: 0')) {
     problems.push(`--tier milestone (directory): unexpected summary (${summaryLine(tierMilestone.output)})`)
 }
-if (statusLines(tierMilestone.output).join(', ') !== 'PASS tier.milestone') {
-    problems.push(`--tier milestone (directory) ran: ${statusLines(tierMilestone.output).join(', ')}`)
+if (tierLinesMilestone.join(', ') !== 'PASS tier.milestone') {
+    problems.push(`--tier milestone (directory) ran: ${tierLinesMilestone.join(', ')}`)
 }
-if (!tierAll.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
+if (!tierAll.output.includes('[SUMMARY] total: 22, pass: 22, fail: 0')) {
     problems.push(`--tier all (directory): unexpected summary (${summaryLine(tierAll.output)})`)
 }
 // `all` is the Release layers, fast, slow and milestone: the debug-layer test of the fixture must
 // stay out of it, because an aborting test would run against the Release binary and never abort.
-if (statusLines(tierAll.output).includes('PASS tier.debug')) {
+if (tierLinesAll.includes('PASS tier.debug')) {
     problems.push('--tier all ran the debug test; the debug layer is opt-in')
 }
 // A debug layer runs on the Debug build; asking for it on the Release build is a contradiction
-// the runner refuses before it starts a test.
+// the runner refuses before it starts a test. This one writes no run directory at all, which is
+// why it is not a subject of any other run here.
 const debugOnRelease = runRunner(['--tier', 'debug', '--build', 'release', tierDir])
 if (debugOnRelease.status === 0 || !debugOnRelease.output.includes('--tier debug runs on the Debug build')) {
     problems.push(`--tier debug --build release: expected a refusal, got exit ${debugOnRelease.status}: ${debugOnRelease.output.slice(0, 200)}`)
 }
+// A named plan runs in full whatever the layer says -- at the default layer it is the `green` run
+// above, where `tier.plan.toml` was one of eight named targets and all five of its entries ran at a
+// layer that selects two of them. The two layers below are named explicitly, because the flag has
+// to be typed for the reading to be about the flag.
 for (const [label, run] of [
-    ['default tier', runRunner([tierPlan])],
-    ['--tier fast', runRunner(['--tier', 'fast', tierPlan])],
     ['--tier slow', runRunner(['--tier', 'slow', tierPlan])],
     ['--tier milestone', runRunner(['--tier', 'milestone', tierPlan])],
 ]) {
@@ -529,13 +723,13 @@ if (!tierLayered.output.includes('selected plan target(s) follow --tier fast')) 
 // sweep/ holds two source plans (five tests tagged collections, four scalar tests) and the plan
 // that sweeps them. In the fast layer the risky plan keeps three copies and the plain one one;
 // `--tier all` keeps every copy. The source plans themselves always run.
-const sweepDir = path.join(here, 'sweep')
-const sweepFast = runRunner(['--tier', 'fast', sweepDir])
-if (sweepFast.status !== 0) problems.push(`sweep fast: runner exit ${sweepFast.status}, expected 0`)
-if (!sweepFast.output.includes('[SUMMARY] total: 13, pass: 13, fail: 0')) {
-    problems.push(`sweep fast: unexpected summary (${summaryLine(sweepFast.output)})`)
-}
-const fastPoison = statusLines(sweepFast.output).filter((line) => line.startsWith('PASS poison:'))
+//
+// The three layers are the three runs above that already name a `--tier`, so the sweep's entries
+// are read out of those runs: `poison:` is its own name space, and the counts below are that
+// fixture's own entries, not the run's. The sweep is a copy of the layer, so it needs no start of
+// its own.
+if (tierFast.status !== 0) problems.push(`sweep fast: runner exit ${tierFast.status}, expected 0`)
+const fastPoison = statusLines(tierFast.output).filter((line) => line.startsWith('PASS poison:'))
 const riskyPoison = fastPoison.filter((line) => line.includes('poison:selftest.sweep.risky:'))
 const plainPoison = fastPoison.filter((line) => line.includes('poison:selftest.sweep.plain:'))
 if (fastPoison.length !== 4 || riskyPoison.length !== 3 || plainPoison.length !== 1) {
@@ -543,22 +737,14 @@ if (fastPoison.length !== 4 || riskyPoison.length !== 3 || plainPoison.length !=
         `sweep fast sampled ${fastPoison.length} copies (risky ${riskyPoison.length}, plain ${plainPoison.length}), expected 3 + 1`
     )
 }
-const sweepAll = runRunner(['--tier', 'all', sweepDir])
-if (sweepAll.status !== 0) problems.push(`sweep all: runner exit ${sweepAll.status}, expected 0`)
-if (!sweepAll.output.includes('[SUMMARY] total: 18, pass: 18, fail: 0')) {
-    problems.push(`sweep all: unexpected summary (${summaryLine(sweepAll.output)})`)
-}
-if (statusLines(sweepAll.output).filter((line) => line.includes('poison:')).length !== 9) {
+if (tierAll.status !== 0) problems.push(`sweep all: runner exit ${tierAll.status}, expected 0`)
+if (statusLines(tierAll.output).filter((line) => line.includes('poison:')).length !== 9) {
     problems.push('sweep --tier all did not keep every copy')
 }
 // The copies the sample did not take are the milestone layer, by name: `--tier milestone` selects
 // exactly those five (risky 2, plain 3) and none of the four the fast layer sampled.
-const sweepMilestone = runRunner(['--tier', 'milestone', sweepDir])
-if (sweepMilestone.status !== 0) problems.push(`sweep milestone: runner exit ${sweepMilestone.status}, expected 0`)
-if (!sweepMilestone.output.includes('[SUMMARY] total: 5, pass: 5, fail: 0')) {
-    problems.push(`sweep milestone: unexpected summary (${summaryLine(sweepMilestone.output)})`)
-}
-const milestonePoison = statusLines(sweepMilestone.output).filter((line) => line.includes('poison:'))
+if (tierMilestone.status !== 0) problems.push(`sweep milestone: runner exit ${tierMilestone.status}, expected 0`)
+const milestonePoison = statusLines(tierMilestone.output).filter((line) => line.includes('poison:'))
 const milestoneRisky = milestonePoison.filter((line) => line.includes('poison:selftest.sweep.risky:'))
 const milestonePlain = milestonePoison.filter((line) => line.includes('poison:selftest.sweep.plain:'))
 if (milestonePoison.length !== 5 || milestoneRisky.length !== 2 || milestonePlain.length !== 3) {
@@ -577,45 +763,40 @@ if (milestonePoison.length !== 5 || milestoneRisky.length !== 2 || milestonePlai
 // test had run. The fixture's two `shapes` print different words, so a reference that resolved
 // to the other plan fails on `stdout_normalized` instead of passing by accident.
 const collisionPlan = path.join(here, 'sweep_names', 'collision.plan.toml')
-const collision = runRunner([collisionPlan])
-if (collision.status !== 0) problems.push(`sweep collision: runner exit ${collision.status}, expected 0`)
-if (!collision.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
-    problems.push(`sweep collision: unexpected summary (${summaryLine(collision.output)})`)
-}
+const collision = green
 const collisionExpected = [
     'PASS poison:selftest.sweep.collision.alpha:shapes.nvm',
     'PASS poison:selftest.sweep.collision.alpha:shapes.fvm',
     'PASS poison:selftest.sweep.collision.beta:shapes.nvm',
     'PASS poison:selftest.sweep.collision.beta:shapes.fvm',
 ]
-if (statusLines(collision.output).join('\n') !== collisionExpected.join('\n')) {
-    problems.push(`sweep collision ran: ${statusLines(collision.output).join(', ')}`)
+// Filtered to this fixture's copies: in a run of eight fixtures a reading of "everything the run
+// printed" would be the run's, and the claim here is that THIS fixture's four copies are named
+// after their source plan and that no copy is named after the bare source test.
+const collisionLines = statusLinesMatching(collision.output, 'selftest.sweep.collision')
+if (collisionLines.join('\n') !== collisionExpected.join('\n')) {
+    problems.push(`sweep collision ran: ${collisionLines.join(', ')}`)
 }
 if (collision.output.includes('poison:shapes.')) {
     problems.push('sweep collision: a copy is still named after the source test alone')
 }
-fs.rmSync(path.join(scratchRoot, `run-${collision.pid}`), { recursive: true, force: true })
 
 // The other direction: one source test legitimately reused under two sweeps is two identities,
 // and each copy's back ends compare against their own sweep's base. The fixture prints the
 // sweep's environment variable, so the two sweeps' outputs differ and a copy that resolved its
 // reference against the other sweep would fail.
 const reusePlan = path.join(here, 'sweep_names', 'reuse.plan.toml')
-const reuse = runRunner([reusePlan])
-if (reuse.status !== 0) problems.push(`sweep reuse: runner exit ${reuse.status}, expected 0`)
-if (!reuse.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
-    problems.push(`sweep reuse: unexpected summary (${summaryLine(reuse.output)})`)
-}
+const reuse = green
 const reuseExpected = [
     'PASS poison:selftest.sweep.reuse.source:shapes.nvm',
     'PASS poison:selftest.sweep.reuse.source:shapes.fvm',
     'PASS poison_again:selftest.sweep.reuse.source:shapes.nvm',
     'PASS poison_again:selftest.sweep.reuse.source:shapes.fvm',
 ]
-if (statusLines(reuse.output).join('\n') !== reuseExpected.join('\n')) {
-    problems.push(`sweep reuse ran: ${statusLines(reuse.output).join(', ')}`)
+const reuseLines = statusLinesMatching(reuse.output, 'selftest.sweep.reuse')
+if (reuseLines.join('\n') !== reuseExpected.join('\n')) {
+    problems.push(`sweep reuse ran: ${reuseLines.join(', ')}`)
 }
-fs.rmSync(path.join(scratchRoot, `run-${reuse.pid}`), { recursive: true, force: true })
 
 // --- the --changed mapping ---------------------------------------------------------------------
 const hasPlan = (selection, name) => selection !== null && selection.names.includes(name)
@@ -711,8 +892,10 @@ if (!hasTarget(ownPlan, planFile)) {
 if (plansForChanges(['no/such/directory/file.txt']) !== null) {
     problems.push('--changed: an unmatched path selected plans instead of falling back')
 }
-// The forbidden layers stay unselectable: perf, the GC-stress plans and progen. A change there
-// falls back to the fast layer rather than running a plan the project keeps for a quiet machine.
+// The forbidden layers stay unselectable: perf and the GC-stress plans. A change there falls back
+// to the fast layer rather than running a plan the project keeps for a quiet machine. The progen
+// plan is here for a different reason: editing the plan file itself must fall back too, and only
+// the rule for its own harness may name it (checked below).
 for (const file of [
     'benchmarks/train.py',
     'test/cases/perf/fib_recursive.cml',
@@ -722,10 +905,37 @@ for (const file of [
     'test/plans/feat/opt/progen.plan.toml',
 ]) {
     if (plansForChanges([file]) !== null) {
-        problems.push(`--changed: ${file} selected a plan; perf/GC-stress/progen must be unselectable`)
+        problems.push(
+            `--changed: ${file} selected a plan; perf/GC-stress must be unselectable and a progen plan edit must fall back`
+        )
     }
 }
-// Every plan the selection file names must exist, and no rule may wire in a forbidden plan.
+// The one door into the random-program plan, and the reason it is a door and not a hole: the
+// harness that writes the programs is the one change that has to run them. It is selected by name,
+// so the whole plan runs -- the batch and the seed the batch leaves out -- because a plan that is
+// selected and then filtered down to one entry is the same "nobody runs it" in a new place.
+const progenHarness = plansForChanges(['test/tools/progen/generate.py'])
+const PROGEN_PLAN = 'feat/opt/progen.plan.toml'
+if (!hasPlan(progenHarness, PROGEN_PLAN)) {
+    problems.push(
+        `--changed: test/tools/progen/ selected ${progenHarness ? progenHarness.names.join(', ') : 'nothing'}, not the progen plan`
+    )
+} else if (hasLayered(progenHarness, PROGEN_PLAN)) {
+    problems.push(
+        '--changed: the progen plan is layered, so the tier filter would drop its batch; a harness change must run the plan in full'
+    )
+}
+// The lock: a progen case and the plan file itself still select nothing of the kind, so the door
+// above is the harness and not the corpus.
+const progenCase = plansForChanges(['test/cases/opt/progen/findings/inline_fvm_arm_effect_lost.cml'])
+if (hasPlan(progenCase, PROGEN_PLAN)) {
+    problems.push('--changed: a progen case selected the progen plan; only test/tools/progen/ may')
+}
+const HARNESS_DOOR = 'test/tools/progen/'
+const namesOnlyTheHarnessDoor = (rule) =>
+    Array.isArray(rule.paths) &&
+    rule.paths.length > 0 &&
+    rule.paths.every((p) => typeof p === 'string' && (p === HARNESS_DOOR || p.startsWith(HARNESS_DOOR)))
 const selectionDoc = JSON.parse(fs.readFileSync(path.join(repoRoot, 'test', 'plan-selection.json'), 'utf8'))
 const forbiddenPlan = (name) =>
     name === 'perf' ||
@@ -743,7 +953,7 @@ for (const rule of selectionDoc.rules || []) {
         if (!fs.existsSync(base) && !fs.existsSync(`${base}.plan.toml`)) {
             problems.push(`plan-selection.json: '${name}' is not a plan in test/plans`)
         }
-        if (forbiddenPlan(name)) {
+        if (forbiddenPlan(name) && !(name.startsWith('feat/opt/progen') && namesOnlyTheHarnessDoor(rule))) {
             problems.push(`plan-selection.json: '${name}' is a plan an ordinary change must not run`)
         }
     }
@@ -754,8 +964,9 @@ for (const rule of selectionDoc.rules || []) {
 // runs nothing. That is how stdlib/signatures, the doc guards, the golden files and the debugger
 // harness were being missed. This check walks every tracked file and fails on one that neither a
 // directory rule nor a file rule selects, unless it names a class the project deliberately does
-// not select. The allowlist is only for the forbidden layers (perf, GC stress, progen, PyTorch)
-// and for files no plan can read (vendored code, packaging, CI configuration).
+// not select. The allowlist is for the forbidden layers (perf, GC stress, PyTorch) and for the
+// progen plan file, which is reachable only from its own harness, plus files no plan can read.
+// (Vendored code, packaging, CI configuration.)
 const RULELESS_ALLOWED = [
     {
         match: /^hello\.cml$/,
@@ -814,12 +1025,12 @@ const RULELESS_ALLOWED = [
         why: 'the perf plans are deliberately not selectable',
     },
     {
-        match: /^test\/plans\/feat\/mm\/gc(\.plan\.toml|_collections\.plan\.toml|_elder_exhaustion\.plan\.toml)$/,
+        match: /^test\/plans\/feat\/mm\/gc(\.plan\.toml|_collections\.plan\.toml|_elder_exhaustion\.plan\.toml|_root_window\.plan\.toml)$/,
         why: 'the GC-stress plans are deliberately not selectable',
     },
     {
         match: /^test\/plans\/feat\/opt\/progen\.plan\.toml$/,
-        why: 'progen is deliberately not selectable',
+        why: 'a progen plan edit falls back to the fast layer: the plan is named only by the rule for test/tools/progen/, not by its own file or by a case',
     },
     {
         match: /^test\/plans\/gpu\/tiles_(regions|decorator)\.plan\.toml$/,
@@ -1111,8 +1322,32 @@ if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(emptyRun.output)) {
 const matchedChangedList = path.join(changedScratch, 'matched.txt')
 fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
 const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
-if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
-    problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+// Two plans, and one of them follows `--tier`. The quantity is not incidental: a rule-matching
+// file selects the plan that mirrors its directory AND the plans the rule adds beside it, and since
+// 2026-11-14 the `test/cases/` rule carries `{ "plan": "feat/parse/frontend.plan.toml", "layer":
+// true }` (test/plan-selection.json; the reason is in that rule's own comment: the frontend plan
+// hashes every `.cml` of the repository, so a case that lands without its record is a file that
+// changed with nothing reading it). `select 1 plan(s)` was written on 2026-11-05, when the rule had
+// one plan; it was the count of that day, and it is now the count of a tree without `also`. A count
+// alone is a thin reading, so both plan files are asserted by name beside it and so is the layer
+// mark: a rule that dropped `also` reads 1 and goes red here, and an `also` written without
+// `layer` reads `select 2 plan(s)` with no tier note and goes red as well -- which is the case
+// worth pinning, because an unlayered frontend plan would run its slow fuzz test on every case
+// edit. The paths are compared after `\` is read as `/`: the runner prints the resolved targets as
+// `path.resolve` writes them, so on Windows they arrive with backslashes.
+const matchedText = matchedSelection.output.replace(/\\/g, '/')
+if (!/select 2 plan\(s\), 1 follow --tier/.test(matchedText)) {
+    problems.push(
+        `--changed on a rule-matching file did not select the plan it mirrors and the plan the rule `
+        + `adds beside it: ${matchedSelection.output.trim()}`
+    )
+}
+for (const plan of ['test/plans/feat/compile/enum.plan.toml', 'test/plans/feat/parse/frontend.plan.toml']) {
+    if (!matchedText.includes(plan)) {
+        problems.push(
+            `--changed on a rule-matching file did not name ${plan}: ${matchedSelection.output.trim()}`
+        )
+    }
 }
 if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
     problems.push(
@@ -1131,34 +1366,73 @@ fs.rmSync(changedScratch, { recursive: true, force: true })
 // payload crashed the runner while it formatted the metric. The test must fail, with the
 // diagnostic, and the summary must still be printed.
 const benchPlan = path.join(here, 'benchmark_failure.plan.toml')
-const bench = runRunner([benchPlan])
-if (bench.status !== 1) problems.push(`benchmark failure: exit ${bench.status}, expected 1`)
-if (/runner error/.test(bench.output)) problems.push('benchmark failure: a runner error was reported')
-if (!/\[FAIL\] failing_pass/.test(bench.output)) {
-    problems.push(`benchmark failure: the test was not reported as failing:\n${bench.output}`)
+const bench = failures
+// This plan's own lines. The four fixtures of the run refuse eight plans between them, and those
+// refusals are printed as runner errors too -- so "the runner did not crash on the payload" is a
+// claim about this plan's section, and stays one.
+const benchSection = planSection(bench.output, 'selftest.benchmark_failure')
+if (/runner error/.test(benchSection)) problems.push('benchmark failure: a runner error was reported')
+if (!/\[FAIL\] failing_pass/.test(benchSection)) {
+    problems.push(`benchmark failure: the test was not reported as failing:\n${benchSection}`)
 }
-if (!/the timed pass failed/.test(bench.output)) {
+if (!/the timed pass failed/.test(benchSection)) {
     problems.push('benchmark failure: the payload failure reason is missing')
 }
-if (!/RuntimeDiag::DivisionByZero/.test(bench.output)) {
+if (!/RuntimeDiag::DivisionByZero/.test(benchSection)) {
     problems.push('benchmark failure: the diagnostic of the failed iteration is missing')
 }
-if (!/\[SUMMARY\].*fail: 1/.test(bench.output)) {
-    problems.push(`benchmark failure: ${summaryLine(bench.output)}`)
-}
 
-// --- the gate split line -----------------------------------------------------------------------
+// --- the claims taken at a width of their own: two runs -----------------------------------------
+// Three fixtures need `--jobs 1`. The serial comparison of the parallel fixture needs it as its
+// subject: the same plan at one job must print the same lines in the same order. The card a GPU
+// test is given needs it because each of its two readings is one test. The gate split is not about
+// the width at all -- it pins the build clock the remote helper exports and the arithmetic that
+// adds it to the test's own -- but it needs a run that starts a test, and one run is as good as
+// another for it. So the three share two runs, split by the environment each was going to set
+// anyway: the one with a build clock and an idle host, and the one with neither.
+//
 // The gate's wall time is build + test, and the next person has to be able to see a regression in
-// it. The remote helper exports the build's own clock as CAMEL_GATE_BUILD_SECONDS; the runner
-// prints `[SPLIT] build <b> s, test <t> s, total <b+t> s`. Both the format and the arithmetic are
-// pinned here, on the real runner, with a value the runner could not have guessed. Without the
-// variable the runner built nothing in this invocation, and says so (0.0), which is also the
-// -NoBuild path's value.
-const splitPlan = path.join(here, 'scratch.plan.toml')
-const splitWithBuild = runRunner([splitPlan, '--jobs', '1'], { CAMEL_GATE_BUILD_SECONDS: '12.5' })
-const splitMatch = splitWithBuild.output.match(/^\[SPLIT\] build ([\d.]+) s, test ([\d.]+) s, total ([\d.]+) s$/m)
+// it. Without the variable the runner built nothing in this invocation, and says so (0.0), which is
+// also the -NoBuild path's value.
+const devicePlan = path.join(here, 'free-device', 'device.plan.toml')
+const idleListing = [
+    '0, GPU-00000000-0000-0000-0000-000000000001, 20000, 24576, NVIDIA GeForce RTX 3090',
+    '1, GPU-00000000-0000-0000-0000-000000000002, 12, 24576, NVIDIA GeForce RTX 3090',
+    '2, GPU-00000000-0000-0000-0000-000000000003, 20000, 24576, NVIDIA GeForce RTX 3090',
+].join('\n')
+const busyListing = [
+    '0, GPU-00000000-0000-0000-0000-000000000001, 20000, 24576, NVIDIA GeForce RTX 3090',
+    '1, GPU-00000000-0000-0000-0000-000000000002, 19000, 24576, NVIDIA GeForce RTX 3090',
+    '2, GPU-00000000-0000-0000-0000-000000000003, 20000, 24576, NVIDIA GeForce RTX 3090',
+].join('\n')
+const serialSamePlan = runRunner([parallelPlan, devicePlan, '--jobs', '1'], {
+    CAMEL_GATE_BUILD_SECONDS: '12.5',
+    CAMEL_TEST_GPU_CARDS: idleListing,
+})
+const splitNoBuild = runRunner([tierPlan, devicePlan, '--jobs', '1'], {
+    CAMEL_GATE_BUILD_SECONDS: '',
+    CAMEL_TEST_GPU_CARDS: busyListing,
+})
+// The same plan as the parallel run above, one job at a time: the lines, in order, must be the
+// parallel run's. Filtered to `parallel.`, because the run also starts the card fixture.
+if (serialSamePlan.status !== 0) problems.push(`serial run of parallel.plan: exit ${serialSamePlan.status}`)
+// Six of the parallel fixture and two of the card fixture, all of them run: the same arithmetic the
+// two separate runs used to print as `6` and `2`, over the union of what this run selected.
+if (!/\[SUMMARY\] total: 8, pass: 8, fail: 0\b/.test(serialSamePlan.output)) {
+    problems.push(`run at --jobs 1: unexpected summary (${summaryLine(serialSamePlan.output)})`)
+}
+if (/\[SKIP\]/.test(serialSamePlan.output)) {
+    problems.push(`run at --jobs 1: a skip on an idle host, where both card entries must run:\n${serialSamePlan.output}`)
+}
+const serialOrder = statusLinesMatching(serialSamePlan.output, 'parallel.')
+if (parallelOrder.join('\n') !== serialOrder.join('\n')) {
+    problems.push(
+        `parallel output order differs from serial:\n  parallel: ${parallelOrder.join(', ')}\n  serial:   ${serialOrder.join(', ')}`
+    )
+}
+const splitMatch = serialSamePlan.output.match(/^\[SPLIT\] build ([\d.]+) s, test ([\d.]+) s, total ([\d.]+) s$/m)
 if (!splitMatch) {
-    problems.push(`gate split: the runner printed no [SPLIT] line:\n${splitWithBuild.output}`)
+    problems.push(`gate split: the runner printed no [SPLIT] line:\n${serialSamePlan.output}`)
 } else {
     const [build, test, total] = splitMatch.slice(1).map(Number)
     if (build !== 12.5) problems.push(`gate split: build ${build}, expected 12.5 (CAMEL_GATE_BUILD_SECONDS)`)
@@ -1166,7 +1440,6 @@ if (!splitMatch) {
         problems.push(`gate split: total ${total} is not build ${build} + test ${test}`)
     }
 }
-const splitNoBuild = runRunner([splitPlan, '--jobs', '1'], { CAMEL_GATE_BUILD_SECONDS: '' })
 if (!/^\[SPLIT\] build 0\.0 s, test [\d.]+ s, total [\d.]+ s$/m.test(splitNoBuild.output)) {
     problems.push(`gate split: a run that built nothing did not print build 0.0 s:\n${splitNoBuild.output}`)
 }
@@ -1185,16 +1458,22 @@ if (!/^\[SPLIT\] build 0\.0 s, test [\d.]+ s, total [\d.]+ s$/m.test(splitNoBuil
 // guard must refuse, and the guard must pass on this tree with a pinned population: a guard that
 // examined nothing would otherwise pass by finding nothing.
 const visibilityPlan = path.join(here, 'cuda-visibility', 'visibility.plan.toml')
-const visibility = runRunner([visibilityPlan])
+const visibility = green
 for (const name of ['reference.node', 'hidden.python', 'hidden.precondition', 'declared.python', 'pinned.python']) {
     if (!new RegExp(`^\\[PASS\\] ${name.replace('.', '\\.')}\\b`, 'm').test(visibility.output)) {
         problems.push(`cuda visibility: '${name}' did not pass (${summaryLine(visibility.output)})`)
     }
 }
-if (!/\[SUMMARY\] total: 5, pass: 5, fail: 0\b/.test(visibility.output) || /\[SKIP\]/.test(visibility.output)) {
+// Its five entries are the run's five `reference|hidden|declared|pinned` entries, and none of them
+// may be skipped: a skip would lose the reading the plan was written for. Read by name, because a
+// `[SKIP]` anywhere in a run of eight fixtures is some other fixture's business.
+const visibilityLines = statusLines(visibility.output).filter((line) =>
+    /^(PASS|FAIL|XFAIL|SKIP) (reference|hidden|declared|pinned)\./.test(line)
+)
+if (visibilityLines.length !== 5 || visibilityLines.some((line) => !line.startsWith('PASS'))) {
     problems.push(
         `cuda visibility: the hidden default, its precondition, the opt-in and a test's own value ` +
-            `were not all exercised: ${summaryLine(visibility.output)}`
+            `were not all exercised: ${visibilityLines.join(', ')}`
     )
 }
 const treeAudit = cudaVisibilityAudit(repoRoot)
@@ -1228,38 +1507,30 @@ if (unpinnedAudit.problems.length !== 2) {
 //
 // The busy answer must be a SKIP that names every card, never a pass and never a fail: a skip is
 // what this host state is, and a red would be blamed on the code.
-const devicePlan = path.join(here, 'free-device', 'device.plan.toml')
-const idleListing = [
-    '0, GPU-00000000-0000-0000-0000-000000000001, 20000, 24576, NVIDIA GeForce RTX 3090',
-    '1, GPU-00000000-0000-0000-0000-000000000002, 12, 24576, NVIDIA GeForce RTX 3090',
-    '2, GPU-00000000-0000-0000-0000-000000000003, 20000, 24576, NVIDIA GeForce RTX 3090',
-].join('\n')
-const busyListing = [
-    '0, GPU-00000000-0000-0000-0000-000000000001, 20000, 24576, NVIDIA GeForce RTX 3090',
-    '1, GPU-00000000-0000-0000-0000-000000000002, 19000, 24576, NVIDIA GeForce RTX 3090',
-    '2, GPU-00000000-0000-0000-0000-000000000003, 20000, 24576, NVIDIA GeForce RTX 3090',
-].join('\n')
-
-const idle = runRunner([devicePlan, '--jobs', '1'], { CAMEL_TEST_GPU_CARDS: idleListing })
-if (idle.status !== 0) problems.push(`free device: runner exit ${idle.status}, expected 0`)
-if (!/\[SUMMARY\] total: 2, pass: 2, fail: 0\b/.test(idle.output) || /\[SKIP\]/.test(idle.output)) {
-    problems.push(
-        `free device: an idle card and a test that names its own were not both run ` +
-            `(${summaryLine(idle.output)})`
-    )
-}
+//
+// The two listings were spent on the two runs above, one each: the idle listing on the run taken at
+// `--jobs 1` with a build clock, the busy one on the run with neither. Their entries are their own
+// names (`free_card`, `names_its_own_card`), so a summary of the run cannot stand in for them and
+// is not asked to.
+const idle = serialSamePlan
 if (!/^\[PASS\] free_card\b/m.test(idle.output)) {
     problems.push(
         `free device: the test was not given the lowest idle card of the listing, so its exact ` +
             `stdout assertion failed:\n${idle.output}`
     )
 }
+if (!/^\[PASS\] names_its_own_card\b/m.test(idle.output)) {
+    problems.push('free device: a test that named its own card was not run on an idle host')
+}
 
-const busy = runRunner([devicePlan, '--jobs', '1'], { CAMEL_TEST_GPU_CARDS: busyListing })
+const busy = splitNoBuild
+// The other run's own arithmetic: five entries of the tier fixture and two of the card fixture, one
+// of the two skipped. A host with no idle card must not fail the run, and the skip must be exactly
+// one -- which is what `skip: 1` counts, and what the two named reads below pin to the right entry.
 if (busy.status !== 0) {
     problems.push(`free device: a host with no idle card failed the run (exit ${busy.status})`)
 }
-if (!/\[SUMMARY\] total: 2, pass: 1, fail: 0, skip: 1\b/.test(busy.output)) {
+if (!/\[SUMMARY\] total: 7, pass: 6, fail: 0, skip: 1\b/.test(busy.output)) {
     problems.push(`free device: unexpected summary (${summaryLine(busy.output)})`)
 }
 if (!/^\[SKIP\] free_card\b/m.test(busy.output) || /^\[FAIL\] free_card\b/m.test(busy.output)) {
@@ -1277,6 +1548,13 @@ for (const text of [
 // skip is the selection's, and it does not reach past a test that made its own decision.
 if (!/^\[PASS\] names_its_own_card\b/m.test(busy.output)) {
     problems.push('free device: a test that named its own card was skipped or failed')
+}
+// The counts the run's own summary carried: two entries on the idle host, both run; two on the busy
+// one, one run and one skipped. Read as the two names' lines rather than as a total, because both
+// runs now carry other fixtures too -- and a `[SKIP]` that reached any other entry of either run
+// was never one of these two fixtures' claims and would have made this line red in the old shape.
+if (statusLines(busy.output).filter((line) => line.startsWith('SKIP ') && !line.startsWith('SKIP free_card')).length > 0) {
+    problems.push(`free device: a skip reached an entry of another fixture:\n${busy.output}`)
 }
 
 // A reading, printed and used by nothing: how many child runs it took, what width this file put
@@ -1297,7 +1575,7 @@ if (!/^\[PASS\] names_its_own_card\b/m.test(busy.output)) {
 // test/plans/feat/consistency/runner.plan.toml.
 //
 // Reading the children from here instead would mean running each one through child-cpu.mjs, and that
-// wrapper is a Node process of its own: ~40 ms of CPU apiece over the ~120 child runs below, added to
+// wrapper is a Node process of its own: ~40 ms of CPU apiece over the 22 child runs below, added to
 // the very figure it measures -- seconds against a bound (13.0 s of work plus a 0.5 s band) that this
 // file's own runs are judged by. A measurement that moves the thing it measures is worse than the
 // number it replaces, so the reading stays where the runner makes it.
@@ -1312,6 +1590,23 @@ console.log(
         + `fixed=${widthTally.fixed}, own=${widthTally.named}, inherited=${widthTally.inherited}, `
         + `cli=${widthTally.cli}; wall=${spentWall.toFixed(1)} s`
 )
+// The entries a sweep does not cover, counted rather than described: what the source plans of every
+// `[[sweeps]]` entry declare as `negative`, how many of those a sweep copies, how many it leaves out
+// and which ruling the code implements (`a`: a `negative` entry is copied; `b`: its kind is left
+// out). It reads the plan tree through the expansion itself, so it cannot disagree with the run.
+//
+// It is here because the count and the comment disagreed once and nothing said so: from the
+// sweep's first commit the kind filter left `negative` out while the docstring above `expandSweeps`
+// named only benchmarks and differential tests as left out, and 1258 entries -- 73% of the tree's
+// `negative` ones -- were never copied. A line that prints the three numbers on every gate run is
+// the difference between a coverage gap somebody has to remember and one that is in front of the
+// reader; the counts are a reading, so they are printed and not asserted.
+//
+// The walk is the runner's own loader over the plan tree, a couple of hundred milliseconds for the
+// whole tree (0.197 s over 372 plan files, measured on this machine), which is why it can sit in
+// this file instead of needing a check of its own.
+const sweepAccounting = negativeSweepAccounting(allPlanFiles)
+console.log(negativeSweepLine(sweepAccounting))
 if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')

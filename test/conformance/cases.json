@@ -56,8 +56,8 @@
       "case": "test/conformance/cases/unused_effect_not_executed.cml",
       "reading": "",
       "exit": 0,
-      "principle": "3.1, an effect nothing uses does not run",
-      "what": "An effect whose result nothing uses is not executed, before or after optimization; a pass that runs it adds output the program does not have."
+      "principle": "3.1, an external read nothing uses does not run (a write is used by its region)",
+      "what": "The read's value nothing uses is not executed, before or after optimization; a pass that runs it adds output the program does not have. It is a read and not a write: since the author's ruling of 2026-11-15 a write to an outside resource is a root of the region it is written in, so `println` here would print."
     }
   ]
 }

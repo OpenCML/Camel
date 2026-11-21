@@ -1,0 +1,53 @@
+/// A `match type` case may be written `case pattern when predicate`, as in a value match (design
+/// principles 5.5, ruling of 2026-11-14): the case is taken when its pattern selects the subject
+/// *and* the predicate holds, so a type function divides by structure and then by property.
+///
+/// The predicates stay in Camel. `FamilyOf` reads the shape words for what they are -- `array`,
+/// `struct` -- and asks `is_numeric` and `is_ordered` for the leaf types, each of them an ordinary
+/// generic function of the library. Nothing here is a list of type names the compiler knows.
+import { is_numeric, is_ordered, is_same } from types
+
+/// Structure first, then property. `string` and `bool` reach the fourth case only because the
+/// third case matched them structurally and then had its guard refused, which is the fall-through
+/// this step is about.
+type FamilyOf<T> = match type T {
+    case array => int[1]
+    case struct => int[2]
+    case _ when is_numeric::<T>() => int[3]
+    case _ when is_ordered::<T>() => int[4]
+    case _ => int[5]
+}
+
+/// The same division written where a value is asked for (`match type` over values), so that the
+/// guard is read in the graph builder as well as in the type layer.
+func family::<T>(): int {
+    return match type T {
+        case array => 1
+        case struct => 2
+        case _ when is_numeric::<T>() => 3
+        case _ when is_ordered::<T>() => 4
+        case _ => 5
+    }
+}
+
+type Point = { x: float, y: float }
+
+func main(): int sync {
+    // ① the shape words decide without asking anything: an array is not a struct and neither is
+    //    asked whether it is a number.
+    println(is_same::<FamilyOf<int[]>, int[1]>(), is_same::<FamilyOf<Point>, int[2]>())
+    // ② the guard that holds takes its case: int and float are numbers, and c64 is one too
+    //    (`is_numeric` asks `is_real` and `is_complex`).
+    println(is_same::<FamilyOf<int>, int[3]>(), is_same::<FamilyOf<f64>, int[3]>())
+    println(is_same::<FamilyOf<c64>, int[3]>())
+    // ③ and a guard that does not hold sends the subject to the case written after it: `string` is
+    //    not a number, so the first `case _` refuses it and the second one takes it.
+    println(is_same::<FamilyOf<string>, int[4]>(), is_same::<FamilyOf<bool>, int[4]>())
+    // ④ nothing holds: a nullable struct is neither a number nor ordered, and the unguarded
+    //    default takes it. The last case is the only one that is a default.
+    println(is_same::<FamilyOf<Point?>, int[5]>())
+    // ⑤ the same answers where the match gives a value.
+    println(family::<int[]>(), family::<Point>(), family::<int>(), family::<c64>())
+    println(family::<string>(), family::<bool>(), family::<Point?>())
+    return 0
+}

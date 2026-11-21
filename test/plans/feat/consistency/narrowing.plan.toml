@@ -29,10 +29,10 @@ assert(input.stderr === '', 'no diagnostic: ' + input.stderr)
 
 [[tests]]
 name = "narrowing.behaviour.passes"
-desc = "The same program through std::opt::inline, std::opt, std::fvm."
+desc = "The same program through std::cxx::inline, std::opt, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/narrowing/narrow.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout_starts_with = "3 0\n3 -1\n3 -1 -1\n2 0 0\ntrue false false\n"
 

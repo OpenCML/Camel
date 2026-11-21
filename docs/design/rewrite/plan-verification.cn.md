@@ -100,7 +100,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 | 没有 Z3 | `git grep -n -i -w z3`：只有 `docs/design/rewrite/v2.cn.md` 第 8.1 节的"求解器（Z3）作为可选的构建依赖"与任务书第 5.27 节 |
 | 没有 SMT | `git grep -n -i -w smt`：只有设计稿第 8.1 节与示例的性能说明（那里的 SMT 是"同时多线程"的意思，与求解器无关） |
 | 没有依赖位 | `conanfile.txt` 六条 requires（`cpp-httplib`、`fmt`、`gtest`、`nlohmann_json`、`taskflow`、`pybind11`），无求解器 |
-| 没有构建开关 | `cmake/options.json` 四个选项（`ENABLE_FASTVM_JIT`、`ENABLE_FASTVM_COMPUTED_GOTO`、`CAMEL_ENABLE_PYTHON`、`CAMEL_TENSOR_BLAS`），无求解器 |
+| 没有构建开关 | `cmake/options.json` 三个选项（`ENABLE_FASTVM_JIT`、`CAMEL_ENABLE_PYTHON`、`CAMEL_TENSOR_BLAS`），无求解器 |
 
 所以第 8.1 节的"依赖"那一条今天**一行都不存在**：没有可选的构建依赖，也没有"缺了它怎么办"的先例可循。
 
@@ -207,7 +207,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 按**可并行度**排。每片给出：产物、**红前用例**（今天就能跑、今天失败）、验收（逐字命令与期望输出）。红前用例一律以"今天实测到的逐字输出"为对照——即**今天的那一行与要求的那一行不同**。
 
-**本节的路径约定**：`modules/verify/`、`test/plans/feat/modules/verify.plan.toml`、`test/plans/feat/modules/verify_solver.plan.toml`、`test/cases/modules/rules/verify_witness.cml`、`verify_licences.cml`、`verify_generic.cml` 都是**本计划提议新建的文件，今天不存在**；它们的名字在下面每一处都带"（新建）"。本节引用的其余路径今天都已存在。
+**本节的路径约定**：`modules/verify/`、`test/plans/feat/modules/` 下的 `verify.plan.toml` 与 `verify_solver.plan.toml`、`test/cases/modules/rules/` 下的 `verify_witness.cml`、`verify_licences.cml`、`verify_generic.cml` 都是**本计划提议新建的文件，今天不存在**；它们的名字在下面每一处都带"（新建）"。本节引用的其余路径今天都已存在。
 
 ### S0 判定词汇与报告类型（不引入求解器）
 
@@ -270,7 +270,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
   camel test/cases/modules/rules/verify_licences.cml std::nvm
   ```
   期望含四行：`proved plain, class equality`（无许可，按位）、`proved reassoc, class real equality`、`sampled anywhere: reason no numeric bound`、以及 `refine_accuracy` 的一条 `proved …, class error bound`。
-- **可并行**：与 S2 的整数侧并行（`modules/verify/translate_fp.cpp` 与 `licences.cpp` 两个文件，接口在 S1 定下）。
+- **可并行**：与 S2 的整数侧并行（`modules/verify/` 下的 `translate_fp.cpp` 与 `licences.cpp` 两个文件，尚未存在，接口在 S1 定下）。
 
 ### S4 `when` 与 `fact` 作前提
 

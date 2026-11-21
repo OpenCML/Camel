@@ -6,13 +6,13 @@ Chapter 9's sentence has a price: **an expression is evaluated because somebody 
 "print a line" happen at all? And which of two prints goes first? This chapter is Camel's answer to both: effects and
 order are not defaults, they are **written in the program**, and the graph has edges that say so.
 
-## What nobody needs does not run
+## What nobody needs: a read does not run, a write does
 
 [`examples/10_unused_effect.cml`](examples/10_unused_effect.cml):
 
 ```cml
-// An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
-// never runs.
+// A write whose result nothing needs still runs: `greet`'s body is a region, so its `println`
+// prints although nothing uses the result and the body is not a sync block (3.1).
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
 
 func greet(): int {
@@ -31,23 +31,25 @@ camel docs/tutorial/examples/10_unused_effect.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_unused_effect.cml:6:5
-   |
- 6 |     println('hello from greet')
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
 
-Only `1` is printed. The `1` that `greet` returns does not depend on that `println`, so on the graph it is a node nobody
-wants: **an effect nobody needs does not run**. That is not an error but a rule of the language; the compiler gives the
-warning so that a `sync` you forgot to write is visible.
+Both lines are printed. The `1` that `greet` returns still does not depend on that `println`'s result, but a
+`println` is a **write**: a write to a resource outside the program is used by the region it is written in, and
+`greet`'s body is a region, so it runs -- no `sync` needed. What really is dropped for lack of a reader? A **read**:
+an external read whose result nobody uses does not run, and nothing is reported for it
+([language reference 4.2](../language/en/04_execution_model.md#42-evaluation-by-dependency)). A write of a handle
+(`Ref` and the other `#resource` types) has been on that same rule since the ruling of 2026-11-16
+([design principles 3.1](../design-principles.en.md#31-evaluation-by-dependency),
+[3.3](../design-principles.en.md#33-resources-uses-and-pure)), for the reason the outside write has: its reader may
+stand in the caller, in a closure called later, or behind another name of the same box, and this graph cannot see all
+of them.
 
 The rule and its reason: the only order a program can observe comes from **values being passed** and from **order
 written down**. Everything else may run in parallel, be reordered, be dropped -- so the compiler assumes nothing. Write
-`sync` where order matters.
+`sync` where order matters. Whether something runs at all is a second rule: a read runs when its result is needed, a
+write runs when its region runs.
 
 ## `sync` on a function body
 
@@ -113,23 +115,18 @@ camel docs/tutorial/examples/10_sync_block.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_sync_block.cml:7:22
-   |
- 7 |     if second then { println('three'); println('four') }
-   |                      ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
 the body is a sync block
+three
 four
 five
 six
 0
 ```
 
-`three` is not printed: that `if`'s arm is not a sync block, `println('three')`'s result is wanted by nobody, so it does
-not run; `println('four')` is the arm's value, which is the `if`'s value, so it runs. The second `if`'s arm says `sync`,
-and both of its statements run.
+`three` is printed too: that `if`'s arm is not a sync block, but the arm is a region, and a write to `stdout` in it is
+used by that region -- `println('three')`'s result is wanted by nobody and it runs all the same. What the arm's missing
+`sync` decides is **order**: those two statements have none. The second `if`'s arm says `sync`, and both of its
+statements run, in order.
 
 The reason for this rule is that **a block's meaning does not change with where it is written**: if an arm inherited the
 outer `sync`, the same lines would mean two different things depending on their neighbours, and a reader would have to
@@ -179,6 +176,13 @@ camel docs/tutorial/examples/10_var_order.cml
 ```
 
 ```text
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+   --> docs/tutorial/examples/10_var_order.cml:21:7
+    |
+ 21 |     c = 3
+    |       ^
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+
 2
 2
 ```
@@ -190,8 +194,11 @@ Two rules, one `2` each:
 - `latest`: `let before = c` **reads the most recent write before it**, the version written by `c = 2`; the later
   `c = 3` cannot reach back to it. So `before` is `2`, whatever `c` becomes afterwards.
 
-The third rule is its other side: **a write that nothing reads afterwards does not run**. The same cell, two function
-bodies, the same output, different warnings
+That last `c = 3` stores a value nothing reads, which is what the warning above says: **a write that nothing reads
+afterwards leaves a value nobody uses**. It leads to the next rule. The same cell, two function bodies, the same output,
+and the same one report for both -- assigning to a `var` is not an effect
+([design principles 3.1](../design-principles.cn.md#31-按依赖求值), 3.3), so what is reported is "this value is never
+read", not "this assignment has side effects"
 ([`examples/10_write_nobody_reads.cml`](examples/10_write_nobody_reads.cml)):
 
 ```cml
@@ -226,38 +233,60 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 ```
 
 ```text
-warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int) => int' is not in a sync block, and it takes a var argument.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:5
-    |
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+  --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
+   |
  9 |     c = 5
-    |     ^^^^^
-help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
+   |       ^
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
 
-warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:16:7
     |
- 9 |     c = 5
+ 16 |     c = 5
     |       ^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
 
 1
 1
 ```
 
-Both functions print `1`: the read takes the version from before the write, and the write is read by nobody. The
-difference is the guarantee -- the write inside the sync block **certainly happens**, and after the reads written before
-it; for the write outside one, the compiler can only tell you that nothing runs it
-(`SemanticDiag::IgnoredSideEffect`), and since nothing reads the variable afterwards, the whole write does not run
-(`SemanticDiag::EffectNotExecuted`).
+Both functions print `1`: the read takes the version from before the write, the write is read by nobody, and both are
+reported as `SemanticDiag::UnusedAssignedValue` -- one diagnostic asks only whether anything reads the **value**, which
+has nothing to do with whether the write runs. The difference is the guarantee: the write inside the sync block
+**certainly happens** (the statements written directly in a block run with the block), while the write outside one has
+nothing that wants it and does not run at all. Remove the assignment, or read the variable after it -- either is a fix.
+
+What is really dropped for lack of a reader is a **read**: an external read whose result nobody uses does not
+run, and nothing is reported for it -- the diagnostic that used to name a statement which does not run went with the
+region roots (the ruling of 2026-11-17), because a call, a loop and a block that write run with the region they are
+written in.
+The read below is wanted by nobody, so it does not run; `println` is a
+**write** to standard output, used by the region it is written in, so it runs:
+
+```cml
+import { get_env } from env
+
+func main(): int {
+    get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
+    println(7)
+    return 0
+}
+```
+
+```text
+7
+```
 
 One sentence to take away: **correct output is not the same as a correct program**. Write `sync` where order matters,
 and the compiler may no longer move it.
 
 ## Effects on one resource order themselves
 
-What an effect acts on is called a **resource**: standard output is one, the file system is one, a `var` is one.
-**Two effects on the same resource that both execute happen in the order written, and need no sync block**
-([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)). In
+What an effect acts on is called a **resource**: standard output is one, the file system is one; a `var` is not one --
+assigning to a variable of the program is not an effect, it is a value under another name
+([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)). **Two effects on the same resource
+that both execute happen in the order written, and need no sync block**. In
 [`examples/10_same_resource.cml`](examples/10_same_resource.cml) both prints go to standard output and both results are
 used (`println` returns its argument), so they happen in the order written with no warning at all:
 
@@ -294,14 +323,16 @@ compiler to guess.
 
 ## Effects as resources: `uses` in a signature
 
-Which resources a call touches is **part of its type**: `func save(p: Params): unit uses fs`. In Camel you may write it
+Which resources a call touches is **part of its type**: `func save(p: Params): unit uses var fs`. In Camel you may write it
 by hand or leave it out -- the compiler infers it from the callees of the body (taking a fixed point on recursion) and
 records it in the function type it displays. This program puts the forms side by side
 ([`examples/10_resources.cml`](examples/10_resources.cml)):
 
 ```cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
+// handle parameter. A variable is never written in a clause -- a `var` parameter is declared by the
+// `var` in the parameter list and its uses are measured from the body -- so `bump` writes the cell
+// it is handed and every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
@@ -313,10 +344,10 @@ func read_id(s: Stream): int uses s {
     return s.id
 }
 
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses cell sync {
+func bump(var cell: int): int sync {
     cell += 1
     return cell
 }
@@ -347,9 +378,20 @@ What may follow `uses`: the grammar is `resourceClause` in
 - **A resource the module declares**: `resource db`. A module may declare its own resources, and may group several of
   them: `resource console = [db, stdout]`.
 - **A resource every program has**: `stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`.
-- **A parameter**: `uses s`, `uses cell`. This says "the call reads and writes the value I pass in" -- handle-style,
-  like a `var` parameter: operations on one handle keep the written order, different handles do not constrain each
-  other.
+- **A handle parameter**: `uses s`. This says "the call touches the value you hand it" -- handle-style: operations on one
+  handle keep the written order, different handles do not constrain each other. A `var` parameter is not written this
+  way: it is a variable, see the next entry.
+- **How the call touches it is written in front of the name**: without `var` the entry reads, with `var` it writes, the
+  same meaning a `var` parameter has (design principles 3.3): `uses s` reads the handle, `uses var s` writes it,
+  `uses fs` reads a file, `uses var fs` writes it. An **external** resource follows the same rule -- there is no
+  exception that one of them always carries `var`: for a resource a call only reads, such as `clock` or `env`, the
+  entry is written without it. An inferred type, a `tooltip` and a diagnostic all print the entry that way, so
+  `uses fs` and `uses var fs` are told apart at a glance.
+- **A variable is not written in `uses`**: a `var` parameter, a module-level `var`, a captured variable and a local
+  are all variables, and a clause names none of them (`SemanticDiag::VariableInUses`). A variable is declared in one
+  place -- the `var` in a parameter list, the `var` of a module declaration, the `var` or `let` that binds it -- and
+  which calls touch it, reading or writing, is measured from the body and printed in the signature the compiler
+  derives. `bump` above is that case: its clause is empty and its type still reads `uses var cell`.
 - **A handle type declared with `#resource type`**: `#resource type Stream = { id: int }`. **Every value** of it is a
   resource of its own, so `read_id` claims "I touch the `Stream` you give me", not "I touch all streams".
 
@@ -357,8 +399,8 @@ Draw the graph of this program and the `tooltip` of a function node is the resou
 
 ```text
             tooltip="(s: Stream) => int uses s";
-            tooltip="() => void uses db, stdout";
-            tooltip="(var cell: int) => int uses cell";
+            tooltip="() => void uses var db, var stdout";
+            tooltip="(var cell: int) => int uses var cell";
 ```
 
 All three lines say what a call touches: `read_id` touches the handle it is given, `tick` touches the `console` group
@@ -369,6 +411,9 @@ error (the errors below).
 What a wrong clause looks like (all compile errors):
 
 - a name that is neither a parameter nor a resource: `SemanticDiag::UnknownResource`.
+- a variable in a clause (a `var` parameter, a module `var`, a captured variable): `SemanticDiag::VariableInUses` --
+  a variable is declared once, and which calls touch it is measured from the body and printed in the derived
+  signature.
 - `pure` together with `uses` in one signature: `SemanticDiag::PureAndUses` -- `pure` says "no resource at all",
   `uses` says "these", and only one of the two may be written.
 - a body-less declaration (a native operator) whose clause is not the operator's: `SemanticDiag::NativeResourceMismatch`
@@ -391,7 +436,7 @@ writes the standard output.
 
 resource db
 
-func stamp(): int uses db sync {
+func stamp(): int uses var db sync {
     println('x')
     return 1
 }
@@ -407,11 +452,11 @@ camel docs/tutorial/examples/10_uses_beyond.cml
 ```
 
 ```text
-error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: stdout.
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: stdout.
    --> docs/tutorial/examples/10_uses_beyond.cml:8:1
     |
-  8 | func stamp(): int uses db sync {
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  8 | func stamp(): int uses var db sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   9 |     println('x')
     |     ^^^^^^^^^^^^
  10 |     return 1
@@ -428,7 +473,7 @@ help: A signature is a promise the compiler checks against the resources the fun
 camel: 1 error
 ```
 
-The diagnostic says three things: **which promise** (`'() => int uses db'`), **what the body reached past it**
+The diagnostic says three things: **which promise** (`'() => int uses var db'`), **what the body reached past it**
 (`stdout`), and **which use crossed it** (the `note` points at the first use the signature does not name). There are
 two repairs: the body stops reaching for it, or the clause is widened to name it.
 
@@ -600,8 +645,8 @@ camel docs/tutorial/examples/10_exercise.cml
 2. `apply(square, 5)` is `25`; with `println` it is `SemanticDiag::NoMatchingFunction`, and the error lists the required
    `(x: int) => int pure`.
 3. The output is still `1`: the read still takes the version from before the write. What changes is the **guarantee** --
-   the write is no longer ordered (one more `SemanticDiag::IgnoredSideEffect`), and since nothing reads the variable
-   after it, the whole write does not run (`SemanticDiag::EffectNotExecuted`).
+   the write is no longer inside a sync block, and since nothing reads the variable after it, the value it stores is used
+   by nobody, so the whole write does not run and `SemanticDiag::UnusedAssignedValue` is reported.
 
 ## Reference
 

@@ -4,7 +4,6 @@
     "files": [
       "include/camel/compile/gir/draft_graph_builder.h",
       "include/camel/core/tags.h",
-      "include/camel/core/type/composite/func.h",
       "include/camel/runtime/draft.h",
       "include/camel/runtime/draft_inline.h",
       "include/camel/runtime/draft_session.h",
@@ -15,7 +14,7 @@
       "include/camel/runtime/node_ref.h",
       "include/camel/runtime/operator_instance.h",
       "include/camel/runtime/writings.h",
-      "modules/rewrite/proof.h",
+      "modules/graph/txn.cpp",
       "modules/tiles/include/tiles/internal/graph_values.h",
       "modules/tiles/src/graph_values.cpp",
       "modules/tiles/src/region_extract.cpp",
@@ -28,25 +27,32 @@
       "src/compile/gir/builder_support.h",
       "src/compile/gir/draft_graph_builder.cpp",
       "src/core/tags.cpp",
+      "src/passes/opt/inline/engine.cpp",
+      "src/passes/test/rules.cpp",
+      "src/passes/test/undo_selfcheck.cpp",
       "src/passes/test/writings.cpp",
       "src/runtime/draft.cpp",
       "src/runtime/draft_clone.cpp",
       "src/runtime/draft_construct.cpp",
       "src/runtime/draft_inline.cpp",
+      "src/runtime/draft_outline.cpp",
       "src/runtime/draft_regions.cpp",
       "src/runtime/draft_types.cpp",
+      "src/runtime/draft_undo.cpp",
       "src/runtime/draft_writes.cpp",
       "src/runtime/graph.cpp",
       "src/runtime/graph_build.h",
       "src/runtime/loop.cpp",
       "src/runtime/operator_instance.cpp",
-      "src/runtime/writings.cpp"
+      "src/runtime/writings.cpp",
+      "src/runtime/writings_driver.cpp",
+      "src/runtime/writings_extract.cpp",
+      "src/runtime/writings_match.cpp"
     ],
     "constructions": [
       "src/runtime/draft.cpp#decode"
     ],
     "decode": [
-      "modules/rewrite/proof.h#-",
       "src/runtime/draft.cpp#decode",
       "src/runtime/draft_inline.cpp#liftClosureGraph",
       "src/runtime/draft_inline.cpp#specializeGraphWithBindings"

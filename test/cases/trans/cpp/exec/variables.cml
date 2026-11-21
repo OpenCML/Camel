@@ -1,5 +1,8 @@
-/// `var` variables: assigned in a function (a C++ local), passed as `var` arguments and captured
-/// by a closure (a shared cell: every holder sees the same value, design principles 3.5).
+/// `var` variables: assigned in a function (a C++ local) and passed as `var` arguments.
+///
+/// What is no longer here: a closure that captured a `var` and wrote it (a shared cell). A closure
+/// may not assign an outer name (the ruling of 2026-11-15, design principles 3.5); the writes below
+/// are the function's own, and the three values printed are the three it printed before.
 
 func bump(var x: int) {
     x += 1
@@ -24,10 +27,9 @@ func main(): int sync {
     s += 'c'
     println(s)
     var acc = 0
-    let add = (x: int): int => sync {
-        acc += x
-        return acc
-    }
-    println(add(5), add(7), acc)
+    acc += 5
+    let after5 = acc
+    acc += 7
+    println(after5, acc, acc)
     return 0
 }

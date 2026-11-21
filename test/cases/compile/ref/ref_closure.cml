@@ -1,0 +1,17 @@
+/**
+ * A reference may hold a closure: the function value goes in as a value and is read back and called,
+ * and `set` replaces it with another closure. A closure is a value here, so the reference is the one
+ * place it outlives the expression that made it.
+ */
+
+import state
+
+func main(): int sync {
+    let r = state::ref((x: int): int => x + 1)
+    let add = state::get(r)
+    println(add(41))
+    state::set(r, (x: int): int => x * 2)
+    let twice = state::get(r)
+    println(twice(21))
+    return 0
+}

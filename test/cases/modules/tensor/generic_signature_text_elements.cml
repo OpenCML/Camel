@@ -1,12 +1,9 @@
-/// The element type of an explicit-generic tensor signature is a numeric scalar, and the
-/// signature states it: `func f::<T>(x: T[...]) when is_numeric::<T>()` applies exactly where `T` is
-/// a number (design principles 4.1). An array of text fills neither arm of `shape`, so the call is
-/// refused at the declaration rather than at a kernel.
+/// A scalar has no dimensions, so `shape` answers the empty list (design principles 5.4).
 
 import { shape } from tensor
 
 func main(): int sync {
-    let words: string[2] = ["a", "b"]
-    println(shape(words))
+    let scalar = 3
+    println(shape(scalar))
     return 0
 }

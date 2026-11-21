@@ -14,7 +14,9 @@
  * What a program does by hand is small: ask whether a device is there (`available`, `device`), move
  * a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
  * `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
- * written order against the others and is never folded, merged or dropped. The functions to look
+ * written order against the others and is never folded, merged or dropped -- `regions` excepted:
+ * it reads the graph of the function it is given and touches no resource, so it writes no `uses`
+ * clause and needs no place in that order (it is still never folded). The functions to look
  * at are the `with` argument and the data is the example input, as for `map`:
  * `inputs->inspect<fn>`.
  *
@@ -34,13 +36,13 @@ export resource driver
 /// a visible device is missing. A capability question only -- a device the run names with
 /// `--devices` and that is not there is a fault at start-up, never `false`.
 /// @example available()
-export func available(): bool uses driver
+export func available(): bool uses var driver
 
 /// A description of the CUDA device the run selects: its ordinal, name, compute capability and
 /// memory.
 /// @fails error value `DeviceUnavailable` when this build or this machine has no CUDA device
 /// @example device() !! 'no device'
-export func device(): string! uses driver
+export func device(): string! uses var driver
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
@@ -49,7 +51,7 @@ export func device(): string! uses driver
 /// Outlines the regions the device can run, compiles them and executes the program; the card is
 /// chosen at run time with `--devices`, never by a pass parameter.
 /// @fails error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope)
-export func compile::<F>(f: F): F! uses driver when is_function::<F>()
+export func compile::<F>(f: F): F! uses var driver when is_function::<F>()
 
 /// Prints the operator surface of the program and consumes it: one `TILES_CENSUS` line with the
 /// number of surface operators, how many the device's capability table names and how many it does

@@ -57,7 +57,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "types_shapes.type_function_not_applicable"
-desc = "A type function given a type it is not defined for (`ElementOf<int>`) is TypeFunctionNotApplicable, where the instance that makes it is built."
+desc = "A type function given a type it is not defined for (`ElementOf<int>`) is TypeFunctionNotApplicable, where the instance that makes it is built: the sentence is the one a written `match type` with no case that selects the subject gives."
 kind = "negative"
 case = "../../../cases/modules/types/type_function_not_applicable.cml"
 args = ["${case}"]
@@ -65,7 +65,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 25
-expect_output_contains = ["The type function 'ElementOf<int>' is not applicable: int is neither an array nor a set"]
+expect_output_contains = ["The type function '", "no case selects int"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

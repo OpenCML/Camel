@@ -1,0 +1,288 @@
+// The two semantics of `inline` the ruling of 2026-11-18 gave (`e55cd6157`;
+// docs/design/graph-editing/README.cn.md 7 and 15.3): `at` a statement of a block's chain takes
+// over its place, `at` a pure node only picks the region.
+//
+// The two are not told apart by counting nodes -- both add the body's code -- so each reading says
+// three things: what the block's exit gate is written after, which nodes the graph has, and where
+// the body's node sits in the region table. The first two readings also run the edited function, so
+// that "the statement is gone" and "the chain did not move" are read from what the program prints.
+
+import { Node, Graph, Region, RegionKind, graph_of, name, nodes, inputs, value_users, sync_inputs, kind, NodeKind, op, op_name, constant, region_of, region_kind, region_parent, callee, exit_of, open, inline, order, order_inputs, commit } from graph
+
+// The body that is spliced in: one operation of its own (`21 * 2`), so that the code the readings
+// look for is a node nothing else in the edited graph is.
+func answer(): int {
+    return 21 * 2
+}
+
+func inc(x: int): int {
+    return x + 1
+}
+
+// The body the ordering reading splices in: the value it hands on is the print itself, so the node
+// the splice answers with is the node that writes -- which is the node the ordering is about.
+func announcing(): string sync {
+    return println('announced')
+}
+
+// The function every reading is about: two prints that are statements of the block's chain, two
+// calls of `inc` that are not (a call of a function that writes nothing has no place of its own),
+// and one pure addition.
+func subject(): int sync {
+    println('first')
+    let a = inc(1)
+    let b = inc(2)
+    let c = a + b
+    println(c)
+    return 0
+}
+
+func opText(n: Node): string spelling {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func constInt(n: Node): int {
+    return match constant::<int>(n) {
+        case null => -1
+        case v => v
+    }
+}
+
+func calleeName(n: Node): string spelling {
+    return match callee(n) {
+        case null => ''
+        case g => name(g)
+    }
+}
+
+func isPrint(n: Node): bool spelling {
+    return opText(n) == ':io/println'
+}
+
+func isMul(n: Node): bool spelling {
+    return opText(n) == ':op/mul_l' || opText(n) == ':op/mul_i'
+}
+
+func isSumOp(n: Node): bool spelling {
+    return opText(n) == ':op/add_l' || opText(n) == ':op/add_i'
+}
+
+func isIncCall(n: Node): bool spelling {
+    return kind(n) == NodeKind::Func && calleeName(n) == 'inc'
+}
+
+// The call `inc(2)`: named by the constant it reads, so the reading does not depend on the order
+// the calls are made in.
+func isIncCallOfTwo(n: Node): bool spelling {
+    let ins = inputs(n)
+    return isIncCall(n) && len(ins) == 1 && constInt(ins[0]) == 2
+}
+
+func prints(g: Graph): Node[] {
+    let found = nodes(g)->filter<isPrint>
+    return found
+}
+
+func theSum(g: Graph): Node {
+    let found = nodes(g)->filter<isSumOp>
+    return found[0]
+}
+
+func muls(g: Graph): Node[] {
+    let found = nodes(g)->filter<isMul>
+    return found
+}
+
+func incCalls(g: Graph): Node[] spelling {
+    let found = nodes(g)->filter<isIncCall>
+    return found
+}
+
+func incCallSelector(g: Graph): Node spelling {
+    let found = nodes(g)->filter<isIncCallOfTwo>
+    return found[0]
+}
+
+// What a node is, as one word: the callee's name for a call, the operator's name for an operation,
+// the value for a constant, the kind otherwise.
+func label(n: Node): string spelling {
+    let k = kind(n)
+    return if k == NodeKind::Func then `call(${calleeName(n)})`
+        else if k == NodeKind::Gate then 'gate'
+        else if k == NodeKind::Oper then opText(n)
+        else if k == NodeKind::Data then `const(${constInt(n)})`
+        else `${k}`
+}
+
+func labelsFrom(ls: Node[], i: int, acc: string): string spelling {
+    return if i >= len(ls) then acc
+        else labelsFrom(ls, i + 1, if i == 0 then label(ls[0]) else `${acc},${label(ls[i])}`)
+}
+
+func labelsOf(ls: Node[]): string spelling {
+    return if len(ls) == 0 then '(none)' else labelsFrom(ls, 0, '')
+}
+
+// What the block's exit gate is written after: the last statement of the chain.
+func exitOf(g: Graph): Node {
+    return match exit_of(g) {
+        case null => prints(g)[0]
+        case n => n
+    }
+}
+
+func parentIs(r: Region, parent: Region): bool {
+    return match region_parent(r) {
+        case null => false
+        case p => p == parent
+    }
+}
+
+// The block's chain as one line: every node written after another, `what <- what it is written
+// after`. Canonical order, so two runs of the same graph print the same line.
+func isChained(n: Node): bool {
+    return len(sync_inputs(n)) > 0
+}
+
+func chainedFrom(ns: Node[], i: int, acc: string): string spelling {
+    return if i >= len(ns) then acc
+        else chainedFrom(ns, i + 1, if i == 0 then `${label(ns[0])}<-${labelsOf(sync_inputs(ns[0]))}`
+                                     else `${acc} ${label(ns[i])}<-${labelsOf(sync_inputs(ns[i]))}`)
+}
+
+func chainText(g: Graph): string spelling {
+    return chainedFrom(nodes(g)->filter<isChained>, 0, '(none)')
+}
+
+// What the exit gate is written after, and what the node it is written after is written after: the
+// two neighbours of the last place of the chain.
+func lastTwo(g: Graph): string spelling {
+    let exit = exitOf(g)
+    let ins = sync_inputs(exit)
+    return if len(ins) == 0 then '(exit has no predecessor)'
+        else `${label(ins[0])} (written after ${labelsOf(sync_inputs(ins[0]))})`
+}
+
+func bodyText(h: Graph, sum: Node): string spelling {
+    let bodies = bodyNodes(h)
+    return if len(bodies) == 0 then 'no node of the body in the graph'
+        else `${len(bodies)} node(s), region=${region_kind(region_of(bodies[0]))} parent_is_sum_region=${parentIs(region_of(bodies[0]), region_of(sum))}`
+}
+
+// The value of `answer` as it stands in a committed graph: `21 * 2` is a constant, so the body is
+// one node of value 42, and nothing else in `subject` is 42.
+func isAnswerValue(n: Node): bool {
+    return constInt(n) == 42
+}
+
+func bodyNodes(g: Graph): Node[] {
+    let found = nodes(g)->filter<isAnswerValue>
+    return found
+}
+
+// The node the place of the last statement was handed to, if the chain ends in one that is written
+// after a predecessor: `gate<-:io/println` after the statement at the end was inlined over.
+func anchorText(g: Graph): string spelling {
+    let ins = sync_inputs(exitOf(g))
+    return if len(ins) == 0 then '(the exit has no predecessor)' else `${label(ins[0])} reading ${labelsOf(inputs(ins[0]))}`
+}
+
+/// `at` is the pure addition `c = a + b`: it only picks the region. The chain is the one it was, the
+/// addition still reads the two calls, and the body's node is in an Inline region whose parent is
+/// the addition's own region. Running the edited function still prints `first` and `5`.
+func atPure(): int spelling sync {
+    let g = graph_of(subject)
+    let sum = theSum(g)
+    let t = open(subject)
+    let made = inline(t, sum, answer)
+    let madeText = label(made)
+    let edited = commit(t) !! subject
+    let h = graph_of(edited)
+    let sumAfter = theSum(h)
+    println(`[pure] prints=${len(prints(g))}->${len(prints(h))} body=${len(bodyNodes(g))}->${len(bodyNodes(h))} sum_kept=${len(nodes(h)->filter<isSumOp>)} sum_reads=${labelsOf(inputs(sumAfter))} sum_readers=${len(value_users(sumAfter))} value=${madeText}`)
+    println(`[pure] body=${bodyText(h, sumAfter)}`)
+    println(`[pure] chain=${chainText(g)} -> ${chainText(h)}`)
+    println('[pure] the edited function runs:')
+    edited()
+    return 0
+}
+
+/// `at` is the call of a function that writes nothing: by the ruling's own words a call is a
+/// statement, and by the graph's structure it has no place of its own to take over. The reading says
+/// which one the operator followed: the call is still there, still reads `2`, and the chain did not
+/// move.
+func atCallWithoutAPlace(): int spelling sync {
+    let g = graph_of(subject)
+    let target = incCallSelector(g)
+    let t = open(subject)
+    let made = inline(t, target, answer)
+    let madeText = label(made)
+    let edited = commit(t) !! subject
+    let h = graph_of(edited)
+    let after = incCallSelector(h)
+    println(`[call] inc_calls=${len(incCalls(g))}->${len(incCalls(h))} body=${len(bodyNodes(g))}->${len(bodyNodes(h))} target_sync_in=${labelsOf(sync_inputs(target))} call_reads=${labelsOf(inputs(after))} call_feeds=${len(value_users(after))} chain_same=${chainText(g) == chainText(h)} value=${madeText}`)
+    return 0
+}
+
+/// `at` is the block's second print: a statement of the chain, so the body takes over its place. The
+/// print is gone, the exit gate is written after the body instead of after the print, and running
+/// the edited function prints `first` and no `5`.
+func atStatement(): int spelling sync {
+    let g = graph_of(subject)
+    let t = open(subject)
+    let made = inline(t, prints(g)[1], answer)
+    // The node the operator answers belongs to the transaction, not to the committed graph: read it
+    // before the commit.
+    let madeText = label(made)
+    let edited = commit(t) !! subject
+    let h = graph_of(edited)
+    println(`[stmt] prints=${len(prints(g))}->${len(prints(h))} body=${len(bodyNodes(g))}->${len(bodyNodes(h))} value=${madeText}`)
+    println(`[stmt] last=${lastTwo(h)} anchor=${anchorText(h)}`)
+    println(`[stmt] chain=${chainText(g)} -> ${chainText(h)}`)
+    println('[stmt] the edited function runs:')
+    edited()
+    return 0
+}
+
+/// `at` the same pure addition, and this time the caller writes the ordering the documentation of
+/// `inline` says is `order`'s to say: the node the splice answered with names the transaction and no
+/// program, and `order` takes a node of that draft as either end. What the splice answers with is the
+/// gate that carries the body's value out of the region it landed in, so the node the write is on is
+/// the one that gate reads; the two prints that were already there are ordered before it, and the
+/// commit is accepted -- the third print is in the graph the commit published, ordered after both.
+/// It runs as well, because design principles 3.1 makes the body's write a write of the region it
+/// landed in and that region's exit `GATE` waits for it (the author's ruling of 2026-11-20): the
+/// splice at a pure node changes nothing the block's chain says, and still prints the body's line.
+func atPureThenOrder(): int spelling sync {
+    let g = graph_of(subject)
+    let sum = theSum(g)
+    let ps = prints(g)
+    let t = open(subject)
+    let made = inline(t, sum, announcing)
+    let carried = inputs(made)
+    let bodyWrite = carried[0]
+    order(t, ps[0], bodyWrite)
+    order(t, ps[1], bodyWrite)
+    let ordered = len(order_inputs(bodyWrite))
+    println(`[order] carried=${labelsOf(carried)} ordered_after=${ordered}`)
+    let edited = commit(t) !! subject
+    let h = graph_of(edited)
+    let sumAfter = theSum(h)
+    println(`[order] prints=${len(prints(g))}->${len(prints(h))} ordered_before=${ordered} body=${len(bodyNodes(h))} sum_kept=${len(nodes(h)->filter<isSumOp>)}`)
+    println('[order] the edited function runs (the body runs: its write waits on the region exit gate):')
+    edited()
+    return 0
+}
+
+func main(): int spelling sync {
+    println('[run] subject, before any edit')
+    subject()
+    atPure()
+    atCallWithoutAPlace()
+    atStatement()
+    atPureThenOrder()
+    return 0
+}

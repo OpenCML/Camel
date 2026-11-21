@@ -497,7 +497,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
     const std::string shown  = calleeNameOf(program, root, call);
     const std::string name   = shown.empty() ? "the called function" : "'" + shown + "'";
     const InlineDeclined *no = callee ? report->find(root->name(), callee->name()) : nullptr;
-    // The budget is a parameter of the pass that ran the engine (std::opt, std::opt::inline, ...),
+    // The budget is a parameter of the pass that ran the engine (std::opt, std::cxx::inline, ...),
     // not an environment variable; the message says which pass to change when it is known.
     const std::string source =
         !report->budgetFromParameter ? std::string("the default")
@@ -508,7 +508,7 @@ explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_
         report->passName.empty()
             ? std::string(
                   "raise the budget by writing a larger growth_budget on the pass that "
-                  "inlines (std::opt or std::opt::inline)")
+                  "inlines (std::opt or std::cxx::inline)")
             : std::format(
                   "raise the budget by writing a larger growth_budget on {} (for example "
                   "{} growth_budget=8192)",

@@ -18,10 +18,10 @@ stays in the tree; the graph it builds cannot host the blocks the pass puts down
 
 [[tests]]
 name = "regions.inline_origin"
-desc = "std::opt::inline puts the body of each function it inlines in a region of kind inline, inside the region of the call, which names the function it came from (std::jgir shows them); the program still runs."
+desc = "std::cxx::inline puts the body of each function it inlines in a region of kind inline, inside the region of the call, which names the function it came from (std::jgir shows them); the program still runs."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "std::jgir"]
 expect_exit = 0
 expect_output_contains = ["\"regions\"", "\"kind\": \"inline\"", "\"inlined\": \"forward\"", "\"region\": \"g1r1\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -29,10 +29,10 @@ timeout_ms = 20000
 
 [[tests]]
 name = "regions.inline_runs"
-desc = "A program inlined by std::opt::inline, with its inline regions, runs on every back end as before."
+desc = "A program inlined by std::cxx::inline, with its inline regions, runs on every back end as before."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "${run_fvm}"]
+args = ["${case}", "std::cxx::inline", "${run_fvm}"]
 expect_exit = 0
 expect_stdout_contains = ["[8.0, 8.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -43,7 +43,7 @@ name = "regions.dot_clusters"
 desc = "std::gir_regions and std::rgir_regions draw the regions of a graph as clusters inside the cluster of its function; std::gir and std::rgir draw the same graph without them."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "std::gir_regions"]
+args = ["${case}", "std::cxx::inline", "std::gir_regions"]
 expect_exit = 0
 expect_output_contains = ["label=\"inlined forward\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -54,7 +54,7 @@ name = "regions.dot_default_unchanged"
 desc = "Without the regions option the dump has no region cluster."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
-args = ["${case}", "std::opt::inline", "std::rgir"]
+args = ["${case}", "std::cxx::inline", "std::rgir"]
 expect_exit = 0
 expect_output_not_contains = ["inlined forward"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -116,5 +116,73 @@ args = ["${case}", "test::regions", "std::nvm"]
 
 expect_exit = 0
 expect_output_contains = ["REGIONS sibling_refused=1 port=1 reader=6 arm=1 sibling=3 rule=1 named_port=1 named_reader=1", "REGIONS owner_refused=1 port=9 owner=10 region=2 rule=1 named_port=1 named_reader=1 violations=1", "REGIONS count=7 in_inner=2 in_outer=1 result=ok ports=1 within=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.orphan_owner_refused"
+desc = "A control region may not outlive the node it belongs to. `test::regions` asks that of the commit by giving a region an owner the draft then erases, which is the state a pruning pass leaves when it takes the loop or the branch away and forgets the region; the region's kind and members stay as they were, its owner is not there, and the commit refuses it, naming the region (`validateRuntimeRegions`, src/runtime/graph.cpp). No program in the tree builds that draft, so with no case this check would look the same whether it read the owner or not. The two readings are `gone=1` (the draft really erased the owner) and `rule=1 named_region=1` (the refusal is the owner's own wording and names the region, not a neighbouring rule about a port or a member)."
+kind = "behavior"
+case = "../../../cases/compile/expected_type_loop/loop_parts.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS orphan_owner_refused=1 region=1 gone=1 rule=1 named_region=1", "REGIONS orphan_member_refused=1 region=2 rule=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.orphan_member_refused"
+desc = "The other direction of the same rule: a node whose region is not there. `test::regions` retires a region and leaves a node of the draft in it; the commit refuses the graph and names the node and the region (`validateRuntimeRegions`), because a region has no member table a check could find short -- the membership is the column on the node, so that is the side that has to be read. `rule=1` says the refusal is that wording and not another one about the same draft."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS orphan_member_refused=1 region=3 rule=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.order_edge_outside_region"
+desc = "What a move into a region may be asked for, and what it may not do (docs/design/effects/edges.cn.md 4.6). `test::regions` writes an order edge from a node a part of a loop holds to a node of the body, and reads where the body's node ended up (`order_moved=0`: an order edge says when the node runs, not what it reads, so it must not carry the node into the region -- a node moved there would run once per pass of a loop it was never written in); then it gives the same pair a value edge, which is the move the region rule is for (`value_moved=1`: a node that reads a value from a region has to run in it). It then writes an order edge that reaches into a region with no owner, where there is no node to hang it on: the edge is still there after `rehomeOrderEdges` (`rehome_kept=1`) and the commit refuses the draft (`refused=1 rule=1`), naming the region whose owner does not fit its kind -- refused, never silently dropped, because an order edge dropped is an order lost (design principles 3.1)."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS order_moved=0 value_moved=1 rehome_kept=1 refused=1 rule=1", "[8.0, 8.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.branch_pruned"
+desc = "A branch whose condition is statically known is replaced by the arm it takes, and the graph that is published holds no control region of that branch: the arm regions went with it (the draft dissolves them and hands what they held to the region around, GraphDraft::dissolveRegionsOf), so nothing is left pointing at a branch that is not there. Read through `test::exec_plan`, whose REGION lines are the control regions of each graph: none is left, while the program still prints what it printed before the branch was folded."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt", "test::exec_plan"]
+
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10))
+const left = lines.filter((line) => line.startsWith('REGION '))
+assert(left.length === 0, `the dissolved branch left ${left.length} control region(s): ${left.join(' | ')}`)
+const printed = lines.filter((line) => line.trim() !== '').slice(-3).join(' | ')
+assert(printed === 'side 2 | side 2 | bd 1 1', `unexpected output: ${printed}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.table_refused"
+desc = "Every rule `validateRuntimeRegions` (src/runtime/graph.cpp) makes about the region table has a reading that is 1 only when the refusal carries that rule's own words: the body is a root, a region's parent is a region of the same table and leads to the body without a cycle, a region's ports are inside the port table, a control region names no port the graph does not have, a node's region is one the table holds, and a region names nodes the graph has. Five of the shapes cannot be written through a draft -- `addRegion` hands ids out in order and asserts the parent is below the count, `setRegionPorts` appends, the body is made as a `GCRegion{}`, and `setNodeRegion` asserts the region is below the count -- so `test::regions` builds them on the frozen record the commit validates, the way `test::edges` builds the order edge on a pure node."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS bad_body_kind_refused=1", "REGIONS parent_out_of_range_refused=1", "REGIONS root_outside_body_refused=1", "REGIONS parent_cycle_refused=1", "REGIONS ports_outside_table_refused=1", "REGIONS control_port_missing_refused=1", "REGIONS node_region_out_of_range_refused=1", "REGIONS result_ref_missing_refused=1", "REGIONS callsite_ref_missing_refused=1", "[8.0, 8.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

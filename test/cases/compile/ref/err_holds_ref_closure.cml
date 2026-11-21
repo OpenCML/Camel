@@ -1,0 +1,16 @@
+/**
+ * The same rule one layer in: a closure that holds a reference is a content that holds a reference,
+ * so putting that closure into a reference is refused. A function type does not spell its captures,
+ * so this refusal is the one that has to follow the value into the closure it is.
+ */
+
+import state
+
+func main(): int sync {
+    let n = state::ref(0)
+    let f = (): int => state::get(n)
+    let box = state::ref(f)
+    let g = state::get(box)
+    println(g())
+    return 0
+}

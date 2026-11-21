@@ -1,345 +1,86 @@
 # Branching And Merge Rules
 
-This repository uses a strict `main` / `develop` / feature-branch workflow. Follow these rules whenever you perform merges, release preparation, or branch synchronization.
-
-## Core Policy
-
-- Do not develop directly on `main` or `develop`.
-- End every release or merge workflow back on a feature branch, not on `main` or `develop`.
-- Use merge commits, not fast-forward merges, for both feature integration and release promotion.
-- Treat merge and release workflows as strictly sequential operations on shared git state.
-- Never run git write operations in parallel during merge or release work.
-
-## Feature Branch To `develop`
-
-- Merge feature branches into `develop` with `git merge --no-ff`.
-- Keep the merge commit explicit.
-- The merge commit message must summarize the integrated work itself, not merely the merge action.
-- Do not use vague subjects such as `merge: integrate xxx`, `merge branch`, or `release: merge develop`.
-- A valid merge commit subject should describe the shared product change, feature set, refactor theme, or release content that the merge introduces.
-- After the merge completes, rebase the merged feature branch so it stays synchronized with the updated `develop`.
-- After the merge, verify branch ancestry before proceeding.
-
-### A lane may not accumulate: the ten-commit rule
-
-A lane's age is measured in `develop`'s API changes, not in days. A lane holding forty unmerged
-commits is a fuse: every change `develop` makes in the code the lane also edits is a merge that has
-not happened yet, and every commit taken out of the lane by diff is a chance to miss one.
-
-The rule, and who counts what when:
-
-- **The lane owner**, before starting a new piece of work, runs
-  `git rev-list --count origin/develop..HEAD`. If it is **more than 10**, the lane merges into
-  `develop` **first** and only then continues.
-- **The lane owner**, after every merge of `develop` into the lane, runs the same count and records
-  it in the merge commit. A lane that merges `develop` in and then adds ten more commits without
-  going back has already crossed the line again.
-- **The coordinator (or the merge lane)**, when a lane is handed over, runs the same count before
-  deciding how to take it. **A lane over 10 is taken whole (`git merge --no-ff`), not by diff** —
-  taking a commit out of a long lane is how a dependency gets missed (the include that `01ff08254`
-  needed is the example on record).
-- **After any merge, the person who merged runs `git rev-list --count origin/develop..HEAD`, which
-  must be 0 — or 1 when the merge commit itself has not been pushed yet.** Anything else means a
-  commit is still outside the door, which has happened twice and was caught only by this count.
-
-A lane may be red; `develop` may not. When a lane's tip is red, take its **last commit that was
-green** and say so in the merge message, so the red's cause lands with the next commit instead of
-sitting on `develop`.
-
-### A lane squashes its own wip before it merges
-
-The author's ruling of 2026-11-02 13:30, after a whole-lane merge carried a lane's work-in-progress
-states into `develop`'s history: **"add then take back" commits are squashed by the lane into one
-complete commit before the lane merges into `develop`; force-pushing one's own lane branch is
-allowed; the merging side does not squash for the lane.**
-
-The instance on record: `796f5ae07` ("The tangent bit exists but does not yet reach the resolver: the
-closed shape is asked for and never given") and `2850834ab` ("The closed half's type answers
-`(ct) => (cotangents)`: the marker split puts on `lin`, and the red it makes") were written as
-steps inside one piece of work, and both are now on `origin/develop` (and on `fsh-dev`,
-`lane-casemig`) because the lane handed over a history that still contained them. Neither is a state
-anyone would want to bisect to or revert to.
-
-Executable form, in this order:
-
-- The **lane**, before handing over: `git log --oneline origin/develop..HEAD` and read it as a
-  history, not as a to-do list. A commit whose message describes the state *between* two finished
-  ones ("does not yet reach", "still red", "wip", "try"), or whose successor reverts part of it, is
-  folded into the commit it belongs to (`git rebase -i origin/develop`, `git reset --soft` to the
-  base, then commit once) and the lane is pushed again with
-  `git push --force-with-lease origin lane-xxx`.
-- The **merging side**, before merging: the same `git log --oneline origin/develop..origin/lane-xxx`
-  goes into the merge message, one line per commit. If a wip pair is still there, the lane is
-  returned to its owner to squash. The merger does not squash it: rewriting a lane's history is the
-  owner's act, and a merger that does it silently leaves the owner's branch and `develop` disagreeing
-  about the same work.
-
-The rule does not license rewriting history that is already on `develop`. It is about the state of
-the lane **before** the door.
-
-### A reading carries the tree, the sha, the build time and the clock
-
-A number in a report is only a number until the four facts around it are written down: **which tree**
-it was measured in (a worktree path, not "the repo"), **the sha `origin/develop` was at when it was
-fetched** (not the sha someone quoted an hour earlier), **when the binary that produced it was
-built** (the runner prints it as `binary built <timestamp>`), and **when the measurement was taken**.
-
-The instance on record: a page was priced against `95d6ab4fc` while `origin/develop` had already
-moved to `8529eb9c4`, so the "current" figure was two merges old and nobody could tell from the page
-itself. `git rev-parse --short origin/develop` **after** the fetch, pasted next to the number, is
-what settles it.
-
-### A lane's reading is not develop's number
-
-The same numbers measured on a lane tree and written as `develop`'s are wrong for every reader who
-arrives after the next merge, and they are wrong silently, because the shape of the number is
-unchanged. A lane that quotes line counts, test totals, timings or file lists says **which tree** it
-read them in; a page that needs a `develop` figure measures it on `develop` (`git show
-<develop-sha>:<path> | wc -l`, not a file in the lane's working directory) or states the lane and the
-merge base it belongs to.
-
-The instance on record: the closure page
-`docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md`
-carried six line counts measured in a lane tree and read as `develop`'s; they were off by up to 34
-lines, and one path named a file by a name two files share. The first repair put the sha and the
-command beside the numbers, and the author rejected that on 2026-11-02 05:30: **a design page or a
-handover page states rules and reasons, and a reading that moves with the code belongs in the commit
-message of the change that took it.** A sha and a command do not make such a number durable -- they
-only make a wrong number look checked. The page now states no counts at all and points at those
-commit messages.
-
-### "Green" is only green on today's `develop`
-
-A lane that reports a green suite reports it about **the `develop` it last merged in**. Five times in
-one night a lane was green and still not mergeable, because the tree it measured predated a change
-its own work would have to live with. Two checks before merging a green lane, both required:
-
-- `git merge-base --is-ancestor origin/develop <the commit to merge>` — **must succeed**. If it
-  fails, the green belongs to an older world: the lane merges `origin/develop` in, re-runs, and
-  reports again.
-- `git rev-list --count origin/develop..<the commit to merge>` — the lane's own commits, a different
-  number from how far behind it is, and both are worth knowing.
-
-One exception: a commit behind by **documentation only**, with each intervening commit named and its
-file list shown in the merge message. Documents cannot make code green or red, so the reading holds.
-Being behind by a commit that touches code is not an exception — it is the thing the check exists
-to catch.
-
-### An escaped spelling does not survive a merge that rewrites it
-
-This tree spells the same operator two ways — `..` for an interval, a composition and a stream type,
-`...` for a pack — so a regular expression written `\.\.` matches only the first of them. A text
-migration cannot see that pattern (a backslash separates the dots), so **a merge that brings a
-migrated spelling together with such a pattern silently turns a check into one that finds nothing**:
-it does not throw, it answers "no problems". Measured twice on 2026-11-04: `scripts/law-cotangent-ports.mjs`
-(`kindOfType`'s `\[\s*\.\.\]`) and `test/cases/compile/rulesets/deleted_row_reduction_helpers.mjs`.
-Before reporting a merge green, run:
-
-```
-git grep -n '\\\.\\\.' -- '*.mjs' '*.ts' '*.cml' '*.toml'
-```
-
-Each hit is read as "does this pattern still mean what it meant when it was written". A check that
-quietly finds nothing is worse than one that fails loudly, because nothing about it looks wrong.
-
-### When a ruling and a reading disagree
-
-A ruling is a decision about what the language should be; a reading is what the tree does today. They
-can disagree, and when they do, **do neither of the two easy things**: do not execute the ruling as
-if the reading were noise, and do not stop and wait.
-
-- **Take the default the page itself wrote down.** If the page that asked the question names a
-  default and a criterion for abandoning it ("if the suite drops, something calls it directly and it
-  is not a candidate"), the measurement is what applies that criterion. A reading of 508 failing
-  cases is the criterion answering.
-- **Write the conflict as a question page** and put it in `questions/`, with the reading, what was
-  tried, and the paths: the ruling stands as written in the record, and the person who ruled gets to
-  rule again knowing the number.
-- **Say in the merge or fix commit that the ruling was not executed, and why.** Otherwise the next
-  reader finds a ruling on `develop` and assumes it was carried out.
-
-The example on record: the ruling said the eleven `:op/ne_*` rows are a second implementation of
-`==` and should go. Deleting them took the suite from `8390/8374/0` to `8390/7866/508`, because
-`modules/graph/module.cpp#neKernel` builds a `__neq__` group for the types that have no `==` to fall back
-on. The rows stayed, a question page carried the reading, and the ruling's own text stayed in the
-record untouched.
-
-**The conflict ends when the ruling comes back with a path.** If the person who ruled responds with
-how to do it — change the call sites to an equivalent form first, then delete — the state is no
-longer "ruling vs reading": it is a migration with an order, and the lane does it. Move the page to
-`reviews/` at that point, because a ruled page left in `questions/` turns the index into a list of
-questions that have been answered. The example above ended exactly this way: the author answered with
-"grep for the URI, read `==` and negate, then delete", and the page went to `reviews/`.
-
-## Coordinator Workflow: Handover Branches And `wzj-dev`
-
-The coordinator's own work follows a two-step integration so the remote stays quiet and the task book's readers still see progress.
-
-- A `handover/Hxx-...` branch is a **local staging branch**: do not push it to the remote, and do not create a remote branch for it. The only remote branch that represents the coordinator's development is `wzj-dev`.
-- Merge each finished handover branch into `wzj-dev` first (`git merge --no-ff`), and promote `wzj-dev` into `develop` in batches — at least every half hour, so an AI reading `develop` sees the progress quickly. Pushing `develop` and `wzj-dev` is what makes the work visible.
-- As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
-  - `git branch -d` refuses for **two different reasons** and they print almost the same. One is that the branch's **content** is not in `origin/develop` — that is the one a human must read. The other is that the branch's **configured upstream** (`origin/<same name>`) is not merged: `warning: not deleting branch '<b>' that is not yet merged to 'refs/remotes/origin/<b>', even though it is merged to HEAD`, followed by `error: the branch '<b>' is not fully merged`. The second refuses `-d` but would pass `-D`, while the content is demonstrably in `develop` (`git cherry origin/develop <b>` all `-`, `git rev-list --count origin/develop..<b>` = 0). Do not read it as "content not merged", and do not switch to `-D`; record which of the two the message was and leave the branch for its owner.
-- `git checkout -b <lane> origin/develop` makes `origin/develop` the branch's **configured upstream**, so a later `git pull` on that branch merges `develop` **into** the lane — the direction of integration reverses, and nothing reports it. Point the upstream at the lane's own remote branch right after creating it (`git branch --set-upstream-to=origin/<lane> <lane>`; `git rev-parse --abbrev-ref '@{u}'` must read `origin/<lane>`).
-- The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
-
-## The `release` Branch: Where A Version Is Assembled
-
-- `release` is the branch a version is assembled on and the only branch a tag is made from; `main`
-  is moved to the tagged commit afterwards. It is cut from `develop` and lives one version.
-- Assemble a version there with `git merge --no-ff <develop boundary>` -- the boundary is the last
-  `develop` commit that version ships -- then write its `changes.log` section, tag, and run
-  `node scripts/setver.js <next>` for the following development version.
-- Push `release` **before** creating the tag. `.github/workflows/ci.yml` and `build-pypi.yml` run on
-  that push (about 40 minutes, in parallel), so the tag, `main` and the published wheel only move
-  once the run is green. A red run on `release` costs a push; a red run on the tag costs a
-  published version that cannot be taken back.
-- A fix that run asks for is made on `release` when it is a build, test or timing bound. A fix that
-  changes meaning is made on `develop` and `git cherry-pick -x`-ed onto `release`, so both sides
-  hold the same content and the later merge is a no-op.
-- After the tag, merge `release` back into `develop` with `git merge --no-ff release`, which is how
-  the notes, the version bump and any release-branch fix reach the next version.
-  `git merge-base --is-ancestor release develop` must be true afterwards.
-- `develop` is not a trigger of either workflow: it takes a merge every few minutes, and a leg that
-  started on it would spend 40 minutes measuring a tree nobody releases.
-
-## `develop` To `main`
-
-- Only merge `develop` into `main` when intentionally releasing a new version.
-- Merge `develop` into `main` with `git merge --no-ff`.
-- The release merge commit on `main` must summarize the released content, not just state that `develop` was merged.
-- Before merging `develop` into `main`, explicitly ask the user to confirm:
-  - the release version number to publish now
-  - the next development version number after release
-- The usual version progression is to increment the trailing component by 1, for example `v0.1.22 -> v0.1.23`, but you must still ask the user to confirm.
-- Before merging `develop` into `main`, check whether `changes.log` already contains the release notes for the pending release.
-- If `changes.log` is missing the release notes, summarize them from the relevant git commit history and prepare a `changes.log` update on `develop`.
-- Before committing that `changes.log` update on `develop`, ask the user to confirm that the proposed release-note content is appropriate.
-- The version tag is created on the `release` commit that carries the notes, once that commit's run
-  is green; `main` is then moved to that same commit, so the tag, `main` and `release` name one
-  tree. `main` is an ancestor of it (every earlier release is in `release`'s history), so the move
-  is a fast-forward; when it is not, stop and read the graph rather than forcing it.
-- The release merge commit on `main` should name the key released changes; avoid redundant action words such as `publish`, `merge`, or the branch name unless they are necessary to keep the subject clear.
-
-## Post-Release Version Bump
-
-After tagging the release on `main`:
-
-1. Switch to `develop`.
-2. Rebase `develop`.
-3. Run `npm run setver x.x.x`.
-4. Run `npm i`.
-5. Commit the version bump immediately with:
-   - `chore: update to version vx.x.x`
-
-## Final Branch State
-
-After the post-release version bump commit on `develop`:
-
-1. Switch back to the active feature branch.
-2. Rebase that feature branch.
-3. Confirm the working branch is the feature branch before continuing development.
-
-## Failure Handling
-
-- If any merge, rebase, checkout, tag, stash, or commit step fails, stop the workflow immediately.
-- Before continuing after a failure, re-check:
-  - the current branch
-  - working tree cleanliness
-  - recent commit graph for `main`, `develop`, and the active feature branch
-  - whether the intended tag points to the intended commit
-- Do not make forward progress in a release workflow based on assumptions about repository state.
-
-## Required Verification Commands
-
-For merge or release work, run and inspect these kinds of checks at the relevant points:
-
-- Current branch and worktree:
-  - `git branch --show-current`
-  - `git status --short`
-- Branch ancestry:
-  - `git merge-base --is-ancestor main develop`
-  - `git merge-base --is-ancestor develop <feature-branch>`
-  - `git merge-base --is-ancestor main <feature-branch>`
-- Short graph confirmation:
-  - `git log --graph --decorate --oneline main develop <feature-branch> -n 12`
-- Release tag confirmation:
-  - `git show --no-patch --pretty=oneline <tag>`
-
-Agents should prefer explicit verification over visual guesswork from partial history.
-
-## Practical Constraints For AI Agents
-
-- Never leave the repository on `main` after a release workflow.
-- Never leave the repository on `develop` after a release workflow unless the user explicitly says to stop there.
-- If a task involves merges or releases, read this file first and follow it exactly.
-- Do not guess release version numbers without explicit user confirmation.
-- Do not merge `develop` into `main` until both version confirmation and `changes.log` confirmation have been completed with the user.
-- Never write a merge commit subject that only describes the mechanical act of merging.
-- Never run `checkout`, `merge`, `rebase`, `commit`, `tag`, `reset`, or `stash` in parallel with another git write operation.
-
-## Collapsing a Lane
-A lane that must land as one commit is collapsed against the base it will land on, and the measurement
-that says "only my content is in it" is the **two-dot** diff, `git diff <base>..HEAD`.
-
-- **`...` (three dots) hides what you reverted.** `git diff <base>...HEAD` is the difference from the
-  *merge-base*, so a file the base changed after your merge-base appears as **your** change -- and if
-  your branch still holds the older copy, what it shows as "your edit" is in fact you putting someone
-  else's work back. Wrong: collapse a lane on a three-dot stat and push it. Right: `git diff <base>..HEAD`
-  after `git reset --hard <base>` and re-applying only the paths you own. This has bitten this branch:
-  a three-dot stat read "10 files, mine" while `reset --soft` revealed `agents/test.md`,
-  `src/execute/pass.cpp` and `src/passes/test/fault.cpp` staged as reverts of the base's newer work.
-- **Collapse by resetting to the base and re-taking your paths**, not by rewording history one commit at
-  a time: `git reset --hard <base>; git checkout <old-tip> -- <paths>`, then one commit. The tree is what
-  lands; the base's newer files are untouched because they were never in your paths.
-- **Force-push a shared lane with `--force-with-lease` only.** Another lane may have written to it, and
-  the lease is what turns "I am replacing what I saw" into a refusal when that is no longer true.
-
-## The Main Checkout Is A Read-Only Coordination Surface
-The checkout at the repository root is where merges are inspected and where a reader looks; it is not
-anyone's work tree. Before a lane starts work, `git -C <main checkout> rev-parse --abbrev-ref HEAD` must
-answer `develop`. A lane that finds itself editing a file inside that checkout stops, stashes what it
-wrote, and redoes the change in its own worktree -- a stash is not a rescue, it is a way to keep the
-work while the checkout goes back to being readable. Six times in one night this surface was written
-into from somewhere else: a reformatted header, a broken replacement in `graph_read.cpp`, a duplicated
-probe diagnostic, a zero-byte `cml.cpp`, and once eight files plus a branch other than `develop`. Each
-time the diff had to be recovered from the wreckage before anyone could say whether it was work or a
-repeat of work that had already landed.## The Merge Lane Is A Standing Slot
-
-One work slot is reserved for merging, always. It is not "the next free slot" — it is a slot
-that stays open so that a merge never has to wait, and so that a merge never runs inside the
-coordinator's own session.
-
-### Why it is reserved rather than scheduled
-
-A merge is the only operation that touches shared git state: `--no-ff`, conflict resolution,
-a full gate, a push. Those are long. When they run inside the coordinator's session, the session
-cannot answer anything else for their whole duration — a ruling, a new reading, a lane that
-finished, a question page that arrived. The cost is not the merge's runtime; it is everything
-that was not answered while it ran.
-
-So the merge is handed to a lane and the coordinator stays free. A lane that reports after
-twenty minutes costs nothing, because the coordinator was answering other things in the
-meantime. A merge that runs in the session costs twenty minutes of everything.
-
-### What counts as a merge-lane job
-
-- Integrating one or more finished lanes into `develop` (`--no-ff`, no rebase, no force).
-- Resolving conflicts, judged by content: docs keep both sides, code keeps both cases.
-- The full gate on the tree that will be pushed, and proof that the pushed tree is the gated
-  tree — same tree hash, not a verbal assurance.
-- Reverting something the gate proved broken, and gating the revert.
-- Pushing a lane branch, or `develop`, and verifying the remote ref afterwards.
-
-### What does not
-
-- Deciding whether a red is debt or a regression — that is a judgement on readings.
-- Writing a question page.
-- Anything that can be answered by reading an existing `[SUMMARY]`.
-
-### The rule, stated as a test
-
-> If an operation will take longer than a few minutes and it writes shared git state, it goes
-> to the merge lane. The coordinator does not hold a lock on the session to do it.
-
-A corollary that has already paid for itself: **a lane may finish its own work and then be
-re-tasked as the merge lane.** The slot is defined by the job, not by a fixed agent.
+This repository uses `main` for releases, `develop` for integration and feature branches for work. Branch and merge operations are stateful and sequential: inspect the repository before each step and stop after an unexpected result.
+
+## Core policy
+
+- Do not develop directly on `main` or `develop` unless the user explicitly asks for integration there.
+- Start feature branches from the current `origin/develop`. Do not create additional worktrees unless the user explicitly requests one.
+- Integrate with `git merge --no-ff`; do not fast-forward, rebase shared history or force-push shared branches.
+- Never run checkout, merge, rebase, commit, tag, reset or stash concurrently with another Git write operation.
+- End integration work on a feature branch, not on `main` or `develop`.
+- A merge commit describes the integrated content, not merely the act of merging. Do not use subjects such as `merge branch` or `update`.
+
+## A Lane's Checkout Belongs To The Lane
+- **Merging a lane's branch does not end the lane.** A lane that has been merged keeps reading, re-recording and writing back, and a checkout removed while it works produces a failed write and no other signal. On 2026-11-18 a checkout was removed after its branch merged; the lane's next AST re-record answered `Could not find a part of the path ...ast_hashes.txt`, and only that message said anything was wrong. Nothing was lost, but nothing would have said so either.
+- **Remove a checkout only when the lane has reported and stopped**, or when its tree is clean and no process holds it. `worktree remove` refusing a directory with `Permission denied` is a file still open, not a dirty tree: the tree was clean. Treat the refusal as "someone is working" and leave it.
+- **A lane does not amend a commit it did not write.** An `--amend` aimed at a lane's own last commit landed on the integration merge that had just been made into its branch, rewriting the coordinator's sha. It was restored with `reset --soft` and the intended change committed separately, so nothing was lost -- but the window existed because `--amend` takes whatever is at the tip. Amend only a commit you made, and check the tip's subject before you do.
+- **A merge lane is a lane, and it needs a checkout of its own.** Two merge lanes were dispatched one after the other; both were told to work in the same directory. The second checked out its own branch twenty seconds after the first started, and then merged its lane on top of the first's commit. Nothing was lost -- the resulting tree contained both merges, and the second lane said so unprompted, including which sha its readings had come from -- but three things were true at once and only the last was noticed in time: the first lane's criteria were read on a tree that was no longer its own, the second lane's merge had a parent it had not created, and the published commit was a combination nobody had been briefed to produce. **Give each concurrent merger its own worktree, and when two lanes have touched one directory, re-read `rev-list --parents` before publishing rather than trusting the sha you last wrote down.** A collision of this kind is quiet because both lanes are doing exactly what they were told; the telling was the error.
+
+## Before integrating a lane
+
+1. Check `git status --short --branch` and confirm the intended base and clean worktree.
+2. Read `git log --oneline origin/develop..<lane>` and `git diff --stat origin/develop...<lane>`. Identify unique content and conflicts rather than relying on the branch name. **Then read the bodies, not only the subjects.** A commit whose message says not to merge it has not been overtaken by the fact that merging it is now convenient. On 2026-11-16 `3773eed5c` carried `DO NOT MERGE THIS BRANCH YET ... This branch waits until the three families are fixed`, reached `origin/develop` anyway, and left twenty-one tests red in three families -- one of them a write to a captured name that produces no node and no diagnostic, so the program compiles, runs, prints its value and says nothing. The merger had checked content, diff shape and blob identity, and **none of those three asks what the author of the commit intended**; the statement was in the body the whole time. To merge such a commit, first delete the sentence in a new commit and say there why the reason no longer holds -- the message is the only place that intention is recorded, so a merge that ignores it deletes the record without replacing it. The author's ruling of that day also requires the twenty-one to be listed one by one in the baseline as brought in by that commit and pending, so that `new red = 0` keeps meaning what it says.
+3. Use `git merge-tree --write-tree origin/develop <lane>` to preview the merge result and conflicts. Patch-equivalence alone is not proof that content is present or missing.
+4. Check whether the branch is already integrated or superseded. `git branch --merged`, ancestry and the resulting tree answer different questions; use all of them as appropriate.
+5. Run the relevant tests and the fast acceptance layer on the actual merge result. A lane may be red; `develop` may not.
+
+A lane with more than ten unique commits is taken as a whole with `--no-ff`, not split by file or cherry-picked piecemeal. Do not incorporate WIP pairs whose second commit merely undoes the first. The lane owner may collapse such work before integration and force-push only that lane with `--force-with-lease`; the merger does not rewrite it.
+
+## Merge and verification
+
+- Merge sequentially, checking branch and worktree state after every operation. If a command fails, inspect the graph, status and recent commits before proceeding; do not repeat it blindly.
+- Resolve conflicts by meaning. Documentation retains both applicable current statements; code retains every valid case without reviving an outdated implementation.
+- Run conflict-marker, diagnostics and documentation checks, relevant plans, and the fast layer. Name the tested commit in the report.
+- **Push each merge in the same step that makes it.** The shape to avoid is not "pushing late", it is merging faster than pushing: a local run's readings carry no `ls-remote` backing, and a gate result on an unpushed commit cannot be quoted. A merge is finished when it is pushed -- `git rev-list --count origin/develop..HEAD` above 2 means an earlier merge was not.
+- **Never rewrite a pushed commit on `develop` -- no amend, no rebase, and no `--force-with-lease` either**, unless the owner asks for exactly that. A published sha is a name other things refer to: hand-written ledgers, `git notes` bodies, another lane's recorded base, a report someone already quoted. Rewriting replaces the name and leaves every reference pointing at an object nothing contains -- and the object is unreachable from then on, so it does not merely become old, it stops existing. **The rule follows from what a message can express, not from how bad the mistake was: anything an amended message can say, a new commit can say better**, because the new commit keeps both steps visible -- what was written first, and what replaced it. The precedent is a question page whose original advice the author's ruling overtook: it was restored, corrected in place and given a new commit, so a reader sees the road that was abandoned beside the road taken. Amending would have shown only the second.
+- **Name the tree the reading came from, and only trust what can name it.** The gate's own `[provenance] tip <sha7> | tier <tier> | jobs <n>` line is the evidence; `out/latest/build-info.json` in the *main* checkout is not, because the main checkout is usually not the tree that was built -- on 2026-11-15 it held `revision=b72d59535e52, builtAt=2026-11-12` while the gate was measuring `b55283c43` on another host. The same file is fresh in a lane's worktree, where the build happened. **Same filename, two different levels of trust: quote the stamp only from the tree that was built, and quote `[provenance]` for every gate reading.**
+- **Nothing writes to the main checkout while a gate is measuring it.** On 2026-11-15 a documentation commit landed in the main checkout while the merger's `--changed` was starting; the gate's own guard refused with `1 dirty file(s)` and exit 4, which was correct -- the coordinator's timing was not. Documentation commits by anyone else wait for a gap between two readings, because `camel-remote.ps1` transmits the working tree, not `HEAD`.
+- **A lane's worktree belongs to the lane, and to nobody else, coordinator included.** On 2026-11-15 the coordinator made three writes into state another agent owned: a documentation commit into the main checkout mid-gate, a `git branch -d` on a branch the merger was finishing, and a commit pushed into a measurement lane's worktree while that lane was still running. Each time the other agent reported the write as an unexplained concurrent actor, and each time the guard it blamed had in fact been right. **The cost is not the lost keystroke: it is that a correct guard gets recorded as broken, and the next reader stops believing it.** Whoever owns a path is the only writer; if the coordinator needs a page from a lane's tree, the lane commits it.
+- **Run git in a registered worktree, or read about another repository.** A directory under the worktree root with no `.git` of its own does not stop git: it walks up and answers about whatever repository is above it. On 2026-11-15 a lane whose directory had been deregistered reported `branch=master`, `HEAD=a44c193`, `M camel-remote.ps1` -- none of which exist in this project; the parent directory happened to be its own one-commit repository with a copy of `camel-remote.ps1` in it. **The reading looked exactly like this project's**, complete with a dirty file, and it was about a different repository. Check `git rev-parse --show-toplevel` before trusting any status reading, and treat a missing `.git` as "this is not my tree" rather than as a clean tree.
+- Verify ancestry with `git merge-base --is-ancestor <integrated-tip> develop`. Check `origin/develop` separately when reporting what has or has not been pushed. **"Merged" is a verdict about a base, so say which base.** `git branch -d` judges against `HEAD`, not against `origin/develop`, and the two disagree: on 2026-11-16 a lane deleted a measurement branch whose tip was an earlier commit of its own branch, and `-d` took it -- "deleted (was `bb5591de2`)" -- because from `HEAD` that commit is reachable, while against `develop` it was not merged at all. The coordinator had predicted a refusal and told the lane to report which kind, and there was no refusal to report. **A branch that is safe to delete under one base is not safe under the other**, so name the base before the word, and neither `-d` nor `-D` announces which one it used.
+- **A lane refreshes at two moments only: when it starts, and when it is asked.** Synchronize by merging `origin/develop` into the lane, never by rebasing a pushed lane -- but do not chase `develop`. A lane that merges again every time `develop` moves never catches up, and each of its merges leaves every other lane further behind: on 2026-11-16 the coordinator's `maxBehind` rose from 105 to 124 and back to 114, and part of that rise was lanes refreshing each other. A refresh is the merger's cost to pay, one `git merge origin/develop` before its own short run, not the lane's.
+- **A report names the tree its readings came from, not how current it is.** `[SUMMARY]` numbers and the test names beside them are quoted with the commit they were taken on ("`ffb2a33ca`, the merge of `789129985`") and never as "I merged to the latest": a reading without a tree name and a reading with one look identical in someone else's quotation, and only one of them survives being quoted.
+- **Never `git stash`: the stash is one stack for the whole repository, shared by every worktree.** On 2026-11-15 two lanes working in different worktrees each ran `git stash push` / `pop`; each popped the other's entry, and one lane's source changes were briefly replaced by the other's files in the other's worktree. Nothing was lost, and that was luck: a `pop` takes the top entry, so whoever runs it next gets the most recent stranger's work. To set work aside, write `git diff > <file>.patch` (and say where it is). An entry someone else left in the stack -- on 2026-11-15 a 74-file, 1985-line WIP -- is not yours to pop, drop or reorder.
+- Do not push `main`, `develop`, a release branch or a tag without the user's authorization. Local integration and remote publication are different actions.
+
+## Who guards a plan
+
+"Is it guarded?" has three answers, and each one has to be able to name itself; **the hole is the thing none of the three names.**
+
+- **The selection rules** (`test/plan-selection.json`): `--changed` reaches it because a rule ties the changed file to this plan. Naming the rule is part of knowing it is guarded.
+- **Direct calls in the gate** (`internal/tools/camel-remote.ps1`): some checks are in no plan at all -- `check-plan-fields`, `check-doc-links`, the generated-reference checks -- because the gate itself runs them on every measurement. **"Not in the `--changed` selection" does not mean "not guarded"**; it means the guard is somewhere else, and that place has to be named.
+- **Named runs on a schedule** (see "Plans no change selects" below): the plans no rule selects and the gate does not call, which exist only because someone runs them by name.
+
+A green `--changed` run says the selected plans passed, not that the tree is good. On 2026-11-15 a scheduler change passed its selection at 1356/1352 while nine tests were red on the pushed `develop`, because no rule tied that file to a plan whose objects die differently -- **that is exactly the shape of a thing none of the three layers names**, and it is why each layer has to be able to say what it covers instead of being assumed to cover everything.
+
+> 三层都说不出名字的那个东西，就是拿 `1356/1352` 当「树是好的」那一刻的真实情形。 —— the owner, 2026-11-15
+
+## Plans no change selects
+
+Some plans are deliberately unreachable from `--changed` (`test/plans/perf/**`, the GC-stress plans; see `test/plan-selection.json` and `docs/test-plans.md`, "Selecting Plans From A Change"). That is allowed, and it has one condition: **something must name them on a schedule, or the ledger cannot tell "deliberate" from "forgotten".** A plan no change selects is a plan whose red is invisible until someone goes looking, and `perf/showcase_c2` sat red that way.
+
+- Run the unselectable plans **once each time the merge queue empties**, and report the reading with the commit it was taken against. It does not need to be every night, and it does not gate a merge; it needs to happen often enough that a change in its message is noticed within a day or two.
+- Read them on the build host, not on a workstation: the same case measured 300 s and 600 s (both timeouts) locally and 1.87 s / 2.07 s on the build host. **A difference of two orders of magnitude means "hangs on that platform", not "slower"**, and a timeout there is a platform finding rather than a defect until proved otherwise.
+- Report `killed by a signal` and `timed out` beside `fail` whenever they are non-zero; both are absent from `[SUMMARY]` when zero, so "the suffix did not appear" is the reading.
+
+## Closing and preserving branches
+
+- Delete only branches whose content is integrated or demonstrably superseded. First create `archive/<name>` pointing at the old tip.
+- Use normal deletion for merged branches. Do not use `-D` to force deletion merely because a branch is unmerged; investigate the remaining content first.
+- **`-d` answers two different questions depending on a remote.** For a local branch with a same-named branch on `origin`, `-d` compares against that remote, not against `develop`: a lane branch that was pushed but never merged is reported as `merged to refs/remotes/origin/<name>, but not yet merged to HEAD` and then **deleted, exit 0**. On 2026-11-16 this deleted `lane-capturewrite`, whose four commits were still queued for merge; it was rebuilt from `308129030` and nothing was lost, but only because the tip sha had been recorded beforehand. So `git branch --merged origin/develop` is not the check that protects you here, and neither is the exit status: read `git rev-list --count origin/develop..<branch>` before deleting, and record the tip sha beside the name so a surprise deletion is reversible. A guard that reports success while removing unmerged work is worse than a guard that refuses.
+- Do not delete probes, owner-only refs or a branch still used by another worktree. `hold/fsh-dev` and `release` require an explicit owner decision.
+- A branch with no new content does not need a merge commit. Archive it instead of reintroducing old code or old question pages.
+- **A carrier branch says who consumes it and when it dies.** Some branches are not "in flight" and not "merged": part of the work must not land (a rework whose rule the owner then withdrew) while part of it must (the cases that become the acceptance criteria of the change that replaced it). Keep it under `hold/<name>`, excluding it from the in-flight count `U` and counting it separately as `H`. Its tip must say, in a place a reader will find -- a note on the branch tip or the commit it points at -- **which item consumes it and that it is deleted when that item lands**. Without that sentence it may not exist. `H > 3`, or a `hold/` branch behind `origin/develop` by more than 50 commits, is a decision point: take the content, or discard it and record one sentence naming what replaced it. **Parking is allowed; parking without an expiry date is how a parked branch becomes permanent junk** -- and the hygiene numbers cannot tell the two apart, because `U`, `maxBehind` and `branch --merged` all assume a branch is either merged or in flight.
+
+## Release assembly
+
+`release` is the only branch used to assemble a version. It is cut from `develop` and lives for that version.
+
+1. Merge the intended `develop` boundary into `release` with `--no-ff`.
+2. Before a `develop` to `main` release merge, explicitly confirm the version to publish, the next development version and the `changes.log` release-note content with the user.
+3. Push `release` before tagging so CI can build and test it. Fix build/test-only issues there; semantic fixes belong in `develop` and are cherry-picked with `-x` onto `release`.
+4. After a green run, create the tag on `release`, then move `main` to that commit. Do not tag `main` separately.
+5. Merge `release` back into `develop` with `--no-ff` and verify `git merge-base --is-ancestor release develop`. Apply the next development-version bump and return to a feature branch.
+
+Do not guess release versions, rewrite release history, or publish from an unverified commit. A red release run blocks the tag.

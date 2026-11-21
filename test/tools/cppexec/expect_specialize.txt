@@ -1,0 +1,21 @@
+# Programs whose translation by std::cpp, *after* `std::cxx::specialize`, must build, run and agree
+# with std::fvm (standard output and exit code). Read by
+#   python3 test/tools/cppexec/run.py --passes std::cxx::specialize --expect <this file>
+# which the plan test/plans/feat/trans/cpp.plan.toml runs as
+# `rc19_seed70_builds_after_specialize`.
+#
+# It is a list of its own because the pass is the trigger, and `--passes` applies to the whole list:
+# mixing one specialize program into test/tools/cppexec/expect.txt would hand that pass to the 174
+# programs that are asked about with no pass at all, and their claim -- what the writer does to the
+# graph the front end built -- is a different reading.
+#
+# Keep it small: every entry is one C++ compilation.
+#
+# rc19_seed70: `std::cxx::specialize` binds `false` into `f1`'s first parameter, so the copy takes
+# two arguments and the call passes two. The writer read the callee's declared parameter list by
+# position, which still stated the erased one, and spelled the closure at the last position with its
+# predecessor's type -- `rt::Fn<int64_t(double)>` where the definition takes
+# `rt::Fn<bool(rt::Str, int64_t)>`. clang refused the text: "no matching function for call to 'f1'",
+# "no known conversion from 'Fn<int64_t (double)>' to 'Fn<bool (rt::Str, int64_t)>' for 3rd
+# argument" (cell `p03_+specialize|std::cpp` of the E9 differential, 500 seeds).
+test/cases/opt/e9/rc19_seed70.cml

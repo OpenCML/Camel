@@ -30,8 +30,38 @@ NodeRoleRegistry::NodeRoleRegistry() {
                  return std::nullopt;
              }
              const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
-             if (camel::core::OperatorTable::instance().isPure(body->oper)) {
+             const auto &table = camel::core::OperatorTable::instance();
+             if (table.isPure(body->oper)) {
                  return std::nullopt;
+             }
+             // A higher-order operator is no effect of its own: what it touches is the function
+// the program hands it (design principles 3.3), read through
+             // `functionValueClause` the way a call through a value is. A type that writes no
+             // clause keeps the conservative answer: ordered, never folded away.
+             if (const auto *facts = table.semantics(body->oper);
+                 facts != nullptr && facts->resources && facts->resources->functionOperand) {
+                 const auto &where = *facts->resources->functionOperand;
+                 if (where.kind == core::sem::ResourceBinding::Kind::Norm ||
+                     where.kind == core::sem::ResourceBinding::Kind::With) {
+                     const auto operands = where.kind == core::sem::ResourceBinding::Kind::Norm
+                                               ? graph.normInputsOf(ref)
+                                               : graph.withInputsOf(ref);
+                     const core::type::FunctionType *value = nullptr;
+                     if (where.index < operands.size()) {
+                         const GCNode *operand = graph.node(operands[where.index]);
+                         if (operand != nullptr && operand->dataType() != nullptr &&
+                             operand->dataType()->code() == core::type::TypeCode::Function) {
+                             value = static_cast<const core::type::FunctionType *>(
+                                 operand->dataType());
+                         }
+                     }
+                     if (const auto clause = core::functionValueClause(value)) {
+                         if (clause->pure()) {
+                             return std::nullopt;
+                         }
+                         return std::string(body->uri());
+                     }
+                 }
              }
              return std::string(body->uri());
          }});

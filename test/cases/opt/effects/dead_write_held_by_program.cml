@@ -1,0 +1,19 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The write keeps what it wrote: the module's own cell is a place the graph names, so a rewrite
+// may not leave the write behind even when nothing reads it. `x * 0 => 0` folds away the write's
+// only reader and the closure prints the 41 all the same (design principles 9.7).
+
+var total: int = 0
+
+func bump(k: int): int sync {
+    let w = (total = k) * 0
+    return w + k
+}
+
+func main(): int sync {
+    println(bump(41))
+    println(total)
+    return 0
+}

@@ -9,11 +9,10 @@
  *   specType          T<arguments>
  *   primaryType       name, {struct}, (T), (tuple), function type, typeof e
  *
- * A type never continues with an operator. The type operators the grammar used to reserve here
- * (`A & B`, `A \ B`, `A + B`, `A ^ B`) are not in the language, so writing one where a type is
+ * A type never continues with an operator. The type operators (`A & B`, `A \ B`, `A + B`,
+ * `A ^ B`) are not in the language, so writing one where a type is
  * expected is an ordinary syntax error, and the operand of a cast ends at the type: `x as T + U`
- * is a cast to `T` and then the expression's `+ U`. While the operators were reserved the same
- * line read that the other way, keeping the operator for the type when a type could follow it.
+ * is a cast to `T` and then the expression's `+ U`.
  */
 
 #include "parser_impl.h"
@@ -66,9 +65,9 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
 /// SemanticDiag::StreamInContainer). Written without a stream mark nothing changes: `T?[3]` is
 /// still a syntax error, and only the mark that was just read reopens the bracket.
 ///
-/// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
-/// language, so the form is an ordinary syntax error. The type
-/// operators `A & B`, `A \ B`, `A + B` and `A ^ B` left the grammar the same way.
+/// `A of B` is not read here: `of` is not a keyword of the
+/// language, so the form is an ordinary syntax error, as are the type
+/// operators `A & B`, `A \ B`, `A + B` and `A ^ B`.
 void ParserImpl::parseType() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -254,7 +253,11 @@ void ParserImpl::parseMatchTypeType() {
     close(m, NK::MatchTypeType);
 }
 
-/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
+/// A case of a type function's `match type` takes the guard a value-level `match` case takes
+/// (design principles 5.5): `case _ when is_numeric::<T>() => int[0]` is
+/// taken only where the predicate holds, and a case whose guard does not hold falls through to
+/// the one written after it.
 void ParserImpl::parseTypeArm() {
     const size_t m = mark();
     bump(); // case
@@ -262,6 +265,9 @@ void ParserImpl::parseTypeArm() {
     while (cur_ == TK::Pipe && !panic_) {
         bump();
         parseTypeCasePattern();
+    }
+    if (!panic_ && atWord(0, "when")) {
+        parseWhenClause();
     }
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
@@ -307,20 +313,19 @@ void ParserImpl::parsePrimaryType() {
         } else {
             parseLogicalOr();
         }
-        return close(m, NK::TypeOfType);
+        return close(m, NK::TypeOfExpr);
     }
     case TK::LParen: {
         const TK t1 = peek(1);
-        if (!typeHead &&
-            (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
-             (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
-             (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
-              peek(4) == TK::FatArrow) ||
-             (t1 == TK::Ellipsis && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
-              peek(4) == TK::FatArrow) ||
-             (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
-             (t1 == TK::Ellipsis && parenClosesBeforeArrow()) ||
-             (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
+        if (!typeHead && (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
+                          (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
+                          (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
+                           peek(4) == TK::FatArrow) ||
+                          (t1 == TK::Ellipsis && peek(2) == TK::Identifier &&
+                           peek(3) == TK::RParen && peek(4) == TK::FatArrow) ||
+                          (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
+                          (t1 == TK::Ellipsis && parenClosesBeforeArrow()) ||
+                          (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
         const size_t m = mark();
@@ -405,34 +410,59 @@ void ParserImpl::parseFuncType() {
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }
-    if (atWord(0, "uses") || atWord(0, "pure")) {
+    if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {
         parseResourceClause();
     }
     close(m, NK::FuncType);
 }
 
-/// resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+/// resourceClause : 'spelling'? ('uses' usesEntry (',' usesEntry)* | 'pure')*
 ///
 /// What a function type says about the resources a call touches (design effects plan 3.1):
 /// `pure` says none; `uses` names parameters (the values a call touches) and resources
-/// (ambient state, a module's resource, or a group of them). `uses` and `pure` are contextual.
-/// A `pure` followed by a `uses` is read here and refused when the clause is compiled
-/// (PureAndUses), so the error names the two words rather than the token after them.
+/// (ambient state, a module's resource, or a group of them). `spelling` is the clause's leading
+/// word and says something of the same kind (design principles 9.5): the body may read the
+/// spelling of the program -- a name, a source position, creation order and creation numbers, the
+/// text a node shows -- which is a capability rather than an effect, so it is written in this
+/// clause and carried by the same type. It is leading for the same reason `pure` is: the AST
+/// reads both as the clause's own text, and a resource may legitimately be named `spelling`
+/// (`uses spelling` names one). `uses`, `pure` and `spelling` are contextual. A `pure` followed by
+/// a `uses` is read here and refused when the clause is compiled (PureAndUses), so the error names
+/// the two words rather than the token after them.
 void ParserImpl::parseResourceClause() {
     const size_t m = mark();
+    if (atWord(0, "spelling")) {
+        bump();
+    }
     while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {
         if (atWord(0, "pure")) {
             bump();
             continue;
         }
         bump(); // `uses`
-        parseIdentRef(NK::IdentRef);
-        while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+        parseUsesEntry();
+        while (cur_ == TK::Comma && (peek(1) == TK::Identifier || peek(1) == TK::KwVar) &&
+               !panic_) {
             bump();
-            parseIdentRef(NK::IdentRef);
+            parseUsesEntry();
         }
     }
     close(m, NK::ResourceClause);
+}
+
+/// usesEntry : 'var'? identRef
+///
+/// One resource of the clause, written the way a parameter is (design principles 3.3): without
+/// `var` the call reads it, with `var` it writes it. `var` is a reserved word, so an entry that
+/// starts with it can only be the written one; a resource whose name is `var` cannot be named in
+/// a clause, as it cannot be named anywhere.
+void ParserImpl::parseUsesEntry() {
+    const size_t m = mark();
+    if (cur_ == TK::KwVar) {
+        bump();
+    }
+    parseIdentRef(NK::IdentRef);
+    close(m, NK::UsesEntry);
 }
 
 /// typeList : typeExpr (',' typeExpr)*

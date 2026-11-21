@@ -1,0 +1,211 @@
+id = "compile.region_roots"
+order = 1012
+tier = "fast"
+tags = ["feat", "compile", "effects", "regions"]
+desc = "The roots a region has (design principles 3.1): a write to a resource outside the program runs because the region it is written in runs."
+
+# Design principles 3.1, "区域的根" (docs/design/effects/analysis.cn.md 3.4, `regionRoot`): a write to a
+# resource outside the program is used by the region it is written in, so a running region runs it
+# although nothing reads what it produces. The author's ruling of 2026-11-15 names this case first
+# ("非同步函数里的打印不执行"): with `main` not written `sync`, its three prints printed nothing and
+# reported one warning per line, a warning that is gone: a statement that does not run is not reported at all.
+#
+# The rule is read from the resource a write names and never from the operator's name, so the second
+# case writes `rng` through `seed` rather than the console. The two remaining cases are the boundary:
+# the warning is not silenced -- it names what really does not run (a region whose owner runs
+# nothing, and a read nothing needs).
+
+[[tests]]
+name = "region_roots.plain_body"
+desc = "A body that is not a sync block holds three bare prints: a running region runs the writes it holds, so all three run in the order they are written and nothing is reported. The four back ends print the same bytes."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/plain_body.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "alpha\nbeta\ngamma\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.plain_body.default"
+desc = "A body that is not a sync block holds three bare prints: a running region runs the writes it holds, so all three run in the order they are written and nothing is reported. Pipeline: default (interpreter)."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/plain_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "alpha\nbeta\ngamma\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.resource_write"
+desc = "The rule is by resource, not by operator name: `seed` writes the generator `rng` and is a bare statement of a body that is not a sync block, and the key the body draws from it is the one the seed gave."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/resource_write.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "keys agree\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+[[tests]]
+name = "region_roots.a_loop_that_writes_runs"
+desc = "A loop written in a body is one of that body's writes when what runs inside it writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the loop runs even though nothing needs its value: three rounds, three lines, no diagnostic. It used to be the negative case next door -- the loop nobody needed was not started and the warning named it -- and the ruling removed the reading that made a loop's running conditional on its value being read."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/dead_loop.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "round\nround\nround\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `a loop that writes runs because its region's GATE reads it, so nothing is reported, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement"
+desc = "A branch written as a statement runs with the region it is written in (design principles 3.1, 3.7): an `if` without `else` has no value, so nothing can need it into the execution and nothing can leave it out of one, and the external writes in the arm it takes are roots of that arm. In a body that is not a `sync` block the whole branch -- the arm that is taken and the print in it -- used to be dropped from the graph and reported, while the same branches in a `sync` body ran all along. The arm the branch does not take still does not run, a `match` written as a statement runs its case, a branch written inside another one's arm waits for the outer arm, and a branch whose value is taken reads as it did."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "then\na\nb\ntwo\ndeep\n1 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(!input.normalized.stdout.includes('never'), `the arm of 'if false' does not run: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement_kinds"
+desc = "What an arm of a branch written as a statement holds, side by side (design principles 3.1, 3.3): `println` runs as a root of the arm's region, `state::set` written as the arm's value runs because the JOIN reads that value, an assignment to a `var` is not an effect and makes the variable 2 as the arm's value says (the ruling of 2026-11-15), and a pure computation runs nothing and reports nothing. The body is not a `sync` block, which is the shape the branch's running was missing."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement_kinds.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "5 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement_untaken"
+desc = "The reverse judgement on the same rule (design principles 3.1; the author's `R2`): the arm of `if false` is not taken, so its write does not run -- and nothing is reported either, because the branch itself runs and its arms are regions of a branch in the execution. An arm that is not taken is a choice not taken, not an effect dropped; the same program with a `sync` body has always read this way, and the two readings now agree. What the warning still names is a region that does not run at all, which `region_roots.dead_loop` and `region_roots.read_only` pin."
+kind = "negative"
+case = "../../../cases/compile/region_roots/branch_statement_untaken.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `the arm of 'if false' does not run, so nothing is printed, got: ${out}`)
+assert(input.diagnostics.length === 0, `the branch runs, so the arm it does not take is no dropped effect: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_value_dropped"
+desc = "The shape that still does not run, next to `region_roots.branch_statement`: a branch whose value is taken by nobody -- `let unused = if ...` -- is not a statement of its body, so the write in the arm it would take does not run with it (design principles 3.1, 3.7; the author's `R2`: no arm is executed by a branch that does not run). What tells it from `branch_statement.cml` is the value the branch joins: one that joins no value at all is a statement of its region and runs; one that joins a value nobody reads is not. Nothing is printed and nothing is reported: the statement that does not run is what the ruling of 2026-11-17 leaves to the graph, and what a program gets for a value nobody takes is a warning about that value (`UnusedAssignedValue`), not one about an effect that failed to run."
+kind = "negative"
+case = "../../../cases/compile/region_roots/branch_value_dropped.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `nothing runs: ${out}`)
+assert(input.diagnostics.length === 0, `nothing is reported, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement_condition"
+desc = "The condition of a branch statement does not decide whether the branch is one (design principles 3.1, 3.7): a branch written as a statement is one whatever its condition holds -- a literal, a parameter, an operator or a call -- and the arm it takes runs. The mark that says `the value of this statement nobody takes` used to be cleared while the condition's own operators were built and never put back, so a branch behind `x > 0` or `positive(x)` was lowered as a branch that joins a value (its JOIN carried `string`, not `void`) and dropped from the graph again, while `if true then ...` in the same body ran. Which of the two a program got was a property of how its condition was written, and no property of the program."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement_condition.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "pos\nneg\npositive\nnot\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.read_only"
+desc = "The boundary of the rule, and why the predicate is a write and not an effect: a read of an outside resource is a dependency like a read of a variable, so `get_env` with nobody needing its value does not run. Nothing is printed and nothing is reported -- the diagnostic that used to name it went with the region roots (the ruling of 2026-11-17), and a read that does not run leaves no value behind to warn about."
+kind = "negative"
+case = "../../../cases/compile/region_roots/read_only.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `nothing needs the value, so nothing is printed, got: ${out}`)
+assert(input.diagnostics.length === 0, `nothing is reported, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+# The writing-freedom reading of the same rule (design principles 3.1, the author's ruling of
+# 2026-11-17): the writes of a region are the inputs of its one `GATE`, and no edge joins them, so
+# two writings that put two writes to two different resources in the two possible orders are **one**
+# canonical document. Read by `test/tools/writing-freedom.mjs`; the two cases are
+# `test/cases/compile/region_roots/write_order_{print,seed}_first.cml`.
+#
+# It is the reading the rule it replaces could not produce: chaining the writes into the region's exit
+# made the second write wait on the first, so swapping the two lines changed the graph. And it is the
+# half `region_roots.resource_write` cannot see: that case says the write runs, this one says it is not
+# ordered against the other.
+[[tests]]
+name = "region_roots.writing_freedom_of_two_writes"
+desc = "Two writes of one body to two different resources, written in the two possible orders, are one canonical graph: the region's writes are siblings -- the inputs of one `GATE` -- and neither is ordered against the other (design principles 3.1, 3.4)."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "region_write"]
+expect_exit = 0
+expect_stdout_contains = ["expect=same-graph", "[graph] seed_first same_graph"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

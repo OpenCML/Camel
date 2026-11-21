@@ -85,6 +85,8 @@ struct DefinitionGraph {
     /// The function's graph (what it calls is reachable from it), and the program that holds
     /// them.
     GCGraph *graph = nullptr;
+    // program-holder-exempt: kept-by-another-root -- the store pins it for the context's
+    // lifetime (Context::pinRuntimeProgram, definitions.cpp).
     const Program *program = nullptr;
     /// portableGraphHash of the graph: what it computes, in a form that is the same in every
     /// process. A change of the definition changes it.
@@ -110,6 +112,8 @@ class DefinitionStore {
     /// library are computed before the function runs (design principles 10.1). Its signature is
     /// the function's.
     struct LibraryFunction {
+        // program-holder-exempt: kept-by-another-root -- the store pins it for the context's
+        // lifetime (Context::pinRuntimeProgram, definitions.cpp).
         const Program *program = nullptr;
         GCGraph *graph         = nullptr;
     };

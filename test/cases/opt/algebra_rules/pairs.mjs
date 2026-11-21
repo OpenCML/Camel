@@ -1,5 +1,5 @@
 // The graphs of the divergence corpus, node by node and edge by edge, against the reference mode
-// this tree runs: `std::opt::algebra neutral_only=true` (`src/passes/opt/generic/algebra.cpp`), the
+// this tree runs: `std::cxx::algebra neutral_only=true` (`src/passes/opt/generic/algebra.cpp`), the
 // `by_cpp` snapshot beside this entry, whose `std::jgir` dump this reads. The run being verified is
 // the library's. Every graph of the corpus is examined; `main` and `effect_mul_zero` are the same
 // graph on the two sides (compared by the terms `compareGirDotIsomorphic` uses: a node is its kind,

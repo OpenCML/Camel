@@ -67,7 +67,7 @@ string Formatter::formatStringLiteral(const string &input, bool multiLine = fals
         // like a string that holds both kinds of quotes.
         return input;
     }
-    char quoteChar = (quotePrefer == QuotePreference::Single) ? '\'' : '"';
+    char quoteChar         = (quotePrefer == QuotePreference::Single) ? '\'' : '"';
     const string slicedStr = input.substr(1, input.size() - 2);
 
     string procStr = slicedStr;
@@ -180,7 +180,7 @@ any Formatter::visitProgram(cst::Program context) {
             head.push_back(pair.first);
             // The comments after an import. Those between the last import and the first
             // other declaration belong to that declaration (its documentation) and are
-            // written with it; they used to be written twice.
+            // written with it, once.
             auto after = declTokenRanges[pair.second + 1];
             if (!tailWithIndex.empty() && pair.second + 1 == tailWithIndex[0].second) {
                 after.first = after.second;
@@ -206,8 +206,8 @@ any Formatter::visitProgram(cst::Program context) {
     }
 
     string headStr, tailStr;
-    // The comments above the first declaration (the description of the file) stay above it; they
-    // used to be dropped. A blank line between two of them is kept: it is what separates the
+    // The comments above the first declaration (the description of the file) stay above it, not
+    // dropped. A blank line between two of them is kept: it is what separates the
     // licence header from the file's own description, and without it the two runs of comments
     // become one, which changes how the parser reads the file.
     {
@@ -223,7 +223,8 @@ any Formatter::visitProgram(cst::Program context) {
                 // Written here, and marked as written: the node below the comments asks which of
                 // them are still unwritten, and a comment it reads again is written twice.
                 markCommentWritten(i);
-                previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
+                previousEnd =
+                    line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
         // The blank line the file leaves between its comments and the first declaration is kept: a
@@ -363,7 +364,7 @@ any Formatter::visitStmtBlock(cst::StmtBlock context) {
     if (stmtList) {
         // The comments between the last statement of the block and its closing brace belong to the
         // block: the statement list writes comments up to its last statement and no further, and
-        // they used to be dropped - `// mark:` after the last statement of a body, say. They are
+        // they must not be dropped - `// mark:` after the last statement of a body, say. They are
         // written where they stood: on the statement's line if they were on it, which is where
         // every statement but the last one keeps such a comment. The brace keeps its own line.
         const size_t lastStmt = stmtList->lastToken()->index();
@@ -371,13 +372,13 @@ any Formatter::visitStmtBlock(cst::StmtBlock context) {
         std::string inner     = any_cast<string>(visitStmtList(stmtList));
         std::string comments;
         pushIndent();
-        size_t lastStopLine =
-            tokens[lastStmt].line() + countLines(tokens[lastStmt].text());
+        size_t lastStopLine = tokens[lastStmt].line() + countLines(tokens[lastStmt].text());
         for (size_t i = lastStmt + 1; i < brace; i++) {
             if (tokens[i].channel <= 1 || commentWritten(i)) {
                 continue;
             }
-            const long skips = static_cast<long>(tokens[i].line()) - static_cast<long>(lastStopLine);
+            const long skips =
+                static_cast<long>(tokens[i].line()) - static_cast<long>(lastStopLine);
             comments += skips <= 0 ? " " : lineEnd();
             writeCommentText(comments, i);
             lastStopLine = tokens[i].line() + countLines(tokens[i].text());
@@ -468,8 +469,8 @@ tagDecl    : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPosition
 */
 any Formatter::visitTagDecl(cst::TagDecl context) {
     string result = context->tok(TK::KwExport) ? "export tag " : "tag ";
-    // The head is measured once and written once, as a function's is; `on` and `read_by` belong to the signature and
-    // the `when` clause is the one that moves.
+    // The head is measured once and written once, as a function's is; `on` and `read_by` belong to
+    // the signature and the `when` clause is the one that moves.
     const auto buildHead = [&](bool splitParams) {
         string head;
         head += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
@@ -482,12 +483,14 @@ any Formatter::visitTagDecl(cst::TagDecl context) {
         }
         paramsOnePerLine = false;
         if (const auto group = context->get<cst::BracketIdents>()) {
-            return std::make_pair(head + " = " + any_cast<string>(visitBracketIdents(group)),
-                                  std::vector<string>{});
+            return std::make_pair(
+                head + " = " + any_cast<string>(visitBracketIdents(group)),
+                std::vector<string>{});
         }
         head += " on " + any_cast<string>(visitTagPositions(context->get<cst::TagPositions>()));
         if (context->get<cst::TagReaders>()) {
-            head += " read_by " + any_cast<string>(visitTagReaders(context->get<cst::TagReaders>()));
+            head +=
+                " read_by " + any_cast<string>(visitTagReaders(context->get<cst::TagReaders>()));
         }
         std::vector<string> clauses;
         if (context->get<cst::WhenClause>()) {
@@ -495,10 +498,10 @@ any Formatter::visitTagDecl(cst::TagDecl context) {
         }
         return std::make_pair(head, clauses);
     };
-    measureOnly = true;
+    measureOnly         = true;
     const auto measured = buildHead(false);
-    measureOnly = false;
-    const auto head = buildHead(headExceedsWidth(measured.first.size()));
+    measureOnly         = false;
+    const auto head     = buildHead(headExceedsWidth(measured.first.size()));
     return result + joinDeclClauses(head.first, head.second);
 }
 
@@ -560,8 +563,8 @@ any Formatter::visitTagRef(cst::TagRef context) {
 /// puts every clause on a line of its own, indented one level, and leaves the opening brace of
 /// the body at the end of the last clause's line; a head that fits keeps them on one line, one
 /// space after the signature.
-std::string Formatter::joinDeclClauses(
-    const std::string &signature, const std::vector<std::string> &clauses) {
+std::string
+Formatter::joinDeclClauses(const std::string &signature, const std::vector<std::string> &clauses) {
     if (clauses.empty()) {
         return signature;
     }
@@ -665,13 +668,13 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         return std::make_pair(signature, clauses);
     };
 
-    measureOnly = true;
+    measureOnly         = true;
     const auto measured = buildHead(false);
-    measureOnly = false;
+    measureOnly         = false;
     // Still too wide once the clauses have moved to their own lines: the parameters go one per
     // line as well. A head that fits is under the width already, so this cannot fire for one.
     const bool splitParams = headExceedsWidth(measured.first.size());
-    const auto head = buildHead(splitParams);
+    const auto head        = buildHead(splitParams);
     result += joinDeclClauses(head.first, head.second);
 
     if (!stmtBlock) {
@@ -692,7 +695,8 @@ any Formatter::visitWhenClause(cst::WhenClause context) {
 }
 
 /*
-ruleDecl : ('with' angledParams)? EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}' ;
+ruleDecl : ('with' angledParams)? EXPORT? IDENTIFIER identDef ruleContext? parentParams whenClause?
+'{' ruleBody '}' ;
 */
 any Formatter::visitRuleDecl(cst::RuleDecl context) {
     string result;
@@ -731,10 +735,10 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
         }
         return std::make_pair(head, clauses);
     };
-    measureOnly = true;
+    measureOnly         = true;
     const auto measured = buildHead(false);
-    measureOnly = false;
-    const auto head = buildHead(headExceedsWidth(measured.first.size()));
+    measureOnly         = false;
+    const auto head     = buildHead(headExceedsWidth(measured.first.size()));
     result += joinDeclClauses(head.first, head.second);
     result += " { " + any_cast<string>(visitRuleBody(context->get<cst::RuleBody>())) + " }";
     return result;
@@ -760,7 +764,8 @@ any Formatter::visitFactDecl(cst::FactDecl context) {
     }
     result += context->tok(TK::KwExport) ? "export fact " : "fact ";
     // The head is `fact name(params): Type`; a fact has no `when`/`uses`/`pure` clause, so the
-    // half of the wrap rule that applies to it is the parameters going one per line. It is measured once and written once, as a function's is.
+    // half of the wrap rule that applies to it is the parameters going one per line. It is measured
+    // once and written once, as a function's is.
     const auto buildHead = [&](bool splitParams) {
         string head = any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
         if (const auto typeParams = context->get<cst::TypeParams>()) {
@@ -773,9 +778,9 @@ any Formatter::visitFactDecl(cst::FactDecl context) {
         paramsOnePerLine = false;
         return head + ": " + any_cast<string>(visitType(context->type()));
     };
-    measureOnly = true;
+    measureOnly           = true;
     const string measured = buildHead(false);
-    measureOnly = false;
+    measureOnly           = false;
     result += buildHead(headExceedsWidth(measured.size()));
     result += " " + any_cast<string>(visitFactBody(context->get<cst::FactBody>()));
     // The clauses that say how two facts are merged, one per line, as written.
@@ -910,37 +915,71 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
 }
 
 /*
-resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 */
 any Formatter::visitResourceDecl(cst::ResourceDecl context) {
     string result = context->tok(TK::KwExport) ? "export " : "";
-    result += "resource " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    const auto name = context->get<cst::IdentDef>();
+    result += "resource " + any_cast<string>(visitIdentDef(name));
     if (const auto members = context->get<cst::BracketIdents>()) {
         result += " = " + any_cast<string>(visitBracketIdents(members));
-    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
-        // The contextual `unordered` (design effects plan 3.1): any order of the accesses is
-        // allowed, so the resource has no order to keep.
-        result += " unordered";
+    } else if (name) {
+        // The modifier after the name is a contextual word kept as a token of this declaration:
+        // `unordered` (design effects plan 3.1: any order of the accesses is allowed, so the
+        // resource has no order to keep) or `readonly` (design principles 9.12: nothing writes it).
+        // Every token after the name is written back, so a format keeps the word the input had
+        // instead of dropping one it does not know.
+        const auto nameEnd = name->lastToken().index();
+        for (size_t i = 0; i < context->childCount(); ++i) {
+            const auto child = context->child(i);
+            if (!child.isToken() || child.token().index() <= nameEnd) {
+                continue;
+            }
+            result += " " + child.text();
+        }
     }
     return result;
 }
 
 /*
-resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+resourceClause : 'spelling'? ('uses' usesEntry (',' usesEntry)* | 'pure')+
+usesEntry : 'var'? identRef
 */
 any Formatter::visitResourceClause(cst::ResourceClause context) {
-    // `pure` has no name to print; `uses` prints the names as written. A clause that says both
-    // is refused by the semantic check (PureAndUses), and formatting keeps what was written.
-    const auto refs = context->all<cst::IdentRef>();
-    const bool pure = context->firstToken() && context->firstToken()->text() == "pure";
-    string result   = pure ? "pure" : "";
-    if (!refs.empty()) {
+    // `pure` has no name to print; `uses` prints every entry as it was written. The `var` of an
+    // entry is part of what the entry promises -- without it the call reads the resource, with it
+    // the call writes it (design principles 3.3) -- so it is written back, not dropped. A clause
+    // that says both is refused by the semantic check (PureAndUses), and formatting keeps what was
+    // written.
+    //
+    // `spelling` is the clause's leading word (design principles 9.5) and stands where it was
+    // written: a format that dropped it would print a body that no longer declares the capability
+    // it reads, which is a different program. Only the word before `pure`/`uses` is the clause's
+    // own -- a resource may be named `spelling` too (`uses spelling` names one), and that entry is
+    // printed by the loop below like any other.
+    const auto entries = context->all<cst::UsesEntry>();
+    const bool leading = context->firstToken() && context->firstToken()->text() == "spelling";
+    // `pure` is a token of the clause and no entry: an entry is a `cst::UsesEntry`, so a child
+    // that reads `pure` is the word itself and not a resource named that way.
+    bool pure = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        if (context->child(i)->text() == "pure") {
+            pure = true;
+            break;
+        }
+    }
+    string result = leading ? "spelling" : "";
+    if (pure) {
+        result += (result.empty() ? "" : " ") + string("pure");
+    }
+    if (!entries.empty()) {
         if (!result.empty()) {
             result += " ";
         }
         result += "uses ";
-        for (size_t i = 0; i < refs.size(); ++i) {
-            result += (i > 0 ? ", " : "") + any_cast<string>(visitIdentRef(refs[i]));
+        for (size_t i = 0; i < entries.size(); ++i) {
+            result += (i > 0 ? ", " : "") + (entries[i]->has(TK::KwVar) ? string("var ") : "") +
+                      any_cast<string>(visitIdentRef(entries[i]->get<cst::IdentRef>()));
         }
     }
     return result;
@@ -1018,8 +1057,7 @@ any Formatter::visitKeyTypePair(cst::KeyTypePair context) {
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         result += any_cast<string>(visitTagUse(tagUse)) + " ";
     }
-    return result +
-           any_cast<string>(visitIdentDef(context->get<cst::IdentDef>())) + ": " +
+    return result + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>())) + ": " +
            any_cast<string>(visitType(context->type()));
 }
 
@@ -1042,11 +1080,11 @@ keyParamPair : ('var' | 'const' | 'constas')? identDef (':' typeExpr ('=' dataEx
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
     // A rest parameter is written `...` (design principles 5.6). The parser reads the old `..`
     // too, so both tokens name the same mark here and the formatter writes the spelling.
-    string result = (context->tok(TK::DotDot) || context->tok(TK::Ellipsis)) ? "..."
-                    : context->tok(TK::KwConstas) ? "constas "
-                    : context->tok(TK::KwVar)     ? "var "
-                    : context->tok(TK::KwConst)   ? "const "
-                                                  : "";
+    string result        = (context->tok(TK::DotDot) || context->tok(TK::Ellipsis)) ? "..."
+                           : context->tok(TK::KwConstas)                            ? "constas "
+                           : context->tok(TK::KwVar)                                ? "var "
+                           : context->tok(TK::KwConst)                              ? "const "
+                                                                                    : "";
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
     if (!context->get<cst::IdentDef>()) {
@@ -1112,7 +1150,7 @@ any Formatter::visitTupleParam(cst::TupleParam context) {
         if (!first) {
             result += ", ";
         }
-        first   = false;
+        first = false;
         result += any_cast<string>(visitIdentDef(identDef));
     }
     return result + ")";
@@ -1131,8 +1169,9 @@ any Formatter::visitPairedParams(cst::PairedParams context) {
             params.push_back(child);
         }
     }
-    // A declaration head too wide to fit writes its parameters one per line; the declaration sets the flag before it builds its
-    // head, and it is false for every other parameter list (a lambda's, a call's).
+    // A declaration head too wide to fit writes its parameters one per line; the declaration sets
+    // the flag before it builds its head, and it is false for every other parameter list (a
+    // lambda's, a call's).
     const int flags = PaddingNL | PushScope | (onePerLine ? Multiline : 0);
     return formatList(params, context, ", ", ",", flags);
 }
@@ -1300,8 +1339,7 @@ any Formatter::visitMatchCase(cst::MatchCase context) {
     // `case p when c => body`: the guard stands between the patterns and the arm, as it does
     // in the source the parser reads (node_kinds.def). Leaving it out changes the AST the text
     // parses to, so it is written where it stood.
-    string result =
-        "case " + formatList(vec(context->all<cst::Pattern>()), context, " | ", " |");
+    string result = "case " + formatList(vec(context->all<cst::Pattern>()), context, " | ", " |");
     if (const auto guard = context->get<cst::WhenClause>()) {
         result += " " + any_cast<string>(visitWhenClause(guard));
     }
@@ -1326,13 +1364,19 @@ any Formatter::visitMatchTypeExpr(cst::MatchTypeExpr context) {
 
 /*
 typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
     ;
 */
 any Formatter::visitTypeCase(cst::TypeCase context) {
-    return "case " +
-           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
-           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    // `case p when c => body`: a type's case carries a guard the same way a value's does, and
+    // leaving it out changes the AST the text parses to -- the case would then take every type
+    // its pattern matches. Written where it stood, with the same `when` clause printer.
+    string result =
+        "case " + formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |");
+    if (const auto guard = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(guard));
+    }
+    return result + " => " + any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
 
 /*
@@ -1353,13 +1397,16 @@ any Formatter::visitMatchTypeType(cst::MatchTypeType context) {
 
 /*
 typeArm
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+    : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
     ;
 */
 any Formatter::visitTypeArm(cst::TypeArm context) {
-    return "case " +
-           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
-           any_cast<string>(visit(context->type()));
+    string result =
+        "case " + formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |");
+    if (const auto guard = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(guard));
+    }
+    return result + " => " + any_cast<string>(visit(context->type()));
 }
 
 /*
@@ -1367,9 +1414,7 @@ typeCasePattern
     : 'struct' | 'tuple' | '#' 'leaf' | '_'
     ;
 */
-any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) {
-    return context->text();
-}
+any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) { return context->text(); }
 
 /*
 staticForExpr
@@ -1434,17 +1479,16 @@ any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     string text = "static loop ";
     bool first  = true;
     for (const auto state : context->all<cst::LoopState>()) {
-        text += (first ? "" : ", ") +
-                any_cast<string>(visitIdentDef(state.get<cst::IdentDef>())) + " = " +
-                any_cast<string>(visit(state.expr()));
+        text += (first ? "" : ", ") + any_cast<string>(visitIdentDef(state.get<cst::IdentDef>())) +
+                " = " + any_cast<string>(visit(state.expr()));
         first = false;
     }
-    const auto mode   = context->tok(TK::Identifier);
-    const string body = any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    const auto mode    = context->tok(TK::Identifier);
+    const string body  = any_cast<string>(visitBlockExpr(context->lastChild().node()));
     const string names = formatStaticHeadNames(context);
     if (mode && mode.text() == "indices") {
-        return text + " for " + names + " in indices " +
-               any_cast<string>(visit(context->expr())) + " do " + body;
+        return text + " for " + names + " in indices " + any_cast<string>(visit(context->expr())) +
+               " do " + body;
     }
     if (mode && mode.text() == "fields") {
         return text + " for " + names + " in fields " +
@@ -1477,7 +1521,7 @@ any Formatter::visitCtrlExpr(syn::Node context) {
         // keyword is read as part of it and the conditional loses it, which is the formatted text
         // failing to parse (`SyntaxDiag::MissingThen`). The `else` below already ends the line on
         // this answer; here it was dropped.
-        const auto &thenTok = context->tok(TK::KwThen);
+        const auto &thenTok          = context->tok(TK::KwThen);
         const bool conditionLineEnds = writeInlineComments(
             result,
             context->expr()->lastToken()->index(),
@@ -1518,7 +1562,7 @@ any Formatter::visitCtrlExpr(syn::Node context) {
 
     default:
         // `try`/`catch`/`finally` are not part of the language (design principles 3.9) and are not
-        // tokens any more, so the parser never builds a control expression for them.
+        // tokens, so the parser never builds a control expression for them.
         throw runtime_error("Invalid structExpr context");
     }
 }
@@ -1641,8 +1685,38 @@ any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(con
 rangeExpr
     : additiveExpr ('..' additiveExpr)*
     ;
+`..` is written without the spaces the arithmetic operators get, but never directly after a
+conversion: the type after `as` takes a `..` that stands on its line as a mark -- the stream type
+`int..` -- whatever white space is written before it, and it stops at a line break. So
+`x as int..5` is not the interval from `x as int` to `5`: it is a `..` written where a type
+stands, which SyntaxDiag::AsRightSideIsType reports (test/cases/parse/rulings/
+stream_type_as_interval.cml says why, and names the spelling `(a..b)`). An input that writes
+`let r = n as int` and `..5` on the next line is a range, and writing it back as
+`let r = n as int..5` would turn an accepted program into text the parser refuses; the input is
+test/cases/parse/rulings/dotdot_after_cast.cml. A conversion that a `..` follows is written in
+parentheses, the spelling the diagnostic names, which reads back as the same tree.
 */
-any Formatter::visitRangeExpr(cst::RangeExpr context) { return formatBiOpsList(context, false); }
+any Formatter::visitRangeExpr(cst::RangeExpr context) {
+    std::string result;
+    const size_t n = context.childCount();
+    for (size_t i = 0; i < n; i++) {
+        const syn::Child child = context.child(i);
+        if (!child.isNode()) {
+            result += child.text();
+            continue;
+        }
+        std::string operand = std::any_cast<std::string>(visit(child.node()));
+        // Only the operand a `..` follows: a conversion at the end of the range can be written
+        // as it stands, nothing follows it that a type would take.
+        const bool followedByRange = i + 1 < n && !context.child(i + 1).isNode() &&
+                                     context.child(i + 1).text() == "..";
+        if (followedByRange && child.node().is(NK::CastExpr)) {
+            operand = "(" + operand + ")";
+        }
+        result += operand;
+    }
+    return result;
+}
 
 /*
 annoExpr
@@ -1847,7 +1921,7 @@ any Formatter::visitArrayDim(cst::ArrayDim context) {
                 if (!first) {
                     result += ", ";
                 }
-                first    = false;
+                first = false;
                 result += "...";
                 packName = true;
             }
@@ -2242,7 +2316,7 @@ any Formatter::dispatch(syn::Node context) {
         // `..E`, one type expression written once for each member of a pack (design principles
         // 5.6).
         return "..." + any_cast<string>(visit(context.type()));
-    case NK::TypeOfType:
+    case NK::TypeOfExpr:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {
         // `T { static for n, F in fields U => e }`: the shape is written as a type, and the

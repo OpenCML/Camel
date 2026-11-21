@@ -240,7 +240,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // pointer that C++ code kept across the safepoint reads poison instead of a value
         // that happens to be still right. Requires young copying. See poison.h.
         bool poisonAtSafepoints = false;
-    bool checkMarks = false; // --gc-check mark: compare the ledger with the graph space
+        bool checkMarks         = false; // --gc-check mark: compare the ledger with the graph space
     };
 
     struct RuntimeStats {
@@ -265,7 +265,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t largeBudgetRequests      = 0;
         uint64_t elderExhaustedRequests   = 0;
         uint64_t elderBlockBudgetRequests = 0; // Promoted block bytes, see below
-        uint64_t otherRequests            = 0; // Stress settings, explicit calls, a full birth space
+        uint64_t otherRequests = 0; // Stress settings, explicit calls, a full birth space
         // Payload bytes handed out, per space. Small objects that found no room in the elder
         // space are counted in largeBytesAllocated (and in elderOverflowBytes).
         uint64_t youngBytesAllocated = 0;
@@ -337,7 +337,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         const void *owner, std::string name, std::vector<rtdata::Object *> *rootSet);
     void unregisterObjectRootSet(const void *owner);
     /// Called by a major collection once it has marked what it reaches, before the spaces are
-/// swept: the graph space holds Programs and graphs, which it frees when unmarked. One per
+    /// swept: the graph space holds Programs and graphs, which it frees when unmarked. One per
     /// owner, for the same reason as the root sets: a second context's sweeper must not replace
     /// the first's, or a graph the first is running is freed as unreachable.
     void registerGraphSweeper(const void *owner, std::string name, std::function<void()> sweeper);
@@ -476,8 +476,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
     /// and ends the process. Called from the one place a collection is started
     /// (collectAtSafepointUnlocked), so an exception from a collection never reaches ordinary
     /// fault handling as if the heap were still usable (C24, MG/R8).
-    [[noreturn]] static void reportFatalCollectionFailure(
-        CollectionKind kind, std::string_view reason);
+    [[noreturn]] static void
+    reportFatalCollectionFailure(CollectionKind kind, std::string_view reason);
 
     // ============================================================================
     // Allocation region tag
@@ -554,7 +554,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     uint64_t blockSweepGeneration_ = 1;
     size_t minorTriggerBytes_;        // Birth-space occupancy that asks for a minor collection
     size_t heapLimitBytes_;           // 0: none
-    bool heapLimitExceeded_ = false;  // Set by an allocation; resolved at the next safepoint
+    bool heapLimitExceeded_  = false; // Set by an allocation; resolved at the next safepoint
     size_t heapLimitRequest_ = 0;     // ...the allocation that crossed the limit
     // Live data-block bytes at the end of the last collection (core/mm/block.h). The blocks
     // are outside the collected heap, so their growth since then is added to the young, elder
@@ -563,7 +563,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // blocks. The live volume itself is not added, or a program holding one large array would
     // ask for a collection on every allocation.
     size_t blockBytesAtCollection_ = 0;
-    bool enableYoungGenCopying_;      // Young objects are copied (and so move) when set.
+    bool enableYoungGenCopying_; // Young objects are copied (and so move) when set.
 
     // ============================================================================
     // GC state and roots
@@ -602,15 +602,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Calls every registered root source: the external tracers and the root handles. `visit`
     // receives the name of the source and a function that traces it with a relocator.
     void forEachRootSourceUnlocked(
-        const std::function<
-            void(std::string_view name, const std::function<void(const RefRelocator &)> &trace)>
-            &visit);
+        const std::function<void(
+            std::string_view name, const std::function<void(const RefRelocator &)> &trace)> &visit);
     struct RememberedSetEntry {
         rtdata::Object *object = nullptr;
         const type::Type *type = nullptr;
     };
-    // Old/large auto-space objects that currently contain at least one young reference. The typed
-    // layout is required because composite objects do not carry their own runtime type metadata.
+    // Old/large auto-space objects with a young reference or a graph-carrier reference whose
+    // static area needs a minor scan. The typed layout is required because composite objects do
+    // not carry their own runtime type metadata.
     std::unordered_map<ObjectHeader *, RememberedSetEntry> rememberedSet_;
     std::unordered_map<ObjectHeader *, const type::Type *> objectTypes_;
     bool recordLayouts_ = false; // objectTypes_ is being filled (see recordObjectTypeUnlocked)
@@ -677,11 +677,20 @@ class GenerationalAllocatorWithGC : public IAllocator {
     std::vector<RememberedEdge>
     collectYoungReferenceEdges(rtdata::Object *object, const type::Type *objectType) const;
 
-    void rememberOldObjectIfYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType);
+    void
+    rememberOldObjectForMinorScanUnlocked(rtdata::Object *object, const type::Type *objectType);
 
-    // Whether `object` holds a reference a minor collection must follow (collectYoungReferenceEdges
-    // without the list).
+    // Whether `object` holds a young reference (collectYoungReferenceEdges without the list).
     bool hasYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType) const;
+
+    // Whether `object` names a graph carrier whose static area a minor collection must trace.
+    bool hasGraphCarrierRefsUnlocked(rtdata::Object *object, const type::Type *objectType) const;
+
+    bool rememberedEntryNeedsMinorScanUnlocked(
+        ObjectHeader *header, const RememberedSetEntry &entry) const;
+    // Drops valid old entries whose current references no longer need a minor scan. Invalid or
+    // non-old entries are left for the verifier to diagnose.
+    void pruneRememberedSetUnlocked();
 
     // Runs the finalizers of the young objects this minor collection did not copy.
     void finalizeDeadYoungUnlocked();
@@ -722,9 +731,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     bool autoRegionContainsPayload(
         const GrowableFreeListAllocator &allocator, rtdata::Object *object,
-        std::string_view regionName,
-        AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
-        std::string_view path) const;
+        std::string_view regionName, AllocRegion expectedRegion,
+        std::vector<HeapVerificationIssue> &issues, std::string_view path) const;
 
     bool autoRegionContainsPayload(
         const LargeObjectAllocator &allocator, rtdata::Object *object,

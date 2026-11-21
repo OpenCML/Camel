@@ -14,14 +14,23 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/resource_conflict.h"
 #include "camel/core/type/storage.h"
-#include "camel/core/type/typecall.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typecall.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
 
 namespace camel::core::type {
+
+ResourceConflictSink &resourceConflictSink() {
+    // One for the process: a build installs its own on the way in and restores the previous one on
+    // the way out (Builder::ResourceConflictScope), the way the `match type` guard evaluator is
+    // installed and restored.
+    static ResourceConflictSink sink;
+    return sink;
+}
 
 // ---- TypeVarType ----
 
@@ -40,7 +49,9 @@ TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
     const std::string *text  = TypeTable::instance().internText(name);
     const uintptr_t words[2] = {reinterpret_cast<uintptr_t>(text), binder ? 1u : 0u};
     return static_cast<TypeVarType *>(TypeTable::instance().intern(
-        TypeTable::Shape::TypeVar, std::span<const uintptr_t>(words, 2), [&]() -> Type * {
+        TypeTable::Shape::TypeVar,
+        std::span<const uintptr_t>(words, 2),
+        [&]() -> Type * {
             void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
             return new (mem) TypeVarType(name, binder);
         }));
@@ -67,36 +78,6 @@ bool TypeVarType::equals(Type *type) const {
 CastSafety TypeVarType::castSafetyFrom(Type *sourceType) const {
     return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
-
-// ---- TypeOfType ----
-
-TypeOfType::TypeOfType(const void *expression) : Type(TypeCode::TypeOf), expression_(expression) {}
-
-TypeOfType *TypeOfType::create(const void *expression) {
-    // One placeholder per expression (see intern.h): `typeof e` twice in one position is one
-    // type. Two of them are equal when they are the same object (see below), so the placeholder
-    // is its own canonical form and carries no name-erased twin: nothing compares it by
-    // structure, and the graph builder resolves it before any type check.
-    const uintptr_t words[1] = {reinterpret_cast<uintptr_t>(expression)};
-    return static_cast<TypeOfType *>(TypeTable::instance().intern(
-        TypeTable::Shape::TypeOf, std::span<const uintptr_t>(words, 1), [&]() -> Type * {
-            void *mem = allocTypeStorage<TypeOfType>(TypeStorageKind::TypeVar);
-            return new (mem) TypeOfType(expression);
-        }));
-}
-
-std::string TypeOfType::toString() const { return "typeof"; }
-
-std::string TypeOfType::mangle() const { return "O"; }
-
-Type *TypeOfType::clone(bool) const { return create(expression_); }
-
-// Two `typeof` placeholders are equal only when they are the same object: the expression they
-// stand for is not compared here, and the graph builder resolves them before any type check.
-bool TypeOfType::equals(Type *type) const { return this == type; }
-
-// A placeholder is not the type of any value: it is replaced where the type is used.
-CastSafety TypeOfType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
 
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name) {
     for (const auto &[bound, type] : bindings) {
@@ -125,8 +106,8 @@ TypeFunctionType::create(const std::string &name, std::vector<std::string> param
     for (const std::string &param : params) {
         words.push_back(reinterpret_cast<uintptr_t>(TypeTable::instance().internText(param)));
     }
-    return static_cast<TypeFunctionType *>(TypeTable::instance().intern(
-        TypeTable::Shape::TypeFunc, words, [&]() -> Type * {
+    return static_cast<TypeFunctionType *>(
+        TypeTable::instance().intern(TypeTable::Shape::TypeFunc, words, [&]() -> Type * {
             void *mem = allocTypeStorage<TypeFunctionType>(TypeStorageKind::TypeVar);
             return new (mem) TypeFunctionType(name, std::move(params), body);
         }));
@@ -266,7 +247,7 @@ bool takePackApart(Type *pattern, Type *subject, type_bindings_t &bindings) {
     const std::span<Type *const> written = static_cast<TupleType *>(shape)->types();
     const std::span<Type *const> members = TypeCallType::packMembers(subject);
     size_t fixed                         = written.size();
-    const bool hasRest = fixed > 0 && TypeCallType::isExpand(written.back());
+    const bool hasRest                   = fixed > 0 && TypeCallType::isExpand(written.back());
     if (hasRest) {
         --fixed;
     }
@@ -299,6 +280,60 @@ bool takePackApart(Type *pattern, Type *subject, type_bindings_t &bindings) {
     return true;
 }
 
+/// A pattern a `match type` case writes to take an array type apart (`case E[...Dims]`,
+/// `case E[...]`), tried against `subject`: whether it fits, what the names it writes stand for,
+/// and the dimensions it reached. The element type binds the name the pattern writes where the
+/// type is a name (`E`); a concrete element type written in the pattern is the type the case
+/// selects, by identity.
+///
+/// The dims pack says which of the two things a shape states the case takes. A *named* pack
+/// (`E[...Dims]`) stands for the dimensions themselves, so the case selects an array whose rank
+/// is stated (a shape of `?` per dimension is a stated rank, `T[]` included) and no array whose
+/// rank is open: `Dims` then stands for `rank` dimensions, both as the dimension pack the type
+/// layer can put back (`RowsOf`) and, where an extent is written, as the number of them
+/// (`int[Dims]`, the rank `ShapeOf` answers). An *anonymous* pack (`E[...]`) is the open rank
+/// itself: what the case selects is an array whose rank nobody stated, and there is nothing to
+/// bind. Design principles 5.4: `T[...]` is every rank, `T[]` is one dimension of unknown length,
+/// and a dimension pack is the dimensions a type does not name.
+bool takeArrayApart(
+    Type *pattern, Type *subject, type_bindings_t &bindings, ExtentValues &values,
+    ExtentPacks &packs) {
+    const ArrayType *shape = asArrayType(substituteTypeVars(pattern, bindings));
+    const ArrayType *array = asArrayType(subject);
+    if (shape == nullptr || array == nullptr) {
+        return false;
+    }
+    const bool namesDims = !shape->packName().empty();
+    if (namesDims == array->anyRank()) {
+        // A named pack takes the dimensions of a stated rank apart; an anonymous one is the open
+        // rank. Neither selects the other: a case that binds the dimensions cannot select a value
+        // whose rank is not stated, and the open-rank case is not the closed one.
+        return false;
+    }
+    if (!shape->extents().empty()) {
+        // Only a pack with no extent before it is a pattern this matcher reads: `case E[3, ...R]`
+        // states a shape, which is what an identity case selects.
+        return false;
+    }
+    Type *element = shape->elemType();
+    if (element != nullptr && element->code() == TypeCode::TypeVar) {
+        bindings.emplace_back(static_cast<TypeVarType *>(element)->name(), array->elemType());
+    } else if (
+        element == nullptr || containsTypeVar(element) || !typeEquals(element, array->elemType())) {
+        return false;
+    }
+    if (namesDims) {
+        const std::string name(shape->packName());
+        std::vector<ExtentForm> dims(array->extents().begin(), array->extents().end());
+        // One name, two readings, in the two namespaces the type layer already has: the pack is
+        // the dimensions (`E[?, ...Dims]` puts them back), and an extent written as `Dims` is how
+        // many there are.
+        values[name] = static_cast<int64_t>(dims.size());
+        packs[name]  = std::move(dims);
+    }
+    return true;
+}
+
 /// A factory holding `func` with the variables (and, when `extents` is not null, the named
 /// extents) replaced; `changed` tells whether anything was. A `constas` parameter is part of the
 /// declaration's identity, not a runtime argument: it is dropped when `dropConstas` says the
@@ -318,13 +353,19 @@ FunctionTypeFactory rebuildFunctionType(
         return result;
     };
     for (size_t i = 0; i < func->withTypesCount(); ++i) {
-        if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
-            factory.addWithRest(paramNameOf(func, i, "__w", i));
-            continue;
-        }
+        // A pack in the `with` list (`<...WithOf<F>>`) whose members the substitution settles is
+        // those members as **fixed** parameters, and it is asked before the rest slot is put back:
+        // the pack's own position in the signature is what the `...` writes, and a call passes the
+        // members and not the pack. Written the other way round, `<...WithOf<F>>` with one member
+        // kept the rest slot as well as the member, the signature said one `with` parameter while
+        // `StaticFuncTypeResolver::resolve` counted the rest slot away, and every call of
+        // `GradientOf<F>` was refused one argument short:
+        // `'<__pack_0_0: float> () => float' cannot be called with argument types: <> (float)`
+        // (an empty rest pack is a value in
+        // the body, an empty tuple, and it enters neither the parameter list nor the function type).
         if (TypeCallType::isExpand(func->withTypeAt(i))) {
             std::vector<Type *> members;
-            Type *mismatch = nullptr;
+            Type *mismatch         = nullptr;
             const Expansion result = expandPack(func->withTypeAt(i), bindings, members, mismatch);
             if (result != Expansion::Keep) {
                 changed = true;
@@ -333,17 +374,25 @@ FunctionTypeFactory rebuildFunctionType(
                 }
                 for (size_t k = 0; k < members.size(); ++k) {
                     factory.addWithArg(
-                        paramNameOf(func, i, "__w", i) + "_" + std::to_string(k), members[k], false);
+                        paramNameOf(func, i, "__w", i) + "_" + std::to_string(k),
+                        members[k],
+                        false);
                 }
                 continue;
             }
+        }
+        if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
+            factory.addWithRest(paramNameOf(func, i, "__w", i));
+            continue;
         }
         if (func->withIsConstasAt(i)) {
             if (dropConstas) {
                 changed = true;
                 continue;
             }
-            factory.addWithConstasArg(paramNameOf(func, i, "__w", i), replaced(func->withTypeAt(i)));
+            factory.addWithConstasArg(
+                paramNameOf(func, i, "__w", i),
+                replaced(func->withTypeAt(i)));
             continue;
         }
         factory.addWithArg(
@@ -353,8 +402,26 @@ FunctionTypeFactory rebuildFunctionType(
             func->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < func->normTypesCount(); ++i) {
-        const std::string name =
-            paramNameOf(func, func->withTypesCount() + i, "__n", i);
+        const std::string name = paramNameOf(func, func->withTypesCount() + i, "__n", i);
+        // The same reading as the `with` list above, on the ordinary parameters: `(...ParamsOf<F>)`
+        // is the members the substitution settles, and a function of none of them declares none --
+        // written the other way round, `GradientOf<F>` of a function with no ordinary parameter kept a rest
+        // slot the call never fills, and `<> (float)` was refused for it.
+        if (TypeCallType::isExpand(func->normTypeAt(i))) {
+            std::vector<Type *> members;
+            Type *mismatch         = nullptr;
+            const Expansion result = expandPack(func->normTypeAt(i), bindings, members, mismatch);
+            if (result != Expansion::Keep) {
+                changed = true;
+                if (result == Expansion::Mismatch) {
+                    members.push_back(mismatch);
+                }
+                for (size_t k = 0; k < members.size(); ++k) {
+                    factory.addNormArg(name + "_" + std::to_string(k), members[k], false);
+                }
+                continue;
+            }
+        }
         if (func->hasRest() && i + 1 == func->normTypesCount()) {
             factory.addRestArg(name, replaced(func->normTypeAt(i)));
             continue;
@@ -367,21 +434,6 @@ FunctionTypeFactory rebuildFunctionType(
             }
             factory.addConstasArg(name, replaced(func->normTypeAt(i)));
             continue;
-        }
-        if (TypeCallType::isExpand(func->normTypeAt(i))) {
-            std::vector<Type *> members;
-            Type *mismatch = nullptr;
-            const Expansion result = expandPack(func->normTypeAt(i), bindings, members, mismatch);
-            if (result != Expansion::Keep) {
-                changed = true;
-                if (result == Expansion::Mismatch) {
-                    members.push_back(mismatch);
-                }
-                for (size_t k = 0; k < members.size(); ++k) {
-                    factory.addNormArg(name + "_" + std::to_string(k), members[k], false);
-                }
-                continue;
-            }
         }
         factory.addNormArg(name, replaced(func->normTypeAt(i)), func->normIsVarAt(i));
     }
@@ -557,7 +609,7 @@ bool containsTypeVar(Type *type) {
         return std::any_of(types.begin(), types.end(), containsTypeVar);
     }
     case TypeCode::Struct: {
-        auto *record = static_cast<StructType *>(type);
+        auto *record     = static_cast<StructType *>(type);
         const auto types = record->named() ? record->typeArgs() : record->types();
         return std::any_of(types.begin(), types.end(), containsTypeVar);
     }
@@ -572,49 +624,14 @@ bool containsTypeVar(Type *type) {
     default:
         break;
     }
+    if (type->code() == MatchTypeType::typeCode()) {
+        std::vector<std::string> names;
+        collectTypeVars(type, names);
+        return !names.empty();
+    }
     if (type->isOtherType()) {
         const auto params = static_cast<OtherType *>(type)->paramsSpan();
         return std::any_of(params.begin(), params.end(), containsTypeVar);
-    }
-    return false;
-}
-
-bool containsTypeOf(Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    switch (type->code()) {
-    case TypeCode::TypeOf:
-        return true;
-    case TypeCode::TypeFunc:
-        return false;
-    case TypeCode::Array:
-        return containsTypeOf(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Stream:
-        return containsTypeOf(static_cast<StreamType *>(type)->elemType());
-    case TypeCode::Tuple: {
-        const auto types = static_cast<TupleType *>(type)->types();
-        return std::any_of(types.begin(), types.end(), containsTypeOf);
-    }
-    case TypeCode::Struct: {
-        auto *record     = static_cast<StructType *>(type);
-        const auto types = record->named() ? record->typeArgs() : record->types();
-        return std::any_of(types.begin(), types.end(), containsTypeOf);
-    }
-    case TypeCode::Function: {
-        const auto *func = static_cast<FunctionType *>(type);
-        const auto with  = func->withTypesSpan();
-        const auto norm  = func->normTypesSpan();
-        return std::any_of(with.begin(), with.end(), containsTypeOf) ||
-               std::any_of(norm.begin(), norm.end(), containsTypeOf) ||
-               (func->hasExitType() && containsTypeOf(func->exitType()));
-    }
-    default:
-        break;
-    }
-    if (type->isOtherType()) {
-        const auto params = static_cast<OtherType *>(type)->paramsSpan();
-        return std::any_of(params.begin(), params.end(), containsTypeOf);
     }
     return false;
 }
@@ -639,7 +656,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         // member that `E` makes, as the tuple they make it (design principles 5.6). A pack of one
         // member is a one-member tuple, and an empty pack the empty tuple. A pack nothing bound
         // yet leaves the node waiting, with its body substituted as far as `bindings` reach.
-        Type *body        = static_cast<TypeCallType *>(type)->paramsSpan()[0];
+        Type *body = static_cast<TypeCallType *>(type)->paramsSpan()[0];
         std::vector<Type *> members;
         Type *mismatch         = nullptr;
         const Expansion result = expandPack(type, bindings, members, mismatch);
@@ -730,9 +747,13 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         return changed ? factory.build() : type;
     }
     case TypeCode::Function: {
-        bool changed = false;
-        FunctionTypeFactory factory =
-            rebuildFunctionType(static_cast<FunctionType *>(type), bindings, nullptr, false, changed);
+        bool changed                = false;
+        FunctionTypeFactory factory = rebuildFunctionType(
+            static_cast<FunctionType *>(type),
+            bindings,
+            nullptr,
+            false,
+            changed);
         return changed ? factory.build() : type;
     }
     default:
@@ -744,15 +765,88 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         // looked at; with a type variable still in the subject it waits.
         auto *match   = static_cast<MatchTypeType *>(type);
         Type *subject = substituteTypeVars(match->subject(), bindings);
+        if (TypeCallType::isPack(subject)) {
+            // A type function applied to a pack of known members is applied to each member, and
+            // the pack of the answers is its answer: `Tangent<ParamsOf<F>>` is one tangent per
+            // parameter of `F`, and `...ElementOf<A>` is one element type per array (design
+            // principles 5.6). A case that writes a pack pattern takes the pack apart instead --
+            // that is what `FirstOf<P>` is -- so the pack is one subject and not a list exactly
+            // where a case says how to take it apart.
+            bool takesPackApart = false;
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                takesPackApart |= !match->armPackPatterns(arm).empty();
+            }
+            if (!takesPackApart) {
+                std::vector<Type *> params(match->paramsSpan().begin(), match->paramsSpan().end());
+                std::vector<Type *> mapped;
+                for (Type *member : TypeCallType::packMembers(subject)) {
+                    params[0] = member;
+                    mapped.push_back(substituteTypeVars(match->cloneWithParams(params), bindings));
+                }
+                return TypeCallType::makePack(mapped);
+            }
+        }
         if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
-            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+            // A case may carry a guard (`case p when pred => ...`, design principles 5.5).
+            // A case is taken when its pattern selects the subject *and* the
+            // predicate holds; a predicate that does not hold sends the subject on to the case
+            // written after it. A predicate nobody has answered yet is neither of those: it takes
+            // no case at all and the match waits, because an answer this build does not have is
+            // not an answer of false -- the unguarded case after a guarded one would otherwise
+            // take a subject the guard was written to decide (`FamilyOf<int>` answered `int[5]`,
+            // the default, while `is_numeric::<int>` was never asked).
+            bool undecided        = false;
+            const auto guardHolds = [&](size_t arm, const type_bindings_t &binds) {
+                const std::shared_ptr<const TypeCaseGuard> &guard = match->armGuard(arm);
+                if (guard == nullptr) {
+                    return true;
+                }
+                const TypeCaseGuardEvaluator &evaluate = typeCaseGuardEvaluator();
+                if (!evaluate) {
+                    undecided = true;
+                    return false;
+                }
+                // The guard is written in the type function's body, so the types it reads are that
+                // function's parameters, and this substitution is the one that binds them -- the
+                // bindings the match carries are the ones an earlier substitution recorded while
+                // it could not run the predicate (a match with nothing left to bind is not
+                // substituted again).
+                type_bindings_t effective = binds;
+                for (const auto &entry : match->pendingGuardBindings()) {
+                    if (findTypeBinding(effective, entry.first) == nullptr) {
+                        effective.push_back(entry);
+                    }
+                }
+                const std::optional<bool> answer = evaluate(guard, subject, effective);
+                if (!answer.has_value()) {
+                    undecided = true;
+                    return false;
+                }
+                return *answer;
+            };
+            for (size_t arm = 0; arm < match->armCount() && !undecided; ++arm) {
                 // A case that takes the pack apart selects it by the pattern it writes, and its
                 // names stand for the members the pattern reached (design principles 5.6).
                 for (Type *pattern : match->armPackPatterns(arm)) {
                     type_bindings_t taken = bindings;
-                    if (takePackApart(pattern, subject, taken)) {
+                    if (takePackApart(pattern, subject, taken) && guardHolds(arm, taken)) {
                         return substituteTypeVars(match->armResult(arm), taken);
+                    }
+                }
+                // A case that takes an array type apart (`case E[...Dims]`) selects it the same
+                // way, and the dimensions it reached are the pack the result writes back
+                // (`E[?, ...Dims]`) and, as an extent, the number of them (`int[Dims]`).
+                for (Type *pattern : match->armArrayPatterns(arm)) {
+                    type_bindings_t taken = bindings;
+                    ExtentValues values;
+                    ExtentPacks packs;
+                    if (takeArrayApart(pattern, subject, taken, values, packs) &&
+                        guardHolds(arm, taken)) {
+                        return substituteExtentValues(
+                            substituteTypeVars(match->armResult(arm), taken),
+                            values,
+                            packs);
                     }
                 }
                 bool selected = (match->armShapes(arm) & shapes) != 0;
@@ -760,10 +854,33 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                     Type *pattern = substituteTypeVars(identity, bindings);
                     selected |= !containsTypeVar(pattern) && typeEquals(subject, pattern);
                 }
-                if (selected) {
+                if (selected && guardHolds(arm, bindings)) {
                     return substituteTypeVars(match->armResult(arm), bindings);
                 }
             }
+            // No case selected. Substitute the unchosen arms too: their result types may still
+            // mention the function's parameters, but they must not make this concrete refusal look
+            // like a match still waiting for a type binding.
+            std::vector<Type *> params;
+            params.reserve(match->paramCount());
+            for (Type *param : match->paramsSpan()) {
+                params.push_back(substituteTypeVars(param, bindings));
+            }
+            // A case a guard decided may be the one this substitution could not take, because the
+            // predicate is not a type: it needs a build that runs Camel, and this one may have
+            // none. The bindings are kept with the match -- they are the last thing that knows
+            // what `T` is once the type function is applied -- and the build that runs the
+            // predicate reads them (typevar.h, `typeCaseGuardEvaluator`).
+            bool guarded = false;
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                guarded |= match->armGuard(arm) != nullptr;
+            }
+            if (guarded) {
+                return match->withPendingGuardBindings(
+                    std::span<Type *const>(params.data(), params.size()),
+                    bindings);
+            }
+            return match->cloneWithParams(params);
         }
     }
     if (OtherType *applied = asTypeApplication(type)) {
@@ -781,10 +898,14 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         if (type->code() == TypeCallType::typeCode() &&
             std::none_of(params.begin(), params.end(), containsTypeVar)) {
             // A type function whose arguments are all concrete is the type it computes (one it
-            // does not accept stays a call, and is reported where the type is used).
+            // does not accept stays a call, and is reported where the type is used). The
+            // placeholder of a `typeof e` is a type variable to this layer, so an unresolved one
+            // counts as not concrete: the front end resolves it before this call.
             std::string error;
             if (Type *computed = TypeCallType::evaluate(
-                    static_cast<TypeCallType *>(type)->name(), arguments, error)) {
+                    static_cast<TypeCallType *>(type)->name(),
+                    arguments,
+                    error)) {
                 if (gPackScope != nullptr && TypeCallType::isPack(computed)) {
                     return packMemberFor(*gPackScope, type->toString(), computed);
                 }
@@ -806,29 +927,38 @@ OpenFunctionType *instantiateFunctionType(
 }
 
 Type *substituteExtentValues(Type *type, const ExtentValues &values, const ExtentPacks &packs) {
-    if (type == nullptr || values.empty()) {
+    if (type == nullptr || (values.empty() && packs.empty())) {
         return type;
+    }
+    // A dimension pack written where an extent stands is how many dimensions it stands for: the
+    // one name answers the dimensions themselves (`E[?, ...Dims]` puts them back) and their
+    // number (`int[Dims]`, which is the rank). One reading, and it is the length of the pack, the
+    // count `indices` walks in the value layer -- so a type states the rank of a shape it is given
+    // without a second spelling for it.
+    ExtentValues named = values;
+    for (const auto &[name, dims] : packs) {
+        named[name] = static_cast<int64_t>(dims.size());
     }
     switch (type->code()) {
     case TypeCode::Array: {
         auto *array = static_cast<ArrayType *>(type);
-        Type *elem  = substituteExtentValues(array->elemType(), values, packs);
+        Type *elem  = substituteExtentValues(array->elemType(), named, packs);
         // An array's own extents name values too (`f32[n]` with a `constas n: int`), and they are
         // where such a name lives now that `[]` is the core array type: replace them as the type
         // arguments of a module type are replaced, so the parameter of a call becomes the concrete
         // one (`f32[3]`) and an argument of another extent is refused (design principles 5.4 gives
-        // the shape check to the core). While the name stayed in the type, an array with a named extent
-        // accepts every
-        // extent, so `total(3, ones([4]))` with `x: f32[n]` was taken as it was.
-        if (const Type *named = array->withExtentValues(values, packs); named != nullptr) {
-            array = const_cast<ArrayType *>(static_cast<const ArrayType *>(named));
+        // the shape check to the core). While the name stayed in the type, an array with a named
+        // extent accepts every extent, so `total(3, ones([4]))` with `x: f32[n]` was taken as it
+        // was.
+        if (const Type *replaced = array->withExtentValues(named, packs); replaced != nullptr) {
+            array = const_cast<ArrayType *>(static_cast<const ArrayType *>(replaced));
         }
         return elem == array->elemType() ? array : array->withElementType(elem);
     }
     case TypeCode::Stream: {
         // A stream's type holds no extent of its own: its element type may.
         auto *stream = static_cast<StreamType *>(type);
-        Type *elem   = substituteExtentValues(stream->elemType(), values, packs);
+        Type *elem   = substituteExtentValues(stream->elemType(), named, packs);
         return elem == stream->elemType() ? type : StreamType::create(elem);
     }
     case TypeCode::Tuple: {
@@ -837,7 +967,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
         std::vector<Type *> types;
         types.reserve(tuple->size());
         for (Type *elem : tuple->types()) {
-            types.push_back(substituteExtentValues(elem, values, packs));
+            types.push_back(substituteExtentValues(elem, named, packs));
             changed |= types.back() != elem;
         }
         if (!changed) {
@@ -858,14 +988,14 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
             std::vector<Type *> args;
             args.reserve(record->typeArgCount());
             for (Type *arg : record->typeArgs()) {
-                args.push_back(substituteExtentValues(arg, values, packs));
+                args.push_back(substituteExtentValues(arg, named, packs));
                 changed |= args.back() != arg;
             }
             return changed ? StructType::get(record->decl(), args) : type;
         }
         StructTypeFactory factory;
         for (size_t i = 0; i < record->size(); ++i) {
-            Type *field = substituteExtentValues(record->typeAt(i), values, packs);
+            Type *field = substituteExtentValues(record->typeAt(i), named, packs);
             changed |= field != record->typeAt(i);
             factory.add(std::string(record->fieldName(i)), field);
         }
@@ -874,7 +1004,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     case TypeCode::Function: {
         bool changed = false;
         FunctionTypeFactory factory =
-            rebuildFunctionType(static_cast<FunctionType *>(type), {}, &values, false, changed);
+            rebuildFunctionType(static_cast<FunctionType *>(type), {}, &named, false, changed);
         return changed ? factory.build() : type;
     }
     default:
@@ -883,7 +1013,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     if (type->isOtherType()) {
         // A module type decides what its named extents mean (`Tensor` keeps them as a shape).
         // A type that knows nothing of them leaves the type alone.
-        if (const Type *replaced = type->withExtentValues(values, packs);
+        if (const Type *replaced = type->withExtentValues(named, packs);
             replaced != nullptr && replaced != type) {
             return const_cast<Type *>(replaced);
         }
@@ -948,8 +1078,8 @@ bool matchParameterList(
 /// not enter either -- and when the actual is already an array, whose own element the array arm
 /// below pairs with.
 ///
-/// One judgement for both walkers: `bindTypeVars` and `unifyTypeVars` used to answer "the codes
-/// differ, so nothing binds" separately, and that is exactly the answer design principles 5.4
+/// One judgement for both walkers: `bindTypeVars` and `unifyTypeVars` do not each answer "the codes
+/// differ, so nothing binds" -- exactly the answer design principles 5.4
 /// overrules for `T[..]`. `rankZeroType()` is where the shape is decided, so the binding and
 /// `ArrayType::assignableFrom` (array.cpp, the membership check that follows) ask one place.
 Type *rankZeroBindTarget(Type *pattern, Type *actual) {
@@ -987,11 +1117,11 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     if (pattern->code() != actual->code()) {
         // `T[..]` includes rank 0, and a rank-zero array is that element (design principles 5.4),
         // so a value of some other type at an open-rank position binds the element type there and
-        // the position then holds that type at rank zero -- the same edge `ArrayType::assignableFrom`
-        // answers for the argument check, which asks `rankZeroType()` for it (array.cpp). `T[]` and
-        // `T[3, ..]` state dimensions and hold no rank-zero value, so `rankZeroType()` is the one
-        // place that decides which shapes are an open rank with no prefix, and the two answering
-        // it here and there cannot drift apart.
+        // the position then holds that type at rank zero -- the same edge
+        // `ArrayType::assignableFrom` answers for the argument check, which asks `rankZeroType()`
+        // for it (array.cpp). `T[]` and `T[3, ..]` state dimensions and hold no rank-zero value, so
+        // `rankZeroType()` is the one place that decides which shapes are an open rank with no
+        // prefix, and the two answering it here and there cannot drift apart.
         if (Type *zero = rankZeroBindTarget(pattern, actual); zero != nullptr) {
             return bindTypeVars(zero, actual, bindings);
         }
@@ -1028,8 +1158,7 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         if (want->named() && have->named()) {
             // Two instances of the same declaration: the arguments are the whole story. An
             // instance of another declaration is another type, and binds nothing.
-            if (want->decl() != have->decl() ||
-                want->typeArgCount() != have->typeArgCount()) {
+            if (want->decl() != have->decl() || want->typeArgCount() != have->typeArgCount()) {
                 return false;
             }
             for (size_t i = 0; i < want->typeArgCount(); ++i) {
@@ -1053,8 +1182,8 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return true;
     }
     case TypeCode::Function: {
-        auto *want = static_cast<FunctionType *>(pattern);
-        auto *have = static_cast<FunctionType *>(actual);
+        auto *want      = static_cast<FunctionType *>(pattern);
+        auto *have      = static_cast<FunctionType *>(actual);
         const auto pair = [&](Type *w, Type *h) { return bindTypeVars(w, h, bindings); };
         if (!matchParameterList(want->withTypesSpan(), have->withTypesSpan(), bindings, pair) ||
             !matchParameterList(want->normTypesSpan(), have->normTypesSpan(), bindings, pair)) {
@@ -1140,6 +1269,30 @@ void collectTypeVars(Type *type, std::vector<std::string> &names) {
     default:
         break;
     }
+    if (type->code() == MatchTypeType::typeCode()) {
+        // A `match type` is a type function written out: what it varies with is its subject, and a
+        // case's patterns bind the names they write (the element and the dimensions of an array
+        // pattern, the members and the rest of a pack pattern). Those names stand for what the
+        // case reached, so they are not variables of the type the `match type` is part of, and
+        // only a case's result names what the case does not bind.
+        const auto *match = static_cast<MatchTypeType *>(type);
+        collectTypeVars(match->subject(), names);
+        for (size_t arm = 0; arm < match->armCount(); ++arm) {
+            std::vector<std::string> bound;
+            match->armBoundNames(arm, bound);
+            std::vector<std::string> fromResult;
+            collectTypeVars(match->armResult(arm), fromResult);
+            for (const std::string &name : fromResult) {
+                if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
+                    continue;
+                }
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
+        }
+        return;
+    }
     if (OtherType *applied = asTypeApplication(type)) {
         among(applied->paramsSpan());
     }
@@ -1161,6 +1314,17 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         // this one writes none. A clause written in one argument is then not a requirement the
         // others have to keep, and the call's result promises no more than the arguments stated.
         Type *bound = findTypeBinding(bindings, var->name());
+        // Two occurrences that are one type in every part but their resources: the variable would
+        // have to be two types at once, and which of the two it is taken for is not a question the
+        // place they meet may answer -- that would let a use decide what the callee reaches. The
+        // compiler in hand records the pair and judges it once the bodies are measured
+        // (resource_conflict.h); a build without one keeps the reading below.
+        if (bound != nullptr && !bound->equals(actual) &&
+            typeEqualsIgnoringResources(bound, actual)) {
+            if (ResourceConflictSink &sink = resourceConflictSink(); sink) {
+                sink(*bound, *actual);
+            }
+        }
         // A variable several arguments give takes the join of what they give (the relation of the
         // mixed join): the element `void` of an empty literal constrains nothing, and of two types
         // one enters the other, the one it enters is the solution (a named struct over the unnamed
@@ -1169,8 +1333,9 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
             Type *joined = nullptr;
             if (bound->code() == TypeCode::Void) {
                 joined = actual;
-            } else if (!bound->equals(actual) && !bound->assignableFrom(actual) &&
-                       actual->assignableFrom(bound)) {
+            } else if (
+                !bound->equals(actual) && !bound->assignableFrom(actual) &&
+                actual->assignableFrom(bound)) {
                 joined = actual;
             }
             if (joined != nullptr) {
@@ -1258,8 +1423,7 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         auto *have = static_cast<StructType *>(actual);
         bool ok    = true;
         if (want->named() && have->named()) {
-            if (want->decl() != have->decl() ||
-                want->typeArgCount() != have->typeArgCount()) {
+            if (want->decl() != have->decl() || want->typeArgCount() != have->typeArgCount()) {
                 return false;
             }
             for (size_t i = 0; i < want->typeArgCount(); ++i) {
@@ -1277,8 +1441,8 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return ok;
     }
     case TypeCode::Function: {
-        auto *want = static_cast<FunctionType *>(pattern);
-        auto *have = static_cast<FunctionType *>(actual);
+        auto *want      = static_cast<FunctionType *>(pattern);
+        auto *have      = static_cast<FunctionType *>(actual);
         const auto pair = [&](Type *w, Type *h) { return unifyTypeVars(w, h, bindings); };
         if (!matchParameterList(want->withTypesSpan(), have->withTypesSpan(), bindings, pair)) {
             return false;
@@ -1374,5 +1538,3 @@ std::string typeBindingsToString(const type_bindings_t &bindings) {
 }
 
 } // namespace camel::core::type
-
-

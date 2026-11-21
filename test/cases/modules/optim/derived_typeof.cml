@@ -1,0 +1,18 @@
+/**
+ * `AdamState<typeof(params)>` is the state of the parameter tree's actual type. The declaration
+ * resolves the `typeof` inside the named state type, so `init` enters it without a conversion or
+ * an unresolved placeholder in the instance's types.
+ */
+
+import { Adam, AdamState, adam, constant, init } from optim
+
+func make_state::<P>(opt: Adam, params: P): AdamState<typeof(params)> {
+    return init(opt, params)
+}
+
+func main(): int sync {
+    let state = make_state(adam(constant(0.1)), { w: 1.0 })
+    println(state.step)
+    println(state.m.w)
+    return 0
+}

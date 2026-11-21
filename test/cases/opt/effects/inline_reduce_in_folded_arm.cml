@@ -4,7 +4,7 @@
  * `sum` computes with `reduce`, an operator declared to have effects (`:mark/reduce_arr`,
  * src/builtin/executors/builtin.cpp, `{.pure = false, .callsGraphs = true}`): the program observes
  * its running whether or not anything reads what it returns. `pick` calls it in the arm of a branch
- * whose condition is a constant, and `main` never reads the result, so `std::opt::fold` takes the
+ * whose condition is a constant, and `main` never reads the result, so `std::cxx::fold` takes the
  * branch and every unread value around it away.
  *
  * Before the fix the inlined body's tail was a GATE that the fold's branch pruning left with no
@@ -14,7 +14,7 @@
  *     graph 'main' has effect node 36 (':mark/reduce_arr') with neither a read of its value nor a
  *     place in its chain
  *
- * Pipeline: std::opt::inline std::opt::fold
+ * Pipeline: std::cxx::inline std::cxx::fold
  * Expected output: (nothing)
  */
 

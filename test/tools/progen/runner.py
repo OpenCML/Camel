@@ -54,30 +54,30 @@ BACKENDS = ["std::nvm", "std::fvm", "std::jit", "std::prl"]
 
 REWRITES: Dict[str, List[str]] = {
     "none": [],
-    "inline": ["std::opt::inline"],
-    "fold": ["std::opt::fold"],
-    "cse": ["std::opt::cse"],
-    "dce": ["std::opt::dce"],
+    "inline": ["std::cxx::inline"],
+    "fold": ["std::cxx::fold"],
+    "cse": ["std::cxx::cse"],
+    "dce": ["std::cxx::dce"],
     "simplify": ["std::opt"],
     "opt": ["std::opt"],
     "macro": ["std::macro"],
     "macro+opt": ["std::macro", "std::opt"],
-    "devirt": ["std::opt::devirtualize"],
-    "spec": ["std::opt::specialize"],
-    "inline+fold": ["std::opt::inline", "std::opt::fold"],
-    "fold+inline": ["std::opt::fold", "std::opt::inline"],
-    "fold+cse": ["std::opt::fold", "std::opt::cse"],
-    "cse+dce": ["std::opt::cse", "std::opt::dce"],
-    "inline+simplify": ["std::opt::inline", "std::opt"],
+    "devirt": ["std::cxx::devirtualize"],
+    "spec": ["std::cxx::specialize"],
+    "inline+fold": ["std::cxx::inline", "std::cxx::fold"],
+    "fold+inline": ["std::cxx::fold", "std::cxx::inline"],
+    "fold+cse": ["std::cxx::fold", "std::cxx::cse"],
+    "cse+dce": ["std::cxx::cse", "std::cxx::dce"],
+    "inline+simplify": ["std::cxx::inline", "std::opt"],
     "macro+simplify": ["std::macro", "std::opt"],
-    "macro+inline": ["std::macro", "std::opt::inline"],
+    "macro+inline": ["std::macro", "std::cxx::inline"],
     "simplify+simplify": ["std::opt", "std::opt"],
     "opt+opt": ["std::opt", "std::opt"],
-    "inline+opt": ["std::opt::inline", "std::opt"],
-    "spec+inline": ["std::opt::specialize", "std::opt::inline"],
-    "devirt+inline+dce": ["std::opt::devirtualize", "std::opt::inline", "std::opt::dce"],
-    "inline*3": ["std::opt::inline", "std::opt::inline", "std::opt::inline"],
-    "macro+fold+cse+dce": ["std::macro", "std::opt::fold", "std::opt::cse", "std::opt::dce"],
+    "inline+opt": ["std::cxx::inline", "std::opt"],
+    "spec+inline": ["std::cxx::specialize", "std::cxx::inline"],
+    "devirt+inline+dce": ["std::cxx::devirtualize", "std::cxx::inline", "std::cxx::dce"],
+    "inline*3": ["std::cxx::inline", "std::cxx::inline", "std::cxx::inline"],
+    "macro+fold+cse+dce": ["std::macro", "std::cxx::fold", "std::cxx::cse", "std::cxx::dce"],
 }
 QUICK = ["none", "inline", "fold", "cse", "dce", "simplify", "opt", "macro+opt"]
 # `cross`: every rewrite sequence on the node VM, and these on the other schedulers too.
@@ -164,8 +164,24 @@ def run_cell(source_path: Path, passes: List[str], env_values: dict, expected: L
     else:
         info.update(outcome="MISMATCH", detail=first_difference(expected, got))
     if info["outcome"] != "OK":
-        info["got"] = got[:60]
+        info["got"] = capped(got)
     return info
+
+
+GOT_LIMIT = 60
+
+
+def capped(lines: List[str]) -> List[str]:
+    """What a cell printed, cut at `GOT_LIMIT` lines -- and the cut is written into the list.
+
+    A shortened output and an output that is genuinely short read the same in a report. The first
+    version of this function cut at sixty lines and `e9diff` cut again at six, both silently: a
+    program that printed nine lines where the model says ten was read as one that printed six, and
+    a cut at six lines turns "one line is missing" into "four lines are missing". Whatever is cut
+    leaves a line that says how much was cut."""
+    if len(lines) <= GOT_LIMIT:
+        return list(lines)
+    return [*lines[:GOT_LIMIT], f"... {len(lines) - GOT_LIMIT} more line(s) truncated"]
 
 
 def first_difference(expected: List[str], got: List[str]) -> str:

@@ -1,0 +1,48 @@
+// The smallest nest of `grad` inside `grad`, through the *library's* transform: `grad` here is
+// `vjp`'s (`stdlib/vjp.cml#grad`), which is `split(jvp(first_with_as_param(f)))` and not the
+// engine's operator (`stdlib/signatures/autodiff.cml#grad`, which nests by construction).
+//
+//   f(x) = x*x,  f'(x) = 2x,  f''(x) = 2,  so the second derivative at 2 is 2.0
+//
+// The wall this case used to pin is gone, and it was the call form and not the nest: `grad(f)`
+// answered a function whose weight was its first **ordinary** parameter (`GradientOf<F>`), so the
+// outer `grad` met a function with no `with` parameter at all and `first_with_as_param` refused it --
+//
+//   Invalid call to 'first_with_as_param' with argument types <> ((w: float) => float):
+//   `first_with_as_param` moves the first `with` parameter onto the ordinary list, and this
+//   function has no `with` parameter: there is no first one to move
+//
+// The derivative keeps its weight in the `with` list now (`GradientOf<F>`, `stdlib/types.cml`), so
+// the outer `grad` finds the parameter the inner one differentiated and the nest is the same
+// composition twice: `grad(f)` answers a function of a `with` value, and `grad` differentiates a
+// function's first `with` parameter (design principles 9.9). That writing typechecks and builds.
+//
+// The nest builds and both layers lift, so the wall is past them now. It has moved twice since this
+// file was written, so it is recorded with its date instead of being relied on -- read 2026-11-21 on
+// `b74edf66c`, `std::nvm`:
+//
+//   [Error]: An error has occurred: transforms: transpose has no transpose for this function: the
+//   callee's transpose was built, but the parameter at position 3 reads a value this call does not
+//   carry.
+//
+// Before that it was `split does not build this function (the value half reads the tangent of
+// parameter 0, which the forward half does not take)` (`2a2cf31a8` removed it), and before that
+// `jvp has no forward transform for this function` (`2da9735da` gave the lift the law that lifts the
+// answer type). Neither sentence is pinned any more, here or in the plan: the entry is a
+// `known_fail` on the number, because a sentence quoted from a refused run follows the implementation
+// while the number does not.
+//
+// The number is the point and not merely the exit: 2.0, not 4.0 -- the answer of a nest that read
+// the first derivative twice without differentiating it -- and not 0.0, which is what a second pass
+// through a cut that had lost the first one answers.
+import { grad } from vjp
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+func main(): int sync {
+    println('nested_grad_min second={}'->format<grad(grad(square))<2.0>()>)
+    return 0
+}

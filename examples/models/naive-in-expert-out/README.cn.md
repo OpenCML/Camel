@@ -37,8 +37,11 @@ python examples/models/naive-in-expert-out/accuracy.py \
 ```
 
 `measure.py` 需要一个已构建的 Camel 安装和带 torch 的 Python；它从检出目录与 `sys.executable`
-找到两者。单个格子把 `results.json` 写在脚本旁边（被 git 忽略）并打印表格；`--output` 改为写一个
-要提交的文件。Camel 程序不读任何环境变量：`bench`、`init_dir`、`final_dir` 都是 `main` 的参数，
+找到两者。单个格子把 `results.json` 写在脚本旁边并打印表格；`--output` 写一个命名的文件，两者
+都落在 `results/` 这一层。**`results/` 不进仓库**（本目录的 `.gitignore`）：里面的 JSON 是一次运行
+的原始记录，随主机、当时的负载与线程数而变，提交它们只会让每个克隆都背着在别处量过一次的读数。
+它们留在跑出它们的那台机器上，文件名就是下面各节引用的那个；数字在正文的表格里，要一份新读数
+就重跑对应的命令。Camel 程序不读任何环境变量：`bench`、`init_dir`、`final_dir` 都是 `main` 的参数，
 上面第一条命令把三个都显式传入；`measure.py` 自己也这样传（`--arg bench=true --arg
 init_dir=... --arg final_dir=...`）。
 
@@ -133,7 +136,7 @@ d=1024 的两种线程数）。原因在范围里看得见：d=256 16 线程那�
 
 "16 线程"是每个物理核一个线程，不是全部 32 个硬件线程。在 16 核的 SMT 机器上要 32 个线程，测的是
 主机而不是框架：在
-[`results/2026-10-23-thread-scaling-linux.json`](results/2026-10-23-thread-scaling-linux.json) 里，
+`results/2026-10-23-thread-scaling-linux.json` 里，
 2048×1024 的 matmul 在 16 线程是 49.4 ms、在 32 线程是 47.4 ms（一点没快），而 64×64 的 matmul 在
 单线程是 0.0145 ms、16 线程 32.3 ms、32 线程 48.8 ms——这个模型由小算子拼成，每多给一个线程就多付
 一整份唤醒开销。那次运行的负载是 72；它的绝对值与扫掠一样属于共享主机，能复现的是"第 32 个线程
@@ -160,7 +163,7 @@ ms/步 成立；与 float64 的损失和参数比较在那几行不存在，JSON
 **更早的数字**。此前报告过 2.062 ms/步（更早的修订）与 2.314 ms/步（繁忙主机）。两份报告都没有在
 树里留下机器、命令或修订——本仓库的文件与提交信息里都找不到这两个数字——所以它们是背景，不是基线。
 单一尺寸那张表的 2.091（2.029–2.195，见
-[`results/2026-10-23-linux.json`](results/2026-10-23-linux.json)）与两者都相容；2.062 与 2.091 的
+`results/2026-10-23-linux.json`）与两者都相容；2.062 与 2.091 的
 差小于那次测量的范围，不能当作回归的证据。
 
 ## 朴素程序做了什么

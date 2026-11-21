@@ -10,7 +10,7 @@ timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
 
 # A pass written in Camel (`stdlib/opt.cml`) against the C++ pass that does the
-# same (`std::opt::cse`, `std::opt::dce values_only=true`). The evidence is graph equality: the
+# same (`std::cxx::cse`, `std::cxx::dce values_only=true`). The evidence is graph equality: the
 # C++ run records the graph it produced in a golden, and the Camel run's graph is put to the
 # isomorphic comparison the snapshot tests use (`gir_dot_isomorphic`, `test/tools/gir-dot.mjs`),
 # which compares each node's kind, type, shape and in/out degree and each edge's endpoint kinds,
@@ -33,17 +33,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "camel_passes.cse.subject"
-desc = "The corpus before any pass: `shared` writes `x * 7` twice over two separate 7s, `literals` has two constants of 7 that its one product reads, and `written` has two 3s beside the two products over two different reads of the cell."
+desc = "The corpus before any pass: `shared` writes `x * 7` twice over two separate 7s, `literals` has two constants of 7 that its one product reads, and `written` has two 3s beside two products over two different values -- the parameter, and the sum the rebinding between them made."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
 args = ["${case}", "std::jgir"]
 verify_script_path = "../../../cases/opt/camel_passes/cse_subject.mjs"
 
 [[tests]]
 name = "camel_passes.cse.by_cpp"
-desc = "The reference: std::opt::cse on the corpus whose literals and expressions repeat."
+desc = "The reference: std::cxx::cse on the corpus whose literals and expressions repeat."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
-args = ["${case}", "std::opt::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.cse.dot"
 
@@ -65,7 +65,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
 name = "camel_passes.cse.property"
-desc = "What opt::cse leaves: no graph keeps two nodes that are one value, the two products over two reads of a written cell stay two nodes over two different reads, `shared`'s sum reads its one product twice, `literals`' product reads one value twice, and `apart`'s two sums keep the constants 1 and 2."
+desc = "What opt::cse leaves: no graph keeps two nodes that are one value, `written`'s twice-written product stays two nodes over the two different values it reads while its twice-written 3 is one node, `shared`'s sum reads its one product twice, `literals`' product reads one value twice, and `apart`'s two sums keep the constants 1 and 2."
 case = "../../../cases/opt/camel_passes/cse_subject.cml"
 args = ["${case}", "opt::cse", "std::jgir"]
 verify_script_path = "../../../cases/opt/camel_passes/cse_property.mjs"
@@ -81,16 +81,16 @@ expect_stdout_exact = "42\n49\n27\n42\n"
 
 [[tests]]
 name = "camel_passes.cse_written_variable.by_cpp"
-desc = "The reference: std::opt::cse on the var corpus whose expression is reread after a write, whose two reads of the cell must stay apart."
+desc = "The reference: std::cxx::cse on the var corpus whose expression is reread after a write, whose two reads of the cell must stay apart."
 kind = "snapshot"
 case = "../../../cases/opt/generic/written_variable.cml"
-args = ["${case}", "std::opt::cse", "std::gir"]
+args = ["${case}", "std::cxx::cse", "std::gir"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.cse_written_variable.dot"
 
 [[tests]]
 name = "camel_passes.cse_written_variable.by_camel"
-desc = "opt::cse gives the graph std::opt::cse gives on the var corpus too: the two products over two reads of a cell with a write between them are not merged, and the two constants they read are."
+desc = "opt::cse gives the graph std::cxx::cse gives on the var corpus too: the two products over two reads of a cell with a write between them are not merged, and the two constants they read are."
 case = "../../../cases/opt/generic/written_variable.cml"
 args = ["${case}", "opt::cse", "std::gir"]
 verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
@@ -107,23 +107,23 @@ expect_stdout_exact = "3\n2\n7\n3\n2\n7\n3\n2\n7\n"
 # ---- dead values ----
 
 # The dead values are not in the compiled graph by themselves: a `let` of the source that no
-# expression reads is never built. `std::opt::inline` is what leaves values nobody reads — it takes
+# expression reads is never built. `std::cxx::inline` is what leaves values nobody reads — it takes
 # the only user of `chain`'s product away — and the sweep is what removes them, the product first
 # and the constant it reads after.
 
 [[tests]]
 name = "camel_passes.dce.subject"
-desc = "The corpus one pass before the sweep: after std::opt::inline, `chain` holds a product no node reads, over a constant 2 that the product is the only user of — the node a sweep that stopped after one round would leave behind."
+desc = "The corpus one pass before the sweep: after std::cxx::inline, `chain` holds a product no node reads, over a constant 2 that the product is the only user of — the node a sweep that stopped after one round would leave behind."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::inline", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "std::jgir"]
 verify_script_path = "../../../cases/opt/camel_passes/dce_subject.mjs"
 
 [[tests]]
 name = "camel_passes.dce.by_cpp"
-desc = "The reference: std::opt::dce restricted to values, after the inlining that leaves the dead chain."
+desc = "The reference: std::cxx::dce restricted to values, after the inlining that leaves the dead chain."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::inline", "std::opt::dce values_only=true", "std::gir"]
+args = ["${case}", "std::cxx::inline", "std::cxx::dce values_only=true", "std::gir"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.dce.dot"
 
@@ -131,7 +131,7 @@ golden = "./golden/camel_passes.dce.dot"
 name = "camel_passes.dce.by_camel"
 desc = "opt::dce, written in Camel with the graph module, gives the graph the C++ pass gives, on the corpus whose dead chain needs two rounds: the product, then the constant it reads."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::inline", "opt::dce", "std::gir"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "std::gir"]
 verify_script_path = "../../../cases/opt/camel_passes/graph_equal.mjs"
 
 [[tests]]
@@ -139,7 +139,7 @@ name = "camel_passes.dce.is_a_fixpoint"
 desc = "opt::dce run on its own output gives the same graph: the sweep repeats its rounds until no value nobody reads is left, so removing `chain`'s product and leaving the constant it read behind is refused here."
 kind = "differential"
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::inline", "opt::dce", "opt::dce", "std::gir"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "opt::dce", "std::gir"]
 compare_to = "camel_passes.dce.by_camel"
 compare_fields = ["exit_code", "stdout_normalized"]
 
@@ -147,14 +147,14 @@ compare_fields = ["exit_code", "stdout_normalized"]
 name = "camel_passes.dce.property"
 desc = "What opt::dce leaves: no graph keeps a value nobody reads, and the value the program uses is still there — `kept`'s product is read by its sum and keeps both its operands."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::inline", "opt::dce", "std::jgir"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "std::jgir"]
 verify_script_path = "../../../cases/opt/camel_passes/dce_property.mjs"
 
 [[tests]]
 name = "camel_passes.dce.program_still_runs"
 desc = "The program after opt::dce prints `chain(3)` and `kept(5)`: removing values nobody reads changed no result, on NVM, FastVM, JIT and the parallel scheduler."
 case = "../../../cases/opt/camel_passes/dce_subject.cml"
-args = ["${case}", "std::opt::inline", "opt::dce", "${backend}"]
+args = ["${case}", "std::cxx::inline", "opt::dce", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_stdout_exact = "5\n11\n"
@@ -177,10 +177,10 @@ verify_script_path = "../../../cases/opt/camel_passes/fold_subject.mjs"
 
 [[tests]]
 name = "camel_passes.fold.by_cpp"
-desc = "The reference: std::opt::fold on the corpus whose operations are over constants."
+desc = "The reference: std::cxx::fold on the corpus whose operations are over constants."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_subject.cml"
-args = ["${case}", "std::opt::fold", "std::gir"]
+args = ["${case}", "std::cxx::fold", "std::gir"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.dot"
 
@@ -243,10 +243,10 @@ verify_script_path = "../../../cases/opt/camel_passes/fold_fault_subject.mjs"
 
 [[tests]]
 name = "camel_passes.fold_fault.by_cpp"
-desc = "The reference: std::opt::fold on a corpus whose returned value is a constant expression that can only fault — it warns where the expression is written, leaves it there, and folds the product beside it."
+desc = "The reference: std::cxx::fold on a corpus whose returned value is a constant expression that can only fault — it warns where the expression is written, leaves it there, and folds the product beside it."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_fault.cml"
-args = ["${case}", "std::opt::fold", "std::jgir"]
+args = ["${case}", "std::cxx::fold", "std::jgir"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold_fault.jgir"
 
@@ -309,9 +309,9 @@ golden = "./golden/camel_passes.fold.constant_budget.camel.dot"
 
 [[tests]]
 name = "camel_passes.fold.constant_budget.by_cpp"
-desc = "The reference: the same program through std::opt::fold, which stops at the same budget."
+desc = "The reference: the same program through std::cxx::fold, which stops at the same budget."
 kind = "snapshot"
 case = "../../../cases/opt/camel_passes/fold_constant_budget.cml"
-args = ["${case}", "std::opt::fold", "std::gir"]
+args = ["${case}", "std::cxx::fold", "std::gir"]
 snapshot_stream = "stdout"
 golden = "./golden/camel_passes.fold.constant_budget.cpp.dot"

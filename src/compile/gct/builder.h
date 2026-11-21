@@ -42,8 +42,8 @@ class Builder {
     std::unique_ptr<Tree> build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
         idIndex_ = 0;
         pendingNames_.clear();
-        diags_   = diags;
-        tree_    = std::make_unique<Tree>();
+        diags_ = diags;
+        tree_  = std::make_unique<Tree>();
         initInnerTypes();
         try {
             tree_->setRoot(visitModule(node));
@@ -240,6 +240,19 @@ class Builder {
     /// parameter nor a resource (UnknownResource) and a group that contains itself
     /// (ResourceGroupCycle) are reported here, before a clause expands one.
     void checkResourceGroups();
+    /// One resource a clause names, expanded: the key it is stored under, and whether it is
+    /// external (design principles 3.3: state something outside the program also reads and
+    /// writes, so a clause that names it writes it).
+    struct AmbientEntry {
+        std::string key;
+        bool external = false;
+        /// The resource is declared `unordered` (design principles 3.3): effects on it keep no
+        /// written order.
+        bool unordered = false;
+        /// The resource is declared `readonly` (design principles 9.12, 15.5): a clause may read
+        /// it, and one that writes it is refused.
+        bool readonly = false;
+    };
     /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
     /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a
     /// Variable, any other an Object), ambient resources (a group expanded), or nothing for
@@ -251,8 +264,8 @@ class Builder {
     /// those; `where` locates the diagnostic (UnknownResource, ResourceGroupCycle).
     bool resolveAmbientResource(
         const camel::core::module::module_ptr_t &in, const Reference &name,
-        std::vector<std::string> &out, std::vector<std::string> &active,
-        std::string *failed, const AST::node_ptr_t &where);
+        std::vector<AmbientEntry> &out, std::vector<std::string> &active, std::string *failed,
+        const AST::node_ptr_t &where);
     /// The tag uses written before `ast`, lowered: the `RepeatedLoad("TagUse")` child of a
     /// function, type or block declaration, and the one of each of its fields.
     std::vector<GCT::TagUse> tagUsesOf(const AST::node_ptr_t &ast);
@@ -368,12 +381,11 @@ class Builder {
     node_ptr_t literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at);
     /// A text element of the composite literal `data` where the type of its position expects
     /// something else, reported as the type mismatch it is (design principles 5.1) at the
-    /// element itself, as the same check reports an element whose value does not fit. Recurses through
-    /// nested composites; false when there is no such element, and the caller reports the
+    /// element itself, as the same check reports an element whose value does not fit. Recurses
+    /// through nested composites; false when there is no such element, and the caller reports the
     /// literal the way it did before. `where` is the position to use for an element whose own
     /// position was not kept.
-    bool rejectTextInLiteral(
-        const data_ptr_t &data, Type *type, camel::source::origin_id_t where);
+    bool rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::source::origin_id_t where);
     /// The initializer `value` of a declaration written with the type `type` (`let x: T = e`,
     /// lowered from `ast`). A literal is converted to the type here; any other expression is
     /// put under an annotation CAST, which the GIR builder resolves once the type of the value
@@ -398,22 +410,33 @@ class Builder {
     Type *visitStreamType(const AST::node_ptr_t &ast);
     Type *visitNullableType(const AST::node_ptr_t &ast);
     Type *visitTypeExpr(const AST::node_ptr_t &ast);
+    /// `typeof e` as the type layer holds it: a type variable named for the expression, which the
+    /// tree keeps (`Tree::makeTypeOfPlaceholder`). Nothing of the expression reaches the type.
+    Type *typeOfPlaceholder(const node_ptr_t &expression);
     Type *visitArrayType(const AST::node_ptr_t &ast);
     Type *visitStructType(const AST::node_ptr_t &ast);
     Type *visitTupleType(const AST::node_ptr_t &ast);
-    Type *visitFuncType(
-        const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
+    Type *visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
     Type *visitMatchTypeType(const AST::node_ptr_t &ast);
-    /// Whether a `match type` case pattern writes the rest of a pack (`case (W, ...Rest)`), which is
-    /// how a case takes the subject pack apart (design principles 5.6): a tuple type whose last
+    /// Whether a `match type` case pattern writes the rest of a pack (`case (W, ...Rest)`), which
+    /// is how a case takes the subject pack apart (design principles 5.6): a tuple type whose last
     /// member is `...Name`.
     bool isPackPattern(const AST::node_ptr_t &typeAst) const;
     /// The names such a pattern introduces -- the members it writes out and the rest -- appended to
     /// `bound`, the names the case has already written: a name a type here already answers is that
     /// type and not a new binding.
     void packPatternNamesOf(const AST::node_ptr_t &typeAst, std::vector<std::string> &bound);
+    /// The dims group of an array-type case pattern that writes a dims pack and no extent before it
+    /// (`case E[...Dims]`, `case E[...]`), or nullptr when the pattern does not have that shape.
+    /// Such a pattern takes an array type apart: the element binds the name it writes, and the
+    /// pack is the dimensions after it (design principles 5.4, where `...s` is a dimension pack).
+    static const AST::DimGroup *arrayPatternDimsOf(const AST::node_ptr_t &typeAst);
+    /// Whether the name a case pattern writes is a new name the case binds: one it has not written
+    /// yet, and one no type here already answers (a name a type here already answers is a
+    /// reference, the rule a dimension name written once too often follows, design principles 5.4).
+    bool patternNameIsNew(const std::string &name, const std::vector<std::string> &bound) const;
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
@@ -427,4 +450,3 @@ class Builder {
 };
 
 } // namespace camel::compile::gct
-

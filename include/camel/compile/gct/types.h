@@ -7,6 +7,11 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
+
+namespace camel::core::type {
+class Type;
+}
 
 namespace camel::compile::gct {
 
@@ -16,6 +21,30 @@ class Tree;
 /// A node of the tree. Nodes belong to the Tree that made them and live as long as it; a
 /// null pointer is "no node".
 using node_ptr_t = Node *;
+
+/// The name the type layer holds for a `typeof e` before the front end resolves it: this prefix
+/// and the number `Tree::makeTypeOfPlaceholder` gave the expression. `#` is not a character an
+/// identifier can hold, so a type variable a program writes can never collide with one. The type
+/// layer knows nothing else about it: it is an ordinary type variable there.
+inline constexpr const char *kTypeOfPlaceholderPrefix = "typeof#";
+
+/// Whether `type` is such a placeholder (and not a type variable a program wrote).
+bool isTypeOfPlaceholder(const camel::core::type::Type *type);
+
+/// Whether a placeholder occurs anywhere in `type`, in any position: the ones the front end
+/// resolves (an argument of a type function, the subject of a `match type`, the arguments of a
+/// named type) and the ones it refuses with `TypeOfNotWholeType` (inside an array, a tuple, a
+/// function type) alike. A type function that is not applied yet is not searched: its body is not
+/// part of the type.
+bool hasTypeOfPlaceholder(const camel::core::type::Type *type);
+
+/// The type variables of `type`, as `collectTypeVars` names them, without the placeholders: a
+/// placeholder is not a variable a signature binds -- the front end resolves it where the type is
+/// used -- so a caller asking which variables a signature declares must not see one. Every number
+/// it does not answer for is the same before and after the placeholders were moved out of the type
+/// layer, since the type layer never held them as variables.
+void collectTypeVarsWithoutPlaceholders(
+    camel::core::type::Type *type, std::vector<std::string> &names);
 
 /// The kind of a node: what it stands for and which accessors of Node apply to it.
 enum class NodeKind : uint8_t {
@@ -46,9 +75,28 @@ enum class NodeKind : uint8_t {
     SLOOP, // `static loop`: children: TYPE, the first values, EXEC body; payload: the
            // names of the state, then the field name and its type
     SPRD,  // `..e`, a rest argument; child: the compile-time tuple it expands
+    ASSIGN, // a write of its target; children: the target, the value; tag: AssignmentForm;
+            // payload: the group of the compound operator a compound write follows
 };
 
 std::string to_string(NodeKind kind);
+
+/// What a write is. The kind says the node writes its target; the form says which write it is,
+/// since a write is not a call and the forms differ in what the write means, not in how the node
+/// is read.
+///  - Plain: `x = e`, and `v.f = e` / `v[i] = e` (the target is the path it writes). A write the
+///    program wrote.
+///  - Compound: `x op= e`, on a name or on a path. The operator it follows is the node's payload
+///    (`__assn_add__` for `+=`): that operator's set of operand types is what decides whether the
+///    compound assignment is defined, so the operator is asked, not a spelling.
+///  - Rebuilt: the whole variable's `x = ...` the graph builder rebuilds a path write into
+///    (`v.f = e` is `v = <v with the field written>`). The compiler's own write, not the
+///    program's: a value nobody takes is not reported for it.
+///  - Owned: `x = x->op<w...>()`, lowered to `__assn_owned__(x, op<w...>(x))`: the rebinding to
+///    the result of an in-place operator.
+enum class AssignmentForm : uint8_t { Plain, Compound, Rebuilt, Owned };
+
+std::string to_string(AssignmentForm form);
 
 /// What selects the arm of a BRCH node (design principles 1; all are the same structure on
 /// the graph).

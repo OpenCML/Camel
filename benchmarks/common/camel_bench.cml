@@ -48,9 +48,17 @@ func timed(forward: (x: f32[...]) => f32[...], x: f32[...], remaining: int): int
 func export_onnx(forward: (x: f32[...]) => f32[...], path: string): int sync {
     let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
     let start = now()
-    let _ = export_model<out: path>(forward, x)
-    'CAMEL_BENCH export_ms={}'->format<(now() - start) * 1000.0>->println
-    return 0
+    let r = export_model<out: path>(forward, x)
+    return match r {
+        case error e => sync {
+            println(e)
+            return 1
+        }
+        case _ => sync {
+            'CAMEL_BENCH export_ms={}'->format<(now() - start) * 1000.0>->println
+            return 0
+        }
+    }
 }
 
 /// Runs warmup and timed repetitions of `forward` and saves its output.

@@ -147,8 +147,9 @@ the file records it as such rather than as an overhead figure.
 ## 6. Measurement: d=256 and d=1024
 
 One thread, 16 steps and 3 warm-up, the generated `train_step.cml` (`measure.py`'s substitutions),
-`tensor::fuse std::jit`, `--block-limit 8192`, `std::profile report=true top=0`. Full data:
-[`examples/models/naive-in-expert-out/results/2026-10-23-d256-d1024-alloc-profile.json`](../../examples/models/naive-in-expert-out/results/2026-10-23-d256-d1024-alloc-profile.json).
+`tensor::fuse std::jit`, `--block-limit 8192`, `std::profile report=true top=0`. Full data: the
+run's `2026-10-23-d256-d1024-alloc-profile.json`, which stays on the machine that took it -- the
+example's `results/` is not in the repository (examples/models/naive-in-expert-out/README.md).
 
 | | d=256 | d=1024 |
 |---|---|---|

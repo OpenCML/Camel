@@ -19,6 +19,7 @@
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/collection.h"
@@ -41,14 +42,15 @@
 #include <atomic>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -167,13 +169,42 @@ inline TupleType *currentClosureTupleType(const compile_graph_ptr_t &graph) {
 
 inline StaticFunction *createStaticFunction(
     const compile_graph_ptr_t &ownerGraph, const compile_graph_ptr_t &targetGraph) {
-    GUARD(
-        targetGraph != nullptr,
-        "Target graph is null when materializing compile-time function.");
+    GUARD(targetGraph != nullptr, "Target graph is null when materializing compile-time function.");
     return StaticFunction::create(
         targetGraph,
         currentClosureTupleType(targetGraph),
         staticFunctionAllocator(ownerGraph));
+}
+
+/// The order two nodes of a compile-time table are walked in, when that walk decides what the body
+/// builds: the graph the node belongs to first, then the node's own id.
+///
+/// `operator<` on a handle is not this order. The handle's `std::hash` and its ordering both reach
+/// the draft through a pointer (`include/camel/runtime/node_ref.h#DraftNodeRef`), so a table of them
+/// walked as it stands walks the allocator's order, and the compiled graph then depends on where the
+/// nodes happened to land. The node's id alone is not this order either: an id names a node **inside
+/// one graph**, and these tables hold nodes of several, so an id-first key orders two graphs' nodes
+/// by their numbering and interleaves them -- two entries whose ids are equal are then separated
+/// only by whatever their hash happened to be, which is the same defect one level down. The graph's
+/// identity is the draft's `epoch`, the number the draft was made with and that no other draft is
+/// ever given (`node_ref.h`), so `(epoch, id)` is one name per node and a total order over the whole
+/// table.
+inline bool walksBefore(const node_handle_t &left, const node_handle_t &right) {
+    if (left.epoch != right.epoch) {
+        return left.epoch < right.epoch;
+    }
+    return left.id < right.id;
+}
+
+/// The same order for the tables keyed by the graph itself: a graph's identity is the epoch of the
+/// draft it builds (`GraphDraft::epoch`), never the address of its builder.
+inline bool walksBeforeGraph(const DraftGraphBuilder *left, const DraftGraphBuilder *right) {
+    if (left == nullptr || right == nullptr) {
+        return left != nullptr;
+    }
+    const uint64_t leftEpoch  = left->transaction().graph().epoch();
+    const uint64_t rightEpoch = right->transaction().graph().epoch();
+    return leftEpoch < rightEpoch;
 }
 
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
@@ -361,7 +392,8 @@ inline std::string conversionTextOf(const std::string &text, const ConversionGap
 }
 
 /// "it has type 'A', less exact than 'B'" for each gap, the subject naming the element.
-inline std::string describeGaps(const std::string &subject, const std::vector<ConversionGap> &gaps) {
+inline std::string
+describeGaps(const std::string &subject, const std::vector<ConversionGap> &gaps) {
     std::string out;
     for (const ConversionGap &gap : gaps) {
         out += out.empty() ? "" : "; ";
@@ -390,12 +422,11 @@ inline void setNodeMacro(node_handle_t node, bool enabled) {
 
 inline compile_graph_ptr_t createCompileGraph(
     runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
-    std::string name = "",
-    const std::vector<camel::source::origin_id_t> &parameterOrigins = {}) {
+    std::string name = "", const std::vector<camel::source::origin_id_t> &parameterOrigins = {}) {
     // The graph's identity is taken by the transaction it is built in: this is the one place a
     // compile graph comes into being, and it comes into being inside a transaction.
-    auto graph = std::make_shared<DraftGraphBuilder>(runtime::GraphTransaction::open(
-        id, funcType ? funcType : FunctionType::create()));
+    auto graph = std::make_shared<DraftGraphBuilder>(
+        runtime::GraphTransaction::open(id, funcType ? funcType : FunctionType::create()));
     if (name.empty()) {
         name = std::format("__g_{}__", runtime::toValue(id));
     }
@@ -419,8 +450,7 @@ inline compile_graph_ptr_t createCompileGraph(
         // call passes, and a pack is the arguments a call writes beyond the fixed parameters,
         // decided at the call (design principles 4.4, 5.6). Its slot stays in the signature,
         // which is what the name table below indexes with, and no port stands for it.
-        const size_t withPorts =
-            funcType->withTypesCount() - (funcType->hasWithRest() ? 1 : 0);
+        const size_t withPorts = funcType->withTypesCount() - (funcType->hasWithRest() ? 1 : 0);
         for (size_t i = 0; i < withPorts; ++i) {
             const std::string portName = i < funcType->argNamesCount()
                                              ? std::string(funcType->argNameAt(i))
@@ -451,10 +481,50 @@ inline compile_graph_ptr_t createCompileGraph(
 using camel::core::displayNameOf;
 using camel::core::operatorSymbolOf;
 
-/// The prefix of a name the compiler writes for a built-in operator it means itself (the
-/// `filter` and `map` of a list comprehension). No program can write it, and no declaration
-/// of the program is looked at when it is resolved.
-constexpr std::string_view kBuiltinPrefix = "$builtin::";
+/// The prefix of a name the compiler writes for a built-in operator it means itself. Stated once,
+/// in `core/operator_names.h`: the GCT layer writes such names too (the `filter` and `map` of a
+/// list comprehension) and cannot include this header.
+using camel::core::kBuiltinPrefix;
+
+/// Whether a value of this type can hold a function value: a function itself, or a composite that
+/// can carry one (a tuple or struct field, an array element). A body whose result is of such a type
+/// can hand a closure it made to its caller, which is what makes a cell the closure captured
+/// outlive the call (design principles 3.3, effect masking; the state rule, 3.5 rule two). A type
+/// this does not read is answered as able to hold one: refusing a program costs a program,
+/// accepting one whose cell escapes costs correctness.
+inline bool typeCarriesFunction(const Type *type, int depth = 0) {
+    if (type == nullptr || depth > 8) {
+        return true;
+    }
+    switch (type->code()) {
+    case TypeCode::Function:
+        return true;
+    case TypeCode::Tuple: {
+        const auto *tuple = static_cast<const TupleType *>(type);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (typeCarriesFunction(tuple->typeAt(i), depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Struct: {
+        const auto *record = static_cast<const StructType *>(type);
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (typeCarriesFunction(record->typeAt(i), depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Array:
+        return typeCarriesFunction(static_cast<const ArrayType *>(type)->elemType(), depth + 1);
+    case TypeCode::Other:
+        return true; // an enum or a type a module names: its variants may hold one
+    default:
+        return false;
+    }
+}
 
 inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
     if (!lhs || !rhs || nodeGraphOf(lhs) != nodeGraphOf(rhs)) {
@@ -471,9 +541,9 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
 /// Whether `from` already reaches `to` over data edges, directly or through the nodes between them:
 /// `to` reads what `from` produced, so it is computed after it, and an edge that only says "after"
 /// says nothing new. This is the transitive form of `hasDirectDataDependency`, and the question a
-/// read before a write asks: `x = x + 1` and `x += 1` both hand the read's value to the operator the
-/// write stores, so both are ordered already and neither is given a second edge (design principles
-/// 2.1). The transitive reduction over the edges that remain is `std::opt::order`'s.
+/// read before a write asks: `x = x + 1` and `x += 1` both hand the read's value to the operator
+/// the write stores, so both are ordered already and neither is given a second edge (design
+/// principles 2.1). The transitive reduction over the edges that remain is `std::cxx::order`'s.
 inline bool dataPathReaches(node_handle_t from, node_handle_t to) {
     if (!from || !to || from == to || nodeGraphOf(from) != nodeGraphOf(to)) {
         return false;
@@ -545,9 +615,8 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
     if (kind == runtime::GCNodeKind::Oper) {
         // The operator of a node being built is named by its target, not yet by a payload.
         const auto &op = nodeGraphOf(node)->operTarget(node);
-        const auto id  = op == nullptr
-                             ? std::optional<camel::core::OperId>{}
-                             : camel::core::OperatorTable::instance().lookup(op->uri());
+        const auto id  = op == nullptr ? std::optional<camel::core::OperId>{}
+                                       : camel::core::OperatorTable::instance().lookup(op->uri());
         return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }
     return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
@@ -562,59 +631,18 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
 /// of the value a variable holds may be reused by an update -- is decided by the execution plan
 /// from the graph itself: a read that keeps the value ends the proof (`:var/get`), a read that
 /// cannot (`:var/peek`) leaves it standing, and an edge that only orders carries no use (design
-/// principles 3.3, 3.4). The transitive reduction over such edges lives in `std::opt::order`;
+/// principles 3.3, 3.4). The transitive reduction over such edges lives in `std::cxx::order`;
 /// measured that adding or removing one changes no decision.
 inline bool chainEdgeSaysSomething(node_handle_t from, node_handle_t to) {
     return linkCheek(from, to) && !hasDirectDataDependency(from, to);
 }
 
-/// Whether `node` is a read of a variable the lowerer writes as an operator of its own
-/// (`:var/get`, `:var/peek`): the one kind of node a `sync` block puts in its chain for the place
-/// a read is written at, when the variable is a `var` parameter (`Builder::readVariableThrough`,
-/// docs/design/effects/edges.cn.md 5.5).
-inline bool nodeIsVariableRead(node_handle_t node) {
-    if (node == nullptr || nodeKindOf(node) != runtime::GCNodeKind::Oper) {
-        return false;
-    }
-    const auto &op = nodeGraphOf(node)->operTarget(node);
-    const auto id  = op == nullptr
-                         ? std::optional<camel::core::OperId>{}
-                         : camel::core::OperatorTable::instance().lookup(op->uri());
-    return id.has_value() && camel::core::oper::isVariableRead(*id);
-}
-
-/// Whether `from` is a read of a `var` that `to` takes as an argument: the previous chain node is
-/// one of the statement's own argument reads. This is the one shape in which the chain edge must be
-/// written even though `to` already reads the order of `from` from its data edge: the read's chain
-/// place is the read's, not the statement's, so without the edge the statement has no place of its
-/// own on the block's chain (docs/design/effects/edges.cn.md 5.3, 5.5).
-inline bool fromIsArgumentReadOf(node_handle_t from, node_handle_t to) {
-    if (from == nullptr || to == nullptr || nodeGraphOf(from) != nodeGraphOf(to)) {
-        return false;
-    }
-    if (!nodeIsVariableRead(from)) {
-        return false;
-    }
-    const draft_node_ref_t id = nodeIdOf(from);
-    return std::ranges::find(normInputsOf(to), id) != normInputsOf(to).end() ||
-           std::ranges::find(withInputsOf(to), id) != withInputsOf(to).end();
-}
-
-/// Whether a `sync` block's chain has to name this pair: a statement of the block follows the one
-/// written before it by a sync edge, and that edge carries "used" as well as "after" (5.3). The
-/// data-dependency skip still stands wherever it did: a node that is not a statement of a chain --
-/// pure and unable to fault (3.4), so a pass may arrange it -- is not on the chain, and neither is a
-/// statement whose link carries something beyond the order. "Is a statement of a chain" is
-/// `runtime::isChainStatement`, the same answer the seal check's census reads: two predicates for
-/// the one question is what let the writer and the checker disagree. The one pair the skip must not
-/// take is an effectful or faulting statement that reads a `var` through a place of its own
-/// (`fromIsArgumentReadOf`): the read's chain place is the read's, so without the edge the statement
-/// has no place on the chain.
+/// Whether a `sync` block's chain has to name this pair. A statement follows the one written before
+/// it even when it also reads that statement's value: the data edge orders, but only the sync edge
+/// says the statement occupies its own chain place. Pure, infallible computations stay off the
+/// chain. `runtime::isChainStatement` is the same classification the seal check reads.
 inline bool chainLinkSaysSomething(node_handle_t from, node_handle_t to) {
-    return linkCheek(from, to) &&
-           (!hasDirectDataDependency(from, to) ||
-            (camel::runtime::isChainStatement(*nodeDraftOf(to), nodeIdOf(to)) &&
-             fromIsArgumentReadOf(from, to)));
+    return linkCheek(from, to) && camel::runtime::isChainStatement(*nodeDraftOf(to), nodeIdOf(to));
 }
 
 /// Whether a control edge that stands in for the data edge a pair is still owed says anything: the
@@ -667,46 +695,26 @@ inline bool isFailCall(node_handle_t node) {
     return op != nullptr && op->uri() == camel::core::kFailOperatorUri;
 }
 
-/// A statement one `sync` block writes directly: the edge that joins it to the statement written
-/// before it is a sync edge (docs/design/effects/edges.cn.md 1.5), and the builder records that fact
-/// on both ends so the seal check can read the graph back (src/runtime/graph_edges.cpp,
-/// `checkSyncEdges`).
-inline void markSyncStatement(node_handle_t node) {
-    if (node == nullptr) {
-        return;
-    }
-    auto *draft               = nodeDraftOf(node);
-    const draft_node_ref_t id = nodeIdOf(node);
-    draft->setNodeRuntimeFlags(
-        id, static_cast<uint8_t>(draft->header(id)->runtimeFlags | runtime::kGCNodeFlagSyncStatement));
-}
-
-/// The chain link itself: both ends marked as statements of one block, which is what the seal check
-/// reads back (src/runtime/graph_edges.cpp, `checkSyncEdges`), and the sync edge between them. No
-/// control edge: this is the pair as the model wants it, for a caller whose edge is not written for a
-/// consumer that still reads the old kind.
+/// The chain link itself. No control edge: this is the pair as the model wants it, for a caller
+/// whose edge is not written for a consumer that still reads the old kind.
 inline void writeSyncLink(node_handle_t from, node_handle_t to) {
-    markSyncStatement(from);
-    markSyncStatement(to);
     linkNodes(LinkType::Sync, from, to);
 }
 
-/// One link of a `sync` block's chain: a statement follows the one written before it by a sync edge,
-/// which carries "used" as well as the order (docs/design/effects/edges.cn.md 1). The link is decided
-/// by that sync edge -- what a `sync` block wrote is read back from `syncPredsOf` -- and the control
-/// edge the kind names the same pair with is written beside it only for a consumer that still reads
-/// that kind; nothing is judged by it. Both are written as one pair so that no consumer of the chain
-/// reads less than it did; the inline splice writes them the same way (src/runtime/draft.cpp,
-/// `setSyncInputs`).
+/// One link of a `sync` block's chain: a statement follows the one written before it by a sync
+/// edge, which carries "used" as well as the order (docs/design/effects/edges.cn.md 1). The link is
+/// decided by that sync edge -- what a `sync` block wrote is read back from `syncPredsOf` -- and
+/// the control edge the kind names the same pair with is written beside it only for a consumer that
+/// still reads that kind; nothing is judged by it. Both are written as one pair so that no consumer
+/// of the chain reads less than it did; the inline splice writes them the same way
+/// (src/runtime/draft.cpp, `setSyncInputs`).
 ///
-/// Both ends are marked as statements of one block, which is what the seal check reads back
-/// (src/runtime/graph_edges.cpp, `checkSyncEdges`). The caller has already decided the edge says
-/// something: this is the raw pair, and a chain that reaches a node the graph hands on asks it even
-/// when that node reads the tail (there the wait *is* the only thing that reaches the node).
-/// The one place a control edge is written on the builder's side: a caller that needs the kind
-/// beside a sync edge calls this instead of `linkNodes`, so what the kind means while it is being
-/// retired (docs/design/effects/edges.cn.md 1: a graph's edges are data, sync and order) is decided
-/// here rather than at fourteen call sites.
+/// The caller has already decided the edge says something: this is the raw pair, and a chain that
+/// reaches a node the graph hands on asks it even when that node reads the tail (there the wait
+/// *is* the only thing that reaches the node). The one place a control edge is written on the
+/// builder's side: a caller that needs the kind beside a sync edge calls this instead of
+/// `linkNodes`, so what the kind means while it is being retired (docs/design/effects/edges.cn.md
+/// 1: a graph's edges are data, sync and order) is decided here rather than at fourteen call sites.
 inline void writeControlLink(node_handle_t from, node_handle_t to) {
     linkNodes(LinkType::Ctrl, from, to);
 }
@@ -834,7 +842,7 @@ expressionSpan(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
     camel::source::source_file_id_t fileId = camel::source::kInvalidSourceFileId;
     size_t start = 0, end = 0;
     std::function<void(const GCT::node_ptr_t &, int)> cover = [&](const GCT::node_ptr_t &node,
-                                                                 int depth) {
+                                                                  int depth) {
         if (node == nullptr || depth > 32) {
             return;
         }
@@ -886,7 +894,7 @@ inline void registerGraphOrigin(
     const std::string &label                             = "gir.graph",
     std::vector<camel::source::SemanticPart> extraParts  = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
-    const std::string &syntheticReason                   = "",
+    const std::string &syntheticReason   = "",
     camel::source::span_id_t primarySpan = camel::source::kInvalidSpanId) {
     if (!context || !graph) {
         return;
@@ -896,7 +904,12 @@ inline void registerGraphOrigin(
         return;
     }
     auto origin = deriveGirOrigin(
-        context, gct, camel::source::OriginKind::Graph, label, mergedInputs, primarySpan);
+        context,
+        gct,
+        camel::source::OriginKind::Graph,
+        label,
+        mergedInputs,
+        primarySpan);
     if (origin != camel::source::kInvalidOriginId) {
         sourceContext->debugMap().registerGraphOrigin(graph->graphId(), origin);
         sourceContext->registerGirGraphSemantic(
@@ -1050,9 +1063,17 @@ enum class ConditionSeparation {
 inline const std::vector<Type *> &registeredWhenTypes() {
     static const std::vector<Type *> types = [] {
         std::vector<Type *> list{
-            Type::Int(),        Type::Int32(),     Type::Float(),     Type::Float32(),
-            Type::BFloat16(),   Type::Float16(),   Type::Complex64(), Type::Complex128(),
-            Type::Bool(),       Type::String(),    Type::Void()};
+            Type::Int(),
+            Type::Int32(),
+            Type::Float(),
+            Type::Float32(),
+            Type::BFloat16(),
+            Type::Float16(),
+            Type::Complex64(),
+            Type::Complex128(),
+            Type::Bool(),
+            Type::String(),
+            Type::Void()};
         // One of each composite shape: an array, a tuple, a function, and an empty struct.
         list.push_back(ArrayType::create(Type::Int()));
         list.push_back(TupleType::create({Type::Int(), Type::Int()}));
@@ -1069,14 +1090,14 @@ inline const std::vector<Type *> &registeredWhenTypes() {
 /// The names of the type variables a condition writes, in the order it writes them: a condition
 /// is asked about one type by binding each of them to it (`is_integer::<T>()` asks about `T`,
 /// which the declaration's own signature is written over).
-inline void collectConditionTypeVars(
-    const GCT::node_ptr_t &condition, std::vector<std::string> &names) {
+inline void
+collectConditionTypeVars(const GCT::node_ptr_t &condition, std::vector<std::string> &names) {
     if (condition == nullptr) {
         return;
     }
     if (condition->type() == GCT::NodeKind::TYPE) {
         std::vector<std::string> written;
-        camel::core::type::collectTypeVars(condition->dataType(), written);
+        GCT::collectTypeVarsWithoutPlaceholders(condition->dataType(), written);
         for (const std::string &name : written) {
             if (std::find(names.begin(), names.end(), name) == names.end()) {
                 names.push_back(name);
@@ -1155,15 +1176,15 @@ inline ConditionSeparation separateWhenConditions(
 /// Whether a value's type goes from `T` to `T[..]`, or back from `T[..]` to `T`: the two edges the
 /// run represents with a rank-zero array (design principles 5.4 -- a rank-zero array *is* the
 /// element, so the conversion is invisible to the program: the same value, the same printing, the
-/// same comparison). `Builder::coerceTo` is where the conversion is inserted, and a call argument --
-/// the one entrance that is not some position's `coerceTo` -- asks this same question before it
+/// same comparison). `Builder::coerceTo` is where the conversion is inserted, and a call argument
+/// -- the one entrance that is not some position's `coerceTo` -- asks this same question before it
 /// enters (builder_operators.cpp), so both entrances answer with one rule.
 ///
 /// The rule itself is stated once, in the type layer
 /// (`camel/core/type/composite/array.h#isRankZeroEdge`), because the transposition walk asks it too
 /// where it hands a law the cotangent of that law's port, and that entrance is not a builder's
-/// (`modules/transforms/transpose.cpp#ruleCotangent`). One rule, and the entrances that ask it rather
-/// than a second reading each.
+/// (`modules/transforms/transpose/walk.cpp#ruleCotangent`). One rule, and the entrances that ask it
+/// rather than a second reading each.
 using camel::core::type::isRankZeroEdge;
 
 /// The element type a position of `T[..]` holds, or null when the position is not an open rank with
@@ -1176,5 +1197,31 @@ inline Type *rankZeroElementOf(Type *type) {
     const auto *array = tt::as_ptr<const ArrayType>(type);
     return array != nullptr ? array->rankZeroType() : nullptr;
 }
+
+// The group whose result `a != b` negates (design principles 4.2, 4.3): `==`. `!=` is not
+// overloaded itself -- an overload of `==` gives it -- so this is also the group the call
+// resolves in before the negation is built over its one result. Null for every other operator,
+// and for a call written by name. `!==` is not here: it is not an overloadable form, so no DREF
+// of it reaches these files -- the construction tree builds it as `!(===)` (gct/builder.cpp).
+inline const char *negatedWholeOf(const std::string &group) {
+    if (group == "__neq__") {
+        return "__eq__";
+    }
+    return nullptr;
+}
+
+/// Clears the "the statement being built has a value nobody takes" mark for the length of a
+/// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
+/// an argument written inside one is not a statement of its own.
+struct UnusedStatementScope {
+    const GCT::Node *&slot;
+    const GCT::Node *saved;
+    UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value) : slot(slot), saved(slot) {
+        slot = value;
+    }
+    ~UnusedStatementScope() { slot = saved; }
+    UnusedStatementScope(const UnusedStatementScope &)            = delete;
+    UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
+};
 
 } // namespace camel::compile::gir

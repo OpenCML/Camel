@@ -36,6 +36,6 @@ func main(): int sync {
     println('vjp_ruleset value={}'->format<value>)
     println(cotangents)
     println('vjp_ruleset cotangent={}'->format<cotangents.0>)
-    println('vjp_ruleset grad={}'->format<grad(f_at)(2.0)>)
+    println('vjp_ruleset grad={}'->format<grad(f_at)<2.0>()>)
     return 0
 }

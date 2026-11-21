@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 #include "fastvm.h"
-#include "camel/runtime/exec_plan.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/module.h"
+#include "camel/core/rtdata/aggregate.h"
+#include "camel/core/rtdata/view.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
+#include "camel/execute/operator_call.h"
 #include "camel/profile/profile.h"
+#include "camel/execute/loop_frame.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
-#include "camel/core/rtdata/aggregate.h"
-#include "camel/core/rtdata/view.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
 
@@ -22,8 +24,8 @@
 #include "jit/backend/backend.h"
 #include "jit/runtime/trampoline.h"
 
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <optional>
 #include <stdexcept>
 #endif
@@ -76,8 +78,7 @@ inline void setFastVmGraphLengthOf(camel::runtime::GCGraph *graph, size_t length
 
 #if ENABLE_FASTVM_JIT
 inline jit::JitEntryFn fastVmJitEntryOf(camel::runtime::GCGraph *graph) {
-    return graph ? reinterpret_cast<jit::JitEntryFn>(graph->execPlan().fastVm.jitEntry)
-                 : nullptr;
+    return graph ? reinterpret_cast<jit::JitEntryFn>(graph->execPlan().fastVm.jitEntry) : nullptr;
 }
 
 inline void setFastVmJitEntryOf(camel::runtime::GCGraph *graph, jit::JitEntryFn fn) {
@@ -359,8 +360,7 @@ void FastVMSchedPass::leaseCode(camel::runtime::GCGraph *graph, size_t start, si
     if (&bytecodes_ != &ownBytecodes_) {
         return; // a host's image
     }
-    graph->execPlan().fastVm.codeLease =
-        std::make_shared<CodeLease>(codeSpace_, start, length);
+    graph->execPlan().fastVm.codeLease = std::make_shared<CodeLease>(codeSpace_, start, length);
 #if ENABLE_FASTVM_JIT
     // A version that already has its JIT entry (a second lease of the same graph) keeps the entry
     // cleared with the new lease.
@@ -522,8 +522,8 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
 
     if (camel::profile::enabled()) {
 #if ENABLE_FASTVM_JIT
-        camel::profile::setBackend(jitConfig_.policy == jit::JitPolicy::Disabled ? "std::fvm"
-                                                                                : "std::jit");
+        camel::profile::setBackend(
+            jitConfig_.policy == jit::JitPolicy::Disabled ? "std::fvm" : "std::jit");
 #else
         // A build without the JIT runs this pass as `std::fvm`, whichever name it was given.
         camel::profile::setBackend("std::fvm");
@@ -633,7 +633,9 @@ void FastVMSchedPass::evalMarkedOperator(
         evalMarkedOperator_isolate(self, nargs, wargs, currFrame);
         break;
     default:
-        throw std::runtime_error("Unsupported marked operator in FastVM.: the dispatch reached a case no handler covers");
+        throw std::runtime_error(
+            "Unsupported marked operator in FastVM.: the dispatch reached a case no handler "
+            "covers");
     }
 }
 
@@ -678,7 +680,7 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *source = currFrame.get<Array *>(nargs[0]);
+    Array *source                      = currFrame.get<Array *>(nargs[0]);
     const Array::ElementRead readClass = source->elementRead();
     const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
@@ -720,7 +722,7 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *source = currFrame.get<Array *>(nargs[0]);
+    Array *source                      = currFrame.get<Array *>(nargs[0]);
     const Array::ElementRead readClass = source->elementRead();
     const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
@@ -754,15 +756,18 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
             Array *arr                     = currFrame.get<Array *>(nargs[0]);
             Function *func                 = currFrame.get<Function *>(wargs[0]);
             const HigherOrderCallSite site = higherOrderCallSite(func);
-            const slot_t args[]            = {currFrame.get<slot_t>(self), arr->readElement<kRead>(i, viewLayout)};
+            const slot_t args[]            = {
+                currFrame.get<slot_t>(self),
+                arr->readElement<kRead>(i, viewLayout)};
             requireNestedCallRoom(&currFrame);
             Frame *frame = framePool_.acquire(site.runtimeGraph);
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
-            // The accumulator is the value the next round reads, so it is a value, not a view of the
-            // element this round read. The store is the boundary: materialise here.
+            // The accumulator is the value the next round reads, so it is a value, not a view of
+            // the element this round read. The store is the boundary: materialise here.
             const slot_t next = camel::core::rtdata::materializeCallResult(
-                callElement(site, frame), accumulatorType);
+                callElement(site, frame),
+                accumulatorType);
             CAMEL_ASSERT_NOT_VIEW(next, accumulatorType, "the reduce accumulator");
             currFrame.set(self, next);
         }
@@ -771,7 +776,7 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
 
 void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    Array *source = currFrame.get<Array *>(nargs[0]);
+    Array *source                      = currFrame.get<Array *>(nargs[0]);
     const Array::ElementRead readClass = source->elementRead();
     const bool useViews                = readClass == Array::ElementRead::View;
     const type::DataLayout *viewLayout =
@@ -882,7 +887,7 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     // (push(), requireNestedCallRoom()) -- less the calls already open, whichever spelling put
     // them there: push() for a direct call, nestedCalls_ for a call through a function value.
     // Both are subtracted, because the count must not depend on the spelling
-    // (camel/execute/limits.h) after std::opt::devirtualize rewrites one into the other.
+    // (camel/execute/limits.h) after std::cxx::devirtualize rewrites one into the other.
     const size_t room = maxRecursionDepth_ + camel::execute::kEntryCalls;
     jc->depthBudget   = room - std::min(stackDepth_ + nestedCalls_, room);
     // The count does not bound the machine stack its native calls use: they also stop above
@@ -894,9 +899,11 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     try {
         result = fn(slots, jitCtx);
     } catch (...) {
+        // A frame goes back with a loop still open only when the run is unwinding past that loop's
+        // exit; what the loop held comes home before the slots are reset (camel/execute/loop_frame.h,
+        // `releaseWithOpenLoops`).
         camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
-        if (framePool_.isActive(frame))
-            framePool_.release(frame);
+        camel::execute::releaseWithOpenLoops(framePool_, frame);
         throw;
     }
     camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
@@ -920,8 +927,7 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
         // What a helper of framed code caught: located already where it is a fault.
         std::exception_ptr pending = std::move(jc->pending);
         jc->pending                = nullptr;
-        if (framePool_.isActive(frame))
-            framePool_.release(frame);
+        camel::execute::releaseWithOpenLoops(framePool_, frame);
         std::rethrow_exception(pending);
     }
     // The fault is in the graph the frame belongs to (compiled code calls only itself), at the
@@ -929,8 +935,9 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     const ExecutionSite site =
         makePcExecutionSite(context_->sourceContext(), frame, pc, 0, "", ExecutionSiteKind::JitPc);
     const std::string graphName = frame->graphName();
-    if (framePool_.isActive(frame))
-        framePool_.release(frame);
+    // A loop this frame is still inside gives back what it held: the frame is released at once and the
+    // slots that name the value go with it (camel/execute/loop_frame.h, `releaseWithOpenLoops`).
+    camel::execute::releaseWithOpenLoops(framePool_, frame);
     const RuntimeFault fault =
         kind == x64::JitFaultKind::DivisionByZero ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
         : kind == x64::JitFaultKind::MaxRecursionDepthExceeded
@@ -1075,7 +1082,20 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     const data_arr_t nargs = bc->nargs();
                     const data_arr_t wargs = bc->wargs();
                     if (bc->opcode == OpCode::SCHD) {
-                        evalMarkedOperator(bc->extra()->mark, bc->result, nargs, wargs, *cur);
+                        // A marked operator reached from compiled code: the count's rows at its
+                        // position are the hook's (camel/execute/operator_call.h), the same way the
+                        // interpreter runs them at gotovm.cpp's `label_SCHD`.
+                        camel::execute::callOperator(
+                            camel::execute::siteOfSlot(*cur, bc->result),
+                            [&] {
+                                evalMarkedOperator(
+                                    bc->extra()->mark,
+                                    bc->result,
+                                    nargs,
+                                    wargs,
+                                    *cur);
+                                return bc->result == 0 ? NullSlot : cur->get<slot_t>(bc->result);
+                            });
                     } else {
                         GUARD(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");
                         // A call through a function value, as the interpreters make it: nested
@@ -1098,11 +1118,19 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                             callCount);
                         --nestedCalls_;
                         cur->set(bc->result, value);
+                        // The rows the plan has at this call's position, the same ones
+                        // gotovm.cpp's `label_CALL` runs (camel/execute/operator_call.h,
+                        // `runNode`).
+                        (void)camel::execute::runNode(
+                            camel::execute::siteOfSlot(*cur, bc->result),
+                            [&] { return value; });
                     }
                     break;
                 }
                 default:
-                    throw std::runtime_error("Unknown exit kind of framed JIT code.: the dispatch reached a case no handler covers");
+                    throw std::runtime_error(
+                        "Unknown exit kind of framed JIT code.: the dispatch reached a case no "
+                        "handler covers");
                 }
             }
             if (!activationEnded) {
@@ -1132,7 +1160,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
         // stands in a frame that the frames it still holds are *above*. The pool is a stack, so the
         // order is the pool's -- the highest frame first -- and releasing `cur` first released a
         // frame that was not the top whenever the fault came back out of a call the driver had
-        // already pushed (`stream.generator_body_fault_ends_stream` on `std::jit`, 2026-11-02,
+        // already pushed (`stream.generator_body_fault_ends_stream` on `std::jit`,
         // where `main` was released under the still-active closure frame).
         Frame *siteFrame = cur;
         std::vector<Frame *> mine;
@@ -1148,8 +1176,8 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
             return reinterpret_cast<uintptr_t>(left) > reinterpret_cast<uintptr_t>(right);
         });
         for (Frame *held : mine)
-            framePool_.release(held);
-        stackDepth_ = depthBase;
+            camel::execute::releaseWithOpenLoops(framePool_, held);
+        stackDepth_  = depthBase;
         nestedCalls_ = nestedBase;
         try {
             throw;
@@ -1189,7 +1217,7 @@ void FastVMSchedPass::attachJitEntry(camel::runtime::GCGraph *graph, JitEntryFn 
         return;
     }
     const std::weak_ptr<JitGraphCache> cache = jitCache_;
-    lease->onRelease = [cache, fn] {
+    lease->onRelease                         = [cache, fn] {
         if (const auto alive = cache.lock()) {
             alive->forget(fn);
         }
@@ -1338,10 +1366,9 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
             for (const auto &construct : jitBackend_->runtimeConstructs(unit)) {
                 if (construct.kind != "LOOP")
                     continue;
-                auto it = std::find_if(
-                    byDetail.begin(),
-                    byDetail.end(),
-                    [&](const auto &entry) { return entry.first == construct.detail; });
+                auto it = std::find_if(byDetail.begin(), byDetail.end(), [&](const auto &entry) {
+                    return entry.first == construct.detail;
+                });
                 if (it == byDetail.end())
                     byDetail.emplace_back(construct.detail, 1);
                 else
@@ -1395,7 +1422,6 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
 
 // The four functions below are the interpreter's own: a build without the JIT needs them too.
 slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
-#if ENABLE_FASTVM_COMPUTED_GOTO
     // With an execution observer (a debugger) installed, the activation is reported and runs
     // on the loop that has the observer's hooks (inspectvm.cpp). One load of a pointer per
     // nested activation otherwise; the loop of a normal run has no hook at all.
@@ -1406,7 +1432,6 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             framePool_.release(inspected.rootFrame);
         return inspected.result;
     }
-#endif
     CallResult result = callBorrowed(pc, rootFrame);
 #if ENABLE_FASTVM_JIT
     if (result.tailFn != nullptr) {

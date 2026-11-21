@@ -274,7 +274,12 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
   调用，并行调度器会并发执行它。
 - `camel inspect --ops <文件>` 列出内建模块与该程序导入的每个模块的全部算子：每个重载一行
   `OPERATOR {json}`，含模块、名字、URI、`with`/普通参数个数（`-1` 表示不限，`-2` 表示解析器没有给出）、
-  声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名。
+  声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名，以及算子的**访问列表**
+  （`"accesses":[{"class":…,"name":…,"binding":…,"mode":"read"|"write"|"rmw"}]`，逐条给出资源与读写模式）、
+  访问列表是否逐条声明（`accesses_declared`）、是否触及程序之外的状态（`external`）与是否可能中止
+  （`may_fault`）。没有逐条声明的算子按"写全局资源"读，访问列表打印的就是那一条。纯、触及外部、
+  可能中止三个判断都由访问列表与故障表推出，不单独声明。只分配一个新资源而不触及其他资源的算子
+  （`var new`）打印空的访问列表，但纯度是 `state`：分配不是对已有资源的访问。
 - 从文件加载的模块如有未声明的算子，加载时给出一条 warn 级日志（`camel -v ...` 可见），列出这些算子；
   它们仍按有副作用对待。
 - 仓库内的模块由测试约束（`test/plans/feat/modules/stdlib_registry.plan.toml`）：不得有未声明的算子。

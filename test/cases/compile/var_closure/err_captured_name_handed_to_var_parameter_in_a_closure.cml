@@ -1,0 +1,25 @@
+/**
+ * A closure hands a name it captured to a `var` parameter: `bump` writes `x` back where the call
+ * stands, and that write is a write of a name the closure holds the value of (design principles
+ * 3.5, 197). The report names the closure and the three ways out, exactly as it does for the
+ * assignment written inside the closure (`err_closure_assigns_captured.cml`).
+ *
+ * The call site is what makes this case worth having: the write is a callee's, so the refusal is
+ * reached through the argument position and not through `__assn__`. A capture port that is a value
+ * has no cell to be written through, and without the capture rule being asked here the program
+ * would compile and print the value it started with.
+ */
+
+func bump(var p: int): void {
+    p = p + 10
+}
+
+func main(): int sync {
+    var x = 1
+    let g = () => sync {
+        bump(x)
+        x
+    }
+    println(g())
+    return 0
+}

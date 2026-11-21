@@ -4,8 +4,8 @@
 /*
  * The batching transform of a function graph: `reinterp<vmap>(f)`.
  *
- * `reinterp` produces a *new function*, not a rewritten graph (the author's ruling a824031aa, the
- * same one `jvp` follows): the transform builds a graph of its own and hands it to the call site as
+ * `reinterp` produces a *new function*, not a rewritten graph (the same rule `jvp`
+ * follows): the transform builds a graph of its own and hands it to the call site as
  * a function value. The ruleset is `stdlib/rulesets/vmap.cml`, whose `Lift<T>` is `RowsOf<T>`: a
  * value with one dimension of unknown length in front of it (`f32` holds a batch of `f32` rows).
  *
@@ -54,9 +54,13 @@
 namespace camel::transforms {
 
 /// The graph of `reinterp<vmap>(f)` and the program of the graphs built with it.
+///
+/// `program` is held through `ProgramHold`: the group that reserved it is gone by the time this
+/// value reaches the caller, a program reserved while a program runs is one `reserve` does not
+/// root, and a safepoint between the two would free the program `graph` is a graph of.
 struct VmapGraph {
-    const camel::runtime::Program *program = nullptr;
-    camel::runtime::GCGraph *graph         = nullptr;
+    camel::runtime::ProgramHold program;
+    camel::runtime::GCGraph *graph = nullptr;
     /// Where the build stopped, when `graph` is null: the primitive (or construct) the transform
     /// could not lift, as the origin of that node in `function`.
     camel::source::origin_id_t refusedOrigin = camel::source::kInvalidOriginId;

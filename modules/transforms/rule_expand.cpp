@@ -7,6 +7,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/equality.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
@@ -25,6 +26,9 @@
 
 namespace camel::transforms {
 
+using camel::runtime::gateWaitsOf;
+using camel::runtime::valueBehindGates;
+
 namespace rt = camel::runtime;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphId;
@@ -42,6 +46,120 @@ rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
         ports.push_back(func->normTypeAt(i));
     }
     return ports;
+}
+
+/// One `<>` value a law's own left side writes, with the type it was written at.
+struct WrittenConstant {
+    camel::core::type::Type *type = nullptr;
+    slot_t value                  = 0;
+};
+
+/// The `<>` values a law's **own left side** writes: the `with` inputs of the operator node of
+/// `instance.lhs`, each with the value that graph's static area holds for it.
+///
+/// `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, and the shape is written by the left side, so
+/// it is no parameter of the rule -- it is one `<>` value, an `int[]` holding `2, 2`. Empty for a law
+/// that names its configuration as a parameter instead (`(x, dims: int[])`), and for an operator that
+/// takes none.
+///
+/// The left side's operator node is found the way `rule_templates.cpp` found it when it recorded
+/// `lhsOperatorUri`: the first `Oper` node of the published left side.
+std::vector<WrittenConstant>
+leftSideConstantsOf(const camel::compile::gir::GenericRuleInstance &instance) {
+    std::vector<WrittenConstant> written;
+    if (instance.lhs == nullptr) {
+        return written;
+    }
+    const std::span<const slot_t> slots = instance.lhs->staticSlots();
+    for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.lhs->nodeCount(); ++ref) {
+        const camel::runtime::GCNode *node = instance.lhs->node(ref);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
+            continue;
+        }
+        for (const gc_node_ref_t input : instance.lhs->withInputsOf(ref)) {
+            const camel::runtime::GCNode *constant =
+                input < instance.lhs->nodeCount() ? instance.lhs->node(input) : nullptr;
+            // **Only a literal counts as a value the law wrote.** A `<>` slot of the left side is
+            // one of two things, and the difference decides whether this function says anything at
+            // all:
+            //
+            //   `reshape<[2, 2]>(x)`  -- a constant `Data` node in the left side's static area: the
+            //                            law chose that configuration, so it answers only that one.
+            //   `reshape<dims>(x)`    -- a `Port` node, i.e. the rule's own parameter: the law says
+            //                            *nothing* about the configuration and takes the node's,
+            //                            which the matcher already binds. Reading this as a written
+            //                            value is the mistake this branch exists to not make: it has
+            //                            no value to compare (`dataIndex` is not negative), and
+            //                            comparing against the placeholder refused `jvp_reshape` for
+            //                            every node in the tree (it refused with, verbatim
+            //                            "writes 1 `<>` value(s) of its own ((int[])), and this
+            //                            node's configuration is not that one ((float[...], int[]))").
+            if (constant == nullptr || constant->kind != camel::runtime::GCNodeKind::Data ||
+                constant->dataIndex >= 0) {
+                continue;
+            }
+            const auto index = static_cast<size_t>(-constant->dataIndex);
+            if (index >= slots.size()) {
+                continue;
+            }
+            WrittenConstant one;
+            one.type  = constant->dataType();
+            one.value = slots[index];
+            written.push_back(one);
+        }
+        break;
+    }
+    return written;
+}
+
+/// Whether the `<>` values the law's own left side writes are the ones the node carries.
+///
+/// This is the half the fit was missing. A `<>` value is compared **by content** against the value
+/// the node holds at that port -- `valuesEqualByContent`, the same relation `==` uses on the two
+/// arrays -- because the type does not carry it: `reshape<[2, 2]>` and
+/// `reshape<[2, 1, 2]>` are assignable to one another, so a type comparison lets the law through and
+/// its right side then writes `[2, 2]` into the tangent of a rank-three reshape. A law written for
+/// one configuration therefore answers only the node that carries that configuration, which is the
+/// defect this closes: `reshape<[8, 2, 8]>` would match the law written for `[2, 2]` and the run
+/// would die with `TensorDimensionMismatch: [6] -> [2, 2]` (`probes/06_layout.cml`).
+///
+/// A law that writes **no** `<>` value is not asked about the node's configuration here: what such a
+/// law says about it is nothing, and `namesTheNode` already settles how many ports it must name.
+/// That leaves one hole open and it is written down rather than closed by guessing: `jvp_sum` names
+/// one port and writes none, so it would fit the three ports of `sum<0, false>(xs)`. Today the wider
+/// `jvp_sum_axis` wins on `fitting.size()` before the choice is made (`the `widest` step below`);
+/// closing it here would mean comparing against a law that states nothing.
+///
+/// A caller that passes no `portValues` cannot answer the question, and a law that writes a `<>`
+/// value is then **refused** rather than guessed: answering with the law's own constant is exactly
+/// the wrong answer this function exists to stop.
+bool lawConstantsFitNode(
+    const camel::compile::gir::GenericRuleInstance &instance, size_t namedPorts,
+    const std::vector<camel::core::type::Type *> &operandTypes,
+    const std::vector<std::optional<slot_t>> *portValues) {
+    const std::vector<WrittenConstant> written = leftSideConstantsOf(instance);
+    if (written.empty()) {
+        return true;
+    }
+    // The law's parameters are the node's first ports, so its own `<>` values are the ports after
+    // them, in the order the left side wrote them.
+    if (namedPorts + written.size() != operandTypes.size()) {
+        return false;
+    }
+    if (portValues == nullptr || portValues->size() != operandTypes.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < written.size(); ++i) {
+        const std::optional<slot_t> &nodePort = (*portValues)[namedPorts + i];
+        if (!nodePort.has_value() || written[i].type == nullptr) {
+            return false;
+        }
+        if (!camel::core::rtdata::valuesEqualByContent(
+                written[i].value, *nodePort, written[i].type)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool narrowerPortsThan(
@@ -110,7 +228,8 @@ RuleChoice chooseRuleAmong(
     const std::vector<camel::parse::ast::RuleMatch> &candidates,
     const std::vector<camel::core::type::Type *> &instanceTypes,
     const std::vector<camel::core::type::Type *> &operandTypes, size_t dataOperandCount,
-    const RuleChoiceWords &words, const std::vector<bool> *answered) {
+    const RuleChoiceWords &words, const std::vector<bool> *answered,
+    const std::vector<std::optional<slot_t>> *portValues) {
     using camel::core::type::Type;
     RuleChoice choice;
     const auto &table = camel::compile::gir::genericRuleTable(context);
@@ -122,6 +241,10 @@ RuleChoice chooseRuleAmong(
     // law to read them again.
     std::vector<Type *> shapePorts;
     std::string lastWhy;
+    // The most specific refusal there is: a candidate whose own left side writes a `<>` value. It is
+    // more specific than a shape mismatch, because the law's types may well fit -- what it cannot do
+    // is describe the node's configuration (see the check in the loop).
+    std::string constantWhy;
     // Every candidate that instantiates and whose ports take the operands. A key can hold more than
     // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first
     // and the choice made after it.
@@ -160,6 +283,19 @@ RuleChoice chooseRuleAmong(
                           : instance.why;
             continue;
         }
+        // A law that writes a `<>` value of its own must find the node's configuration to be that value.
+        // The fit below compares **types and counts**, and `namesTheNode` lets a law name only some
+        // of the node's ports, so a law whose left side writes a constant would fit every node of
+        // that operator however the node spelled its configuration -- and its right side would then
+        // write the law's constant into the answer. For example
+        // `jvp_reshape`'s left side is `reshape<[2, 2]>(x)`, a `reshape<[8, 2, 8]>` node matched it,
+        // and the tangent came out as `[2, 2]` -- `TensorDimensionMismatch: [6] -> [2, 2]`. Design
+        // principles 9.9: the right derivative, or a refusal at compile time that names the
+        // operator; running and answering a wrong value is not allowed.
+        //
+        // A law that names its configuration as a parameter (`(x: T[...], dims: int[])` reading
+        // `reshape<dims>`) writes no `<>` value of its own and is not asked this question: what it
+        // says about the configuration is nothing.
         // The shape first: a candidate whose ports are not the operands' own types cannot be built,
         // however well its condition holds at the element. Refusing here is what keeps a `float[]`
         // out of a `float` port -- the run that did it was killed by a signal, and a named refusal
@@ -215,10 +351,35 @@ RuleChoice chooseRuleAmong(
             shapePorts = ports;
             continue;
         }
+        // The `<>` values the law wrote, against the configuration the node carries. This is a
+        // refusal of its own kind: the law's types fit, and it is the value the left side spelled
+        // that the node does not have. It is recorded separately so it can outrank a shape refusal
+        // in the report -- it says more, because a law that nearly fitted on types is exactly the
+        // case a reader needs named.
+        if (!lawConstantsFitNode(instance, ports.size(), operandTypes, portValues)) {
+            const std::vector<WrittenConstant> written = leftSideConstantsOf(instance);
+            std::vector<camel::core::type::Type *> writtenTypes;
+            writtenTypes.reserve(written.size());
+            for (const WrittenConstant &one : written) {
+                writtenTypes.push_back(one.type);
+            }
+            constantWhy = std::string("the ") + words.subject + " '" + candidate.rule + "' writes " +
+                          std::to_string(written.size()) + " `<>` value(s) of its own (" +
+                          typeTextOf(writtenTypes) +
+                          "), and this node's configuration is not that one (" +
+                          typeTextOf(operandTypes) + ")";
+            continue;
+        }
         fitting.push_back(Fit{&instance, candidate.rule, std::move(ports)});
     }
     if (fitting.empty()) {
-        // Every candidate refused: the shape that nearly fitted says the most.
+        // Every candidate refused. The one that wrote its own configuration says the most, because
+        // the law's types fit and only its hard-coded `<>` value is what stops it; then the shape
+        // that nearly fitted.
+        if (!constantWhy.empty()) {
+            choice.why = constantWhy;
+            return choice;
+        }
         choice.why = !shapeWhy.empty() ? shapeWhy : lastWhy;
         if (!shapeWhy.empty()) {
             // A law was found and instantiated and its shape refused: that is `Shape`, not `NoLaw`,
@@ -230,8 +391,8 @@ RuleChoice chooseRuleAmong(
         return choice;
     }
     // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than
-    // the other are two laws the declaration does not choose between -- the author's `two laws both
-    // accept these arguments` -- and it is reported rather than answered by filing order.
+    // the other are two laws the declaration does not choose between -- the `two laws both
+    // accept these arguments` case -- and it is reported rather than answered by filing order.
     //
     // A law that names more of the operator's ports is the narrower one, and that is settled before
     // the port types are compared: the axis reduction's law names the axis and the flag beside the
@@ -240,8 +401,8 @@ RuleChoice chooseRuleAmong(
     // refuse the axis node's two extra ports, because `namesTheNode` takes a law that names fewer
     // ports than the node has -- the rest may be written as constants in the law's own left side
     // (`reshape`'s shape). Both laws are filed under `sum` at the one operand the parentheses carry,
-    // which is the author's ruling of 2026-11-05 ("a reduction over an axis has one name, the whole
-    // reduction's"), so they are told apart here: the law that names every port is the node's.
+    // (a reduction over an axis has one name, the whole
+    // reduction's), so they are told apart here: the law that names every port is the node's.
     size_t widest = 0;
     for (const Fit &fit : fitting) {
         widest = std::max(widest, fit.ports.size());
@@ -315,15 +476,9 @@ bool findRuleRightSide(
     const rt::GCGraph *rhs = instance.rhs;
     // The exit node is the graph's value-producing node; a gate may stand in front of it when the
     // value is carried out of a block.
-    gc_node_ref_t exitRef = rhs->exitNodeRef();
-    for (size_t guard = 0; guard < 8 && exitRef != rt::kInvalidNodeRef; ++guard) {
-        const rt::GCNode *node = rhs->node(exitRef);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-            break;
-        }
-        const auto carried = rhs->normInputsOf(exitRef);
-        exitRef            = carried.empty() ? rt::kInvalidNodeRef : carried.front();
-    }
+    // The walk is camel::runtime::valueBehindGates (camel/runtime/graph.h): a gate's first input
+    // is the value it carries, then its first context input, then nothing.
+    const gc_node_ref_t exitRef = valueBehindGates(*rhs, rhs->exitNodeRef());
     const rt::GCNode *exit = exitRef == rt::kInvalidNodeRef ? nullptr : rhs->node(exitRef);
     if (exit == nullptr) {
         why = "the rule's right side has no value to answer with";
@@ -419,11 +574,11 @@ constexpr std::string_view kShapeUri = "tensor:shape";
 /// The extents as the value a law reads them as: a rank-one array of the numbers, of the type the
 /// law's own `tensor:shape` node answers with (`int[]`).
 ///
-/// This is the whole of the pathway the author asked for on 2026-11-03 (17:35 and 17:55): a shape
+/// This is the whole of the pathway: a shape
 /// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
 /// built -- instead of being read off the value of an operand the caller does not have. It is not a
-/// zero standing in for a value (`transpose.cpp#shapeCarrierOf` was one, and a law that multiplied
-/// by it answered zeros; deleted 2026-11-05); it is the extents themselves, and the only thing that
+/// zero standing in for a value (`transpose/walk.cpp#shapeCarrierOf` was one, and a law that multiplied
+/// by it answered zeros); it is the extents themselves, and the only thing that
 /// reads them is the shape (5.4: a shape is a fact about a type, and this is that fact written
 /// down).
 gc_node_ref_t statedExtentsValue(
@@ -573,15 +728,7 @@ gc_node_ref_t expandRuleRightSide(
     std::vector<bool> keep;
     gc_node_ref_t answerRef = body->exitNodeRef();
     if (position != kWholeAnswer) {
-        for (size_t guard = 0; guard < 8; ++guard) {
-            const rt::GCNode *node =
-                answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
-            if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-                break;
-            }
-            const auto carried = body->normInputsOf(answerRef);
-            answerRef          = carried.empty() ? rt::kInvalidNodeRef : carried.front();
-        }
+        answerRef = valueBehindGates(*body, answerRef);
         const rt::GCNode *exit = answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
         if (exit == nullptr) {
             why = "the rule's right side has no value to answer with";
@@ -643,7 +790,7 @@ gc_node_ref_t expandRuleRightSide(
     // that is nothing. So the product is written as the zero of its own type and the nodes nothing
     // else reads -- the coefficient, and the calls it is made of -- are not copied at all.
     //
-    // This is the author's ruling of 2026-11-04: the zero of a tangent is a structural fact (a
+    // This is the rule that the zero of a tangent is a structural fact (a
     // constant has no tangent), not a value a law computes and branches on. Deciding it here, on
     // the graph, is what lets `pow_tangent`'s rule carry no `if dw == T(0)` and still answer -6.0.
     std::vector<bool> collapsed;
@@ -761,13 +908,13 @@ gc_node_ref_t expandRuleRightSide(
     std::unordered_map<gc_node_ref_t, bool> answeredAsShape;
     // Whether the answer can have `capture`'s **shape** where it cannot have its value.
     //
-    // The question is the author's 2026-11-03 17:35/17:55 ruling -- a shape reaches a transpose as
-    // a known operand, never read off an operand's value -- and the answer is yes exactly when two
+    // The question is the rule that a shape reaches a transpose as
+    // a known operand, never read off an operand's value; and the answer is yes exactly when two
     // facts hold:
     //
     //   * the law's port for that capture states its extents (`float[2, 3]` does, `float[..]` and a
     //     number do not). The instance is made at the node's own operand types
-    //     (`expandRuleByName`, `transpose.cpp#ruleCotangent`), so the port is the operand's type;
+    //     (`expandRuleByName`, `transpose/walk.cpp#ruleCotangent`), so the port is the operand's type;
     //   * every place the answer reads that capture is a `tensor:shape` call. A body that read it
     //     anywhere else needs the value, and the value is the caller's to carry: substituting there
     //     would answer arithmetic with a shape, which is the silent zero this exists to remove.
@@ -814,7 +961,7 @@ gc_node_ref_t expandRuleRightSide(
         }
         answeredAsShape.emplace(capture, true);
         if (!keep.empty()) {
-            // Not part of the answer any more: the call that read it answers with the shape, so the
+            // Not part of the answer: the call that read it answers with the shape, so the
             // value is neither asked for nor copied.
             keep[capture] = false;
         }
@@ -838,7 +985,7 @@ gc_node_ref_t expandRuleRightSide(
         // Asked before the value, not after it: a caller that has no value for this operand may
         // still have a *shape* for it, and that shape is answerable from the port's type whatever
         // the caller holds. Answering the shape from the type is the same answer in either case,
-        // and it is the one the author asked for: the extents the port states, written into the
+        // and it is the one the rule asks for: the extents the port states, written into the
         // graph where the call stood. A caller with no value *and* no stated shape gets no answer
         // here; the law then asks for the value, and a law whose forward half writes the extents as
         // operands of the node
@@ -1126,17 +1273,7 @@ gc_node_ref_t expandRuleRightSide(
     // carries the same value. A position asks for one component of that value, which the gate walk
     // above has already found.
     gc_node_ref_t out = position == kWholeAnswer ? body->exitNodeRef() : answerRef;
-    for (size_t guard = 0; guard < 8; ++guard) {
-        const rt::GCNode *node = body->node(out);
-        if (node == nullptr || node->kind != rt::GCNodeKind::Gate) {
-            break;
-        }
-        const auto carried = body->normInputsOf(out);
-        if (carried.empty()) {
-            break;
-        }
-        out = carried.front();
-    }
+    out = valueBehindGates(*body, out);
     const auto at = copied.find(out);
     if (at == copied.end()) {
         why = "the rule's right side has no exit the transform can read";

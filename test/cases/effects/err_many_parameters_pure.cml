@@ -6,7 +6,7 @@
 #resource type Stream = { id: int }
 
 /// The clause says a call writes the handle it is given.
-func consume(s: Stream): int uses s {
+func consume(s: Stream): int uses var s {
     return 0
 }
 

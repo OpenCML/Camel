@@ -8,8 +8,8 @@ add_camel_module(
     proof.cpp
     rule.cpp
     ${CAMEL_VERIFY_SOURCES}
-  EXTRA_LIBS
-    graph_cmo
+  LINK_MODULES
+    graph
   EXTRA_INCLUDES
     ${CMAKE_SOURCE_DIR}/modules
 )

@@ -3,11 +3,11 @@
 
 #include "operators.h"
 #include "half.h"
-#include "minmax.h"
 #include "numeric.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/math/minmax.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/half.h"

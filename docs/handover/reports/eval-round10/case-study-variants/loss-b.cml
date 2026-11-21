@@ -1,0 +1,38 @@
+// A linear model trained by gradient descent: the loss, its gradient as a library
+// transform, and a training step that takes the model in and gives a new one back.
+import { grad } from vjp
+import { shape, sum } from tensor
+import { sgd } from nn
+
+type Linear = { weight: f32[?, ?] }
+
+with <layer: Linear, y: f32[?, ?]>
+func loss(X: f32[?, ?]): float {
+    let err = X @ layer.weight - y
+    let count = float(shape(X)[0])
+    let total = float(sum(err * err))
+    return total / count
+}
+
+func step(layer: Linear, X: f32[?, ?], y: f32[?, ?], rate: float): Linear {
+    let dloss = grad(loss)
+    let g = dloss<layer, y>(X)
+    return sgd(layer, g, rate)
+}
+
+func run(X: f32[?, ?], y: f32[?, ?], rate: float): (float, Linear) {
+    let w0: Linear = { weight: [[0.0], [0.0]] as f32[2, 1] }
+    let before = loss<w0, y>(X)
+    let model = loop m = w0 for i in 0..200 do step(m, X, y, rate)
+    return (before, model)
+}
+
+func main(): int sync {
+    let X = [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [2.0, 1.0]] as f32[4, 2]
+    let y = [[2.0], [-1.0], [1.0], [3.0]] as f32[4, 1]
+    let (before, model) = run(X, y, 0.1)
+    println(`loss before: ${before:.4f}`)
+    println(`loss after:  ${loss<model, y>(X):.4f}`)
+    println(model.weight)
+    return 0
+}

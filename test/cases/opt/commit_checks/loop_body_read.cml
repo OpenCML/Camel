@@ -1,0 +1,27 @@
+// A program whose loop body computes a value, and which has no branch anywhere in it. That is the
+// shape the missing question is about: the arm of a branch and the body of a loop are both regions
+// of the graph, and a read across either is the same question -- does what it reads run whenever the
+// reader runs. A branch is not what makes the question askable; it was only what made it asked.
+//
+// `step` is computed in the function body before the loop (`total + 10`, so `10`), so the loop's
+// body reads a value the function body computed -- the direction every loop in the language writes.
+// The body computes `total + step` and ends in `i + 1`, so a node of the function body reading
+// either of them is reading a value that exists only while a round runs. `total` is a `var`, so the
+// loop is on the chain and the read after it sees the last round's value: the loop prints `10`,
+// `20`, `30`, the read after it prints `30`, and the function returns `60`. Nothing here branches.
+//
+// `test::commit_loop_body_read` makes the read that must be refused (a COPY in the function body
+// reading a value of the loop's body), then the two that must not be: the same copy reading a value
+// of its own region, and a copy inside the loop's body reading the value the function body computed.
+
+func main(): int sync {
+    var total = 0
+    let step = total + 10
+    let _ = loop i = 0 while i < 3 do sync {
+        total = total + step
+        println(total)
+        i + 1
+    }
+    println(total)
+    return total * 2
+}

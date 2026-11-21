@@ -89,21 +89,30 @@ graph.
 
 Three things happen to a value of these forms, and each is an existing node kind.
 
-**Reading the tag and the parts: `OPER`.** Five built-in operators
+**Reading the tag and the parts: `OPER`.** Six built-in operators
 (`src/builtin/operators/tagged.cpp`, group names are reserved identifiers):
 
 | Operator | Type | Meaning |
 |---|---|---|
 | `__is_null__` | `(T?) => bool` | the tag of a `T?` |
 | `__null_value__` | `(T?) => T` | the value of a `T?` that is not null |
+| `__unwrap__` | `(T?) => T` | the same value, from a `T?` the compiler has already checked: a null is an internal error |
 | `__is_error__` | `(T!) => bool` | the tag of a `T!` |
 | `__error_value__` | `(T!) => T` | the value of a `T!` that has not failed |
 | `__error_info__` | `(T!) => Error` | the error of a `T!` that has failed |
 
-All five are declared pure. `__null_value__`, `__error_value__` and `__error_info__` are only
+All six are declared pure. `__null_value__`, `__error_value__` and `__error_info__` are only
 ever placed inside the arm their tag selects. Applied to the other case they do not fault:
 they return the zero slot of their type, so a pass that moves one out of its arm (hoisting)
 does not change behaviour as long as the result is used only inside the arm.
+
+`__unwrap__` is the one that checks, and no pass places it: it is what a machine the compiler
+builds unwraps its own state slot with, where the compiler has already read the tag. A null there
+is `RuntimeDiag::NullSlotUnwrapped` — an internal error of the compiler, which is never isolated
+by `attempt` — rather than the zero slot, because a zero slot is a value of the right shape and
+the reader could not tell a slot that was never written from one that holds zero (the ruling of
+2026-11-18, `96714f465`; the reasoning is
+`docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md`).
 
 **Putting a value into the form: `CAST`.** `TupleType::castSlotFrom` allocates the box.
 Allowed conversions (`castSafetyFrom`): `T -> T?`, `T -> T!`, `U! -> T!` for the failed case (compiler-made only, the error arm
@@ -248,7 +257,7 @@ destructuring of a tagged value are errors (`TaggedValueNotOpened`, 0x63), and n
 overload accepts one where it expects a `T`. A tagged value may be stored, passed, returned,
 captured and printed (`println` prints `null`, the value, or `error <kind>: <message>`) (Q5).
 
-Not closed: the five operators of section 3 are ordinary global names (reserved identifiers:
+Not closed: the operators of section 3 are ordinary global names (reserved identifiers:
 a program cannot *declare* such a name, but it can call `__null_value__(x)`). Nothing in the
 language needs that, and it should be refused where the name is resolved.
 
@@ -281,14 +290,14 @@ Nothing in a pass, a backend or an exporter mentions the two forms. What they me
 
 - `BRCH`/`JOIN` with two subgraph arms and a `bool` condition: an `if`;
 - `OPER` nodes of pure built-in operators;
-- `CAST` nodes whose target is a tuple type (`std::opt::fold` folds a `CAST` between
+- `CAST` nodes whose target is a tuple type (`std::cxx::fold` folds a `CAST` between
   primitive types only, so these stay in the graph);
 - values whose type is a tuple type.
 
 Verified (`test/plans/feat/compile/tagged.plan.toml`): one program over both forms gives the
 same output on `std::nvm`, `std::fvm`, `std::jit`, `std::prl` and through `std::opt`,
-`std::opt::inline`, `std::opt`, `std::opt::fold`, `std::opt::cse std::opt::dce`,
-`std::macro std::opt` and `std::opt::inline std::opt`. No pass, backend or exporter was changed.
+`std::cxx::inline`, `std::opt`, `std::cxx::fold`, `std::cxx::cse std::cxx::dce`,
+`std::macro std::opt` and `std::cxx::inline std::opt`. No pass, backend or exporter was changed.
 
 Not verified: `std::cpp`, `onnx::export` and autodiff over a graph that holds these nodes
 (they are expected to refuse it the way they refuse tuples and unknown operators), and a
@@ -337,7 +346,7 @@ func main(): int sync {
 ```
 
 `nullable.cml` of the test plan contains this shape, so it is run on the four backends and
-through `std::opt::inline`, not through `std::opt`.
+through `std::cxx::inline`, not through `std::opt`.
 
 ## 10. Questions for the language author
 

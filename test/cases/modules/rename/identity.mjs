@@ -14,6 +14,17 @@
 // rename itself still changes only the module name; the digests are a snapshot of the whole graph,
 // which is what this check is.
 //
+// Recorded once more when a statement's chain place began to be derived from the graph's shape
+// (`docs/design/effects/edges.cn.md` 4.6): a direct `FUNC` call is a statement of its block, so
+// the statements after the `get_env` and `get_cwd` calls in these samples now follow them by a
+// sync edge, with the legacy control edge written beside it. The samples gained that pair and
+// nothing else; their data edges are the ones the previous digests hashed.
+//
+// Recorded once more when `std::jgir` began numbering each graph's nodes by the graph's own
+// canonical order (`camel/runtime/canonical.h`, design principles 9) instead of the order the
+// nodes were created: every id in the document moved, so these two digests are of the new
+// numbering. The rename itself still changes only the module name.
+//
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
 //
@@ -40,13 +51,13 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'd4785cc572cb48997b83e6362e7fd4a76fce01ce2d54ff05d298b021442ecc27',
+        expected: '888f2f441fe164df4f6de610c61c4faddff38cbc2e11d8ac65c43b36a5e7a57f',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: 'a1f13890de58a4a185feaef24a0cec38558f32832dcb50c5d70b4723377ddb15',
+        expected: 'a47eb096d8a2b75e0e25321a40108fe5a849e843e58870a1d7188f8a38c9cf83',
     },
 }
 

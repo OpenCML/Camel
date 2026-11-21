@@ -158,10 +158,10 @@ expect_stdout_starts_with = "before\n-30\n-60\n"
 
 [[tests]]
 name = "fault.in_foreach_closure"
-desc = "A foreach closure that writes a captured var faults at its fourth element."
+desc = "A loop body that faults at its fourth element: the three writes before it are printed, and the report names the division."
 case = "../../../cases/consistency/faults/fault_in_foreach_closure.cml"
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 11
 expect_diagnostic_column = 28
 expect_stdout_starts_with = "4\n10\n22\n"
 

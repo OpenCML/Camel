@@ -75,7 +75,7 @@ is keyed the same way.
 
 ## 4. Rewrites
 
-Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::opt::inline`,
+Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::cxx::inline`,
 `std::opt` and its parts, `std::macro`, specialization, entry arguments, `tensor::fuse`, the ONNX
 export's session), so the revisions are maintained in one place. A fact computed
 before a pass reads as stale afterwards when the pass changed what it read, and is computed again
@@ -130,7 +130,7 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
 
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
-  (`test::facts`), facts across `std::opt::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
+  (`test::facts`), facts across `std::cxx::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
   and `inspect --facts`. The check pass prints the declaration epoch and the graph revisions it
   finds (`FACTS epoch check=`, `FACTS check revision`), a per-kind tally per graph (`FACTS graph
   kind <graph> <kind>`), and `FACTS after recompute valid=... stale=... gone=...`: after the stale

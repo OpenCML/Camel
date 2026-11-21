@@ -76,63 +76,64 @@ function expect(name, condition, detail) {
     expect('good passes', good.output.includes('PASS every test writes'), good.output)
 }
 
-// (2) The runner's margin rule fires on a tight bound and not on a real one.
+// (2) The runner's margin rule fires on a tight bound and not on a real one, and (3) a test whose
+// bound is its own CPU time is judged on CPU and not on the wall clock.
+//
+// Six fixtures, four runs: the two that must be red share one, the two that must be green share
+// another, and the two that cannot share are named where they stand. A nesting of the runner pays a
+// price before it starts anything -- it prunes test/results and reads one summary per run directory
+// there (test/tools/runner-output.mjs#pruneRunnerOutput) -- and that price is what this case's own
+// CPU time is made of on a host whose results tree is large, so a fixture pays it for the verdict it
+// needs and not for the company it keeps. What is not merged is the *reading*, and there is one
+// fixture per reading that only a run of its own can give: the exit code of a pair of red fixtures
+// is one number, and each fixture is attributed by its own line below.
 {
-    const tight = run(process.execPath, [
+    const both = run(process.execPath, [
         runner,
         path.join(repoRoot, 'test', 'tools', 'selftest', 'margin', 'tight.plan.toml'),
-        '--jobs',
-        '1',
-    ])
-    expect('tight run exits 1', tight.status === 1, `exit ${tight.status}: ${tight.output}`)
-    expect(
-        'tight run names the margin',
-        tight.output.includes('[FAIL] tight_bound') && tight.output.includes('margin'),
-        tight.output
-    )
-}
-{
-    const room = run(process.execPath, [
-        runner,
-        path.join(repoRoot, 'test', 'tools', 'selftest', 'margin', 'room.plan.toml'),
-        '--jobs',
-        '1',
-    ])
-    expect('room run exits 0', room.status === 0, room.output)
-    expect('room run passes', room.output.includes('[PASS] room_to_spare'), room.output)
-}
-
-// (3) A test whose bound is its own CPU time is judged on CPU and not on the wall clock.
-{
-    const room = run(process.execPath, [
-        runner,
-        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'room.plan.toml'),
-        '--jobs',
-        '1',
-    ])
-    expect('cpu-budget room exits 0', room.status === 0, `exit ${room.status}: ${room.output}`)
-    expect(
-        'cpu-budget room passes with the wall clock over the margin',
-        room.output.includes('[PASS] cpu_budget_load_room') && room.output.includes('cpu of'),
-        room.output
-    )
-}
-{
-    const over = run(process.execPath, [
-        runner,
         path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'over.plan.toml'),
         '--jobs',
         '1',
     ])
-    expect('cpu-budget over exits 1', over.status === 1, `exit ${over.status}: ${over.output}`)
+    // Both fixtures are red, so the pair's exit code is red: one reading, two fixtures. Which of
+    // them failed is its own [FAIL] line and its own sentence, asserted below.
+    expect('the tight bound and the crossed budget make one run exit 1', both.status === 1, `exit ${both.status}: ${both.output}`)
+    expect(
+        'tight run names the margin',
+        both.output.includes('[FAIL] tight_bound') && both.output.includes('margin'),
+        both.output
+    )
     expect(
         'cpu-budget over names the CPU figure and the budget',
-        over.output.includes('[FAIL] cpu_budget_exceeded') &&
-            over.output.includes('of CPU against a cpu_budget_ms'),
-        over.output
+        both.output.includes('[FAIL] cpu_budget_exceeded') &&
+            both.output.includes('of CPU against a cpu_budget_ms'),
+        both.output
     )
 }
 {
+    const both = run(process.execPath, [
+        runner,
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'margin', 'room.plan.toml'),
+        path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'room.plan.toml'),
+        '--jobs',
+        '1',
+    ])
+    // Both are green, so the pair's exit code 0 is one reading for either; which of them passed is
+    // its own [PASS] line, asserted below.
+    expect('room run exits 0', both.status === 0, both.output)
+    expect('room run passes', both.output.includes('[PASS] room_to_spare'), both.output)
+    expect(
+        'cpu-budget room passes with the wall clock over the margin',
+        both.output.includes('[PASS] cpu_budget_load_room') && both.output.includes('cpu of'),
+        both.output
+    )
+}
+{
+    // The liveness fixture keeps a run of its own, and this is the one merge that would destroy the
+    // reading rather than share it: its claim is a *negative* -- the CPU-budget sentence must not
+    // appear -- and cpu-budget/over.plan.toml prints that exact sentence for a legitimate reason.
+    // In one run the two could not be told apart, and the negative would be red for the neighbour's
+    // correct behaviour.
     const liveness = run(process.execPath, [
         runner,
         path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'liveness.plan.toml'),
@@ -148,8 +149,11 @@ function expect(name, condition, detail) {
         liveness.output
     )
 }
-
 {
+    // no-report keeps a run of its own for the same reason in another currency: its claim is that
+    // the missing reading is the *only* thing wrong with the test, and it is read off a summary of
+    // that one test (`total: 1, pass: 0, fail: 1`). Any other fixture in the run would print a
+    // different summary, and the claim "and nothing else failed" could no longer be read at all.
     const missing = run(process.execPath, [
         runner,
         path.join(repoRoot, 'test', 'tools', 'selftest', 'cpu-budget', 'no-report.plan.toml'),

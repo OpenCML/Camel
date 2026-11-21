@@ -65,7 +65,7 @@ on the side that column reads.
 Standard output is normalized with the runner's own normalizers (`strip_ansi`,
 `normalize_newlines`, `trim_trailing_space`), so the comparison is the one the plan runner makes.
 Standard error is **not** compared: it carries diagnostics that the model has no counterpart for
-(the `EffectNotExecuted` warning, for one). The exit code is compared because the specification
+(a warning, for one). The exit code is compared because the specification
 makes `main`'s return value the program's exit code.
 
 ## Where a reading comes from
@@ -85,7 +85,7 @@ specification's own entries:
 
 | entry | what it states | covered by |
 |---|---|---|
-| 3.1, evaluated by dependency | an effect nothing uses does not run; what the program uses runs | `unused_effect_not_executed` (a pass may not start it), `fold_keeps_arm_effect`, `branch_keeps_outer_effect` |
+| 3.1, evaluated by dependency | reads are demand-driven: an external read nothing uses does not run, and what the program uses runs. A write of a resource outside the program is not demanded by anybody -- it is used by the region it is written in (author's ruling of 2026-11-15) | `unused_effect_not_executed` (an unused read, which a pass may not start), `fold_keeps_arm_effect`, `branch_keeps_outer_effect` |
 | 3.3, resources and `uses` | the effects that run on one resource run in written order; a call is one effect on the resources its callee reaches | `same_resource_order`, `same_resource_order_call` |
 | 3.4, `sync` blocks | the effects of the statements a sync block writes happen, wherever they sit in the expression | `dce_effect_under_pure_arithmetic`, `inline_argument_effect` |
 | 9.6 / 9.7, passes and effects | a rewrite may neither drop an effect that runs nor start one that does not, and the result is the source program's | all seven cases, on all four back ends, through `std::opt` |

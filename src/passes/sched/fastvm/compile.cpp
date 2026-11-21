@@ -2,17 +2,21 @@
 // SPDX-License-Identifier: MIT
 
 #include "compile.h"
-#include "camel/runtime/exec_plan.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/trace.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/profile/operators.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
+#include <algorithm>
+#include <iostream>
 
 #include <algorithm>
 #include <cstddef>
@@ -118,13 +122,23 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
 static bytecode_vec_t compileRuntimeGraph(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
     GUARD(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
     GUARD(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
-    const auto &plan              = graph->execPlan();
+    const auto &plan = graph->execPlan();
+    // The position-to-node side table: while --gc-check asks for the counted blocks, one row per
+    // instruction that belongs to a node is written here, with what the plan says that node does to
+    // the count, and the table is kept with the plan it describes -- the run reads it after this
+    // compile is over, at the moment a box is made, and a local table would be gone by then. A
+    // compile that is not asked for it writes nothing and allocates nothing for it.
+    const bool anchorSitesWanted = camel::core::mm::allocatorChecks().printForeignResources;
+    if (anchorSitesWanted) {
+        localPcNodes = &plan.countedSites.nodeAtPc;
+    }
     const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
     const auto *returnNode        = graph->returnNode();
@@ -258,10 +272,9 @@ static bytecode_vec_t compileRuntimeGraph(
         // instructions come before the node's own, in the order of the plan.
         if (!plan.loops.empty()) {
             for (const uint32_t code : plan.loopEventsAt(i)) {
-                const auto &loop = plan.loops[code / 3];
-                const auto loopOrigin =
-                    graph->nodeOrigin(plan.topo[loop.position]);
-                const size_t eventPc = bytecodes.size();
+                const auto &loop      = plan.loops[code / 3];
+                const auto loopOrigin = graph->nodeOrigin(plan.topo[loop.position]);
+                const size_t eventPc  = bytecodes.size();
                 switch (static_cast<camel::runtime::ExecLoopEvent>(code % 3)) {
                 case camel::runtime::ExecLoopEvent::Begin:
                     appendBytecode(bytecodes, OpCode::LBEG, 0, {}, {}, {}, true, {.loop = &loop});
@@ -387,7 +400,9 @@ static bytecode_vec_t compileRuntimeGraph(
                 break;
             }
             default:
-                throw std::runtime_error("Unsupported ACCS source node type.: the dispatch reached a case no handler covers");
+                throw std::runtime_error(
+                    "Unsupported ACCS source node type.: the dispatch reached a case no handler "
+                    "covers");
             }
 
             appendBytecode(
@@ -416,6 +431,9 @@ static bytecode_vec_t compileRuntimeGraph(
             }
             if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
                 (*localPcOrigins)[currIdx] = nodeOrigin;
+            }
+            if (localPcNodes) {
+                (*localPcNodes)[currIdx] = runtimeNodeIndex;
             }
 
             continue;
@@ -454,7 +472,7 @@ static bytecode_vec_t compileRuntimeGraph(
             break;
 
         case camel::runtime::GCNodeKind::Func: {
-            bool isTail            = plan.directCallTailEligible[i] != 0;
+            bool isTail              = plan.directCallTailEligible[i] != 0;
             auto *targetRuntimeGraph = program.calleeOf(*graph, runtimeNodeIndex);
             GUARD(
                 targetRuntimeGraph != nullptr,
@@ -488,16 +506,18 @@ static bytecode_vec_t compileRuntimeGraph(
             // version of beside the return value (GCFuncRef::reserved); 0 when none, and then the
             // call's value is the result alone.
             setFuncExtraWriteMask(
-                callBc, camel::runtime::funcWriteMaskOf(*graph, runtimeNodeIndex));
+                callBc,
+                camel::runtime::funcWriteMaskOf(*graph, runtimeNodeIndex));
             break;
         }
 
         case camel::runtime::GCNodeKind::Oper: {
             const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex);
             // The plan names the operator: an update node whose storage must not be reused runs
-            // the plain form of the operator it names (docs/design/arrays-memory/README.cn.md
-            // 4.3.1).
-            const std::string uri(plan.operatorUriFor(runtimeNodeIndex));
+            // the plain form of the operator it names, and the copying form of an operator that
+            // has an in-place one runs it where the plan handed over the value it was given
+            // (docs/design/arrays-memory/README.cn.md 4.3.1).
+            const std::string uri = plan.operatorUriFor(runtimeNodeIndex);
 
             if (opt.enableInlineOperators) {
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();
@@ -583,7 +603,10 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Gate: {
             const auto normInputs = graph->normInputsOf(runtimeNodeIndex);
             if (!normInputs.empty()) {
-                const auto valueInput = normInputs.back();
+                // The value a GATE hands on is its first normal input (design principles 3.1);
+                // the inputs after it are the reads of the region's
+                // writes and are not what it produces.
+                const auto valueInput = normInputs.front();
                 if (auto it = valueProducerMap.find(valueInput); it != valueProducerMap.end()) {
                     valueProducerMap[runtimeNodeIndex] = it->second;
                 }
@@ -604,6 +627,9 @@ static bytecode_vec_t compileRuntimeGraph(
 
         if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
             (*localPcOrigins)[currIdx] = nodeOrigin;
+        }
+        if (localPcNodes) {
+            (*localPcNodes)[currIdx] = runtimeNodeIndex;
         }
 
         if (bytecodes.size() > bytecodeStart) {
@@ -650,14 +676,55 @@ static bytecode_vec_t compileRuntimeGraph(
     BytecodeOptimizer optimizer(opt.optimizationStrategies);
     optimizer.optimize(bytecodes, 0, localPcOrigins);
 
+    if (anchorSitesWanted) {
+        // Read back out of the table the run will read: what is printed here and what the anchor
+        // asks about later are one table, not a copy of one.
+        std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(
+            plan.countedSites.nodeAtPc.begin(),
+            plan.countedSites.nodeAtPc.end());
+        std::sort(sites.begin(), sites.end());
+        for (const auto &[pc, ref] : sites) {
+            const size_t position =
+                ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
+            // The holds are refHoldsAt, the plan's only column of them: a second column at the value's own
+            // position would disagree for a value a CALL or a FILL makes.
+            const uint32_t taken =
+                position < plan.refHoldsAt.size() ? plan.refHoldsAt[position] : 0;
+            const uint32_t given =
+                position < plan.refGiveBackAt.size() ? plan.refGiveBackAt[position] : 0;
+            const bool produces =
+                position < plan.refProducedAt.size() && plan.refProducedAt[position] != 0;
+            if (taken == 0 && given == 0 && !produces) {
+                continue;
+            }
+            // A diagnostic and not the program's output: the log's RefSites scope, written to
+            // stderr with every other log line and off unless a threshold or --log-include asks
+            // for it, so a program's stdout is the program's own: the compiler's dump never lands among the
+            // program's lines, which every plan that reads a program's output would otherwise have to skip.
+            // A reading of the plan's reference sites, on the run's tracing channel
+            // (`--trace plan`, `include/camel/core/trace.h`) and not on a log scope: one kind of reading has one
+            // way to ask for it, not a log threshold, a log scope and an environment variable.
+            camel::core::trace(camel::core::TraceArea::Plan)
+                << std::format(
+                       "PLAN_REF_SITES {} at {} node {} +{} -{} {}\n",
+                   graph->name(),
+                   pc,
+                   ref,
+                   taken,
+                   given,
+                   produces ? "produces" : "no-row");
+        }
+    }
+
     return bytecodes;
 }
 
 bytecode_vec_t compile(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
-    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins);
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
+    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins, localPcNodes);
 }
 
 LinkedBytecodeResult compileAndLink(
@@ -725,6 +792,14 @@ LinkedBytecodeResult compileAndLinkGraphs(
 
         offsetMap[runtimeGraph] = start;
         graphs.push_back({start, codes.size(), runtimeGraph});
+
+        // Where the table's own pc numbering starts in the image this run executes. Set from the
+        // table rather than from the flag, so the two cannot describe different things: a graph
+        // the compile was not asked to lay out keeps an empty table and no entry pc at all.
+        auto &countedSites = runtimeGraph->execPlan().countedSites;
+        if (!countedSites.nodeAtPc.empty()) {
+            countedSites.entryPc = start;
+        }
 
         linked.insert(linked.end(), codes.begin(), codes.end());
         if (auto sourceContext = registerOrigins && ctx ? ctx->sourceContext() : nullptr) {

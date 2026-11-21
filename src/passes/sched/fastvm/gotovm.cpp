@@ -10,6 +10,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/loop_frame.h"
+#include "camel/execute/operator_call.h"
 #include "runtime_support.h"
 #include <array>
 #include <iostream>
@@ -22,8 +23,6 @@ using namespace camel::core::rtdata;
 using namespace camel::jit;
 #endif
 
-#if ENABLE_FASTVM_COMPUTED_GOTO
-
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /* Clang Win64: wrapper in trampoline.cpp. Use a fixed-size per-thread stack so nested direct JIT
  * calls do not overwrite the caller's saved pc/bc, while keeping the hot path allocation-free. */
@@ -33,14 +32,14 @@ static thread_local std::array<const Bytecode *, kJitSaveStackLimit> s_jit_bc_st
 static thread_local size_t s_jit_save_depth = 0;
 #define JIT_SAVE_PC_BC()                                                                           \
     do {                                                                                           \
-        GUARD(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");          \
+        GUARD(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");           \
         s_jit_pc_stack[s_jit_save_depth] = pc;                                                     \
         s_jit_bc_stack[s_jit_save_depth] = bc;                                                     \
         ++s_jit_save_depth;                                                                        \
     } while (0)
 #define JIT_RESTORE_PC_BC()                                                                        \
     do {                                                                                           \
-        GUARD(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                          \
+        GUARD(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                           \
         --s_jit_save_depth;                                                                        \
         pc = s_jit_pc_stack[s_jit_save_depth];                                                     \
         bc = s_jit_bc_stack[s_jit_save_depth];                                                     \
@@ -81,8 +80,8 @@ static thread_local size_t s_jit_save_depth = 0;
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 #endif
-#include <unordered_set>
 #include <stdexcept>
+#include <unordered_set>
 
 // This file is compiled a second time by inspectvm.cpp, which defines the two hooks below
 // before it includes this file: that is the loop a program runs on while an execution observer
@@ -326,10 +325,18 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         currFrame                = lastFrame;
 
         Bytecode &lbc = bytecodes_[pc];
-        fastFrameSetSlot(
-            currFrame,
-            lbc.result,
-            camel::passes::sched::fastvm::funcValueForCall(&lbc, currFrame, result));
+        const slot_t callerValue =
+            camel::passes::sched::fastvm::funcValueForCall(&lbc, currFrame, result);
+        fastFrameSetSlot(currFrame, lbc.result, callerValue);
+        // The rows the plan has at the position of the call this returns into: `pc` is still the
+        // FUNC instruction the callee was entered from, and `lbc.result` is the slot the plan keys
+        // that node by. The interpreter enters a direct call by moving the program counter into the
+        // callee, so this -- the caller's own continuation, once the callee's value exists -- is
+        // the place the call's node has run (camel/execute/operator_call.h, `runNode`). A value a
+        // call made is born with its count here, before the next instruction can read it.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, lbc.result), [&] {
+            return callerValue;
+        });
 
         NEXT();
     }
@@ -388,7 +395,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 "Struct access index out of range in FastVM.");
             currFrame->set(bc->result, s->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
         } else {
-            throw std::runtime_error("ACCS opcode unsupported source type in FastVM.: the dispatch reached a case no handler covers");
+            throw std::runtime_error(
+                "ACCS opcode unsupported source type in FastVM.: the dispatch reached a case no "
+                "handler covers");
         }
 
         NEXT();
@@ -483,6 +492,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             }
             slot_t result = fastFrameGetSlot(currFrame, wargs[static_cast<size_t>(brIndex)]);
             fastFrameSetSlot(currFrame, bc->result, result);
+            // The rows the plan has at this JOIN's position (camel/execute/operator_call.h,
+            // `runNode`): the arm value this node hands on is a use of its own, and the plan laid
+            // that use's reference down at the node whose value it is handed to.
+            (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+                return result;
+            });
         }
         NEXT();
     }
@@ -505,6 +520,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         writeComputedGotoFillSlots(currFrame, bc, srcObj, srcType, fillBody);
 
         currFrame->set(bc->result, srcObj);
+        // The rows the plan has at this FILL's position, in the place the node ran
+        // (camel/execute/operator_call.h, `runNode`): a FILL makes a value and reads the values it
+        // packs, and its position is the one the plan laid its rows out at.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+            return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+        });
 
         NEXT();
     }
@@ -544,6 +565,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         _timer.resume();
 
         currFrame->set(bc->result, result);
+        // The rows the plan has at this call's position (camel/execute/operator_call.h, `runNode`):
+        // the count a value a call made is born with is taken where the call ran, and the uses the
+        // call made of a value it was given come back here.
+        (void)camel::execute::runNode(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+            return result;
+        });
 
         NEXT();
     }
@@ -663,7 +690,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         // activation, so folding the entry's call of its callee into the entry's activation would
         // leave one activation fewer on the stack and lift the limit by one -- which is what a
         // graph whose entry call is a direct call (`FUNC main`) rather than a call through a
-        // function value did, after std::opt::devirtualize. The count of open calls must not
+        // function value did, after std::cxx::devirtualize. The count of open calls must not
         // depend on how a call is spelled (camel/execute/limits.h), so the entry's callee gets an
         // activation of its own, exactly as the value-call spelling gives it one. Every other tail
         // call reuses its caller's activation as before.
@@ -677,7 +704,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             auto *entryTarget = getFuncExtraRuntimeGraph(entryBc);
             GUARD(
                 entryTarget != nullptr,
-                "FastVM direct TAIL target of the entry graph must have a materialized runtime graph.");
+                "FastVM direct TAIL target of the entry graph must have a materialized runtime "
+                "graph.");
             push(pc, currFrame);
             Frame *funcFrame = framePool_.acquire(entryTarget);
             populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
@@ -838,7 +866,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 }
             }
             try {
-                result = invokeNativeOperator(*bc, *currFrame);
+                result = invokeNativeOperator(*bc, *currFrame, pc);
             } catch (const RuntimeFault &fault) {
                 OBSERVE_RUNTIME_FAULT(fault);
                 throw reportRuntimeFault(
@@ -868,7 +896,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t wargs = bc->wargs();
         auto mark              = bc->extra()->mark;
         try {
-            evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+            // A marked operator is an operator node like any other: it runs through the one hook
+            // (camel/execute/operator_call.h), so the count's rows at this instruction's position
+            // are run here as they are at OPER's -- the missing place that made std::fvm keep a
+            // counted box that std::nvm released.
+            camel::execute::callOperator(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+                evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+                return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+            });
         } catch (const camel::core::mm::MemoryExhausted &e) {
             throw e.during(
                 std::string(),
@@ -932,6 +967,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         DEF_CMP_OP_LABEL(FGE, Float32, >=);
         DEF_CMP_OP_LABEL(DGE, Float64, >=);
     } catch (const RuntimeFault &fault) {
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
         OBSERVE_RUNTIME_FAULT(fault);
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
         s_jit_save_depth = jitSaveBase;
@@ -970,6 +1006,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             fault,
             makePcExecutionSite(context_->sourceContext(), siteFrame, pc));
     } catch (Diagnostic &) {
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
         s_jit_save_depth = jitSaveBase;
 #endif
@@ -997,5 +1034,3 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         throw;
     }
 }
-
-#endif // ENABLE_FASTVM_COMPUTED_GOTO

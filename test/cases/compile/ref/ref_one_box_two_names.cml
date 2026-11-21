@@ -1,0 +1,65 @@
+/**
+ * One box, two names: `main` hands one reference to one call twice, so inside the callee the two
+ * handle parameters may name one box, and the compiler cannot prove they do not.
+ *
+ * Design principles 3.3, handle types (负责人 2026-11-15): a handle is a run-time value and two
+ * names may be one handle -- two same-typed handle names in one function (`Ref<T>` with the same
+ * `T`, or one `#resource` type) are one resource, and accesses through them keep the order they
+ * are written in, unless the values are provably different.
+ *
+ *   read_then_write  reads first and writes second: the read takes the old content, `12`
+ *   write_then_read  writes first and reads second: the read takes the new content, `22`
+ *   same_sync        the same read then write in a `sync` body: the block orders them, `1`
+ *   param_and_fresh  a box this body makes is provably not the caller's, so no order edge joins
+ *                    the read of it to the write of the parameter (the `--gir` entry reads that)
+ *
+ * Neither `read_then_write` nor `write_then_read` is `sync`: what orders the two statements is the
+ * handle, not a timeline written around them. Both results are used, so neither write is a dead
+ * write that would answer the same thing for the wrong reason.
+ *
+ * A caller that hands two *different* references in through two same-typed parameters is ordered
+ * all the same: from inside the body the two values are not provably different, which is what
+ * "unless the values are provably different" allows (more order than the program needs, never
+ * less). Proving the two apart would have to be done at the call site, by specializing the callee
+ * on which of its arguments are the same value -- the same gap design principles 3.5 records for
+ * two `var` arguments.
+ */
+
+import state
+
+func read_then_write(a: state::Ref<int>, b: state::Ref<int>): int {
+    let t = state::get(b)      // The read is written first.
+    let w = state::set(a, 2)   // The write is written second.
+    return t * 10 + w
+}
+
+func write_then_read(a: state::Ref<int>, b: state::Ref<int>): int {
+    let w = state::set(a, 2)   // The write is written first.
+    let t = state::get(b)      // The read is written second.
+    return t * 10 + w
+}
+
+func same_sync(a: state::Ref<int>, b: state::Ref<int>): int sync {
+    let t = state::get(b)
+    state::set(a, 2)
+    return t
+}
+
+func param_and_fresh(a: state::Ref<int>): int {
+    let b = state::ref(1)      // A box this body makes: not the box `a` names.
+    let t = state::get(b)
+    let w = state::set(a, 2)
+    return t * 10 + w
+}
+
+func main(): int sync {
+    let r = state::ref(1)
+    println(read_then_write(r, r))
+    state::set(r, 1)
+    println(write_then_read(r, r))
+    state::set(r, 1)
+    println(same_sync(r, r))
+    state::set(r, 1)
+    println(param_and_fresh(r))
+    return 0
+}

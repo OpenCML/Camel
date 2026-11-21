@@ -252,10 +252,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "combined.inline_nvm"
-desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::opt::inline std::nvm`."
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/combined.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -728,10 +728,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::inline std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -755,10 +755,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.fallible.inline_nvm"
-desc = "The `T!` program gives the same result through `std::opt::inline std::nvm`."
+desc = "The `T!` program gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/fallible.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -785,10 +785,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.nullable.inline_nvm"
-desc = "The `T?` program gives the same result through `std::opt::inline std::nvm`."
+desc = "The `T?` program gives the same result through `std::cxx::inline std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/nullable.cml"
-args = ["${case}", "std::opt::inline", "std::nvm"]
+args = ["${case}", "std::cxx::inline", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -819,10 +819,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_fvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::inline std::fvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::inline std::fvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -873,10 +873,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.fold_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::fold std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::fold std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::fold", "std::nvm"]
+args = ["${case}", "std::cxx::fold", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -900,10 +900,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.cse_dce_nvm"
-desc = "The program over both tagged forms gives the same result through `std::opt::cse std::opt::dce std::nvm`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::cse std::cxx::dce std::nvm`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::cse", "std::opt::dce", "std::nvm"]
+args = ["${case}", "std::cxx::cse", "std::cxx::dce", "std::nvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -954,10 +954,10 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pipeline.inline_opt_jit"
-desc = "The program over both tagged forms gives the same result through `std::opt::inline std::opt std::jit`."
+desc = "The program over both tagged forms gives the same result through `std::cxx::inline std::opt std::jit`."
 kind = "behavior"
 case = "../../../cases/compile/tagged/pipelines.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1414,3 +1414,48 @@ assert(out.split(id + ' ->').length - 1 === 2, 'both calls that leave the parame
 }
 """
 timeout_ms = 12000
+
+# ---- the checked unwrap (`__unwrap__`, `:op/tag_unwrap`) ----
+#
+# The one operator of the tagged forms that reads the tag itself. It is placed where the compiler
+# has already read the tag, so a null is the compiler's own defect and is reported as one
+# (`RuntimeDiag::NullSlotUnwrapped`, an internal error that `attempt` cannot isolate) instead of
+# being handed on as the zero slot of the payload type (the ruling of 2026-11-18, `96714f465`;
+# docs/handover/reviews/2026-11-18-unwrapping-a-nullable-state-slot.cn.md).
+
+[[tests]]
+name = "unwrap.null_is_an_internal_error"
+desc = "`__unwrap__(null)` refuses with `RuntimeDiag::NullSlotUnwrapped`: an internal error of the compiler, reported where the call stands, and never the zero slot of the payload type."
+kind = "behavior"
+case = "../../../cases/compile/tagged/unwrap_null.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::NullSlotUnwrapped"
+expect_diagnostic_code = "0x040001B2"
+expect_diagnostic_line = 9
+expect_output_contains = ["The slot unwrapped here is null, and its type is 'int?': an internal error of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "unwrap.value_passes_through"
+desc = "`__unwrap__` on a non-null `T?` gives the payload unchanged: the operator is silent on the case every caller is supposed to be in."
+kind = "behavior"
+case = "../../../cases/compile/tagged/unwrap_value.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "unwrap.null_is_not_isolated"
+desc = "`attempt` does not turn the refusal into an error value: a defect of the compiler is not a fault of the program, so the run stops with the diagnostic instead of printing the `!!` fallback (-12345)."
+kind = "behavior"
+case = "../../../cases/compile/tagged/unwrap_null_attempt.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::NullSlotUnwrapped"
+expect_output_not_contains = ["-12345"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

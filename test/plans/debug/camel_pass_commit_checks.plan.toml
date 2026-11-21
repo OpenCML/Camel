@@ -1,0 +1,47 @@
+id = "debug.camel_pass_commit_checks"
+order = 901
+tier = "debug"
+tags = ["debug", "effects", "commit-checks", "camel-pass"]
+desc = """
+The effect-containment check, asked of a pass written in Camel because the build asks it.
+
+A pass whose rewriting interface is the graph module alone cannot build the defect the check looks
+for, so the ruling of 2026-11-15 stopped asking it of such a pass (docs/design/effects/analysis.cn.md
+4.1). The ruling of 2026-11-16 keeps that saving only where it is paid for: a shipped build
+(`NDEBUG`) does not ask, and a debug or test build asks anyway, which is how the theorem is kept
+true rather than assumed.
+
+`test::camel_commit_checks` prints what the build answers, then runs the pass. Here the answer is
+the whole reading: the debug build asks by itself (`CAMEL_CHECKS build asks=1`), so the pass written
+in Camel (`opt::cse`, stdlib/opt.cml) is refused the first time, on a program the fixture made
+uncontained -- the same fold `test::fold_function_type` writes, `announced` publishing the type of
+`doubled` while its body prints.
+
+The shipped build's answer for the same fixture is pinned by
+`feat/opt/commit_checks.plan.toml`, `commit_checks.camel_pass_is_asked_when_the_build_asks`: there
+the first line is `asked=0 -> accepted` and the check refuses only after the request. This plan is
+`tier = "debug"`, which no ordinary layer selects; it runs only under `--tier debug` on the Debug
+build.
+
+`[SUMMARY]`'s total/pass/fail are structural -- what ran and what it decided -- and they hold wherever the run
+happens. Its milliseconds are environmental: the run this was first read on printed
+`[load] WARNING: 1m load 22.13 > 8 -- readings taken now are not comparable to quiet-host readings`, so a
+duration from that night compares with another run of that night and with nothing else. A reading carries its
+limit or it is not a reading.
+"""
+
+[[tests]]
+name = "debug.camel_pass_commit_checks_asked_by_the_build"
+desc = "The Debug build asks the commit checks of a pass written in Camel, so the uncontained program the fixture made is refused without any request: `CAMEL_CHECKS build asks=1`, and then the containment diagnostic that names the call site and the access the type leaves out."
+kind = "negative"
+case = "../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::camel_commit_checks", "std::nvm"]
+expect_exit = 1
+timeout_ms = 60000
+expect_diagnostic_name = "RuntimeDiag::PassEffectContainment"
+expect_output_contains = ["fold_function_type: graph 'announced' now publishes", "CAMEL_CHECKS build asks=1", "Pass 'opt::cse' returned a program whose call site reaches past the type it declares", "write stdout"]
+# Nothing is accepted and nothing is asked by the test: a build that did not ask would print
+# `accepted, asked=0` and then ask itself, and a check that had stopped firing would print
+# `accepted, asked=1`. Both are what this reading rejects.
+expect_output_not_contains = ["CAMEL_CHECKS accepted,", "CAMEL_CHECKS released:", "CAMEL_CHECKS asked=1 ->"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

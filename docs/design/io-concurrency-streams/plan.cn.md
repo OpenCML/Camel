@@ -42,7 +42,7 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 `
 |---|---|---|---|
 | 维度包（已落地） | 类型位置，**只在 `[...]` 里** | `ParserImpl::parseArrayDim`；`include/camel/core/type/composite/array.h#ArrayType::openRank` | `T[...]`、`T[3, ...rest]`；实测 `f32[...]` 可声明可打印 |
 | 二元运算符 | 表达式 | `ParserImpl::parseComp`（同时吃 `...` 与 `?..`），AST 结点 `CompExpr` | 建图时报 `ConstructNotSupported` |
-| 宏算子 | 落图以后 | `src/compile/gct/builder.cpp#MacroCmp`，`:macro/cmp`，`src/builtin/operators/macro.cpp#__cmp__` | 实现体是 `return NullSlot`（空实现）；因为 AST 先报错，这条路径今天到不了 |
+| 宏算子 | 落图以后 | `src/compile/gct/builder_expr.cpp#MacroCmp`，`:macro/cmp`，`src/builtin/operators/macro.cpp#__cmp__` | 实现体是 `return NullSlot`（空实现）；因为 AST 先报错，这条路径今天到不了 |
 | 保留记号 `?..` | 表达式 | 词法 `QuestionDotDot`；`Builder::visitCompExpr` 的独立分支 | 报 `ConstructNotSupported`，并在 AST 上额外建一个 `NotNullThen` 结点 |
 
 要点：**`ParserImpl::parseComp` 是一个「零个或多个 `...`/`?..` 的列表」层次**（注释原文：`compExpr : annoExpr (('...' | '?..') annoExpr)*`），不是两层。任务书要求的「两边是函数时是组合，是数时是区间」因此是**同一个语法结点上的语义分派**，不需要新语法层次——但今天连"是数"这条分支的诊断文本都没有（见摘要第 2 条）。
@@ -53,7 +53,7 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 `
 
 已经有用例与计划条目固定了它的现状：
 
-- 用例 `test/cases/compile/not_supported/optional_comp.cml`（第 11 行 `let g = inc?..dbl`）；
+- 用例 `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删；第 11 行 `let g = inc?..dbl`）；
 - 计划条目 `test/plans/feat/compile/not_supported.plan.toml` 的 `not_supported.optional_comp`，`expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"`、`expect_diagnostic_code = "0x0300001F"`、第 11 行第 16 列，`desc` 原文「`?..` is rejected at the operator; it used to be a warning and compiled as `...`.」；
 - 诊断目录 `docs/diagnostics.md` 里 `0x0300001F` 的一行。
 
@@ -179,7 +179,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 
 #### 片 A：`f..g` 组合与 `?..` 的删除
 
-- **A1（`?..` 删除）**：`token_kinds.def` 的词法记号、`ParserImpl::parseComp` 的分支、`Builder::visitCompExpr` 的 `?..` 分支、用例 `test/cases/compile/not_supported/optional_comp.cml`、计划条目 `not_supported.optional_comp`、`tools/format/fmt.cpp#Formatter` 的对应处理。`ConstructNotSupported` **保留**（还有 7 条用例用它）。
+- **A1（`?..` 删除）**：`token_kinds.def` 的词法记号、`ParserImpl::parseComp` 的分支、`Builder::visitCompExpr` 的 `?..` 分支、用例 `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删）、计划条目 `not_supported.optional_comp`、`tools/format/fmt.cpp#Formatter` 的对应处理。`ConstructNotSupported` **保留**（还有 7 条用例用它）。
   - 红前用例（附录 A 的 t10，**反例**：今天编译失败，这正是本片要改掉的现状）
     <!-- camel-snippet: counter-example: 反例：今天的 `?..` 报 ConstructNotSupported，逐字诊断见附录 A 的 t10 -->
     ```camel
@@ -219,7 +219,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
     camel cases\...\t4_comp.cml std::gir # 期望：组合是函数类型的一个值，不再有 :macro/cmp
     ```
     另加：`xs->map<inc..dbl>` 与 `xs->map<inc>->map<dbl>` 结果相同（尖括号里放组合）。
-- **A3（区间，待裁定）**：`1..5`。**本片先落地 G14 的"函数"分支并保留"数"分支的现状诊断，等问题 3 的裁决**——因为「闭/半开、与 `range(start, end)` 是否同物、是否与切片 `t[a:b]` 冲突」都没有依据，不许自己定。
+- **A3（区间，已定：原则"函数组合 `f..g`"一条，两边是整数时 `a..b` 是左闭右开区间）**：`1..5`。**本片先落地 G14 的"函数"分支并保留"数"分支的现状诊断，等问题 3 的裁决**——因为「闭/半开、与 `range(start, end)` 是否同物、是否与切片 `t[a:b]` 冲突」都没有依据，不许自己定。
   - 红前用例（附录 A 的 t13）：`let xs = 1..5` 今天报的仍是「function composition is not implemented」（诊断不看操作数类型）。
   - 验收（裁定为「区间」之后）：`let xs = (1..5)` 打印 `[1, 2, 3, 4]`（或裁定给的端点），且 `1..5` 不带括号时的读法由裁定固定并有用例。
 - **独立理由**：不碰流类型、不碰 IR 结点种类、不碰驻留，是本计划里唯一能与其它片完全解耦的一片。
@@ -288,7 +288,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
   - 落地上只用 `BRCH`、`LOOP`、结构体与既有节点：机器是「一个 `LOOP`（条件是 `pc` 还没结束）里一串按 `pc` 的 `BRCH`」，每段末尾把新状态交给下一段；语言没有 `break`（3.10），所以结束是**条件**而不是跳转。写状态要注意：`return` 写在 `if`/`match` 的臂里只结束那个臂（`ExitInUnusedBranch`），所以每段的出口是**表达式的值**，`return` 只在步进函数的最外层。
   - 局部变量按"活过 `yield`"进 `S`：每段入口从状态里取出来（`let`/`var`），出口把新值写回状态。**没写先读的字段要有值**：这个语言没有"任意类型的默认值"，所以这一步用底类型 `never` 与核心内建 `fail<'Kind'>(message): never` 写（`m[k] ?? fail(...)`），两者落地之前不要把半个机器合入。
   - `for` 位置把生产者融进消费者的 `loop` 是**优化**：生产者与消费者同时可见（同一个函数里，或内联之后）时省掉闭包；看不见时走步进函数值。两条路的结果必须相同，差分用例两种都覆盖。
-  - 步进函数体就是函数体：生成器头上写的 `sync` 就是步进函数体的 `sync`，按每次拉取生效；步进函数的资源集就是这个流的资源集。落地时删掉 `FeatureNotSupported("generators")` 与 `stream.yield_lowering_refused`，`test/cases/compile/stream/yield_lowering.cml` 转成正例（`count(3)` 产出 0、1、2）。除 `count(3)` 与 `pairs(n)`（双层循环）外，验收还要覆盖一轮多次 `yield`、`match` 臂里的 `yield`、`sync` 体里的打印顺序、拉到一半就停时后面的效应不发生、空流、可错元素的 `yield error(...)` 加 `return`；每个用例配一份"直接把元素写成数组"的等价程序，收集成数组后逐元素比较，四个后端都跑。
+  - 步进函数体就是函数体：生成器头上写的 `sync` 就是步进函数体的 `sync`，按每次拉取生效；步进函数的资源集就是这个流的资源集。落地时删掉 `FeatureNotSupported("generators")` 与 `stream.yield_lowering_refused`，`test/cases/compile/stream/` 下的 `yield_lowering.cml`（已删）转成正例（`count(3)` 产出 0、1、2）。除 `count(3)` 与 `pairs(n)`（双层循环）外，验收还要覆盖一轮多次 `yield`、`match` 臂里的 `yield`、`sync` 体里的打印顺序、拉到一半就停时后面的效应不发生、空流、可错元素的 `yield error(...)` 加 `return`；每个用例配一份"直接把元素写成数组"的等价程序，收集成数组后逐元素比较，四个后端都跑。
 - **预取条件**（3.5）：生成器内部，元素之间只经状态相连；不依赖上一个元素的那部分可以提前算后面的元素，条件是「**纯且不会出故障**，并放在**有界缓冲**里」；**来源上的读取不预取**。
 - 红前用例（附录 A 的 t3、t9）：
   ```camel
@@ -548,7 +548,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 1
 ```
 
-**t10** —— 既有用例 `test/cases/compile/not_supported/optional_comp.cml`：
+**t10** —— 既有用例 `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删）：
 
 ```
 (optional_comp)/.../optional_comp.cml:11:16: [Error]: '?..' is not supported: the operator is not implemented. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
@@ -596,12 +596,12 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 表达式的 `...` 层次 | `src/parse/syntax/parser_expr.cpp#ParserImpl::parseRange` | 237–253（`CompExpr` 逐层改名 `RangeExpr`，层次从 `linkExpr` 之下移到 `relationalExpr` 之下） |
 | 类型里的 `...` | `src/parse/syntax/parser_type.cpp#ParserImpl::parseArrayDim` | 155–188（`DotDot` 在 169） |
 | `...` / `?..` 的 AST → 诊断 | `src/parse/ast/builder.cpp#Builder::visitRangeExpr` | 4025–4052（`?..` 已在 A1 删除） |
-| `CompExpr` 落图 | `src/compile/gct/builder.cpp#MacroCmp` | 2944–2949 |
+| `CompExpr` 落图 | `src/compile/gct/builder_expr.cpp#MacroCmp` | 2944–2949 |
 | 宏算子本体 | `src/builtin/operators/macro.cpp#__cmp__` | 12（`return NullSlot`） |
 | 算子 id | `include/camel/core/operator_table.h#MacroCmp` | 117（`= 19`，`:macro/cmp`） |
 | `TypeCode` 无流 | `include/camel/core/type/base.h#TypeCode` | 56–100 |
 | 开秩数组 `T[...]` | `include/camel/core/type/composite/array.h#ArrayType::openRank` | 83–87、111–118 |
-| 维度包落图 | `src/compile/gct/builder.cpp#DimPack` | 5095–5120、5775–5805 |
+| 维度包落图 | `src/compile/gct/builder_type.cpp#DimPack` | 5095–5120、5775–5805 |
 | `map` / `filter` 的类型解析 | `stdlib/prelude.cml#map` | 2266–2348 |
 | 高阶算子的语义形状 | `src/builtin/executors/builtin_semantics.cpp#ElementCalls` | 190、222 |
 | 数组版签名 | `stdlib/prelude.cml#map` | 385（`zip`）、411–429（`map`/`filter`/`reduce`）、324（`range`） |
@@ -615,7 +615,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 驻留报告的接口 | `modules/tiles/include/tiles/internal/residency.h#residencyReport` | 23–25 |
 | 「只读不插节点」 | `modules/tiles/src/region_pass.cpp#RegionPass` | 43–49 |
 | 驻留的设计依据 | `docs/design/gpu/plan.cn.md` | `### 3.2 驻留推断`（297） |
-| `?..` 的既有用例 | `test/cases/compile/not_supported/optional_comp.cml` | 11 |
+| `?..` 的既有用例 | `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删） | 11 |
 | `?..` 的既有计划条目 | `test/plans/feat/compile/not_supported.plan.toml` | `not_supported.optional_comp`（67–80） |
 | 诊断目录里的两个码 | `docs/diagnostics.md` | `0x0300001F`（70、1654）、`0x03000120`（114、3019） |
 | `fs` 今天有什么 | `stdlib/fs.cml#read_text` | 24、36、41（无 `read_lines`） |

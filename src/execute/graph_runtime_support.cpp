@@ -14,6 +14,7 @@
 #include "camel/core/context/context.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/region_roots.h"
 
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
@@ -134,6 +135,36 @@ std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref
 
 } // namespace
 
+std::vector<ExecutionPredecessor>
+executionPredecessorsOf(const camel::runtime::GCGraph &graph, gc_node_ref_t ref) {
+    std::vector<ExecutionPredecessor> predecessors;
+    const auto append = [&predecessors](gc_node_ref_t node, ExecutionPredecessor::Kind kind) {
+        predecessors.push_back(ExecutionPredecessor{node, kind});
+    };
+    // The order the walk of computeExecutionOrder takes them in, which is also the order the plan
+    // is laid out in: control inputs, then the data ports (normal role before context role,
+    // edges.cn.md 1.5), then the statements of a sync chain, then what only orders.
+    for (gc_node_ref_t input : graph.ctrlInputsOf(ref)) {
+        append(input, ExecutionPredecessor::Kind::Control);
+    }
+    for (gc_node_ref_t input : graph.normInputsOf(ref)) {
+        append(input, ExecutionPredecessor::Kind::Data);
+    }
+    for (gc_node_ref_t input : graph.withInputsOf(ref)) {
+        append(input, ExecutionPredecessor::Kind::Data);
+    }
+    // A sync edge carries "used" and an order at once (edges.cn.md 1.5): the statement written
+    // before this one runs before it, exactly as a control input does.
+    for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+        append(edge.pred, ExecutionPredecessor::Kind::Sync);
+    }
+    // An order edge only orders: neither end is made to run by it (edges.cn.md 2).
+    for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+        append(edge.pred, ExecutionPredecessor::Kind::Order);
+    }
+    return predecessors;
+}
+
 std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *graph) {
     GUARD(graph != nullptr, "Runtime graph is null in execution topo construction.");
     GUARD(
@@ -147,19 +178,19 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     std::vector<gc_node_ref_t> stack;
     stack.reserve(graph->nodeCount());
 
-    // Only what the exit depends on, and what the regions say runs, is laid out. A rewrite may leave
-    // nodes nothing uses (the inner branch of an inlined callee whose result the caller's body
-    // ignores); they still hang off live nodes as users. The branch handling below walks users, so
-    // it has to know which of them are part of the execution.
+    // Only what the exit depends on, and what the regions say runs, is laid out. A rewrite may
+    // leave nodes nothing uses (the inner branch of an inlined callee whose result the caller's
+    // body ignores); they still hang off live nodes as users. The branch handling below walks
+    // users, so it has to know which of them are part of the execution.
     const gc_node_ref_t startRef = graph->exitNodeRef() != camel::runtime::kInvalidNodeRef
                                        ? graph->exitNodeRef()
                                        : graph->returnNodeRef();
-    // Two sets, because the ruling keeps them apart (docs/design/effects/edges.cn.md 5.2):
+    // Two sets, because the design keeps them apart (docs/design/effects/edges.cn.md 5.2):
     //
     //   * `used` -- what the exit depends on. The walk from the exit along the edges that carry
     //     "used": data ports and sync edges. This is the set the region-result check below reads.
     //   * `live` -- what the execution holds. It starts as `used` and then takes the seed the
-    //     ruling names: **the results of the regions**. A region runs because its owner runs, so
+    //     design names: **the results of the regions**. A region runs because its owner runs, so
     //     its result is part of the execution whether or not anything downstream reads it.
     //
     // The members of a region are not seeds. They are the region's *range*: laid out below as the
@@ -192,28 +223,34 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         std::vector<gc_node_ref_t> fromExit{startRef};
         reachBack(fromExit, used);
         live = used;
-        // The seed is the region's result, and the ruling above says why: a region runs because its
+        // The writes a region owes are not seeded here: they reach the region's exit by the sync
+        // edge laid when the graph was built (`Builder::layRegionWriteEdges`),
+        // and the walk above follows sync edges like any other. What is
+        // seeded below is only what the rule above names -- the results of the regions.
+        // The seed is the region's result, and the rule above says why: a region runs because its
         // owner runs. So a region is seeded only once its owner is in the execution. Seeding every
         // region of the graph instead laid out the members of a region whose owner nothing reached,
         // and they ran with the ports the owner would have bound still empty: the body of a loop
         // that answers nothing ran before any round, and the element its round binds was read as a
-        // null tuple (the member `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` transposes to,
-        // 2026-11-03). The walk repeats because an owner may itself be a member of a region: what a
+        // null tuple (the member `h(x) = loop s = 0.0 for i in [1,2,3,4] do s + 2.0` transposes to).
+        // The walk repeats because an owner may itself be a member of a region: what a
         // seed brings in can be the owner of another region.
         //
-        // Measured on 2026-11-03 (`test/plans/feat/compile/transforms.plan.toml`, 84 entries): no
-        // entry needs more than one round -- a seeded result is one the exit walk already had, so no
-        // seed brings in an owner the walk had not reached (the GUARD below is what keeps that true:
-        // an owner in `used` with a result outside it is an error, not a seed). The load-bearing half
-        // of this change is the owner-live condition, and this loop is defensive: it is kept, and not
-        // deleted, so that a graph whose seed does bring in another region's owner walks to the
-        // fixpoint instead of stopping one round short -- but it solves nothing this tree can show
-        // today, and the count above is the reading, not a claim that it will always be one.
+        // In `test/plans/feat/compile/transforms.plan.toml` no
+        // entry needs more than one round -- a seeded result is one the exit walk already had, so
+        // no seed brings in an owner the walk had not reached (the GUARD below is what keeps that
+        // true: an owner in `used` with a result outside it is an error, not a seed). The
+        // load-bearing half of this change is the owner-live condition, and this loop is defensive:
+        // it is kept, and not deleted, so that a graph whose seed does bring in another region's
+        // owner walks to the fixpoint instead of stopping one round short -- but it solves nothing
+        // this tree can show today, and the count above is the reading, not a claim that it will
+        // always be one.
         for (bool grew = true; grew;) {
             grew = false;
             std::vector<gc_node_ref_t> seeds;
             seeds.reserve(graph->regionCount());
-            // Every control region in the walk order (position 0 is the body, which is not a region).
+            // Every control region in the walk order (position 0 is the body, which is not a
+            // region).
             for (uint32_t at = 1; at < static_cast<uint32_t>(seedRegions.size()); ++at) {
                 const camel::runtime::GCRegion *region = graph->region(seedRegions.regionAt(at));
                 if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef ||
@@ -234,11 +271,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         }
     }
 
-    // A region that yields a value yields it to the node that reads it -- the owner of the region --
-    // and an owner the exit depends on is one whose reads the exit depends on. So the walk from the
-    // exit has to have reached the result of every such region. A rewrite that drops the link from a
-    // region result leaves the region computing a value nothing takes: the work is still done, the
-    // value is thrown away, and nothing in the graph says so.
+    // A region that yields a value yields it to the node that reads it -- the owner of the region
+    // -- and an owner the exit depends on is one whose reads the exit depends on. So the walk from
+    // the exit has to have reached the result of every such region. A rewrite that drops the link
+    // from a region result leaves the region computing a value nothing takes: the work is still
+    // done, the value is thrown away, and nothing in the graph says so.
     //
     // The check reads `used`, not `live`: the region's result is now a seed of `live`, so asking
     // `live` here would answer itself and the sentence below would never fire.
@@ -269,8 +306,7 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     // belongs to the piece its region is laid out as even when nothing reached it.
     const camel::runtime::ControlRegions regions(*graph);
     const auto isMember = [&](gc_node_ref_t n) {
-        return graph->containsNodeRef(n) && graph->node(n) != nullptr &&
-               regions.controlOf(n) != 0;
+        return graph->containsNodeRef(n) && graph->node(n) != nullptr && regions.controlOf(n) != 0;
     };
     std::vector<gc_node_ref_t> grouped;
     std::vector<uint32_t> groupStart;
@@ -384,14 +420,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         state[index] = 1;
         stack.push_back(index);
 
-
         // Schedulers run a taken arm as the range of its region and skip everything else between
         // the BRCH and the JOIN, so each arm is laid out as one piece, one after the other, and
         // what an arm reads from outside the branch comes before the BRCH: it runs whether the
         // arm is taken or not.
-        if (const auto *node = graph->node(index);
-            node && node->kind == camel::runtime::GCNodeKind::Join &&
-            !graph->normInputsOf(index).empty()) {
+        if (const auto *node = graph->node(index); node &&
+                                                   node->kind == camel::runtime::GCNodeKind::Join &&
+                                                   !graph->normInputsOf(index).empty()) {
             const gc_node_ref_t brch = graph->normInputsOf(index).front();
             const auto arms          = regions.armsOf(brch);
             for (uint32_t arm : arms) {
@@ -453,7 +488,7 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         // LOOP node, which ends a round.
         if (const auto *node = graph->node(index);
             node && node->kind == camel::runtime::GCNodeKind::Loop) {
-            const auto parts = regions.loopPartsOf(index);
+            const auto parts  = regions.loopPartsOf(index);
             const auto inLoop = [&](gc_node_ref_t input) {
                 const uint32_t control = regions.controlOf(input);
                 for (uint32_t part : parts) {
@@ -491,6 +526,20 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                     visit(edge.pred);
                 }
             }
+            // An order edge into the loop is a wait the loop itself carries: a splice writes the
+            // call's predecessors on a body whose entry root is a loop, and the rule is that the
+            // owner of a region takes the incoming wait (draft_inline.cpp, addSpliceOrderEdges).
+            // It runs before the loop's first round, exactly as the statement above does. Left to
+            // the walk below, which visits what only orders *after* the piece, it landed between
+            // the body's range and the LOOP, and buildLoopTables requires that range to end at the
+            // LOOP: an inlined body that starts with a loop aborted the plan with "The nodes of a
+            // loop are not one range in the execution order", and a release build, which compiles
+            // that check out, ran the loop table it would have stopped.
+            for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
+                if (edge.pred < live.size() && live[edge.pred] != 0 && !inLoop(edge.pred)) {
+                    visit(edge.pred);
+                }
+            }
             for (gc_node_ref_t input : graph->normInputsOf(index)) {
                 visit(input);
             }
@@ -512,32 +561,23 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             }
         }
 
-        for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
-            visit(input);
-        }
-        for (gc_node_ref_t input : graph->normInputsOf(index)) {
-            visit(input);
-        }
-        for (gc_node_ref_t input : graph->withInputsOf(index)) {
-            visit(input);
-        }
-        // A sync edge is a use and an order at once (docs/design/effects/edges.cn.md 1.5): the
-        // statement written before this one runs before it. It is live whenever the node is --
-        // the liveness walk above follows it -- so it is visited whether or not the layout holds
-        // it for another reason.
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(index)) {
-            visit(edge.pred);
-        }
+        // Everything that orders another node after this one, read from the one function that
+        // says what it is (executionPredecessorsOf): the control inputs, the data ports, the
+        // statement a sync edge writes before this one -- which is live whenever the node is, the
+        // liveness walk above following it -- and the order edges.
+        //
         // An order edge orders two nodes that both run; it does not make either of them run
         // (docs/design/effects/edges.cn.md 1.5 and 2; design principles 3.1: a node runs iff a node
         // of its region that runs uses it). A predecessor that the layout does not hold anyway is a
         // node nothing reaches, so its order says nothing and is not visited: no other edge is
         // followed from it. Region membership decides *when* a node runs, never *whether* -- it is
-        // read below, to lay the plan out arm by arm, and it does not seed this walk.
-        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
-            if (live[edge.pred]) {
-                visit(edge.pred);
+        // read above, to lay the plan out arm by arm, and it does not seed this walk.
+        for (const ExecutionPredecessor &predecessor : executionPredecessorsOf(*graph, index)) {
+            const bool onlyOrders = predecessor.kind == ExecutionPredecessor::Kind::Order;
+            if (onlyOrders && (predecessor.node >= live.size() || live[predecessor.node] == 0)) {
+                continue;
             }
+            visit(predecessor.node);
         }
 
         state[index] = 2;
@@ -561,6 +601,43 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     // above because a region that runs makes its value; its members are not, and seeding them here
     // is what used to make a control edge from the branch the only reason an arm's statements were
     // laid out.
+    //
+    // This sweep is the walk's last resort: it is what lays a node out when nothing the exit
+    // depends on leads to it, and the case that makes it load-bearing is the effect nothing reads,
+    // kept in the execution by the write it makes to a resource outside the program (3.1's other
+    // root of a region, camel/runtime/region_roots.h; `println` in a function that is not `sync`,
+    // whose exit is the value it returns and which therefore orders no statement after any other).
+    //
+    // Node order is all this sweep has, and it says nothing about regions: a member of a control
+    // region laid out here lands wherever its node id puts it. That is not the order a round runs
+    // the region in, and for a loop it is not one range at all -- `let n = loop k = 0 while k < 2
+    // do { k + 1 }` followed by a statement has the condition's port and its `lt` in the regions
+    // and the literal `2` it compares against in none, so node order interleaves `[port, 2, lt]`
+    // and
+    // `[port, 1, add]`, and ExecPlan's loop tables refuse the plan ("The nodes
+    // of a loop are not one range in the execution order"). The owner lays its region out as one
+    // range (the BRCH and LOOP cases above), so a member waits for it: the owner is in `live`
+    // whenever the seed reached the value the effect reads, and it is right here that the walk
+    // would otherwise get ahead of it.
+    for (gc_node_ref_t n = 0; n < live.size(); ++n) {
+        if (!live[n] || state[n] == 2) {
+            continue;
+        }
+        const uint32_t control = seedRegions.controlOf(n);
+        if (control != 0) {
+            const camel::runtime::GCRegion *region = graph->region(control);
+            const gc_node_ref_t owner =
+                region != nullptr ? region->owner : camel::runtime::kInvalidNodeRef;
+            if (owner != camel::runtime::kInvalidNodeRef && owner < live.size() &&
+                live[owner] != 0 && state[owner] != 2) {
+                continue;
+            }
+        }
+        visit(n);
+    }
+    // A member the owner's visit did not reach -- an owner the execution does not hold, or a region
+    // whose membership the piece did not cover -- is still laid out rather than dropped: a node the
+    // walk holds runs, and losing it would silently drop the work it does.
     for (gc_node_ref_t n = 0; n < live.size(); ++n) {
         if (live[n] && state[n] != 2) {
             visit(n);
@@ -572,26 +649,13 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
 gc_node_ref_t resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, gc_node_ref_t ref) {
     GUARD(graph != nullptr, "Runtime forwarded-value resolution requires a graph.");
 
-    gc_node_ref_t currentIndex = ref;
-    while (currentIndex != camel::runtime::kInvalidNodeRef) {
-        const auto *current = graph->node(currentIndex);
-        GUARD(current != nullptr, "Runtime forwarded-value chain resolved to null.");
-        if (current->kind != camel::runtime::GCNodeKind::Gate) {
-            return currentIndex;
-        }
-        const auto normInputs = graph->normInputsOf(currentIndex);
-        if (!normInputs.empty()) {
-            currentIndex = normInputs.back();
-            continue;
-        }
-        const auto withInputs = graph->withInputsOf(currentIndex);
-        if (!withInputs.empty()) {
-            currentIndex = withInputs.back();
-            continue;
-        }
-        return camel::runtime::kInvalidNodeRef;
-    }
-    return camel::runtime::kInvalidNodeRef;
+    // The walk is `camel/runtime/graph.h#valueBehindGates`: a gate hands on its **first** ordinary
+    // input (design principles 3.1) and the inputs after it are the reads the region's writes are
+    // held by. Reading the inputs again here is what made a body returning `x + 1` hand on the value
+    // of its last write instead (`test/cases/compile/diag_json/dropped_effects_forward.cml`), and a
+    // second copy of the reading is what drifts from the one every other walker of a graph asks
+    // (`resolveRuntimeTailValueRef` beside this one asks it already).
+    return camel::runtime::valueBehindGates(*graph, ref);
 }
 
 gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
@@ -608,14 +672,22 @@ gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph) {
         if (node->kind != camel::runtime::GCNodeKind::Gate) {
             break;
         }
-        const auto normInputs = graph->normInputsOf(current);
-        if (!normInputs.empty()) {
-            current = normInputs.back();
+        // What a gate passes on is the kernel's one reading of it
+        // (`camel/runtime/graph.h#forwardedInputOf`: the first ordinary input, else the first
+        // context input), and this walk asks that function rather than reading the inputs again:
+        // a copy here is what would drift from the reading every other walker of a graph uses.
+        if (const gc_node_ref_t forwarded = camel::runtime::forwardedInputOf(*graph, current);
+            forwarded != camel::runtime::kInvalidNodeRef) {
+            current = forwarded;
             continue;
         }
-        // The value a GATE forwards is its data input; when it has none, what it waits on is all
-        // there is to show, so the walk follows the wait instead: the sync predecessor carries it
-        // (docs/design/effects/edges.cn.md 5.3).
+        // Below is **not** that reading, and it is not a second copy of it: a gate that forwards no
+        // value still stands somewhere in the graph, and this walk asks a different question -- the
+        // last *statement* the graph does, seen through forwarding gates -- so a gate with no value
+        // falls back to what it waits on instead of answering "no tail". The sync predecessor
+        // carries it (docs/design/effects/edges.cn.md 5.3); `forwardedInputOf` answers
+        // `kInvalidNodeRef` for this same gate, because the value it forwards and the statement it
+        // waits for are two different questions.
         const auto syncInputs = graph->syncPredsOf(current);
         if (!syncInputs.empty()) {
             current = syncInputs.back().pred;
@@ -724,7 +796,8 @@ collectRuntimeTailJoinArmValues(camel::runtime::GCGraph *graph, gc_node_ref_t ta
         const auto branch = graph->normInputsOf(joinRef);
         for (gc_node_ref_t armRef : graph->withInputsOf(joinRef)) {
             const gc_node_ref_t value = resolveRuntimeForwardedValueRef(graph, armRef);
-            const auto *node = value != camel::runtime::kInvalidNodeRef ? graph->node(value) : nullptr;
+            const auto *node =
+                value != camel::runtime::kInvalidNodeRef ? graph->node(value) : nullptr;
             if (!node || std::find(values.begin(), values.end(), value) != values.end()) {
                 continue;
             }
@@ -792,9 +865,9 @@ RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
     }
     const auto joinInputs = graph->withInputsOf(brchBody->join);
     RuntimeBranchArmRegion arm{
-        .tailIndex = armIndex < joinInputs.size() ? joinInputs[armIndex]
-                                                  : graph->region(armRegion)->result,
-        .joinIndex = brchBody->join,
+        .tailIndex =
+            armIndex < joinInputs.size() ? joinInputs[armIndex] : graph->region(armRegion)->result,
+        .joinIndex   = brchBody->join,
         .topoIndices = {},
     };
     // In the order the nodes depend on one another: from the tail, then the nodes nothing in the
@@ -1000,8 +1073,7 @@ void writeRuntimeFillSlots(
         auto *tuple     = tt::as_ptr<Tuple>(target);
         auto *tupleType = tt::as_ptr<camel::core::type::TupleType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
-            CAMEL_ASSERT_NOT_VIEW(
-                values[i], tupleType->typeAt(slots[i]), "a FILL into a tuple");
+            CAMEL_ASSERT_NOT_VIEW(values[i], tupleType->typeAt(slots[i]), "a FILL into a tuple");
             tuple->set<slot_t>(slots[i], values[i], tupleType);
         }
     } break;
@@ -1009,8 +1081,7 @@ void writeRuntimeFillSlots(
         auto *array     = tt::as_ptr<Array>(target);
         auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
-            CAMEL_ASSERT_NOT_VIEW(
-                values[i], arrayType->elemType(), "a FILL into an array");
+            CAMEL_ASSERT_NOT_VIEW(values[i], arrayType->elemType(), "a FILL into an array");
             array->set<slot_t>(slots[i], values[i], arrayType);
         }
     } break;
@@ -1018,8 +1089,7 @@ void writeRuntimeFillSlots(
         auto *str        = tt::as_ptr<Struct>(target);
         auto *structType = tt::as_ptr<camel::core::type::StructType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
-            CAMEL_ASSERT_NOT_VIEW(
-                values[i], structType->typeAt(slots[i]), "a FILL into a struct");
+            CAMEL_ASSERT_NOT_VIEW(values[i], structType->typeAt(slots[i]), "a FILL into a struct");
             str->set<slot_t>(slots[i], values[i], structType);
         }
     } break;
@@ -1031,8 +1101,7 @@ void writeRuntimeFillSlots(
         for (size_t i = 0; i < values.size(); ++i) {
             // A closure capture is a stored value: a view must have been
             // materialised before it is captured.
-            CAMEL_ASSERT_NOT_VIEW(
-                values[i], tupleType->typeAt(slots[i]), "a closure capture");
+            CAMEL_ASSERT_NOT_VIEW(values[i], tupleType->typeAt(slots[i]), "a closure capture");
             closureData->set<slot_t>(slots[i], values[i], tupleType);
         }
     } break;
@@ -1051,12 +1120,10 @@ slot_t runtimeFuncValue(
     // The versions are the call's With inputs at the callee's capture ports: the declared `with`
     // arguments come first, then the captures in the order the callee made them.
     camel::core::type::FunctionType *calleeType = calleeGraph->funcType();
-    const size_t declaredWith =
-        calleeType != nullptr ? calleeType->withTypesCount() : size_t{0};
-    const bool hasExit =
-        calleeType != nullptr && calleeType->hasExitType() &&
-        calleeType->exitType() != nullptr &&
-        calleeType->exitType()->code() != camel::core::type::TypeCode::Void;
+    const size_t declaredWith = calleeType != nullptr ? calleeType->withTypesCount() : size_t{0};
+    const bool hasExit        = calleeType != nullptr && calleeType->hasExitType() &&
+                                calleeType->exitType() != nullptr &&
+                                calleeType->exitType()->code() != camel::core::type::TypeCode::Void;
     std::vector<slot_t> parts;
     if (hasExit) {
         parts.push_back(result);
@@ -1180,8 +1247,9 @@ void fillFrameForDirectInvoke(
     }
     size_t stagedCount = 0;
     const auto stage   = [&](std::span<const gc_node_ref_t> args,
-                           std::span<const gc_node_ref_t> ports,
-                           const char *what) {
+                             std::span<const gc_node_ref_t>
+                                 ports,
+                             const char *what) {
         for (size_t i = 0; i < args.size(); ++i) {
             const auto *argRecord  = callerGraph->node(args[i]);
             const auto *portRecord = targetGraph->node(ports[i]);

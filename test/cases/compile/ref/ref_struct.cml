@@ -1,0 +1,20 @@
+/**
+ * The control of `err_holds_ref`: a reference of a record that holds an integer is legal, so the
+ * refusal of `Ref<Ref<int>>` is about the reference inside the content and not about a content with
+ * a shape.
+ */
+
+import state
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    let p: Point = { x: 1, y: 2 }
+    let r = state::ref(p)
+    let q = state::get(r)
+    println(q.x + q.y)
+    state::set(r, { x: 10, y: 20 })
+    let s = state::get(r)
+    println(s.x + s.y)
+    return 0
+}

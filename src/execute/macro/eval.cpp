@@ -68,14 +68,12 @@ constexpr size_t kMacroFramePoolSize = 8 * mm::MB;
 /// the plain form of the in-place form it names, which copies
 /// (docs/design/arrays-memory/README.cn.md 4.3.1). Every other node runs the operator it names.
 std::string plannedOperatorUri(camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
-    const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
-    if (body == nullptr) {
-        return {};
-    }
-    if (!camel::core::OperatorTable::instance().plainForm(body->uri()).has_value()) {
-        return std::string(body->uri());
-    }
-    return std::string(graph.execPlan().operatorUriFor(ref));
+    // The plan names the operator in both directions, so this asks it and decides nothing itself:
+    // an in-place form the plan marked Copy runs the plain form, and the copying form of an
+    // operator that has an in-place form runs that one where the plan handed it the value it was
+    // given (`ExecPlan::operatorUriFor`). Reading `plainForm` here and answering the declared URI
+    // otherwise was one half of that answer, and the half it left out is the plan's decision.
+    return graph.execPlan().operatorUriFor(ref);
 }
 
 class MacroExecutionError : public std::runtime_error {
@@ -215,7 +213,7 @@ struct MacroEvaluator::ValueRoot {
 };
 
 MacroEvaluator::MacroEvaluator(const context_ptr_t &context, const camel::runtime::Program *program)
-    : context_(context), program_(program),
+    : context_(context), program_(*context, program),
       framePool_(std::max<size_t>(
           kMacroFramePoolSize,
           camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),

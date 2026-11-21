@@ -133,6 +133,11 @@ struct ResourceAccess {
     ResourceBinding binding;
     ResourceRegion region;
     AccessMode mode = AccessMode::ReadModifyWrite;
+    /// The resource is declared `unordered` (design principles 3.3: `resource net unordered`), so
+    /// how two effects on it are written keeps no order: the builder writes no order edge between
+    /// them and they may run at the same time. The declaring library promises that the order does
+    /// not matter; where it does, the calls go in a `sync` block or through a handle.
+    bool unordered = false;
 
     bool operator==(const ResourceAccess &) const = default;
 };
@@ -167,10 +172,32 @@ struct ResourceSpec {
     /// Running the operator is visible outside the program (I/O, clocks, generators, the
     /// process): such operators keep the order the program gives them among themselves.
     bool externalEffect = false;
+    /// The operator reads the *spelling* of the program: a name, a source position, the order the
+    /// program was written in, the text a node shows (design principles 9.5). It is not a resource
+    /// -- nothing orders two of these and nothing outside the program is touched -- so it is a
+    /// separate component of the spec rather than an access, and it is declared the same way: by
+    /// the operator, once, here.
+    bool spelling = false;
+    /// The accesses are the function value's that arrives in the operand `functionOperand` names
+    /// (design principles 3.3): what a higher-order operator touches is what
+    /// the function the program hands it touches -- `map(f, xs)` over a pure `f` touches nothing,
+    /// over an `f` that prints it writes `stdout` -- so the declaration names the operand and not
+    /// a resource. The function is the first `with` operand for the array shapes and the first
+    /// ordinary operand for `:mark/isolate` (operator_semantics.h, `ElementCalls`). A reader that
+    /// has the value (`Builder::reachOfOper`, `EffectWalk::ofNodes`) reads that value's function
+    /// type, which is the rule a call through a function value already follows
+    /// (`Builder::reachOfCall`); a reader that has only the table reads it conservatively
+    /// (`signatureOf` reports an external effect that itemizes nothing), because a static answer
+    /// cannot be narrower than "unknown function". `accesses` is empty when this is set.
+    std::optional<ResourceBinding> functionOperand;
 
-    /// Touches no resource: no access, nothing allocated, no external effect (how the result
-    /// relates to the operands' resources is not a touch).
-    bool none() const { return accesses.empty() && !allocates && !externalEffect; }
+    /// Touches no resource: no access, nothing allocated, no external effect, no function operand
+    /// to take the accesses from (how the result relates to the operands' resources is not a
+    /// touch). Reading the spelling is not a touch of a resource either: `none()` answers what the
+    /// order edges ask.
+    bool none() const {
+        return accesses.empty() && !allocates && !externalEffect && !functionOperand;
+    }
     bool operator==(const ResourceSpec &) const = default;
 };
 
@@ -193,7 +220,7 @@ struct ResourceSignature {
     struct ParamUse {
         /// The parameter, with parameters first and ordinary ones after them (0..withCount-1,
         /// then withCount..).
-        uint8_t index = 0;
+        uint8_t index     = 0;
         ResourceClass cls = ResourceClass::Unknown;
         /// The name a Handle or Foreign resource carries (the declaration's qualified name).
         std::string name;
@@ -205,6 +232,9 @@ struct ResourceSignature {
     struct AmbientUse {
         std::string name;
         AccessMode mode = AccessMode::ReadModifyWrite;
+        /// The ambient resource is declared `unordered` (ResourceAccess::unordered): effects on
+        /// it keep no written order, so no order edge joins two of them.
+        bool unordered = false;
 
         bool operator==(const AmbientUse &) const = default;
     };
@@ -225,8 +255,19 @@ struct ResourceSignature {
     /// program does not own, so a signature that names one carries this too: writing `stdout` in a
     /// clause promises the effect that comes with it (design principles 3.3).
     bool external = false;
+    /// The body reads the spelling of the program (design principles 9.5): a name, a source
+    /// position, the creation order or the creation number of a node, the text a node shows. This
+    /// is the capability a declaration writes with the word `spelling` in its clause, the way it
+    /// writes `pure` or `uses`; a body whose signature does not carry it is proved by the compiler
+    /// never to read any of them. Unlike an access it orders nothing and reaches nothing outside
+    /// the program, so it takes no part in `pure()`, in the order edges or in the region roots --
+    /// only in `covers` (a body that may read spelling does not fit a signature that does not
+    /// promise it) and in the text a type prints.
+    bool spelling = false;
 
-    /// Concrete and touching nothing: `pure`.
+    /// Concrete and touching nothing: `pure`. Reading the spelling is not a touch, so a signature
+    /// that writes `spelling` with no resource is still pure: `effects` of a graph that names a
+    /// node is the empty summary.
     bool pure() const {
         return mode == Mode::Concrete && params.empty() && captures.empty() && ambient.empty() &&
                anyOf.empty() && !allocates && !external;
@@ -260,6 +301,27 @@ inline void ambientCarriesExternal(ResourceSignature &signature) {
 /// not cover it; a `pure` target covers only a source that touches nothing.
 bool covers(const ResourceSignature &target, const ResourceSignature &source);
 
+/// Whether a resource of this class is state outside the program (design principles 3.3, 10.5):
+/// the console, the file system, a module's own state, a resource nobody itemized. A variable or
+/// an object is the program's own; a handle is a value the program owns -- but its reader may
+/// stand in a graph this one cannot see, which is why a *write* of one is asked separately (see
+/// `writesForTheRegion`).
+bool reachesOutside(ResourceClass cls);
+
+/// Whether what a signature describes writes a resource the region that runs it owes (design
+/// principles 3.1, "对外部资源与句柄的写由所在区域用到"): a write of state outside the program --
+/// the console, the file system, a module's own state, a resource nobody itemized -- or a write of
+/// a handle, whose reader may stand in a graph this one cannot see (3.3). A read is not one: a read
+/// is a dependency like a read of a variable and runs only when something needs its value.
+///
+/// **The one answer to "is this a write the region owes".** It is asked of the measurement
+/// (`Builder::footprintOf`) writing the classes it reached into a signature, rather than of an
+/// operator's name, so a call, a branch and a loop are answered by what they reach exactly as an
+/// operator is; `OperatorSemantics::writesForTheRegion` states a declared spec as the same
+/// signature (`signatureOf`) and calls this, so a declaration and a measured body cannot disagree
+/// about what a write is.
+bool writesForTheRegion(const ResourceSignature &signature);
+
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,
 /// `stderr`, `stdin`, `clock`, `env` and `fs`. They need no declaration and every module sees
 /// them; a module may still write `resource fs` to say it uses it, and a group may name them.
@@ -292,6 +354,18 @@ ResourceAccess ambientAccess(std::string name, AccessMode mode);
 /// The spec of an operator whose one touch is the ambient resource `name`, with an effect
 /// visible outside the program: a file system call, the console, the clock, a generator.
 ResourceSpec externalAmbient(std::string name, AccessMode mode);
+/// The same for an ambient resource the module declares `unordered` (design principles 3.3): the
+/// effects on it keep no written order, so the builder writes no order edge between two of them
+/// and a scheduler may run them at the same time. The declaration is the module's promise that
+/// the order does not matter; it is the language's own word for it in `stdlib/<module>.cml`
+/// (`resource net unordered`), and the two have to agree (builder_modules.cpp#resourceIdentities).
+ResourceSpec externalUnorderedAmbient(std::string name, AccessMode mode);
+
+/// The conservative reading of an operator that declares no access list (design principles 3.3:
+/// an operator that declares nothing is taken to use the "global" resource, which keeps it in
+/// order with every other effect). It is a reading, not a declaration: the class is Unknown,
+/// which `checkResources` refuses, and the name is written so that a report can show it.
+ResourceAccess globalAccess(AccessMode mode = AccessMode::Write);
 
 /**
  * The conservative reading of an operator without a declaration (design 4.2, 8.1): nothing for

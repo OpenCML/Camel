@@ -1,0 +1,323 @@
+id = "opt.commit_refusal"
+order = 483
+tier = "fast"
+tags = ["feat", "opt", "effects", "commit-checks"]
+
+# The checks a commit answers, as the author's rework of 2026-11-18 has them (the rework commit
+# `18ae6f296`, answering
+# `docs/handover/reviews/2026-11-18-commit-checks-which-pairs-a-commit-owns.cn.md`
+# and `.../reviews/questions-2026-10-29.md`'s "the six checks of a commit"):
+#
+#   ① the exit is in the top region -- the value a graph hands on is read at its exit, and the exit,
+#   the output and the returned value are nodes of the function body (region 0). Asked by the seal
+#   (`validateRuntimeGraphPayloadImpl`, src/runtime/graph.cpp) at every commit, in every build,
+#   whatever the draft added: it is a property of the graph published, not of the commit's edit.
+#   ② no cycle -- asked at every commit by the same seal the commit already runs
+#   (`validateRuntimeGraphPayload` -> `EdgeChecker::findCycle`, src/runtime/graph_edges.cpp), in every
+#   build, before the two checks below.
+#   ③ the tier is what the draft added, not what the build is -- a draft that added an access is asked
+#   the effect and order checks in every build, and a draft that added none owes no answer about them
+#   in any build. This replaces the ruling of 2026-11-16, which read the tier as a build's answer.
+#   ④ the regions a commit answers for are the ones it touched and every region around them, and a
+#   pair is judged when one of its two *sides* answers for a node this commit made -- a branch node
+#   standing for an arm that gained a write answers for it, although the branch node is not a node
+#   the commit made. The rule the rework replaced judged a pair when one of its two *named* nodes was
+#   made, which never sees the pair out in the body. 甲 containment -- for every graph the draft changed, the footprint its nodes add up to (from what
+# the operators declare, bottom-up, principle 3.3) must stay inside the effect its own type
+# declares; a footprint that reaches past it is refused, and the diagnostic names the resource, the
+# node and the source position.
+#
+# 乙 order completeness -- for every graph the draft changed and every region ④ names, take the nodes
+# that touch a resource; for each pair of which at least one writes, and which can both run in one
+# execution, there must be a path on the graph that puts one before the other (a data edge, a sync
+# edge, an order edge, or a region's `GATE` input). No path is refused, and the diagnostic names the
+# pair, the resource and the source position. Two nodes in different arms of one branch cannot both
+# run and are not a pair; a resource the declaration itself calls `unordered` promises no order.
+#
+# 甲 and 乙 are asked by the one function every commit path reaches (`camel::runtime::commitViolation`,
+# src/runtime/resources.cpp, called from the commit in src/runtime/draft_session.cpp): a pass written
+# in Camel can only rewrite through the graph module, and the graph module's `commit` is that same
+# commit, so the named paths are one reading and not two copies of it. ① and ② are asked by the seal
+# the same commit runs before them (`validateRuntimeGraphPayload`, src/runtime/graph.cpp), which is
+# why neither reads the tier: a graph that would publish reads its value in the body and closes no
+# cycle whatever a draft did to it.
+#
+# What the three cases of the first commit became under the rework, one by one:
+#
+#   `commit_refusal.order`     kept as it was: the splice adds an access, so the commit is asked, and
+#                              the pair it wrote in the body has no path. Only the first line it
+#                              prints changed -- the tier line that used to read the build's cell now
+#                              reads the draft.
+#   `commit_refusal.effect`    kept as the same check and moved to the defect the check can still see:
+#                              the old case published a graphing *type* over a body (no node made, so
+#                              no access added), and under ③ a commit is not asked about a draft that
+#                              added none. The check is now read where a rewrite reaches it, on a
+#                              spliced write in a graph whose type declares nothing -- which is the
+#                              defect `test::fold_function_type` leaves behind, reached by the door a
+#                              rewrite uses. The type-replacement reading moved to `commit_refusal.retier`,
+#                              where it is the "adds nothing, so nothing is asked" half of ③.
+#   `commit_refusal.legal_splice`  kept as it was: the positive half that says the refusals above are
+#                              about the defect and not about the pass being named.
+#
+# The four readings the rework adds are `commit_refusal.exit_region` (①), `commit_refusal.cycle` (②),
+# `commit_refusal.retier` (③) and `commit_refusal.ancestor_region` (④).
+#
+# The two readings of the six that the review of 2026-10-29 lists last are `commit_refusal.sibling_arm`
+# and `commit_refusal.loop_body_read` (a read across regions), the sixth is `commit_refusal.port_type`
+# (a graph's ports are the parameters its own signature declares), and the exit's own type is the
+# separate plan `feat/runtime/exit_type.plan.toml` -- the seal's exit check was already asked there,
+# which is why `port_type.cml` is built so that only the *parameter* can be the question.
+# All of them run on `fold_function_type.cml`, `branch_and_print.cml` and `identity_at_exit.cml`: one
+# prints and declares the write (`announced`), one has the same shape and does not (`doubled`), one
+# branches over a value of its own while printing a constant -- which is what a region under the body
+# needs -- and one is the calculus's own counter-example, an identity applied at the exit.
+
+[defaults]
+kind = "negative"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+# 乙, refused. `announced` already writes stdout and its type declares the write, so containment has
+# nothing to say here: the only broken promise is the order one. `test::commit_order` splices a second
+# print into that graph, ordered against nothing.
+#
+# Every line quoted below is part of the refusal: the pass says which node the program already wrote
+# at and which one it added, the diagnostic says which check refused, and the reading names both
+# nodes and the resource -- a refusal nobody can act on is not a refusal.
+[[tests]]
+name = "commit_refusal.order"
+desc = "A splice writes the console a second time with nothing ordering the two writes: the commit is refused, and the diagnostic names both nodes, the resource and the graph."
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_order", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectOrder"
+expect_output_contains = ["commit_order: the draft splices two writes to stdout", "it adds an access, so the commit asks the effect and order checks in every build", "already writes stdout at node", "and now writes it again at", "with no edge ordering either before the other", "commit_order: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write stdout"]
+
+# 甲, refused, on the draft the check can still see: the write is spliced into a graph whose type
+# declares nothing, so the draft added an access and the commit is asked in this build. The defect is
+# the one E9 found -- a printing body under a type that promises nothing -- reached the way a rewrite
+# reaches it.
+[[tests]]
+name = "commit_refusal.effect"
+desc = "A splice writes the console inside a graph whose own type declares nothing: the commit is refused, and the diagnostic names the node, the resource and the type."
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_effect", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectBeyondType"
+expect_output_contains = ["commit_effect: the draft splices a write to stdout into a graph whose type declares nothing", "so the commit asks the effect and order checks in every build", "declares nothing and its body now writes stdout at node", "commit_effect: refused, check=effect", "committed a graph that reaches past the effect its own type declares", "makes an access the type does not cover", "write stdout"]
+
+# The same splice as the first case, ordered after the write that was already there, in the same graph
+# whose type declares the write: both checks are asked, both pass, and the commit publishes. This is
+# the reading that says the two refusals above are about the defect.
+[[tests]]
+name = "commit_refusal.legal_splice"
+desc = "A splice of the same write, ordered after the write the program already had and declared by the graph's type, is committed and the program runs."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_legal_splice", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["commit_legal_splice: the draft splices a write to stdout ordered after the write that was already there", "so the commit asks the effect and order checks in every build", "writes stdout at node", ", ordered after it", "commit_legal_splice: the commit published it, and nothing was refused"]
+
+# 乙's other side, on a splice the check really has nothing to say about: two *reads* of one ambient
+# resource in one region. `std::cxx::inline` copies a callee that loads two `.npy` files into `main`;
+# the two loads carry `read ambient fs` (the tensor module's declaration, `catalog.cpp`), a read and a
+# read do not conflict, and the commit publishes. It is the twin of `commit_refusal.order` above:
+# that one is a second write to the console, this one is not a conflict at all.
+#
+# What it pins is the declaration reaching the operator: until 2026-11-19 `tensor:load_npy` named the
+# *group's head*, which is no operator, so each `load_npy_<dtype>` fell back to "writes the global
+# resource" and this same program was refused with `RuntimeDiag::PassEffectOrder` -- node 8 against
+# node 9, two loads of two files read as two writes of one resource. That was read on the build
+# without the declaration and again with it, so the case is red before the repair and green after.
+#
+# The two files differ, and that is not decoration: two calls of one operator with one operand are
+# one node to the graph, no second copy is kept, and the pair this reading is about does not exist.
+[[tests]]
+name = "commit_refusal.reads_spliced"
+desc = "A splice carries two reads of one ambient resource into one region: no write is added and no pair conflicts, so the commit is asked and publishes, and the program prints what it printed before the splice."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/inline_two_reads.cml"
+args = ["${case}", "std::cxx::inline", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["7"]
+
+# ③, the tier itself, as two drafts read under both answers the one build cell can hold. The first
+# draft adds an access and is refused with the cell off; the second adds no node at all and is
+# published with the cell on. Under the ruling of 2026-11-16 the first line would have read
+# `published` and the second `refused` -- the tier followed the cell; here neither moves.
+#
+# The second draft is the type replacement the old `commit_refusal.effect` read: `announced` takes
+# `doubled`'s type and keeps its printing body. No node is made, so no access is added, so the commit
+# is not asked -- and it publishes a graph whose body reaches past the type it just published. That
+# is the reading, and it is why the containment reading above moved to a splice: under ③ a commit
+# answers for what a draft *adds*, and a type replacement adds nothing. What still refuses the
+# uncontained program is the pass boundary (`opt.commit_checks`), which is a different question
+# asked at a different place -- the pass's own return, not the commit.
+[[tests]]
+name = "commit_refusal.retier"
+desc = "Two drafts and the one build cell: the draft that adds an access is refused with the cell off, the draft that adds none is published with the cell on, and the tier follows the draft and not the build."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_tier", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_tier: cell=0, refused, check=order", "the tier is the draft's, not the build's", "commit_tier: cell=1, draft adds no access", "commit_tier: cell=1, published, and nothing was asked", "the tier is the draft's, not the build's", "cell=0 add-an-access -> refused=1, cell=1 adds-nothing -> published=1", "the same two drafts answer the same under both builds"]
+
+# ①, refused, in the seal and in every build. The exit is moved onto a node of one arm -- the shape
+# the calculus's counter-example lands in (`f(b) = let y = if b then {not(b)} else {false}; not(y)`,
+# with the identity inlined onto the exit) -- and `validateRuntimeGraphPayloadImpl` refuses it. This
+# one is not one of the two checks the tier scopes: it is a property of the graph published, so it is
+# asked of every commit whatever the draft added, which is why the refusal is the seal's own and not
+# a `CommitViolation`.
+[[tests]]
+name = "commit_refusal.exit_region"
+desc = "A commit reads the graph's value at a node of one arm: the seal refuses it, naming the node, the region that only runs when its owner says so and the read that then never happens, and the program it did not publish still runs."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/identity_at_exit.cml"
+args = ["${case}", "test::commit_exit_region", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["commit_exit_region: the seal asks it", "now reads its value at node", "and not in the function body", "commit_exit_region: refused at the commit:", "has its exit at node", "instead of the function body", "runs only when its owner says so", "the read never happens"]
+
+# ②, refused. One node is made to read itself -- no input setter looks for a cycle, because one
+# rewrite cannot see a cycle another one closes -- and the commit refuses the graph at the seal it
+# already runs. The refusal is the seal's, which is where acyclicity is answered; the pass is not in
+# this plan's reading of the graph's shape, so it hands the program back and `std::nvm` runs it.
+[[tests]]
+name = "commit_refusal.cycle"
+desc = "A draft leaves one node reading itself: the commit refuses the graph as one that closes a cycle of inputs, and the program it did not publish still runs."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::commit_cycle", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["commit_cycle: the draft's input setters do not look for a cycle, the commit does", "now reads itself", "commit_cycle: refused at the commit:", "breaks its edge invariants", "lies on a cycle of inputs"]
+
+# ④, refused. The write is spliced into one arm, ordered against nothing; the body already writes
+# stdout, and the edit also re-sequences that write (it no longer waits for the branch, so nothing
+# orders the two). The pair the commit must refuse is the branch node (standing, in the body, for the
+# write under it) against the body's own write -- and *neither* of those two nodes is one this commit
+# made: the branch node and the write were the program's before the commit. A commit that judged a
+# pair only when one of its nodes was made publishes this one, which is what the ruling of 2026-11-18
+# changed.
+[[tests]]
+name = "commit_refusal.ancestor_region"
+desc = "A splice writes the console inside one arm, where the branch node carries it in the body against a write already in the body, and nothing orders the two: the commit is refused, although neither node of the pair was made by it."
+case = "../../../cases/opt/commit_checks/branch_and_print.cml"
+args = ["${case}", "test::commit_ancestor", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectOrder"
+expect_output_contains = ["commit_ancestor: the regions a commit answers for are the ones it touched and every region around them", "and now waits for nothing", "now writes stdout at node", "neither the branch node nor the write left in the body is a node this commit made", "commit_ancestor: refused, check=order", "committed a graph whose conflicting effects are not ordered", "has no order against", "write stdout"]
+# The read across two arms. The port rule of the seal (`checkGraphCrossReferences`,
+# src/runtime/graph_edges.cpp) asks it of a region's *ports* only, and this value is not a port; the
+# question is asked anyway, by the branch-arm invariant of the seal (`validateRuntimeBranchArms`,
+# src/runtime/branch_arms.cpp): a node reads only nodes that run whenever it runs. The fixture's two
+# arms compute a value each -- a constant written in an arm is hoisted to the body and has no region
+# of its own to be read out of -- and the pass splices a COPY into one arm reading the other arm's
+# value, with the branch's JOIN reading the copy where the first arm's own value stood, so the read
+# sits on the edge the arm ends at and nothing can be dead about it.
+#
+# Both halves are one run, the way `commit_refusal.retier` reads two drafts in one: the copy across
+# the arms is refused at the commit, naming the node it reads and the two arms; the same copy reading
+# a value of the arm it sits in is published, and the program runs to its own value. Without the
+# second half, "it was refused" would mean only "a copy is always refused", which is a reading of
+# neither rule.
+[[tests]]
+name = "commit_refusal.sibling_arm"
+desc = "A copy spliced into one arm reads the other arm's value: the commit refuses it as a read that would run only when the other arm is taken, while the same copy reading a value of its own arm is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/sibling_arm.cml"
+args = ["${case}", "test::commit_sibling_arm", "std::nvm"]
+expect_exit = 50
+expect_stdout_contains = ["commit_sibling_arm: the seal asks whether a node reads only what runs when it runs", "which reads node", "of arm", "refused at the commit: Runtime graph 'pick' breaks the branch-arm invariant", "belongs to two arms", "it would run only when arm", "reads it", "of the same arm", "the copy that reads a value of its own arm was published"]
+
+# The same read where there is no branch to hang it on. The arm of a branch and the body of a loop
+# are both regions of the graph, so "a node reads only nodes that run whenever it runs" is one rule
+# over the region tree -- but the check returned as soon as a graph had no BRCH, so the cross-region
+# reads of a branch-less graph were never asked. A loop is what such a graph has instead: its body is
+# a region the function body does not contain, and it runs only while the loop does.
+#
+# `loop_body_read.cml` is a loop whose body computes a value and no branch anywhere. The first draft
+# puts a COPY in the function body reading a value of that body, standing where the body's own read of
+# a function-body value stood, so nothing about the read is dead; the refusal must name the reader,
+# the region it runs in, the node it reads and the region *that* is in -- a refusal that says only
+# "breaks the invariant" is not one anybody can act on, so the whole sentence is asked for here,
+# node numbers included. The other two drafts are what says the refusal is about the pair and not
+# about the copy: the same COPY reading a value of its own region, and a COPY inside the loop's body
+# reading a value the function body computed (the direction every loop body in the language writes).
+[[tests]]
+name = "commit_refusal.loop_body_read"
+desc = "A copy in the function body reads a value the loop's body computes, in a graph with no branch at all: the commit refuses it, naming the reader, its region, the value and the region that value is in, while a read of the reader's own region and a read from the loop's body outwards are both published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/loop_body_read.cml"
+args = ["${case}", "test::commit_loop_body_read", "std::nvm"]
+expect_exit = 60
+expect_stdout_contains = ["commit_loop_body_read: the arm of a branch and the body of a loop are both regions of the graph", "and no BRCH anywhere", "in the body (region 0) reading node", "of the body of LOOP", "refused at the commit: Runtime graph 'main' breaks the branch-arm invariant: COPY 24 runs in the body (region 0) and reads OPER 14 (:op/add_l), which lies in the body of LOOP 17 (region 2): a node reads only the values that run whenever it runs (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).", "the copy that reads a value of its own region was published", "in the body of LOOP", "reading node", "of the function body was published"]
+
+# The six the review of 2026-10-29 lists end with "端口与声明的类型一致", and it is the one of the six
+# that was read from outside the seal: a call site is checked against the callee's *port node*
+# (`EdgeChecker::checkCall`, `callee->node(ports[i])->dataType()`), while the value a graph hands on
+# is checked against the *signature* (`checkReturnValueType`) and the entry arguments are read
+# through the signature. Two readers, two places, no question asked about the two being one
+# statement. A draft that writes a new signature without touching the port nodes -- what a fold does
+# when it decides two bodies are one function, and what `test::commit_tier` already does on two
+# graphs that happen to have the same parameter types -- published a graph that says one type to its
+# callers and another to its own body, and every plan stayed green.
+#
+# `port_type.cml` is three called functions of one shape: two take an `int`, one takes a `float`.
+# `test::commit_port_type` republishes `takes_int` under `takes_float`'s signature -- another
+# parameter type, port nodes untouched -- and the commit must refuse it, naming the parameter, the
+# declared type and the type the port node carries. The same replacement under `mirror_int`'s
+# signature is the positive half: the parameter types are the same, so nothing is refused, and
+# without that line "it was refused" would mean only "a signature was replaced".
+[[tests]]
+name = "commit_refusal.port_type"
+desc = "A draft republishes a graph under another function's signature, whose parameter type differs from the one its port node carries: the commit refuses it, naming the parameter, the declared type and the port node's type, while the same replacement under a signature of the same parameter types is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/port_type.cml"
+args = ["${case}", "test::commit_port_type", "std::nvm"]
+expect_exit = 42
+expect_stdout_contains = ["commit_port_type: a graph publishes one statement about one parameter twice", "the commit asks whether the two agree of every graph it encodes", "takes the signature of graph 'takes_float' and keeps its port nodes", "refused at the commit: Runtime graph 'takes_int' publishes a signature of another type than the ports it holds", "declares parameter 0 as 'float', and its port node", "carries a 'int'", "takes the signature of graph 'mirror_int', whose parameter types are the same", "the commit published it, and nothing was refused -- a signature replacement is not what the check refuses", "signature of other parameter types -> refused=1, signature of the same parameter types -> published=1"]
+
+# The same promise, on the graph no signature comparison can reach: one the *transaction made*.
+#
+# Two narrower placements missed this graph, and neither was the case they were written for (that case
+# was the compiler's own outputs -- `*$spec*`, `main$lift0` -- whose ports sat one place over from the
+# signature, a defect fixed at its source on 2026-11-18). Measured 2026-11-18: the commit's closing
+# loop decodes a made graph, finds no write recorded, drops it from `edited_`, so a commit that asked
+# only the graphs it edited never asked it (probe: `graph 'made$mismatch' not asked the port question
+# (edited=0, made=1)`); and the signature tier `sameSignature(before, after)` would have waived it too,
+# a made graph having a `before` that is itself, both its nodes and its signature written by the draft.
+# The check is now asked of every graph a commit encodes, so this graph owes the answer for the same
+# reason every other one does, and the case keeps it as its subject because it is the graph both
+# narrower placements missed.
+#
+# `test::commit_made_graph_ports` makes two graphs from nothing and hands each to the session through
+# `noteMadeGraph` (design graph-editing 2.5: the draft is `f`, the graphs `f` reaches, and the graphs
+# this edit makes; 8.1 asks the port-and-exit item of the made graph on `outline`'s row and of every
+# graph on the low-level interface's row).
+#
+# The negative half is the made graph whose port node carries an `f32` while its own signature
+# declares parameter 0 as an `i32`: the commit must refuse it and name the parameter -- the graph is
+# wrong from the moment it is made, and that moment is the commit. The positive half is the same
+# graph made the same way with an `i32` port for an `i32` parameter, published: without it, "it was
+# refused" would only mean "a made graph is always refused".
+#
+# Neither draft touches the fixture: what `std::nvm` runs afterwards is `port_type.cml`, so the two
+# graphs never execute and their being well-formed elsewhere is not this reading's question.
+[[tests]]
+name = "commit_refusal.made_graph_port_type"
+desc = "Two graphs a transaction makes out of nothing, handed to the session as made: the one whose port node carries another type than its own signature declares is refused, naming the parameter, and the one whose port agrees is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/port_type.cml"
+args = ["${case}", "test::commit_made_graph_ports", "std::nvm"]
+expect_exit = 42
+expect_stdout_contains = ["commit_made_graph_ports: a made graph has no signature the program held, so the port question is owed to it because it was made", "made graph 'made$mismatch' declares parameter 0 as 'i32' and its port node carries an 'f32'", "refused at the commit: Runtime graph 'made$mismatch' publishes a signature of another type than the ports it holds", "declares parameter 0 as 'i32', and its port node 0 carries a 'f32'", "made graph 'made$match' declares parameter 0 as 'i32' and its port node carries an 'i32'", "the commit published it, and nothing was refused", "made graph, port of another type -> refused=1, port of the declared type -> published=1"]
+# 幂等小测试：同一个调用点、同一个 slot 两次 `materializeStaticValue`。第一次给一个 clause，第二次给
+# 更宽的那个；要读的是**编码后的程序说哪一个**。这是「一轮加宽之后调用点还慢一轮」那个问句的机械版，
+# 答案只可能是两句之一：第二次的类型活到了编码里（缺陷不在草稿接口），或者第一次的还在（缺陷在这里）。
+[[tests]]
+name = "commit_refusal.value_retype_twice"
+desc = "A call site retyped twice through materializeStaticValue carries the second type into the encoded program."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::value_retype_twice", "std::nvm"]
+expect_exit = 48
+expect_stdout_contains = ["value_retype_twice: graph '__root__' names 'main'", "the two clauses differ: yes", "first uses var stdout, second uses var stdout, var retype_twice", "value_retype_twice: the encode says uses var stdout, var retype_twice"]

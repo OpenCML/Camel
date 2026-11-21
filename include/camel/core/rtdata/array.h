@@ -538,8 +538,8 @@ class Array : public rtdata::Object {
     /// compact array, whose own element type is enough.
     void setSlot(uint64_t flatIndex, slot_t value, const camel::core::type::ArrayType *arrayType = nullptr) {
         // `appendSlot` stores the new element at `numel_` before it increments the count, so the
-        // bound is inclusive here; the capacity has already been grown for that write. The bound
-        // used to be exclusive, which aborted every compact append in a Debug build.
+        // bound is inclusive here; the capacity has already been grown for that write (an
+        // exclusive bound would abort every compact append in a Debug build).
         if (isCompact() && slotShaped_ && value != NullSlot &&
             !camel::core::rtdata::isViewSlot(value, elemType_)) {
             GUARD(
@@ -596,7 +596,7 @@ class Array : public rtdata::Object {
     };
 
     // The class a loop decides once has to be the class getSlot/setSlot decide per element, and
-    // the one question the two used to disagree on is whether the element's bytes are a slot:
+    // the one question the two could disagree on is whether the element's bytes are a slot:
     // `c64` is eight bytes and is *not* slot-resident (isSlotResidentElement), so reading its
     // bytes as a slot hands the callback the two f32 parts of 1 + 2i where a `Complex *` is due
     // (`fromSlot<Complex *>` then holds 0x400000003F800000, and the complex operator faults on

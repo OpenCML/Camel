@@ -59,7 +59,7 @@ constexpr bool isTrivia(TokenKind kind) {
 /// The keyword table as data, for tools that list or check it.
 struct KeywordInfo {
     std::string_view text;
-    TokenKind kind;
+    TokenKind kind = TokenKind::Eof;
     std::string_view group; // Declaration, Control, Type, Literal
 };
 const std::vector<KeywordInfo> &keywordTable();
@@ -88,7 +88,7 @@ enum class LexErrorKind : uint8_t {
 };
 
 struct LexError {
-    LexErrorKind kind;
+    LexErrorKind kind = LexErrorKind::IllegalCharacter;
     uint32_t begin = 0;
     uint32_t end   = 0;
 };

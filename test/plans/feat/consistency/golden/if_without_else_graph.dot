@@ -22,7 +22,7 @@ digraph GraphIR {
         N01 -> N07 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N08 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=3073, span="0:0-4:1", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="() => int uses stdout"];
+    N08 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=3073, span="0:0-4:1", srcfile="<ROOT>/test/cases/consistency/if_without_else/as_statement_graph.cml", value_type="() => int uses var stdout"];
     N09 [label="CALL", type="CALL", value_type="int"];
     N09 -> O00 [label="0", type="EXIT"];
     N08 -> N09 [label="0|0", type="WITH"];

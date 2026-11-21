@@ -4,11 +4,12 @@
 /*
  * Operators over the tagged forms `T?` and `T!`; see tagged.h.
  *
- * None of the lowerings faults; `fail` is the one library operator here that does, and it is
- * how a program raises a fault of its own. The three that take a part out of a value are only
- * ever placed in the branch arm their tag selects; applied to the other case they return the
- * zero slot, so a pass that evaluates one early changes nothing as long as its result is used
- * in that arm.
+ * None of the lowerings faults, `__unwrap__` excepted: it is the checked unwrap, silent on a value
+ * and an internal error on the null slot, and only a machine the compiler builds writes it (see its
+ * definition below). `fail` is the one library operator here that does fault, and it is how a
+ * program raises a fault of its own. The three that take a part out of a value are only ever placed
+ * in the branch arm their tag selects; applied to the other case they return the zero slot, so a
+ * pass that evaluates one early changes nothing as long as its result is used in that arm.
  */
 
 #include "camel/utils/number_text.h"
@@ -38,6 +39,23 @@ slot_t __is_null__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __null_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return nullablePayload(norm.slot(0));
+}
+
+slot_t __unwrap__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const slot_t value = norm.slot(0);
+    // The checked sibling of `:op/tag_null_value`, and the only operator of this file that refuses:
+    // it is placed where the tag has already been read and the value selected, so the null slot
+    // here is a state the compiler promised not to produce. It is reported rather than handed on as
+    // the zero slot, because a zero slot is a value of the right shape: the reader could not tell
+    // "the slot was never written" from "the slot holds zero", and a defect that reads as a value is
+    // refused here.
+    if (value == NullSlot) {
+        Type *type = norm.type(0);
+        throw camel::core::error::RuntimeFault(
+            camel::core::error::RuntimeDiag::NullSlotUnwrapped,
+            {type != nullptr ? type->toString() : std::string("T?")});
+    }
+    return nullablePayload(value);
 }
 
 slot_t __is_error__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -152,6 +170,15 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
         OperatorGroup::create(
             "__null_value__",
             {{":op/tag_null_value",
+              opening("(value: T?) => T", TupleType::Tag::Nullable, [](TupleType *type) {
+                  return type->payloadType();
+              })}}),
+        // The same type rule as `__null_value__`, and the one of the two that reads the tag itself:
+        // a null is the compiler's defect, reported as one (see __unwrap__ above). A program cannot
+        // declare this name; the machine the compiler builds writes the call.
+        OperatorGroup::create(
+            "__unwrap__",
+            {{":op/tag_unwrap",
               opening("(value: T?) => T", TupleType::Tag::Nullable, [](TupleType *type) {
                   return type->payloadType();
               })}}),

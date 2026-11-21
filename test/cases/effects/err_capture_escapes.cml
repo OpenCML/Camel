@@ -1,0 +1,26 @@
+/**
+ * The other side of effect masking, as it stood before 2026-11-16: the closure left the call, so
+ * the cell it captured lived longer than the call and a write of it was a resource the caller
+ * could reach, which broke the `pure` that `make` promises (design principles 3.3).
+ *
+ * That reading is gone with rule two. A closure captures a value, so a value that outlives the
+ * scope that made it is nobody's resource (the author's ruling of 2026-11-16), and the write the
+ * closure makes is refused at the write itself: `ClosureAssignsCapturedName` (0x03000213, design
+ * principles 3.5, 197). The program is kept as it stands because it is still the smallest shape
+ * that reads "a closure is made here and leaves here", and what refuses it is now the write.
+ */
+
+func make(x: int): ((k: int) => int, int) pure {
+    var acc = 0
+    let add = (k: int): int => sync {
+        acc = acc + k
+        acc
+    }
+    (add, x)
+}
+
+func main(): int sync {
+    let (g, n) = make(0)
+    println(g(n))
+    return 0
+}

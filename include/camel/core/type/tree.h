@@ -39,10 +39,9 @@ inline bool isInternal(const Type *type) {
 /// The number of children of `type`, when `type` is the kind of type that has children -- a
 /// `Struct` or a `Tuple`: **the only types this answers for.** Every other type -- an array, a
 /// function, a number, a string, `nullptr` -- gets `std::nullopt`, because the question has no
-/// answer there. It used to answer one anyway: every type that is not a `Struct` was cast to
-/// `TupleType` and its member count read out of that object's bytes, so `arity(f32[3])` answered
-/// `131961841501032` -- another object's bytes read as a count, with no error and no default. A
-/// default can be argued with; another object's bytes cannot.
+/// answer there. Casting a non-`Struct` to `TupleType` and reading its member count would read
+/// another object's bytes as a count (`arity(f32[3])` would give `131961841501032`), with no
+/// error and no default. A default can be argued with; another object's bytes cannot.
 ///
 /// The no-answer is a *return value*, not an `assert`, on purpose: **an `assert` is compiled out of
 /// the release build** (`NDEBUG`), so a guard written that way is loud on a developer's machine and
@@ -50,7 +49,7 @@ inline bool isInternal(const Type *type) {
 /// The empty value travels in every build, and a caller cannot take the count without saying what
 /// it does when there is none.
 ///
-/// **There is one `arity`, not two** (author's ruling, `a2cc57100`): a second name that still
+/// **There is one `arity`, not two**: a second name that still
 /// answers a number keeps the defect alive for whoever reaches for it, and that caller gets no
 /// diagnosis. A caller that has already established the type is a struct or an ordinary tuple may
 /// say so and unwrap; a caller that has not must handle the empty value.

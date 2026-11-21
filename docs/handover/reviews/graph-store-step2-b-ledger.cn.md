@@ -1425,3 +1425,210 @@ git show c6bbd67f5^:modules/transforms/rule_expand.cpp | grep -n 'transaction.ed
 `runtime.graph_draft_ledger.plan.toml` 一个字没动，判据仍是"逐个成员比对"，没有容差。
 **这笔上涨记在 `rule_expand.cpp` 头上**：它是草稿的又一个住户，`b6` 那天它和名单上另外 38 个
 一起消失，不是又一个必须留下的边界。
+
+## 63. `files` 涨 3（40 → 43）：**四处红里有一处不是住户，是头文件里一条没人能调的声明**（本笔）
+
+**读数**（`node test/cases/runtime/graph_draft_ledger/check.mjs`，基线 `1885b7ed0`）：
+
+```
+[LEDGER] files 44 member(s), constructions 1 member(s), decode 3 member(s), compared with the list member by member
+[LEDGER] RED entered files: include/camel/runtime/draft_outline.h  (first at include/camel/runtime/draft_outline.h:47: const GraphDraft &draft, std::span<const gc_node_ref_t> group);)
+[LEDGER] RED entered files: modules/graph/txn.cpp  (first at modules/graph/txn.cpp:242: const camel::runtime::GraphDraft::NamedEdit named(draft);)
+[LEDGER] RED entered files: src/passes/opt/inline/engine.cpp  (first at src/passes/opt/inline/engine.cpp:782: bool inSplicedRegion(const camel::runtime::GraphDraft &draft, gc_node_ref_t id) {)
+[LEDGER] RED entered files: src/runtime/draft_outline.cpp  (first at src/runtime/draft_outline.cpp:52: const GCOperBody &operBodyOf(const GraphDraft &draft, gc_node_ref_t id) {)
+[LEDGER] RED the list is test\cases\runtime\graph_draft_ledger\baseline.json: 4 entered, 0 left
+```
+
+**四处不是同一笔带进来的**（三个提交）：
+
+| 处 | 谁 | 是什么 |
+|---|---|---|
+| `modules/graph/txn.cpp` | `eccc6824a`（11-18，"the commit tier is the edit"） | `replace`／`erase` 的 `GraphDraft::NamedEdit` 护栏（`:242`、`:266`）。`3d9cbbc08` 给这个文件 **+77 行**，只把这一行从 `:237` 推到 `:242` |
+| `src/passes/opt/inline/engine.cpp` | `a6b9ec5d14`（11-18，"name the callee of the calls a splice and a gate were hiding"） | 新增 `inSplicedRegion`，读 `nodeRegion`／`regionCount`／`region(i)` 的 `kind` 与 `parent`，判断一个节点是否落在这趟 inline 自己铺下的 `Inline` region 里 |
+| `include/camel/runtime/draft_outline.h` | `3d9cbbc08`（`lane-outln`） | **只有一处代码点名**：边界读取函数的**声明**（`:46`–`:47`） |
+| `src/runtime/draft_outline.cpp` | 同上 | 边界读取与 `outlineDraftNodes` 的整个实现 |
+
+### 判"真的必须吗"：一处不必，三处必须
+
+**① `src/runtime/draft_outline.cpp` —— 必须，记账。** 它不只读，还**写**：`transaction.edit()` 取草稿
+（`:216`），`addFuncNode`／`setNormInputs`／`replaceAllValueUses`／`takeStatementPlace`／
+`eraseUnreadNodes`／`setNodeRegion`；再用 `GraphTransaction::open()` 造第二张草稿 `made`（`:238`）并
+`encode` 成新图。读的也是草稿独有的东西：`payloadOf`（OPER 的 `GCOperBody`）、`alive`／`header`、
+`namesNode`、`ctrlInputsOf`／`orderInputsOf`／`syncInputsOf`／`withInputsOf`／`normInputsOf`、
+`normUsersOf`／`withUsersOf`、`regionCount`／`region(i)` 的 `result`／`regionPortsOf`、`nodeRegion`／
+`nodeOrigin`。**用例里的节点 id 是草稿 id，那张图还没提交**；冻结的 `GCGraph` 是一次 `encode`／提交的
+产物，读它答的是另一张图（id 还要经 `translateNodeRef` 映射），而写（`eraseUnreadNodes`、
+`takeStatementPlace`）在冻结图上根本不存在。同族文件 `src/runtime/draft_inline.cpp`、
+`draft_regions.cpp`、`draft_writes.cpp` 都在名单上：**这是草稿层的又一个住户**，不是又一条边界。
+
+**② `include/camel/runtime/draft_outline.h` —— 不必，改实现、不记账。** 全文件唯一的代码点名是
+`draftOutlineBoundary(const GraphDraft &, std::span<...>)` 的声明；这个函数**唯一的调用者**是同一个
+`.cpp` 的 `:217`（`outlineDraftNodes` 体内），`git grep` 全树只有这两处，没有别的 TU、没有测试、没有
+设计页引用它。按 §51 已判过的同一条——**"唯一的调用者就在自己那个 `.cpp` 里，它根本不是 API 面"**
+（那笔把 `isWrittenArgument` 从 `draft_writes.h` 收进 `draft_writes.cpp` 的匿名命名空间）——这里照办：
+`DraftOutlineBoundary` 与 `draftOutlineBoundary` 一起收进 `draft_outline.cpp` 的匿名命名空间，头文件只剩
+`outlineDraftNodes(session, transaction, group, name)`，收的是**事务**，一个草稿类型名都不点（`#include
+"camel/runtime/draft.h"` 也换成它真正收的 `graph_txn.h`）。**头文件 10 增 14 删，公开声明 −1。**
+
+* 为什么不是"改收事务、仍留在头文件里"：那会把一条**只读**查询写成"我要一个事务来编辑"，而它并不编辑；
+  而且声明照样只有一个内部调用者。删声明是接口往下走，符合"只能降"。
+* 为什么不是"用 `auto` 把名字藏掉"：`auto` 会让**住户**离开名单而东西没动（§62 判过的正是这个）；这里
+  收回去的是一条**没有外部调用者的公开声明**，接线一根没动、`src/runtime/draft_outline.cpp` 照样记账。
+
+**③ `modules/graph/txn.cpp` —— 必须，记账。** `GraphDraft::NamedEdit named(draft)`（`:242`）把随后的
+`replaceNode` 标成 8.1 表里的**具名编辑**：那些 raw setter 因此不落进 `lowLevelEdits()`（`noteLowLevelEdit`
+读的就是草稿上的 `namedEdits_`，`draft.cpp:2162`），提交不必为一次"定理就是 `replace` 本身"的编辑欠六项
+检查。计数器在草稿对象上、且是私有的，`NamedEdit` 是它唯一的门；冻结图上没有"正在编辑"这个状态可读。
+要躲只能写 `auto` 或给要退休的类型加一个工厂——那是在涨接口，且数掉下去东西没动。
+
+**④ `src/passes/opt/inline/engine.cpp` —— 必须，记账。** `inSplicedRegion` 读的 region 表是**草稿态**：
+`Inline` region 是这一趟 `addInlineRegion` 写进草稿的，冻结图上是提交后的编码，答不了"这一趟铺下的
+region"；节点 id 也是草稿的。这个文件本来就用 `auto &draft = transaction.edit()`（`:924`、`:1221`）持有
+草稿，`a6b9ec5d14` 只是把这段读抽成自由函数、形参必须写出类型——与 §62 的 `rule_expand.cpp` 同型：
+**新增的是写出来的名字，住户本来就在。**
+
+### 记录
+
+`--record` 拒绝写涨了的成员，`--force` 才写：
+
+```
+node test/cases/runtime/graph_draft_ledger/check.mjs --record --force
+[LEDGER] --force: recording members that entered; the diff of baseline.json says so
+[LEDGER] recorded files 43 member(s), constructions 1 member(s), decode 3 member(s)
+```
+
+`baseline.json` 的 `files` **40 → 43**，diff 恰好三行（`modules/graph/txn.cpp`、
+`src/passes/opt/inline/engine.cpp`、`src/runtime/draft_outline.cpp`），别人的条目一条没动；
+`check.mjs` 与 `runtime.graph_draft_ledger.plan.toml` 一个字没动，判据仍是"逐个成员比对"，没有容差。
+**阴性对照**：把一处临时文件 `src/runtime/tmp_ledger_probe.cpp`（`ledgerProbe(const GraphDraft &, id)`）
+`git add` 后重跑，读数 `files 44 member(s)` / `RED entered files: src/runtime/tmp_ledger_probe.cpp` /
+`1 entered, 0 left`，退出码 1——账本在看；该文件未提交、已删。
+
+## 64. `files` 43 → 46：**四处红里三处是住户、一处是拼写**（本笔）
+
+**读数**（`node test/cases/runtime/graph_draft_ledger/check.mjs`，`1eaa3d780`，2026-11-20）：
+
+```
+[LEDGER] files 47 member(s), constructions 1 member(s), decode 3 member(s), compared with the list member by member
+[LEDGER] RED entered files: src/passes/test/draft_erase_unread.cpp  (first at src/passes/test/draft_erase_unread.cpp:46: int readersOf(camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t id) {)
+[LEDGER] RED entered files: src/passes/test/rules.cpp  (first at src/passes/test/rules.cpp:232: const auto runFaulty = [&](DraftWritings &writings, GraphDraft &draft) {)
+[LEDGER] RED entered files: src/passes/test/undo_selfcheck.cpp  (first at src/passes/test/undo_selfcheck.cpp:40: using camel::runtime::GraphDraft;)
+[LEDGER] RED entered files: src/runtime/draft_undo.cpp  (first at src/runtime/draft_undo.cpp:63: std::array<std::span<const gc_node_ref_t>, 5> userListsOf(const GraphDraft &draft, gc_node_ref_t id) {)
+[LEDGER] RED the list is test\cases\runtime\graph_draft_ledger\baseline.json: 4 entered, 0 left
+```
+
+**四处不是同一笔带进来的**，而四笔都晚于上次记账（`c31c57609`，11-18 23:31），所以名单一个也没记过：
+
+| 处 | 谁带进来的 | 是什么 |
+|---|---|---|
+| `src/passes/test/rules.cpp` | `1f617b8d8`（11-19 17:33，"a savepoint takes back a whole segment, both halves of it"） | 7 处，全是 `shapeAfter(...)` 调用点的 **lambda 形参** |
+| `src/runtime/draft_undo.cpp` | `84f7008e6`（11-19 19:53，"a rollback checks the draft it put back against the one the mark found"） | 25 处：17 处类外成员定义 + 8 处匿名助手形参 |
+| `src/passes/test/undo_selfcheck.cpp` | 同上 `84f7008e6` | 28 处代码 + 1 处注释：被检的 undo/自检 API 本体 |
+| `src/passes/test/draft_erase_unread.cpp` | `a698b933c`（11-20 14:00，"Pin the erase interface's refusal with a witness no program can reach"） | 3 处：1 处绑定 + 2 处匿名助手形参 |
+
+### 判"真的必须吗"：一处不必，三处必须
+
+**① `src/passes/test/rules.cpp` —— 不必，改拼写。** 整词命中 7 处全是
+`shapeAfter(context_, program, target, [&](DraftWritings &writings, GraphDraft &draft) {…})` 的
+lambda 形参。而 `shapeAfter` 自己就是模板（`template<typename Work>`，`:128`），体内早已经是
+`auto &draft = session.edit(graph).edit()`（`:142`），同一文件的 `run()` 也这样（`:164`），
+同族的 `src/passes/test/edges.cpp` 全篇 `auto &draft = transaction.edit()` 且**从不在名单上**。
+⇒ 与 §62 的 b2.1b（`edges.cpp` 写三个 `GraphDraft *`、改 `auto *` 才归位）同型：
+**这里的类型名不是主语**，测试要的是"会话递出来的那一个"。7 处改 `auto &`，整词命中 7 → **0**，
+`files` 47 → **46**，`src/` 的树一行没动（`DraftWritings` 仍写出来，它不是账本数的那个类型）。
+
+**② `src/runtime/draft_undo.cpp` —— 必须，记账。** 25 处代码里 **17 处是类外成员定义**：
+`GraphDraft::savepoint()`、`beginUndo()`、`markUndo()`、`endUndo()`、`dropJournal()`、
+`noteOriginalNode()`／`noteOriginalRegions()`／`noteOriginalScalars()`／`noteOriginalTypes()`／
+`noteOriginalPorts()`／`noteOriginalLowLevel()`、`setOpenExitType()`、`setOpenResources()`、
+`restoreUndoNode()`、`replayJournal()`、`rollbackTo()`、`noteLowLevelEdit()`。
+**定义一个类的成员，C++ 要求写出类名——这一类删不掉。** 其余 8 处
+（`userListsOf`、`sameNodes`／`sameRegions`／`sameScalars`／`sameTypes`／`samePorts`、
+`takeUndoSnapshot`、`undoMismatch`）是匿名命名空间的助手，**唯一调用者就是那些成员体**，
+体内只有 `*this`、没有事务可收，所以也不是"换一个不需要这个名字的人来拿图"能解的。
+同族 `draft.cpp`、`draft_types.cpp`、`draft_regions.cpp`、`draft_writes.cpp` 全在名单上：
+**这是撤销日志的住户，不是又一条边界。**
+
+**③ `src/passes/test/undo_selfcheck.cpp` —— 必须，记账。** 28 处代码 + 1 处注释，
+**主体就是这个类型的 undo/自检 API**：`draft.setUndoSelfCheck(GraphDraft::SelfCheckMode::Report)`
+（3 处，**嵌套枚举的限定名写不出来就调不到**）、`Probe` 里成对的 `std::function<void(GraphDraft &)>`
+写入/撤销、12 个把"改坏"与"改回"成对写出的 lambda、5 个收 `const GraphDraft &` 的探针、
+3 处 `GraphDraft &draft = session.edit(graph).edit();`。它比的就是"把草稿改坏再回滚"，
+**冻结的 `GCGraph` 上没有"正在编辑"这个状态可读**（同一个理由见 §63 ① 与 §63 ③ 的 `NamedEdit`）。
+
+**④ `src/passes/test/draft_erase_unread.cpp` —— 必须，记账。** 3 处里 1 处是
+`camel::runtime::GraphDraft &draft = builder->edit();`（**本可写 `auto &`**），另 2 处是匿名命名空间
+助手 `readersOf`／`aliveAs` 的**形参**。自由函数的形参类型必须写出来，而把它们改成模板、或内联回
+`auto &draft` 的作用域，正是 §62 判过的"数掉下去、东西没动"——**所以这一处改不干净，记账。**
+它的 `[ERASE_UNREAD]` 四行读数由 `feat/runtime/draft_erase_unread` 这条计划钉住，本笔不动它。
+
+### 记录
+
+```
+node test/cases/runtime/graph_draft_ledger/check.mjs --record --force
+[LEDGER] --force: recording members that entered; the diff of baseline.json says so
+[LEDGER] RED the list is test\cases\runtime\graph_draft_ledger\baseline.json: 3 entered, 0 left
+[LEDGER] recorded files 46 member(s), constructions 1 member(s), decode 3 member(s)
+```
+
+`baseline.json` 的 `files` **43 → 46**，diff 恰好三行（`src/passes/test/draft_erase_unread.cpp`、
+`src/passes/test/undo_selfcheck.cpp`、`src/runtime/draft_undo.cpp`），别人的条目一条没动；
+`check.mjs` 与 `runtime.graph_draft_ledger.plan.toml` 一个字没动，判据仍是"逐个成员比对"，没有容差。
+**`left` 是 0**：`rules.cpp` 本来就不在名单上（它是"entered"而不是"recorded"），所以它改干净之后
+既不是 entered 也不是 left，`files` 是 47 - 1 = 46。
+
+### 这一笔为什么可以涨，而"只许降"仍然成立
+
+账页从 §62 起就是**两条腿**：**住户记账（`--record --force`，diff 里看得见）、拼写归位（改 `auto &`）**。
+本笔涨出来的三条全是住户，每条都写明了为什么删不掉；唯一删得掉的那一条（`rules.cpp`）在同一笔里删掉了。
+**"只许降"挡的是"新代码遇到它时不换人"**（作者 2026-10-31，本节开头 §134 那句），
+**不是"合法合并带进来的住户不许登记"**——`a698b933c` 带进来的那个文件正是合法合并的结果。
+涨的边界与代价写在待裁页
+`docs/handover/questions/2026-11-20-a-ledger-that-may-only-fall-meets-a-legal-merge.cn.md`。
+
+### 口径：这一格最容易再犯的地方
+
+`git grep -n 'GraphDraft' -- src/` 量的是**词**，账本量的是**成员进出**（整词 `-w`、
+注释与字符串先被 blank 掉、`constructions`／`decode` 还带 `file#symbol`）。`1eaa3d780` 上
+这个数是 **538 行**，其中 `RuntimeGraphDraftSession` 占 **169 次**、注释另有一批；整词 `GraphDraft`
+是 367 次 / 363 行。**改 `auto &` 会让这个数降、同时让账本想涨**——两者方向都不一致，
+别拿"命中数下降"当判据。
+
+## 65. §64 那一笔的读数（E 类：**位置不变**，只换命名的来源）
+
+**判据**：`src/passes/test/rules.cpp` 的 7 处 lambda 形参改成 `auto &` 之后，
+**账本降一格**、而**行为一个字节不动**——`test::savepoint` 与 `test::undo_selfcheck` 那两条用例的
+`[SUMMARY]` 改前改后**逐字相同**，且它们钉住的每一行输出都还在。
+
+**同一条计划、同一台主机（88）、同一次传输的两个方向**（`-Jobs 8`）：
+
+| 树 | 计划 | `[SUMMARY]` |
+|---|---|---|
+| 改前（`rules.cpp` 回到 `1eaa3d780`） | `feat/opt/savepoint` | `total: 2, pass: 2, fail: 0` |
+| 改后（本笔） | `feat/opt/savepoint` | `total: 2, pass: 2, fail: 0` |
+
+那两条用例钉的是 `SAVEPOINT fault asked= … slots= … erased= …`／`SAVEPOINT budget_cut cut= … applied= … rounds= …`／
+`SELFCHECK class=<name> hook=<run|skipped> verdict=<…> ok`（六个类各两行）与程序的 `56 42 42`，
+外加 `expect_output_not_contains = ["FAIL"]`——**改前改后都 pass，就是那些行都还在、且没有一行变成 FAIL。**
+
+**账本侧的读数**（`1eaa3d780` → 本笔）：
+
+```
+改前: files 47 member(s), constructions 1 member(s), decode 3 member(s)   RED 4 entered, 0 left
+改后: files 46 member(s), constructions 1 member(s), decode 3 member(s)   ok: every member is on the list…
+```
+
+⇒ **`constructions` 仍是 1、`decode` 仍是 3**：这一笔**没有动任何一个住户**（造图点、读入口一处未动），
+只是把一处的拼写换成了"会话递出来的那一个"。**位置不变**——改的是命名的来源，不是结构。
+
+**阴性对照**：`zero files ok` 那五个文件（`modules/graph/handle.h`、`handle.cpp`、`read.cpp`、
+`modules/rewrite/fact.cpp`、`module.cpp`）在两份读数里都干净。若它们中有一个变得"脏"，
+说明这一笔动了边界而不是拼写——**它们是这一格的闸**。
+
+**同一次调用的另一段（不是我这条计划）**：`check=gpu-plans` 报 **13 条 `gpu.tiles_regions` 红**
+（`TILES_OUTLINED 10 → 12`／`10 → 5` 的输出 diff）。这是 `1eaa3d780` 自带的、按 `mode=report` 记录的
+既存红，与 `rules.cpp` 的形参类型无关：**它在我改前的同一次调用里也在**（改前那次也报了同一批 13 条）。
+
+**闸门里的另外两条**（`-Jobs 8`，88）：`feat/compile` `[SUMMARY] total: 2662, pass: 2646, fail: 0,
+known failures: 16`；`feat/runtime/graph_draft_ledger` `[SUMMARY] total: 2, pass: 2, fail: 0`，
+其中 `[PASS] runtime.graph_draft_ledger.never_rises`。**`known failures: 16` 不是 `pass`，不许互相顶账。**

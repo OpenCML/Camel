@@ -1,0 +1,44 @@
+/**
+ * A `uses` entry says how the call touches its resource (design principles 3.3): without `var` it
+ * reads the resource and with `var` it writes it, the way a parameter is written. A resource a
+ * module declares is external state, so an entry may say either: `reads` promises a read of
+ * `scale`, `writes` a write of `acc`, `maybe` promises a write and its body asks for nothing more
+ * -- `var` promises a write and asks for no less -- and `shout` writes the group `console`, which
+ * expands to `stdout`. A variable is never written in a clause: a `var` parameter is declared by
+ * the `var` in the parameter list and a module `var` by its declaration.
+ *
+ *   3 5 1 shout 1
+ */
+
+resource scale
+resource acc
+resource console = [stdout]
+
+/// A read of the resource: the entry carries no `var`.
+func reads(): int uses scale {
+    return 3
+}
+
+/// A write of the resource: the entry carries `var`.
+func writes(): int uses var acc {
+    return 5
+}
+
+/// `var` says the entry may write, not that the body must.
+func maybe(): int uses var scale {
+    return 1
+}
+
+/// The group expands to `stdout`, which every call to this writes: the entry carries `var`.
+func shout(): int uses var console sync {
+    println('shout')
+    return 1
+}
+
+func main(): int sync {
+    println(reads())
+    println(writes())
+    println(maybe())
+    println(shout())
+    return 0
+}

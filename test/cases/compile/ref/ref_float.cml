@@ -1,0 +1,15 @@
+/**
+ * A reference holds any type, not only an integer: a float goes in, is read back, written through
+ * `set` and advanced through `update` with a `pure` function of the content.
+ */
+
+import state
+
+func main(): int sync {
+    let r = state::ref(1.25)
+    println(state::get(r))
+    state::set(r, 2.5)
+    println(state::get(r))
+    println(state::update(r, (x: float) => x * 2.0))
+    return 0
+}

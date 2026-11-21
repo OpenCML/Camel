@@ -62,13 +62,13 @@
 
 ## 标准库里的 Camel 遍
 
-`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::fold`、`opt::cse`、`opt::dce` 分别与 C++ 的 `std::opt::fold`、`std::opt::cse`、`std::opt::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::fold`（遍名与遍参数的写法见 `docs/cli.md`）。`opt::fold` 把操作数全是常量的纯算子换成它的算子算出的值（`eval`），逐轮重复到没有可折的为止（`chain` 要把 `let b = a + 4` 的加法先折成常量，才能折 `let c = b * 2` 的乘法）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。三个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，折掉一个算子会让它上面的运算成为常量，所以一轮不够。
+`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::fold`、`opt::cse`、`opt::dce` 分别与 C++ 的 `std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::fold`（遍名与遍参数的写法见 `docs/cli.md`）。`opt::fold` 把操作数全是常量的纯算子换成它的算子算出的值（`eval`），逐轮重复到没有可折的为止（`chain` 要把 `let b = a + 4` 的加法先折成常量，才能折 `let c = b * 2` 的乘法）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。三个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，折掉一个算子会让它上面的运算成为常量，所以一轮不够。
 
 每轮一次事务。`cse` 与 `dce` 里同一轮每个待改的节点都被换成"输入完全相同且更早的那个节点"，而这样的两个节点不可能互为祖先——若 `b` 是 `a` 的传递使用者，`b` 的某个输入必在 `a` 的使用者闭包里，于是 `b` 的输入列不可能与 `a` 的相同——所以一轮一次 `commit` 就够，不需要 C++ 的 `reaches` 守卫（`replace` 自带的成环检查是第二道防线）。`fold` 没有这条保证，折出来的值是事务新造的节点而不是更早的节点，所以它只在真有可求值的节点时才 `open`，并且一轮里一个都没折成（必然出故障的常量表达式就是这种）时 `abort` 掉、原样返回：不然事务会造出一个与原来一模一样的图，递归就停不下来。
 
 `fold` 求值的范围比它能替换的范围大：函数返回的那个常量表达式是图的 return、output 与 exit 锚点，而 `replace` 拒绝替换锚点（下一节的第三条）。C++ 的折叠在这里给 return 节点留了口子——没有控制输入时 `isFoldable` 放行，`replaceFoldResult` 再把三个锚点搬到折出来的值上——事务没有搬锚点的操作，于是 `opt::fold` 只求值、只为在必然出故障时报出警告，然后原样留下。两者对"必然出故障"的表达式都是这样：都求值、都报同一条 `ConstantExpressionFaults`、都原样留下，程序有没有这个遍都一样（设计原则 3.9）。
 
-`opt::saturate` 是第四个：把规则库的 `algebra` 与 `distribution` 两路定律双向用在每个值的写法上，最多 `rounds` 轮，什么也不抽取（`f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>`，`rewrite` 模块的引擎）；C++ 的 `std::opt::saturate` 就是调用它，规则只在 `stdlib/rules.cml` 里写一次。
+`opt::saturate` 是第四个：把规则库的 `algebra` 与 `distribution` 两路定律双向用在每个值的写法上，最多 `rounds` 轮，什么也不抽取（`f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>`，`rewrite` 模块的引擎）；C++ 的 `std::cxx::saturate` 就是调用它，规则只在 `stdlib/rules.cml` 里写一次。
 
 ### `opt::cse` 与 `opt::fold` 对着 C++ 遍少了什么
 
@@ -79,7 +79,7 @@
 - `opt::fold` 不折**分支**上的常量：判定是常量时 C++ 遍会挑一条臂并把结构折掉，而在值上求值一个算子不是折它外层的分支结构。
 - `opt::fold` 不折**返回位置**的常量表达式：C++ 遍的 `isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 再把图的 exit、output 与 return 锚点搬到折出来的值上；事务没有搬锚点的操作（`replace` 自带"替换锚点"的拒绝），所以这里只求值、只为必然出故障时报出警告，然后原样留下。`opt::fold` 与 `opt::order` 的其余差别见上表（`opt::order` 要删一条控制边，是事务没有的边手术）。
 
-对照在 `test/plans/feat/opt/camel_passes.plan.toml`：C++ 一侧的图记成 golden，Camel 一侧交给快照测试已有的同构比较（`gir_dot_isomorphic`，`test/tools/gir-dot.mjs`）——节点是种类、类型、形状与出入度，边是两端种类、连接类型与标签，也就是"同样的值、同样的类型、同样的区域结构、同样的接线"。`opt::fold` 另有一条把两侧的转储按文本比的条目：把 origin 号归一化之后两份转储逐字符相同，比同构更强。五个语料（`cse_subject`、`cse_written_variable`、`dce_subject`、`fold_subject`、`fold_fault`）各有一条"遍之前"的条目，断言要合并的重复、要删的死值与要折的运算确实在（没看任何东西的守卫不会通过），一组 `std::jgir` 属性条目（合并的不动点、写过一次的 cell 两侧不合并、程序用到的值还在、没有算子还留在常量上）与四条后端上的结果条目。`fold_fault` 是"必然出故障的常量表达式"那个语料：它在返回位置放一个 `1 / 0`（锚点，不能替换）、在旁边放一个可折的乘法，于是同一轮里既求值又替换，两侧的 jgir 与两侧的警告文本都逐字符相同（`stdout_normalized` 与 `stderr_normalized` 一起比），并且在 `std::nvm` 上跑到那条运行期故障时的结果也与没有这个遍时相同。
+对照在 `test/plans/feat/opt/camel_passes.plan.toml`：C++ 一侧的图记成 golden，Camel 一侧交给快照测试已有的同构比较（`gir_dot_isomorphic`，`test/tools/gir-dot.mjs`）——节点是种类、类型、形状与出入度，边是两端种类、连接类型与标签，也就是"同样的值、同样的类型、同样的区域结构、同样的接线"。`opt::fold` 另有一条把两侧的转储按文本比的条目：把 origin 号归一化之后两份转储逐字符相同，比同构更强。五个语料（`cse_subject`、`cse_written_variable`、`dce_subject`、`fold_subject`、`fold_fault`）各有一条"遍之前"的条目，断言要合并的重复、要删的死值与要折的运算确实在（没看任何东西的守卫不会通过），一组 `std::jgir` 属性条目（合并的不动点、两次写同一个乘积而中间名字换了值的两侧不合并、程序用到的值还在、没有算子还留在常量上）与四条后端上的结果条目。`fold_fault` 是"必然出故障的常量表达式"那个语料：它在返回位置放一个 `1 / 0`（锚点，不能替换）、在旁边放一个可折的乘法，于是同一轮里既求值又替换，两侧的 jgir 与两侧的警告文本都逐字符相同（`stdout_normalized` 与 `stderr_normalized` 一起比），并且在 `std::nvm` 上跑到那条运行期故障时的结果也与没有这个遍时相同。
 
 **缺口即任务**。下表记着哪些缺口已关闭、哪些还在：
 
@@ -87,19 +87,19 @@
 | --- | --- | --- |
 | 三个遍问"这个节点能不能删／并／折"时读的那两件事 | **已补**：`may_be_recomputed(n)` 读 `OperatorTable::mayBeRecomputed`（纯且可折，C++ 的 `isPureOper`），`may_fault(n)` 读 `nodeMayFault`（`OperatorTraits::mayFault` 与 `castMayFault`，C++ 的 `isValueOnly` 读的同一特征） | `opt::cse`、`opt::fold`、`opt::dce` 都改问这两条：`is_pure` 只说"声明为纯"，不说"算得出来"，更不说"不会出错" |
 | "能不能挪/丢/并"这一个判据（设计原则 3.4） | **已补**：`may_be_rearranged(n)` 读 `graph::may_be_rearranged`（`camel/runtime/graph.h`），也就是 C++ 遍读的 `nodeIsFreelySchedulable`——那个名字现在只是它的转发 | `opt::cse` 的 `mergeable_operation` 与 `opt::dce` 的 `value_only` 都改问这一条，不再各自写 `is_pure && may_be_recomputed && !may_fault`；`may_be_recomputed`／`may_fault` 仍是别的两个问题，各自保留 |
-| `opt::dce` 与 C++ 一样在删掉的语句占的链位上写 `:op/keep`（`keepThroughValue`），让那个效应继续跑 | 事务写不出算子节点（只有 `add_constant`）；`graph` 也没有"这个读者是不是某个效应的最后一个读者"这条查询 | **缺，记为后续**：不在 `opt::dce` 里猜。提交时的检查会拒掉"效应既没人读值、又不在任何链位上"的图（`GraphInvalid`），所以是响亮的失败而不是悄悄改程序；`dce_effect_under_pure_arithmetic` 这类形状今天两侧都保留效应（两侧都打印 `5`、exit 7），没有被这条差别碰到 |
+| `opt::dce` 删掉一个节点时，若它带走的是某个可能出故障的计算的最后一个用处（设计原则 3.3） | 务写不出 `GATE`／算子节点（只有 `add_constant`），但"这个读者是不是它的最后一个读者"用 `inputs`／`value_users`／`may_fault` 就能问 | **已补**：`dead_value` 加一条 `last_read_of_a_fault`——那个读者留下，计算保住那条值的读，故障因此留在程序里（C++ 一侧走的是 `keepThroughValue`：把用处交给一个 `GATE`，数据口读原值、同步前驱是那个节点） |
 | `opt::fold`：把输入全是常量的纯算子求值 | **已补**：`eval(t, n)` 在值上求值一个算子，返回持有结果的节点，求值出故障就报同一警告并返回 `null` | 写出来了（`opt::fold`） |
 | `opt::fold` 的其余分支：转换、拷贝、访问、填充，以及按操作数类型就能定出结果的算子（`typeFolder`） | `eval` 求值的是**算子**（`NodeKind::Oper`），`Cast`／`Copy`／`Accs`／`Fill` 不是算子，`typeFolder` 也没有出口 | 这些分支仍只在 C++ 侧；`fold_subject` 只用算子的形状，所以这一层没有被两侧比过 |
 | `opt::fold` 折**返回位置**的常量表达式：`isFoldable` 在 return 节点没有控制输入时放行它，`replaceFoldResult` 把图的 exit、output 与 return 锚点搬到折出来的值上 | 搬锚点：事务的 `replace` 拒绝替换锚点（`isReplaceable` 那条），没有别的操作能移动一个锚点 | 只求值（为了必然出故障时报出那条警告）然后原样留下；`fold_subject` 里没有返回位置的常量表达式，所以这一层没有被两侧比过 |
 | `opt::order`：删掉已被必然的数据或控制路径蕴涵的一条控制边 | 删一条边、加一条边：事务只有整节点的 `replace` 与 `erase`，对应 C++ 的 `unlinkInput(Ctrl, …)` 与 `appendControlDependency` | 写不出来 |
-| `std::opt::dce` 的 `values_only=false` 那一半：绕过只转发值的 GATE，把它的等待移到消费者 | 同上，这是边手术 | 只落了 `values_only=true` 那一半 |
+| `std::cxx::dce` 的 `values_only=false` 那一半：绕过只转发值的 GATE，把它的等待移到消费者 | 同上，这是边手术 | 只落了 `values_only=true` 那一半 |
 | 合并任何非 GC 追踪类型的常量 | 读一个标量的位（`bytes` 编解码的是数组与张量，`math` 没有 `signbit`） | 只合并 `int`、`i32`、`bool`：`0.0` 与 `-0.0` 用 `==` 相等却是图里两个值，按 `==` 合并会改程序 |
 | 合并节点时把属性一起合并 | 写属性（`tags(n)` 只把属性读成文本；`add_constant` 造的是新节点，`replace` 不搬运属性） | 属性文本不同的两个节点不合并 |
 | 按类型问"是不是 GC 追踪"（`type::isGCTraced`） | 节点类型上没有这个查询 | 按类型名排除 |
 | 以区域为键的 Map | `id(Region)` 没有导出，只有 `region_of`、`region_kind`、`region_parent` 与 `==` | 区域只能用 `==` 比较 |
 | 遍参数带默认值（`std::opt safe_fp=false`） | Camel 遍的源码没有默认值，每个 `with` 参数都必填（上一节第 4 条） | 每个参数都要写在流水线里 |
 
-计划里说的"`opt::cse` 与 `std::opt::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl(cse_native)` 接到 C++ 实现落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为问题并**已有定论**（设计原则 10.4）：声明模块可以有函数体、泛型函数可以带 `#impl`，这条从此不再是障碍，`#impl(cse_native)` 的实现尚未做。
+计划里说的"`opt::cse` 与 `std::cxx::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl(cse_native)` 接到 C++ 实现落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为问题并**已有定论**（设计原则 10.4）：声明模块可以有函数体、泛型函数可以带 `#impl`，这条从此不再是障碍，`#impl(cse_native)` 的实现尚未做。
 
 **一页结论**。行数按各自的语言量：`opt::cse` 的定义与它用到的比较（`stdlib/opt.cml` 的 `bitEqualType` 到 `cse`）126 行，对 C++ 的 `cseDraft`（`src/passes/opt/generic/generic.cpp`）130 行；`opt::dce`（同一文件的 `valueOnly` 到 `dce`）26 行，对 `dceDraft` 38 行。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
 
@@ -109,7 +109,7 @@
 
 ## 对照与测试
 
-`test/cases/modules/graph_pass/` 里有两个用 Camel 写的遍，各与一个 C++ 遍做差分比较（`test/plans/feat/modules/graph.plan.toml`）：`neutral::integers`（`x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`）对 `std::opt::algebra neutral_only=true`，`unused::values`（无人读取的常量与纯运算）对 `std::opt::dce values_only=true`。两侧的 `std::jgir` 转储逐图相等（`normalize_origins` 去掉源码 origin 号，它们因编译过遍的库而不同）。两个参数是为这个对照加的、文档化的遍参数（`docs/cli.md`）。`is_written_slot(n)` 读出节点的值是否可能被原地写（传给 `var` 形参或改自身操作数的算子，经 GATE 传递），两个遍都跳过这样的节点，差分程序里有 `var`。
+`test/cases/modules/graph_pass/` 里有两个用 Camel 写的遍，各与一个 C++ 遍做差分比较（`test/plans/feat/modules/graph.plan.toml`）：`neutral::integers`（`x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`）对 `std::cxx::algebra neutral_only=true`，`unused::values`（无人读取的常量与纯运算）对 `std::cxx::dce values_only=true`。两侧的 `std::jgir` 转储逐图相等（`normalize_origins` 去掉源码 origin 号，它们因编译过遍的库而不同）。两个参数是为这个对照加的、文档化的遍参数（`docs/cli.md`）。`is_written_slot(n)` 读出节点的值是否可能被原地写（传给 `var` 形参或改自身操作数的算子，经 GATE 传递），两个遍都跳过这样的节点，差分程序里有 `var`。
 
 `node_kinds_match_the_graph` 把一个带分支、闭包与折叠的程序的每张图的节点种类序列与 `std::jgir` 的转储逐一对过。
 

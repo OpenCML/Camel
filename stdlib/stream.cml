@@ -21,6 +21,8 @@
  *   here: those declare their non-determinism and belong to the libraries that own a clock.
  */
 
+import state
+
 // ---- producing ----
 
 /// The stream of what `step` answers from `state` on: one element with the state after it, or
@@ -183,20 +185,27 @@ export func tee::<T>(s: T..): (T.., T..) sync {
     let hint = if n > tee_hint_cap then tee_hint_cap else n
     // The source as far as it has been pulled, one element per position already pulled, how far
     // each side has read, and the widest the part of the buffer that one side has not read yet
-    // has been.
-    var src: T.. = s
-    var buffer: T[] = []
-    var taken: int[] = [0, 0]
-    var peak: int = 0
+    // has been. The two sides share them, and the nested functions below are what write them: a
+    // closure cannot assign a name declared in the body it is written in (design principles 3.5,
+    // rule two), and the exit that rule names for shared mutable state is a `Ref` (3.5; 5.4 names
+    // exactly this buffer, one that two consumers share). So the four are boxes, `get`/`set` read
+    // and write them. Each box is one resource, so the writes on it keep the order they are
+    // written in.
+    let src = state::ref(s)
+    let none: T[] = []
+    let buffer = state::ref(none)
+    let taken = state::ref([0, 0])
+    let peak = state::ref(0)
 
     // One element more from the source, kept for the other side; `false` when the source is over.
     // The write stands in a sync block, so it is ordered before the reads of a later pull.
     func pull(): bool sync {
-        return match src() {
+        let rest = state::get(src)
+        return match rest() {
             case null => false
             case p => sync {
-                buffer = buffer->append<p.0>
-                src = p.1
+                state::set(buffer, state::get(buffer)->append<p.0>)
+                state::set(src, p.1)
                 true
             }
         }
@@ -209,18 +218,23 @@ export func tee::<T>(s: T..): (T.., T..) sync {
     // sync block: a sync body does not reach into the arms and blocks written inside it (design
     // principles 3.4), and a write nothing orders is a write a later pull cannot count on (3.5).
     func read(side: int, at: int): (T, int)? sync {
-        let holds = if at < len(buffer) then true else sync { pull() }
+        let holds = if at < len(state::get(buffer)) then true else sync { pull() }
         if holds then sync {
-            taken[side] = at + 1
+            // An array is a value, so a position is written by building the two-element cursor
+            // again -- which is what `taken[side] = at + 1` means on a `var`.
+            let seen = state::get(taken)
+            let reached = at + 1
+            let next = if side == 0 then [reached, seen[1]] else [seen[0], reached]
+            state::set(taken, next)
             let other = 1 - side
-            let slow = if taken[side] < taken[other] then taken[side] else taken[other]
-            let unread = len(buffer) - slow
-            if unread > peak then sync {
-                peak = unread
+            let slow = if next[side] < next[other] then next[side] else next[other]
+            let unread = len(state::get(buffer)) - slow
+            if unread > state::get(peak) then sync {
+                state::set(peak, unread)
             }
-            tee_note(hint, tee_hint_cap, len(buffer), peak, s)
+            tee_note(hint, tee_hint_cap, len(state::get(buffer)), state::get(peak), s)
         }
-        return if holds then (buffer[at], at + 1) else null
+        return if holds then (state::get(buffer)[at], at + 1) else null
     }
 
     // The two steps of the two streams, each a sync function so that what its pull writes is

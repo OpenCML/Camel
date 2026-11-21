@@ -4,9 +4,8 @@
 /*
  * The forward-mode (jvp) transform of a function graph: `reinterp<jvp>(f)`.
  *
- * `reinterp` produces a *new function*, not a rewritten graph. The author's ruling (a824031aa) is
- * that a published program's graph is never replaced -- that road was measured and ends in SIGSEGV
- * at the entry it makes (9cb1c3a94) -- so the transform builds a graph of its own, node by node,
+ * `reinterp` produces a *new function*, not a rewritten graph. A published program's graph is never replaced (replacing it ends in SIGSEGV at
+ * the entry it makes), so the transform builds a graph of its own, node by node,
  * and hands it to the call site as a function value. That is the same shape as
  * `camel::autodiff::buildGradientGraph` for the reverse direction, and it is why this lives beside
  * a value-level transform rather than in the pass pipeline: a `RuntimeGraphRewritePass` must answer
@@ -24,7 +23,7 @@
  * body into the new graph with the values the left side bound as its captures and the tangents as
  * its parameters. What stands where the operator stood is therefore a direct call to the named rule
  * function -- `mul_tangent(x, w, dx, dw)` -- and not a closure-valued node that a second call reads
- * (the author's ruling of 2026-11-01; the two-call chain is what performing the rewrite as a
+ * (the two-call chain is what performing the rewrite as a
  * *runtime* call produces, and it belongs in a graph built at run time, not in this one). A
  * constant's tangent is zero and a port's is the tangent the caller passed; the result's tangent is
  * what the chain of rules computed. There is no table of laws here: a primitive with no rule in the
@@ -46,9 +45,17 @@
 namespace camel::transforms {
 
 /// The graph of `reinterp<jvp>(f)` and the program of the graphs built with it.
+///
+/// `program` is held through `ProgramHold`, not named by a bare pointer: the build reserves a
+/// program of its own (`GraphDraftGroup`), and the group that rooted it is gone by the time this
+/// value reaches the caller, which reads `graph` to make a function value out of it. A program
+/// reserved while a program runs is one `GCGraphManager::reserve` does not root (program.cpp), so
+/// between the group's end and that function value this member is the only root the program has --
+/// and a safepoint that fell there would free it, leaving `graph` an address in a freed program.
+/// Move-only, like the root it carries.
 struct JvpGraph {
-    const camel::runtime::Program *program = nullptr;
-    camel::runtime::GCGraph *graph         = nullptr;
+    camel::runtime::ProgramHold program;
+    camel::runtime::GCGraph *graph = nullptr;
     /// Where the build stopped, when `graph` is null: the primitive the ruleset has no rule for, as
     /// the origin of that node in `function` (its source position), what the primitive is and why it
     /// was refused. A refusal that only prints is a reading, not a diagnosis: the kernel raises a

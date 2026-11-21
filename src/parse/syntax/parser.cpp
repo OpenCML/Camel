@@ -1000,7 +1000,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::Colon)) {
         parseType();
     }
-    if (atWord(0, "uses") || atWord(0, "pure")) {
+    if (atWord(0, "uses") || atWord(0, "pure") || atWord(0, "spelling")) {
         parseResourceClause();
     }
     if (atWord(0, "when")) {
@@ -1235,13 +1235,17 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
     close(m, NK::TypeDecl);
 }
 
-/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered' | 'readonly')?
 ///
 /// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
 /// an ambient resource of the module, `resource io = [stdout, fs]` a group of resources and other
 /// groups, and `resource net unordered` says the accesses of a call may be reordered (step 8
-/// gives that meaning). `resource` and `unordered` are contextual: they are not reserved words,
-/// and a declaration starts with `resource` only when a name follows it.
+/// gives that meaning). `resource graph readonly` says the resource is only ever read, so it
+/// conflicts with no access and orders none (design principles 9.12: reading a graph is an effect,
+/// and nothing writes the graph it reads); what `uses var` on such a resource means is the
+/// semantic layer's business. One modifier stands after the name, not a list of them.
+/// `resource`, `unordered` and `readonly` are contextual: they are not reserved words, and a
+/// declaration starts with `resource` only when a name follows it.
 void ParserImpl::parseResourceDecl() {
     const size_t m = mark();
     eat(TK::KwExport);
@@ -1253,6 +1257,8 @@ void ParserImpl::parseResourceDecl() {
         // rather than taking whatever token stands there.
         parseBracketedIdents(TK::RBracket, NK::BracketIdents);
     } else if (atWord(0, "unordered")) {
+        bump();
+    } else if (atWord(0, "readonly")) {
         bump();
     }
     close(m, NK::ResourceDecl);

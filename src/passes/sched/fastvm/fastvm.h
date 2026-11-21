@@ -13,12 +13,12 @@
 #include "camel/runtime/graph.h"
 #include "compile.h"
 #include <array>
+#include <cstdlib>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
-#include <cstdlib>
-#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -176,8 +176,8 @@ struct CodeLease {
 class FastVMSchedPass : public RuntimeGraphSchedulePass {
   public:
     struct CallResult {
-        slot_t result;
-        ctx::Frame *rootFrame;
+        slot_t result = {};
+        ctx::Frame *rootFrame = nullptr;
         // Not null when the activation ended in a tail call of compiled code instead of
         // returning: `rootFrame` is then the frame prepared for that code (this entry point of
         // it), and running it yields the result. The interpreter hands the call back rather
@@ -372,7 +372,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
           enableJitTraceMir_(config.enableJitTraceMir)
 #endif
     {
-        statsPath_  = config.statsPath;
+        statsPath_ = config.statsPath;
         framePool_.registerGcTracer();
     }
     virtual ~FastVMSchedPass();
@@ -381,15 +381,15 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
-#if ENABLE_FASTVM_COMPUTED_GOTO
     /// The same loop compiled a second time with the hooks of the execution observer
     /// (inspectvm.cpp): what a program runs on while an observer is installed.
     CallResult callBorrowedInspected(size_t pc, ctx::Frame *rootFrame);
-#endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
 
-    // Shared by interpreted and JIT native-operator paths.
-    slot_t invokeNativeOperator(const Bytecode &bc, ctx::Frame &frame);
+    // Shared by interpreted and JIT native-operator paths. `pc` is the instruction this operator
+    // is, in the image the caller executes: the anchor names the node it belongs to through it
+    // (native_call.cpp), so it is stated rather than found.
+    slot_t invokeNativeOperator(const Bytecode &bc, ctx::Frame &frame, size_t pc);
 
     // ---- Hosted interpreters (hosted.cpp) --------------------------------------------------
     //

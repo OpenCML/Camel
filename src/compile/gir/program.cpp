@@ -16,8 +16,9 @@
  *    buildTopLevelValue). So the top level of a module does not depend on the order it is
  *    written in, and a function's return type and captures are known where it is used. A
  *    value needed while it is being built depends on itself: ModuleValueCycle.
- * 3. Link: the captures of every direct call (linkCaptureSites, a least fixpoint), the call of
- *    the entry module's `main`, the summaries of effects (another fixpoint) and the warnings
+ * 3. Link: the captures a call is still owed (linkCaptureSites, a least fixpoint; the ones the
+ *    call was built with are already its `with` inputs), the call of the entry module's `main`,
+ *    the summaries of effects (another fixpoint) and the warnings
  *    that need them, per module.
  *
  * A library (buildLibrary) is built the same way by a builder of its own, from the library
@@ -31,6 +32,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/graph.h"
@@ -39,9 +41,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <format>
 #include <functional>
-#include <cstdlib>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -63,8 +65,8 @@ class Builder::UnitContext {
           tree_(builder.tree_), graph_(builder.currGraph_), nodeScope_(builder.nodeScope_),
           graphScope_(builder.graphScope_), decoratedScope_(builder.decoratedScope_),
           templateScope_(builder.templateScope_), bindings_(builder.typeBindings_),
-          depth_(builder.instantiationDepth_), synced_(builder.synced_),
-          varied_(builder.varied_), declaresVariable_(builder.declaresVariable_),
+          depth_(builder.instantiationDepth_), synced_(builder.synced_), varied_(builder.varied_),
+          declaresVariable_(builder.declaresVariable_),
           calleeAllowed_(builder.genericCalleeAllowed_), lastSynced_(builder.lastSyncedNode_),
           refOrigin_(builder.refOrigin_), namespacePath_(builder.namespacePath_),
           usingFrames_(builder.usingFrames_) {
@@ -200,15 +202,15 @@ bool isWrittenName(const std::string &name) {
 /// rule's right side: such a family has nothing to bind its pattern's names with, so its rules may
 /// not read them (`SemanticDiag::RuleRightUsesOuterVariable`).
 ///
-/// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands and
-/// then with what it answers, so its rules write `x` and `w` on the right side and must
+/// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands
+/// and then with what it answers, so its rules write `x` and `w` on the right side and must
 /// (`modules/transforms/jvp.cpp`). `rulesets.vmap` is: the batched graph has no unbatched value to
 /// give the outer arrow, so the transform reads `rhsCalleeOf` and calls the named function with the
 /// batch (`modules/transforms/vmap.cpp`), and a rule that reads `x` has nothing to read.
 bool familyCallsOnlyItsCallee(const std::string &family) {
     // `rulesets.probe_batch` is the fixture of the same shape: the refusal is reachable on purpose
-    // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing rule
-    // reachable for `jvp`.
+    // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing
+    // rule reachable for `jvp`.
     return family == "rulesets.vmap" || family == "rulesets.probe_batch";
 }
 
@@ -244,6 +246,14 @@ void Builder::claimRootNodes(size_t firstNode) {
 // ---- Step one: declare ----
 
 void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnostics_ptr_t diags) {
+    // A signature is read here, before any body is built, and a type in it may be a `match type`
+    // whose guard decides it (`func f(x: ShapeOf<string>)`): the predicate has to be answerable
+    // here too, or the type would look like one no case selects.
+    GuardScope guardScope(*this);
+    // And it records the pairs of function types one type variable is asked for, which are judged
+    // once every body is measured: a type in a top-level declaration is read here too
+    // (resource_conflict.h).
+    ResourceConflictScope conflictScope(*this);
     ensureRootGraph();
     recorder_  = context_ ? context_->semanticRecorder() : nullptr;
     auto &slot = units_[module.get()];
@@ -434,8 +444,7 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
             for (const std::string &name : declaration.names) {
                 if (const auto cell = declaration.unit->nodeScope->get(name, false);
                     cell.has_value()) {
-                    moduleVariableResources_[*cell] =
-                        declaration.unit->module->name() + ":" + name;
+                    moduleVariableResources_[*cell] = declaration.unit->module->name() + ":" + name;
                 }
             }
         }
@@ -577,7 +586,11 @@ bool Builder::buildProgram() {
     if (entryIt == units_.end()) {
         return false;
     }
-    return buildFrom(*entryIt->second, true);
+    const bool built = buildFrom(*entryIt->second, true);
+    // The reading of what the guards of a `match type` cost: how many predicates ran, how many
+    // were answered from the cache by (function, type arguments), and how many pairs that is.
+    logPredicateCounts();
+    return built;
 }
 
 bool Builder::buildLibrary(const module_ptr_t &module) {
@@ -586,7 +599,9 @@ bool Builder::buildLibrary(const module_ptr_t &module) {
     if (it == units_.end()) {
         return false;
     }
-    return buildFrom(*it->second, false);
+    const bool built = buildFrom(*it->second, false);
+    logPredicateCounts();
+    return built;
 }
 
 bool Builder::buildLibraryEntry(
@@ -609,16 +624,29 @@ bool Builder::buildLibraryEntry(
     return buildFrom(*it->second, true);
 }
 
+size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
+    auto sourceContext = context_ != nullptr ? context_->sourceContext() : nullptr;
+    if (sourceContext == nullptr || origin == camel::source::kInvalidOriginId) {
+        return kNoSourceOffset;
+    }
+    const camel::source::OriginRecord *record = sourceContext->origin(origin);
+    if (record == nullptr) {
+        return kNoSourceOffset;
+    }
+    const camel::source::SourceSpan *span = sourceContext->span(record->primarySpan);
+    if (span == nullptr) {
+        return kNoSourceOffset;
+    }
+    return span->startOffset;
+}
+
 void Builder::scanProgramWriters() {
     programWriters_.clear();
-    // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
-    // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
-    // principles 4.3). The variable it writes is the base of its target: the variable itself
-    // (`v = e`) or a path into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a
-    // rebinding of the variable (pathAssignmentOf).
-    const auto isAssignment = [](const std::string &group) {
-        return group.rfind("__assn", 0) == 0;
-    };
+    programValueNames_.clear();
+    // The variable it writes is the base of its target: the variable itself (`v = e`) or a path
+    // into its value (`v.f = e`, `v[i] = e`), which the GIR builder reads as a rebinding of the
+    // variable (pathAssignmentOf). A write is a node of kind ASSIGN: the kind, not a group's
+    // spelling, is what says so.
     // The variable a target names: the reference under the fields and indices the assignment
     // writes through.
     const auto baseOf = [](GCT::node_ptr_t target) -> GCT::node_ptr_t {
@@ -645,18 +673,6 @@ void Builder::scanProgramWriters() {
         }
         return nullptr;
     };
-    // The group a callee names, under the with-arguments a partial application binds
-    // (`LINK(WITH(DREF op, w...), ...)`, design principles 4.3).
-    const auto groupOf = [](GCT::node_ptr_t callee) -> const std::string * {
-        GCT::node_ptr_t node = callee;
-        if (node != nullptr && node->type() == GCT::NodeKind::WITH && node->size() > 0) {
-            node = node->at(0);
-        }
-        if (node == nullptr || node->type() != GCT::NodeKind::DREF) {
-            return nullptr;
-        }
-        return &node->name();
-    };
     struct Pending {
         GCT::node_ptr_t node = nullptr;
         // The function the node is written in: the innermost FUNC, or null at a module's top
@@ -680,8 +696,7 @@ void Builder::scanProgramWriters() {
         std::set<std::string> &names = parametersOf[function];
         if (function != nullptr && function->size() > 0 && function->at(0) != nullptr) {
             if (auto *type = function->at(0)->dataType(); type != nullptr) {
-                if (const auto *signature = tt::as_ptr<FunctionType>(type);
-                    signature != nullptr) {
+                if (const auto *signature = tt::as_ptr<FunctionType>(type); signature != nullptr) {
                     for (size_t index = 0; index < signature->argNamesCount(); ++index) {
                         names.emplace(signature->argNameAt(index));
                     }
@@ -698,9 +713,9 @@ void Builder::scanProgramWriters() {
     }
     // The names a function declares itself: `var x = e` is a `VARI` over the reference that names
     // the cell. A function that writes a name it declared writes its own cell -- nothing outside it
-    // reaches that cell but the functions written inside it, which are writers of their own and stay
-    // in the set. The declaring function's own write is left out: a call through a function value
-    // cannot write a cell it was never handed.
+    // reaches that cell but the functions written inside it, which are writers of their own and
+    // stay in the set. The declaring function's own write is left out: a call through a function
+    // value cannot write a cell it was never handed.
     std::unordered_map<const GCT::Node *, std::set<std::string>> declaredOf;
     const auto declaredNamesOf = [](GCT::node_ptr_t vari, std::set<std::string> &names) {
         std::function<void(GCT::node_ptr_t, int)> collect = [&](GCT::node_ptr_t node, int depth) {
@@ -728,24 +743,38 @@ void Builder::scanProgramWriters() {
         if (node == nullptr) {
             continue;
         }
-        const GCT::Node *function =
-            node->type() == GCT::NodeKind::FUNC ? node : current.function;
+        const GCT::Node *function = node->type() == GCT::NodeKind::FUNC ? node : current.function;
         if (node->type() == GCT::NodeKind::VARI) {
             declaredNamesOf(node, declaredOf[function]);
         }
-        if (node->type() == GCT::NodeKind::LINK && node->size() >= 2) {
-            const std::string *group = groupOf(node->at(0));
-            if (group != nullptr && isAssignment(*group)) {
-                if (const GCT::node_ptr_t variable = baseOf(node->at(1)); variable != nullptr) {
-                    const std::set<std::string> &parameters = parametersIn(function);
-                    if (parameters.find(variable->name()) == parameters.end()) {
-                        programWriters_[variable->name()].insert(function);
-                    }
+        if (node->type() == GCT::NodeKind::ASSIGN) {
+            if (const GCT::node_ptr_t variable = baseOf(node->assignmentTarget());
+                variable != nullptr) {
+                const std::set<std::string> &parameters = parametersIn(function);
+                if (parameters.find(variable->name()) == parameters.end()) {
+                    programWriters_[variable->name()].insert(function);
                 }
             }
         }
+        // A name read where a call is not made is a value the program wants: `let k = f` makes a
+        // value of `f`, and `f(1)` calls it. A `LINK` (and a `WITH` or `TAPP` that binds one) puts
+        // its callee first; every other node reads every child. The value is what a capture of a
+        // closure is about (a function value holds the values its captures had when it was made),
+        // so the two are told apart here, before any body is built.
+        const bool calleeFirst = node->type() == GCT::NodeKind::LINK ||
+                                 node->type() == GCT::NodeKind::WITH ||
+                                 node->type() == GCT::NodeKind::TAPP;
         for (size_t i = 0; i < node->size(); ++i) {
-            pending.push_back({node->at(i), function});
+            const GCT::node_ptr_t child = node->at(i);
+            if (child != nullptr && !(calleeFirst && i == 0) &&
+                (child->type() == GCT::NodeKind::DREF || child->type() == GCT::NodeKind::NREF)) {
+                // The callee of a `LINK`, a `WITH` and a `TAPP` is the first child and is skipped
+                // above: `f(1)` calls `f`, and a name read anywhere else is a value the program
+                // wants. An assignment's target is a name this scan already counted as a write of
+                // `programWriters_`, and being read as a value here changes nothing.
+                programValueNames_.insert(child->name());
+            }
+            pending.push_back({child, function});
         }
     }
     // A function's write of a name it declared is dropped: the cell is the function's own, and only
@@ -754,7 +783,7 @@ void Builder::scanProgramWriters() {
         std::set<const GCT::Node *> &functions = entry->second;
         for (auto writer = functions.begin(); writer != functions.end();) {
             const GCT::Node *function = *writer;
-            const auto declared = declaredOf.find(function);
+            const auto declared       = declaredOf.find(function);
             if (function != nullptr && declared != declaredOf.end() &&
                 declared->second.count(entry->first) != 0) {
                 writer = functions.erase(writer);
@@ -770,13 +799,185 @@ void Builder::scanProgramWriters() {
     }
 }
 
+void Builder::scanClosureLastUses() {
+    closureUseOf_.clear();
+    // A closure the program binds to a name (`let g = () => x`) is used where the block that binds
+    // it names `g`: design principles 3.5 (198) takes that name's last use for the closure's. Two
+    // other shapes are left out on purpose, because this scan cannot end their stretch and a
+    // stretch cut wide is a legal program refused: a closure written at a call's argument position
+    // is used by that call, and one the program puts into another value is used to the end of the
+    // scope.
+    struct Binding {
+        const GCT::Node *closure = nullptr;
+        const GCT::Node *block   = nullptr;
+        std::string name;
+        size_t at = kNoSourceOffset;
+    };
+    // The names each block writes, with the last offset it writes them at. The block is the key and
+    // not the function: a name bound again in a block inside it is another name, and the closure
+    // the outer block bound is not used by it -- which is also why a use written in a nested block
+    // is not counted for the binding outside it (the stretch is cut short, never long).
+    std::unordered_map<const GCT::Node *, std::unordered_map<std::string, size_t>> usesOfBlock;
+    std::vector<Binding> bindings;
+    struct Pending {
+        GCT::node_ptr_t node = nullptr;
+        // The innermost block (an EXEC) the node stands in, and the innermost function around it.
+        const GCT::Node *block    = nullptr;
+        const GCT::Node *function = nullptr;
+    };
+    std::vector<Pending> pending;
+    for (const auto &[module, unit] : units_) {
+        if (unit->tree != nullptr && unit->tree->root() != nullptr) {
+            pending.push_back({unit->tree->root(), nullptr, nullptr});
+        }
+    }
+    // The closure a binding's value is, if it is one: `let g = () => ...` is the reference `g` over
+    // the function node, and `var g = () => ...` puts that reference inside the cell's declaration.
+    // A VARI carries no name of its own (gct/node.h), so the name is read from the reference it
+    // declares -- reading one off the cell is not a question the node answers.
+    struct ClosureBinding {
+        const GCT::Node *closure = nullptr;
+        std::string name;
+    };
+    const auto closureOf = [](const GCT::node_ptr_t &node) -> ClosureBinding {
+        const auto functionValue = [](const GCT::node_ptr_t &value) -> const GCT::Node * {
+            return value != nullptr && value->type() == GCT::NodeKind::FUNC ? value : nullptr;
+        };
+        if (node == nullptr) {
+            return {};
+        }
+        if (node->type() == GCT::NodeKind::NREF) {
+            for (size_t i = 0; i < node->size(); ++i) {
+                if (const GCT::Node *found = functionValue(node->at(i)); found != nullptr) {
+                    return {found, node->name()};
+                }
+            }
+            return {};
+        }
+        if (node->type() == GCT::NodeKind::VARI) {
+            for (size_t i = 0; i < node->size(); ++i) {
+                const GCT::node_ptr_t declared = node->at(i);
+                if (declared == nullptr || declared->type() != GCT::NodeKind::NREF) {
+                    continue;
+                }
+                for (size_t k = 0; k < declared->size(); ++k) {
+                    if (const GCT::Node *found = functionValue(declared->at(k)); found != nullptr) {
+                        return {found, declared->name()};
+                    }
+                }
+            }
+        }
+        return {};
+    };
+    while (!pending.empty()) {
+        const Pending current = pending.back();
+        pending.pop_back();
+        const GCT::node_ptr_t node = current.node;
+        if (node == nullptr) {
+            continue;
+        }
+        const GCT::Node *block    = current.block;
+        const GCT::Node *function = current.function;
+        if (node->type() == GCT::NodeKind::FUNC) {
+            // A function's own body binds and uses its own names: nothing of it is this block's.
+            function = node;
+            block    = nullptr;
+        } else if (node->type() == GCT::NodeKind::EXEC) {
+            block = node;
+        }
+        // A binding in this block whose value is a closure.
+        if (node->type() == GCT::NodeKind::NREF || node->type() == GCT::NodeKind::VARI) {
+            if (const ClosureBinding binding = closureOf(node); binding.closure != nullptr) {
+                bindings.push_back(
+                    {binding.closure, block, binding.name, sourceOffsetOf(node->origin())});
+            }
+        }
+        // A use of a name in this block: a reference the program writes (`g()`, `g`, `g.f`). A cell
+        // carries no name, so only the two reference kinds are read here.
+        if ((node->type() == GCT::NodeKind::NREF || node->type() == GCT::NodeKind::DREF) &&
+            !node->name().empty() && block != nullptr) {
+            // The binding's own reference is not a use of it: the closure is made there.
+            const bool bindingHere =
+                node->type() == GCT::NodeKind::NREF && closureOf(node).closure != nullptr;
+            if (!bindingHere) {
+                const size_t at = sourceOffsetOf(node->origin());
+                if (at != kNoSourceOffset) {
+                    size_t &last = usesOfBlock[block][node->name()];
+                    if (last < at) {
+                        last = at;
+                    }
+                }
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            pending.push_back({node->at(i), block, function});
+        }
+    }
+    for (const Binding &binding : bindings) {
+        if (binding.closure == nullptr) {
+            continue;
+        }
+        size_t lastUse = binding.at;
+        if (binding.block != nullptr) {
+            const auto uses = usesOfBlock.find(binding.block);
+            if (uses != usesOfBlock.end()) {
+                const auto named = uses->second.find(binding.name);
+                if (named != uses->second.end()) {
+                    lastUse = named->second;
+                }
+            }
+        }
+        if (binding.at != kNoSourceOffset && lastUse > binding.at) {
+            closureUseOf_[binding.closure] = {lastUse, false, binding.name};
+        } else if (binding.at != kNoSourceOffset) {
+            // The block never names the closure again after the binding. Two shapes reach here and
+            // the graph does not tell them apart: a closure the program put into another value (a
+            // tuple, a struct, an array, a `Ref`, a return) -- whose construction may have dropped
+            // the value from the datum it built, so no reference to the closure is left to walk --
+            // and one the program never used at all. Design principles 3.5 (198) gives the first
+            // shape an end: "the closure's value put into another value runs to the rest of the
+            // scope". A stretch cut that far covers every write after the making, which is what the
+            // report reads; the shape the design keeps legal, a name assigned after the closure is
+            // done with, still shows as a use after the write and keeps its own offset above.
+            //
+            // Known over-wide, and not resolved here. The second shape -- a closure bound to a name
+            // that the block never uses again, with no placement behind it -- has no stretch under
+            // 3.5 and is legal, and this branch reports a write after it anyway:
+            //
+            //     let h = (): int => c     // never used
+            //     c = 41                   // reported, though the stretch is empty
+            //
+            // The two shapes are not separable in the graph: making the closure's value part of
+            // another value folds it out of the construction that built it, so the walk meets the
+            // closure node exactly once (its own binding) and no node carries the name. The way to
+            // narrow it is to read the placement off the source -- the tuple, struct, array, `Ref`
+            // or return the value is put into -- and not to keep counting names in the graph. The
+            // measured pair that makes this visible: `let h = (): int => c; let first = h(); c = c
+            // + 1` prints 0 and is legal (the last use is the call), while the shape above is
+            // refused.
+            closureUseOf_[binding.closure] = {binding.at, true, binding.name};
+        }
+    }
+}
+
 bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
+    // From here on this builder answers the `match type` cases whose guards decide them: the type
+    // layer asks for a predicate's answer while it selects a case, and only a build can read one
+    // (typevar.h `typeCaseGuardEvaluator`, design principles 5.5).
+    GuardScope guardScope(*this);
+    // And it records the pairs of function types one type variable is asked for, judged once every
+    // body is measured (resource_conflict.h).
+    ResourceConflictScope conflictScope(*this);
 
     // The conservative writer set, made before any body is built (design principles 3.1, 3.5):
     // which variables the program writes is in the construction trees, and a function whose module
     // has not been built yet still has its body there. A call through a function value, whose
     // callee this layer does not know, is a possible write of those variables (visitLinkNode).
     scanProgramWriters();
+    // And the last use of every closure the program binds to a name, from the same trees and for
+    // the same reason: design principles 3.5 (198) makes a name unassignable from the making of a
+    // closure to that use, and the end of that stretch is in the source, not in a body.
+    scanClosureLastUses();
 
     // The modules in the order of their imports: a module after those it imports, except
     // around a cycle of imports, where one of them comes first (its uses of the others build
@@ -842,8 +1043,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // (a rule's `__lhs` has no body at that stage, so nothing here could read them); they are
         // indexed here, where the module and its diagnostics are in hand: one index per ruleset,
         // taken once, and a second rule under one head is refused rather than chosen by order.
-        if (!unit->failed && unit->module &&
-            unit->module->name().rfind("rulesets.", 0) == 0) {
+        if (!unit->failed && unit->module && unit->module->name().rfind("rulesets.", 0) == 0) {
             const std::string ruleset = unit->module->name();
             std::vector<camel::parse::ast::RuleHead> rules =
                 camel::parse::ast::takeRuleHeads(ruleset);
@@ -866,19 +1066,18 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     continue;
                 }
                 // A family whose transform reads a rule's callee name and calls that function with
-                // the batch never calls the rule's right side itself, so nothing binds the names its
-                // left side's pattern writes. A rule that reads one of them is a rule no such
+                // the batch never calls the rule's right side itself, so nothing binds the names
+                // its left side's pattern writes. A rule that reads one of them is a rule no such
                 // transform can use -- and the place to say so is here, where the rule is written,
-                // not the call that would have used it (the author's ruling of 2026-11-01 05:10:
-                // the outer arrow is not called, so nothing may depend on it).
+                // not the call that would have used it:
+                // the outer arrow is not called, so nothing may depend on it.
                 if (familyCallsOnlyItsCallee(ruleset) && !rule.outerUses.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::RuleRightUsesOuterVariable);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
                     diag.commit(rule.rule, rule.outerUses);
                     continue;
                 }
-                const std::string first =
-                    camel::parse::ast::indexRule(ruleset, rule);
+                const std::string first = camel::parse::ast::indexRule(ruleset, rule);
                 if (!first.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
@@ -890,7 +1089,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         }
     }
     bool ok = std::none_of(order.begin(), order.end(), inError);
-
 
     // Step three: link.
     if (ok) {
@@ -915,16 +1113,27 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         claimRootNodes(firstNode);
     }
     if (ok) {
+        // A declaration's clause is a promise; the bodies measure what it actually touches, and
+        // the declaration is held to the promise (design effects plan, step 5). The measurement
+        // runs here, while the bodies are still in hand; the report runs per module below, with
+        // the other diagnostics of the module being reported.
+        //
+        // It runs before the two walks below because
+        // a region's use of its writes is an edge laid at build time from every node
+        // whose *inferred effect* writes (a call, a loop, a branch and an operator alike), and the
+        // effect of a call is the measured signature of its callee, so the measurements have to
+        // exist before the edges are laid. The measurement reads no edge of this kind --
+        // `footprintOf` walks bodies and callee signatures -- so the two may stand in this order.
+        measureInferredResources();
+        // The edges themselves, once: what a write owes its region is not derived by each
+        // walk that asks what runs (the warning's, the liveness of a graph, the encode, the
+        // execution order) -- they follow these edges.
+        layRegionWriteEdges();
         settleEffectfulGraphs();
         // A stream is read once on each execution path (design principles 5.4), which is a property
         // of the built graphs: this runs while every body is in hand and every read is a data edge
         // of the graph it was written in, before the graphs are encoded.
         settleStreamLinearity();
-        // A declaration's clause is a promise; the bodies measure what it actually touches, and
-        // the declaration is held to the promise (design effects plan, step 5). The measurement
-        // runs here, while the bodies are still in hand; the report runs per module below, with
-        // the other diagnostics of the module being reported.
-        measureInferredResources();
         // The effects that reach one resource are ordered by the order they are written in
         // (design principles 3.3). This runs on the settled measurements, before anything reads
         // the graphs as a schedule: an order edge is not a use, so it neither runs an effect nor
@@ -945,6 +1154,11 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportEffectfulConditions();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
+                // The content rule of `Ref<T>`: a reference
+                // may hold any type but one that holds a reference, because the boxes are
+                // reclaimed by counting the handles that point at them. Also before the bodies are
+                // let go.
+                checkRefContents();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`
@@ -973,9 +1187,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // skips for an ordinary dump or pass, and Program::implBodies still lists it.
     std::vector<compile_graph_ptr_t> imported;
     for (const compile_graph_ptr_t &graph : rootGraph_->subGraphs()) {
-        const auto owner = rootSubGraphOwners_.find(graph.get());
-        const bool semanticBody =
-            (graph->view().flags() & camel::runtime::kGraphFlagImplBody) != 0;
+        const auto owner        = rootSubGraphOwners_.find(graph.get());
+        const bool semanticBody = (graph->view().flags() & camel::runtime::kGraphFlagImplBody) != 0;
         if (owner != rootSubGraphOwners_.end() && owner->second != nullptr &&
             !owner->second->entry && !semanticBody) {
             imported.push_back(graph);
@@ -994,6 +1207,5 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     }
     return ok;
 }
-
 
 } // namespace camel::compile::gir

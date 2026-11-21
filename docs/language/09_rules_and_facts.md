@@ -405,3 +405,12 @@ camel fired.cml fired::simplify std::gir
 - [46 规则](../technical/46_rules.md)：规则与事实在实现里的样子（技术记录）
 - [标准库参考](../stdlib-reference.md)：`rewrite` 模块的全部函数（`rewrite`、`saturate`、`extract`、`check`、`run`、`explain`、`why_not`、四个读取器）
 - [第 17 章 · 教编译器一条定律](../tutorial/17_teaching_a_law.cn.md)：从零写一条规则，并用 `check` 检查它
+## 选择操作数匹配关系
+
+调用可用 `f->rewrite<rules, ordered: true>` 要求按模式书写的操作数位置匹配。
+`run` 和 `saturate` 同样接受 `ordered: bool = false`。开启时，所有嵌套模式节点
+都保持位置，条件失败也不会触发操作数交换；重复参数仍遵循引擎已有的相等性约定。
+省略参数保留默认的已声明交换律与精确结合律搜索。
+
+有序饱和仍搜索已有写法，显式交换规则仍可增加交换后的写法。抽取、轮数、事实域、
+数值许可与删除保护是独立选择；这个参数不证明故障或效应保持。

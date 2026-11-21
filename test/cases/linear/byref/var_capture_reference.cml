@@ -1,38 +1,32 @@
 /**
- * A variable captured by an `if` arm or a lambda is captured by reference
- * (docs/design-principles.cn.md 3.5): a write inside goes through to the outer variable, and
- * the lambda sees later writes from outside. Expected output:
- *   5 1      written in an `if` arm; the arm's value
- *   0 0      the other arm leaves it alone
- *   1 1      a lambda called later writes the captured variable
- *   12 12    a write from outside is seen by the lambda, and its write outside again
- *   6        a lambda passed to foreach writes it once per element
- *   [11, 12, 13]  a lambda passed to map reads the variable as it is at the call. (It does not
- *                 write it: `map` may run its elements in parallel, and writes to one variable
- *                 from several of them are not ordered.)
- *   1 2 3    a lambda that outlives the function declaring the variable keeps it
- *   1 1      ... and each call of that function declares a new variable
- *   8        a nested function writes a variable of the enclosing function
- *   21       a captured var parameter: the write reaches the caller's variable
+ * The shapes this case used to pin as legal -- a closure that writes a name of the body around it,
+ * so the write goes through to the outer variable -- are refused now: a closure holds the value the
+ * name had when the closure was made, not the name (docs/design-principles.cn.md 3.5). A write
+ * inside the closure has nowhere to go, and the compiler reports
+ * `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) at the written name.
+ *
+ * The case is the counter-example of that diagnostic: a nested `func`, a lambda that writes a `var`
+ * parameter of the function around it, and a `foreach` element function, each writing a name of the
+ * enclosing body. The three ways out the diagnostic names are: return the new value as the
+ * closure's result and let the caller bind it; write the state as a loop's carried state
+ * (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold the state in a `Ref`
+ * (`let r = ref(0)`, `get(r)`, `set(r, v)`) and let the closure capture the handle, which is a value.
+ *
+ * What is not here any more, and why:
+ *
+ *   - An `if` arm writing a `var` of the surrounding function is still legal (the arm is not a
+ *     closure; the branch hands the new value on) and is pinned by `captured_write_order.cml`
+ *     (`arm_then_read`, `arm_call_then_read`, `write_then_arm_read`, `arm_read_then_write`) and by
+ *     `captured_write_graph.cml` (`arms`).
+ *
+ *   - A closure that only *reads* a local `var` is still legal, and it sees the value the name had
+ *     when the closure was made. This file used to pin that shape twice -- `base` in the `map`
+ *     lambda, `v` in `nested` -- but both closures also assigned the name, so the shape left with
+ *     them. **No case pins it now.** `captured_write_graph.cml`'s `look()` reads a `var`, but a
+ *     top-level one, which is the exempt class, not this one; `var_alias_captured.cml` has a
+ *     closure that only reads, but it reads a `let`. Named here so that the next reader does not
+ *     take this file for complete coverage of the legal half.
  */
-
-func pick(k: int): int sync {
-    var c = 0
-    let r = if k > 0 then sync {
-        c += 5
-        return 1
-    } else 0
-    println('{} {}'->format<c, r>)
-    return r
-}
-
-func counter(): () => int sync {
-    var n = 0
-    return (): int => sync {
-        n += 1
-        return n
-    }
-}
 
 func nested(): int sync {
     var v = 3
@@ -54,47 +48,19 @@ func through(var out: int): int sync {
     return b
 }
 
-func main(): int sync {
-    let a = pick(1)
-    let b = pick(0)
-
-    var c = 0
-    let f = (): int => sync {
-        c += 1
-        return c
-    }
-    let r1 = f()
-    println('{} {}'->format<r1, c>)
-    c += 10
-    let r2 = f()
-    println('{} {}'->format<r2, c>)
-
+func counted(): int sync {
     var total = 0
     [1, 2, 3]->foreach<(x: int) => sync {
         total += x
     }>
-    println(total)
+    return total
+}
 
-    var base = 0
-    base += 10
-    let shifted = [1, 2, 3]->map<(x: int): int => x + base>
-    println(shifted)
-
-    let next = counter()
-    let n1 = next()
-    let n2 = next()
-    let n3 = next()
-    println('{} {} {}'->format<n1, n2, n3>)
-    let other = counter()
-    let m1 = other()
-    let fresh = counter()
-    let m2 = fresh()
-    println('{} {}'->format<m1, m2>)
-
-    println(nested())
-
+func main(): int sync {
     var o = 0
-    let r3 = through(o)
+    println(nested())
+    println(through(o))
+    println(counted())
     println(o)
     return 0
 }

@@ -284,12 +284,12 @@ size_t reduceControlDependencies(camel::runtime::GraphTransaction &transaction, 
                         keep.push_back(root);
                     }
                 }
-                // Item 7 of docs/handover/reports/opt-ctrl-inventory.md used to stand here: when every wait of
-                // a target fell away it put one predecessor back. The builder owns that wait now -- a
+                // No predecessor is put back when every wait of a target falls away. The builder
+                // owns that wait -- a
                 // GATE gets its sync predecessor where the block's chain ends
                 // (docs/design/effects/edges.cn.md 5.3, Builder::writeSyncLink), a place this reduction
-                // cannot see. Measured before removing it: across the whole fast corpus it never fired
-                // once, so no graph that can be built reaches it; one that did would be refused at
+                // cannot see -- so no graph that can be built reaches that case; one that did would be
+                // refused at
                 // commit by the runtime's own "GATE node without a wait" rule (src/runtime/graph.cpp).
                 if (keep.size() < draft.ctrlInputsOf(target).size()) {
                     removed += draft.ctrlInputsOf(target).size() - keep.size();
@@ -312,7 +312,7 @@ namespace {
 /// away when a path of at least two edges that order already orders the two ends inside the region
 /// that holds the edge, which is what "when both run the predecessor runs first" makes redundant.
 enum class OrderingReading {
-    /// `std::opt::order` on a graph a pass still rewrites: order edges are the candidates, and the
+    /// `std::cxx::order` on a graph a pass still rewrites: order edges are the candidates, and the
     /// proof walks order edges and sync edges -- the two kinds that order without passing "used"
     /// (docs/design/effects/edges.cn.md 1). Data and control edges stay out of the proof: a pass may
     /// still rewrite them, so an order edge they would cover is the conservative answer while they
@@ -442,12 +442,10 @@ size_t reduceOrderingEdges(
 /// undecided, and until it is, a reduction that ignored them would be answering a question about a
 /// graph the compiler does not build.
 size_t reduceOrderDependencies(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
-    auto &draft = transaction.edit();
     return reduceOrderingEdges(transaction, maxWork, OrderingReading::Pass);
 }
 
 size_t reduceDocumentOrdering(camel::runtime::GraphTransaction &transaction, size_t maxWork) {
-    auto &draft = transaction.edit();
     return reduceOrderingEdges(transaction, maxWork, OrderingReading::Document);
 }
 

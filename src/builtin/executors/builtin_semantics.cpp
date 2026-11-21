@@ -15,13 +15,20 @@
  * Every operator is declared at version 1.0. Operators not listed here (pow, the untyped
  * `op/mul` and `op/div`, string operators) have no declaration and read as opaque.
  *
+ * The faults of the built-in operators are declared here too, in one table
+ * (declareBuiltinOperatorSemantics below): the arithmetic that faults on a zero divisor, and the
+ * operators with no fault path at all, which an empty table states. Nothing outside this file
+ * says whether a built-in operator may fault; the traits and the node-level answer
+ * (`src/runtime/graph.cpp#nodeMayFault`) are both read off this table.
+ *
  * Beside them, `:mark/unordered_reduce_arr` declares its index semantics and its reduction law
  * (docs/design/op-semantics 6.6 and 7): an unordered reduction by the function it is given.
  *
  * The built-in operators that touch resources declare them (docs/design/op-semantics 8,
  * declareBuiltinOperatorResources): the variable operators and the assignments their cell,
- * the console and the profiler their ambient state. The higher-order `:mark/` operators run
- * the functions they are given and are left to the conservative reading.
+ * the console and the profiler their ambient state. The rest declare an empty access list, which
+ * is what makes them pure (src/builtin/executors/builtin.cpp#kAccessFree). The higher-order
+ * `:mark/` operators run the functions they are given and are left to the conservative reading.
  */
 
 #include "builtin.h"
@@ -40,9 +47,9 @@ using camel::core::type::TypeCode;
 
 /// The four numeric suffixes of the typed `:op/` operators and their types.
 struct NumericType {
-    const char *suffix;
-    TypeCode type;
-    bool isFloat;
+    const char *suffix = nullptr;
+    TypeCode type = TypeCode::Int32;
+    bool isFloat = false;
     bool isComplex = false;
 };
 constexpr NumericType kNumericTypes[] = {
@@ -181,14 +188,24 @@ void declareUnorderedReduce() {
         inst.law    = 0;
         return inst;
     };
-    OperatorTable::instance().declareSemantics(
-        uri,
-        OperatorSemantics{
-            .key          = OperatorKey::of(uri),
-            .indexing     = indexing,
-            .laws         = {law},
-            .elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true},
-        });
+    // What the operator already has is kept and this declares the addition: its declared accesses
+    // and, on the second context that loads the module, the version the record
+    // already carries. A record declared again from a fixed key is refused as a lower version, so
+    // the key comes from the table the way `declareElementCalls` takes it.
+    OperatorSemantics record{
+        .key          = OperatorKey::of(uri),
+        .indexing     = indexing,
+        .laws         = {law},
+        .elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true},
+    };
+    auto &table = OperatorTable::instance();
+    if (const auto id = table.lookup(uri); id && table.semantics(*id) != nullptr) {
+        record = *table.semantics(*id);
+        record.indexing     = indexing;
+        record.laws         = {law};
+        record.elementCalls = ElementCalls{.shape = ElementShape::Fold, .independent = true};
+    }
+    table.declareSemantics(uri, std::move(record));
 }
 
 /**
@@ -223,6 +240,124 @@ void declareElementCalls() {
     }
 }
 
+/**
+ * The fault table of the built-in operators (docs/design/op-semantics/README.cn.md 4.2): an operator
+ * that can raise nothing declares an empty table, and that is the one place "never faults" is
+ * written. declare above states the faults of the numeric operators; this states the empty
+ * table of the operators that have no numeric semantics of their own.
+ */
+void declareBuiltinOperatorFaults() {
+    auto &table = OperatorTable::instance();
+    // The operators whose implementation has no fault path at all: an empty fault table is how
+    // a declaration says "this can raise nothing", and it is the one place that is said --
+    // design principles 3.3 leaves "may fault" undeclared-means-yes, and design principles 3.4
+    // reads the answer when it decides whether a computation may be scheduled freely. The
+    // passes do act on it: `src/runtime/graph.cpp#nodeMayFault` reads the trait derived from
+    // this table, and `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or
+    // recompute a node -- a computation left out of this table is a running the program
+    // observes, so `std::opt` keeps it alive with `:op/keep` when a removal takes its last
+    // read (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Integer arithmetic wraps,
+    // floating-point arithmetic rounds and a comparison only compares; the predicates over a
+    // collection walk one and build no value; `pow` of the scalar and complex types is the
+    // library call of the same name, which returns inf or NaN outside its domain. Each entry
+    // is one operator whose implementation is read against this table.
+    static constexpr std::string_view kNoFaultPath[] = {
+        "op/add_i",
+        "op/add_l",
+        "op/add_f",
+        "op/add_d",
+        "op/sub_i",
+        "op/sub_l",
+        "op/sub_f",
+        "op/sub_d",
+        "op/lt_i",
+        "op/lt_l",
+        "op/lt_f",
+        "op/lt_d",
+        "op/le_i",
+        "op/le_l",
+        "op/le_f",
+        "op/le_d",
+        "op/gt_i",
+        "op/gt_l",
+        "op/gt_f",
+        "op/gt_d",
+        "op/ge_i",
+        "op/ge_l",
+        "op/ge_f",
+        "op/ge_d",
+        "op/and",
+        "op/or",
+        "op/not",
+        "op/mul_i",
+        "op/neg_i",
+        "op/mul_l",
+        "op/neg_l",
+        "op/mul_f",
+        "op/neg_f",
+        "op/mul_d",
+        "op/neg_d",
+        "op/eq_i",
+        "op/eq_l",
+        "op/eq_f",
+        "op/eq_d",
+        "op/eq_b",
+        "op/eq_s",
+        "op/eq_c",
+        "op/eq_z",
+        "op/lt_s",
+        "op/le_s",
+        "op/gt_s",
+        "op/ge_s",
+        "op/add_bf",
+        "op/sub_bf",
+        "op/mul_bf",
+        "op/neg_bf",
+        "op/pow_bf",
+        "op/lt_bf",
+        "op/le_bf",
+        "op/gt_bf",
+        "op/ge_bf",
+        "op/add_f6",
+        "op/sub_f6",
+        "op/mul_f6",
+        "op/neg_f6",
+        "op/pow_f6",
+        "op/lt_f6",
+        "op/le_f6",
+        "op/gt_f6",
+        "op/ge_f6",
+        "op/pow_i",
+        "op/pow_l",
+        "op/pow_f",
+        "op/pow_d",
+        "op/pow_c",
+        "op/pow_c_i",
+        "op/pow_c_l",
+        "op/pow_z",
+        "op/pow_z_i",
+        "op/pow_z_l",
+        "struct/len_arr",
+        "struct/len_str",
+        "coll/len",
+        "coll/has",
+        "coll/set_contains",
+        "coll/eq",
+        "coll/set_is_subset",
+        "struct/contains_arr",
+        "struct/contains_str",
+        "struct/len_bytes",
+        "op/eq_bytes",
+    };
+    for (const std::string_view name : kNoFaultPath) {
+        table.declareFaults(std::string(":") + std::string(name), {});
+    }
+    // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag has
+    // already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's value --
+    // it is the absence of one -- and it is the compiler's own error, so it names no arithmetic kind.
+    table.declareFaults(":op/tag_unwrap", {{FaultKind::Other, 0}});
+}
+
 } // namespace
 
 void declareBuiltinOperatorSemantics() {
@@ -236,15 +371,14 @@ void declareBuiltinOperatorSemantics() {
     constexpr PermissionMask kDiv = kApproxMath | kChangePrecision | kFiniteMath;
     // `+ - *`, negation and the comparisons have no fault path: integer arithmetic wraps,
     // floating-point arithmetic rounds and a comparison only compares. `div` and `%` are the two
-    // of a numeric type that fault (a zero divisor). The scalar `mul` and `neg` pass no list and
-    // take the empty one from the trait (src/builtin/executors/builtin.cpp#kNeverFaults), which
-    // `declareSemantics` merges into the record; the complex ones have no entry in that trait, so
-    // the list is written at their declaration below.
+    // of a numeric type that fault (a zero divisor). The scalar `mul` and `neg` state the empty
+    // table themselves; the never-faulting operators that have no numeric semantics of their own
+    // are in the table `declareBuiltinOperatorFaults` below.
     for (const NumericType &t : kNumericTypes) {
         if (t.isFloat) {
             declare("add", t, rounded(t, kAddMul, "a + b, rounded once"), none);
             declare("sub", t, rounded(t, kAddMul, "a - b, rounded once"), none);
-            declare("mul", t, rounded(t, kAddMul, "a * b, rounded once"), std::nullopt);
+            declare("mul", t, rounded(t, kAddMul, "a * b, rounded once"), none);
             declare(
                 "div",
                 t,
@@ -253,7 +387,7 @@ void declareBuiltinOperatorSemantics() {
         } else {
             declare("add", t, exact(t, "a + b, wrapping"), none);
             declare("sub", t, exact(t, "a - b, wrapping"), none);
-            declare("mul", t, exact(t, "a * b, wrapping"), std::nullopt);
+            declare("mul", t, exact(t, "a * b, wrapping"), none);
             declare(
                 "div",
                 t,
@@ -265,7 +399,7 @@ void declareBuiltinOperatorSemantics() {
             "neg",
             t,
             exact(t, t.isFloat ? "-a: the sign flipped" : "-a, wrapping"),
-            std::nullopt);
+            none);
         for (const char *cmp : {"lt", "le", "gt", "ge"}) {
             declare(
                 cmp,
@@ -311,6 +445,7 @@ void declareBuiltinOperatorSemantics() {
             },
             none);
     }
+    declareBuiltinOperatorFaults();
     declareUnorderedReduce();
     declareElementCalls();
 }
@@ -365,6 +500,13 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         }
         const std::string uri       = ":" + std::string(name);
         const std::string_view rest = name.substr(std::string_view("op/assn").size());
+        // Writing a variable is not an effect (design principles 3.1 and 3.5):
+        // the cell is one of the program's own variables, so an assignment is
+        // state-only -- it changes what the program keeps and nothing outside it. The access list
+        // below says the same thing one operand at a time; this is the word that keeps the reading
+        // from falling back to "an effect was declared and nothing itemized, so it reaches
+        // everything".
+        table.set(uri, {.stateOnly = true});
         ResourceSpec spec;
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
             spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = cellResult()};
@@ -411,4 +553,70 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
                 .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
                 .externalEffect = true});
     }
+    // The private copy of an array made for one state of a loop whose body only appends to it
+    // (`Builder::markLoopStateInPlace`) is pure and declared in the pure list of
+    // `registerBuiltinOperatorTraits`: `copyWithRoom` allocates a new array, fills it with the
+    // elements of the one it is given and leaves that one exactly as it was. The loop-state append
+    // (`:struct/append_arr_owned`) sits in the same list, for the reason `:struct/append_arr` is:
+    // it appends inside storage the program holds alone and copies when it does not, so what a
+    // program with a second holder of the array sees does not change. Its parameter is ordinary,
+    // not `var` -- it promises nothing about the array it is handed -- and a declared write through
+    // an ordinary parameter is refused by the declaration check, which is the same answer.
+
+    // A local of a generator body, whose cell is made before it has a value (`Tuple::create(1)`
+    // and nothing in its slot): a new variable, the same resource `:var/new` makes.
+    table.declareResources(
+        ":var/new/empty",
+        ResourceSpec{.allocates = Resource{.cls = ResourceClass::Variable}});
+    // `std::mem::blocks()` reports the block counters of the process: state outside the program,
+    // read and never written. Reads are dependencies and not effects, so the call is ordered by the
+    // values it gives -- and it is not pure, because those values change without an argument
+    // changing (design principles 3.3: an observer of a counter the program does not own).
+    table.declareResources(":op/mem_blocks", externalAmbient("mm", AccessMode::Read));
+    // `tee_note` writes the record of a tee into the report of a profile session: the profiler's
+    // own ambient resource, written the way the profiler's operators write it.
+    table.declareResources(
+        ":stream/tee_note",
+        ResourceSpec{
+            .accesses       = {ambientAccess("profiler", AccessMode::ReadModifyWrite)},
+            .externalEffect = true});
+    // `:macro/cmp` is pure and declared in the pure list of `registerBuiltinOperatorTraits`: its
+    // executor answers the null slot and the compiler makes no node of it
+    // (src/compile/gct/builder.cpp, `ReservedDataOp::Comp`), and the two operands are function
+    // values it never calls.
+    // The operators that run a function the program hands them (`map`, `filter`, `foreach` and the
+    // unordered loop of the same shape): what they touch is that function's, so the declaration
+    // names the operand the function arrives in and not a resource (design principles 3.3).
+    // It is the same rule a call through a function value already follows
+    // (`Builder::reachOfCall`): a reader that has the value reads its function type, and `map` over
+    // a pure function touches nothing at all -- itemizing "external" here made such a call enter
+    // compare) would make such a call enter the sync chain and lose its freedom. A reader that has
+    // only the table takes it as an effect outside the program that itemizes nothing, which is the
+    // conservative reading a type without a clause gets too. The function is the first `with`
+    // operand in all of them: src/builtin/operators/higher_order.cpp, `functionOf`, takes
+    // `with.get<Function *>(0)`. The result is a new array (or the null slot), so nothing is
+    // claimed about it either.
+    for (const char *uri :
+         {":mark/map_arr", ":mark/filter_arr", ":mark/foreach_arr", ":mark/unordered_foreach_arr"}) {
+        table.declareResources(
+            uri, ResourceSpec{.functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
+    }
+    // The two that hand a value back out of the callback: `reduce` gives the accumulator it was
+    // given or the value the last call made, and the marked call of `attempt(f)` gives what the
+    // callee gave, which may be an object the callee holds. Nothing is known about either result,
+    // and that stays even though the accesses are the function's. `reduce`'s function is its first
+    // `with` operand too; `:mark/isolate`'s is its first ordinary one (operator_semantics.h,
+    // `ElementCalls`, and the resolver of the marked call in tagged.cpp).
+    for (const char *uri : {":mark/reduce_arr", ":mark/unordered_reduce_arr"}) {
+        table.declareResources(
+            uri,
+            ResourceSpec{
+                .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
+                .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::With}});
+    }
+    table.declareResources(
+        ":mark/isolate",
+        ResourceSpec{
+            .result          = ResultAlias{.kind = ResultAlias::Kind::Unknown},
+            .functionOperand = ResourceBinding{.kind = ResourceBinding::Kind::Norm}});
 }

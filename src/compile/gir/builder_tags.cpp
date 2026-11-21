@@ -18,7 +18,7 @@
  *     tag::ofDeclaration / ofField.
  *
  * A tag keeps the name it is written with and does not enter the value namespace (design
- * principles 6.2, the author's ruling of 2026-10-30): `#tag` resolves among the tags -- declared
+ * principles 6.2): `#tag` resolves among the tags -- declared
  * here, imported by name, or qualified through an imported module -- and a function, a type or a
  * value of that name is a different name, which `#tag` neither finds nor hides.
  */
@@ -425,7 +425,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
     // A name that is not the value the parameter takes: reported at the tag, naming what the name
     // is. `#jvp(mul_jvp)` -- the shape docs/design/program-transforms/README.cn.md section 3
     // writes, whose argument is a `rule` -- reaches this report: a rule is a declaration, and
-    // whether a tag parameter may carry one is open (questions-2026-10-29-transforms.md), so the
+    // whether a tag parameter may carry one is open, so the
     // writer is told what was written instead of being told the name is unknown.
     const auto reportNotValue = [&](const std::string &written) {
         const ArgumentDeclaration declaration = declarationOf(written);
@@ -457,7 +457,7 @@ Builder::tagValueOf(const camel::core::tag::Decl &decl, const GCT::TagUse &use) 
                 if (!graph.has_value()) {
                     // A rule has no function graph of its own -- its declaration is a value of the
                     // `Rule` type -- so the fact a parameter that carries a function keeps for a
-                    // rule is the name itself (the author's ruling of 2026-10-31: a tag argument is
+                    // rule is the name itself ( a tag argument is
                     // a function or a rule declaration, and a rule is named). A reader of the tag
                     // looks the name up among the rules of the module.
                     if (declarationOf(arg == nullptr ? std::string{} : arg->name()) ==

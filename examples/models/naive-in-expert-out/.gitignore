@@ -1,3 +1,8 @@
+# The raw record of one measurement run -- the host, its load, the per-round samples -- is not
+# tracked. It is one run's file, it changes with the host and its load, and a clone would carry
+# readings taken once somewhere else. The numbers the pages quote are in their tables; the files
+# stay with the run, on the machine that took it, under the names the pages cite.
+results/
 results.json
 accuracy.json
 artifacts/

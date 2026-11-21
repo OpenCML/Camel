@@ -106,6 +106,8 @@ class Function : public rtdata::Object {
         const type::TupleType *tupleType)
         : program_(program), graphId_(graph), closure_(nullptr), tupleType_(tupleType) {}
 
+    // program-holder-exempt: heap-self-tracking -- Function is a heap object, and its updateRefs
+    // relocates program_ like the rest of what the value keeps (func.cpp).
     const camel::runtime::Program *program_;
     camel::runtime::GraphId graphId_;
     Tuple *closure_;

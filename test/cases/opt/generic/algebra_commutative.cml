@@ -10,7 +10,7 @@
  * commutativity (the value would change).
  *
  *   camel algebra_commutative.cml std::opt std::jgir
- *   camel algebra_commutative.cml std::opt::algebra std::jgir
+ *   camel algebra_commutative.cml std::cxx::algebra std::jgir
  */
 
 func left(x: float): float {

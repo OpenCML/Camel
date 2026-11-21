@@ -25,7 +25,7 @@ func isOne(n: Node): bool {
 }
 
 /// The `x + 1` of `target`: an int addition whose second operand is the constant 1.
-func isAddOne(n: Node): bool {
+func isAddOne(n: Node): bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
 }
@@ -40,7 +40,7 @@ func size(g: Graph): int {
     return len(nodes(g))
 }
 
-func isTarget(g: Graph): bool {
+func isTarget(g: Graph): bool spelling {
     return name(g)->ends_with<'target'>
 }
 
@@ -49,7 +49,7 @@ func targetIn::<F>(p: F): Graph {
     return found[0]
 }
 
-func main(): int sync {
+func main(): int spelling sync {
     println(`running: ${target(5)}`)
     println(`current: ${addOnes(targetIn(main))}`)
     return 0

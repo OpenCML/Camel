@@ -1,0 +1,31 @@
+func f10(a11: (int, bool[]), a12: int): string {
+    return '';
+}
+
+func q43(a44: int, a45: bool): bool sync {
+    return false;
+}
+
+func main(): int sync {
+    let n57 = '';
+    let n58 = true;
+    let n81 = if n58 then sync {
+        let n76 = match n57 {
+            case 'cd' => sync {
+                return '';
+            }
+            case '' => sync {
+                return '';
+            }
+            case 'ab' => sync {
+                return f10((0, [false]), 0);
+            }
+            case _ => ''
+        };
+        let n77 = q43(0, false | false);
+        return '';
+    } else sync {
+        return 'a';
+    };
+    return 0;
+}

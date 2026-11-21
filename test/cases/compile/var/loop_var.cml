@@ -1,0 +1,27 @@
+/**
+ * The same accumulation written two ways: a `var` written inside a loop body.
+ *
+ * This is one side of the pair `loop_var.cml` / `loop_let.cml`; the two files are one program in
+ * two writings, and `std::jgir canonical=true` must print the same bytes for both (design
+ * principles 3.5: a `var` is a resource and a unit is a representation).
+ *
+ * It is red today, and red for one reason: a write inside a loop body keeps its `:var/get` (the
+ * read in `total = total + 1` cannot fold, because the value the previous turn carried is not a
+ * node's input), so the `var` writing still builds a unit -- `:var/new`, `:var/get` and the LOOP's
+ * carried state. The `let` writing has no unit at all.
+ *
+ * Run: camel test/cases/compile/var/loop_var.cml
+ */
+func sum(n: int): int sync {
+    var total = 0
+    let _ = loop i = 0 while i < n do {
+        total = total + 1
+        i + 1
+    }
+    return total
+}
+
+func main(): int sync {
+    println(sum(3))
+    return 0
+}

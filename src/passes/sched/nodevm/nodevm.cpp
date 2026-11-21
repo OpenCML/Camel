@@ -5,6 +5,7 @@
 #include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/function_call.h"
@@ -13,6 +14,7 @@
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
+#include "camel/execute/operator_call.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -22,6 +24,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 
 #include <algorithm>
 #include <span>
@@ -33,7 +36,6 @@ using namespace camel::core::rtdata;
 using namespace camel::core::error;
 
 namespace {
-
 
 using camel::runtime::gc_data_idx_t;
 using camel::runtime::gc_node_ref_t;
@@ -47,7 +49,7 @@ using camel::runtime::kInvalidNodeRef;
 
 /// Whether `loop` is a region form of its graph: a LOOP node owns a condition region and a body
 /// region (camel/runtime/graph.h). The graph form of a loop (two graphs in the LOOP body) is not
-/// built any more, and NodeVM does not execute it.
+/// built, and NodeVM does not execute it.
 bool hasLoopRegions(const camel::runtime::GCGraph &graph, gc_node_ref_t loop) {
     for (uint32_t r = 0; r < graph.regionCount(); ++r) {
         const camel::runtime::GCRegion *region = graph.region(r);
@@ -104,7 +106,8 @@ void bindMarkedFunctionFrame(
     GUARD(
         closure == nullptr || closure->size() == closureNodes.size(),
         std::format(
-            "the callee declares {} closure node(s), but the closure tuple holds {}: the graph does "
+            "the callee declares {} closure node(s), but the closure tuple holds {}: the graph "
+            "does "
             "not describe the call it makes",
             closureNodes.size(),
             closure == nullptr ? 0 : closure->size()));
@@ -114,7 +117,8 @@ void bindMarkedFunctionFrame(
         GUARD(
             port != nullptr,
             std::format(
-                "binding norm argument {} of a marked operator call: the callee names node {} in its "
+                "binding norm argument {} of a marked operator call: the callee names node {} in "
+                "its "
                 "norm port list, but its graph has no node there",
                 i,
                 normPorts[i]));
@@ -125,7 +129,8 @@ void bindMarkedFunctionFrame(
         GUARD(
             port != nullptr,
             std::format(
-                "binding with argument {} of a marked operator call: the callee names node {} in its "
+                "binding with argument {} of a marked operator call: the callee names node {} in "
+                "its "
                 "with port list, but its graph has no node there",
                 i,
                 withPorts[i]));
@@ -137,7 +142,8 @@ void bindMarkedFunctionFrame(
             GUARD(
                 port != nullptr,
                 std::format(
-                    "binding closure slot {} of a marked operator call: the callee names node {} in "
+                    "binding closure slot {} of a marked operator call: the callee names node {} "
+                    "in "
                     "its closure node list, but its graph has no node there",
                     i,
                     closureNodes[i]));
@@ -147,9 +153,7 @@ void bindMarkedFunctionFrame(
 }
 
 inline gc_data_idx_t planDataIndex(const camel::runtime::ExecPlan &plan, gc_node_ref_t nodeRef) {
-    GUARD(
-        nodeRef < plan.dataIndexByRef.size(),
-        "NodeVM cached data-index lookup is out of range.");
+    GUARD(nodeRef < plan.dataIndexByRef.size(), "NodeVM cached data-index lookup is out of range.");
     return plan.dataIndexByRef[nodeRef];
 }
 
@@ -299,7 +303,9 @@ slot_t NodeVMSchedPass::call(
     slot_t result = NullSlot;
     GUARD(
         rootRuntimeGraph != nullptr,
-        std::format("running this program: its root graph was never materialized, so node 0 has no " "frame to run in"));
+        std::format(
+            "running this program: its root graph was never materialized, so node 0 has no "
+            "frame to run in"));
 
     Frame *currFrame       = rootFrame;
     Frame *tailLow         = nullptr; // tail-call frames above rootFrame, in stack order
@@ -314,10 +320,15 @@ slot_t NodeVMSchedPass::call(
     // The node being executed, so a fault points at its source expression.
     gc_node_ref_t faultNodeRef = kInvalidNodeRef;
     try {
-        const camel::runtime::ExecPlan *currPlan = &currRuntimeGraph->execPlan();
-        std::span<const gc_node_ref_t> currNodes = currPlan->topo;
+        const camel::runtime::ExecPlan *currPlan    = &currRuntimeGraph->execPlan();
+        std::span<const gc_node_ref_t> currNodes    = currPlan->topo;
         const camel::runtime::ExecNode *currRecords = currPlan->nodes().data();
-        // The program the running graph belongs to: its direct callees are in it.
+        // The program the running graph belongs to: its direct callees are in it. A root graph
+        // runs in the program the back end was given; a graph reached through a function value
+        // runs in the program that value names (every call below passes `->program()` of the
+        // value it came from), which is not the same question as which program holds the
+        // version: a version a closure makes at run time, or a rewrite commits, is held by more
+        // than one program, and only the value says whose table its ids are read in.
         const camel::runtime::Program *currProgram =
             rootProgram != nullptr ? rootProgram : &programs_.of(currRuntimeGraph);
 
@@ -344,14 +355,14 @@ slot_t NodeVMSchedPass::call(
         groupDeferred.clear();
         const size_t nodesSize = currNodes.size();
         const bool hasLoops    = !currPlan->loops.empty();
-        resumedLoop = camel::execute::kNoLoop;
+        resumedLoop            = camel::execute::kNoLoop;
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
             const camel::runtime::ExecNode &en = currRecords[i];
-            const gc_node_ref_t nodeRef = en.ref;
-            faultNodeRef                = nodeRef;
-            const GCNode *n             = en.node;
+            const gc_node_ref_t nodeRef        = en.ref;
+            faultNodeRef                       = nodeRef;
+            const GCNode *n                    = en.node;
 
             if (tillNode != kInvalidNodeRef) {
                 if (tillNode == nodeRef) {
@@ -382,8 +393,7 @@ slot_t NodeVMSchedPass::call(
                     i,
                     *currFrame,
                     resumedLoop,
-                    camel::execute::loopRoundSafepoint(
-                        [&] { gcSafepoint("nodevm loop round"); }));
+                    camel::execute::loopRoundSafepoint([&] { gcSafepoint("nodevm loop round"); }));
                 if (resume != camel::execute::kNoLoopJump) {
                     groupDeferred.clear();
                     i = resume - 1;
@@ -445,7 +455,9 @@ slot_t NodeVMSchedPass::call(
                         group);
                 if (groupAction == camel::execute::FusionGroupAction::Deferred) {
                     groupDeferred.insert(
-                        groupDeferred.end(), groupMembers.begin(), groupMembers.end());
+                        groupDeferred.end(),
+                        groupMembers.begin(),
+                        groupMembers.end());
                     continue;
                 }
                 if (groupAction == camel::execute::FusionGroupAction::Ran) {
@@ -571,9 +583,8 @@ slot_t NodeVMSchedPass::call(
                 }
                 joinNode = body->join;
                 tillNode = currPlan->branchArmEntriesOf(i)[jumpIdx];
-                skipNode = tillNode == joinNode
-                               ? kInvalidNodeRef
-                               : currPlan->branchArmTailsOf(i)[jumpIdx];
+                skipNode =
+                    tillNode == joinNode ? kInvalidNodeRef : currPlan->branchArmTailsOf(i)[jumpIdx];
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "NodeVM",
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
@@ -616,7 +627,10 @@ slot_t NodeVMSchedPass::call(
                 auto *funcRuntimeGraph = programs_.graphOf(func);
                 GUARD(
                     funcRuntimeGraph != nullptr,
-                    std::format("an indirect call reaches a graph whose runtime form was never materialized, so " "the call has no code to enter"));
+                    std::format(
+                        "an indirect call reaches a graph whose runtime form was never "
+                        "materialized, so "
+                        "the call has no code to enter"));
 
                 requireRecursionRoom(currRuntimeGraph);
                 Frame *funcFrame = framePool_.acquire(funcRuntimeGraph);
@@ -626,17 +640,19 @@ slot_t NodeVMSchedPass::call(
                     currRuntimeGraph,
                     nodeRef);
 
-                slot_t callResult = call(funcRuntimeGraph, funcFrame);
+                slot_t callResult = call(funcRuntimeGraph, funcFrame, func->program());
                 if (n->dataIndex != 0) {
                     currFrame->set(n->dataIndex, callResult);
                 }
             } break;
 
             case GCNodeKind::Func: {
-                auto *runtimeTarget      = currProgram->graph(currPlan->directCallTargetIds[i]);
+                auto *runtimeTarget = currProgram->graph(currPlan->directCallTargetIds[i]);
                 GUARD(
                     runtimeTarget != nullptr,
-                    std::format("a direct call names a function whose graph is not in the program's graph table"));
+                    std::format(
+                        "a direct call names a function whose graph is not in the program's graph "
+                        "table"));
                 const bool isTailCall = currPlan->directCallTailEligible[i] != 0 ||
                                         currPlan->directCallFeedsTailJoin[i] != 0;
                 // The entry graph's own activation is not a call of the program, and its call of
@@ -645,7 +661,7 @@ slot_t NodeVMSchedPass::call(
                 // so the entry's call of `main` asked whether it may reuse the entry's activation
                 // would leave one activation fewer on the stack and lift the limit by one -- which
                 // is what a graph whose entry call is a direct call (`FUNC main`) rather than a
-                // call through a function value used to do, after std::opt::devirtualize. The
+                // call through a function value does, after std::cxx::devirtualize. The
                 // count of open calls must not depend on how a call is spelled, so the entry's
                 // callee always gets an activation of its own, the way the value-call spelling
                 // gives it one. Every other tail call reuses its caller's activation as before.
@@ -675,7 +691,7 @@ slot_t NodeVMSchedPass::call(
                         currNodes        = currPlan->topo;
                     }
                     const auto *layout = &runtimeTarget->execPlan();
-                    currFrame = tailCallFrame(
+                    currFrame          = tailCallFrame(
                         runtimeTarget,
                         rootFrame,
                         lastFrame,
@@ -689,7 +705,7 @@ slot_t NodeVMSchedPass::call(
                 requireRecursionRoom(currRuntimeGraph);
                 Frame *funcFrame    = framePool_.acquire(runtimeTarget);
                 const auto argSlots = currPlan->directCallArgSlotsOf(i);
-                const auto *layout = &runtimeTarget->execPlan();
+                const auto *layout  = &runtimeTarget->execPlan();
                 bindDirectCallFrameSlots(currFrame, funcFrame, layout, argSlots, callArgScratch_);
                 slot_t callResult = call(runtimeTarget, funcFrame, currProgram);
 
@@ -709,7 +725,11 @@ slot_t NodeVMSchedPass::call(
                                 currFrame->get<slot_t>(planDataIndex(*currPlan, input)));
                         }
                         value = camel::execute::runtimeFuncValue(
-                            n->dataType(), runtimeTarget, written, withValues, callResult);
+                            n->dataType(),
+                            runtimeTarget,
+                            written,
+                            withValues,
+                            callResult);
                     }
                     currFrame->set(n->dataIndex, value);
                 }
@@ -721,15 +741,28 @@ slot_t NodeVMSchedPass::call(
                     currPlan->resolvedOpers[nodeRef].load(std::memory_order_relaxed);
                 if (!opFunc) {
                     // The plan names the operator: an update node whose storage must not be
-                    // reused runs the plain form of the operator it names (4.3.1).
-                    const std::string uri(currPlan->operatorUriFor(nodeRef));
+                    // reused runs the plain form of the operator it names, and the copying form of
+                    // an operator that has an in-place one runs it where the plan handed over the
+                    // value it was given (4.3.1).
+                    const std::string uri = currPlan->operatorUriFor(nodeRef);
                     auto found = context_->execMgr().find(uri);
                     if (found) {
                         opFunc = camel::profile::profiledOperator(uri, *found);
                         currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
-                            evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);
+                            // The marked evaluator writes this node's output itself, so the value
+                            // the count's rows get is the slot it left. The rows are the hook's
+                            // (camel/execute/operator_call.h), like every other operator call's.
+                            camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
+                                evalMarkedOperator(
+                                    body->oper,
+                                    currRuntimeGraph,
+                                    nodeRef,
+                                    *currFrame);
+                                return n->dataIndex == 0 ? slot_t{0}
+                                                         : currFrame->get<slot_t>(n->dataIndex);
+                            });
                             break;
                         }
                         throwRuntimeFault(
@@ -739,7 +772,37 @@ slot_t NodeVMSchedPass::call(
                     }
                 }
 
-                slot_t result = evalNativeOperator(currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
+                // The anchor's site, in the node form: a `Ref` box made while this operator ran has
+                // to be a value the plan names this very node as producing. Asked only while
+                // --gc-check wants the counted blocks -- the flag that already pays for the
+                // counters, so a program that does not pass it reads nothing here and takes the
+                // same path as before -- and the answer is only reported: it cannot refuse the
+                // value, change the frame, or move this node to another order.
+                const bool anchorWanted = camel::core::mm::allocatorChecks().printForeignResources;
+                camel::runtime::CountedBoxesBracket boxes;
+                if (anchorWanted) {
+                    boxes.begin();
+                }
+                // The count's rows at this position are the hook's (camel/execute/operator_call.h):
+                // the holds this node's output takes and the references that come back once it has
+                // run, run whether or not the anchor above was asked for -- counting is what
+                // releases a box (design principles 10.5) and the flag only says whether the
+                // process reports what it released.
+                const slot_t result =
+                    camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
+                        return evalNativeOperator(
+                            currRuntimeGraph,
+                            en,
+                            *currPlan,
+                            *currFrame,
+                            opFunc);
+                    });
+                if (anchorWanted) {
+                    camel::runtime::noteCountedCreationForNode(
+                        currRuntimeGraph,
+                        nodeRef,
+                        boxes.sinceBegin());
+                }
 
                 currFrame->set(n->dataIndex, result);
             } break;
@@ -766,7 +829,8 @@ slot_t NodeVMSchedPass::call(
                 GUARD(
                     false,
                     std::format(
-                        "Node type {} should not appear in NodeVM execution: it belongs to another scheduler.",
+                        "Node type {} should not appear in NodeVM execution: it belongs to another "
+                        "scheduler.",
                         static_cast<int>(n->kind)));
             } break;
             }
@@ -774,6 +838,18 @@ slot_t NodeVMSchedPass::call(
             // A group's tail computed this node's value in one pass (the switch above is the
             // operator's own execution, which the group replaced).
         node_done:;
+            // The rows the plan has at this node's position, for every kind whose rows are its own.
+            // Two kinds keep theirs elsewhere: an operator's run inside `callOperator` above, and a
+            // LOOP node's at its exit (`applyRefEntriesForLoopExit`, reached from `stepLoops`). A
+            // CALL and a FILL are nodes of this loop too, so a value a call made is born with its
+            // count where the call ran -- before every reader, because the edge the plan has from
+            // the call to each reader is also what runs this node first
+            // (camel/execute/operator_call.h, `runNode`).
+            if (n->kind != GCNodeKind::Oper && n->kind != GCNodeKind::Loop) {
+                (void)camel::execute::runNode({*currPlan, *currFrame, nodeRef}, [&] {
+                    return n->dataIndex == 0 ? NullSlot : currFrame->get<slot_t>(n->dataIndex);
+                });
+            }
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "NodeVM",
                 "Executed node [{}/{}]: ref={}",
@@ -792,6 +868,10 @@ slot_t NodeVMSchedPass::call(
 
         return result;
     } catch (const RuntimeFault &fault) {
+        // The loops this activation is still inside give back what they held: the run is unwinding
+        // past `loopEnd`, and the frames are released below, so the slots this can read are gone a
+        // line later (camel/execute/loop_frame.h, `giveBackOpenLoopsOfEveryFrame`).
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
         // A debugger stops here, while every frame of the stack is still alive.
         if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
             observer->faultRaised(
@@ -816,6 +896,7 @@ slot_t NodeVMSchedPass::call(
         }
         throw reportRuntimeFault(*context_, fault, site);
     } catch (Diagnostic &) {
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
         currRecursionDepth_--;
         releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {
@@ -835,6 +916,7 @@ slot_t NodeVMSchedPass::call(
         // whose top is the next frame's address, so a frame that is not released leaves the top
         // above a frame that is still in use and the next acquire hands that frame out twice; the
         // slots of the two activations then overwrite each other.
+        camel::execute::giveBackOpenLoopsOfEveryFrame(framePool_);
         currRecursionDepth_--;
         releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {
@@ -878,8 +960,7 @@ slot_t NodeVMSchedPass::callFunction(
             closure.push_back(captured->get<slot_t>(i));
         }
     }
-    return callGraph(
-        function->program(), function->graph(), arguments, withArguments, closure);
+    return callGraph(function->program(), function->graph(), arguments, withArguments, closure);
 }
 
 slot_t NodeVMSchedPass::callGraph(
@@ -887,8 +968,8 @@ slot_t NodeVMSchedPass::callGraph(
     std::span<const slot_t> arguments, std::span<const slot_t> withArguments,
     std::span<const slot_t> closure) {
     camel::execute::RunScope runScope(programs_, *context_, program);
-    Frame *frame      = framePool_.acquire(graph);
-    const auto ports  = graph->normPorts();
+    Frame *frame     = framePool_.acquire(graph);
+    const auto ports = graph->normPorts();
     GUARD(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
     for (size_t i = 0; i < ports.size(); ++i) {
         frame->set(graph->node(ports[i])->dataIndex, arguments[i]);
@@ -922,7 +1003,7 @@ void NodeVMSchedPass::evalMarkedOperator(
     GUARD(calls != nullptr, "A marked operator declares how it calls its function.");
     switch (calls->shape) {
     case camel::core::sem::ElementShape::Map:
-        // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
+        // `apply` (f from T to T) returns a new array, like `map`: it does not change the
         // array it is given (design principles 11.3).
         evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
         break;
@@ -963,7 +1044,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(programs_.graphOf(func), frame);
+        slot_t result = call(programs_.graphOf(func), frame, func->program());
         currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
     }
 }
@@ -992,7 +1073,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(programs_.graphOf(func), frame);
+        slot_t result = call(programs_.graphOf(func), frame, func->program());
         if (fromSlot<bool>(result)) {
             Array *target = currFrame.get<Array *>(resultSlot);
             target->append(currFrame.get<Array *>(arrSlot)->getSlot(i), resultType);
@@ -1028,7 +1109,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
-        currFrame.set(resultSlot, call(programs_.graphOf(func), frame));
+        currFrame.set(resultSlot, call(programs_.graphOf(func), frame, func->program()));
     }
 }
 
@@ -1050,7 +1131,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        call(programs_.graphOf(func), frame);
+        call(programs_.graphOf(func), frame, func->program());
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
 }
@@ -1063,9 +1144,7 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
     GUARD(!normInputs.empty(), "The fault-isolation node requires a function input.");
     const auto resultSlot = dataIndexOf(graph, nodeRef);
     Function *func        = currFrame.get<Function *>(dataIndexOf(graph, normInputs.front()));
-    GUARD(
-        func != nullptr && programs_.graphOf(func) != nullptr,
-        "Fault-isolation callee is null.");
+    GUARD(func != nullptr && programs_.graphOf(func) != nullptr, "Fault-isolation callee is null.");
     auto *target = programs_.graphOf(func);
 
     std::vector<slot_t> args;
@@ -1084,7 +1163,7 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
     slot_t value = NullSlot;
     try {
         camel::core::error::FaultIsolationScope boundary;
-        value = call(target, frame);
+        value = call(target, frame, func->program());
     } catch (const Diagnostic &fault) {
         if (!camel::core::error::isIsolatedFault(fault)) {
             throw;
@@ -1151,10 +1230,9 @@ slot_t NodeVMSchedPass::evalNativeOperator(
             auto *target = programs_.graphOf(function);
             Frame *frame = framePool_.acquire(target);
             bindMarkedFunctionFrame(frame, function, normalArgs, withArgs);
-            return call(target, frame);
+            return call(target, frame, function->program());
         };
     }
     camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
     return (*opFunc)(withView, normView, *context_);
 }
-

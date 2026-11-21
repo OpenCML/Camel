@@ -5,7 +5,7 @@
 
 resource db
 
-func stamp(): int uses db sync {
+func stamp(): int uses var db sync {
     println('x')
     return 1
 }

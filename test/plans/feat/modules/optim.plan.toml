@@ -312,3 +312,14 @@ expect_diagnostic_line = 24
 expect_diagnostic_column = 31
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "optim.derived_typeof_state"
+desc = "A generic result signature may write `AdamState<typeof(params)>`: the `typeof` inside the named derived type resolves against the instance's parameter ports before the body is built, so the value returned by `init` matches the declared result and its zero moments and step remain readable."
+kind = "behavior"
+case = "../../../cases/modules/optim/derived_typeof.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "0\n0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

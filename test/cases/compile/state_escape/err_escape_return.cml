@@ -1,0 +1,26 @@
+/**
+ * Escape route one, "handed out as a result" (design principles 3.5, 197): `make` makes the closure
+ * `add`, which captures `acc`, a `var` of `make`'s call, and returns it. Handing it back is not a
+ * fault of any kind: a closure captures a value, so a value that leaves the scope that made it is a
+ * value nobody has to own (the author's ruling of 2026-11-16, which withdrew the state rule of
+ * 2026-11-14 and its diagnostic `ClosureCaptureEscapes`).
+ *
+ * The assignment inside the closure is the fault: a closure holds a value and not a place, so
+ * `acc = acc + x` writes nothing the closure can see. Refused by `ClosureAssignsCapturedName`
+ * (0x03000213), whose help gives the three ways out: return the new value, write the state as a
+ * loop's carried state or a `fold`, or hold it in a `Ref`.
+ */
+
+func make(): (x: int) => int {
+    var acc = 0
+    return (x: int): int => sync {
+        acc = acc + x
+        acc
+    }
+}
+
+func main(): int sync {
+    let g = make()
+    println(g(1))
+    return 0
+}

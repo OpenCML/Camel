@@ -96,7 +96,7 @@ enum class ScalarCompare { Equal, NotEqual, Less, LessEqual };
 // Same-type comparisons: integers remain exact; IEEE NaNs compare unequal and
 // either floating signed zero equals zero. Mixed types require an explicit cast.
 struct ScalarPredicate {
-    ScalarCompare compare;
+    ScalarCompare compare = ScalarCompare::Equal;
     ScalarExpr lhs, rhs;
     bool evaluate(const std::unordered_map<std::string, ScalarValue> &bindings) const;
     std::string cuda() const;

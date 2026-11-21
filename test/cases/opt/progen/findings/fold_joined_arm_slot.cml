@@ -3,11 +3,11 @@
  *   a `float?` and each arm is put into that form at its exit (design principles 3.8). The
  *   node that stands for an arm in the enclosing graph was made before the arms were joined
  *   and kept the slot of what the arm gave then, a `float`. Without a pass nothing reads that
- *   slot by its type (the JOIN copies it); `std::opt::fold` prunes the branch with the constant
+ *   slot by its type (the JOIN copies it); `std::cxx::fold` prunes the branch with the constant
  *   condition and the users of the JOIN read the arm's slot directly: a `float?` box read as
  *   a float. (A box in a slot typed `float` is not traced by the collector either.) The
  *   defect was in the compiler front end, not in the pass.
- * Pipeline: std::opt::fold std::nvm (every scheduler; also fold+cse, macro+fold+cse+dce)
+ * Pipeline: std::cxx::fold std::nvm (every scheduler; also fold+cse, macro+fold+cse+dce)
  * Expected output: 1.0
  * Actual: 6.5937273290103e-310
  * Reduced by test/tools/progen from seed 7333 (generator version 3, all features).

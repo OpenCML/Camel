@@ -18,7 +18,7 @@
 | [10_source_mapping_and_debug_locations.md](10_source_mapping_and_debug_locations.md) | 源码映射、Origin 派生链，以及 GCT/GIR/Runtime 如何回到源码区间 |
 | [11_semantic_models_and_reverse_mapping_foundation.md](11_semantic_models_and_reverse_mapping_foundation.md) | AST/GCT/GIR 节点语义、层间 lowering、基础缺口审计与相对精确逆映射底座 |
 | [12_namespace_convention.md](12_namespace_convention.md) | **命名空间规范**：路径与命名空间映射、别名约定、新代码规则及迁移状态 |
-| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::opt::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
+| [16_inline_rewrite_algorithm.md](16_inline_rewrite_algorithm.md) | `std::cxx::inline` 重写算法、SCC 调度、Graph API 协作与不变量 |
 | [17_graph_rewrite_api_contracts.md](17_graph_rewrite_api_contracts.md) | Graph 重写 API 契约：事务边界、可写域、内联入口规则与验证器约束 |
 | [18_sync_control_semantics.md](18_sync_control_semantics.md) | 同步控制语义解读：`BRCH/JOIN/GATE` 分工、`EXIT` 锚点规则与后端契约 |
 | [19_tail_call_optimization.md](19_tail_call_optimization.md) | 尾调用优化（TCO）：以 NodeVM 为主的机制说明（拓扑、判据、帧与尾调路径）；附录含 FastVM 对照 |
@@ -54,6 +54,11 @@
 | [56_cpu_baselines_and_cuda_visible_devices.md](56_cpu_baselines_and_cuda_visible_devices.md) | CPU 基线里的 CUDA 上下文：`torch.optim.Adam(...).step()` 的健康检查会为从不用 GPU 的对照程序建上下文，卡被别的租户占着时以 `CUDA_ERROR_UNKNOWN` 死在第一个数字之前，而 `SGD.step()` 不会；最小复现、与 `--data` 路径无关的 2×2、以及为什么基线要钉 `CUDA_VISIBLE_DEVICES=""` |
 | [57_python_bindings.md](57_python_bindings.md) | Python 绑定：从 Python 调用 Camel 模块的导出函数，数组经 DLPack 零拷贝进出（地址、时间、内存三处实测），诊断与故障按位置映射成 Python 异常，以及 `pip install` 装出来的 wheel 与一个示例 |
 | [58_install_cxx_runtime.md](58_install_cxx_runtime.md) | 安装自带 C++ 运行时：`$ORIGIN` rpath 的两条入口与 `libs/libstdc++.so.6` 的复制规则（链接解析在发行版目录里就不复制）、为什么"运行时太旧"只能由 `bin/camel` 启动器在加载前说出（GLIBCXX 版本要求在 `main` 之前解析，实测七行加载器报错、程序一个字都没跑）、用户看到的两句话与退出码 1、`libs/` 增加 23.9 MB，以及哪些工具没有被包住 |
+| [59_typeid_keys_and_the_type_the_table_does_not_hold.md](59_typeid_keys_and_the_type_the_table_does_not_hold.md) | `TypeId` 作键时 `kNoTypeId`（0）成为通配符：`sameCanonicalType` 的相反一格、0 的两个来源（`typeIdOf` 的 debug 断言与 `canonicalId` 不检查 `holds`）、实测 30 处下游站点（8 个符号）的清单，以及"规则右值是闭包"那一批类型的源头修法（函数类型连退出分量一起入表） |
+| [60_cml_print_roundtrip_gap.md](60_cml_print_roundtrip_gap.md) | `std::cml` 往返缺口：`not_equivalent` 的十条类别与真实原因（打印文本比原程序少掉的顶点：类型拼写、字面值、编译期展开、捕获端口、函数值、`return`、被丢的臂、结构体循环状态、空臂区域、判据异常），以及 3688 个文件上的读数与接口作者「51 条」的来历 |
+| [61_capture_census.md](61_capture_census.md) | 捕获普查 `scripts/check-capture-census.mjs`：作者验收闭包捕获用的两个数（`:var/new` 节点、按引用捕获口）怎么从 `std::jgir` 数出来、`list_sha` 如何钉住分母、`test/cases` 与全仓两套读数、5912/410/621 为什么复现不出来 |
+| [62_generator_type_has_two_answers.md](62_generator_type_has_two_answers.md) | 生成器里一个闭包的两个类型：`typeof` 重建与语句处真建各算一次捕获、`captureByValueOf_` 把机器的答案粘住、五条 `stream.generator*` 今天的绿靠 gate5 按名字匹配的巧合（「绿在别处」） |
+| [63_what_the_348_units_are.md](63_what_the_348_units_are.md) | 剩下的 348 个 `:var/new` 按"为什么存在"分成 A/B/C/D/E 五类（A 0、B 117、C 81、D 79、E 71）：每一类的名单、判据（节点与图的形状，不看文件名）、以及**建图时直接构造 SSA 之后每个单元还在不在**——270 消失、78 留（64 机器状态 + 10 模块级共享 → `Ref` + 4 判不了）；含"两个口径差 64"与"54 是没有读者、不是可以删"两句 |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
@@ -81,3 +86,4 @@
 - **FastVM**：基于字节码的线性调度虚拟机
 - **NodeVM**：基于图节点直接遍历的线性调度器
 - **Taskflow**：基于 DAG 的并行调度器
+

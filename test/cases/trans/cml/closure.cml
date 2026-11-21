@@ -1,15 +1,9 @@
-// A lambda as a value, one with a block body, one that captures a source name, one returned
-// from a function, and a closure over a mutable cell.
+// A lambda as a value, one with a block body, one that captures a source name, and one returned
+// from a function. A closure over a mutable cell that leaves the call that declared it is refused
+// (design principles 3.5, rule two; test/cases/compile/state_escape/err_escape_return.cml), so the
+// counter this file used to round-trip is gone.
 func make_adder(base: int): (x: int) => int {
     return (x: int) => x + base
-}
-
-func counter(start: int): () => int sync {
-    var n = start
-    return (): int => sync {
-        n = n + 1
-        return n
-    }
 }
 
 func main(): int sync {
@@ -20,7 +14,6 @@ func main(): int sync {
         y
     }
     let plus3 = make_adder(3)
-    let next = counter(0)
-    println(add(5), twice(4), plus3(7), next(), next())
+    println(add(5), twice(4), plus3(7))
     return 0
 }

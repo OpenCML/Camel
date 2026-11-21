@@ -42,7 +42,7 @@
 //     the half `mean_axis_stated_t` was on, and a law's source has no witness for it: `ruleCotangent`
 //     (`modules/transforms/transpose.cpp`) decides the types at build time. It is recorded as a
 //     question beside this change
-//     (`docs/handover/questions/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
+//     (`docs/handover/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`).
 //
 // So this reads the laws as text and asks one question of each port: what does the body require of
 // it? Three kinds of witness, and each names where its requirement comes from:

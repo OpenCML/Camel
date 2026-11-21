@@ -1,0 +1,33 @@
+/// A predicate's answer is remembered by the function and the type arguments it was given, so a
+/// guard costs one evaluation per question and not one per case that asks it (design principles
+/// 5.5, ruling of 2026-11-14: "with their results cached by function and type arguments").
+///
+/// `NumericOnce` and `NumericAgain` are two type functions that ask `is_numeric` about the same
+/// types, and `is_numeric` itself is written as a `match type` over shapes, so it is a predicate
+/// the compiler can answer while it selects a case. The answers below are the ones the rules
+/// give; how many times the predicate ran is the line the build prints at `-vv`
+/// (`[match type] 6 guard question(s) about 3 distinct (function, type arguments) pair(s),
+/// 3 answered by running the predicate and 3 from the cache` -- six questions, three of them
+/// answered by the run of ①, because ② asks the same three).
+import { is_numeric, is_same } from types
+
+type NumericOnce<T> = match type T {
+    case _ when is_numeric::<T>() => int[1]
+    case _ => int[0]
+}
+
+type NumericAgain<T> = match type T {
+    case _ when is_numeric::<T>() => int[1]
+    case _ => int[0]
+}
+
+func main(): int sync {
+    // ① the first question about each of these two types is asked here.
+    println(is_same::<NumericOnce<int>, int[1]>(), is_same::<NumericOnce<float>, int[1]>())
+    // ② the same two questions, asked by another type function: answered from the cache.
+    println(is_same::<NumericAgain<int>, int[1]>(), is_same::<NumericAgain<float>, int[1]>())
+    // ③ a third type, and one that is not a number: the guard is refused, and the case after it
+    //    takes the type.
+    println(is_same::<NumericOnce<string>, int[0]>(), is_same::<NumericAgain<string>, int[0]>())
+    return 0
+}

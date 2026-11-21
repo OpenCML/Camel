@@ -54,6 +54,19 @@ class GraphIRPass {
     // `std::rgir`, `std::jgir` draw the classes) or rewrites it (the rules library).
     virtual bool acceptsWritings() const { return false; }
 
+    // A pass whose only rewriting interface is the graph module's -- `open`, `replace`, `erase`,
+    // `add_constant` and the rest of stdlib/graph.cml, which is every handle a pass written in Camel
+    // has on a graph. Such a pass cannot make a node that carries an access, cannot splice a body in
+    // and cannot change what a node is, so for it "no access appears and no order is lost" is a
+    // theorem (docs/design/effects/analysis.cn.md 4.1: the checks are for
+    // the C++ passes, whose interface is wider).
+    //
+    // This answers a fact about the pass, not the question of whether the two commit checks are
+    // asked of it. That question is the caller's, because it depends on the build: a shipped build
+    // reads the theorem and does not pay for the check, a debug or test build asks anyway
+    // (`camelPassCommitChecksEnabled`) -- a theorem nobody reads is a guess.
+    virtual bool rewritesThroughTheGraphModuleOnly() const { return false; }
+
   private:
     /// The error value this pass ended with, or NullSlot when it did not fail (failWithErrorValue).
     /// The driver reads it in the same safepoint window as `apply`, so a value the pass made is
@@ -94,6 +107,8 @@ enum class PassApplyStatus {
 };
 
 struct PassApplyResult {
+    // program-holder-exempt: kept-by-another-root -- the pipeline's provisional set roots it
+    // until the pass settles (GCGraphManager::settle).
     const camel::runtime::Program *program = nullptr;
     PassApplyStatus status{PassApplyStatus::Transformed};
     /// The error value the pass ended with, when the status is `Errored` and NullSlot otherwise.
@@ -203,6 +218,8 @@ PassApplyResult applyPassesDetailed(
 /// stage). `program` is what the pass produced (unchanged when a rewrite pass produced nothing);
 /// `changed` says whether the produced program holds graphs of different content.
 struct PassRunResult {
+    // program-holder-exempt: kept-by-another-root -- the program a pass produced is in the
+    // provisional set until the caller settles.
     const camel::runtime::Program *program = nullptr;
     bool changed                           = false;
 };
@@ -230,3 +247,22 @@ PassRunResult applyRegisteredPass(
 bool checkPassBoundary(
     const camel::core::context::context_ptr_t &ctx, const std::string &spec,
     const camel::runtime::Program &before, const camel::runtime::Program &after);
+
+/// Whether the two commit checks of the effect analysis (docs/design/effects/analysis.cn.md 4.1)
+/// are asked of a pass whose rewriting interface is the graph module alone -- the exemption of
+/// `GraphIRPass::rewritesThroughTheGraphModuleOnly`, which every pass written in Camel answers with
+/// yes (src/execute/camel_pass.cpp).
+///
+/// Such a pass cannot build the defect the checks look for, so the saving is kept where it is paid
+/// for and the theorem is read everywhere else: **a shipped build (`NDEBUG`) does not ask, a debug build asks, and a test asks
+/// through `setCamelPassCommitChecksEnabled`** -- a theorem nobody reads is a guess, and a suite
+/// that never runs the check cannot say whether the theorem still holds.
+///
+/// It is a build option and a test's own request, never an environment variable: what a run does is
+/// decided by the program, the command line and the build options, and the same rule is written for
+/// pass settings ("pass parameters, not environment variables", AGENTS.md).
+bool camelPassCommitChecksEnabled();
+
+/// Asks for the checks (or not) for the rest of the process. A release build is the only one whose
+/// default is "no", so a test that reads the Camel-pass path in a release build is what calls this.
+void setCamelPassCommitChecksEnabled(bool enabled);

@@ -33,8 +33,8 @@ class EnumOpTypeResolver final : public FuncTypeResolver {
     EnumOpTypeResolver(Kind kind, std::string signature, size_t normCount)
         : kind_(kind), signature_(std::move(signature)), normCount_(normCount) {}
 
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override {
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &with, const type_vec_t &norm) const override {
         return decide({}, with, norm, {});
     }
 
@@ -132,7 +132,7 @@ slot_t __enum_tag__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (value == nullptr) {
         // The value a tag is read from is null: it came from the program and the operator cannot
         // take it. A branch rather than an assert, because an assert's premise is not held in a
-        // release build (the assert audit of 2026-11-02: an assert that guards a dereference is
+        // release build (an assert that guards a dereference is
         // no guard at all there).
         throwRuntimeFault(
             camel::core::error::RuntimeDiag::InvalidArgument,
@@ -147,10 +147,20 @@ slot_t __enum_field__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const size_t index   = static_cast<size_t>(norm.get<Int64>(1));
     const Variant *value = fromSlot<const Variant *>(norm.slot(2));
     ASSERT(value != nullptr, "A field of an enum value is taken from a value that is null.");
-    ASSERT(
-        value->tag() == tag,
-        "A field of an enum value is read from the variant the graph decided it would be.");
-    ASSERT(index < value->fieldCount(), "Enum field index out of range.");
+    // The two cases are told apart here, and the one this node does not select reads as no value:
+    // a value whose tag is not the one the node was written for, or whose variant has no field at
+    // `index`, is the case of another arm. Returning the zero slot is the answer every lowering
+    // that takes a part out of a tagged value already gives (src/builtin/operators/tagged.cpp,
+    // "applied to the other case they return the zero slot"), and the pass relies on it: a node
+    // that cannot be replaced is still evaluated, to fault where it is written if it can fault
+    // (generic.cpp, `foldDraft`), so an arm the constant's tag does not select is executed with a
+    // value of the other variant in hand. An `ASSERT` would not do here -- it is
+    // nothing in a release build -- and `Variant::get` would then read an index the value does not
+    // have ("reading field 0 of a Variant whose tag 1 declares 0 field(s)",
+    // include/camel/core/rtdata/variant.h).
+    if (value->tag() != tag || index >= value->fieldCount()) {
+        return NullSlot;
+    }
     return value->get(index);
 }
 

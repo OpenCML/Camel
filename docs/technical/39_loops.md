@@ -67,8 +67,8 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
    slot the back ends count the rounds in.
 5. Like a branch, the loop uses every variable its parts used and writes those they wrote
    (`mergeArmVariables`: ordering, `IgnoredSideEffect`); in a sync block it joins the
-   chain. A loop whose value nothing uses outside a sync block does not run; when its parts have
-   effects that is reported as `EffectNotExecuted` ("The loop").
+   chain. A loop whose value nothing uses outside a sync block still runs when it writes: what a region
+   writes is a root of that region (the ruling of 2026-11-17), so its body runs and nothing is reported.
 
 Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form,
 the iterable form and `collectionCount`, the number of collection slots (section 3.1, zero for a

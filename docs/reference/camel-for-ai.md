@@ -70,8 +70,9 @@ parallelize.
 
 An effect is a node whose point is that it happened. A **sync block** orders the statements written
 *directly* in it and only those: `sync { ... }`, `func f(): T sync { ... }`, `if c then sync { ... }`.
-Outside one, an effect whose result nothing uses is dropped, with the warning
-`SemanticDiag::EffectNotExecuted`. The rule does not reach inward — an arm or a loop body written
+Outside one, a statement whose result nothing uses still runs when it writes: what a region writes is a root of
+that region (the ruling of 2026-11-17), so a call, a loop and a block run with it and nothing is reported. A read
+whose result nothing uses does not run, and nothing is reported for it either. The rule does not reach inward — an arm or a loop body written
 inside a sync block is an ordinary subgraph and needs its own `sync`. A `var` parameter is a mutable
 reference to the caller's variable, so a write in the callee is a write the caller sees, ordered
 against everything that reads or writes that variable.
@@ -234,14 +235,14 @@ Sources: `docs/language/en/06_expressions.md`, `docs/language/en/07_statements.m
 
 Its answer is half of learning the language.
 
-- **A diagnostic is named in full.** The compiler prints `warning[SemanticDiag::EffectNotExecuted]`,
+- **A diagnostic is named in full.** The compiler prints `warning[SemanticDiag::UnusedAssignedValue]`,
   and [Appendix A](camel-for-ai-diagnostics.md) holds every diagnostic with its message template and
   its code. `camel --explain <name or code>` prints that entry on the spot; the section prefix may be
   left out, and case, `-` and `_` do not matter.
 - **A known fix is printed with the diagnostic**: as `-`/`+` lines in the text form, as `fixes` with
   a `replacement` in JSON, and as a code action in the language server. A code that carries no fix
   says why in the registry's `edit` column, so "no fix" is a statement about the diagnostic.
-- **A warning is the compiler telling you what the graph does.** `SemanticDiag::EffectNotExecuted`
+- **A warning is the compiler telling you what the graph does.** `SemanticDiag::UnusedAssignedValue`
   and `SemanticDiag::UnusedFallibleValue` are usually right, and the answer is a `sync` or a use
   rather than `-Wno-`; `-Werror` makes every warning an error for a run that must be clean.
 - **The editor has the same information.** `camel-ls --stdio` is a language server — diagnostics with
@@ -257,38 +258,31 @@ The first drafts that say something about the language. Each is compiled by
 `node scripts/camel-for-ai.mjs --verify-errors`, which checks that the diagnostic named is the one
 the compiler reports.
 
-### An effect nothing needs does not run
+### A read nothing needs does not run; a write runs with its region
 
-`println` is an effect, and an effect whose result nothing uses is dropped: the program compiles,
-prints nothing from that line, and warns `SemanticDiag::EffectNotExecuted`. **Wrong:**
-
-<!-- camel-snippet: counter-example: the effect is dropped because nothing needs its result -->
-
-```camel
-func greet(): int {
-    println('hello')
-    return 1
-}
-```
-
-Nothing in that graph needs the `println`; making it run would mean some unused nodes are special.
-Say that it must happen: a `sync` body orders the calls written in it.
+Reads are demand-driven: an external *read* whose result nothing uses is dropped, and nothing is
+reported for it. A *write* to a resource outside the program is not like
+that: it is used by the region it is written in, so it runs although nothing reads what it returns.
+**Wrong** -- claiming that a bare `println` in a body that is not `sync` is dropped:
 
 ```camel
-func greet(): int sync {
-    println('hello')
-    return 1
-}
+import { get_env } from env
 
-func main(): int sync {
-    greet()
+func main(): int {
+    println('before')
+    get_env("CAMEL_AI_REFERENCE_NO_SUCH_VARIABLE")     // no diagnostic, and nothing is printed for it
     return 0
 }
 ```
 
 ```text
-hello
+before
 ```
+
+The reads above run only when their value is needed; the second one is wanted by nobody, so it does
+not run, and nothing is reported for it. A **write** is not like
+that: `main`'s body is a region, so a `println('hello')` in a body that is not `sync` prints, and
+`sync` only orders the statements -- it does not enable them.
 
 ### `match` over an `enum` must handle every variant
 

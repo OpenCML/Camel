@@ -113,6 +113,10 @@ class Tree {
     node_ptr_t makeLink(size_t argCount);
     node_ptr_t makeWith(size_t argCount);
     node_ptr_t makeTypeApplication();
+    /// A write of a place (children: the target, the value). `compoundGroup` is the group of the
+    /// operator a Compound write follows (`__assn_add__` for `+=`) and is empty for every other
+    /// form.
+    node_ptr_t makeAssign(AssignmentForm form, std::string_view compoundGroup = {});
     node_ptr_t makeAccs(size_t index);
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);
@@ -320,6 +324,16 @@ class Tree {
     }
 
 
+    /// `typeof e` (design principles 5.6): what the type layer holds for it is a type variable
+    /// named by `kTypeOfPlaceholderPrefix` and a number, and this table is what the number names.
+    /// The expression is the front end's -- the type layer never sees it -- and it is not a child
+    /// of anything, since a type is not a node: it is reachable from here, and the graph builder
+    /// visits it where the type is used, once per instance. One expression node is one
+    /// placeholder, so a caller that asks twice gets the same name.
+    std::string makeTypeOfPlaceholder(node_ptr_t expression);
+    /// The expression the placeholder `name` stands for, or nullptr when `name` is not one.
+    node_ptr_t typeOfOperandOf(const std::string &name) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -390,6 +404,9 @@ class Tree {
     // wrote: `let (x, y) = t` makes one per name, and the graph builder compares the count with the
     // tuple it destructures (a written `t.0` has no entry).
     std::unordered_map<const Node *, size_t> unpackCounts_;
+    // A `typeof` placeholder's number, in the order the type expressions were built, and the
+    // expression each one stands for.
+    std::vector<node_ptr_t> typeOfOperands_;
 
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.

@@ -80,8 +80,14 @@ func step(m: Tf4, x: f32[...]): (float, Tf4) {
 
 /// Exports `step` to ONNX: the parameters and the input become graph inputs.
 func export_step(m: Tf4, path: string): int sync {
-    let _ = export_model<out: path>(step, (m, bench_input()))
-    return 0
+    let r = export_model<out: path>(step, (m, bench_input()))
+    return match r {
+        case error e => sync {
+            println(e)
+            return 1
+        }
+        case _ => 0
+    }
 }
 
 func dump_grads(m: Tf4, x: f32[...], dir: string): int sync {

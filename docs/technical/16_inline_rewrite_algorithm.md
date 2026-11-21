@@ -1,4 +1,4 @@
-# `std::opt::inline` 重写算法与 GIR API 协作详解
+# `std::cxx::inline` 重写算法与 GIR API 协作详解
 
 本文针对当前实现（`src/passes/opt/inline/inline.cpp`、`src/passes/opt/inline/engine.cpp` + `src/runtime/draft_inline.cpp`）进行工程化拆解，重点说明：
 
@@ -11,34 +11,34 @@
 
 ## 1. 总体设计目标
 
-当前 `std::opt::inline` 在 **Pass 层**是一个**跨图事务式重写**过程，目标有三层：
+当前 `std::cxx::inline` 在 **Pass 层**是一个**跨图事务式重写**过程，目标有三层：
 
 1. **跨图引用一致性**：会话内所有图引用都以运行时图（`GCGraph`）的身份表示，提交时统一改写到新编码的图上。
 2. **分支语义不破坏**：被内联的函数体留在调用原本所在的分支臂内，`BRCH` 的臂首/臂尾锚点随拼接迁移。
 3. **可收敛性**：递归图不被整体复制进调用方，增长与次数受预算约束，避免展开失控。
 
-### 1.1 重要：`std::opt::inline` 是策略化目标选择
+### 1.1 重要：`std::cxx::inline` 是策略化目标选择
 
 实现上必须把下面两点分开理解：
 
 | 层次 | 含义 |
 |------|------|
 | **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GraphDraft::calleeGraphOf`）克隆进调用方并返回 `DraftInlineResult`。 |
-| **`InlineRewritePass`（`std::opt::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
+| **`InlineRewritePass`（`std::cxx::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
 
 当前 pass 入口命名与含义（注册表见 `src/execute/pass.cpp`）：
 
-- `std::opt::inline`：默认综合策略（等价 `std::opt::inline::hybrid`）；
-- `std::opt::inline::small`：只内联“小”被调图上的调用，且该调用**不是**分支臂首；
-- `std::opt::inline::arm`：只内联位于分支臂首的调用，不要求被调图“小”；
-- `std::opt::inline::hybrid`：综合策略（被调图“小”，或调用位于分支臂首，满足其一即内联）。
+- `std::cxx::inline`：默认综合策略（等价 `std::cxx::hybrid`）；
+- `std::cxx::small`：只内联“小”被调图上的调用，且该调用**不是**分支臂首；
+- `std::cxx::arm`：只内联位于分支臂首的调用，不要求被调图“小”；
+- `std::cxx::hybrid`：综合策略（被调图“小”，或调用位于分支臂首，满足其一即内联）。
 
 重要边界：
 
-- `std::opt::inline*` 只负责 **inline target selection + inline rewrite**；
+- `std::cxx::inline*` 只负责 **inline target selection + inline rewrite**；
 - 若需要运行聚合优化流水线（如 **specialization / devirtualization / inlining**），
   入口使用 `std::opt`：循环执行去虚化、特化、内联、常量折叠、公共子表达式消除、局部算式化简与死代码消除，直到稳定或达到预算。
-  `std::inline`（含 `small` / `arm` / `hybrid`）保留为 `std::opt::inline` 的别名。
+  `std::opt` 是默认流水线的名字，今天指向 C++ 版（`std::cxx::opt`）；内联这一族遍在归到 `cxx::` 之前的旧名（`std::opt::inline`、`std::inline` 及六个策略旧名）**不留别名**，写了会报"不认识的遍"。
 
 控制依赖采用源头规避与末尾清理结合的方式。编译器加同步边时，最多检查 64 条 CTRL 边；
 冻结每张图前再清理一次，最多检查 8192 条边。内联、特化、fold、cse、dce 转接依赖时，
@@ -50,7 +50,7 @@ FUNC/CALL 的依赖转接不跳过直接值覆盖：内联前有意补入的实�
 稳定图上的独立清理仍可证明并删除这些边，后续内联会重新显式转接所需的实参顺序。
 预算耗尽时保留尚未证明冗余的依赖，不建立全图传递闭包。
 
-`std::opt` 收敛或达到轮数预算后，最后执行一次 `std::opt::order`，也可单独运行该遍。
+`std::opt` 收敛或达到轮数预算后，最后执行一次 `std::cxx::order`，也可单独运行该遍。
 清理阶段对每个目标最多检查 256 条边，整图的检查量限制为 `8 * (节点槽数 + 全部输入边数)`，
 另有 250000 的上限；初始化与候选扫描为线性工作，带 epoch 的辅助存储与节点槽数线性相关。
 从目标的必需值输入、控制前驱的输入开始回溯普通值、上下文值及控制边，不用待删的边证明自身。
@@ -58,10 +58,10 @@ JOIN/LOOP 的已完成结果可作为证明终点，但不穿过其内部；尤�
 无条件执行的前驱。BRCH、JOIN、LOOP 本身及分支臂首尾的控制输入保持，臂锚点不改动，
 GATE 至少保留一条 CTRL 输入；预算不足时只删除已证明的边。无需全图传递闭包。
 
-只被用作控制前驱、没有值使用者的 GATE 由 `std::opt::dce` 消除：把它的控制前驱及值输入中
+只被用作控制前驱、没有值使用者的 GATE 由 `std::cxx::dce` 消除：把它的控制前驱及值输入中
 承载顺序的来源转接给后继，再删除 GATE。因此 `println → GATE(41) → println` 可直接连成
 两次打印之间的控制边；若值输入本身含有效应，该效应也必须保留。返回/输出及分支臂锚点、
-仍有值使用者的 GATE 不适用此规则。`std::opt` 每轮自带这项清理，单独内联后可接 `std::opt::dce`。
+仍有值使用者的 GATE 不适用此规则。`std::opt` 每轮自带这项清理，单独内联后可接 `std::cxx::dce`。
 
 有值使用者的普通 GATE 也通常可以消除：将 `GATE(v, 等待 A)` 改为使用者直接读取 `v`，
 同时让使用者用 CTRL 等待 A；不把等待加到 `v` 的生产者上。如果原来还有控制使用者，
@@ -415,6 +415,11 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 触及上限时不报错：相应调用保持为调用，程序语义不变，只是展开得更少。引擎最后一轮检查过而未内联的
 直接调用及其原因（`InlineDecline`）记录在 `InlineReport` 中，作为 pass fact `kInlineReportFactKey`
 挂在 `Context` 上，供后续遍解释某个调用为何仍是调用。
+
+运行引擎的那一次调用不从这里回读：`applyOptimizeRewritePass` 把这一轮因预算触顶而留下的调用经
+`growthBudgetLeft` 直接交回给调用者（`std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，
+而不是「到了不动点」）。答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 也就没有 pass
+fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束之后再问的读者（`onnx::export`）。
 
 ### 8.2 提交时的收口与结构检查
 

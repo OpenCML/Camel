@@ -187,8 +187,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
@@ -219,7 +219,7 @@ grad: (f: F) => GradientOf<F> when is_function::<F>()
 has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 
-**`tensor`** — import { ... } from tensor — 76 name(s)
+**`tensor`** — import { ... } from tensor — 81 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -247,7 +247,7 @@ permute: (t: float[...], perm: int[]) => float[...]
 concat: (a: float[...] | number[], b: float[...] | number[], axis: int) => float[...]
 take: (t: float[...], indices: int64[...] | number[]) => float[...]
 one_hot: (labels: int64[...] | number[], classes: int) => f32[...]
-shape: (t: T[...]) => int[] when is_numeric::<T>()
+shape: (t: T) => ShapeOf<T>
 numel: (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: int> (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: i32> (t: T[...]) => int when is_numeric::<T>()
@@ -273,6 +273,8 @@ softmax_grad: (y: f32[...], dy: f32[...], axis?: int) => f32[...]
 softmax_grad: (y: float[...], dy: float[...], axis?: int) => float[...]
 layer_norm: (x: f32[...], gamma: f32[...], beta: f32[...], eps?: number) => f32[...]
 layer_norm: (x: float[...], gamma: float[...], beta: float[...], eps?: number) => float[...]
+layer_norm_grad: (x: f32[...], gamma: f32[...], dy: f32[...], which: int, eps?: number) => f32[...]
+layer_norm_grad: (x: float[...], gamma: float[...], dy: float[...], which: int, eps?: number) => float[...]
 matmul: (lhs: float[...], rhs: float[...]) => float[...]
 linear: (x: f32[...], weight: f32[...], bias?: f32[...]) => f32[...]
 linear: (x: float[...], weight: float[...], bias?: float[...]) => float[...]
@@ -286,6 +288,9 @@ save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
 mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
 matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
 sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
@@ -476,8 +481,8 @@ permutation: (k: Key, n: int) => int[]
 shuffle: <k: Key> (xs: T[]) => T[]
 choice: <k: Key> (xs: T[]) => T
 sample: <k: Key, n: int> (xs: T[]) => T[]
-seed: (value: int) => void uses rng
-next_key: () => Key uses rng
+seed: (value: int) => void uses var rng
+next_key: () => Key uses var rng
 rand: () => float
 randn: () => float
 ```
@@ -526,7 +531,7 @@ clear_input_buffer: () => void
 
 ```text
 sleep: (seconds: float) => void
-exit: (code: int) => never uses process
+exit: (code: int) => never uses var process
 user_name: () => string!
 cpu_count: () => int
 ```
@@ -588,6 +593,15 @@ sha256: (data: Bytes) => string
 sha256: (text: string) => string
 ```
 
+**`state`** — import { ... } from state — 4 name(s)
+
+```text
+ref: (v: T) => Ref<T>
+get: (r: Ref<T>) => T uses r
+set: (r: Ref<T>, v: T) => T uses var r
+update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
+```
+
 **`re`** — import { ... } from re — 7 name(s)
 
 ```text
@@ -610,7 +624,7 @@ unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 **`test_support`** — import { ... } from test_support — 5 name(s)
 
 ```text
-rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
 thread_count: () => int uses process
 with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
 with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
@@ -623,13 +637,14 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 46 name(s)
+**`graph`** — import { ... } from graph — 52 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
 graphs_of: (f: F) => Graph[] when is_function::<F>()
-name: (g: Graph) => string
+name: (g: Graph) => string spelling
 nodes: (g: Graph) => Node[]
+exit_of: (g: Graph) => Node?
 inputs: (n: Node) => Node[]
 with_inputs: (n: Node) => Node[]
 sync_inputs: (n: Node) => Node[]
@@ -655,34 +670,39 @@ declaration_tags: (g: Graph) => Tag[]
 tag_name: (t: Tag) => string
 tag_graphs: (t: Tag) => Graph[]
 rule_of: (g: Graph, name: string) => Graph?
-origin: (n: Node) => int
+origin: (n: Node) => int spelling
 constant: (n: Node) => T? when is_ordered::<T>()
 region_of: (n: Node) => Region
 region_kind: (r: Region) => RegionKind
 region_parent: (r: Region) => Region?
-show: (n: Node) => string
-id: (h: Graph) => int
+show: (n: Node) => string spelling
 id: (h: Node) => int
-id: (h: Op) => int
+creation_id: (h: Graph) => int spelling
+creation_id: (h: Node) => int spelling
+creation_id: (h: Op) => int spelling
 effects: (g: Graph) => Effects
 shape_text: (n: Node) => string?
 permissions: (n: Node) => int
 open: (f: F) => Txn<F> when is_function::<F>()
-replace: (t: Txn<F>, old: Node, new: Node) => void uses t
-erase: (t: Txn<F>, n: Node) => void uses t
-eval: (t: Txn<F>, n: Node) => Node? uses t
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
-commit: (t: Txn<F>) => F! uses t
-abort: (t: Txn<F>) => void uses t
+replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
+erase: (t: Txn<F>, n: Node) => void uses var t
+eval: (t: Txn<F>, n: Node) => Node? uses var t
+order: (t: Txn<F>, before: Node, after: Node) => void uses var t
+inline: (t: Txn<F>, at: Node, fn: G) => Node uses var t when is_function::<G>()
+outline: (t: Txn<F>, ns: Node[]) => Node uses var t
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
+commit: (t: Txn<F>) => F! uses var t
+abort: (t: Txn<F>) => void uses var t
+check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```
 
 **`rewrite`** — import { ... } from rewrite — 15 name(s)
 
 ```text
-rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
 check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 check_text: (r: CheckReport) => string
@@ -699,15 +719,15 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: f32[...]) => Device<f32[...]> uses driver
-download: (value: Device<f32[...]>) => f32[...] uses driver
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
+upload: (value: f32[...]) => Device<f32[...]> uses var driver
+download: (value: Device<f32[...]>) => f32[...] uses var driver
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses var driver
 source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
-regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
-available: () => bool uses driver
-device: () => string! uses driver
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
+available: () => bool uses var driver
+device: () => string! uses var driver
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)
@@ -802,7 +822,7 @@ mul_cotangent_c: (x: T, ct: T) => T when is_float::<T>()
 div_cotangent_c: (x: T, c: T, ct: T) => T when is_float::<T>()
 ```
 
-**`rulesets.jvp`** — import { ... } from rulesets.jvp — 8 name(s)
+**`rulesets.jvp`** — import { ... } from rulesets.jvp — 14 name(s)
 
 ```text
 lift: (x: T) => Lift<T>
@@ -812,7 +832,13 @@ sub_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 sub_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
 div_jvp: (x: f32, y: f32, d: (f32, f32)) => (f32, Tangent<f32>)
 div_jvp: (x: float, y: float, d: (float, float)) => (float, Tangent<float>)
+reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
+layer_norm_neutral: (t: T[...], v: float) => T[...] when is_float::<T>()
 pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
 ```
 
 **`rulesets.vmap`** — import { ... } from rulesets.vmap — 28 name(s)

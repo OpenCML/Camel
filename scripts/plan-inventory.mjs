@@ -257,19 +257,30 @@ function readPlan(abs) {
 // output instead of being a silent pass. A plan file under `test/cases` is not a case: it must be
 // recorded too, or the check asks for it to move under `test/plans`.
 //
-// The list holds one file, and one kind of file is left in the tree on purpose: a trap fixture,
-// which a correct compiler never opens. Its whole function is to be there -- a regression that
-// searches a directory it must not search finds it and prints its value, and the pins above never
-// allow that value -- so no plan and no code reads it, and deleting it would remove the guard.
-export const CASE_EXCEPTIONS = [
-    {
-        file: 'test/cases/compile/module_imports/import_order/roots_trap/pkg/lib.cml',
-        reason:
-            'a trap fixture: the entry directory is not a module root, and this file is what a ' +
-            'regression that treats it as one would load (it returns 9, which the pins above never ' +
-            'allow). Nothing opens it in a correct run, and its presence is the check',
-    },
-]
+// The list held the reduced programs of the E9 crash campaign whose shape was not fixed -- each
+// reproduces a crash the 2026-11-17 full run reported, and no plan entry can name one without
+// either stating the crash as the expected answer (`known_fail` over a process that ends in a
+// guarantee) or going red until its shape is fixed. Two of those shapes are fixed now and their
+// programs are plan entries (`rc12_seed165`, `rc13_seed202`, and `rc17_seed193` together with its
+// line in `test/tools/cppexec/expect.txt`). The five that are left, `rc14_seed176`, `rc15_seed52`,
+// `rc16_seed153`, `rc18_seed429` and `rc19_seed70`, are no longer recorded here, and the reason is
+// the readership rule rather than the files: `test/cases/opt/pass_written/check.mjs` builds
+// `test/cases/opt` out of path segments before it sweeps two of its corpora, and this check counts
+// a directory named that way as reading every file it holds, so it reports those five as reached
+// and asks for the entries to go. What each one reproduces -- and the command that fires it by hand
+// -- is in the plan's own comment (`test/plans/feat/opt/e9.plan.toml`), which is where the record
+// of an unfixed shape has to live while the ledger cannot see it.
+//
+// The list was empty before those, and the one entry it held earlier is recorded here instead
+// of being forgotten: the trap fixture `test/cases/compile/module_imports/import_order/roots_trap/
+// pkg/lib.cml` stays in the tree on purpose -- its whole function is to be there, so a regression
+// that searches a directory it must not search finds it and prints its value, which the pins above
+// never allow -- and the entry said nothing opens it in a correct run. That stopped being true when
+// the AST snapshot began to cover every `.cml` file of the repository: `test/tools/parsecheck/
+// check.py` reads that file now, which is what the `reached` map reports, so the file is reached by
+// code and the exception it needed is gone. The trap itself is unchanged, and a regression that
+// loads it still fails the pins.
+export const CASE_EXCEPTIONS = []
 
 const CASE_ROOT = 'test/cases'
 // A case is a file of the repository, and a bytecode cache is not: the interpreter writes
@@ -485,7 +496,8 @@ export function caseLedgerProblems() {
     // are prose of the same kind: they name a lane and a wall, never a file the plan runs, and the
     // reason quotes a page (`docs/...`) that the plan does not read.
     const PROSE_KEYS = new Set([
-        'desc', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'failure_note', 'comment',
+        'desc', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_ends_when',
+        'failure_note', 'comment',
     ])
     const valueText = (node, out) => {
         if (typeof node === 'string') out.push(node)

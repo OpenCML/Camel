@@ -1,0 +1,25 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// Refused since 2026-11-16 (design principles 3.5, 198, the author's ruling of that day): `h` is put
+// into the tuple `(1, h)` and `c` is written after it, so the stretch of the captured name runs to
+// the rest of the scope and the write is `CapturedVarWrittenAfterTheClosure`. The shape it used to
+// read is the dead write -- `p.0` reads the tuple's first member alone, `w * 0` is the write's only
+// reader, so folding it left a write no root held and no port read (design principles 9.7) -- and the
+// plan reads that judgement on `dead_write_held_by_program.cml` now.
+
+func probe(): int {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    let p = (1, h)
+    return w + p.0
+}
+
+func main(): int sync {
+    println(probe())
+    return 0
+}

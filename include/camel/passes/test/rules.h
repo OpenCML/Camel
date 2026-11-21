@@ -22,3 +22,15 @@ class RulesGreedyTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/* Test-only: the savepoint of a draft. A rewrite that fails partway leaves the draft as it found
+ * it, so running it again gives the result a run that never failed gives; and a saturation round
+ * the budget cuts lands nothing, reports where it stopped, and leaves a draft a full run resumes
+ * from to the same fixed point. The program is passed on unchanged. */
+inline constexpr const char *kSavepointTestPass = "test::savepoint";
+class SavepointTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};

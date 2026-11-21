@@ -1,0 +1,23 @@
+/**
+ * A `var` written inside the body of a loop that is itself inside another loop body.
+ *
+ * Three outer rounds of two inner rounds each add one, so the read after both loops prints `6`. The
+ * write is in the innermost body, so the value has to leave that body through the inner loop head
+ * and then through the outer one: two heads, two phis, one value. `1` means only one round's value
+ * reached the read; `2` or `3` mean the inner head's value stopped at the outer body (one per outer
+ * round) instead of being carried round the outer head.
+ *
+ * Run: camel test/cases/compile/var/loop_nested.cml std::nvm
+ */
+func main(): int sync {
+    var total = 0
+    let _ = loop i = 0 while i < 3 do {
+        let _ = loop j = 0 while j < 2 do {
+            total = total + 1
+            j + 1
+        }
+        i + 1
+    }
+    println(total)
+    return 0
+}

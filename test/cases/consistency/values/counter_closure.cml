@@ -1,13 +1,14 @@
 /**
- * A function that returns closures over its own var: each call makes a new variable, and the
- * closures of one call share it.
+ * A function whose counter lives in an explicit reference: each call makes its own cell, and the
+ * closure it returns writes that cell, so the state outlives the call that declared it.
  */
 
+import state
+
 func counter(start: int): () => int sync {
-    var n = start
+    let n = state::ref(start)
     return (): int => sync {
-        n = n + 1
-        return n
+        return state::update(n, (x: int) => x + 1)
     }
 }
 

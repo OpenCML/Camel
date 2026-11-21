@@ -1,9 +1,13 @@
 /**
  * The position a `loop` gives an effect: a call written as a statement of the loop body, where the
- * body is not a sync block. Nothing depends on it, so it does not run -- the loop's value `3` is
- * what prints, not the three `i=` lines -- and the warning's help names the writing that does work
- * there, `do sync` (author's ruling of 2026-11-05, `080778522`; the reading is
- * `docs/handover/questions/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`).
+ * body is not a sync block. The loop's value is used, so the loop runs, so the write its body holds
+ * runs in every round (design principles 3.1: "循环每一轮都执行") -- the three `i=` lines and then
+ * the value `3`. Nothing is reported: the write is a root of the region it is written in, and is
+ * not an effect nobody runs.
+ *
+ * The author's ruling of 2026-11-15 overrides the reading this case was written for (2026-11-05,
+ * `080778522`, `docs/handover/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`):
+ * a write in a running region runs, and a loop body that runs is a running region.
  */
 
 func main(): int sync {

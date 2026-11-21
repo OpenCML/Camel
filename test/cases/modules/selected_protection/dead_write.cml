@@ -1,0 +1,26 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// Refused since 2026-11-16 (design principles 3.5, 198, the author's ruling of that day): `h` is put
+// into the tuple `(1, h)` and `c` is written after it, so the stretch of the captured name runs to
+// the rest of the scope and the write is `CapturedVarWrittenAfterTheClosure`. The program used to be
+// the shape this plan read a dead write on: `w * 0` is the write's only reader, so folding it left a
+// write no root holds and no port reads, and `main` printed 1 whether or not the write ran. The plan
+// entries that name this case read the refusal now; `dead_write_held.cml` is the shape the judgement
+// is read on.
+
+func probe(): int sync {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    let p = (1, h)
+    return w + p.0
+}
+
+func main(): int sync {
+    println(probe())
+    return 0
+}

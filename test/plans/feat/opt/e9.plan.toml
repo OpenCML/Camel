@@ -1,0 +1,1306 @@
+id = "opt.e9"
+order = 336
+tier = "fast"
+tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, the one whose loop state assembly asked a tuple fill for a component the fill holds in its static template rather than in a with-input, the two the C++ writer left without a return value, and the six statements a chain splice used to drop -- a `println` that stopped running, or ran after the statement written after it -- in the six wrong values that class produced: five turned correct by the merge `2779ad600`, the sixth by `f77e57f9d`"
+
+# Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
+# author’s archive defect ledger, which is not in this repository), reduced to
+# between 240 and 679 bytes. Each one made the optimizer end the process instead of the program:
+#
+#   rc01_seed47  `std::cxx::inline` up to `std::cxx::fold` aborted with "Region 2 yields node
+#                       8 and its owner 5 is in the execution, but that node is not"
+#   rc02_seed6          `std::opt` aborted in the fast VM's compile: a BRCH left with an unmatched
+#                       control output and no JOIN
+#   rc03_seed30         `std::opt` raised a `PassInternalError`: a DATA ran between a BRCH and its
+#                       JOIN and belonged to no arm
+#   rc04_seed72         `std::cxx::inline` raised a `PassInternalError`: a node lay on a cycle of
+#                       inputs
+#
+# None of them prints anything, so what the entries hold is that the program still runs and still
+# says nothing -- the same as with no pass at all -- on every back end. That is the whole claim a
+# reduced program of this campaign makes, and a pass that aborts or crashes on one of them fails it.
+#
+# `rc00_seed27` is the fifth (A4a) and it is here too, with the control that names its trigger. It
+# took a SIGSEGV in `DefunctionalizeRewritePass::apply` -> `staticFunctionOf` ->
+# `Function::graph()`: that function read a static slot as a boxed function because the node it was
+# asked about was the *argument* `3` of `main`'s call, and `0x3` is not a graph table. It now asks
+# the node's type first and answers nullptr, which the pass already refuses by name. The control,
+# `x2_no_lambda_seed27`, is the same program with the anonymous closure inside `r10` gone -- the
+# only difference between the two -- and it never crashed: the trigger is that one graph, not the
+# amount of unused code around it.
+
+[defaults]
+kind = "behavior"
+backends = ["nvm", "fvm", "jit", "prl"]
+
+# Two more reduced programs, from the same campaign, reached a different end: the commit refused them
+# with a read across a region, at two steps of `std::opt`:
+#
+#   graph 'r1' node 18 in region 1 (Arm parent 0): it reads port 13 of region 4 (LoopBody parent 1),
+#   which is not the region the node runs in, nor one it sits in, nor the exit of a region it owns
+#
+# `rc00_seed74` meets it under `std::cxx::fold` alone: the folding prunes the branch a loop body is
+# written as (`do if true then s else 0` becomes `do s`), the arm's value is the loop's state
+# **port**, and the body's place is handed to that port while the region record still says the body
+# ends in the `JOIN` that went. The `LOOP` still reads its body's exit; the record now names
+# another node, so the loop's one legitimate read is refused as a read of a port of another region
+# (`include/camel/runtime/graph.h#GCGraph::regionIsVisibleFrom`).
+#
+# `rc08_seed324` is the same shape reached through the pipeline: with `std::cxx::devirtualize`,
+# `std::cxx::specialize` and `std::cxx::inline` before it, `std::cxx::fold` hands a loop body's
+# place over the same way, and `std::opt` as a whole meets the sentence too (`node 11 in region 1
+# (Inline parent 0): it reads port 4 of region 2`). The first bad prefix of `std::opt` is `+fold`.
+#
+# Those two entries are what the fix must keep: exit 0, and the program prints what it prints with no
+# optimization pass at all (nothing), so a red here is the defect returning.
+
+# One more reduced program, from the same campaign and a different end: `rc11_seed352` is a loop over
+# `[1.0]` with two states whose body is `(c12 - c12, 0)`, so the subtraction of a value from itself
+# folds away and the body then reads **none** of the state ports it is entered with. Without a pass it
+# exits 0 and prints nothing; under `std::cxx::algebra` and under `std::opt` it was refused with
+# `Runtime graph 'f1' has region 1 with a port the graph does not have`
+# (`validateRuntimeRegions`, src/runtime/graph.cpp) -- the commit refusing a graph a pass had already
+# broken. The region is the loop body and its port table is how the loop enters it: an entry a rewrite
+# took, or one dropped from the middle, renames every state after it
+# (`LoopDraftView::bodyStateParam(j)` is entry `j`). So a port of a control region is a name the graph
+# keeps even when nothing in the region reads it, and the policies that erase unread nodes now ask one
+# question (`GraphDraft::namesNode`) instead of each keeping its own list -- the rules driver's list and
+# extraction's list disagreed, which is the window this program fell through.
+#
+# Why not `known_fail` for these three: the mark says "this program is expected to be refused", and this
+# is a program the compiler is expected to run. A red here is the defect returning, and it goes away by
+# fixing the pass.
+
+
+[[tests]]
+name = "rc01_seed47.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc01_seed47.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc01_seed47.opt"
+desc = "The whole optimizer, on the program whose inline-plus-fold used to abort."
+case = "../../../cases/opt/e9/rc01_seed47.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc02_seed6.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc02_seed6.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc02_seed6.opt"
+desc = "The whole optimizer, on the program whose fast-VM compile used to abort on an unmatched BRCH."
+case = "../../../cases/opt/e9/rc02_seed6.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc03_seed30.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc03_seed30.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc03_seed30.opt"
+desc = "The whole optimizer, on the program whose branch-arm invariant used to be broken by a DATA between BRCH and JOIN."
+case = "../../../cases/opt/e9/rc03_seed30.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc04_seed72.without_the_pass"
+desc = "Not a run: the closure rule refuses this program before any pass (`v16` is a `var` the closure assigns; the escape it also makes is legal since 2026-11-16, which is why the refusal is now `ClosureAssignsCapturedName`, 0x03000213, and no longer the withdrawn `ClosureCaptureEscapes`). It stays here with the shape pinned as a refusal, because the program is still the reduction the E9 campaign produced and dropping it would hide that `std::opt` no longer reaches it."
+case = "../../../cases/opt/e9/rc04_seed72.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+
+[[tests]]
+name = "rc04_seed72.opt"
+desc = "The same refusal with `std::opt` on the command line: the rule runs before the pipeline, so this entry holds that the pass never sees the program (it used to abort on a cycle of inputs here). The refusal is `ClosureAssignsCapturedName` since the escape rule was withdrawn on 2026-11-16; the pass is kept out of the program either way."
+case = "../../../cases/opt/e9/rc04_seed72.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+
+[[tests]]
+name = "rc00_seed27.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc00_seed27.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc00_seed27.opt"
+desc = "The whole optimizer, on the program whose defunctionalize read a static slot as a function value."
+case = "../../../cases/opt/e9/rc00_seed27.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "x2_no_lambda_seed27.without_the_pass"
+desc = "The control with no pass at all: the same program without the anonymous closure, which never crashed."
+case = "../../../cases/opt/e9/x2_no_lambda_seed27.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "x2_no_lambda_seed27.opt"
+desc = "The whole optimizer on the control: with the anonymous closure gone there is nothing to read as a function value."
+case = "../../../cases/opt/e9/x2_no_lambda_seed27.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc00_seed30.without_the_pass"
+desc = "The program with no pass at all: two writes, a blank line and one formatted line."
+case = "../../../cases/opt/e9/rc00_seed30.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 true k9m\n"
+
+[[tests]]
+name = "rc00_seed30.opt"
+desc = "The whole optimizer on the program whose first write lost its place in the chain: folding the block between the two writes gave the second one the source-order edge alone, and `std::cxx::dce` reported an effect node with neither a read of its value nor a place in its chain. The place is the successor's again (`fold` splices; see `placeLostStatements`)."
+case = "../../../cases/opt/e9/rc00_seed30.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 true k9m\n"
+[[tests]]
+name = "rc00_seed74.without_the_pass"
+desc = "`rc00_seed74` without any optimization pass: the reading the folded run is held to. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc00_seed74.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc00_seed74.fold"
+desc = "`rc00_seed74` under `std::cxx::fold`, the step that used to hand a loop body's place to the state port and leave the region record on the `JOIN` that went. What it used to print is in `expect_output_not_contains`, so a run that meets it again is red: `the draft of graph 'r1' cannot be encoded: graph 'r1' node 18 in region 1 (Arm parent 0): it reads port 13 of region 4 (LoopBody parent 1), which is not the region the node runs in, nor one it sits in, nor the exit of a region it owns`."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc00_seed74.cml"
+args = ["${case}", "std::cxx::fold", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = ""
+expect_output_not_contains = ["reads port", "cannot be encoded", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rc08_seed324.without_the_pass"
+desc = "`rc08_seed324` without any optimization pass: the reading the optimized run is held to. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc08_seed324.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc08_seed324.std_opt"
+desc = "`rc08_seed324` under `std::opt`: the same read across a region, made later in the integrated fixpoint, when a rewrite replaces the node a loop body ends in. The sentence the commit used to answer it with is in `expect_output_not_contains`: `the draft of graph '__root__' cannot be encoded: graph '__root__' node 11 in region 1 (Inline parent 0): it reads port 4 of region 2 (LoopBody parent 1), which is not the region the node runs in, nor one it sits in, nor the exit of a region it owns`."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc08_seed324.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = ""
+expect_output_not_contains = ["reads port", "cannot be encoded", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rc11_seed352.without_the_pass"
+desc = "`rc11_seed352` without any pass: the reading the two optimized runs must reproduce. Exit 0 and no output -- the program computes its loop's value and prints nothing."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc11_seed352.algebra"
+desc = "`rc11_seed352` under `std::cxx::algebra`, the pass it was found with, in one pass and with no accumulated prefix: exit 0 and the same stdout as the reference. This is the run that used to be refused -- the fold of `c12 - c12` left the loop body reading none of its ports, the erasure of the unread port node left the body region naming a node the graph did not have, and the commit refused the graph before any back end saw it."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "std::cxx::algebra"]
+expect_exit = 0
+expect_output_not_contains = ["has region 1 with a port the graph does not have", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc11_seed352.std_opt"
+desc = "The same program under the whole `std::opt` pipeline: exit 0 and the same stdout as the reference. The same refusal, under the pipeline the seed was found with."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["has region 1 with a port the graph does not have", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+# `rc03_seed56` is the program of this group that no single pass of `std::opt` reaches: every one of
+# its eight passes, run alone, is green, and the whole pipeline used to end in `PassInternalError`
+# naming an order edge that entered a region:
+#
+#   graph '__root__': order edge 25 -> 10 enters region 5; an arm or a part of a loop runs as a
+#   whole, so the order it has with the code around it is written on the node that owns the region
+#
+# The edge was written while both of its ends were in one region -- that is when it says what it has
+# to say -- and a rewrite moved one of them afterwards. The program prints nothing under any pass,
+# so what the entries hold is exit 0 and no output, the same as with no pass at all, on all four
+# back ends.
+#
+# `rc03_seed56.opt` is the entry the defect came back in: the sentence it used to print is in
+# `expect_output_not_contains` by name, so a run that meets it again is red.
+
+[[tests]]
+name = "rc03_seed56.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc03_seed56.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc03_seed56.opt"
+desc = "The whole optimizer, on the program whose fixed point left an order edge reaching into a region one of its ends had been moved into: exit 0 and no output, the same as with no pass at all."
+case = "../../../cases/opt/e9/rc03_seed56.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+expect_output_not_contains = ["enters region", "PassInternalError", "internal error"]
+# The loop's table was refused here (`begin` after `condEnd`, so the Test fired before the node it
+# reads) until the dispatch of a call through a value was written in the call's own region: the
+# range is one range now, node 8 stands before the Test, and all four back ends -- nvm included --
+# really do run this loop. The defect is fixed; nothing about this entry's reading is what changed.
+
+# The A16 group of the same campaign (A16a-A16e, pages
+# `docs/handover/reviews/questions-2026-10-29.md`): five reduced programs that came back from the
+# optimizer with the *wrong program*, not with a refusal. Every one of them exits 0, and the fault
+# is the value it prints -- which is why each entry here pins the exact stdout rather than "no
+# error", and why the same program with no pass at all is in the plan beside it: that run is the
+# model the optimized one is held to, and on all four back ends it is the same reading.
+#
+#   rc02_seed9   A16a  `std::cxx::specialize std::cxx::inline std::cxx::fold` printed `q36 10`
+#                      then `q36 0`; the program prints `q36 0` then `q36 10`.
+#   rc04_seed251 A16b  `std::cxx::inline` printed one blank line twice (a two-element `loop` inside
+#                      an inlined body ran the statement before it once per round).
+#   rc05_seed256 A16c  `std::opt` printed nothing where the program prints one blank line.
+#   rc07_seed140 A16d  `std::cxx::inline std::cxx::dce` printed one blank line where the program
+#                      prints two.
+#   rc09_seed15  A16e  `std::cxx::inline std::cxx::fold` printed the blank line then `L4 0 `; the
+#                      program prints `L4 0 ` then the blank line.
+#
+# A16b, A16c and A16d are green on the develop this lane started from (they were red on the build
+# of 2026-11-12 the campaign reduced them with); their entries stay, because a reduction of this
+# campaign that is not in the plan is a defect that can come back unseen.
+#
+# Where each one first goes wrong, measured on `29ea0a011` -- the build the campaign reduced them
+# on -- by adding the ladder's passes one at a time (`std::macro`, then devirtualize, specialize,
+# inline, fold, cse, algebra, dce, order, then `std::opt` as a whole) under `--gc generational
+# std::nvm`, and comparing the bytes with the same program and no pass:
+#
+#   rc02_seed9   +std::cxx::fold    `q36 10` then `q36 0`
+#   rc04_seed251 +std::cxx::inline  two blank lines where the program prints one
+#   rc05_seed256 std::opt           nothing at all; no earlier prefix of the ladder is wrong
+#   rc07_seed140 +std::cxx::dce     one blank line of the two
+#   rc09_seed15  +std::cxx::fold    the blank line first, then `L4 0 `
+#
+# A16e's row in the campaign table names `std::cxx::order`, and that is not where the reading
+# first goes wrong: `+dce`, the step before `+order`, already reads the program's lines in the
+# program's order again, so `+order` cannot be the first wrong step. What `+fold` breaks on
+# `rc09_seed15` is the place `+fold` breaks on `rc02_seed9`. On `8cdd0e64e` -- the baseline these
+# entries run on -- every one of the five reads correctly at every step of the ladder.
+#
+# A16a and A16e are one defect and one case: `std::cxx::fold`'s `pruneBranch` dissolves the branch
+# and takes the place of the block with it. The `JOIN` was the only node that carried the block's
+# source order -- what was written before the branch, the arm it took, what was written after -- so
+# when it goes, two effects of one block are left with no edge between them and the scheduler is
+# free to run them in either order, which it does. In `rc09_seed15` the taken arm is itself the
+# effect (`then println('L4 0 ')`), in `rc02_seed9` the arm that was dropped used an effect produced
+# before the branch and kept alive by a `GATE`. Both shapes are one rule: the place goes to what
+# stands in it, so `pruneBranch` now orders the statements the `JOIN` ordered after that node and
+# after every effect the dropped arm kept alive (src/passes/opt/generic/generic.cpp). The two
+# programs are kept, one entry for each, as the two shapes of that one case.
+
+[[tests]]
+name = "rc02_seed9.without_the_pass"
+desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc02_seed9.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "q36 0\nq36 10\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'q36 0', `first line is ${JSON.stringify(lines[0])}, not "q36 0"`)
+assert(lines[1] === 'q36 10', `second line is ${JSON.stringify(lines[1])}, not "q36 10"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc02_seed9.specialize_inline_fold"
+desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc02_seed9.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::specialize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "q36 0\nq36 10\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'q36 0', `first line is ${JSON.stringify(lines[0])}, not "q36 0"`)
+assert(lines[1] === 'q36 10', `second line is ${JSON.stringify(lines[1])}, not "q36 10"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc04_seed251.without_the_pass"
+desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc04_seed251.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc04_seed251.inline"
+desc = "`rc04_seed251` (A16b) under `std::cxx::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::inline` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc04_seed251.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc05_seed256.without_the_pass"
+desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line. First wrong pass: this program first goes wrong in `std::opt` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc05_seed256.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc05_seed256.opt"
+desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc05_seed256.cml"
+args = ["${case}", "--gc", "generational", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc07_seed140.without_the_pass"
+desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc07_seed140.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3, `expected two blank lines, got ${JSON.stringify(lines)}`)
+assert(lines.every(line => line === ''), `expected two blank lines, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc07_seed140.inline_dce"
+desc = "`rc07_seed140` (A16d) under `std::cxx::inline std::cxx::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all. First wrong pass: this program first goes wrong in `std::cxx::dce` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc07_seed140.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::dce", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3, `expected two blank lines, got ${JSON.stringify(lines)}`)
+assert(lines.every(line => line === ''), `expected two blank lines, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc09_seed15.without_the_pass"
+desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc09_seed15.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L4 0 \n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'L4 0 ', `first line is ${JSON.stringify(lines[0])}, not "L4 0 "`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc09_seed15.inline_fold"
+desc = "`rc09_seed15` (A16e) under `std::cxx::inline std::cxx::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix. First wrong pass: this program first goes wrong in `std::cxx::fold` (measured on `29ea0a011`; correct on this baseline)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc09_seed15.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L4 0 \n\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'L4 0 ', `first line is ${JSON.stringify(lines[0])}, not "L4 0 "`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+# --- The crash class of the 2026-11-17 full run ------------------------------------------------
+#
+# That run put ten programs in the crash class, and they are seven shapes. A shape here is the
+# crash's own words -- the guarantee that fired, the symbol the fault is in, or the C++ compiler's
+# sentence -- and not the pipeline or the back end the program reached it through:
+#
+#   rc12_seed165, rc13_seed202  SIGSEGV in `nodeKindOf`, called from `dropCarriedVariableUnits`:
+#                               a cell handle the builder keeps across bodies named a node the
+#                               draft had already erased, and the kind question read the header
+#                               the erasure took away. The liveness question is asked first now.
+#                               Two programs.
+#   rc14_seed176                `component != nullptr` in `Builder::visitLoopNode`: the body's next
+#                               state is a tuple, and the fill that builds it names only the
+#                               components it carries a value node for, so a component a constant in
+#                               that fill's static template holds had no value and the assembly
+#                               aborted. The component the fill does not name is read out of the
+#                               tuple now -- the read the body's value already gets when it is no
+#                               fill at all. One program.
+#   rc15_seed52                 `index < fieldCount_` in `Variant::get`, under `std::opt`, reading
+#                               field 0 of a Variant whose tag declares no field. The value was the
+#                               unit variant of the closure family, built correctly with no field;
+#                               what read field 0 of it was the `:enum/field` of the *other* arm, which
+#                               `foldDraft` evaluates on purpose once the value is a constant. Two
+#                               programs -- seeds 52 and 85 -- with one crash point between them.
+#   rc16_seed153                no result in 30 s under `std::jit` on every pipeline. One program.
+#   rc17_seed193                clang: "non-void function 'lambda' should return a value": the
+#                               writer left the lambda's `return` with no value, because the
+#                               branch that gave it was no longer the sequence's last word. Two.
+#   rc18_seed429                clang: "expected expression" at a `= ;` the C++ writer left. One.
+#   rc19_seed70                 clang: "no matching function for call to 'f1'". One program.
+#   rc20_seed262                `binding != nullptr` in `Builder::rebindSsa`. Eight programs, and
+#                               the one shape here that is not this lane's: it arrived with the
+#                               merge (S1), and its entry is the one at the end of this section.
+#
+# Six shapes are fixed, and their programs are entries below. The first pair used to end the
+# process in the front end with no pass at all, on all four back ends, so both arms (with and
+# without `std::opt`) are the same claim -- the program runs, says nothing, exits 0. `rc14_seed176`
+# is the second, and it is the same claim on the same four back ends: its fault is in the graph
+# builder too, so no pass causes it and no pass can avoid it. The third (`rc17_seed193`) was in the
+# C++ writer, so its claim is about the text the writer gives: the entry below is the `std::cpp`
+# arm, and the stronger one -- that the text builds, runs and agrees with `std::fvm` -- is the
+# program's line in `test/tools/cppexec/expect.txt`, which `feat/trans/cpp.agree_with_fvm` builds
+# and runs. The fourth (`rc18_seed429`, with `rc21_seed429` and `rc22_flat_if_var`) was a value the
+# branch handed nobody, misread as a writer's compile error; its section is below, and its programs
+# are lines in the same file. The fifth (`rc19_seed70`) is the writer again and the same kind of
+# claim as the third, with one difference: its text is only wrong *after* `std::cxx::specialize`, so
+# the entry below is the `std::cpp` arm after that pass, and its build-and-run arm is
+# `feat/trans/cpp.rc19_seed70_builds_after_specialize`, which hands the pass to the writer and to
+# `std::fvm` alike. The sixth is `rc15_seed52`, the one entry here whose two arms are *not* the same
+# claim: it never aborted without a pass, and it aborted on every back end with one, because the read
+# that went past the variant is the fold's.
+#
+# The other two shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
+# expectation is the crash states the defect as the answer, and an entry whose expectation is the
+# program's output goes red until its class is fixed. Each file is the standing reproducer of its
+# The other shape is in `test/cases/opt/e9/` and has no entry here: an entry whose
+# expectation is the crash states the defect as the answer, and an entry whose expectation is the
+# program's output goes red until its class is fixed. Each file is the standing reproducer of its
+# class -- `camel rc16_seed153.cml std::jit` fires that one's by hand -- and its entries
+# land with its fix, as these six did. The eighth shape was the exception in the other direction: it
+# was entered while it was red, as a known failure with its owner, because the red is the measurement
+# and a shape that only a report names is one the next person cannot reproduce. That shape is closed
+# and its mark is gone -- its paragraph is at the end of this section.
+
+[[tests]]
+name = "rc12_seed165.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0. It used to end the process in `nodeKindOf` (`dropCarriedVariableUnits`) -- a SIGSEGV, so it printed no diagnostic and named no reason. The cell handle it asked about was one the builder's carried table still held after the draft had erased the node."
+case = "../../../cases/opt/e9/rc12_seed165.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc12_seed165.opt"
+desc = "The same program under the whole optimizer, on all four back ends. The fault was in the front end, so the pass is not what caused it and not what can avoid it: the same claim as the arm above."
+case = "../../../cases/opt/e9/rc12_seed165.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc13_seed202.without_the_pass"
+desc = "The second program of the `nodeKindOf` shape, reduced separately: a `var` a compound assignment writes before a closure captures it. It took the same SIGSEGV with no pass at all, on all four back ends."
+case = "../../../cases/opt/e9/rc13_seed202.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc13_seed202.opt"
+desc = "The same program under the whole optimizer. The fix is in the graph builder and not in a pass, so the two arms move together."
+case = "../../../cases/opt/e9/rc13_seed202.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc15_seed52.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0. It was clean before the fix too, and that is the reading that places the fault: the abort needs `std::opt` because only the fold executes a `:enum/field` of an arm the constant's tag does not select. On all four back ends."
+case = "../../../cases/opt/e9/rc15_seed52.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc15_seed52.opt"
+desc = "The same program under the whole optimizer, on all four back ends: the same claim. It used to stop the process in `Variant::get` (`index < fieldCount_`) -- \"reading field 0 of a Variant whose tag 1 declares 0 field(s)\" -- because `:enum/field` answered a value of the other variant with a read past the end of it. The case its tag does not select reads as no value now, which is what the tagged lowerings answer, so the fold's early evaluation of that arm changes nothing."
+case = "../../../cases/opt/e9/rc15_seed52.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+# --- The crash class of the 2026-11-17 reading: a name declared in an arm, written in it ---------
+#
+# `rc20_seed5_arm_decl` is the seed-5 program of the same differential, reduced by hand from 178 lines
+# to the 85 bytes below -- the whole program on one line:
+#
+#   func main(): int sync { if false then sync { var v1 = 1; v1 = 2; null; }; return 0; }
+#
+# It aborted with no pass at all, on every back end, in `Builder::rebindSsa`:
+#
+#   Camel Invariant Violation: binding != nullptr
+#   Reading: An SSA `var` is written where its declaration is in scope.
+#
+# The trigger is exactly two things at once, and each control is a program of the campaign's reduction:
+# a `var` *declared inside an arm* and *written in that same arm*. The variants -- with an `else`, as a
+# branch whose value a `let` takes, in a `match` arm, written twice -- all abort in the same place; the
+# controls do not: a `var` declared in the body and written in a nested arm (the shape `rc18_seed429`
+# has), a `var` declared in an arm and written in an arm nested in it, and a `var` declared in an arm
+# and never written again.
+#
+# What was wrong was S2's (`243de26e5`) *choice* of the name to carry, not the carrying, and not this
+# guarantee: `branchBeforeValues_` is written by every `rebindSsa` an arm's body reaches, and it cannot
+# tell a name the branch found in scope from one an arm declared, so a name that dies with the arm was
+# carried to a JOIN built after that arm's scope had been popped. The rule that forbids it was already
+# written in `src/compile/gir/builder_control.cpp` ("A name declared inside an arm dies with it and is
+# not carried"); nothing implemented it. The carry now asks `nameIsSsa`, which walks the scopes live at
+# the JOIN, and a name declared before the branch keeps its binding, so no other answer moved.
+#
+# That the name really does not survive the branch is a reading, not an assumption: the same name read
+# after the branch is refused -- `UnresolvedReference`, "Make sure the name is declared and in scope."
+# Carrying it out of the join would bind a name nothing can read. So the assertion stands as it is.
+
+[[tests]]
+name = "rc20_seed5_arm_decl.without_the_pass"
+desc = "The 85-byte reduction of seed 5, with no pass at all: it runs, says nothing, exits 0. It used to abort in `Builder::rebindSsa` (`binding != nullptr`) in the front end, before any pass, so this arm is the claim and `std::opt` is the same claim again below."
+case = "../../../cases/opt/e9/rc20_seed5_arm_decl.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc20_seed5_arm_decl.opt"
+desc = "The same program under the whole optimizer. The fault was in the graph builder, not in a pass, so the pass is neither what caused it nor what can avoid it."
+case = "../../../cases/opt/e9/rc20_seed5_arm_decl.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+[[tests]]
+name = "rc14_seed176.without_the_pass"
+desc = "The program with no pass at all, on all four back ends: it runs, says nothing and exits 0. It used to end the process in `Builder::visitLoopNode` with `component != nullptr`, 'A loop state's next value is missing from the body's value': the loop declares two states and its body's next state is `(([''], false).0, 0.25)`, a tuple whose second component is a constant the fill built for it holds in its static template, so the fill's slot table names the first component only and the second had no value node in hand. Nothing about the program's own execution was at stake -- the tuple has the component -- so the reading is the one the program gives, not a refusal."
+case = "../../../cases/opt/e9/rc14_seed176.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc14_seed176.opt"
+desc = "The same program under the whole optimizer, on all four back ends: the same claim. The fault was in the graph builder, before any pass, so `std::opt` is neither its cause nor its cure."
+case = "../../../cases/opt/e9/rc14_seed176.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc17_seed193.std_cpp"
+desc = "The writer's text for the program of the `non-void function 'lambda' should return a value` shape: the branch that gives the lambda's value is no longer the sequence's last word (`let n67 = len(...)` stands after it), so its join was neither the tail nor anybody's input and the writer ended the function with `return ;`. What is held here is that the text carries no bare `return` -- the run that builds and runs it is the program's line in `test/tools/cppexec/expect.txt`."
+case = "../../../cases/opt/e9/rc17_seed193.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_output_not_contains = ["return ;", "return;"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+
+[[tests]]
+name = "rc17_seed193.runs"
+desc = "The same program on the four back ends: it runs, says nothing, exits 0. The fault was in the writer, so this arm is the control -- the program never depended on the C++ path to run."
+case = "../../../cases/opt/e9/rc17_seed193.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+# --- rc19_seed70: the argument after a bound one, typed as its predecessor ----------------------
+#
+# The program is the fifth shape of that run's crash class, and the crash is the C++ compiler's
+# sentence: `error: no matching function for call to 'f1'`, with
+#
+#   note: candidate function not viable: no known conversion from 'Fn<int64_t (double)>' to
+#         'Fn<bool (rt::Str, int64_t)>' for 3rd argument
+#
+# `std::cxx::specialize` binds the literal `false` into `f1`'s first parameter: it bakes the value
+# into the copy (`f1$spec1`), erases that formal from the copy's ports, and drops the argument from
+# the call. The copy's *declared* function type keeps the erased parameter -- `specializeGraphWith
+# Bindings` renumbers the resource clause and copies the parameter list as it stands
+# (`setRenumberedClause`, src/runtime/draft_inline.cpp) -- and the writer matched the surviving
+# arguments against that list by position (`FunctionEmitter::lowerCall`,
+# src/passes/trans/cpp/function_emitter.cpp), so the closure in the third slot was spelled with the
+# second parameter's type: `rt::Fn<int64_t(double)>` where the definition it calls takes
+# `rt::Fn<bool(rt::Str, int64_t)>`. Nothing was lost at run time -- the graph is right and all four
+# back ends run it -- and nothing was lost in the call either: one *type* was off by one slot.
+# The writer now takes the parameter types from the callee's ports, which is where the definition's
+# own parameter list comes from (`collectParameters`), so a call that matches the ports matches the
+# definition by construction.
+#
+# The 19-line form of this file (b728a7c1f) is the same point with a `with <k33>` member and a
+# `match` around the call; this is its reduction, and the chain is seed 70's own 142-line program ->
+# that form -> no `with` member -> no unused `let` -> the closures used -> 7 lines, each step
+# verified against an unpatched install (the clang sentence above, at the same argument).
+
+[[tests]]
+name = "rc19_seed70.without_the_pass"
+desc = "The program with no pass at all, on the four back ends: it runs, prints `r true` and exits 0. The fault was in the writer, so this arm is the control -- the program never depended on the C++ path to run, and `std::cxx::specialize` is not what makes it runnable either."
+case = "../../../cases/opt/e9/rc19_seed70.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "r true\n"
+
+[[tests]]
+name = "rc19_seed70.specialize"
+desc = "The same program after `std::cxx::specialize`, on all four back ends: the specialization fires (`false` is bound into `f1`, the call passes two arguments instead of three), the graph stays right, and the program still prints `r true`. This is what says the defect was in the writer's reading of the callee's type and not in the specialization."
+case = "../../../cases/opt/e9/rc19_seed70.cml"
+args = ["${case}", "std::cxx::specialize", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "r true\n"
+
+[[tests]]
+name = "rc19_seed70.std_cpp"
+desc = "The writer's text after the same pass: the closure that fills the second surviving parameter is spelled with that parameter's own type -- `rt::Fn<bool(rt::Str, int64_t)>(` and not its predecessor's `rt::Fn<int64_t(double)>(`. Before the fix the text carried the wrong spelling and clang refused it; the run that builds and runs the text, and compares what it prints with `std::fvm`, is `feat/trans/cpp.rc19_seed70_builds_after_specialize`."
+case = "../../../cases/opt/e9/rc19_seed70.cml"
+args = ["${case}", "std::cxx::specialize", "std::cpp"]
+expect_exit = 0
+expect_output_contains = ["rt::Fn<bool(rt::Str, int64_t)>("]
+expect_output_not_contains = ["TranslationRefused"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+
+# --- The eighth shape of the 2026-11-17 reading: the same line closes it ----------------------
+#
+# `rc20_seed262` is the reduced program of the eighth shape of that full run: `sync { }` as the arm
+# of an `if`, holding a `var` that the arm writes with `+=`. `camel rc20_seed262.cml std::nvm` stopped
+# in the graph builder --
+#
+#   Location   : ../src/compile/gir/builder_expr.cpp(3148)
+#   Function   : void camel::compile::gir::Builder::rebindSsa(const std::string &, node_handle_t)
+#   Guarantee  : binding != nullptr
+#   Reading    : An SSA `var` is written where its declaration is in scope.
+#
+# -- on the write, which asked for the SSA binding of a name the arm's own body did not bind. The
+# `if` is `false` and the arm never runs, so nothing about the program's own execution was at stake:
+# the builder asks the question while it is constructing the arm, and the answer was the same on all
+# four back ends (it is before any of them).
+#
+# This entry came in with the merge carrying that red as a known failure, and the owner it named was
+# wrong: it blamed the S1 line that makes a same-region local `var` a value (`1e8e390b6`). The shape
+# arrives with S2's carry (`243de26e5`) instead, and the reading that decides it is that reverting
+# that commit alone makes the reduced program run. It is the same shape as `rc20_seed5_arm_decl`
+# above, and the same one line closes it, so the mark is gone: what is held now is that the program
+# runs. The output is still not named, because the program says nothing on either side of the fix.
+
+[[tests]]
+name = "rc20_seed262.without_the_pass"
+desc = "The program with no pass at all: it runs, says nothing and exits 0. It used to stop in the graph builder at `rebindSsa`'s `binding != nullptr`, and was carried here as a known failure under an owner that named S1; the carry's own choice of name is what it was, and the arm's name is no longer carried out of the join."
+case = "../../../cases/opt/e9/rc20_seed262.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+# --- The shape that was never a compile error ------------------------------------------------
+#
+# `rc18_seed429` was clustered by E9 as a `std::cpp` compile error: clang said `expected
+# expression` at a `v1_branch = ;` the writer left. It is not a writer's shape. Behind it is a
+# value the branch hands nobody: after an `if` with no `else`, a read of the `var` the arm wrote
+# took the branch's JOIN as the variable's version, and that join carries no value -- the arm that
+# hands the branch nothing has nothing to hand. So the read took a node that is defined only where
+# the other arm runs, and the two paths disagreed about what that costs:
+#
+#   * `std::nvm`, `std::fvm`, `std::jit` answered 0 for a variable that is 5 (measured on
+#     `rc21_seed429`, whose answer is 5 on all four back ends, and whose answer was 0 on all four
+#     before this fix) -- a silent wrong value, the kind no differential comparison can catch,
+#     because all the back ends were wrong together;
+#   * `std::cpp` left the branch's temporary unassigned in one arm: `v1_branch = ;`, which clang
+#     refuses.
+#
+# `rc21_seed429` is the smallest program of the shape (the write inside a nested `if`), and
+# `rc22_flat_if_var` is the control: the same `if` without `else` and without the nesting, where
+# the back ends were right and `std::cpp` was wrong (its text stored 0 where the answer is 5).
+# Both are in `test/tools/cppexec/expect.txt` too, so the C++ path is not only read here: the
+# program is translated, built, run and compared with `std::fvm`.
+
+[[tests]]
+name = "rc18_seed429.runs"
+desc = "The reduced program of the seed: it must run, print `L6 0` and exit 0. `v53` is 0 and the branch is not taken, so the answer is the value the variable was made with."
+case = "../../../cases/opt/e9/rc18_seed429.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L6 0\n"
+
+[[tests]]
+name = "rc21_seed429.runs"
+desc = "The smallest program of the shape: `var v = 5`, an `if` with no `else` whose arm writes `v` inside a nested `if`, then a read of `v`. The answer is 5 -- the branch is not taken -- and all three back ends answered 0 before this fix."
+case = "../../../cases/opt/e9/rc21_seed429.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L6 5\n"
+
+[[tests]]
+name = "rc22_flat_if_var.runs"
+desc = "The control: the same `if` without `else` and no nesting. The back ends answered 5 all along; the C++ text answered 0, which is why this one is also a line in `test/tools/cppexec/expect.txt`."
+case = "../../../cases/opt/e9/rc22_flat_if_var.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L6 5\n"
+
+# --- The effect that does not run, which the author ruled must ---------------------------------
+#
+# `rc23_seed429_sync_arm` is the smallest program of a shape the E9 run reports as a wrong value
+# and the compiler reported as a warning: a `sync` block inside the value of a binding nobody reads,
+# holding an outside write (`q(5)` prints).
+#
+# The author ruled on 2026-11-17 (`e480c0995`):
+#
+#   "by principles 3.1 and 3.4 an outside write is used by the region it runs in, so a call, loop
+#    or block that writes runs even when its value is unread; region roots follow the inferred
+#    effect and the warning that named it goes."
+#
+# So the print happens and the warning stops being reported. The mechanism is an **edge that makes
+# the region's exit a place the walk reaches**, not a rule that reads the region's roots: an arm
+# whose value the JOIN does not take exits through a GATE of its own (`Builder::layRegionWriteEdges`,
+# `gateExitOf`), which forwards the arm's value, takes the arm's statement chain, orders the JOIN
+# after it by a sync edge, and becomes `region.result`.
+#
+# That distinction is the whole repair, and it cost three measurements to get to: an edge laid to a
+# region's exit **orders a write before the value** but cannot make the region **run**, so a JOIN
+# that does not hold the arm's value leaves nothing that carries the walk into the arm's interior.
+# A symbol being present in the tree is not evidence about a shape; the evidence is the shape going
+# through and the path being taken.
+#
+# The two facts that make this the *minimal* program, both measured: dropping the `var v`
+# declaration and its write makes the print come back (the branch is then needed for the print
+# alone), and the write itself is not an effect (3.5), which is what kept the branch unneeded
+# before the fix.
+#
+# The entry is a normal one -- an expectation that holds, not a known failure: the program prints
+# `P 5` on all four back ends. **The warning is gone because nothing is left dangling for it to
+# describe, not because the diagnostic was removed**: the never-executed warning and
+# `drop_effect` are untouched, and reporting a warning that describes no defect would be the same
+# mistake in the other direction.
+
+[[tests]]
+name = "rc23_seed429_sync_arm.runs"
+desc = "An outside write inside a `sync` arm of a `match` whose value nobody reads: by 3.1 and 3.4 the write runs with the region it is written in, so the program prints `P 5`, exits 0, and reports nothing."
+case = "../../../cases/opt/e9/rc23_seed429_sync_arm.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "P 5\n"
+# The author's rework order of 2026-11-18 (`8614bb4a6`) is that this case is not withdrawn to make a
+# number look better: it pins a behaviour he confirmed on 2026-11-17, it has an owner, and it stays in
+# the plan as a red that is being repaired -- `known_fail` is "在修的红", not an accepted answer. The
+# three parts he asked a mark to carry are the three fields below.
+#
+#   the defect -- **a region's write is not joined to the region's exit when the graph is built**
+#     (`95a35c23c`'s finding, still true of this tree). Measured with a temporary trace in
+#     `Builder::layRegionWriteEdges`: `q(5)` *is* collected as a write of the `case _` arm
+#     (`id=16 kind=10 -> statement=16 region=3 exit=18`), and then `gateOf` lays no GATE for it,
+#     because the arm's exit already reaches the write (`region=3 write=16 dropped: result already
+#     reaches it`) and nothing else makes that exit needed. The whole `match` is then unreachable when
+#     the graph is frozen -- the graph holds no `BRCH`, no `JOIN` and no call to `q`, and the run
+#     prints the warning below instead of `P 5`.
+#   the owner  -- this lane's rework: the exit `GATE` that reads the region's writes.
+#   the unhide -- when that rework is merged, delete the mark; the case prints `P 5` and reports
+#     nothing. The rework landed in the merge that brought `f850a2505` (a region's exit GATE forwards
+#     the value its reader takes), the run below passed on all four back ends, and the four fields are
+#     gone; what stays is this record of what the mark was and why it had to come off.
+#
+# The four fields are gone: `known_fail_msg` pinned the warning, the warning stopped being reported
+# when the rework landed, and the entry reads `P 5` on all four back ends. `develop` printed `P 5`
+# here before that batch (`feat/opt` 1538/1538 at `33c0fb536`), so the mark was a regression of the
+# batch that added it and not a reading the language had not settled -- the tree is back to that
+# reading, and no new mark replaces it.
+
+# --- The five statements a chain splice used to drop -------------------------------------------
+#
+# The E9 differential campaign put six reduced programs in one class: under `std::opt`, or a prefix
+# of the ladder, a statement that prints stopped running, or ran after the statement written after
+# it. One place lost all six -- `GraphDraft::closeChainOver` (`src/runtime/draft.cpp`) kept the wait
+# of a predecessor only when `nodeRegion(pred)` was the user's region, and a splice gives the code
+# it moves an `Inline` region, so a predecessor still carrying the annotation of the region it came
+# from was refused -- and the repair reads "another block" through `sameSyncBlock`, the block test
+# the rest of that file and `placeLostStatements` already use (merge `2779ad600`,
+# docs/design/effects/edges.cn.md 4.6 and 5.7).
+#
+# Five of the six turned correct with it and the sixth did not; these five entries are those five,
+# the bisection's own reductions (docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md,
+# section 4), 10 to 23 lines each. Each is one pair: the reading with no pass at all, which the
+# optimized run is held to, and the shortest prefix of the ladder the bisection named as the one
+# that loses the statement. Both cells of all five were measured on the `draft.cpp` of `2779ad600^1`
+# and on the one of `2779ad600` (the file swapped in place and rebuilt either way, `std::nvm`,
+# `--gc generational`), which is where the before/after sentence in each entry comes from:
+#
+#   rc24_seed131  devirtualize + inline + fold  `L5 [{ x: 0, y: 0 }]` then the blank line: the
+#                                               closure's `println('')` moved to the end of the output
+#   rc25_seed141  inline + fold                 no line at all; the called function's `println` does
+#                                               not run
+#   rc26_seed417  inline + fold                 only `L4 0 0`; the inlined statement's `println` is gone
+#   rc27_seed419  inline + cse                  no line at all; `q21`'s `println` does not run
+#   rc28_seed484  inline + fold                 no line at all; `q27`'s `println` does not run
+#
+# The shorter prefixes are green even before the repair, measured rather than assumed, and that is
+# what makes the pair worth writing: `std::cxx::fold` alone reads all five correctly, `inline + fold`
+# is green on `rc24_seed131`, and `std::cxx::cse` alone is green on `rc27_seed419`. The trigger is a
+# statement a splice has already moved into an `Inline` region and the fold then replaces -- exactly
+# the annotation `closeChainOver` had to look through -- so `rc24_seed131`, whose trigger also needs
+# the `devirtualize` in front of the inline, is the one whose prefix is three passes long.
+# `std::opt` as a whole was red on all five before the repair and is green on all five after it on
+# all four back ends, so the prefix below is the narrow reading of the same fact, not a weaker one.
+#
+# The bisection report wrote that these could only be single-cell cases because the no-pass cell is
+# not green. On `2779ad600` all five read correctly with no pass at all, so the pair stands here as
+# it does for every other program in this file.
+#
+# `311`, the sixth, was deliberately not here while it was red. `std::cxx::inline` on it stops the
+# `println('MAIN')` written before a macro expanded in an argument from running, `sameSyncBlock` does
+# not reach it, and it read the same wrong answer on `2779ad600` as on `2779ad600^1`. A `known_fail`
+# would have recorded a wrong answer as the expected one: the answer was to fix it, and `f77e57f9d`
+# did (`GraphDraft::closeChainOver`, src/runtime/draft.cpp). Its entry is the section at the end of
+# this file, and it is four cells rather than the pair the five above have.
+
+[[tests]]
+name = "rc24_seed131.without_the_pass"
+desc = "`rc24_seed131` with no pass at all: a blank line, then `L5 [{ x: 0, y: 0 }]`. The order is the reading -- the blank line is the closure's `println('')` at the point the loop body calls it, before the body's own line. First wrong prefix: `std::cxx::devirtualize std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc24_seed131.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL5 [{ x: 0, y: 0 }]\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L5 [{ x: 0, y: 0 }]', `second line is ${JSON.stringify(lines[1])}, not "L5 [{ x: 0, y: 0 }]"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc24_seed131.devirtualize_inline_fold"
+desc = "`rc24_seed131` under the prefix the bisection named: the same two lines in the same order. Before the repair the line came first and the blank line last -- the closure's print moved to the end of the output, which is what a `println` left holding only the ORDER edge to the statement written after it looks like. `std::cxx::fold` alone and `inline + fold` both read it correctly (measured), so the `devirtualize` in front of them is part of the trigger."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc24_seed131.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::devirtualize", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL5 [{ x: 0, y: 0 }]\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L5 [{ x: 0, y: 0 }]', `second line is ${JSON.stringify(lines[1])}, not "L5 [{ x: 0, y: 0 }]"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc25_seed141.without_the_pass"
+desc = "`rc25_seed141` with no pass at all: one blank line -- `q37`'s `println('')` runs when `g56` calls it. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc25_seed141.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc25_seed141.inline_fold"
+desc = "`rc25_seed141` under `std::cxx::inline std::cxx::fold`: one blank line, as with no pass at all. Before the repair the program printed nothing -- `fold` folds the argument `if false then -1 else 10` to `10`, the call `q37(10, false)` is inlined, and the statement the inline moved lost its place, so the callee's `println` never ran. `std::cxx::fold` alone reads it correctly (measured): the inline has to come first."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc25_seed141.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc26_seed417.without_the_pass"
+desc = "`rc26_seed417` with no pass at all: a blank line, then `L4 0 0`. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc26_seed417.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 0\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L4 0 0', `second line is ${JSON.stringify(lines[1])}, not "L4 0 0"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc26_seed417.inline_fold"
+desc = "`rc26_seed417` under `std::cxx::inline std::cxx::fold`: the same two lines. Before the repair only `L4 0 0` was printed -- the `if true then true else false` in the argument folds, the body of `q31` the inline moved in loses its place, and the `println` in it stops running. `std::cxx::fold` alone reads it correctly (measured); the bisection's own probe is that either replacement alone keeps the line, so the pair needs the inline in front of the fold."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc26_seed417.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 0\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === 'L4 0 0', `second line is ${JSON.stringify(lines[1])}, not "L4 0 0"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc27_seed419.without_the_pass"
+desc = "`rc27_seed419` with no pass at all: one blank line -- `q21`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::cse` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc27_seed419.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc27_seed419.inline_cse"
+desc = "`rc27_seed419` under `std::cxx::inline std::cxx::cse`: one blank line, as with no pass at all. Before the repair nothing was printed -- `cse` merges the two null tests on `o44` (`n50 = o44 != null` and `if o44 == null`) into one place, and the `q21` call written between them, once the inline had moved it in, lost its place. `std::cxx::cse` alone reads it correctly (measured): the inline in front of it is part of the trigger."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc27_seed419.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::cse", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc28_seed484.without_the_pass"
+desc = "`rc28_seed484` with no pass at all: one blank line -- `q27`'s `println('')` runs. First wrong prefix: `std::cxx::inline std::cxx::fold` (measured on `2779ad600^1`; correct on `2779ad600`)."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc28_seed484.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc28_seed484.inline_fold"
+desc = "`rc28_seed484` under `std::cxx::inline std::cxx::fold`: one blank line, as with no pass at all. Before the repair nothing was printed -- `fold` folds `true && true` (the JOIN and BRCH go with it) and the `:struct/concat_arr` of `concat([false], [false])` in the same stretch, and `q27`'s call, once the inline had moved it in, lost its place. `std::cxx::fold` alone reads it correctly (measured): the statement has to be inside an `Inline` region first."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc28_seed484.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "std::cxx::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+# --- The sixth: the wait a splice let evaporate behind a macro expanded in an argument ----------
+#
+# `rc29_seed311` is the 20-line program of the sixth figure of
+# `docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md` section 4 (reproduced 5/5), and
+# it is the sixth of the six wrong values the merge `2779ad600` turned correct -- the one that merge
+# left wrong. Under `std::macro std::cxx::inline` the `println('')` written *before* the call does
+# not run, so the program prints one blank line where it should print two. The inline expands the
+# macro call `f1(true, 10.0)` into the argument slot; the statement written before the call hangs on
+# the chain by an ORDER edge only, and the gate standing for that call carries it. `closeChainOver`
+# would not hand that wait on: the successor it named already had two waits -- the inlined body's
+# completion *and* the call whose gate was going -- and the test it asked was "does this successor
+# wait on anything else", which answers the right question only while a successor has one wait or
+# none.
+#
+# The repair is `f77e57f9d` (`GraphDraft::closeChainOver`, src/runtime/draft.cpp): the condition a
+# predecessor's wait is kept by now reads "the successor waited on this node -- its own wait is the
+# one going away -- or it waits on nothing", so two waits no longer refuse the hand-on and the wait
+# evaporates into the chain instead of into nobody.
+#
+# Four cells, and the shape of the set is the claim this entry makes:
+#
+#   without_the_pass  the reference: two blank lines with no pass at all. Nothing the ladder does is
+#                     what the fault needed, so what the ladder prints is held to what the program
+#                     prints -- the entry names no number that the program itself does not give.
+#   macro_inline      `std::macro std::cxx::inline`, the ladder the bisection named: the same two
+#                     lines. Before `f77e57f9d` this cell reads one, and it is the red this pins.
+#   macro_only        `std::macro` alone: the same two lines, on both sides of the repair.
+#   inline_only       `std::cxx::inline` alone: the same two lines, on both sides of the repair.
+#
+# The last two are the reverse pin, and they are the reason the ladder cell is worth writing at all.
+# `std::opt` as a whole was measured green on this program before and after the repair (by the lane
+# that measured the six), and so is each of these two passes on its own. A mark on `std::opt` would
+# sit where it was green all along, and a later regression in the *pair* -- the only shape this
+# program has ever been wrong in -- would be hidden by passes that still cancel it out. Three cells
+# that stay green while one flips is "only the pair was ever broken"; one green cell on the whole
+# ladder would only say "the ladder is green today".
+
+[[tests]]
+name = "rc29_seed311.without_the_pass"
+desc = "`rc29_seed311` with no pass at all: two blank lines -- `main`'s `println('')` and the one in `q18` it calls. This is the reference cell: the program is right without any pass, so the three cells below are held to this reading and not to a number written here."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc29_seed311.macro_inline"
+desc = "`rc29_seed311` under the ladder the bisection named, `std::macro std::cxx::inline`: the same two blank lines. Before `f77e57f9d` only one line was printed -- the `println('')` written before the call stopped running once the inline expanded the macro `f1(true, 10.0)` into the argument slot, and `closeChainOver` refused to keep that statement's wait. This cell is what pins the repair; the two below say the defect was the pair alone."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "std::macro", "std::cxx::inline", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc29_seed311.macro_only"
+desc = "`rc29_seed311` under `std::macro` alone: the same two blank lines. The first reverse pin -- the expansion by itself was never the defect, so a red here would be a different one, and this cell is what says the ladder cell above cannot be read as `std::macro` being broken."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "std::macro", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc29_seed311.inline_only"
+desc = "`rc29_seed311` under `std::cxx::inline` alone: the same two blank lines. The second reverse pin -- the inline by itself was never the defect either; only the two passes together lose the statement, which is what the ladder cell above holds, and this one is what keeps that claim from being a claim about the inline."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc29_seed311.cml"
+args = ["${case}", "--gc", "generational", "std::cxx::inline", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '', `first line is ${JSON.stringify(lines[0])}, not a blank line`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+

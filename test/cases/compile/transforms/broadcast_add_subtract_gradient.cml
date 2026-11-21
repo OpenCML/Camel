@@ -1,0 +1,65 @@
+// The cotangent of an operand a **sum** broadcast, through the library's own transpose law.
+//
+// `x + b` and `x - b` broadcast: `x` is a `float[2, 3]` and `b` is a `float[3]`, so every lane of `b`
+// fed two positions of the result and `dL/db` is the sum of what it fed -- `sum_to(ct, shape(b))` --
+// while `dL/dx` is the cotangent as it arrives. Both laws answered `(ct, ct)` (`subtract_t`:
+// `(ct, -ct)`), so `b`'s cotangent came back at the *result's* shape under a static type that said
+// `float[3]`: six numbers where three belong, exit 0, no diagnostic. This case is the reading that
+// says so, and the one that keeps it from coming back.
+//
+// The cotangent is a **weight**, so the reduction is visible in the digits and not only in the
+// shape: with `x` fixed and `ct` handed in, the law's answer for `b` is the cotangent summed over the
+// axes `b` does not have.
+//
+//     ct = [[1, 2, 3], [4, 5, 6]]      weighted
+//         dL/db  = [1+4, 2+5, 3+6] = [5, 7, 9]      the two rows summed, lane by lane
+//         dL/dx  = ct                               the cotangent as it arrives
+//     ct = [[1, 1, 1], [1, 1, 1]]      plain
+//         dL/db  = [2, 2, 2]                        two rows of ones
+//
+// and `x - b` answers `dL/db` negated -- `[-5, -7, -9]` and `[-2, -2, -2]` -- because the difference
+// is the sum with `b`'s sign flipped, while `dL/dx` is unchanged. Each of the four readings is
+// distinct from the three a wrong law would produce: the whole cotangent (`[[1, 2, 3], [4, 5, 6]]`,
+// `numel=6`), one lane for all of them, or the wrong axis (`[6, 15]`). `numel` is printed beside each
+// answer because the defect this case was written for was a **shape** first: the six-element tensor
+// was a right number nowhere and a right type nowhere either.
+//
+// `dL/dx` is the control inside the same program: it was right before the repair and must stay right
+// after it, so a law that reduced *both* sides of the sum -- the shape of the repair done by halves
+// -- moves that line and not the others. `transpose` is called directly and not through `vjp`
+// deliberately: this is the law's own reading, with nothing else of the library's in the graph.
+//
+//     camel test/cases/compile/transforms/broadcast_add_subtract_gradient.cml
+import rulesets.transpose
+import { numel } from tensor
+import { transpose } from transforms
+
+/// `x + b` on a `float[2, 3]` and a `float[3]`: the sum broadcasts `b` over the two rows.
+func total_add(x: float[2, 3], b: float[3]): float[...] {
+    return x + b
+}
+
+/// `x - b`: the same broadcast through the difference, whose `b`'s cotangent is negated.
+func total_sub(x: float[2, 3], b: float[3]): float[...] {
+    return x - b
+}
+
+func main(): int sync {
+    let weighted = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let plain    = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
+
+    let (dx_w, db_w) = transpose(total_add)(weighted)
+    `add weighted dL/db numel={} dL/db={}`->format<numel(db_w), db_w>->println
+    `add weighted dL/dx={}`->format<dx_w>->println
+
+    let (_, db_p) = transpose(total_add)(plain)
+    `add plain dL/db numel={} dL/db={}`->format<numel(db_p), db_p>->println
+
+    let (sdx_w, sdb_w) = transpose(total_sub)(weighted)
+    `sub weighted dL/db numel={} dL/db={}`->format<numel(sdb_w), sdb_w>->println
+    `sub weighted dL/dx={}`->format<sdx_w>->println
+
+    let (_, sdb_p) = transpose(total_sub)(plain)
+    `sub plain dL/db numel={} dL/db={}`->format<numel(sdb_p), sdb_p>->println
+    return 0
+}

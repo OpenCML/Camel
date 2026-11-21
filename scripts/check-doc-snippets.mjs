@@ -524,7 +524,12 @@ function firstDiagnostic(result) {
 
 // A `text` block that shows a diagnostic: the program prints the lines before it, then fails
 // (an error) or warns (a warning). The name is asserted; the path is not, because the snippet
-// runs from a temporary file.
+// runs from a temporary file. The compiler writes that path exactly as the command line spells
+// it (`camel fault.cml` prints `fault.cml:4:15`, an absolute argument prints an absolute path;
+// see 4.6 of the language reference), and this checker hands over an absolute path, so the
+// normalisation below has to erase a whole path however it is written -- on Windows that
+// includes the drive letter and its colon, which is why the pattern takes one: the reading a
+// page gets must not depend on which machine ran the checker.
 function parseExpected(text) {
     const lines = text.replace(/\r\n/g, '\n').split('\n')
     const kept = []
@@ -554,10 +559,15 @@ function beforeDiagnostic(text) {
 }
 
 function compareText(actual, expected) {
+    // `--> D:\path\to\fault.cml:4:15`, `--> /tmp/x/fault.cml:4:15`, `--> .\fault.cml:4:15` and
+    // `--> fault.cml:4:15` are one reading: the location line is compared as the line and column
+    // of a `.cml` file, not as the path of the machine the checker ran on. `[A-Za-z]:` is the
+    // drive letter, which the older pattern left in front of `<file>` (it could not cross the
+    // colon), so a Windows run compared `D:<file>:4:15` against the page's `<file>:4:15`.
     const normalize = (text) =>
         text
             .replace(/\r\n/g, '\n')
-            .replace(/(?:[^\s:()]*[\\/])?[A-Za-z0-9_.-]+\.cml:(\d+):(\d+)/g, '<file>:$1:$2')
+            .replace(/(?:[A-Za-z]:)?(?:[^\s:()]*[\\/])*[A-Za-z0-9_.-]+\.cml:(\d+):(\d+)/g, '<file>:$1:$2')
             .replace(/\n+$/, '')
     const left = normalize(actual)
     const right = normalize(expected)

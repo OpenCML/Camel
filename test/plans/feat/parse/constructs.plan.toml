@@ -2,7 +2,7 @@ id = "parse.constructs"
 order = 310
 tier = "fast"
 tags = ["feat", "parse", "constructs"]
-desc = "The parser's construct corpus: one small case for each construct the grammar supports that the older parse cases did not exercise on their own. The AST snapshot (frontend.ast_snapshot) hashes exactly the cases under test/cases/parse, so a construct that no case here writes is a construct the snapshot no longer covers."
+desc = "The parser's construct corpus: one small case for each construct the grammar supports that the older parse cases did not exercise on their own. The AST snapshot (frontend.ast_snapshot) reads the rest of the repository as well, so a construct that appears only in stdlib or an example is hashed there too; this corpus is what gives each construct a file that is one construct, compiled and run, and a construct no case here writes is one whose own reading and value nothing pins."
 
 # Every case is also a program that compiles and runs, so the construct it is about is exercised
 # from the parse tree through GCT to the value, not only hashed by the AST snapshot. A `fact`
@@ -129,3 +129,53 @@ case = "../../../cases/parse/constructs/match_guard.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["30", "20", "6.0", "0.0", "4.0", "-0.5", "-1.0", "2", "3", "4", "7"]
+
+[[tests]]
+name = "constructs.resource_modifiers"
+desc = "The modifier a resource declaration carries after its name: `readonly` (`resource graph readonly`, design principles 9.12: it is only ever read) beside the `unordered` the grammar already had. `camel inspect --ast` prints `ResourceDecl: graph readonly` for it, so the word the parser read is in the tree and in what the tree prints."
+kind = "behavior"
+case = "../../../cases/parse/constructs/resource_modifiers.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
+
+[[tests]]
+name = "constructs.resource_modifier_absent"
+desc = "The control of `constructs.resource_modifiers`: the same program with no modifier on its declarations still parses, runs and prints the same value, and `camel inspect --ast` prints `ResourceDecl: graph` -- the same name, no modifier. The two cases differ in those words alone, so this is the reading that says the modifier is seen rather than dropped."
+kind = "behavior"
+case = "../../../cases/parse/constructs/resource_modifier_absent.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
+
+[[tests]]
+name = "constructs.resource_modifier_in_ast"
+desc = "What the two declarations above say, read in one place: `camel inspect --ast` of `resource_modifiers.cml` prints `ResourceDecl: graph readonly` and `ResourceDecl: spelling readonly`, and the AST of `resource_modifier_absent.cml` prints `ResourceDecl: graph` and `ResourceDecl: spelling` and no `readonly` anywhere. A reading that could not tell one file's declaration from the other's would have added a word nothing keeps."
+kind = "behavior"
+case = "../../../cases/parse/constructs/resource_modifiers.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ResourceDecl: graph readonly", "ResourceDecl: spelling readonly", "ResourceDecl: log_sink unordered"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "constructs.resource_modifier_absent_in_ast"
+desc = "The other half of `constructs.resource_modifier_in_ast`: `camel inspect --ast` of the control prints `ResourceDecl: graph` and `ResourceDecl: spelling`, and no `readonly` at all. The pair is the positive control the modifier needs: with the word and without it are two different readings, so the difference is in the tree and not in the case file's name."
+kind = "behavior"
+case = "../../../cases/parse/constructs/resource_modifier_absent.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["ResourceDecl: graph", "ResourceDecl: spelling"]
+expect_stdout_not_contains = ["readonly"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "constructs.resource_modifier_not_in_the_graph"
+desc = "Where the modifier is *not* seen, recorded so nobody reads its absence as a regression: `std::gir` prints the graph, and a resource declaration is not a node of it -- the dump names operators, ports, regions and exits, and says nothing about a resource or its modifier. So a `graph readonly` declaration reaches `std::gir` as the same graph as `graph` with no modifier, and the declaration's own reading is `camel inspect --ast` (`constructs.resource_modifier_in_ast`). This entry fails if the graph dump ever starts carrying declarations, which is the point: then the two readings have to agree on purpose."
+kind = "behavior"
+case = "../../../cases/parse/constructs/resource_modifiers.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["digraph GraphIR"]
+expect_stdout_not_contains = ["readonly", "ResourceDecl"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

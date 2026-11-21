@@ -9,7 +9,7 @@ desc = "What the modules of this repository register: every operator declares wh
 
 [[tests]]
 name = "registry.purity_declared"
-desc = "No operator of a module of this repository is left without a purity declaration (design principles 3.3), and the ones that read a clock, a random generator, the environment or a file are not declared pure."
+desc = "No operator of a module of this repository is left without a purity declaration (design principles 3.3), and the ones that read a clock, a random generator, the environment or a file are not declared pure. The assignment operators are declared state and not effectful: this case used to require `:op/assn` and `:op/assn_owned` in the effectful list, and the ruling of 2026-11-15 (design principles 3.1, 3.5) makes a write to a `var` a value and not an effect, so the list asks for state now."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/registry_all.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -34,7 +34,7 @@ const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
 const notPure = ['time:now', 'rand:seed', 'rand:next_key', 'env:get_env', 'env:get_cwd',
   'fs:read_bytes', 'fs:list_dir', 'fs:exists', 'fs:file_size', 'fs:write_bytes', 'fs:append_bytes', 'process:user_name', 'process:cpu_count', 'process:sleep', 'process:exit',
   'io:set_terminal_raw_mode', 'io:input', 'io:has_input', 'io:get_chars', 'io:clear_input_buffer',
-  ':io/print', ':io/println', ':io/eprintln', ':op/assn', ':op/assn_owned',
+  ':io/print', ':io/println', ':io/eprintln',
   'test_support:rendezvous', 'test_support:thread_count',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
@@ -52,6 +52,14 @@ for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }
 assert(purity[':var/new'] === 'state' && purity[':var/get'] === 'state', 'var/new and var/get touch only the variables of the program')
+// A write to one of the program's own variables is a value and not an effect (design principles
+// 3.1, 3.5; the ruling of 2026-11-15), so the assignment operators are declared state-only. This
+// case used to require them in the list above, where every operator that touches something outside
+// the program stands: that was the same retired rule as the eight warnings, said about the traits
+// instead of about a program.
+for (const uri of [':op/assn', ':op/assn_owned']) {
+  assert(purity[uri] === 'state', `${uri} is declared ${purity[uri]}, expected state`)
+}
 }
 """
 timeout_ms = 20000
@@ -253,7 +261,12 @@ const oneNamePerSet = (what, rules, position, expected) => {
   }
 }
 oneNamePerSet('json.get', ops.filter((o) => o.uri === 'json:get'), 0, 'key')
-oneNamePerSet('get', ops.filter((o) => o.name === 'get'), 0, 'key')
+// `get` answers two questions after `state` landed, so it is two sets and not one loosened one:
+// the collection rules name their first position `key` (a member key or an element index), and
+// `state:get` names it `r` (the handle whose box is read). A reference is not a key, so the
+// split is written here; each family is still held to one name.
+oneNamePerSet('get the collection forms', ops.filter((o) => o.name === 'get' && o.module !== 'state'), 0, 'key')
+oneNamePerSet('get the state form', ops.filter((o) => o.name === 'get' && o.module === 'state'), 0, 'r')
 oneNamePerSet('json.as_int', ops.filter((o) => o.uri === 'json:as_int'), 0, 'j')
 oneNamePerSet('len', ops.filter((o) => o.name === 'len'), 0, 'x')
 oneNamePerSet('items', ops.filter((o) => o.name === 'items'), 0, 'm')
@@ -319,7 +332,12 @@ normalizers = ["normalize_newlines"]
 # So the count the work needs is 47 s of CPU -- the library's own arithmetic, 575 examples, each
 # its own process -- and a bound it cannot meet is a red about the bound. 240000 ms leaves 60 s of
 # margin, the case still asks for every slot, and the number is stated rather than waved at.
-timeout_ms = 240000
+# 360000, not 240000: on the develop gate of 2026-11-05 (`42077348260`, linux-x64) the case used
+# 61040 ms of CPU, and 240000/4 is 60000 -- the margin was the red, not the check, whose verdict
+# and both pinned lines passed (exit 0). At 360000 the margin is 90000 ms, half again that
+# reading. The two readings above (47750 ms at 180000, 47.02 s at 240000) are why the bound has
+# moved twice: the work grows as the reference does, and the rule reads the work.
+timeout_ms = 360000
 # This case compiles every `@example` of the library -- several hundred programs, each its own
 # process -- and reports how many of them compile. Under a full gate that number is a reading
 # about the machine as much as about the library: on 2026-11-02 the same tree passed alone and

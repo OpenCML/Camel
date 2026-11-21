@@ -19,6 +19,7 @@ import {
 } from './cuda-visibility.mjs'
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
+import { judgeTree, markChildrenNested, readTreeState, readTreeStateAsync, startTreeWatch, treeGuardRole } from './tree-guard.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
@@ -33,6 +34,10 @@ const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
 // reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
 // rule it implements is quoted where the reading is judged, in runOneTest).
 const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
+// Which run owns the `[TREE]` verdict, read once at load so that marking the children below cannot
+// be mistaken for this run's own role (test/tools/tree-guard.mjs#treeGuardRole): the outermost run
+// judges, and a run started inside it defers.
+const TREE_ROLE = treeGuardRole(process.env)
 // Whether this host's kernel can report the CPU time of a process tree at all: the reading
 // test/tools/child-cpu.mjs makes is `cutime` + `cstime` of /proc/self/stat, which no other platform
 // has. Where it exists the wrapper runs for every test and the margin rule is judged on CPU time;
@@ -74,6 +79,7 @@ const TEST_FIELDS = new Set([
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
     'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
+    'known_fail_ends_when',
     'failure_note',
     'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
@@ -83,7 +89,7 @@ const TEST_FIELDS = new Set([
     'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
-    'expect_diagnostic_line', 'expect_diagnostic_column',
+    'expect_diagnostic_line', 'expect_diagnostic_column', 'expect_no_diagnostics',
     'expect_refusal',
     'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
     'verify_script', 'verify_script_path', 'verify_js',
@@ -248,13 +254,29 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
     // reported a known failure). It is read off the entry itself -- `executePlans` compares against
     // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
     // once for the whole file.
+    //
+    // The mark may instead state the reading that ends it, and that is the shape the author's
+    // ruling of 2026-11-21 02:20 chose for a case whose target is a number and whose wall is being
+    // built: a sentence quoted from a refused run follows the implementation, so a pin on it has to
+    // be re-typed every time the wall moves -- which records the wall's progress as the case's debt
+    // and reads, in the plan, as "this case fails for this reason" long after that reason moved.
+    // `known_fail_ends_when` says what has to arrive instead: the line the entry prints when the
+    // computation is right, which no wall moves. The trade is stated where a reader will weigh it --
+    // the sentence is the only field the run *compares*, so a mark that states its ending reading
+    // accepts any failure as the expected one until the numbers arrive, and a different defect can
+    // wear the mark's name in the meantime. That is why the owner and the reason are still required
+    // on it, and why the reason has to keep naming the wall as it stands today.
     const expected = entry.known_fail_msg
     if (typeof expected !== 'string' || expected.trim().length === 0) {
-        throw new PlanSchemaError(
-            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg: quote the sentence this ` +
-                `case prints today on the entry itself -- without it the runner takes any failure as the ` +
-                `expected one, so another defect wears this mark's name and nothing ever re-reads it`,
-        )
+        const ends = entry.known_fail_ends_when
+        if (typeof ends !== 'string' || ends.trim().length === 0) {
+            throw new PlanSchemaError(
+                `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg or known_fail_ends_when: ` +
+                    `quote either the sentence this case prints today, or the reading that ends the mark -- a ` +
+                    `mark that names neither takes any failure as the expected one, so another defect wears this ` +
+                    `mark's name and nothing ever re-reads it`,
+            )
+        }
     }
 }
 
@@ -552,6 +574,11 @@ export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
 // How many tests this run left unjudged that way, for the line it prints at the end.
 let marginSkippedTests = 0
 
+// How many `cpu_budget_ms` bounds this run never judged, for the same reason and by the same rule:
+// a host that reports no CPU figure is not a test that crossed its budget. Counted and printed
+// apart from `pass`, so "not read" is never read as "held".
+let budgetSkippedTests = 0
+
 /**
  * The timeout-margin rule's verdict for one test that passed everything else. `canReadCpu` is
  * whether this host reports a process tree's CPU time at all (CAN_READ_CHILD_CPU).
@@ -588,6 +615,42 @@ export function timeoutMarginVerdict({ cpuMs, cpuReason, wallMs, timeoutMs, canR
             `can read is not a bound, and it is not a pass either`,
         skipped: null,
     }
+}
+
+/**
+ * The three numbers that answer "how far from the line did this test run": the CPU time the kernel
+ * charged its own process tree, the line its cost verdict was read against, and how many times that
+ * reading fits under that line. They are recorded for **every** test, not only for the ones that
+ * declare a bound: the timeout-margin rule above is judged on this same figure, and a passing test
+ * used to be recorded as `cpu_ms: null` -- "ran, did not go red, and nobody can say by how much",
+ * which is the third shape of a green nobody looked at (beside the green of a test that never ran
+ * and the green of an assertion that asserted nothing). The reading itself costs nothing more than
+ * it already did: the wrapper runs for every test on a host whose kernel reports CPU time, and the
+ * figure was computed and then discarded.
+ *
+ * The line is **not decided here**. It is the number the verdicts below were made from, and this
+ * function records it; a record that moved it to make a margin read bigger would erase the very
+ * measurement it exists for.
+ *
+ *   * `cpu_budget_ms`, when the test declares one: the test is judged on that figure, and
+ *     `timeout_ms` is only its liveness bound;
+ *   * otherwise `timeout_ms / TIMEOUT_MARGIN`: the figure `timeoutMarginVerdict` compares the
+ *     reading against, since that rule fails a test whose own CPU time used more than a quarter of
+ *     its timeout.
+ *
+ * `marginX` is `line / reading`: 1.0 is the line itself, 39 is a reading with thirty-nine times the
+ * room it needs, and 0.99 is one percent from red. It is null when there is no reading (a host
+ * without `/proc/self/stat`, or a wrapper that reported nothing) and when the reading is 0 ms --
+ * below the kernel's 10 ms tick, so the ratio is not a number. The line and the reading are
+ * recorded in both cases, so the room is still there to be read even when it cannot be divided.
+ */
+function costRecord({ cpuMs, timeoutMs, cpuBudgetMs }) {
+    const basis = cpuBudgetMs === null ? 'timeout_margin' : 'cpu_budget_ms'
+    const lineMs = cpuBudgetMs === null ? timeoutMs / TIMEOUT_MARGIN : cpuBudgetMs
+    const marginX = Number.isFinite(cpuMs) && cpuMs > 0
+        ? Math.round((lineMs / cpuMs) * 1000) / 1000
+        : null
+    return { cpuLimitMs: Math.round(lineMs * 1000) / 1000, cpuMarginX: marginX, cpuMarginBasis: basis }
 }
 
 /**
@@ -829,6 +892,14 @@ function parseArgs(argv) {
         // widening is what let `changed: 0 target(s)` run 336 plan files and print a green summary.
         // Only `test/runner.mjs` passes this flag, and it is refused beside a target.
         selectionEmpty: false,
+        // `--list-known` answers one question in one line per test, `{name, verdict}`: which named
+        // case came out which way. The question "is the known set the same set" was answered only
+        // by the `[XFAIL]` lines, so a before/after comparison had to be picked out of a full
+        // transcript by hand -- and two runs whose known *counts* agreed were read as "nothing
+        // moved" while one case had changed the way it fails. Off by default: unset, the run
+        // prints exactly what it printed before. `options.listKnownRows` is where `printResult`
+        // collects the verdicts while it prints them.
+        listKnown: false,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
@@ -836,6 +907,8 @@ function parseArgs(argv) {
             options.updateGolden = true
         } else if (arg === '--selection-empty') {
             options.selectionEmpty = true
+        } else if (arg === '--list-known') {
+            options.listKnown = true
         } else if (arg === '--selection-layer' && i + 1 < argv.length) {
             for (const entry of argv[++i].split(',')) {
                 if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
@@ -899,32 +972,56 @@ function parseArgs(argv) {
 }
 
 /**
+ * The install this run measures, and whether it is there: `--camel <path>` names it, else
+ * `out/<build>`, and `CAMEL_TEST_BUILD` or the Release default names the build -- one rule, read
+ * once. It is returned rather than printed and exited on so that a caller can ask the question
+ * before it walks into the refusal: the runner's own self-test asks it once, because reporting the
+ * same missing binary once per check turned one absent install into a page of reds that said
+ * nothing about the code (test/tools/selftest/run.mjs).
+ *
+ * `present` is the whole answer; `buildCommand` is the helper that would build this install, so a
+ * refusal and the self-test's one line cannot disagree about how to fix it.
+ */
+export function measuredInstall(options = {}) {
+    const envBuild = process.env.CAMEL_TEST_BUILD
+    const build = options.build
+        || (envBuild !== undefined && Object.hasOwn(BUILDS, envBuild) ? envBuild : 'release')
+    const exe = camelBinary({ ...options, build })
+    return {
+        build,
+        label: BUILDS[build].label,
+        exe,
+        present: fs.existsSync(exe),
+        buildCommand:
+            `pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ` +
+            `${REPO_ROOT} -Config ${BUILDS[build].label}`,
+    }
+}
+
+/**
  * Refuse to run when the install this run measures is not built. `--camel <path>` names it; with
  * none it is `out/<build>`, written by `collect-out.js <build>`. The debug layer additionally
  * refuses anything but a Debug binary: a binary left there by another configuration is caught by
  * its own --version line, which names the build.
  */
 function preflightBuild(options) {
-    const build = options.build
-    const exe = camelBinary(options)
-    if (!fs.existsSync(exe)) {
+    const install = measuredInstall(options)
+    if (!install.present) {
         console.error(
-            `${COLORS.red}[FAIL]${COLORS.reset} no ${BUILDS[build].label} binary at ${exe}`
+            `${COLORS.red}[FAIL]${COLORS.reset} no ${install.label} binary at ${install.exe}`
         )
         if (options.camel) {
             console.error('    --camel names the install this run measures; it must be a built install\'s bin/camel.')
         } else {
-            console.error(
-                `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
-            )
-            console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+            console.error(`    Build it with the shared helper: ${install.buildCommand}`)
+            console.error(`    The ${install.label} tier never falls back to out/latest.`)
         }
         process.exit(2)
     }
-    if (build !== 'debug') return
+    if (options.build !== 'debug') return
     const home = camelInstall(options)
     const pathKey = IS_WINDOWS ? Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
-    const probe = spawnSync(exe, ['--version'], {
+    const probe = spawnSync(install.exe, ['--version'], {
         cwd: REPO_ROOT,
         encoding: 'utf8',
         timeout: 30000,
@@ -936,7 +1033,7 @@ function preflightBuild(options) {
     })
     const text = `${probe.stdout || ''}${probe.stderr || ''}`
     if (probe.error || !/\(Debug\b/.test(text)) {
-        console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${exe} is not a Debug build: ${text.trim() || probe.error || 'no version'}`)
+        console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${install.exe} is not a Debug build: ${text.trim() || probe.error || 'no version'}`)
         console.error('    Rebuild it with: npm run debug (through the shared helper, -Config Debug).')
         process.exit(2)
     }
@@ -1134,7 +1231,9 @@ function signalNumberOf(name) {
 
 /**
  * The signal a plan expects, as the number this platform numbers it by: `expect_signal = "ABRT"`,
- * `"SIGABRT"` and `6` are one expectation written three ways.
+ * `"SIGABRT"` and `6` are one expectation written three ways on POSIX. A number is this platform's
+ * number and no other's -- Windows numbers SIGABRT 22, so `6` is refused there -- which is why the
+ * name is the spelling a plan uses when it means one particular signal.
  *
  * There is no default and no boolean form. `expect_exit = 0` is the ordinary end of a process, so an
  * entry that says nothing is asserting it; a process that dies of a signal is not ordinary, and an
@@ -1153,8 +1252,9 @@ function expectedSignalNumber(value, prefix = '') {
     }
     if (typeof value !== 'string' || value.trim().length === 0) {
         throw new PlanSchemaError(
-            `${prefix}expect_signal must name a signal ("ABRT", "SIGABRT") or give its number (6), ` +
-                `got ${JSON.stringify(value)}: a plan that expects a crash has to say which signal killed it`
+            `${prefix}expect_signal must name a signal ("ABRT", "SIGABRT") or give the number this ` +
+                `platform numbers it by, got ${JSON.stringify(value)}: a plan that expects a crash has ` +
+                `to say which signal killed it`
         )
     }
     const written = value.trim().toUpperCase()
@@ -1361,6 +1461,131 @@ function readProvenance(options) {
 
 function printProvenance(options) {
     console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}${staleAllowedMark()}`)
+}
+
+/**
+ * What the run left in the checkout, on the line after `[SUMMARY]` and for the same reason the line
+ * above it exists: a reading belongs to a tree, and a tree that this run just made dirty is the one
+ * thing that makes the next `[provenance]` untrue. The heading is the whole check -- a run that
+ * leaves a path behind fails, and the exit code says so -- and the detail under it names the path
+ * and the test.
+ *
+ * Three lines and no fourth: `clean`, `FAIL`, and what was already there before the run started.
+ * `not judged` is said out loud for the one run that cannot answer (`--update-golden` rewrites
+ * tracked files on purpose), because a check that quietly turns itself off is the defect it exists
+ * to catch. Everything the verdict rests on is in test/tools/tree-guard.mjs.
+ */
+function printTreeVerdict(verdict) {
+    if (verdict.deferred) {
+        // A nested run that printed nothing here would look like a run whose check had been removed;
+        // it prints where the verdict went instead, because the reader of a nested run's output is
+        // usually looking for the line and not finding it is how a deferral turns into a suspicion.
+        console.log(
+            `${COLORS.cyan}[TREE]${COLORS.reset} ${verdict.reason} (this run's window is inside ` +
+                `that run's, so it is not a second reading of the same tree)`
+        )
+        return
+    }
+    if (!verdict.judged) {
+        // `not judged` is said out loud for the one run that cannot answer (`--update-golden`
+        // rewrites tracked files on purpose), because a check that quietly turns itself off is the
+        // defect it exists to catch. A reading that failed -- `git` not there, a status that
+        // returned non-zero -- is that defect, and it is red.
+        const line = `[TREE] not judged: ${verdict.reason}`
+        if (verdict.failed) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${line}`)
+        else console.log(`${COLORS.yellow}[TREE]${COLORS.reset} ${line}`)
+        return
+    }
+    const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`
+    const who = (item) => {
+        if (item.at === null) return 'the watcher did not see it appear (attribution unavailable)'
+        const at = `first seen ${(item.at / 1000).toFixed(1)} s into the run`
+        if (item.running.length === 0) return `${at}, while no test was running`
+        // Five names and a count: at `-Jobs 8` a handful is a reading, and the first version of this
+        // line printed all of them -- one path written while 7,270 entries were "running" made a
+        // 65 KB line that the terminal cut in half, so the diagnosis was unreadable exactly when it
+        // was needed.
+        const names = item.running.slice(0, 5).map(
+            (run) => `${run.plan ? `${run.plan}/` : ''}${run.name}${run.case ? ` (${run.case})` : ''}`
+        )
+        const more = item.running.length > names.length ? `, and ${item.running.length - names.length} more` : ''
+        return `${at}, while ${item.running.length === 1 ? 'this test was' : `${item.running.length} tests were`} running: ${names.join(', ')}${more}`
+    }
+    const listed = (item) => `${item.status.padEnd(2)} ${item.path}`
+    // A path that appeared and went again has no status to print: `git status` does not list it, and
+    // the only thing known about it is what it was when the watcher saw it.
+    const goneAgain = (item) => `${item.path} -- ${who(item)}`
+    if (verdict.failed) {
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} [TREE] ${plural(verdict.appeared.length, 'path')} appeared under the ` +
+                'checkout during this run: the run wrote outside test/results and tmp/test'
+        )
+        for (const item of verdict.appeared) {
+            console.error(`    ${COLORS.red}[TREE]${COLORS.reset} ${listed(item)} -- ${who(item)}`)
+        }
+    } else {
+        // "left nothing" and not "nothing appeared": a path that appeared and went again is said on
+        // its own line below, and a green line that contradicted it would be the wrong reading.
+        console.log(
+            `${COLORS.cyan}[TREE]${COLORS.reset} clean: the run left nothing under the checkout ` +
+                `(git status --porcelain -u normal: ${verdict.beforeCount} before, ${verdict.afterCount} after, ` +
+                `${verdict.watched} director${verdict.watched === 1 ? 'y' : 'ies'} watched)`
+        )
+    }
+    if (verdict.preexisting.length > 0) {
+        // Printed whatever the verdict: the paths a run before this one left are not this run's, but
+        // they are somebody's, and dropping them from the report is how they become permanent.
+        const shown = verdict.preexisting.slice(0, 12).join(', ')
+        const more = verdict.preexisting.length > 12 ? `, and ${verdict.preexisting.length - 12} more` : ''
+        console.log(
+            `${COLORS.cyan}[TREE]${COLORS.reset} ${plural(verdict.preexisting.length, 'path')} were already ` +
+                `uncommitted when this run started, not this run's: ${shown}${more}`
+        )
+    }
+    if (verdict.transient.length > 0) {
+        // Gone by the end of the run, so it is not a failure -- but a test that writes into the
+        // checkout and removes it again is one cleanup call away from leaving it.
+        const shown = verdict.transient.slice(0, 12).map(goneAgain).join(', ')
+        const more = verdict.transient.length > 12 ? `, and ${verdict.transient.length - 12} more` : ''
+        console.log(
+            `${COLORS.yellow}[TREE]${COLORS.reset} ${plural(verdict.transient.length, 'path')} appeared in the ` +
+                `checkout and were gone again by the end of the run: ${shown}${more}`
+        )
+    }
+    if (verdict.failure || verdict.watched === 0) {
+        // The watcher is the attribution and never the verdict, so a broken watcher costs the names
+        // above and nothing else. Said out loud so that a report with no name in it says why --
+        // `0 directories watched` is not a tree with nothing in it, it is a watcher that did not
+        // start, and a line that printed it without comment would read as a clean run.
+        const why = verdict.failure || 'the walk watched no directory at all'
+        console.log(`${COLORS.yellow}[TREE]${COLORS.reset} the path watcher is incomplete (${why})`)
+    }
+}
+
+/**
+ * The name `--list-known` prints for one test: its plan id in front of the case name. A case name is
+ * unique inside its plan and nowhere else -- `backends` appends the back end, a `[[sweeps]]` entry
+ * copies another plan's names wholesale -- so the plan travels in the name. It is the same
+ * `<plan id>/<name>` pair the runner already keys dependency results by (`byPlanName`), and the part
+ * after the last `/` is exactly the name the `[XFAIL]` line prints.
+ */
+function listedName(plan, test) {
+    const planId = test.__planId || plan.id || path.basename(plan.__planPath, '.plan.toml')
+    return `${planId}/${test.name}`
+}
+
+/**
+ * Silence the run's own narration on stdout for the length of one `--list-known` run, and give back
+ * the function that ends it. `console.log` and not a flag inside every printer: the narration comes
+ * from a dozen places (this file and the helpers it calls), and a mode that had to be honoured at
+ * each of them would be one forgotten call away from mixing a `[PASS]` line into a list whose whole
+ * purpose is to be read by something other than a person. stderr is deliberately left alone: a
+ * refusal on it is a reason to act on, never a verdict about a test.
+ */
+function muteRunNarration() {
+    const narrate = console.log
+    console.log = () => {}
+    return () => { console.log = narrate }
 }
 
 function printRunSummary(summary) {
@@ -1724,10 +1949,17 @@ async function runVerification(test, result) {
         normalized: result.normalized,
         diagnostics: result.diagnostics,
         benchmark: result.benchmark,
-        // The CPU cost judgement, when the test declared one: the figure read on the test's own
-        // process tree and the budget it was judged against (`null` for every other test).
+        // The CPU cost reading, for every test: the figure the test's own process tree was charged,
+        // the declared budget if it has one, the line its cost verdict was read against, and the
+        // room left under that line. `cpu_ms` used to be the budget's figure only (`null` for every
+        // other test), so a script could not see the margin of a test judged by the timeout rule
+        // even though the runner had measured it; the three fields beside it are the same ones
+        // meta.json records (see `costRecord`).
         cpu_ms: result.cpuMs ?? null,
         cpu_budget_ms: result.cpuBudgetMs ?? null,
+        cpu_limit_ms: result.cpuLimitMs ?? null,
+        cpu_margin_x: result.cpuMarginX ?? null,
+        cpu_margin_basis: result.cpuMarginBasis ?? null,
         test_tmp: result.testTmp,
         test_tmp_relative: result.testTmpRelative,
     }
@@ -2008,7 +2240,20 @@ async function validateTest(test, result, context) {
             }
         }
     }
-    if (
+    // "The run records no diagnostic at all" is a claim of its own, and until this field existed a
+    // plan had no way to make it: `expect_diagnostic_name = ""` only cancels the name `[defaults]`
+    // gave the entry (the block below is gated on truthiness) and asserts nothing. The flag is the
+    // stronger claim, so it stands in place of the per-diagnostic expectations rather than joining
+    // them -- an entry cannot both require a diagnostic and require none -- and an entry that does
+    // not name the field keeps exactly the meaning it had.
+    if (test.expect_no_diagnostics === true) {
+        if (result.diagnostics.length > 0) {
+            const seen = result.diagnostics
+                .map((diagnostic) => diagnostic.name || diagnostic.code || diagnostic.message)
+                .join('; ')
+            failures.push(`expected no diagnostics, got ${result.diagnostics.length}: ${seen}`)
+        }
+    } else if (
         test.expect_diagnostic_name
         || test.expect_diagnostic_code
         || typeof test.expect_diagnostic_line === 'number'
@@ -2245,6 +2490,19 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         ? { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
         : { command: toolExe, args }
     const proc = await runProcess(launch.command, launch.args, {
+        // The checkout root, and not the test's scratch directory, because `${test_tmp}` is a
+        // *repository-relative* path (docs/test-plans.md, "Test Scratch"): a plan writes
+        // `ONNX_OUT=${test_tmp}/m.onnx`, and a program started anywhere but here resolves that one
+        // level deeper, under its own cwd. Measured on 2026-11-16 with `cwd: scratch` here: 98
+        // failures in `feat/modules` against 3 on the base and every one of the 95 new ones
+        // `ENOENT ... /tmp/test/run-<pid>/<plan>/<test>/<file>`, because the model had been written
+        // to `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
+        // A program that writes a *bare* relative path therefore still writes into the checkout, and
+        // the thing that answers for it is the `[TREE]` line at the end of the run
+        // (test/tools/tree-guard.mjs): it names the path and the test that was running when it
+        // appeared. The one test that did this -- the sweep that runs a compiler over every case in
+        // the tree -- starts each of those programs in its own directory instead
+        // (scripts/check-plan-refs.mjs).
         cwd: REPO_ROOT,
         env,
         timeoutMs,
@@ -2279,6 +2537,8 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         output: applyNormalizers(raw.output, test.normalizers),
     }
 
+    const costFields = costRecord({ cpuMs: cpuReading.cpuMs, timeoutMs, cpuBudgetMs })
+
     const result = {
         ...raw,
         normalized,
@@ -2291,12 +2551,15 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // Set before validation: the verify script payload carries this as `case_path`, and the
         // script that normalizes a source path out of its output needs it.
         casePath,
-        // The CPU cost judgement, if this test declared one: the figure the wrapper reported and
-        // the budget it is read against, both recorded on the result (meta.json, the verify
-        // payload, the status line) so a reader sees the numbers the verdict came from.
+        // The CPU cost reading, for every test: the figure the wrapper reported (null where this
+        // host reports none), the declared budget if there is one, the line the cost verdict was
+        // read against and the room left under it (see `costRecord`). meta.json and the verify
+        // payload carry all four, so "how far from red" is in the record and not only inferable
+        // from a bound somebody has to know to divide by four.
         cpuBudgetMs,
-        cpuMs: cpuBudgetMs === null ? null : cpuReading.cpuMs,
-        cpuReason: cpuBudgetMs === null ? null : cpuReading.reason,
+        cpuMs: cpuReading.cpuMs,
+        cpuReason: cpuReading.reason,
+        ...costFields,
         // The card the runner chose for this test, if it chose one: which card a GPU test ran on
         // is what makes its result readable later, and it is not derivable from the output.
         cudaDevice: test.__cudaDevice || null,
@@ -2349,7 +2612,17 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
                 `that stopped working, and the CPU budget is what catches one that works harder`
         )
     } else if (!logContext.options.compileOnly && cpuBudgetMs !== null) {
-        if (result.cpuMs === null) {
+        if (result.cpuMs === null && !CAN_READ_CHILD_CPU) {
+            // The host reports no CPU figure at all, so this is a fact about the host and not a
+            // reading of the test: the same split `timeoutMarginVerdict` makes a few lines below,
+            // for the same reason. Before this, a `cpu_budget_ms` entry on such a host was `fail`
+            // with no way to become green -- "the runner cannot read a bound" printed as "the test
+            // crossed one", which is the two readings a gate must not merge. The test keeps its
+            // other verdicts (what it printed, its exit code, its diagnostics); what it loses is
+            // the cost judgement, and the run says at the end how many it never judged.
+            result.budgetSkipped = NO_CPU_TIME_SKIP
+            budgetSkippedTests++
+        } else if (result.cpuMs === null) {
             failures.push(
                 `cpu_budget_ms ${cpuBudgetMs.toFixed(0)} ms has no CPU reading: ${result.cpuReason} ` +
                     `(a budget the runner cannot read is not a bound; test/tools/child-cpu.mjs reads ` +
@@ -2462,10 +2735,21 @@ function writeLogFiles(plan, test, result, status, logDir) {
                     : null,
                 wall_ms: result.wallMs,
                 timeout_ms: result.timeoutMs ?? null,
-                // A test whose bound is its own CPU time records the figure and the budget beside
-                // the wall clock, which is provenance for it and not the bound.
+                // The CPU reading every test records: the figure the kernel charged its own process
+                // tree, and the budget it declares if it declares one. The wall clock above is
+                // provenance, not the bound.
                 cpu_ms: result.cpuMs ?? null,
                 cpu_budget_ms: result.cpuBudgetMs ?? null,
+                // The same reading every test now records, with the line it was judged against and
+                // how many times it fits under that line: `cpu_limit_ms` is the test's
+                // `cpu_budget_ms` when it declares one and `timeout_ms / 4` otherwise (the timeout
+                // margin's line), `cpu_margin_basis` says which of the two it is, and
+                // `cpu_margin_x` is `cpu_limit_ms / cpu_ms` (1.0 is the line, null where there is
+                // no reading or the reading is 0 ms). Read together they answer "how far from red"
+                // for a green test, which is what the record could not answer before.
+                cpu_limit_ms: result.cpuLimitMs ?? null,
+                cpu_margin_x: result.cpuMarginX ?? null,
+                cpu_margin_basis: result.cpuMarginBasis ?? null,
                 // Set where this host reports no CPU time: the test's timeout margin was not judged
                 // at all, and this says why (NO_CPU_TIME_SKIP) instead of leaving a pass that looks
                 // like a judged one.
@@ -2601,22 +2885,65 @@ function invalidPlan(planPath, error) {
  *
  * It is how a property that every program must keep (here: no raw pointer is held across a
  * safepoint) is checked against whatever the other plans exercise, including tests added
- * later. Benchmarks and differential tests are left out, and so is a test that sets
+ * later: every test of the `camel` tool is copied, whatever it expects -- a program that runs to
+ * completion, a stored picture, or a diagnostic, a refusal or a fault it expects to see. A
+ * benchmark (it carries a budget, not a property) and a differential test (it compares two runs to
+ * each other, not one run to its assertions) are left out, and so is a test that sets
  * `sweep = false`.
  */
+const SWEPT_KINDS = new Set(['behavior', 'snapshot', 'negative'])
+
+/**
+ * The plan files one `[[sweeps]]` entry reads: its `plans` entries, minus `exclude`, minus the plan
+ * that lists the sweep, one copy each -- a plan named twice (a directory target and a file inside
+ * it, say) is one source, because two expansions of it would be two copies with the same name and
+ * the same work.
+ */
+export function sweepSources(sweep, planPath) {
+    const exclude = (sweep.exclude || []).map((item) => String(item))
+    return [...new Set(sweep.plans
+        .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
+        .filter((source) => source !== planPath)
+        .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item))))]
+        .sort()
+}
+
+/**
+ * Why this sweep leaves a source test out, or null when it copies the test. One function for the
+ * question, so that the count of what a sweep covers (`negativeSweepAccounting`) cannot answer it
+ * differently from what the sweep runs.
+ */
+function sweepExclusion(sweep, test) {
+    if (!SWEPT_KINDS.has(test.kind)) return `kind ${test.kind}`
+    if (test.sweep === false) return 'sweep = false'
+    if (test.__knownFail) return 'known_fail'
+    if ((test.tool || 'camel') !== 'camel') return 'not the camel tool'
+    // A sweep that sets its own options skips a source test that already names one of them: the
+    // copy would otherwise say --gc-check poison ... --gc-check poison and the parser would see
+    // the option twice.
+    const own = (test.envs || []).map((entry) => String(entry))
+    if (sweep.skip_env_prefix && own.some((entry) => entry.startsWith(sweep.skip_env_prefix))) {
+        return 'names the sweep\'s variable'
+    }
+    const ownArgs = (test.args || []).map((entry) => String(entry))
+    if (sweep.skip_args_prefix && ownArgs.some((entry) => entry.startsWith(sweep.skip_args_prefix))) {
+        return 'names the sweep\'s option'
+    }
+    // Options are read by a run: the words go in front of its entry file. A test that asks the
+    // compiler (`check`, `inspect`, `--version`) has no run to put them in front of, and they would
+    // land on the wrong parser.
+    const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
+    if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) return 'does not drive a run'
+    return null
+}
+
 export function expandSweeps(doc, planPath) {
     const out = []
     for (const sweep of doc.sweeps || []) {
         if (!sweep.name || !Array.isArray(sweep.plans)) {
             throw new Error(`a [[sweeps]] entry of ${planPath} needs a name and plans`)
         }
-        const exclude = (sweep.exclude || []).map((item) => String(item))
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
-        const prefix = sweep.skip_env_prefix || null
-        // A sweep that sets its own options skips a source test that already names one of them:
-        // the copy would otherwise say --gc-check poison ... --gc-check poison and the parser
-        // would see the option twice.
-        const argPrefix = sweep.skip_args_prefix || null
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the milestone layer: the default developer run still checks the property against every
         // plan, and the full sweep (every eligible test) is `--tier milestone` away. The
@@ -2629,14 +2956,7 @@ export function expandSweeps(doc, planPath) {
         const fastSample = Number.isInteger(sweep.fast_sample) && sweep.fast_sample > 0 ? sweep.fast_sample : 0
         const riskTags = new Set((sweep.risk_tags || []).map((tag) => String(tag)))
         const riskSample = Number.isInteger(sweep.risk_sample) && sweep.risk_sample > 0 ? sweep.risk_sample : 0
-        // A plan named twice (a directory target and a file inside it, say) is one source: two
-        // expansions of it would be two copies with the same name and the same work.
-        const sources = [...new Set(sweep.plans
-            .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
-            .filter((source) => source !== planPath)
-            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item))))]
-            .sort()
-        for (const source of sources) {
+        for (const source of sweepSources(sweep, planPath)) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
             // A copy is named after the sweep, its source plan and the source test. The source
             // plan is part of the name because two plans may both have a test called `shapes`
@@ -2649,19 +2969,7 @@ export function expandSweeps(doc, planPath) {
             const sampleCount = fastSample > 0 && risky && riskSample > fastSample ? riskSample : fastSample
             const eligible = []
             for (const test of sourceTests) {
-                if (test.kind !== 'behavior' && test.kind !== 'snapshot') continue
-                if (test.sweep === false || test.__knownFail) continue
-                if ((test.tool || 'camel') !== 'camel') continue
-                const own = (test.envs || []).map((entry) => String(entry))
-                if (prefix && own.some((entry) => entry.startsWith(prefix))) continue
-                const ownArgs = (test.args || []).map((entry) => String(entry))
-                if (argPrefix && ownArgs.some((entry) => entry.startsWith(argPrefix))) continue
-                // Options are read by a run: the words go in front of its entry file. A test
-                // that asks the compiler (`check`, `inspect`, `--version`) has no run to put them
-                // in front of, and they would land on the wrong parser.
-                const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
-                if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) continue
-                eligible.push(test)
+                if (sweepExclusion(sweep, test) === null) eligible.push(test)
             }
             const sampled = new Set()
             if (sampleCount > 0) {
@@ -2692,6 +3000,55 @@ export function expandSweeps(doc, planPath) {
         }
     }
     return out
+}
+
+/**
+ * What the tree's `[[sweeps]]` entries cover and what they leave out, counted through the same two
+ * functions the expansion uses (`sweepSources`, `sweepExclusion`): `declared` `negative` entries in
+ * the source plans of a sweep, `swept` copies of them, `excluded` the rest, and the reason each
+ * excluded one fell out. `reason` says which reading the code implements -- `a` when a `negative`
+ * entry is copied like any other test, `b` when its kind is left out -- so that the coverage a
+ * comment claims and the coverage the code has cannot move apart without this line moving.
+ *
+ * The line is a reading and not a decision: the runner prints it from its self-test and asserts
+ * nothing about the numbers, only that they are printed. It exists because the two did move apart
+ * once: `expandSweeps` left `negative` out from the sweep's first commit while its comment named
+ * only benchmarks and differential tests as left out, so 1258 entries of the sweep's source plans
+ * were declared `negative` and never copied, and no count, summary or gate line said so -- the
+ * missing copies were green because they had not run.
+ */
+export function negativeSweepAccounting(planPaths) {
+    const counts = {
+        declared: 0,
+        swept: 0,
+        reasons: new Map(),
+        reason: SWEPT_KINDS.has('negative') ? 'a' : 'b',
+    }
+    for (const planPath of planPaths) {
+        const doc = loadPlanTests(planPath).doc
+        for (const sweep of doc.sweeps || []) {
+            if (!sweep.name || !Array.isArray(sweep.plans)) continue
+            for (const source of sweepSources(sweep, planPath)) {
+                for (const test of loadPlanTests(source).tests) {
+                    if (test.kind !== 'negative') continue
+                    counts.declared += 1
+                    const why = sweepExclusion(sweep, test)
+                    if (why === null) counts.swept += 1
+                    else counts.reasons.set(why, (counts.reasons.get(why) || 0) + 1)
+                }
+            }
+        }
+    }
+    return counts
+}
+
+/** The reading as one line, then the reasons the rest of them are not swept, one per kind. */
+export function negativeSweepLine(counts) {
+    const line = `negative-sweeps declared=${counts.declared} swept=${counts.swept} `
+        + `excluded=${counts.declared - counts.swept} reason=${counts.reason}`
+    const reasons = [...counts.reasons.entries()].sort()
+    if (reasons.length === 0) return line
+    return `${line}\n  negative-sweeps: not swept -- ${reasons.map(([why, n]) => `${n} ${why}`).join(', ')}`
 }
 
 /**
@@ -2978,6 +3335,11 @@ function runnerErrorResult(casePath, message) {
         cpuBudgetMs: null,
         cpuMs: null,
         cpuReason: null,
+        // Nothing ran, so there is no reading and no line to read it against; the keys are present
+        // rather than absent, for the reason the verify payload keeps its null fields.
+        cpuLimitMs: null,
+        cpuMarginX: null,
+        cpuMarginBasis: null,
         failures: [`runner error: ${message}`],
         status: 'fail',
         casePath,
@@ -3382,7 +3744,35 @@ function summarizeSlotTimings(records, planWallMs, jobs, stalls, logWindows, run
 }
 
 /**
- * Run every selected test, at most `options.jobs` at a time, and print the results in plan and
+ * The tests whose own work is in progress right now -- from before their precondition to after
+ * their verification script -- by the name a reader knows them by.
+ *
+ * One consumer: the tree watcher (`[TREE]`, test/tools/tree-guard.mjs). When a path appears under
+ * the checkout while a test is running, the set is what it was while it appeared, so the line that
+ * reports a file the run left behind names the tests that could have written it instead of asking
+ * the next person to bisect a 9,465-test layer. It is a diagnosis only: the verdict is `git status`
+ * read before and after the run, and a path nobody was running when it appeared is still a failure.
+ */
+const inFlight = new Map()
+let inFlightNext = 1
+
+function enterInFlight(test) {
+    const id = inFlightNext++
+    // The case as the plan writes it is relative to the plan file (`../../../cases/...`), which is
+    // not a path a reader can open: the absolute one, made relative to the checkout, is.
+    const fromRoot = test.case && test.__planPath
+        ? path.relative(REPO_ROOT, path.resolve(path.dirname(test.__planPath), test.case)).split(path.sep).join('/')
+        : test.case || ''
+    inFlight.set(id, { plan: test.__planId || '', name: test.name, case: fromRoot })
+    return id
+}
+
+function leaveInFlight(id) {
+    inFlight.delete(id)
+}
+
+/**
+ * Run every selected test, at most `options.jobs` a time, and print the results in plan and
  * test order: a status line, its failure details and its log files are the same as a serial run's,
  * in the same place, whichever test finishes first. A test that compares against an earlier one
  * waits for it; a test marked serial (`isSerial`) holds every slot while it runs.
@@ -3438,6 +3828,17 @@ async function executePlans(plans, options, sharedVars, logDir) {
     const printResult = (entry) => {
         const { plan, test, outcome } = entry
         entry.logWriteMs = 0
+        // The one output `--list-known` has, recorded in the order the results are printed -- plan
+        // and test order, whichever test finished first -- and before the skip below returns, since
+        // a skipped case is one of the four verdicts this list exists to tell apart. `xfail` is
+        // printed as `known`: the run's own word for it is the plan's mark, and the list is a
+        // reading of the marks, not a second vocabulary.
+        if (options.listKnownRows) {
+            options.listKnownRows.push({
+                name: listedName(plan, test),
+                verdict: outcome.status === 'xfail' ? 'known' : outcome.status,
+            })
+        }
         if (plan !== printedPlan) {
             printPlanHeader(plan)
             printedPlan = plan
@@ -3524,6 +3925,12 @@ async function executePlans(plans, options, sharedVars, logDir) {
             let probeHeld = false
             let slotAcquired = false
             let slotReleased = false
+            // The test's own work starts when it holds a slot: before that it is a promise waiting
+            // in the queue, and every entry in the run has one of those from the moment the plan is
+            // expanded -- `enterInFlight` at the top of this function put 7,270 of them on the
+            // `[TREE]` line at once. `runOneTest` releases the slot the moment the test's own
+            // process is gone, which is the other end of the same window.
+            let flight = null
             // Idempotent: `runOneTest` releases the slot the moment the test's own process is gone,
             // and the finally block releases it for a test that never got that far (a skip, a
             // runner error).
@@ -3568,6 +3975,11 @@ async function executePlans(plans, options, sharedVars, logDir) {
                 await slots.acquire(tokens, priority)
                 slotAcquired = true
                 clock.acquiredAt = performance.now()
+                // Here, and not at the top: from this line to the `finally` below, anything that
+                // appears under the checkout is this test's doing (the `[TREE]` line says so by
+                // name). A `skip_unless` probe runs before this point and is not covered -- it asks
+                // the host a question, and the two things it may start answer on stdout.
+                flight = enterInFlight(entry.test)
                 if (!wantsProbe || serial) {
                     scratch = createTestScratchDir(entry.test)
                     clock.scratchAt = performance.now()
@@ -3649,6 +4061,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     failures: result.failures,
                 }
             } finally {
+                if (flight !== null) leaveInFlight(flight)
                 if (probeHeld) probes.release(1)
                 // The test's own directory is not this run's evidence: it goes whether the
                 // test passed or failed. The run root stays on failure (main prints it).
@@ -3777,6 +4190,18 @@ async function main() {
         process.exitCode = 1
         return 1
     }
+    // `--list-known` speaks from here on: one line per test, `{name, verdict}`, and the `[SUMMARY]`
+    // the run would have ended with. The narration between this line and the end -- the layer line,
+    // the plan headers, the status and detail lines, the timing lines -- is stdout, and every one
+    // of them is a line a per-name comparison would have to filter out, which is the work this mode
+    // exists to remove. It is switched off here and not at the top of this function so that the
+    // refusals above keep their own words: a target that names no plan, a plan whose argument the
+    // CLI does not take, a plan that starts nothing -- those exit before this line, print why, and
+    // are a selection error rather than a list of verdicts. Nothing else changes: the same tests
+    // run in the same order, the same log files and summary.json are written, and the exit code is
+    // decided by the same lines.
+    const restoreNarration = options.listKnown ? muteRunNarration() : null
+    if (options.listKnown) options.listKnownRows = []
     // What the layer declares against what this run starts. The two numbers differ for a reason
     // that is not a defect -- `backends` expands one entry into several tests, `compare_to` pulls a
     // companion in -- and for a whole night the layer's size was quoted as one of them while a run
@@ -3897,7 +4322,58 @@ async function main() {
     // The run owns tmp/test/run-<pid>: a root left by an earlier process with this pid (the pid
     // was reused) must not be read as this run's files.
     fs.rmSync(TEST_SCRATCH_RUN, { recursive: true, force: true })
+    // What the tree was before the first test, and a watcher that records when a path appears
+    // beside the tests that were running at that moment. Both are read here and judged after the
+    // last test: the question is what *this run* left, so the reading has to bracket it
+    // (test/tools/tree-guard.mjs). **One phenomenon, one verdict**: a nested run's window lies
+    // inside this one's, so a nested run reads no tree and starts no watcher -- a file a sibling
+    // test wrote inside that window and removed again is an annotation here and was a leak there.
+    // Everything this run starts is inside its window, so every child inherits `nested` and any
+    // runner among them defers; marking the environment once is what keeps a fourth spawn site from
+    // quietly becoming a second judge.
+    const treeNested = TREE_ROLE === 'nested'
+    markChildrenNested(process.env)
+    // The pre-test window is two readings that do not depend on one another: the tree's `git status`
+    // and the watcher over it. Both are taken before the first test -- the walk is the coverage and
+    // cannot be skipped or deferred (test/tools/tree-guard.mjs#readTreeStateAsync records what was
+    // measured and rejected) -- but they are started together, so the run pays the longer of the two
+    // instead of their sum. `treeSeenAt` is the window's start for the same reason: the timestamps
+    // the attribution prints are measured from before both readings, not from between them.
+    const treeSeenAt = performance.now()
+    const treeBeforeReading = treeNested ? null : readTreeStateAsync(REPO_ROOT)
+    const treeSeen = new Map()
+    let treeWatch = null
+    if (!treeNested) {
+        treeWatch = startTreeWatch(REPO_ROOT, {
+            onPath: (relative) => {
+                // The first moment it appeared: a file written in one burst would otherwise move its own
+                // timestamp on every event, and the answer is which tests were running when it was made.
+                if (treeSeen.has(relative)) return
+                treeSeen.set(relative, { at: performance.now() - treeSeenAt, running: [...inFlight.values()] })
+            }
+        })
+    }
+    const treeBefore = treeNested ? null : await treeBeforeReading
     const outcome = await executePlans(plans, options, sharedVars, logDir)
+    // Both readings before `stop()`: it closes the watchers and forgets how many there were, and
+    // the number is what says the walk found the tree instead of watching nothing.
+    const treeWatched = treeWatch ? treeWatch.watched() : 0
+    const treeWatchFailure = treeWatch ? treeWatch.failure() : null
+    if (treeWatch) treeWatch.stop()
+    let treeVerdict
+    if (treeNested) {
+        treeVerdict = judgeTree({ role: TREE_ROLE })
+    } else {
+        treeVerdict = judgeTree({
+            before: treeBefore,
+            after: readTreeState(REPO_ROOT),
+            firstSeen: treeSeen,
+            updateGolden: options.updateGolden,
+            failure: treeWatchFailure,
+            watched: treeWatched,
+            role: TREE_ROLE
+        })
+    }
     const testRootKept = outcome.summary.fail > 0
     if (testRootKept) {
         // The per-test directories are gone, but what a program wrote outside them (and the
@@ -3937,6 +4413,10 @@ async function main() {
                 // after it was gone, plus the aggregates and the tests that own most of it.
                 slot_timing: slotTiming,
                 test_timings: outcome.timings,
+                // What the run left in the checkout, in the same record as everything else it
+                // measured: the paths, the tests that were running when each appeared, and the two
+                // readings the verdict is the difference of (test/tools/tree-guard.mjs).
+                tree: treeVerdict,
             },
             null,
             2
@@ -3945,12 +4425,26 @@ async function main() {
 
     printProvenance(options)
     printRunSummary(outcome.summary)
+    // After the numbers, and not between them and the line that states what they belong to: a
+    // `[provenance]` line sits immediately before `[SUMMARY]` by its own rule
+    // (test/cases/tools/provenance.mjs pins it), and this is the one line that says whether the
+    // tree that line named is still the tree that ran.
+    printTreeVerdict(treeVerdict)
     if (marginSkippedTests > 0) {
         // The rule's own reading, so a run on a host without a CPU figure says what it did not judge
         // and how often, instead of leaving 105 bounds looking judged.
         console.log(
             `${COLORS.cyan}[INFO]${COLORS.reset} timeout margin ${NO_CPU_TIME_SKIP} on ` +
                 `${marginSkippedTests} test(s): this host's wall clock is not a reading of a test's work`
+        )
+    }
+    if (budgetSkippedTests > 0) {
+        // The other half of the same reading: a `cpu_budget_ms` entry whose budget this host cannot
+        // read at all. Printed apart from the pass count, because a bound nobody read is not a bound
+        // that held.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} cpu_budget_ms ${NO_CPU_TIME_SKIP} on ` +
+                `${budgetSkippedTests} test(s): a cost bound this host cannot read is not a bound it crossed`
         )
     }
     // One line for the flow, with the whole accounting behind it in summary.json: the ratio the
@@ -3979,7 +4473,21 @@ async function main() {
     )
     console.log(formatGateSplit(split))
 
-    const exitCode = outcome.summary.fail > 0 ? 1 : 0
+    // Two ways to fail, and both are red: a test that failed, and a run that left a path behind in
+    // the checkout it was measuring. The second is not cosmetic -- it is what makes the next
+    // `[provenance]` line unable to name the tree the reading belongs to, and what the wrapper
+    // carries to the host on the next run. A tree that could not be read at all counts as the
+    // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
+    const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
+    // The whole of `--list-known`'s output, emitted after everything else so that no narration can
+    // land between the lines: one `{name, verdict}` per test, then the `[SUMMARY]` a normal run ends
+    // with -- through the same function, so the two runs' summary lines are the same line and a
+    // list can be checked against the count beside it.
+    if (restoreNarration) {
+        restoreNarration()
+        for (const row of options.listKnownRows) console.log(JSON.stringify(row))
+        printRunSummary(outcome.summary)
+    }
     process.exit(exitCode)
 }
 

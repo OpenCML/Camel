@@ -11,12 +11,13 @@
  * blob, one unified edge arena, and a compact branch-arm arena.
  */
 
-#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/region_roots.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/context/frame.h"
@@ -108,30 +109,17 @@ namespace graph {
 bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
-    switch (kind) {
-    case GCNodeKind::Data:
-    case GCNodeKind::Port:
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
-    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
-    case GCNodeKind::Brch:
-    case GCNodeKind::Join:
-        return true;
-    case GCNodeKind::Cast:
-        return !nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource, fixedShapes);
-    case GCNodeKind::Oper: {
-        const auto &table = camel::core::OperatorTable::instance();
-        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
-        if (!table.mayBeRecomputed(oper) || !traits.has_value()) {
-            return false;
-        }
-        return !nodeMayFault(kind, oper, nullptr, nullptr, fixedShapes);
-    }
-    default:
-        // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
-        // refuses an order on it (docs/design/effects/edges.cn.md 4.6).
+    // A node a pass may move is one running it cannot fail -- `nodeMayFault` above, asked of every
+    // kind -- and, for an operator, one a pass may run again. `mayBeRecomputed` is the one question
+    // the fault table does not answer: a pure operator a rule writes, and one a macro expands, does
+    // not fault, yet a pass may neither drop it nor copy it.
+    if (kind == GCNodeKind::Oper &&
+        !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
         return false;
     }
+    // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing refuses an
+    // order on it (docs/design/effects/edges.cn.md 4.6) -- the fault table says they may fault.
+    return !nodeMayFault(kind, oper, castTarget, castSource, fixedShapes);
 }
 
 bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
@@ -144,7 +132,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
         return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
     }
     case GCNodeKind::Cast: {
-        const auto inputs = graph.normInputsOf(ref);
+        const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return may_be_rearranged(
             node->kind,
@@ -162,8 +150,9 @@ bool is_chain_statement(
     const camel::core::type::Type *castSource, bool standsForRegion) {
     switch (kind) {
     case GCNodeKind::Call:
+    case GCNodeKind::Func:
         // A call runs a graph: what it does is not in the operator table, and nothing says it
-        // cannot fail.
+        // cannot fail. Naming the callee directly changes neither its effects nor its faults.
         return true;
     case GCNodeKind::Brch:
     case GCNodeKind::Loop:
@@ -173,8 +162,7 @@ bool is_chain_statement(
         return standsForRegion;
     case GCNodeKind::Gate:
         // A `GATE` is where a `sync` block hands its value on and where the chain's wait reaches
-        // that value (edges.cn.md 5.3, author ruling 2026-11-03 01:10): the chain orders it even
-        // though the gate computes nothing.
+        // that value (edges.cn.md 5.3): the chain orders it even though the gate computes nothing.
         return true;
     case GCNodeKind::Cast:
         // A conversion is a statement exactly when running it can fail: a value check the model
@@ -193,8 +181,8 @@ bool is_chain_statement(
         return traits.has_value() && traits->mayFault;
     }
     default:
-        // A `Func`, a `Data`, a `Port`, a `Copy`, a `Fill`, an `Accs`, a `Join`: computed from
-        // what it reads, with nothing to fail and nothing to order.
+        // A `Data`, a `Port`, a `Copy`, a `Fill`, an `Accs`, a `Join`: computed from what it
+        // reads, with nothing to fail and nothing to order.
         return false;
     }
 }
@@ -209,22 +197,82 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
     case GCNodeKind::Oper: {
         const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
         return is_chain_statement(
-            node->kind, body != nullptr ? body->oper : camel::core::kNoOper, nullptr, nullptr,
+            node->kind,
+            body != nullptr ? body->oper : camel::core::kNoOper,
+            nullptr,
+            nullptr,
             standsForRegion);
     }
     case GCNodeKind::Cast: {
-        const auto inputs = graph.normInputsOf(ref);
+        const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return is_chain_statement(
-            node->kind, camel::core::kNoOper, node->dataType(),
-            source != nullptr ? source->dataType() : nullptr, standsForRegion);
+            node->kind,
+            camel::core::kNoOper,
+            node->dataType(),
+            source != nullptr ? source->dataType() : nullptr,
+            standsForRegion);
     }
     default:
-        return is_chain_statement(node->kind, camel::core::kNoOper, nullptr, nullptr, standsForRegion);
+        return is_chain_statement(
+            node->kind,
+            camel::core::kNoOper,
+            nullptr,
+            nullptr,
+            standsForRegion);
     }
 }
 
+gc_node_ref_t chain_exit(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Brch) {
+        return ref;
+    }
+    const auto *body = graph.nodeBodyAs<GCBrchBody>(ref);
+    if (body == nullptr || body->join == kInvalidNodeRef || graph.node(body->join) == nullptr) {
+        return ref;
+    }
+    return body->join;
+}
+
+bool is_chain_exit(const GCGraph &graph, gc_node_ref_t ref) {
+    if (is_chain_statement(graph, ref)) {
+        return true;
+    }
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Join) {
+        return false;
+    }
+    const auto *body = graph.nodeBodyAs<GCJoinBody>(ref);
+    return body != nullptr && body->brch != kInvalidNodeRef &&
+           is_chain_statement(graph, body->brch) && chain_exit(graph, body->brch) == ref;
+}
+
 } // namespace graph
+
+bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref) {
+    if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+        return false;
+    }
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Func) {
+        return false;
+    }
+    const auto exported = graph.closureNodes();
+    if (std::find(exported.begin(), exported.end(), ref) != exported.end()) {
+        return false;
+    }
+    // The two edges that are not ports are read by their own names on a frozen graph (an order edge
+    // is a predicate, a sync edge a predecessor), which is the same six-way question either side.
+    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
+    return !anyOf(
+        graph.ctrlInputsOf(ref),
+        graph.orderPredsOf(ref),
+        graph.syncPredsOf(ref),
+        graph.ctrlUsersOf(ref),
+        graph.orderUsersOf(ref),
+        graph.syncUsersOf(ref));
+}
 
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
@@ -237,7 +285,7 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
         return body == nullptr || nodeMayFault(node->kind, body->oper);
     }
     case GCNodeKind::Cast: {
-        const auto inputs = graph.normInputsOf(ref);
+        const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return nodeMayFault(
             node->kind,
@@ -248,6 +296,30 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     default:
         return nodeMayFault(node->kind, camel::core::kNoOper);
     }
+}
+
+gc_node_ref_t branchJoinOf(const GCGraph &graph, gc_node_ref_t brch) {
+    if (brch == kInvalidNodeRef || !graph.containsNodeRef(brch)) {
+        return kInvalidNodeRef;
+    }
+    const GCNode *node = graph.node(brch);
+    if (node == nullptr || node->kind != GCNodeKind::Brch) {
+        return kInvalidNodeRef;
+    }
+    const auto *body = graph.nodeBodyAs<GCBrchBody>(brch);
+    return body != nullptr && graph.containsNodeRef(body->join) ? body->join : kInvalidNodeRef;
+}
+
+gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch) {
+    const DraftNodeHeader *header = draft.header(brch);
+    if (header == nullptr || !draft.alive(brch) || header->kind != GCNodeKind::Brch) {
+        return kInvalidNodeRef;
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(brch);
+    if (payload.size() < sizeof(DraftBrchPayload)) {
+        return kInvalidNodeRef;
+    }
+    return reinterpret_cast<const DraftBrchPayload *>(payload.data())->join;
 }
 
 using camel::core::rtdata::fromSlot;
@@ -365,14 +437,13 @@ GraphArenaLayout planGraphArenaLayout(
         .graphBytes = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
         // Room for every graph the five lists name; a graph named twice takes one entry and
         // leaves its room unused.
-        .refBytes = camel::core::mm::alignUp(
-            bytesForArray<GraphId>(refCount), alignof(GCGraph *)),
-        .refRoleBytes = camel::core::mm::alignUp(refCount, alignof(GCGraph *)),
-        .tupleBytes = staticSlots.empty()
-                          ? 0
-                          : camel::core::mm::alignUp(
-                                sizeof(::Tuple) + sizeof(slot_t) * staticSlots.size(),
-                                alignof(::Tuple)),
+        .refBytes = camel::core::mm::alignUp(bytesForArray<GraphId>(refCount), alignof(GCGraph *)),
+        .refRoleBytes  = camel::core::mm::alignUp(refCount, alignof(GCGraph *)),
+        .tupleBytes    = staticSlots.empty()
+                             ? 0
+                             : camel::core::mm::alignUp(
+                                   sizeof(::Tuple) + sizeof(slot_t) * staticSlots.size(),
+                                   alignof(::Tuple)),
         .chunkDirBytes = camel::core::mm::alignUp(
             sizeof(GCNodeChunk *) * std::max<size_t>(nodeChunkCount(payload.nodeCount), 1),
             alignof(GCNodeChunk *)),
@@ -401,7 +472,9 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.orderEdgeBytes + layout.syncEdgeBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes +
+        layout.orderEdgeBytes + layout.syncEdgeBytes + layout.normPortBytes + layout.withPortBytes +
+        layout.closureBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -460,8 +533,8 @@ void validateRuntimeRegions(const GCGraph *graph) {
             std::format("Runtime graph '{}' has region {} {}.", graph->name(), region, what));
     };
     const auto inGraph = [&](gc_node_ref_t ref) {
-        return ref == kInvalidNodeRef || (graph->containsNodeRef(ref) &&
-                                          graph->node(ref)->kind != GCNodeKind::Dead);
+        return ref == kInvalidNodeRef ||
+               (graph->containsNodeRef(ref) && graph->node(ref)->kind != GCNodeKind::Dead);
     };
     if (count != 0 && graph->region(0)->kind != GCRegionKind::Root) {
         bad("as its body, which is not a root", 0);
@@ -545,6 +618,50 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     validateRef(graph->exitNodeRef(), "exit");
     validateRef(graph->outputNodeRef(), "output");
     validateRef(graph->returnNodeRef(), "return");
+
+    // The exit check (from the calculus's list of what a
+    // commit owes): the value a graph hands on is read at its exit, and the nodes a graph names as
+    // what it hands on -- the exit, the output, the returned value -- must be nodes of the function
+    // body, region 0. A rewrite that leaves one of them inside an arm or a loop publishes a graph
+    // whose value is read out of a region that only runs when its owner says so: nothing needs that
+    // region, so the read never happens and the run stops there. The counter-example the calculus
+    // gives inlines an identity function into the exit of one whose true arm computes the value,
+    // which lands the exit on the arm's value.
+    //
+    // Here, beside the cross-reference check and not in the commit's own checks, because it is a
+    // property of the graph published and not of what a commit added: every commit runs this seal in
+    // every build, whether or not it added an access, and no draft is exempt from it.
+    // "In the function body" is "runs whenever the function runs", which is not the same as "region
+    // 0": a block and an inlined body are regions the function enters unconditionally, and the front
+    // end leaves the exit in one whenever the last thing a body says is inside one (an inlined call
+    // at the tail, a tagged block). What never runs for a value nothing asks for is an arm, a loop's
+    // condition and a loop's body -- those run only when their owner says so -- and that is what
+    // this refuses, at any depth.
+    const auto validateRunsWithTheBody = [&](gc_node_ref_t ref, std::string_view what) {
+        if (ref == kInvalidNodeRef || !graph->containsNodeRef(ref)) {
+            return; // no such node, or a number `validateRef` above has already thrown about
+        }
+        for (uint32_t region = graph->nodeRegion(ref); region != 0;
+             region            = graph->region(region)->parent) {
+            const GCRegionKind kind = graph->region(region)->kind;
+            if (kind != GCRegionKind::Arm && kind != GCRegionKind::LoopCond &&
+                kind != GCRegionKind::LoopBody) {
+                continue;
+            }
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has its {} at node {}, which is in region {} instead of the "
+                    "function body: that region runs only when its owner says so, so a value nothing "
+                    "asks for never runs there, and the read never happens.",
+                    graph->name(),
+                    what,
+                    ref,
+                    region));
+        }
+    };
+    validateRunsWithTheBody(graph->exitNodeRef(), "exit");
+    validateRunsWithTheBody(graph->outputNodeRef(), "output");
+    validateRunsWithTheBody(graph->returnNodeRef(), "returned value");
     for (gc_node_ref_t ref : graph->normPorts()) {
         validateRef(ref, "norm-port");
     }
@@ -680,26 +797,31 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // A GATE is "let a value through once the sync chain has", and it waits through a
             // **sync predecessor** (docs/design/effects/edges.cn.md 5.3 -- it has no control input
             // there at all: it is a pure value-forwarding node with one data port and one sync
-            // predecessor). The control input is what that wait used to be written as; the paths
-            // this lane has not moved onto the sync edge yet still carry one, and the ones that
-            // have carry the sync edge instead.
+            // predecessor). A path that has not moved onto the sync edge may still carry the wait as a
+            // control input, and the ones that have carry the sync edge instead.
             // The wait a GATE carries is either a block's chain or an edge of its own, and this
-            // refuses a gate with neither. It is a structural reading, and it is written where it is
-            // read: `EffectLivenessFacts` no longer carries it (camel/runtime/effect_liveness.h
+            // refuses a gate with neither. It is a structural reading, and it is written where it
+            // is read: `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h
             // says why -- four call sites filled that field in three spellings, and none of them
             // was the liveness answer).
             const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
             const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
-            // This is an assertion, not a rule programs reach. Measured: payload validation does run
-            // on the execution path (three graphs validated for a small program, five with a
-            // fault-injection pass in the pipeline), but a gate whose waits are all taken away never
-            // gets here -- `dceDraft` removes it first (src/passes/opt/generic/generic.cpp, the
-            // dead-gate branch: no reader, and it waited on something). A fault-injection pass that
-            // stripped both the control input and the sync predecessor of the first gate committed
-            // and ran with no error, and that gate was gone afterwards (2 gates before it, 1 after).
-            // If this ever fires, either `dceDraft` stopped removing such a gate or the builder
-            // started writing one that nothing waits on.
-            if (!hasWaitEdge && !isSyncStatement) {
+            // A gate may also wait through **what it reads**: the inputs after the value are nodes
+            // whose running the gate's own value depends on, so it is an order of its own and not a
+            // wait that went missing (design principles 3.1: the
+            // region `GATE` is `[the value the region hands out, the region's writes...]`, one node
+            // per region, and it waits on nothing else).
+            const bool holdsReads = graph->normInputsOf(ref).size() > 1;
+            // This is an assertion, not a rule programs reach. Measured: payload validation does
+            // run on the execution path (three graphs validated for a small program, five with a
+            // fault-injection pass in the pipeline), but a gate whose waits are all taken away
+            // never gets here -- `dceDraft` removes it first (src/passes/opt/generic/generic.cpp,
+            // the dead-gate branch: no reader, and it waited on something). A fault-injection pass
+            // that stripped both the control input and the sync predecessor of the first gate
+            // committed and ran with no error, and that gate was gone afterwards (2 gates before
+            // it, 1 after). If this ever fires, either `dceDraft` stopped removing such a gate or
+            // the builder started writing one that nothing waits on.
+            if (!hasWaitEdge && !isSyncStatement && !holdsReads) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has GATE node {} without a wait: no sync predecessor "
@@ -779,7 +901,7 @@ void writeBody(gc_payload_word_t *payload, const GCNode &node, const Body &body)
 }
 
 struct PlannedDraftNode {
-    bool dead               = false; // the place of an erased node (ids are kept)
+    bool dead = false; // the place of an erased node (ids are kept)
     /// True when the finished node takes no order edge (nodeTakesNoOrder, asked here of the node
     /// as it will be once the payload is emitted): its order inputs are dropped, not carried into
     /// the graph. The answer is taken once, in the plan, and both the shape and the emission read
@@ -834,18 +956,37 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-/// Every sync edge the draft has is built into the payload, whatever it ends on (author ruling
-/// 2026-11-02 07:30: the edges stay, the check side changes). The build used to leave an edge out
-/// when its end was neither a statement, a `GATE` nor a node in the tail's region -- the "do not
-/// build a wait the seal would refuse" half of the question -- and that is what lost the waits
+/// Whether the finished node `id` carries no order edge: a node that arranges itself freely says
+/// nothing with one, so the payload the graph holds does not keep them. Two readers ask this -- the
+/// payload plan below, which decides the edge count and the edges emitted, and the delivery check
+/// (`verifyDraftDelivery`), which would otherwise report every dropped order edge as lost -- and
+/// they ask it here so that they cannot answer it two ways.
+bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+        !nodeIsFreelySchedulable(draft, id)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            if (draft.region(region).owner == id) {
+                return false; // it stands for its region and carries its order
+            }
+        }
+    }
+    return true;
+}
+
+/// Every sync edge the draft has is built into the payload, whatever it ends on: the edges stay,
+/// and the check side changes. An edge is built even when its end is neither a statement, a `GATE`
+/// nor a node in the tail's region -- leaving it out so as not to build "a wait the seal would
+/// refuse" would lose the waits
 /// whose end was a block's `Join` or `Func`: edges.cn.md 1 and 4.6 say the chain's tail reaches
 /// the block's value, and the value may be one of those.
 ///
 /// So the wait is not dropped, and what the seal makes of it stays the seal's business: the check
-/// side judges the ends of an edge the graph has, which is the half of the ruling that the code
-/// below is about. Measured on this corpus, dropping the edge was also the only reason the tree did
-/// not build: with it gone, `feat.exemplars` reaches `05_effect_order` -- the chain of a block whose
-/// value the old predicate refused -- and the full fast layer has no red.
+/// side judges the ends of an edge the graph has, which is the half that the code
+/// below is about.
 
 DraftPayloadPlan planDraftPayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live = std::nullopt) {
@@ -860,7 +1001,7 @@ DraftPayloadPlan planDraftPayload(
         liveSet.insert(live->begin(), live->end());
     }
     const auto inGraph = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
-    auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
+    auto requireAlive  = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
         if (ref == kInvalidNodeRef) {
             return;
         }
@@ -890,7 +1031,7 @@ DraftPayloadPlan planDraftPayload(
     size_t orderEdgeCount = 0;
     size_t syncEdgeCount  = 0;
     size_t payloadWords   = 0;
-    const bool keepIds = draft.keepsNodeIds();
+    const bool keepIds    = draft.keepsNodeIds();
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
         if (!draft.alive(draftId)) {
             if (keepIds) {
@@ -919,27 +1060,13 @@ DraftPayloadPlan planDraftPayload(
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
         }
-        // The finished node answers for itself here, and this is the one owner of that answer: the
-        // payload the graph will hold is the one the draft holds, so the question the seal check asks
-        // of the frozen graph (nodeTakesNoOrder, graph_edges.cpp) is asked of this node before it is
-        // written, and the answer decides both the edge count and the edges emitted. It cannot be
-        // asked where the edge is written: a node still being built has no payload, so
-        // nodeIsFreelySchedulable answers for a half-made node and every writer believes the edge is
-        // wanted. Asked here, once, the two answers cannot disagree.
-        bool dropsOrder = false;
-        if (const DraftNodeHeader *ordered = draft.header(draftId);
-            ordered != nullptr && ordered->kind != GCNodeKind::Dead &&
-            ordered->kind != GCNodeKind::Cast && nodeIsFreelySchedulable(draft, draftId)) {
-            dropsOrder = true;
-            if (ordered->kind == GCNodeKind::Brch || ordered->kind == GCNodeKind::Loop) {
-                for (uint32_t region = 1; region < draft.regionCount(); ++region) {
-                    if (draft.region(region).owner == draftId) {
-                        dropsOrder = false; // it stands for its region and carries its order
-                        break;
-                    }
-                }
-            }
-        }
+        // The finished node answers for itself here: the payload the graph will hold is the one the
+        // draft holds, so the question the seal check asks of the frozen graph (nodeTakesNoOrder,
+        // graph_edges.cpp) is asked of this node before it is written, and the answer decides both
+        // the edge count and the edges emitted. It cannot be asked where the edge is written: a node
+        // still being built has no payload, so nodeIsFreelySchedulable answers for a half-made node
+        // and every writer believes the edge is wanted.
+        const bool dropsOrder = takesNoOrder(draft, draftId);
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
             if (dropsOrder) {
@@ -961,11 +1088,11 @@ DraftPayloadPlan planDraftPayload(
             "A runtime graph is addressed with 32 bits; this one has no room left.");
         plan.nodes.push_back(
             PlannedDraftNode{
-                .dead       = false,
-                .dropsOrder = dropsOrder,
-                .draftId    = draftId,
-                .ref        = static_cast<gc_node_ref_t>(nodeCount),
-                .payload    = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
+                .dead             = false,
+                .dropsOrder       = dropsOrder,
+                .draftId          = draftId,
+                .ref              = static_cast<gc_node_ref_t>(nodeCount),
+                .payload          = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
                 .payloadWordCount = words,
             });
         plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
@@ -1005,8 +1132,8 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .payloadWordCount = plan.payloadWordCount,
         .normPortCount    = static_cast<gc_cnt_t>(draft.normPorts().size()),
         .withPortCount    = static_cast<gc_cnt_t>(draft.withPorts().size()),
-        .closureCount   = static_cast<gc_cnt_t>(draft.closureNodes().size()),
-        .permissions    = std::any_of(
+        .closureCount     = static_cast<gc_cnt_t>(draft.closureNodes().size()),
+        .permissions      = std::any_of(
             plan.nodes.begin(),
             plan.nodes.end(),
             [&](const auto &planned) { return draft.nodePermissions(planned.draftId) != 0; }),
@@ -1017,13 +1144,15 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .regions = std::any_of(
             plan.nodes.begin(),
             plan.nodes.end(),
-            [&](const auto &planned) { return !planned.dead && draft.nodeRegion(planned.draftId) != 0; }),
+            [&](const auto &planned) {
+                return !planned.dead && draft.nodeRegion(planned.draftId) != 0;
+            }),
         .regionCount     = static_cast<gc_cnt_t>(draft.regionCount()),
         .regionPortCount = static_cast<gc_cnt_t>(draft.regionPortCount()),
         .writingCount    = static_cast<gc_cnt_t>(draft.writings().size()),
         .orderEdgeCount  = plan.orderEdgeCount,
         .syncEdgeCount   = plan.syncEdgeCount,
-        .base = draft.baseGraph(),
+        .base            = draft.baseGraph(),
     };
 }
 
@@ -1033,29 +1162,33 @@ void emitDraftPayload(
         payload.nodeCount == static_cast<gc_cnt_t>(plan.nodes.size()),
         "Draft payload arena shape does not match the planned node count.");
 
-    size_t inputCursor       = 0;
+    size_t inputCursor = 0;
     // Appends the runtime refs of `refs` to the input table; returns where they begin.
-    auto appendInputs = [&](gc_node_ref_t user, std::span<const gc_node_ref_t> refs,
-                            std::string_view role) -> gc_off_t {
+    auto appendInputs =
+        [&](gc_node_ref_t user, std::span<const gc_node_ref_t> refs, std::string_view role)
+        -> gc_off_t {
         const auto begin = static_cast<gc_off_t>(inputCursor);
         for (gc_node_ref_t draftRef : refs) {
             if (CAMEL_UNLIKELY(draftRef >= plan.runtimeRefsByDraftId.size())) {
                 // A draft node's input names a node of the same draft, and the plan holds one entry
-                // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff --
-                // is a graph built with a hole in it, and read as an index it walks 16 GB past the
-                // table. This was an `ASSERT`, which `NDEBUG` makes `((void)0)`: the build that
-                // ships had no check here at all, so a hole the passes made arrived as a SIGSEGV
-                // with an empty stdout and no sentence (measured 2026-11-04, a transposed half whose
-                // answer tuple was handed an empty cotangent). A throw and not an abort: a pass that
-                // builds a graph the encoder cannot write is the pass's answer to give, and the
-                // driver reports it as one (`reportPassFailure`), by name.
+                // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff
+                // -- is a graph built with a hole in it, and read as an index it walks 16 GB past
+                // the table. An `ASSERT` would be `((void)0)` under `NDEBUG`: the build that
+                // ships would have no check here at all, so a hole the passes made would arrive as a SIGSEGV
+                // with an empty stdout and no sentence (a transposed half
+                // whose answer tuple was handed an empty cotangent). A throw and not an abort: a
+                // pass that builds a graph the encoder cannot write is the pass's answer to give,
+                // and the driver reports it as one (`reportPassFailure`), by name.
                 throw std::runtime_error(
                     std::format(
                         "The {} input list of node {} names draft node {}, which is not one of the "
                         "{} nodes this graph's payload plan holds (it holds {}, the reserved empty "
-                        "reference being {}). The graph was built with a hole where an input belongs, "
-                        "and no text of a program writes one: this is a shape the encoding was never "
-                        "given, so read the pass that built the graph rather than the program it was "
+                        "reference being {}). The graph was built with a hole where an input "
+                        "belongs, "
+                        "and no text of a program writes one: this is a shape the encoding was "
+                        "never "
+                        "given, so read the pass that built the graph rather than the program it "
+                        "was "
                         "built from.",
                         role,
                         user,
@@ -1068,28 +1201,29 @@ void emitDraftPayload(
             GUARD(
                 runtimeRef != kInvalidNodeRef,
                 std::format(
-                    "emitting the inputs of a node from the payload plan: draft node {} is in the plan "
-                    "but has no runtime node (it was dropped), so the input list would name nothing",
+                    "emitting the inputs of a node from the payload plan: draft node {} is in the "
+                    "plan "
+                    "but has no runtime node (it was dropped), so the input list would name "
+                    "nothing",
                     draftRef));
             payload.inputs[inputCursor++] = runtimeRef;
         }
         return begin;
     };
 
-    // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
-    // slot, so the slot must be the input's. Rewrites that rebind a gate's input (inlining binds
-    // parameter gates to the caller's arguments) leave a stale slot, so it is derived here. The owner
-    // of this rule is the encoder -- the payload plan in this file -- not the draft's writers: it is
-    // the place that decides what the frozen graph holds, which is where the order-edge filter sits too.
+    // A GATE forwards its **first** norm input: FastVM reads the producer, NodeVM reads the gate's
+    // slot, so the slot must be the input's. The inputs after the first are the reads the gate takes
+    // and are not what it hands on (design principles 3.1), and the walk to the forwarding value is
+    // the one walk (`camel/runtime/draft.h#ungated`).
+    // Rewrites that rebind a
+    // gate's input (inlining binds parameter gates to the caller's arguments) leave a stale slot, so
+    // it is derived here. The owner of this rule is the encoder -- the payload plan in this file --
+    // not the draft's writers: it is the place that decides what the frozen graph holds, which is
+    // where the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
-        for (size_t hops = 0; hops < plan.nodes.size() + 1; ++hops) {
-            const DraftNodeHeader *h = draft.header(id);
-            if (!h || h->kind != GCNodeKind::Gate || draft.normInputsOf(id).empty()) {
-                return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
-            }
-            id = draft.normInputsOf(id).back();
-        }
-        return static_cast<gc_slot_idx_t>(0);
+        const gc_node_ref_t value = ungated(draft, id);
+        const DraftNodeHeader *h  = value == kInvalidNodeRef ? nullptr : draft.header(value);
+        return h ? h->dataIndex : static_cast<gc_slot_idx_t>(0);
     };
 
     for (const PlannedDraftNode &planned : plan.nodes) {
@@ -1110,16 +1244,17 @@ void emitDraftPayload(
             planned.ref,
             static_cast<int>(draftHeader->kind),
             draft.payloadOf(planned.draftId).size_bytes());
-        GCNode &record   = payload.nodes[planned.ref];
-        record.kind      = draftHeader->kind;
-        record.flags     = draftHeader->runtimeFlags;
+        GCNode &record     = payload.nodes[planned.ref];
+        record.kind        = draftHeader->kind;
+        record.flags       = draftHeader->runtimeFlags;
         record.tangentArgs = draftHeader->tangentArgs;
-        record.dataIndex = slotOf(planned.draftId);
-        record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
-        record.inBegin   = appendInputs(planned.ref, draft.normInputsOf(planned.draftId), "norm");
-        record.withBegin = appendInputs(planned.ref, draft.withInputsOf(planned.draftId), "with");
-        record.ctrlBegin = appendInputs(planned.ref, draft.ctrlInputsOf(planned.draftId), "control");
-        record.payload   = planned.payload;
+        record.dataIndex   = slotOf(planned.draftId);
+        record.typeId      = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
+        record.inBegin     = appendInputs(planned.ref, draft.normInputsOf(planned.draftId), "norm");
+        record.withBegin   = appendInputs(planned.ref, draft.withInputsOf(planned.draftId), "with");
+        record.ctrlBegin =
+            appendInputs(planned.ref, draft.ctrlInputsOf(planned.draftId), "control");
+        record.payload = planned.payload;
         // Origin ids index the origin table of the source manager, a vector of records: they
         // fit 32 bits long before memory runs out (design 3.8: a 32-bit OriginId per node).
         const uint64_t origin = draft.nodeOrigin(planned.draftId);
@@ -1144,9 +1279,9 @@ void emitDraftPayload(
                 // The frozen node names the callee by its index in the reference table; a
                 // callee that is not in it is a graph the encoder was not told this one calls.
                 const auto *refIndex = payload.refIndex;
-                const auto found =
-                    refIndex ? refIndex->find(callee)
-                             : std::unordered_map<GraphId, uint32_t>::const_iterator{};
+                const auto found = refIndex
+                                       ? refIndex->find(callee)
+                                       : std::unordered_map<GraphId, uint32_t>::const_iterator{};
                 if (refIndex == nullptr || found == refIndex->end()) {
                     throw std::runtime_error(
                         std::format(
@@ -1203,7 +1338,8 @@ void emitDraftPayload(
             GUARD(
                 draftBody != nullptr,
                 std::format(
-                    "emitting a BRCH node: its payload table holds no DraftBrchPayload, so the join "
+                    "emitting a BRCH node: its payload table holds no DraftBrchPayload, so the "
+                    "join "
                     "and the arms it names cannot be read (it needs {} bytes of it)",
                     sizeof(DraftBrchPayload)));
             writeBody(
@@ -1238,8 +1374,11 @@ void emitDraftPayload(
     // so each is written to the graph's own array, in the node order the records have, and within
     // one node by the predecessor's number (which is what makes the arrays sorted by (user, pred),
     // the order every reader and every dump of them relies on).
-    const auto emitSideEdges = [&](auto *edges, gc_cnt_t count, const auto &inputsOf,
-                                   bool dropUnmapped, bool dropOnFreeUser) {
+    const auto emitSideEdges = [&](auto *edges,
+                                   gc_cnt_t count,
+                                   const auto &inputsOf,
+                                   bool dropUnmapped,
+                                   bool dropOnFreeUser) {
         if (count == 0) {
             return;
         }
@@ -1271,7 +1410,8 @@ void emitDraftPayload(
                 GUARD(
                     at < count,
                     std::format(
-                        "the side-edge counter says {} edges were planned, but the writer is already at "
+                        "the side-edge counter says {} edges were planned, but the writer is "
+                        "already at "
                         "edge {}: the graph about to be sealed does not hold what the plan emits",
                         count,
                         at));
@@ -1285,17 +1425,24 @@ void emitDraftPayload(
         GUARD(
             at == count,
             std::format(
-                "the side-edge counter says {} edges were emitted, but the target port list planned "
+                "the side-edge counter says {} edges were emitted, but the target port list "
+                "planned "
                 "{}: the graph about to be sealed does not describe what its builder wrote",
                 at,
                 count));
     };
     emitSideEdges(
-        payload.orderEdges, payload.orderEdgeCount,
-        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); }, true, true);
+        payload.orderEdges,
+        payload.orderEdgeCount,
+        [&](gc_node_ref_t id) { return draft.orderInputsOf(id); },
+        true,
+        true);
     emitSideEdges(
-        payload.syncEdges, payload.syncEdgeCount,
-        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); }, false, false);
+        payload.syncEdges,
+        payload.syncEdgeCount,
+        [&](gc_node_ref_t id) { return draft.syncInputsOf(id); },
+        false,
+        false);
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
@@ -1311,13 +1458,13 @@ void emitDraftPayload(
     // a rewrite erased becomes "none".
     const auto mapRegionNode = [&](gc_node_ref_t ref) {
         return ref < plan.runtimeRefsByDraftId.size() ? plan.runtimeRefsByDraftId[ref]
-                                                       : kInvalidNodeRef;
+                                                      : kInvalidNodeRef;
     };
     for (uint32_t r = 0; r < draft.regionCount(); ++r) {
-        GCRegion region        = draft.region(r);
-        region.owner           = mapRegionNode(region.owner);
-        region.result          = mapRegionNode(region.result);
-        region.callSite        = mapRegionNode(region.callSite);
+        GCRegion region = draft.region(r);
+        region.owner    = mapRegionNode(region.owner);
+        region.result   = mapRegionNode(region.result);
+        region.callSite = mapRegionNode(region.callSite);
         // A control region the graph being built has no owner for is dead: what it held went with
         // the node that ran it. A graph of the draft's every node keeps its regions as they are.
         if (plan.subset && region.owner == kInvalidNodeRef &&
@@ -1342,10 +1489,10 @@ void emitDraftPayload(
     }
 
     // A graph without an entry starts at its first node.
-    const auto firstNode = std::find_if(
-        plan.nodes.begin(),
-        plan.nodes.end(),
-        [](const PlannedDraftNode &planned) { return !planned.dead; });
+    const auto firstNode =
+        std::find_if(plan.nodes.begin(), plan.nodes.end(), [](const PlannedDraftNode &planned) {
+            return !planned.dead;
+        });
     payload.entryNode  = draft.entryNode() == kInvalidNodeRef
                              ? (firstNode == plan.nodes.end() ? kInvalidNodeRef : firstNode->ref)
                              : plan.runtimeRefsByDraftId[draft.entryNode()];
@@ -1397,6 +1544,238 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
     return planDraftPayload(draft).runtimeRefsByDraftId;
 }
 
+namespace {
+
+/// A short spelling of a list of node references, for the sentences of the delivery check.
+std::string spelledRefs(std::span<const gc_node_ref_t> refs) {
+    if (refs.empty()) {
+        return "none";
+    }
+    std::string text;
+    for (size_t i = 0; i < refs.size(); ++i) {
+        text += i == 0 ? "" : ",";
+        text += std::to_string(refs[i]);
+    }
+    return text;
+}
+
+} // namespace
+
+void verifyDraftDelivery(
+    const GraphTransaction &transaction, const GCGraph &graph, std::string_view name) {
+    const GraphDraft &draft                       = transaction.graph();
+    const std::vector<gc_node_ref_t> draftToGraph = draftRuntimeNodeRefs(transaction);
+
+    // The sentence every refusal carries: which graph, and which edge. A graph that does not hold
+    // an edge its draft holds is an edit the caller wrote and will never see, so the commit is the
+    // last place that can say so -- and the one place that knows both sides.
+    const auto refuse = [&](const std::string &sentence) -> void {
+        throw std::runtime_error(
+            std::format(
+                "the graph '{}' this commit made is not the draft it encoded: {}",
+                name,
+                sentence));
+    };
+    // The node the graph holds for a draft node. A live draft node the graph has no node for is
+    // already a disagreement: the commit encoded this draft itself, so every one of them is there.
+    const auto graphNodeOf = [&](gc_node_ref_t id) {
+        const gc_node_ref_t ref = id < draftToGraph.size() ? draftToGraph[id] : kInvalidNodeRef;
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref) || graph.node(ref) == nullptr ||
+            graph.node(ref)->kind == GCNodeKind::Dead) {
+            refuse(
+                std::format(
+                    "draft node {} is live and the graph has no node for it (the draft's numbering "
+                    "gives "
+                    "it {}, and the graph holds {} node place(s) that are not dead).",
+                    id,
+                    ref == kInvalidNodeRef ? std::string("nothing") : std::to_string(ref),
+                    static_cast<uint64_t>(graph.storedNodeCount())));
+        }
+        return ref;
+    };
+    // The draft's inputs of one kind, in the graph's numbering, in the order the draft holds them.
+    const auto mappedInputs =
+        [&](gc_node_ref_t id, std::span<const gc_node_ref_t> inputs, const char *kind) {
+            std::vector<gc_node_ref_t> refs;
+            refs.reserve(inputs.size());
+            for (gc_node_ref_t input : inputs) {
+                const gc_node_ref_t pred =
+                    input < draftToGraph.size() ? draftToGraph[input] : kInvalidNodeRef;
+                if (pred == kInvalidNodeRef) {
+                    refuse(
+                        std::format(
+                            "the draft's {} input of node {} names draft node {}, which the graph "
+                            "has no node "
+                            "for; a committed graph cannot hold an edge to nothing.",
+                            kind,
+                            id,
+                            input));
+                }
+                refs.push_back(pred);
+            }
+            return refs;
+        };
+    // A run of inputs the graph must hold exactly as the draft does, in the same order (the ports
+    // and the control inputs are runs of one list and their order is the port order).
+    const auto sameRun = [&](gc_node_ref_t id,
+                             gc_node_ref_t ref,
+                             const char *kind,
+                             std::vector<gc_node_ref_t>
+                                 expected,
+                             std::span<const gc_node_ref_t>
+                                 actual) {
+        if (expected.size() == actual.size() &&
+            std::equal(expected.begin(), expected.end(), actual.begin())) {
+            return;
+        }
+        refuse(
+            std::format(
+                "node {} (graph node {}) has its {} inputs as [{}] in the draft and as [{}] in the "
+                "graph.",
+                id,
+                ref,
+                kind,
+                spelledRefs(expected),
+                spelledRefs(actual)));
+    };
+    // A set of side edges (order, sync): the graph holds one array per kind, sorted by (user,
+    // pred), so the order the draft wrote them in says nothing.
+    const auto sameSideEdges = [&](gc_node_ref_t id,
+                                   gc_node_ref_t ref,
+                                   const char *kind,
+                                   std::vector<gc_node_ref_t>
+                                       expected,
+                                   std::vector<gc_node_ref_t>
+                                       actual) {
+        std::sort(expected.begin(), expected.end());
+        std::sort(actual.begin(), actual.end());
+        for (gc_node_ref_t pred : expected) {
+            if (!std::binary_search(actual.begin(), actual.end(), pred)) {
+                refuse(
+                    std::format(
+                        "the {} edge from node {} to node {} (graph nodes {} -> {}) is in the "
+                        "draft and "
+                        "not in the graph: the graph's {} inputs of that node are [{}].",
+                        kind,
+                        pred,
+                        id,
+                        pred,
+                        ref,
+                        kind,
+                        spelledRefs(actual)));
+            }
+        }
+        for (gc_node_ref_t pred : actual) {
+            if (!std::binary_search(expected.begin(), expected.end(), pred)) {
+                refuse(
+                    std::format(
+                        "the graph holds a {} edge from node {} to node {} (graph nodes {} -> {}) "
+                        "that the "
+                        "draft does not: the draft's {} inputs of that node are [{}].",
+                        kind,
+                        pred,
+                        id,
+                        pred,
+                        ref,
+                        kind,
+                        spelledRefs(expected)));
+            }
+        }
+    };
+    const auto sidePreds = [&](gc_node_ref_t ref, bool order) {
+        std::vector<gc_node_ref_t> preds;
+        if (order) {
+            for (const GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+                preds.push_back(edge.pred);
+            }
+        } else {
+            for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+                preds.push_back(edge.pred);
+            }
+        }
+        std::sort(preds.begin(), preds.end());
+        return preds;
+    };
+
+    // Every edge the draft holds, in the numbering the graph gives its nodes: the four kinds of
+    // the design (a data port -- the normal run and the context one -- a control input, an order
+    // edge and a sync edge), so a graph that lost or gained one anywhere is caught.
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (draft.header(id) == nullptr || !draft.alive(id)) {
+            continue;
+        }
+        const gc_node_ref_t ref = graphNodeOf(id);
+        sameRun(
+            id,
+            ref,
+            "normal",
+            mappedInputs(id, draft.normInputsOf(id), "normal"),
+            graph.normInputsOf(ref));
+        sameRun(
+            id,
+            ref,
+            "context",
+            mappedInputs(id, draft.withInputsOf(id), "context"),
+            graph.withInputsOf(ref));
+        sameRun(
+            id,
+            ref,
+            "control",
+            mappedInputs(id, draft.ctrlInputsOf(id), "control"),
+            graph.ctrlInputsOf(ref));
+        const std::vector<gc_node_ref_t> order = sidePreds(ref, true);
+        if (takesNoOrder(draft, id)) {
+            if (!order.empty()) {
+                refuse(
+                    std::format(
+                        "the graph orders node {} (graph node {}) after [{}], and a node that "
+                        "arranges "
+                        "itself freely carries no order edge.",
+                        id,
+                        ref,
+                        spelledRefs(order)));
+            }
+        } else {
+            sameSideEdges(
+                id,
+                ref,
+                "order",
+                mappedInputs(id, draft.orderInputsOf(id), "order"),
+                order);
+        }
+        sameSideEdges(
+            id,
+            ref,
+            "sync",
+            mappedInputs(id, draft.syncInputsOf(id), "sync"),
+            sidePreds(ref, false));
+    }
+
+    // And the graph's side: a node or an edge nobody wrote is as wrong as one the draft lost. The
+    // runs and the side arrays were compared as sets above, so what is left is a node the draft has
+    // no place for.
+    std::vector<gc_node_ref_t> graphToDraft(graph.nodeCount(), kInvalidNodeRef);
+    for (gc_node_ref_t id = 0; id < draftToGraph.size(); ++id) {
+        const gc_node_ref_t ref = draftToGraph[id];
+        if (ref != kInvalidNodeRef && ref < graphToDraft.size()) {
+            graphToDraft[ref] = id;
+        }
+    }
+    for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        const GCNode *node = graph.node(ref);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            continue;
+        }
+        if (graphToDraft[ref] == kInvalidNodeRef) {
+            refuse(
+                std::format(
+                    "the graph holds node {} (kind {}) that the draft has no node for.",
+                    ref,
+                    static_cast<int>(node->kind)));
+        }
+    }
+}
+
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || !draft.alive(id)) {
@@ -1405,10 +1784,10 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
-        bool fixed = byShape && shapesAreFixed(header->dataType);
+        bool fixed                               = byShape && shapesAreFixed(header->dataType);
         for (gc_node_ref_t input : draft.normInputsOf(id)) {
             const DraftNodeHeader *in = draft.header(input);
-            fixed = fixed && in != nullptr && shapesAreFixed(in->dataType);
+            fixed                     = fixed && in != nullptr && shapesAreFixed(in->dataType);
         }
         return payload.size() >= sizeof(GCOperBody) &&
                nodeIsFreelySchedulable(
@@ -1419,7 +1798,7 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
                    fixed);
     }
     case GCNodeKind::Cast: {
-        const auto inputs = draft.normInputsOf(id);
+        const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeIsFreelySchedulable(
             header->kind,
@@ -1459,7 +1838,7 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             standsForRegion);
     }
     case GCNodeKind::Cast: {
-        const auto inputs = draft.normInputsOf(id);
+        const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return isChainStatement(
             header->kind,
@@ -1469,8 +1848,76 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             standsForRegion);
     }
     default:
-        return isChainStatement(header->kind, camel::core::kNoOper, nullptr, nullptr, standsForRegion);
+        return isChainStatement(
+            header->kind,
+            camel::core::kNoOper,
+            nullptr,
+            nullptr,
+            standsForRegion);
     }
+}
+
+gc_node_ref_t chainEntryOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind != GCNodeKind::Join) {
+        return id;
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(id);
+    if (payload.size() < sizeof(GCJoinBody)) {
+        return id;
+    }
+    const auto *body = reinterpret_cast<const GCJoinBody *>(payload.data());
+    return body->brch != kInvalidNodeRef && draft.alive(body->brch) ? body->brch : id;
+}
+
+gc_node_ref_t chainExitOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind != GCNodeKind::Brch) {
+        return id;
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(id);
+    if (payload.size() < sizeof(DraftBrchPayload)) {
+        return id;
+    }
+    const auto *body = reinterpret_cast<const DraftBrchPayload *>(payload.data());
+    return body->join != kInvalidNodeRef && draft.alive(body->join) ? body->join : id;
+}
+
+bool isChainExit(const GraphDraft &draft, gc_node_ref_t id) {
+    if (isChainStatement(draft, id)) {
+        return true;
+    }
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind != GCNodeKind::Join) {
+        return false;
+    }
+    const gc_node_ref_t owner = chainEntryOf(draft, id);
+    return owner != id && isChainStatement(draft, owner) && chainExitOf(draft, owner) == id;
+}
+
+bool occupiesChainPlace(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || !draft.alive(id)) {
+        return false;
+    }
+    if (!draft.syncUsersOf(id).empty()) {
+        return true;
+    }
+    return header->kind != GCNodeKind::Gate && isChainExit(draft, id) &&
+           !draft.syncInputsOf(id).empty();
+}
+
+bool isBlockValue(const GraphDraft &draft, gc_node_ref_t id) {
+    if (draft.exitNode() == id || draft.outputNode() == id || draft.returnNode() == id) {
+        return true;
+    }
+    for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+        const GCRegion &record = draft.region(region);
+        if (record.kind != GCRegionKind::Dead && record.result == id) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
@@ -1481,10 +1928,10 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
-        bool fixed = byShape && shapesAreFixed(header->dataType);
+        bool fixed                               = byShape && shapesAreFixed(header->dataType);
         for (gc_node_ref_t input : draft.normInputsOf(id)) {
             const DraftNodeHeader *in = draft.header(input);
-            fixed = fixed && in != nullptr && shapesAreFixed(in->dataType);
+            fixed                     = fixed && in != nullptr && shapesAreFixed(in->dataType);
         }
         return payload.size() < sizeof(GCOperBody) ||
                nodeMayFault(
@@ -1495,7 +1942,7 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
                    fixed);
     }
     case GCNodeKind::Cast: {
-        const auto inputs = draft.normInputsOf(id);
+        const auto inputs             = draft.normInputsOf(id);
         const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
         return nodeMayFault(
             header->kind,
@@ -1525,8 +1972,293 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
     }
     const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
     return !anyOf(
-        draft.ctrlInputsOf(node), draft.orderInputsOf(node), draft.syncInputsOf(node),
-        draft.ctrlUsersOf(node), draft.orderUsersOf(node), draft.syncUsersOf(node));
+        draft.ctrlInputsOf(node),
+        draft.orderInputsOf(node),
+        draft.syncInputsOf(node),
+        draft.ctrlUsersOf(node),
+        draft.orderUsersOf(node),
+        draft.syncUsersOf(node));
+}
+
+namespace {
+
+/// The one walk behind both faces of a graph, with the smallest shim each side needs: a draft
+/// spells its edges with `syncInputsOf` and its region ports `regionPortsOf`, a frozen graph spells
+/// them `syncPredsOf` (edges, each naming its node) and `regionPorts`, and a branch's join lives in
+/// `DraftBrchPayload` on one side and in `GCBrchBody` on the other. Everything else -- what makes a
+/// node alive, what the roots are, which inputs carry reachability -- is written once, below.
+struct DraftLiveFace {
+    const GraphDraft &draft;
+
+    bool alive(gc_node_ref_t ref) const { return draft.header(ref) != nullptr && draft.alive(ref); }
+    GCNodeKind kindOf(gc_node_ref_t ref) const {
+        const DraftNodeHeader *header = draft.header(ref);
+        return header != nullptr ? header->kind : GCNodeKind::Dead;
+    }
+    void roots(std::vector<gc_node_ref_t> &into) const {
+        for (gc_node_ref_t ref :
+             {draft.entryNode(), draft.exitNode(), draft.outputNode(), draft.returnNode()}) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : draft.normPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : draft.withPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : draft.closureNodes()) {
+            into.push_back(ref);
+        }
+    }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return draft.normInputsOf(ref);
+    }
+    gc_node_ref_t decidingOwnerOf(uint32_t region) const {
+        return camel::runtime::decidingOwnerOfDraft(draft, region);
+    }
+
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return draft.withInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const {
+        return draft.ctrlInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const {
+        return draft.syncInputsOf(ref);
+    }
+    uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
+        return draft.loopRegionOf(ref, part);
+    }
+    std::span<const gc_node_ref_t> regionPortsOf(uint32_t region) const {
+        return draft.regionPortsOf(region);
+    }
+    gc_node_ref_t joinOf(gc_node_ref_t ref) const {
+        const auto *payload =
+            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(ref).data());
+        return payload != nullptr ? payload->join : kInvalidNodeRef;
+    }
+    gc_node_ref_t brchOf(gc_node_ref_t ref) const {
+        const auto *payload = reinterpret_cast<const GCJoinBody *>(draft.payloadOf(ref).data());
+        return payload != nullptr ? payload->brch : kInvalidNodeRef;
+    }
+};
+
+struct FrozenLiveFace {
+    const GCGraph &graph;
+
+    bool alive(gc_node_ref_t ref) const {
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        return node != nullptr && node->kind != GCNodeKind::Dead;
+    }
+    GCNodeKind kindOf(gc_node_ref_t ref) const {
+        const GCNode *node = graph.node(ref);
+        return node != nullptr ? node->kind : GCNodeKind::Dead;
+    }
+    void roots(std::vector<gc_node_ref_t> &into) const {
+        for (gc_node_ref_t ref :
+             {graph.entryNodeRef(),
+              graph.exitNodeRef(),
+              graph.outputNodeRef(),
+              graph.returnNodeRef()}) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : graph.normPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : graph.withPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : graph.closureNodes()) {
+            into.push_back(ref);
+        }
+    }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return graph.normInputsOf(ref);
+    }
+    gc_node_ref_t decidingOwnerOf(uint32_t region) const {
+        return camel::runtime::decidingOwnerOf(graph, region);
+    }
+
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return graph.withInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const {
+        return graph.ctrlInputsOf(ref);
+    }
+    /// The frozen graph carries a sync edge as an edge record that names its node; the walk wants
+    /// the node, so the shim unwraps it here rather than making the walk know two spellings.
+    std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const {
+        std::vector<gc_node_ref_t> inputs;
+        for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+            inputs.push_back(edge.pred);
+        }
+        return inputs;
+    }
+    uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
+        return graph.loopRegionOf(ref, part);
+    }
+    std::span<const gc_node_ref_t> regionPortsOf(uint32_t region) const {
+        return graph.regionPorts(region);
+    }
+    gc_node_ref_t joinOf(gc_node_ref_t ref) const {
+        const auto *body = graph.nodeBodyAs<GCBrchBody>(ref);
+        return body != nullptr ? body->join : kInvalidNodeRef;
+    }
+    gc_node_ref_t brchOf(gc_node_ref_t ref) const {
+        const auto *body = graph.nodeBodyAs<GCJoinBody>(ref);
+        return body != nullptr ? body->brch : kInvalidNodeRef;
+    }
+};
+
+template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &face) {
+    std::unordered_set<gc_node_ref_t> visited;
+    std::vector<gc_node_ref_t> worklist;
+    auto pushRoot = [&](gc_node_ref_t ref) {
+        if (ref != kInvalidNodeRef && face.alive(ref) && visited.insert(ref).second) {
+            worklist.push_back(ref);
+        }
+    };
+
+    std::vector<gc_node_ref_t> roots;
+    face.roots(roots);
+    for (gc_node_ref_t root : roots) {
+        pushRoot(root);
+    }
+
+    const auto reach = [&] {
+        while (!worklist.empty()) {
+            const gc_node_ref_t current = worklist.back();
+            worklist.pop_back();
+            for (gc_node_ref_t input : face.normInputsOf(current)) {
+                pushRoot(input);
+            }
+            for (gc_node_ref_t input : face.withInputsOf(current)) {
+                pushRoot(input);
+            }
+            for (gc_node_ref_t input : face.ctrlInputsOf(current)) {
+                pushRoot(input);
+            }
+            // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement
+            // written before this one in the same `sync` block is live exactly as a data input is.
+            for (gc_node_ref_t input : face.syncInputsOf(current)) {
+                pushRoot(input);
+            }
+            const GCNodeKind kind = face.kindOf(current);
+            if (kind == GCNodeKind::Loop) {
+                // The ports of its regions are part of it, whether the code reads them or not.
+                for (auto part : {GCRegionKind::LoopCond, GCRegionKind::LoopBody}) {
+                    if (const uint32_t region = face.loopRegionOf(current, part); region != 0) {
+                        for (gc_node_ref_t port : face.regionPortsOf(region)) {
+                            pushRoot(port);
+                        }
+                    }
+                }
+            }
+            if (kind == GCNodeKind::Brch) {
+                pushRoot(face.joinOf(current));
+            } else if (kind == GCNodeKind::Join) {
+                pushRoot(face.brchOf(current));
+            }
+        }
+    };
+    reach();
+
+    // What a region owes its writes is not seeded here: it is an edge laid once when the graph was
+    // built (`Builder::layRegionWriteEdges`), and
+    // this walk reaches it like any other sync edge.
+    std::vector<gc_node_ref_t> live(visited.begin(), visited.end());
+    std::sort(live.begin(), live.end());
+    return live;
+}
+
+} // namespace
+
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft) {
+    return liveNodesWith(DraftLiveFace{draft});
+}
+
+std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph) {
+    return liveNodesWith(FrozenLiveFace{graph});
+}
+
+bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
+    const DraftNodeHeader *header = draft.header(node);
+    if (header == nullptr || !draft.alive(node) || header->kind != GCNodeKind::Func) {
+        return false;
+    }
+    const std::span<const gc_node_ref_t> exported = draft.closureNodes();
+    if (std::find(exported.begin(), exported.end(), node) != exported.end()) {
+        return false;
+    }
+    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
+    return !anyOf(
+        draft.ctrlInputsOf(node),
+        draft.orderInputsOf(node),
+        draft.syncInputsOf(node),
+        draft.ctrlUsersOf(node),
+        draft.orderUsersOf(node),
+        draft.syncUsersOf(node));
+}
+
+uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref) {
+    const DraftNodeHeader *header = draft.header(ref);
+    if (header == nullptr || !draft.alive(ref) || header->kind != GCNodeKind::Fill) {
+        return 0;
+    }
+    const auto payload = draft.payloadOf(ref);
+    if (payload.size() < sizeof(GCFillBody)) {
+        return 0;
+    }
+    const auto *body = reinterpret_cast<const GCFillBody *>(payload.data());
+    if (body->fillKind != GCFillKind::Tuple) {
+        return 0;
+    }
+    return body->slotCount;
+}
+
+uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Fill) {
+        return 0;
+    }
+    const auto *body = graph.nodeBodyAs<GCFillBody>(ref);
+    if (body == nullptr || body->fillKind != GCFillKind::Tuple) {
+        return 0;
+    }
+    return body->slotCount;
+}
+
+AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref) {
+    const uint32_t arity = aggregateArity(draft, ref);
+    if (arity < 2) {
+        return AggregateTailVerdict::NotAnAggregate;
+    }
+    // The members of an aggregate are the frame slots its payload names (`GCFillBody::slots` is a
+    // span of `gc_slot_idx_t`), not its ordinary inputs: an aggregate with two members has one
+    // input. So the member-to-node mapping this question needs is the inversion "which node writes
+    // that slot", which no layer provides yet -- and until it does, the only honest answer is that
+    // the shape cannot be judged.
+    return AggregateTailVerdict::MappingMismatch;
+}
+
+AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref) {
+    if (aggregateArity(graph, ref) < 2) {
+        return AggregateTailVerdict::NotAnAggregate;
+    }
+    return AggregateTailVerdict::MappingMismatch;
+}
+
+const char *aggregateTailVerdictName(AggregateTailVerdict verdict) {
+    switch (verdict) {
+    case AggregateTailVerdict::NotAnAggregate:
+        return "not-an-aggregate";
+    case AggregateTailVerdict::MappingMismatch:
+        return "mapping-mismatch";
+    }
+    return "unknown";
 }
 
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) {
@@ -1577,8 +2309,8 @@ void recordDraftDebugData(
     if (subset) {
         liveSet.insert(live->begin(), live->end());
     }
-    const auto inGraph = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
-    record->implKernelUri = draft.implKernelUri();
+    const auto inGraph       = [&](gc_node_ref_t id) { return !subset || liveSet.contains(id); };
+    record->implKernelUri    = draft.implKernelUri();
     record->declarationFacts = draft.declarationFacts();
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     record->nodeNames.clear();
@@ -1601,9 +2333,9 @@ void recordDraftDebugData(
                 draft.nodeName(ref) == camel::core::kEmptySym) {
                 continue;
             }
-            const gc_node_ref_t runtime =
-                ref < plan.runtimeRefsByDraftId.size() ? plan.runtimeRefsByDraftId[ref]
-                                                       : kInvalidNodeRef;
+            const gc_node_ref_t runtime = ref < plan.runtimeRefsByDraftId.size()
+                                              ? plan.runtimeRefsByDraftId[ref]
+                                              : kInvalidNodeRef;
 
             if (runtime != kInvalidNodeRef && runtime < record->nodeNames.size()) {
                 record->nodeNames[runtime] = draft.nodeName(ref);
@@ -1622,19 +2354,19 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
             alignof(GCNodeChunk *)),
         alignof(GCNodeChunk *)));
     std::fill_n(payload.chunks, std::max<size_t>(payload.chunkCount, 1), nullptr);
-    payload.hasPermissions = shape.permissions;
-    payload.hasAttrs       = shape.attrs;
-    payload.hasRegions     = shape.regions;
-    payload.regionTable    = arenaAllocArray<GCRegion>(arena, shape.regionCount);
-    payload.regionCount    = shape.regionCount;
-    payload.regionPorts    = arenaAllocArray<gc_node_ref_t>(arena, shape.regionPortCount);
-    payload.regionPortCount = shape.regionPortCount;
-    payload.writings        = arenaAllocArray<WritingUnion>(arena, shape.writingCount);
-    payload.writingCount    = shape.writingCount;
-    payload.orderEdges      = arenaAllocArray<GCGraphOrderEdge>(arena, shape.orderEdgeCount);
-    payload.orderEdgeCount  = shape.orderEdgeCount;
-    payload.syncEdges       = arenaAllocArray<GCGraphSyncEdge>(arena, shape.syncEdgeCount);
-    payload.syncEdgeCount   = shape.syncEdgeCount;
+    payload.hasPermissions   = shape.permissions;
+    payload.hasAttrs         = shape.attrs;
+    payload.hasRegions       = shape.regions;
+    payload.regionTable      = arenaAllocArray<GCRegion>(arena, shape.regionCount);
+    payload.regionCount      = shape.regionCount;
+    payload.regionPorts      = arenaAllocArray<gc_node_ref_t>(arena, shape.regionPortCount);
+    payload.regionPortCount  = shape.regionPortCount;
+    payload.writings         = arenaAllocArray<WritingUnion>(arena, shape.writingCount);
+    payload.writingCount     = shape.writingCount;
+    payload.orderEdges       = arenaAllocArray<GCGraphOrderEdge>(arena, shape.orderEdgeCount);
+    payload.orderEdgeCount   = shape.orderEdgeCount;
+    payload.syncEdges        = arenaAllocArray<GCGraphSyncEdge>(arena, shape.syncEdgeCount);
+    payload.syncEdgeCount    = shape.syncEdgeCount;
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
@@ -1726,7 +2458,8 @@ bool chunkHolds(
         return n == 0 || std::memcmp(x, y, n * sizeof(*x)) == 0;
     };
     return same(chunk.origins, staging.origins.data() + first, count) &&
-           (!chunk.permissions || same(chunk.permissions, staging.permissions.data() + first, count)) &&
+           (!chunk.permissions ||
+            same(chunk.permissions, staging.permissions.data() + first, count)) &&
            (!chunk.attrs || same(chunk.attrs, staging.attrs.data() + first, count)) &&
            (!chunk.regions || same(chunk.regions, staging.regions.data() + first, count)) &&
            same(chunk.edges, staging.inputs.data() + edgeBegin, edges) &&
@@ -1780,9 +2513,12 @@ void buildNodeChunks(
             const size_t recordsAt = sizeof(GCNodeChunk);
             const size_t originsAt = align8(recordsAt + count * sizeof(GCNode));
             const size_t permsAt   = originsAt + align8(count * sizeof(uint32_t));
-            const size_t attrsAt   = permsAt + (shape.permissions ? align8(count * sizeof(camel::core::sem::PermissionMask)) : 0);
+            const size_t attrsAt =
+                permsAt +
+                (shape.permissions ? align8(count * sizeof(camel::core::sem::PermissionMask)) : 0);
             const size_t regionsAt = attrsAt + (shape.attrs ? align8(count * sizeof(uint32_t)) : 0);
-            const size_t edgesAt = regionsAt + (shape.regions ? align8(count * sizeof(uint32_t)) : 0);
+            const size_t edgesAt =
+                regionsAt + (shape.regions ? align8(count * sizeof(uint32_t)) : 0);
             const size_t payloadAt = edgesAt + align8(edges * sizeof(gc_node_ref_t));
             const size_t bytes     = payloadAt + words * sizeof(gc_payload_word_t);
             auto *base =
@@ -1793,9 +2529,12 @@ void buildNodeChunks(
             chunk->payloadWordCount = static_cast<uint32_t>(words);
             chunk->origins          = reinterpret_cast<uint32_t *>(base + originsAt);
             chunk->permissions =
-                shape.permissions ? reinterpret_cast<camel::core::sem::PermissionMask *>(base + permsAt) : nullptr;
-            chunk->attrs   = shape.attrs ? reinterpret_cast<uint32_t *>(base + attrsAt) : nullptr;
-            chunk->regions = shape.regions ? reinterpret_cast<uint32_t *>(base + regionsAt) : nullptr;
+                shape.permissions
+                    ? reinterpret_cast<camel::core::sem::PermissionMask *>(base + permsAt)
+                    : nullptr;
+            chunk->attrs = shape.attrs ? reinterpret_cast<uint32_t *>(base + attrsAt) : nullptr;
+            chunk->regions =
+                shape.regions ? reinterpret_cast<uint32_t *>(base + regionsAt) : nullptr;
             chunk->edges   = reinterpret_cast<gc_node_ref_t *>(base + edgesAt);
             chunk->payload = reinterpret_cast<gc_payload_word_t *>(base + payloadAt);
 
@@ -1970,7 +2709,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     auto *refStorage         = static_cast<GraphId *>(arena.alloc(
         camel::core::mm::alignUp(bytesForArray<GraphId>(refCapacity), alignof(GCGraph *)),
         alignof(GCGraph *)));
-    auto *refRoleStorage = static_cast<uint8_t *>(
+    auto *refRoleStorage     = static_cast<uint8_t *>(
         arena.alloc(camel::core::mm::alignUp(refCapacity, alignof(GCGraph *)), alignof(GCGraph *)));
     std::unordered_map<GraphId, uint32_t> refIndex;
     size_t refCount    = 0;
@@ -1993,7 +2732,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     // node chunks that hold them can be shared.
     if (payloadShape.base) {
         std::unordered_set<GraphId> named;
-        for (const auto list : {dependencies, subGraphs, staticGraphRefs, ruleGraphs, liftedFromRefs}) {
+        for (const auto list :
+             {dependencies, subGraphs, staticGraphRefs, ruleGraphs, liftedFromRefs}) {
             named.insert(list.begin(), list.end());
         }
         for (GraphId ref : payloadShape.base->refs()) {
@@ -2029,8 +2769,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     staging.inputs.resize(payloadShape.edgeCount);
     staging.payload.resize(payloadShape.payloadWordCount);
     GCGraphPayloadArena payloadArena = makePayloadArenaView(ownedPayload, staging);
-    payloadArena.refs                 = std::span<const GraphId>(refStorage, refCount);
-    payloadArena.refIndex             = &refIndex;
+    payloadArena.refs                = std::span<const GraphId>(refStorage, refCount);
+    payloadArena.refIndex            = &refIndex;
     // The frame layout is part of the graph (see TupleType::constructFrameLayout); the padding
     // planned for it lets it start aligned wherever the arrays before it ended.
     TupleType *runtimeDataType = nullptr;
@@ -2122,8 +2862,7 @@ GCGraph::GCGraph(
     revision_ = revisions.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
-GCGraphPayloadShape
-describeDraftNativePayload(
+GCGraphPayloadShape describeDraftNativePayload(
     const GraphDraft &draft, std::optional<std::span<const gc_node_ref_t>> live) {
     return describeDraftPayload(draft, planDraftPayload(draft, live));
 }
@@ -2197,17 +2936,23 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
         std::vector<GraphId> referenced;
         std::unordered_set<const Object *> visited;
         for (size_t i = 1; i < slots.size() && i < types->size(); ++i) {
-            collectStaticGraphRefsRecursive(program, referenced, slots[i], types->typeAt(i), visited);
+            collectStaticGraphRefsRecursive(
+                program,
+                referenced,
+                slots[i],
+                types->typeAt(i),
+                visited);
         }
         const auto refs = graph->refs();
         for (GraphId ref : referenced) {
             if (std::find(refs.begin(), refs.end(), ref) == refs.end()) {
                 const GCGraph *named = program.graph(ref);
-                throw std::runtime_error(std::format(
-                    "Runtime graph '{}' has a function constant of graph '{}', which is not in "
-                    "its reference table.",
-                    graph->name(),
-                    named ? named->name() : std::format("#{}", toValue(ref))));
+                throw std::runtime_error(
+                    std::format(
+                        "Runtime graph '{}' has a function constant of graph '{}', which is not in "
+                        "its reference table.",
+                        graph->name(),
+                        named ? named->name() : std::format("#{}", toValue(ref))));
             }
         }
     }
@@ -2228,9 +2973,7 @@ const std::string &GCGraph::implKernelUri() const {
     return debug_ ? debug_->implKernelUri : kEmpty;
 }
 
-uint32_t GCGraph::declarationFacts() const {
-    return debug_ ? debug_->declarationFacts : 0;
-}
+uint32_t GCGraph::declarationFacts() const { return debug_ ? debug_->declarationFacts : 0; }
 
 std::span<const camel::core::SymId> GCGraph::captureNames() const {
     return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
@@ -2242,8 +2985,7 @@ std::string_view GCGraph::nodeName(gc_node_ref_t ref) const {
         return {};
     }
     const camel::core::SymId name = debug_->nodeNames[ref];
-    return name == camel::core::kEmptySym ? std::string_view()
-                                          : camel::core::symbolText(name);
+    return name == camel::core::kEmptySym ? std::string_view() : camel::core::symbolText(name);
 }
 
 camel::core::SymId GCGraph::nodeNameSym(gc_node_ref_t ref) const {
@@ -2256,7 +2998,9 @@ camel::core::SymId GCGraph::nodeNameSym(gc_node_ref_t ref) const {
 bool GCGraph::hasNodeNames() const { return debug_ && !debug_->nodeNames.empty(); }
 
 uint32_t GCGraph::nodeAttrs(gc_node_ref_t ref) const {
-    return containsNodeRef(ref) && chunkOf(ref).attrs ? chunkOf(ref).attrs[ref & (kNodeChunkNodes - 1)] : 0;
+    return containsNodeRef(ref) && chunkOf(ref).attrs
+               ? chunkOf(ref).attrs[ref & (kNodeChunkNodes - 1)]
+               : 0;
 }
 
 camel::core::sem::PermissionMask GCGraph::nodePermissions(gc_node_ref_t ref) const {
@@ -2291,8 +3035,7 @@ camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t written
     const bool hasExit = exit != nullptr && exit->code() != camel::core::type::TypeCode::Void;
     // The capture ports are the with-ports after the declared ones, in the order the captures
     // were made: bit k of the mask is the k-th of them.
-    const size_t declaredWith =
-        calleeType != nullptr ? calleeType->withTypesCount() : size_t{0};
+    const size_t declaredWith = calleeType != nullptr ? calleeType->withTypesCount() : size_t{0};
     const std::span<const gc_node_ref_t> withPorts = callee.withPorts();
     std::vector<camel::core::type::Type *> parts;
     if (hasExit) {
@@ -2302,7 +3045,7 @@ camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t written
         if ((writtenCaptures & (uint32_t{1} << k)) == 0) {
             continue;
         }
-        const size_t port = declaredWith + k;
+        const size_t port     = declaredWith + k;
         const GCNode *capture = port < withPorts.size() ? callee.node(withPorts[port]) : nullptr;
         if (capture != nullptr && capture->dataType() != nullptr) {
             parts.push_back(capture->dataType());
@@ -2350,8 +3093,7 @@ std::span<const slot_t> GCGraph::staticSlots() const {
                        : std::span<const slot_t>{};
 }
 
-std::optional<std::pair<int64_t, int64_t>>
-GCGraph::intervalPairValuesOf(gc_node_ref_t ref) const {
+std::optional<std::pair<int64_t, int64_t>> GCGraph::intervalPairValuesOf(gc_node_ref_t ref) const {
     // The pair is a value: the FILL the front end builds and the constant a pass may replace it
     // with hold the same two integers, so the loop's bounds are read from either. This reads the
     // constant: a DATA node of the static area whose type is the tuple of the two bounds.
@@ -2363,8 +3105,7 @@ GCGraph::intervalPairValuesOf(gc_node_ref_t ref) const {
     }
     const auto *type = static_cast<const TupleType *>(nodeType);
     if (type->size() != 2 || type->typeAt(0) == nullptr || type->typeAt(1) == nullptr ||
-        type->typeAt(0)->code() != TypeCode::Int64 ||
-        type->typeAt(1)->code() != TypeCode::Int64) {
+        type->typeAt(0)->code() != TypeCode::Int64 || type->typeAt(1)->code() != TypeCode::Int64) {
         return std::nullopt;
     }
     const auto slots   = staticSlots();
@@ -2377,7 +3118,8 @@ GCGraph::intervalPairValuesOf(gc_node_ref_t ref) const {
         return std::nullopt;
     }
     return std::pair<int64_t, int64_t>{
-        fromSlot<int64_t>(tuple->get<slot_t>(0)), fromSlot<int64_t>(tuple->get<slot_t>(1))};
+        fromSlot<int64_t>(tuple->get<slot_t>(0)),
+        fromSlot<int64_t>(tuple->get<slot_t>(1))};
 }
 
 bool GCGraph::hasNodePayload() const { return !nativePayload_.empty(); }
@@ -2385,7 +3127,6 @@ bool GCGraph::hasNodePayload() const { return !nativePayload_.empty(); }
 const GCGraphNativePayload *GCGraph::nodePayload() const {
     return nativePayload_.empty() ? nullptr : &nativePayload_;
 }
-
 
 const GCNode *GCGraph::entryNode() const { return node(entryNodeRef()); }
 
@@ -2405,7 +3146,7 @@ gc_node_ref_t GCGraph::returnNodeRef() const { return nativePayload_.returnNode;
 
 GCReturnKind GCGraph::returnKind() const { return nativePayload_.returnKind; }
 
-gc_cnt_t GCGraph::liveNodeCount() const {
+gc_cnt_t GCGraph::storedNodeCount() const {
     gc_cnt_t live = 0;
     for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {
         const GCNodeChunk &chunk = *nativePayload_.chunks[c];
@@ -2476,7 +3217,7 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
     }
     // FNV-1a over the node: its record, the run of nodes it consumes and its payload (see the
     // declaration in graph.h).
-    uint64_t hash = 0xcbf29ce484222325ULL;
+    uint64_t hash  = 0xcbf29ce484222325ULL;
     const auto mix = [&hash](const void *data, size_t bytes) {
         const auto *read = static_cast<const uint8_t *>(data);
         for (size_t i = 0; i < bytes; ++i) {
@@ -2484,7 +3225,7 @@ uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
             hash *= 0x100000001b3ULL;
         }
     };
-    const auto mixValue = [&mix](const auto &value) { mix(&value, sizeof(value)); };
+    const auto mixValue  = [&mix](const auto &value) { mix(&value, sizeof(value)); };
     const auto mixInputs = [&mix, &mixValue](std::span<const gc_node_ref_t> inputs) {
         mixValue(static_cast<uint64_t>(inputs.size()));
         for (gc_node_ref_t input : inputs) {
@@ -2552,8 +3293,9 @@ std::string GCStaticFunctionAnswer::describe() const {
 
 GCStaticFunctionAnswer GCGraph::staticFunctionGraphOf(gc_node_ref_t ref) const {
     // One entry, and every step that can fail says so instead of falling through to a guess. The
-    // static area is a table of values, not a table of ids: a slot is only ever read as the value its
-    // type says it holds, and a graph id comes from that value's own record of the graph it names.
+    // static area is a table of values, not a table of ids: a slot is only ever read as the value
+    // its type says it holds, and a graph id comes from that value's own record of the graph it
+    // names.
     const GCNode *n = node(ref);
     if (n == nullptr) {
         return {.reason = "not-a-node"};
@@ -2561,10 +3303,10 @@ GCStaticFunctionAnswer GCGraph::staticFunctionGraphOf(gc_node_ref_t ref) const {
     if (n->kind == GCNodeKind::Fill && n->hasPayload() &&
         nodeBodyAs<GCFillBody>(ref)->fillKind == GCFillKind::FunctionClosure) {
         // A closure being assembled: a static function and the values it captured, filled into one
-        // value at run time. It names no graph *here*, because the graph is one input of the fill and
-        // the captured values are the others -- a name for it would be a name for a half-built
-        // function, and a transposed callee for it would have to take those captures as parameters of
-        // its own.
+        // value at run time. It names no graph *here*, because the graph is one input of the fill
+        // and the captured values are the others -- a name for it would be a name for a half-built
+        // function, and a transposed callee for it would have to take those captures as parameters
+        // of its own.
         return {.reason = "function-closure"};
     }
     if (n->kind != GCNodeKind::Data) {
@@ -2725,7 +3467,8 @@ const ExecPlan &GCGraph::execPlan() const {
     }
     if (!executable()) [[unlikely]] {
         throw std::logic_error(
-            "Graph '" + name() + "' has values with several writings: it has no execution plan "
+            "Graph '" + name() +
+            "' has values with several writings: it has no execution plan "
             "until they are extracted.");
     }
     ExecPlan *built    = buildExecPlan(*this).release();
@@ -2887,7 +3630,8 @@ void collectStaticGraphRefsRecursive(
         GUARD(
             isValid(target),
             std::format(
-                "collecting the static graph references of a function value: it names graph {}, which "
+                "collecting the static graph references of a function value: it names graph {}, "
+                "which "
                 "is not a graph in this program, so the reference would point at nothing",
                 static_cast<int>(target)));
         // A value of another program's graph -- a transform builds a graph of its own while the
@@ -2974,4 +3718,3 @@ void collectStaticGraphRefsRecursive(
 }
 
 } // namespace camel::runtime
-

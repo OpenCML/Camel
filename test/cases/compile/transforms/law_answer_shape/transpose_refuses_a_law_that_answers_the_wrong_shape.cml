@@ -1,0 +1,48 @@
+// The positive control for the transform's own type check: a law that answers a shape its operand
+// cannot have is **refused at the transposition, by name**.
+//
+// The check exists because a law is filed under its operator's head and that head's operand count
+// and the index reads no operand types (`modules/transforms/transpose.h`, `LawAnswerShape`), so
+// nothing ties the shape a right side answers to the shape of the operand whose cotangent it claims
+// to be. The library's own `add_tensor_t` was that shape -- it answered `(ct, ct)` for a sum that
+// broadcasts -- and the reading it gave a caller was a wrong number with exit 0 and no diagnostic.
+//
+// **A control has to be able to go red**, so this one does not depend on the library being wrong:
+// the directory beside this case holds a `rulesets/transpose.cml` that shadows the standard
+// library's (a module's imports are looked for in its own directory first) and declares one law,
+// the array add's, answering `(w, x)` -- each operand handed the other's answer. `x: float[2, 3]` and
+// `w: float[3]` make those two answers different types, so the law is refused where it is expanded
+// and the sentence names it:
+//
+//     transpose has no transpose for this function: the law `add_tensor_t` answers a `float[3]` for
+//     an operand of type `float[2, 3]`, and a cotangent of a value has that value's own type
+//
+// The refusal is the transform's, not the run's: nothing is computed, which is why the reading to
+// look for is the sentence and the exit code and not a number. Two things the sentence has to carry,
+// and they are the reason it is not the shape rule's: **the law's name** (the law is the edit, and
+// the function it was reached through is not) and **both spellings** (a reader compares them and
+// knows which side moved).
+//
+// What this case does not claim is that every wrong law is caught here. The old `(ct, ct)` was not:
+// `ct`'s port is `T[...]`, open rank, and an answer whose type states no shape fits any operand
+// shape. That half belongs to the run -- `sum_to`'s contract refuses a target that is not a suffix of
+// the value's shape -- and its numbers are pinned by `broadcast_add_subtract_gradient.cml`.
+//
+//     camel test/cases/compile/transforms/law_answer_shape/transpose_refuses_a_law_that_answers_the_wrong_shape.cml
+import rulesets.transpose
+import { numel } from tensor
+import { transpose } from transforms
+
+/// `x + w` on a `float[2, 3]` and a `float[3]`: one operator, whose law answers the wrong shape for
+/// the first operand.
+func broadcast_sum(x: float[2, 3], w: float[3]): float[...] {
+    return x + w
+}
+
+func main(): int sync {
+    let start = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]] as float[2, 3]
+    // The cotangent of the result: two rows of ones, the seed `Σ` would hand a sum.
+    let (dx, dw) = transpose(broadcast_sum)(start)
+    `law answer shape dx numel={} dw numel={}`->format<numel(dx), numel(dw)>->println
+    return 0
+}

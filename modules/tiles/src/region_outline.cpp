@@ -15,6 +15,7 @@
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/resources.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
@@ -61,9 +62,161 @@ std::string sourceLocationOf(core::context::Context &context, camel::source::ori
 
 // Transfers are leaf operations. Preserve the source aggregate's structure in
 // graph values instead of inventing a Device<tuple> or flattening field order.
+//
+// What this pass writes into a block is an effect: a transfer reads and writes the ambient
+// `tiles:driver`, and so does the exec call that stands for a segment (`module.cpp`,
+// `declareResources`). Two accesses to one resource in one region must have a path between them
+// (Analysis 4.1), and the statements a program writes get theirs from the chain the front end
+// wrote. A node this pass inserts has no such place unless the pass gives it one, and the resource
+// it writes is what orders it (`docs/design/gpu/plan.cn.md`: a transfer is an ordinary node and
+// the order comes from the resource edge). So the effects of one control region are chained here,
+// in the order this rewrite writes them: the uploads of a segment, the segment's exec call, and
+// the downloads of its outputs. Nothing else orders them -- they are siblings of one rewrite and
+// neither reads what the other writes -- which is why a rewrite that wrote two of them and no edge
+// left a pair the commit must refuse (`RuntimeDiag::PassEffectOrder`).
+//
+// The edges are written once the graph is finished (`finish`), not as each node is made: whether
+// two effects are already ordered is a question about the graph the commit judges, and a node
+// still in the making answers it wrongly. An upload whose value is the result of an earlier
+// segment reads that segment's exec call and the download of its result, but the download does not
+// exist yet when the upload is written: an edge written then goes between two nodes that the
+// download will later join into one path, and closes a cycle. An edge is written only where no
+// path leads either way round in the finished graph.
+class EffectOrder {
+  public:
+    /// Records that `effect` was written into the control region `region`, beside `place` -- the
+    /// node of that region whose value it moves, when there is one, so that what the block wrote
+    /// before and after that place keeps its order against the effect too.
+    void wrote(uint32_t region, runtime::gc_node_ref_t place, runtime::gc_node_ref_t effect) {
+        written_[region].push_back({place, effect});
+    }
+    /// Records that `before` runs before `after` because of what they read, whichever order they
+    /// were written in.
+    void readsBefore(runtime::gc_node_ref_t before, runtime::gc_node_ref_t after) {
+        reads_.emplace_back(before, after);
+    }
+    /// Whether this rewrite wrote an effect into any block: a graph it rewrote but wrote no effect
+    /// into owes no order.
+    bool hasEffects() const { return !written_.empty(); }
+    /// Writes the edges: what an effect reads runs before it, and of two effects written into one
+    /// region that nothing else orders, the one written first runs first -- the place each was
+    /// written beside keeping its say, because the statement before an effect and the statement
+    /// after it are what the effect was written between.
+    void finish(runtime::GraphDraft &draft) {
+        for (const auto &[before, after] : reads_)
+            order(draft, before, after);
+        for (const auto &[region, written] : written_) {
+            std::vector<runtime::gc_node_ref_t> chain;
+            for (const auto &one : written) {
+                if (one.first != runtime::kInvalidNodeRef)
+                    chain.push_back(one.first);
+                chain.push_back(one.second);
+            }
+            for (size_t i = 0; i + 1 < chain.size(); ++i)
+                order(draft, chain[i], chain[i + 1]);
+            for (size_t i = 0; i < written.size(); ++i)
+                for (size_t j = i + 1; j < written.size(); ++j)
+                    order(draft, written[i].second, written[j].second);
+            // And the block keeps its order across the insert: a statement the program wrote before
+            // an effect this rewrite wrote runs before it, and one written after it runs after it.
+            // The commit asks for a path between any two accesses to one resource in one region, and
+            // a statement of the block is the other side of such a pair whenever one of these effects
+            // is one side of it -- an effect it inserted is a write of the driver, and a `println`
+            // written beside it is a write of `stdout` the block never had to order before. Neither
+            // reads the other, so nothing but this edge relates them.
+            for (const auto &one : written) {
+                const auto effect = one.second;
+                if (!draft.alive(effect))
+                    continue; // a later step erased it, and an effect that is gone keeps no place
+                const uint32_t block = draft.nodeRegion(effect);
+                for (runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                    if (id == effect || !draft.alive(id) || draft.nodeRegion(id) != block ||
+                        !runtime::isChainStatement(draft, id))
+                        continue;
+                    // The statement the block wrote first runs first: the ids of a block's own
+                    // statements follow the order they were written in, and an effect this rewrite
+                    // wrote is appended to the block it was written into.
+                    if (id < effect)
+                        order(draft, id, effect);
+                    else
+                        order(draft, effect, id);
+                }
+            }
+        }
+    }
+
+  private:
+    /// Whether the encoder keeps an order edge that orders `id` after something: a node that may be
+    /// arranged anywhere drops it (`graph.cpp`, the payload plan: `nodeIsFreelySchedulable`), so an
+    /// ordering through such a node is not one the commit reads.
+    static bool keepsOrder(const runtime::GraphDraft &draft, runtime::gc_node_ref_t id) {
+        const auto *header = draft.header(id);
+        if (header == nullptr)
+            return false;
+        if (header->kind == runtime::GCNodeKind::Dead || header->kind == runtime::GCNodeKind::Cast)
+            return true;
+        if (!runtime::nodeIsFreelySchedulable(draft, id))
+            return true;
+        // A branch or a loop that owns a region stands for what runs inside it, so its order is
+        // the region's order and the encoder keeps it.
+        if (header->kind == runtime::GCNodeKind::Brch || header->kind == runtime::GCNodeKind::Loop)
+            for (uint32_t region = 1; region < draft.regionCount(); ++region)
+                if (draft.region(region).owner == id)
+                    return true;
+        return false;
+    }
+
+    /// Whether some edge of the draft leads from `from` to `to` -- data, context, control, order or
+    /// sync, the same walk the commit's check makes.
+    static bool leads(
+        const runtime::GraphDraft &draft, runtime::gc_node_ref_t from, runtime::gc_node_ref_t to) {
+        namespace rt = runtime;
+        std::vector<rt::gc_node_ref_t> work{to};
+        std::unordered_set<rt::gc_node_ref_t> seen{to};
+        while (!work.empty()) {
+            const auto here = work.back();
+            work.pop_back();
+            if (here == from)
+                return true;
+            const auto visit = [&](std::span<const rt::gc_node_ref_t> inputs) {
+                for (auto input : inputs)
+                    if (input < draft.nodeSlotCount() && draft.alive(input) &&
+                        seen.insert(input).second)
+                        work.push_back(input);
+            };
+            visit(draft.normInputsOf(here));
+            visit(draft.withInputsOf(here));
+            visit(draft.ctrlInputsOf(here));
+            if (keepsOrder(draft, here))
+                visit(draft.orderInputsOf(here));
+            visit(draft.syncInputsOf(here));
+        }
+        return false;
+    }
+
+    /// Orders `after` after `before` unless the graph already leads one way round. An ordering is
+    /// a path, so an edge is written only where the graph does not answer it already: a second
+    /// one says nothing, and the other way round makes a cycle. An effect a later step erased has
+    /// no place left to order.
+    static void
+    order(runtime::GraphDraft &draft, runtime::gc_node_ref_t before, runtime::gc_node_ref_t after) {
+        if (before == after || !draft.alive(before) || !draft.alive(after) ||
+            !keepsOrder(draft, after))
+            return;
+        if (leads(draft, before, after) || leads(draft, after, before))
+            return;
+        (void)draft.appendOrderDependency(after, before);
+    }
+
+    std::unordered_map<
+        uint32_t, std::vector<std::pair<runtime::gc_node_ref_t, runtime::gc_node_ref_t>>>
+        written_;
+    std::vector<std::pair<runtime::gc_node_ref_t, runtime::gc_node_ref_t>> reads_;
+};
+
 runtime::gc_node_ref_t transferAggregate(
     runtime::GraphDraft &draft, runtime::gc_node_ref_t input, core::type::Type *host, bool upload,
-    operator_t operation, const std::string &uri) {
+    operator_t operation, const std::string &uri, EffectOrder &effects, uint32_t region) {
     namespace rt   = runtime;
     namespace ty   = core::type;
     auto *resident = residentType(host);
@@ -89,21 +242,200 @@ runtime::gc_node_ref_t transferAggregate(
                                            static_cast<ty::StructType *>(host)->fieldName(i),
                                            draft.allocateRuntimeSlot(fieldType));
             draft.setNormInputs(field, std::span(&input, 1));
-            fields.push_back(transferAggregate(draft, field, hostField, upload, operation, uri));
+            fields.push_back(transferAggregate(
+                draft,
+                field,
+                hostField,
+                upload,
+                operation,
+                uri,
+                effects,
+                region));
         }
         return packGraphAggregate(draft, upload ? resident : host, fields);
     }
     auto *type        = upload ? resident : host;
     const auto result = draft.addOperNode(type, operation, uri, draft.allocateRuntimeSlot(type));
     draft.setNormInputs(result, std::span(&input, 1));
+    effects.wrote(region, input, result);
     return result;
+}
+
+/// The node a block holds for a read of a value that happens under it: the reader itself when it is
+/// written in `where`, otherwise the owner (a BRCH or a LOOP) of the innermost region under `where`
+/// that holds it -- that owner is the statement written in `where`. A transfer is written in
+/// `where`, and an ordering never leaves the region that holds it, so this is the node it can be
+/// ordered against for the read to wait for it.
+runtime::gc_node_ref_t standingIn(
+    const runtime::GCGraph &graph, const runtime::ControlRegions &control, uint32_t where,
+    runtime::gc_node_ref_t reader) {
+    namespace rt    = runtime;
+    uint32_t region = control.controlOf(reader);
+    if (region == where)
+        return reader;
+    rt::gc_node_ref_t standing = rt::kInvalidNodeRef;
+    for (uint32_t steps = 0; region != where && steps <= graph.regionCount(); ++steps) {
+        const rt::GCRegion *one = region < graph.regionCount() ? graph.region(region) : nullptr;
+        if (one == nullptr)
+            return rt::kInvalidNodeRef;
+        standing             = one->owner;
+        const uint32_t outer = control.parentControl(region);
+        if (outer == region)
+            return rt::kInvalidNodeRef;
+        region = outer;
+    }
+    return standing;
+}
+} // namespace
+
+namespace {
+/// The declarations over the bodies this pass rewrote, stated on the drafts before the commit that
+/// judges them (the pass declares the widened type, and a commit that widened it itself could not
+/// tell an edit that needs a wider promise from a hand-written clause the user narrowed -- the two
+/// are the same three facts, a draft, the graph it was decoded from, and a body).
+///
+/// `session.prepared()` encodes the drafts without judging or delivering them, which is the same
+/// graph the commit's check reads, so `bodySignature` answers over this pass's body and not over
+/// the one the program had. Every graph whose body reaches past the clause its draft carries gets
+/// the clause the body needs (`runtime::widened`: a body no clause can be written for is left as it
+/// is, and the commit's check refuses it, as it should). Every function value that names such a
+/// graph is given the new type too, because a call site declares the type of the value it calls and
+/// not the type of the graph behind it. Rounds, because widening a callee widens what its callers
+/// have to declare.
+void declareBodiesOverDrafts(runtime::RuntimeGraphDraftSession &session) {
+    namespace rt = runtime;
+    for (int round = 0; round < 4; ++round) {
+        const rt::Program *staged = session.prepared();
+        if (staged == nullptr) {
+            return;
+        }
+        // The graphs the program holds and the graphs this pass made: a segment is a graph the
+        // program did not have, and its clause is read by its callers exactly like any other's, so
+        // it is declared here too. Left out, it would be widened only after the commit
+        // (`settleDeclarations`), and its callers would go on declaring the clause it no longer
+        // carries -- one round behind, at a boundary that judges the program the commit published.
+        std::vector<rt::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
+        for (rt::GCGraph *made : session.madeGraphs()) {
+            if (std::find(graphs.begin(), graphs.end(), made) == graphs.end()) {
+                graphs.push_back(made);
+            }
+        }
+        std::vector<std::pair<rt::GCGraph *, core::type::FunctionType *>> wider;
+        for (rt::GCGraph *graph : graphs) {
+            // What the commit will carry, read from the copy: a graph this pass made has no draft
+            // of its own, and the copy is the one reading that exists for every graph of the
+            // closure. The draft is opened below, and only for a graph whose body is past its
+            // clause: opening one is part of declaring, not a condition of measuring it.
+            const rt::GCGraph *copy = staged->graph(graph->id());
+            if (copy == nullptr) {
+                continue;
+            }
+            const auto *type = copy->funcType();
+            if (type == nullptr) {
+                continue;
+            }
+            const auto declared = type->resources();
+            if (declared.mode == core::sem::ResourceSignature::Mode::Generic) {
+                continue; // a type that promises nothing covers whatever the body does
+            }
+            const auto body = rt::bodySignature(*staged, *copy);
+            if (core::sem::covers(declared, body)) {
+                continue;
+            }
+            const auto clause = rt::widened(declared, body);
+            if (!core::sem::covers(clause, body)) {
+                continue; // not a clause the language can write: the commit says so instead
+            }
+            auto &draft = session.edit(graph).edit();
+            draft.setFuncType(type->withResources(clause));
+            wider.emplace_back(graph, draft.funcType());
+        }
+        if (wider.empty()) {
+            return;
+        }
+        // A value that names a graph whose clause grew carries the clause it names.
+        //
+        // Which graphs hold such a value is read from the copy, because a caller is not always a
+        // graph this pass edited: `__root__` holds the value of the entry and nothing else, so it
+        // has no draft, and a loop that skipped the graphs without one would leave that call site
+        // declaring a clause its callee no longer carries -- the one thing the pass boundary
+        // refuses a published program for. The draft is opened as part of the rewrite.
+        for (rt::GCGraph *graph : graphs) {
+            const rt::GCGraph *copy = staged->graph(graph->id());
+            if (copy == nullptr) {
+                continue;
+            }
+            bool holdsWidened = false;
+            for (rt::gc_node_ref_t id = 0; id < copy->nodeCount() && !holdsWidened; ++id) {
+                const auto *node = copy->node(id);
+                if (node == nullptr || node->kind != rt::GCNodeKind::Data || node->dataIndex >= 0) {
+                    continue;
+                }
+                const auto *nodeType = node->dataType();
+                if (nodeType == nullptr || nodeType->code() != core::type::TypeCode::Function) {
+                    continue;
+                }
+                const size_t slot = static_cast<size_t>(-node->dataIndex);
+                if (slot >= copy->staticSlots().size()) {
+                    continue;
+                }
+                const auto *function =
+                    core::rtdata::fromSlot<::Function *>(copy->staticSlots()[slot]);
+                if (function == nullptr || function->graph() == nullptr) {
+                    continue;
+                }
+                holdsWidened = std::any_of(wider.begin(), wider.end(), [&](const auto &entry) {
+                    return entry.first->id() == function->graphId();
+                });
+            }
+            if (!holdsWidened) {
+                continue; // the value already names what its graph says
+            }
+            auto &draft = session.edit(graph).edit();
+            // The ids to read are the ones the encode wrote, not the draft's live-node count: the
+            // first round of this loop erases the node it replaces, so the id it wrote outlives
+            // `nodeCount()` -- and a scan bounded by the count stops one short of the value this
+            // round has to retype, which is the value the round before it wrote.
+            for (rt::gc_node_ref_t id = 0; id < copy->nodeCount(); ++id) {
+                const auto *header = draft.header(id);
+                if (header == nullptr || header->kind != rt::GCNodeKind::Data ||
+                    header->dataIndex >= 0) {
+                    continue;
+                }
+                auto *nodeType = header->dataType;
+                if (nodeType == nullptr || nodeType->code() != core::type::TypeCode::Function) {
+                    continue;
+                }
+                const size_t slot = static_cast<size_t>(-header->dataIndex);
+                if (slot >= draft.staticSlots().size()) {
+                    continue;
+                }
+                const auto *function =
+                    core::rtdata::fromSlot<::Function *>(draft.staticSlots()[slot]);
+                if (function == nullptr || function->graph() == nullptr) {
+                    continue;
+                }
+                const auto found = std::find_if(wider.begin(), wider.end(), [&](const auto &entry) {
+                    return entry.first->id() == function->graphId();
+                });
+                if (found == wider.end() || found->second == nodeType) {
+                    continue; // names a graph that did not grow, or already says what it does
+                }
+                const auto replacement =
+                    draft.materializeStaticValue(draft.staticSlots()[slot], found->second);
+                draft.setNodeOrigin(replacement, draft.nodeOrigin(id));
+                draft.replaceAllValueUses(id, replacement);
+                draft.eraseNode(id); // its type is the one that no longer says what the body does
+            }
+        }
+    }
 }
 } // namespace
 
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t run, const std::string &uri, size_t &count, const SegmentDeviceOps *device,
-    bool refuseGpuScopes, slot_t *error) {
+    bool refuseGpuScopes, slot_t *error, bool outlinesForDevice) {
     namespace rt = runtime;
     if (device &&
         (!device->upload || !device->execute || !device->download || run != device->execute))
@@ -124,9 +456,15 @@ const runtime::Program *outlineRegions(
     // covered graph is that region's segment, not a reason to fall back to the host (2.5), so the
     // scope map is built before the analysis and answers it.
     const GpuScopes scopes(*program);
+    // What the analysis is told about the device is the target of the pass, not the statement of a
+    // scope: a pass that outlines for the device (`device` set) means what it cuts, so under it
+    // every node the program did not place on the host by a fact of its own answers to the device.
+    // A pass that outlines for the host keeps the scopes the program writes, and a program that
+    // writes none leaves it with nothing to place, as it should.
+    const GpuScopes analysisScopes(*program, outlinesForDevice);
     std::unordered_map<rt::GCGraph *, SegmentAnalysis> analyses;
     for (auto *graph : graphs) {
-        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &scopes));
+        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts(), &analysisScopes));
     }
     // Whether `id` is inside a `#gpu` scope: a device answer places it there directly, and a graph
     // the scope reaches places every node it did not explicitly tag for the host. A `#cpu` fact
@@ -328,12 +666,20 @@ const runtime::Program *outlineRegions(
             return program;
     }
     bool regionRefused = false;
+    // What each rewritten graph's effects are, kept until the rewrite of every graph is over: the
+    // order is written once, and after the declarations stop growing (see the end of this function).
+    std::vector<std::pair<rt::GCGraph *, EffectOrder>> orders;
+    orders.reserve(graphs.size());
     for (auto *graph : graphs) {
         const auto &analysis = analyses.at(graph);
         if (analysis.regions.empty())
             continue;
         auto &draft = session.edit(graph).edit();
         std::unordered_map<size_t, rt::gc_node_ref_t> resident;
+        // The effects this rewrite writes, by the control region they were written in. The record
+        // outlives this graph's rewrite: the edges are written once every graph is rewritten and
+        // the declarations over those bodies have stopped growing.
+        EffectOrder &effects = orders.emplace_back(graph, EffectOrder{}).second;
         const rt::ControlRegions control(*graph);
         // Where a segment runs: the control region of its members (docs/design/gpu/plan.cn.md 2.5). An operator
         // written in an arm runs only when that arm is taken, so its call, its uploads and its
@@ -370,15 +716,26 @@ const runtime::Program *outlineRegions(
             for (auto value : analysis.residency.uploads) {
                 const auto input  = static_cast<rt::gc_node_ref_t>(value);
                 const auto found  = uploadControl.find(value);
-                draft.setInsertRegion(found == uploadControl.end() ? 0 : found->second);
+                const uint32_t where = found == uploadControl.end() ? 0 : found->second;
+                draft.setInsertRegion(where);
                 const auto upload = transferAggregate(
                     draft,
                     input,
                     graph->node(input)->dataType(),
                     true,
                     device->upload,
-                    device->uploadUri);
+                    device->uploadUri,
+                    effects,
+                    where);
                 draft.setNodeOrigin(upload, graph->nodeOrigin(input));
+                // The value is read where this upload is written, or under it: the upload has to
+                // run before what reads it, so the reader -- or the branch or loop that owns the
+                // read, when it is written deeper -- is ordered after the upload.
+                for (auto reader : graph->uses().norm(input)) {
+                    const auto standing = standingIn(*graph, control, where, reader);
+                    if (standing != rt::kInvalidNodeRef && standing != upload)
+                        effects.readsBefore(upload, standing);
+                }
                 draft.setInsertRegion(0);
                 resident.emplace(value, upload);
             }
@@ -477,6 +834,10 @@ const runtime::Program *outlineRegions(
                 draft.setNormInputs(call, args);
             }
             draft.setWithInputs(call, std::span(&fnNode, 1));
+            // The exec call is the second effect of this region: it reads what the uploads wrote and
+            // writes the driver the downloads read, so it takes its place in the chain here and
+            // reads no value of the block beside it.
+            effects.wrote(whereOf(region), rt::kInvalidNodeRef, call);
             // That context argument is the segment's own function constant, so this call is the
             // segment's exec node and the template published above is its plan: a segment is an
             // exec call carrying its graph, and the report operators read the graph, not the
@@ -562,7 +923,9 @@ const runtime::Program *outlineRegions(
                             hostType,
                             false,
                             device->download,
-                            device->downloadUri);
+                            device->downloadUri,
+                            effects,
+                            whereOf(region));
                         draft.setNodeOrigin(download, graph->nodeOrigin(old));
                         replacement = download;
                     }
@@ -591,10 +954,111 @@ const runtime::Program *outlineRegions(
         for (const auto &region : analysis.regions)
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)
                 draft.eraseNode(static_cast<rt::gc_node_ref_t>(*it));
+        // The graph is finished: every effect this rewrite writes exists and every statement it
+        // replaced is erased, so the question the order answers -- is there already a path between
+        // these two? -- is now a question about the graph the commit judges. The answer is not
+        // written here, though: a declaration can still grow over these bodies, and the check reads
+        // the declarations the program ends with.
     }
     if (regionRefused)
         return program;
-    return count ? session.commit() : program;
+    if (count == 0) {
+        return program;
+    }
+    // The type over each body this pass rewrote, declared by this pass and not by the commit: the
+    // bodies it made hold a device submission, which reaches the ambient `tiles:driver`, and the
+    // clause they inherited speaks of the host body they replaced.
+    declareBodiesOverDrafts(session);
+    // The order of the effects this rewrite wrote, written once and after the declarations have
+    // stopped growing: widen the whole program's declarations to a
+    // fixpoint first, then order the effects, once. A graph's clause can still
+    // grow here (a caller of a grown callee grows too, `__root__` included, and this pass rewrites
+    // no node of it), and the check that judges the order reads the declarations the program ends
+    // with, so an edge written before the last widening would be written against a program that no
+    // longer exists. Ordering after the last draft this pass opens also answers the other half:
+    // nothing erases or inserts a node after this, so the graph the edges are written on is the
+    // graph the commit publishes.
+    for (auto &[graph, effects] : orders) {
+        if (effects.hasEffects())
+            effects.finish(session.edit(graph).edit());
+    }
+    return session.commit();
+}
+
+const runtime::Program *settleDeclarations(
+    core::context::Context &context, const runtime::Program *program) {
+    // What the rewrite did to a graph is in its body; what a caller reads is the graph's type
+    // (`runtime::Resolver::accessesOf` takes a call's footprint from the callee's declared
+    // clause, not from its body). A device submission is an effect -- `tiles:upload`, the segment
+    // runners and `tiles:download` write the ambient `tiles:driver` -- so a body the pass gave one
+    // no longer fits the `pure` clause its host body carried, and the type has to say so here, or
+    // the next boundary (analysis 4.1, `PassEffectContainment`) finds the body reaching past it.
+    //
+    // It is not only the rewritten graphs: a caller's footprint is read through the callee's
+    // declaration, so widening a callee widens what its callers have to declare, one level per
+    // round. Each round only ever adds a resource to a clause and the accesses there are finite,
+    // so the rounds end; a body no clause can be written for is left as it was, and the boundary
+    // reports it rather than this step hiding it.
+    for (;;) {
+        runtime::RuntimeGraphDraftSession session(
+            context.shared_from_this(), program, program->root());
+        const std::vector<runtime::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
+        std::vector<std::pair<runtime::GCGraph *, core::type::FunctionType *>> wider;
+        for (runtime::GCGraph *graph : graphs) {
+            const auto *type = graph->funcType();
+            if (type == nullptr)
+                continue;
+            const auto declared = type->resources();
+            if (declared.mode == core::sem::ResourceSignature::Mode::Generic)
+                continue; // a type that promises nothing covers whatever the body does
+            const auto body = runtime::bodySignature(*program, *graph);
+            if (core::sem::covers(declared, body))
+                continue;
+            const auto clause = runtime::widened(declared, body);
+            if (!core::sem::covers(clause, body))
+                continue; // not a clause the language can write: the boundary says so instead
+            wider.emplace_back(graph, type->withResources(clause));
+        }
+        if (wider.empty())
+            return program;
+        for (auto &[graph, type] : wider)
+            session.edit(graph).edit().setFuncType(type);
+        // A call through a function value declares the value's type, not the type of the graph the
+        // value names (`runtime::declaredClauseAt` reads the value, and that is what `__root__`'s
+        // call of the entry is). So every value that names a graph whose clause grew is given the
+        // new clause too: a value left at the old one is a call site promising less than the body
+        // behind it does.
+        for (runtime::GCGraph *graph : graphs) {
+            for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
+                const auto *node = graph->node(id);
+                if (node == nullptr || node->kind != runtime::GCNodeKind::Data ||
+                    node->dataIndex >= 0)
+                    continue;
+                const auto *nodeType = node->dataType();
+                if (nodeType == nullptr || nodeType->code() != core::type::TypeCode::Function)
+                    continue;
+                const size_t slot = static_cast<size_t>(-node->dataIndex);
+                if (slot >= graph->staticSlots().size())
+                    continue;
+                const auto *function =
+                    core::rtdata::fromSlot<::Function *>(graph->staticSlots()[slot]);
+                if (function == nullptr || function->graph() == nullptr)
+                    continue;
+                const auto found = std::find_if(wider.begin(), wider.end(), [&](const auto &entry) {
+                    return entry.first->id() == function->graphId();
+                });
+                if (found == wider.end() || found->second == nodeType)
+                    continue;
+                auto &draft = session.edit(graph).edit();
+                const auto replacement =
+                    draft.materializeStaticValue(graph->staticSlots()[slot], found->second);
+                draft.setNodeOrigin(replacement, graph->nodeOrigin(id));
+                draft.replaceAllValueUses(id, replacement);
+                draft.eraseNode(id); // its type is the one that no longer says what the body does
+            }
+        }
+        program = session.commit();
+    }
 }
 bool isRegionExec(core::OperId oper) {
     // An operator that calls the graph of the function value it receives is one this module

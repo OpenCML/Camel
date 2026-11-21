@@ -32,7 +32,7 @@ namespace camel::execute {
 /// open at the bottom.
 ///
 /// It is the same for every pipeline that produces the graph, too: a pass that rewrites a call
-/// through a function value into a direct call (std::opt::devirtualize does that to the entry's
+/// through a function value into a direct call (std::cxx::devirtualize does that to the entry's
 /// call of `main`) changes the spelling of that call and nothing about the program, so the deepest
 /// call that runs is the same with and without it. Each scheduler folds a tail call into its
 /// caller's activation; the entry graph's activation and its call of `main` are exactly the two

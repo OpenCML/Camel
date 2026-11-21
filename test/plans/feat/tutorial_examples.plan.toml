@@ -20,7 +20,7 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 #
 #     [[tests]]
 #     name = "tutorial.examples.NN_name"
-#     case = "../../../docs/tutorial/examples/NN_name.cml"
+#     case = "../../../docs/tutorial/examples/<name>.cml"
 #     golden = "golden/tutorial_examples/NN_name.txt"
 #
 # and the output it prints today is recorded once with
@@ -121,10 +121,9 @@ golden = "golden/tutorial_examples/05_map_order.txt"
 
 [[tests]]
 name = "tutorial.examples.06_callee_decides"
-desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The print in the callee's body runs with the body (design principles 3.1, the author's ruling of 2026-11-15), so what the page shows is what the file prints and there is no warning left to hide."
 case = "../../../docs/tutorial/examples/06_callee_decides.cml"
 golden = "golden/tutorial_examples/06_callee_decides.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_sync_block"
@@ -134,20 +133,18 @@ golden = "golden/tutorial_examples/06_sync_block.txt"
 
 [[tests]]
 name = "tutorial.examples.06_sync_body"
-desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. Its print runs whether or not the body is `sync`: `sync` orders it, it does not enable it, so the page shows the whole output."
 case = "../../../docs/tutorial/examples/06_sync_body.cml"
 golden = "golden/tutorial_examples/06_sync_body.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 # The lesson of the file is the warning: the call to println has an effect nothing depends on, so it is
 # not executed. The warning is the compiler's and it must keep being reported (the chapter's page shows
 # it in the block after the command).
 [[tests]]
 name = "tutorial.examples.06_unused_effect"
-desc = "Chapter 10: an effect that nothing depends on does not run -- the warning on standard error names the call that is dropped, and only the used value is printed."
+desc = "Chapter 10: a write is not demanded by a reader -- the body is a region and the write to `stdout` is a root of it (design principles 3.1, the author's ruling of 2026-11-15), so the print runs although nothing uses its result. The page used to show the call dropped and a warning."
 case = "../../../docs/tutorial/examples/06_unused_effect.cml"
 golden = "golden/tutorial_examples/06_unused_effect.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_var_order"
@@ -160,17 +157,17 @@ golden = "golden/tutorial_examples/06_var_order.txt"
 # is exactly the claim this plan exists to keep true.
 [[tests]]
 name = "tutorial.examples.06_let_to_var"
-desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 11:10, and the un-synced write above it is a warning at 6:5."
+desc = "Chapter 10: a program the compiler rejects -- an immutable value passed to a var parameter is an error at 10:10, and the whole report is what the chapter prints. `bump`'s own `counter += 1` in a body that is not a `sync` block draws no `SemanticDiag::IgnoredSideEffect`: a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), the same reason the entry next door (`10_write_nobody_reads`) pins that report's absence."
 kind = "behavior"
 case = "../../../docs/tutorial/examples/06_let_to_var.cml"
 backends = false
 args = ["${case}"]
 expect_exit = 1
-expect_output_not_contains = []
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect"]
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 10
-expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter of 'bump'", "SemanticDiag::IgnoredSideEffect"]
+expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter of 'bump'"]
 
 [[tests]]
 name = "tutorial.examples.07_closures"
@@ -530,10 +527,9 @@ golden = "golden/tutorial_examples/09_exercise.txt"
 # it, so each of those entries asserts the diagnostic name rather than only the golden.
 [[tests]]
 name = "tutorial.examples.10_unused_effect"
-desc = "An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println` does not run, and the warning names the call that is dropped."
+desc = "A write whose result nothing needs still runs: `greet`'s body is a region, so its `println` runs although the body is not a sync block, and nothing is reported."
 case = "../../../docs/tutorial/examples/10_unused_effect.cml"
 golden = "golden/tutorial_examples/10_unused_effect.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.10_sync_body"
@@ -543,23 +539,23 @@ golden = "golden/tutorial_examples/10_sync_body.txt"
 
 [[tests]]
 name = "tutorial.examples.10_sync_block"
-desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains. The warning names the effect nobody needs."
+desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains; the print outside the block runs too, because its region runs. Nothing is reported."
 case = "../../../docs/tutorial/examples/10_sync_block.cml"
 golden = "golden/tutorial_examples/10_sync_block.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.10_var_order"
-desc = "A `var` and the order of its writes inside a sync body: a read takes the most recent write, which is what the chapter's picture draws."
+desc = "A `var` and the order of its writes inside a sync body: a read takes the most recent write, which is what the chapter's picture draws. The last write, `c = 3`, stores a value nothing reads -- `latest` returns `before` -- so it is reported at 21:7, and the chapter's next paragraph is about exactly that value."
 case = "../../../docs/tutorial/examples/10_var_order.cml"
 golden = "golden/tutorial_examples/10_var_order.txt"
 
 [[tests]]
 name = "tutorial.examples.10_write_nobody_reads"
-desc = "A write nobody reads is not executed, and outside a sync block nothing orders it after the print: the two warnings are the lesson."
+desc = "A write nobody reads stores a value nobody uses, and the chapter's two function bodies say the same thing about it: `c = 5` is reported in `unordered` (9:7, a body that is not a `sync` block, where the write does not even run) and in `ordered` (16:7, a `sync` body, where it runs because it is a statement of the chain) -- the value it stores is read by nobody in either. Both functions still print `1`; neither report is `SemanticDiag::IgnoredSideEffect`, because a write to a `var` is a value and not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), and a statement that does not run is not reported at all (the ruling of 2026-11-17)."
 case = "../../../docs/tutorial/examples/10_write_nobody_reads.cml"
 golden = "golden/tutorial_examples/10_write_nobody_reads.txt"
-expect_output_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
+expect_output_contains = ["10_write_nobody_reads.cml:9:7", "10_write_nobody_reads.cml:16:7"]
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "is never executed"]
 
 [[tests]]
 name = "tutorial.examples.10_same_resource"
@@ -611,7 +607,7 @@ backends = false
 args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
-expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
+expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses var db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
 
 [[tests]]
 name = "tutorial.examples.10_exercise"

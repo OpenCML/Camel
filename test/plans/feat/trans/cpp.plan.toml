@@ -104,16 +104,16 @@ timeout_ms = 10000
 [[tests]]
 name = "main_after_devirtualize"
 # The root's call of `main` has two spellings: an indirect call of the function value (CALL) and,
-# once a pass has settled the callee, a FUNC node that names its graph (`std::opt::devirtualize`
+# once a pass has settled the callee, a FUNC node that names its graph (`std::cxx::devirtualize`
 # writes that one). The writer read only the first, so it refused every program devirtualize had
 # touched as "the program has no call of 'main' std::cpp can find": 132 of the 132 translatable
 # programs of test/tools/cppexec/expect.txt (the defect the 2026-11-01 eval report counted as
 # "about 55%"). The graph such a node names is still main, found by its name; nothing was inlined
 # away, and this case is the reading that keeps the writer reading both spellings.
-desc = "After `std::opt::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."
+desc = "After `std::cxx::devirtualize` the root still calls main and the writer translates the program instead of refusing it: the entry is the graph the root's FUNC node names, found by its name."
 kind = "behavior"
 case = "../../../cases/trans/cpp/main_io.cml"
-args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+args = ["${case}", "std::cxx::devirtualize", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["int main(int argc, char **argv)"]
 expect_output_not_contains = ["TranslationRefused", "no call of 'main'"]
@@ -125,7 +125,7 @@ name = "computed_top_level_after_devirtualize"
 # A value the top level computes before main starts (`let k = seven()`, design principles 10.1) is
 # not a limit of the language and not one of this writer: with the entry call indirect the root
 # graph is emitted as `top_level`, which computes the value and calls main with it. With the call
-# direct (`std::opt::devirtualize`) that value is the entry call's own normal input rather than
+# direct (`std::cxx::devirtualize`) that value is the entry call's own normal input rather than
 # something the closure holds, and the writer read only the closure -- so it refused the program as
 # one whose top-level value only a literal could be. The program the writer now emits prints `7`,
 # which is what std::fvm prints; agree_with_fvm reads that, and this entry pins that it is
@@ -133,7 +133,7 @@ name = "computed_top_level_after_devirtualize"
 desc = "A value the top level computes reaches main as the entry call's own argument once the call is direct; the writer translates the program (the root graph as `top_level`) instead of refusing it as a value only a literal could be."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
-args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+args = ["${case}", "std::cxx::devirtualize", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["int main(int argc, char **argv)", "seven("]
 expect_output_not_contains = ["TranslationRefused", "top level of the module"]
@@ -150,7 +150,7 @@ name = "top_level_fault_after_devirtualize"
 desc = "A fault in a value the top level computes is the program's first statement, whether the entry call is indirect or direct: the writer translates the program, and the report at the division is the interpreter's."
 kind = "behavior"
 case = "../../../cases/consistency/faults/top_level_fault.cml"
-args = ["${case}", "std::opt::devirtualize", "std::cpp"]
+args = ["${case}", "std::cxx::devirtualize", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["int main(int argc, char **argv)", "Attempted division by zero."]
 expect_output_not_contains = ["TranslationRefused", "top level of the module"]
@@ -717,8 +717,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "rc19_seed70_builds_after_specialize"
+# The same property as agree_with_fvm for the one shape that only fails after a pass: the
+# specialization drops the argument whose formal it bound, and the writer used to spell the next
+# argument with that formal's type -- so the text did not build even though every back end ran the
+# graph correctly. The pass is handed to the writer and to std::fvm alike (both run on the same
+# graph), and the two are compared output for output. `--passes` applies to a whole list, which is
+# why this is a list of its own (test/tools/cppexec/expect_specialize.txt).
+tier = "fast"
+desc = "The program of the E9 differential's `no matching function for call to 'f1'` shape, translated by std::cpp after `std::cxx::specialize`, built with the system's C++ compiler and run: it prints `r true` and exits 0, the same words std::fvm prints on the same graph. Before the fix the translation succeeded and the compiler refused the text -- the closure that fills the second surviving parameter was spelled `rt::Fn<int64_t(double)>` where the definition takes `rt::Fn<bool(rt::Str, int64_t)>` -- which is a crash class of the E9 run and not a refusal, so no diagnostic named it."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--passes", "std::cxx::specialize", "--expect", "test/tools/cppexec/expect_specialize.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["PASS: 1 of 1 programs agree with std::fvm"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
 name = "every_fault_program_says_what_fvm_says"
-desc = "Every `fault_*` case in test/cases -- 47 of them -- run twice: once by std::fvm, once as the program std::cpp writes, and the two reports compared word for word (stdout and stderr together, and the exit code). A fault is the language's answer, so the words of it belong to the interpreter: a back end that writes its own sentence is not translating the fault, it is inventing one -- and an invented sentence reads well, which is why it survives review. This check exists because the tensor builders' rule did exactly that: `Tensor shape cannot contain negative extents` in place of the kernel's `zeros: Shape cannot contain negative values`, found by measuring, not by reading. The six programs std::cpp does not translate (a refusal is a different answer, and the interpreter's sentence is the only one there is) are counted and named, not compared; the two that differ today are in test/tools/cppexec/fault_words.txt, both marked GAP, and the set has to be exactly that list in both directions."
+desc = "Every `fault_*` case in test/cases -- 50 programs, two of which std::cpp does not translate and which a refusal keeps from the comparison -- run twice: once by std::fvm, once as the program std::cpp writes, and the two reports compared word for word (stdout and stderr together, and the exit code). A fault is the language's answer, so the words of it belong to the interpreter: a back end that writes its own sentence is not translating the fault, it is inventing one -- and an invented sentence reads well, which is why it survives review. This check exists because the tensor builders' rule did exactly that: `Tensor shape cannot contain negative extents` in place of the kernel's `zeros: Shape cannot contain negative values`, found by measuring, not by reading. The remaining 48 are compared, and the set of the ones that differ has to be exactly the list test/tools/cppexec/fault_words.txt names, in both directions. That list is empty now: its one member, fault_in_sync_call.cml, differed only by the warning a call taking a `var` argument drew outside a sync block, which the ruling of 2026-11-15 (design principles 3.1, 3.5) retired -- so the line was deleted, as the file's own rule requires when a name starts agreeing. This case used to require that name in the list; it now requires the list to be empty and every one of the 48 to agree, so a new difference turns it red."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/cppexec/run.py"

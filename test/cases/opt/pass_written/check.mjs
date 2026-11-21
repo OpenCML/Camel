@@ -6,17 +6,22 @@
  * The operators the passes write, and the number of cases that hold each of them.
  *
  * These are the operators whose writer is a pass and not the builder, so "is it reachable?" has no
- * answer in the table -- the answer is the corpus. `:op/keep` is written by `replaceNode` when the
- * node it removes has no sync place; `:enum/tag`, `:enum/field` and `:enum/make` are written by the
- * defunctionalizer. The numbers below are pinned by name, because a count with no names goes red
- * without saying anything: one more case means a rule started writing the operator where it did
- * not, one fewer means a rule stopped, and either way someone has to look at which case moved.
+ * answer in the table -- the answer is the corpus. `:enum/tag`, `:enum/field` and `:enum/make` are
+ * written by the defunctionalizer. The numbers below are pinned by name, because a count with no
+ * names goes red without saying anything: one more case means a rule started writing the operator
+ * where it did not, one fewer means a rule stopped, and either way someone has to look at which case
+ * moved.
+ *
+ * The keeper a pass writes when a removal takes the last use of a node whose running is observed is
+ * a `GATE` -- a node kind, not an operator (design principles 3.3, edges.cn.md 5.3) -- so it holds no
+ * URI and has no family here. `src/passes/opt/generic/rewrite.cpp#keepThroughValue` writes it, as a
+ * node of the draft's own (`GraphDraft::addGateNode`, include/camel/runtime/draft.h).
  *
  * The denominator is printed and not pinned: it is every case of the corpus directory, so it moves
  * when anyone adds a case there, and a red on it would say nothing about the passes. The numerator
  * is the pinned part: which cases hold the operator, and how many nodes each one holds. So a case
- * added to `opt/effects` changes `of 5` to `of 6` in the reading and leaves the check green, while
- * a case that starts holding `:op/keep` is red -- the population is allowed to grow, the finding
+ * added to `opt/defun` changes `of 5` to `of 6` in the reading and leaves the check green, while
+ * a case that starts holding `:enum/tag` is red -- the population is allowed to grow, the finding
  * is not allowed to move.
  *\n * A count of zero is pinned like any other, and it has an owner: `:enum/make` is written by the
  * defunctionalizer and no case of `test/cases/opt/defun` reaches that path today. Zero is a
@@ -45,40 +50,10 @@ const env = {
     CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
 }
 
-/// One entry per operator: the corpus that answers the question for it, and what was measured on
-/// 2026-11-01, by file. An operator pinned to nothing is pinned to zero (`names` empty): that is a
-/// reading too, and the owner line says who would write it.
+/// One entry per operator: the corpus that answers the question for it, pinned by file. An
+/// operator pinned to nothing is pinned to zero (`names` empty): that is a reading too, and the
+/// owner line says who would write it.
 const FAMILY = [
-    {
-        uri: ':op/keep',
-        corpus: 'effects',
-        owner:
-            '`replaceNode` -> `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), for a node ' +
-            'with no sync user that takes a last read',
-        names: {
-            'branch_keeps_outer_effect.cml': 2,
-            'dce_effect_under_pure_arithmetic.cml': 2,
-            'fold_keeps_arm_effect.cml': 2,
-            // The keeper inside a folded arm, and why it is due: `std::opt` prunes the branch and
-            // removes the last use of the `:mark/reduce_arr` node the inlined `sum` computed, so
-            // `keepThroughValue` stands `:op/keep` where the value stood -- its only input is that
-            // effect node and its only reader is the block's GATE. Design principles 9.7 (the
-            // effect still executes after the rewrite) and 3.3 as the author ruled it on 2026-11-01
-            // (effect keeping is data keeping: the use a removal takes is handed to `:op/keep`, not
-            // to an order edge -- docs/handover/s1-keep-readings.cn.md records that ruling, and that
-            // 3.3's own sentence still carries the older GATE wording). `inline`+`fold` alone writes
-            // no keeper, and the program prints the same either way.
-            //
-            // It arrived with the conversion registration (dae15cc28: a conversion's purity and
-            // faulting marks now come from where it is registered, `.mayFault =
-            // !kNeverFaults.contains(key)`, instead of from the letters of its name -- and that is
-            // what `isObservedRun` asks), not with A6/A7 and not with a change to the passes:
-            // `std::opt std::jgir` over this case counts 0 keeps at 76f910062, 0 at 9e00900e1 (A6
-            // and A7), 0 at bd975f57d, 2 at dae15cc28, and the two dumps' node labels differ by the
-            // two `:op/keep` occurrences and by nothing else.
-            'inline_reduce_in_folded_arm.cml': 2
-        }
-    },
     {
         uri: ':enum/tag',
         corpus: 'defun',
@@ -115,6 +90,20 @@ const FAMILY = [
 
 const CORPUS_DIRS = ['effects', 'defun']
 
+/// The programs the sweep cannot measure, with the reason each is out. A refused program has no graph
+/// after `std::opt`, so it has no operators to count: measuring it would say "this case stopped
+/// holding `:enum/tag`", which is not what happened. The list is per corpus and the reason is written
+/// where the file is, so a reader who asks why the corpus is one shorter finds the answer here.
+const REFUSED = {
+    effects: {
+        // `h` is put into the tuple `(1, h)` and `c` is written after it:
+        // `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198, the author's ruling of
+        // 2026-11-16). The shape it used to hold is read on `dead_write_held_by_program.cml`.
+        'dead_write_dropped_closure.cml':
+            'refused: a captured name is written after the closure that holds it is put into a tuple'
+    }
+}
+
 /// Every `:oper` label of one program's graph after `std::opt`, once per program.
 const histogram = (file) => {
     const run = spawnSync(CAMEL, [file, 'std::opt', 'std::jgir'], { env, encoding: 'utf8' })
@@ -128,11 +117,13 @@ const histogram = (file) => {
     return counts
 }
 
-/// The measured map for one corpus: `{ 'case.cml': { ':op/keep': 2, ... } }`.
+/// The measured map for one corpus: `{ 'case.cml': { ':enum/tag': 1, ... } }`.
 const sweep = (corpus) => {
+    const out = REFUSED[corpus] || {}
     const files = fs
         .readdirSync(path.join(CASES, corpus))
         .filter((name) => name.endsWith('.cml'))
+        .filter((name) => !(name in out))
         .sort()
     const measured = {}
     for (const name of files) {

@@ -89,7 +89,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "PassBoundaryResources",
                 "Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}.",
-                "An effect is written once and stays where the program put it. A rewrite may move code, copy it, or delete what nothing needs, but the ambient resources a graph touches -- stdout, stderr, stdin, clock, env, fs, rng -- are the program's effects, and the pass list must leave them the same. This is a defect of the pass named, not of the program.",
+                "This invocation selected a pass boundary check requiring equal standard ambient resource/access-mode support. The before and after programs differ under that check. Equal support does not establish equal event counts, payloads, or full observational behavior.",
             },
         },
         {
@@ -114,6 +114,30 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "PassBoundaryPorts",
                 "Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}.",
                 "An operator node's ordinary ports are the arguments of the declaration it names, in order: a pass may rewrite the graph, but not write an operand the declaration does not have, point one at a node that is gone or dead, or leave one without a type. A node that no longer matches its declaration is a call nothing can run.",
+            },
+        },
+        {
+            RuntimeDiag::PassEffectContainment,
+            {
+                "PassEffectContainment",
+                "Pass '{0}' returned a program whose call site reaches past the type it declares: {1}",
+                "A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.",
+            },
+        },
+        {
+            RuntimeDiag::PassEffectBeyondType,
+            {
+                "PassEffectBeyondType",
+                "'{0}' committed a graph that reaches past the effect its own type declares: {1}",
+                "A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.",
+            },
+        },
+        {
+            RuntimeDiag::PassEffectOrder,
+            {
+                "PassEffectOrder",
+                "'{0}' committed a graph whose conflicting effects are not ordered: {1}",
+                "Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.",
             },
         },
         {
@@ -273,7 +297,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "PassNeedsExtraction",
                 "Pass '{0}' cannot take the program: some values of it have several writings.",
-                "An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).",
+                "An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::cxx::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).",
             },
         },
         {
@@ -333,6 +357,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::NullSlotUnwrapped,
+            {
+                "NullSlotUnwrapped",
+                "The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.",
+                "The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",
@@ -370,6 +402,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "JitWithoutCodeGenerator",
                 "`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.",
                 "The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.",
+            },
+        },
+        {
+            RuntimeDiag::OptimizationStoppedShort,
+            {
+                "OptimizationStoppedShort",
+                "`std::opt` stopped short of a fixed point: {0}.",
+                "Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The pass has two bounds, and either one reports here. The round count is the pass's own, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. The growth budget (`growth_budget`, the nodes specializing and inlining may copy) is the caller's: past it the remaining calls stay calls. A round that changed nothing while the inliner had left a call for that budget reports here and is not a fixed point -- it used to be reported as one, which made a spent budget look like a settled optimizer. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.",
             },
         },
     };

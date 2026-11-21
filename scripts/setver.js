@@ -19,7 +19,7 @@ packageJson.version = ver
 fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 4))
 logDone('Updated package.json')
 
-// update version in src/config.h
+// update version in tools/camel-cli/config.h
 let configContent = fs.readFileSync('tools/camel-cli/config.h', 'utf8')
 configContent = configContent.replace(/#define VERSION ".*"/, `#define VERSION "${ver}"`)
 fs.writeFileSync('tools/camel-cli/config.h', configContent)

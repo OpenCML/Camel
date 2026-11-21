@@ -1,0 +1,18 @@
+// Measurement probe (ECOOP round 10, item 1): the commit path with no edit.
+//
+// `graph::commit` checks the edits and makes the changed function (`stdlib/graph.cml`). This pass
+// opens a transaction on the program and commits it with no edit in between, so
+// `camel --timeit commit_only::touch/<N> <program>` measures the commit path itself -- the checks
+// and the publish -- from a fresh graph, N times.
+//
+// It is *one* reading of commit and not the same one a rewriting pass pays: a pass that changed a
+// graph gives commit the changed graphs to check and to publish, and this one hands it none. The
+// report says which of the two each number is.
+import { commit, open } from graph
+import { is_function } from types
+
+/// Opens a transaction on the program and commits it unchanged.
+export func touch::<F>(p: F): F! when is_function::<F>() sync {
+    let t = open(p)
+    return commit(t)
+}

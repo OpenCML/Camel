@@ -26,6 +26,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/runtime/canonical.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/graph.h"
@@ -54,6 +55,7 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::GCRegion;
 using camel::runtime::GraphId;
+using camel::runtime::kInvalidGraphId;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
 
@@ -224,21 +226,103 @@ slot_t graphsOfKernel(ArgsView &, ArgsView &norm, Context &) {
 
 // ---- a graph ----
 
+/// The canonical numbering of one Program, solved once and remembered: `nodes` asks for a whole
+/// graph's order and `id` asks for one node's number, and a pass asks for a number once per node
+/// (a sweep that compares every pair asks for it n^2 times), so the solve cannot be repeated per
+/// call. Keyed by the Program's root graph and that graph's revision, the way `is_written_slot`
+/// below keys its copy: a Program is an immutable snapshot, and a rewrite publishes a new one whose
+/// graphs are new versions.
+class CanonicalSolve {
+  public:
+    static CanonicalSolve &instance() {
+        static CanonicalSolve solve;
+        return solve;
+    }
+
+    std::shared_ptr<const camel::runtime::CanonicalProgram>
+    of(const Program *program, const GCGraph *root) {
+        if (program == nullptr || root == nullptr) {
+            return nullptr;
+        }
+        std::lock_guard lock(mutex_);
+        const auto found = byRoot_.find(root);
+        if (found != byRoot_.end() && found->second.revision == root->revision()) {
+            return found->second.solve;
+        }
+        if (byRoot_.size() > 16) {
+            byRoot_.clear();
+        }
+        auto solve = std::make_shared<const camel::runtime::CanonicalProgram>(*program, *root);
+        byRoot_[root] = Entry{root->revision(), solve};
+        return solve;
+    }
+
+  private:
+    struct Entry {
+        uint64_t revision = 0;
+        std::shared_ptr<const camel::runtime::CanonicalProgram> solve;
+    };
+    std::mutex mutex_;
+    std::unordered_map<const GCGraph *, Entry> byRoot_;
+};
+
+/// The numbering of the graph a handle names: the Program's own solve when the Program still has
+/// that graph as its root, and a solve rooted at the graph itself when it does not (a program a
+/// rewrite published is rooted at the function it rewrote, so this is the ordinary case only for a
+/// graph the solve did not reach).
+std::vector<uint32_t> canonicalNumbersOf(const Handle *handle) {
+    const Program *program = handle->program();
+    const GCGraph &graph   = graphOf(handle, "graph.id");
+    if (const auto solve = CanonicalSolve::instance().of(program, program->root());
+        solve != nullptr) {
+        const std::vector<uint32_t> &numbers = solve->numbers(graph);
+        if (!numbers.empty() || graph.nodeCount() == 0) {
+            return numbers;
+        }
+    }
+    return camel::runtime::canonicalNodeNumbers(*program, graph);
+}
+
 slot_t nameKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(graphOf(norm.get<Handle *>(0), "graph.name").name());
 }
 
 slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCGraph &graph = graphOf(handle, "graph.nodes");
+    const auto *handle = norm.get<Handle *>(0);
     std::vector<Handle *> items;
-    for (const GCNode *node : graph.nodes()) {
-        if (node->kind == GCNodeKind::Dead) {
-            continue;
-        }
-        items.push_back(nodeHandle(handle->program(), handle->graph(), graph.nodeRef(node)));
+    // The nodes in *canonical* order, not in NodeId order (design principles 9.5): the order the
+    // graph's own structure decides, which `src/runtime/canonical.cpp` already computes for the
+    // block naming and for `same_graph`. Two writings that differ only in what the source spelled
+    // -- two statements swapped, a variable renamed -- give one order here, so a pass that pairs
+    // neighbours in it gives one answer for both.
+    for (uint32_t ref : canonicalNodeRefs(handle)) {
+        items.push_back(nodeHandle(handle->program(), handle->graph(), ref));
     }
     return handleArray(HandleKind::Node, items);
+}
+
+/// The node the graph hands its value out of: the node a graph returns, a port for a function that
+/// returns a parameter, the `JOIN` a body's branches end at. Null for a graph that hands no value
+/// out, which is the one case with no node to put anything in the place of.
+slot_t exitOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    // A draft has no `Graph` handle of its own (a transaction names its draft), so this reads a
+    // published graph and nothing else; the exit of a draft is the same node, alive until the graph
+    // is committed.
+    if (handle->transaction() != nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.exit_of",
+            "the graph belongs to a transaction");
+    }
+    const GCGraph &graph    = graphOf(handle, "graph.exit_of");
+    const gc_node_ref_t out = graph.exitNodeRef();
+    if (out == kInvalidNodeRef || graph.node(out) == nullptr) {
+        return NullSlot;
+    }
+    return makeSome(
+        toSlot(nodeHandle(handle->program(), handle->graph(), out)),
+        nullableOf(HandleType::get(HandleKind::Node)));
 }
 
 // ---- a node ----
@@ -343,7 +427,7 @@ slot_t isConstantKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Bool>(node.kind() == GCNodeKind::Data && node.dataIndex() < 0);
 }
 
-/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::opt::fold` clamp with
+/// The bytes a constant node's value occupies: the same measure `std::opt` and `std::cxx::fold` clamp with
 /// `constant_budget`, answered here so a Camel pass can ask the same question. A node that is no constant --
 /// or whose value is not in the graph's static values -- occupies nothing: 0.
 slot_t constantBytesKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -526,6 +610,33 @@ slot_t typeNameKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(norm.get<Handle *>(0)->typeRef()->toString());
 }
 
+/// The graph a CALL node runs: the function value it reads first, which is its first `With` input.
+/// A call written by name reads a FUNC node, and a call through a value reads a DATA node holding
+/// a static function; both are answered by the entries that already resolve a callee
+/// (`GCGraph::calleeIdOf`, `GCGraph::staticFunctionGraphOf`), so this adds no rule of its own. A
+/// call whose function value is neither -- a parameter of function type, a closure being filled --
+/// names no graph here: which graph runs is decided when the call runs, and
+/// `staticFunctionGraphOf` refuses a half-built function for the same reason.
+GraphId calledGraphOf(const GCGraph &graph, gc_node_ref_t call) {
+    const std::span<const gc_node_ref_t> with = graph.withInputsOf(call);
+    if (with.empty()) {
+        return kInvalidGraphId;
+    }
+    const gc_node_ref_t target = with.front();
+    const GCNode *value        = graph.node(target);
+    if (value == nullptr || value->kind == GCNodeKind::Dead) {
+        return kInvalidGraphId;
+    }
+    switch (value->kind) {
+    case GCNodeKind::Func:
+        return graph.calleeIdOf(target);
+    case GCNodeKind::Data:
+        return graph.staticFunctionGraphOf(target).graph;
+    default:
+        return kInvalidGraphId;
+    }
+}
+
 /// The graph a CALL or FUNC node names, null for any other node. A node of the draft being
 /// rewritten names no graph: a draft is not a published version, so a condition cannot follow a
 /// call (and a rule's pattern cannot match one).
@@ -539,7 +650,9 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     if (node.kind != GCNodeKind::Call && node.kind != GCNodeKind::Func) {
         return NullSlot;
     }
-    const GraphId callee = graph.calleeIdOf(handle->index());
+    const GraphId callee = node.kind == GCNodeKind::Call
+                               ? calledGraphOf(graph, handle->index())
+                               : graph.calleeIdOf(handle->index());
     if (!isValid(callee) || handle->program()->graph(callee) == nullptr) {
         return NullSlot;
     }
@@ -936,6 +1049,7 @@ const std::vector<ReadOp> &readOps() {
         {"graphs_of", graphsOfKernel},
         {"name", nameKernel},
         {"nodes", nodesKernel},
+        {"exit_of", exitOfKernel},
         {"inputs", inputsKernel},
         {"with_inputs", withInputsKernel},
         {"sync_inputs", syncInputsKernel},
@@ -971,6 +1085,54 @@ const std::vector<ReadOp> &readOps() {
 }
 
 } // namespace
+
+uint32_t nodeCanonicalNumber(const Handle *handle) {
+    if (handle->transaction() != nullptr) {
+        // A node of a draft has no canonical number, and this reading refuses rather than answer
+        // the place the node holds in the draft (design principles 9.5). The draft is being
+        // edited: that place is the order the nodes were made in while the draft is open, and the
+        // commit is what turns it into a graph -- so an answer here would be a number of the right
+        // shape that is wrong, which is the one thing a reading of the canonical order exists to
+        // replace. A rule condition that wants the draft's own order reads `creation_id` and
+        // declares the `spelling` capability, which is what it is doing.
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.id",
+            "the node belongs to a draft, and a draft has no canonical number: its nodes' places "
+            "are the order they were made in, which the commit replaces. Read `id` after the "
+            "commit publishes the program, or read `creation_id` for the draft's own order");
+    }
+    const std::vector<uint32_t> numbers = canonicalNumbersOf(handle);
+    const uint32_t ref                  = handle->index();
+    return ref < numbers.size() ? numbers[ref] : camel::runtime::kNoCanonicalNumber;
+}
+
+std::vector<uint32_t> canonicalNodeRefs(const Handle *handle) {
+    const Program *program = handle->program();
+    const GCGraph &graph   = graphOf(handle, "graph.nodes");
+    std::vector<uint32_t> refs;
+    const auto take = [&](const std::vector<gc_node_ref_t> &order) {
+        refs.reserve(order.size());
+        for (gc_node_ref_t ref : order) {
+            // A node the walk placed is live by construction; the guard keeps a removed place out
+            // of the answer even if a graph is published mid-solve.
+            if (graph.containsNodeRef(ref) && graph.node(ref) != nullptr &&
+                graph.node(ref)->kind != GCNodeKind::Dead) {
+                refs.push_back(ref);
+            }
+        }
+    };
+    if (const auto solve = CanonicalSolve::instance().of(program, program->root());
+        solve != nullptr) {
+        const std::vector<gc_node_ref_t> &order = solve->order(graph);
+        if (!order.empty() || graph.nodeCount() == 0) {
+            take(order);
+            return refs;
+        }
+    }
+    take(camel::runtime::canonicalNodeOrder(*program, graph));
+    return refs;
+}
 
 const std::unordered_map<std::string, operator_t> &readKernels() {
     static const std::unordered_map<std::string, operator_t> kernels = [] {

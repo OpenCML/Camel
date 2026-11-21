@@ -1,0 +1,92 @@
+# Does a transform read the writing? The ECOOP measurement of the author's plan of 2026-11-18, 丙's
+# acceptance item (a):
+#
+#   "a greedy fusion transform written in Camel: pair the adjacent multiplications in `nodes` order.
+#    The program `x*2 + y*3 + x*y` written two ways (two statements swapped; every local renamed),
+#    each run once: the two outputs are canonically equal (`same_graph`, printing both canonical
+#    hashes)."
+#
+# What the criterion is about (design principles 9.5, plan 丙.1): `nodes` must return the canonical
+# order, so that the two writings choose the same pair of multiplications. The transform is
+# `greedy::fuse` (`test/cases/opt/writings/greedy_fuse.cml.in`, copied into the scratch directory as
+# `greedy.cml`), and it asks none of the writing-visible queries 丙.2 lists -- no `id`, no `name`, no
+# `origin`, no `show` -- so the one thing besides the graph it can read is the order of `nodes`.
+#
+# The case prints, for every reading, **both sides' canonical form: the byte count and the sha256**.
+# The verdict is that form, byte for byte (`std::jgir canonical=true`, the document
+# `test/tools/same_graph.py` compares, author's ruling `812afad5c`); when the answer is no the tool
+# also names the nodes and the edges one side has and the other does not, and the readings that
+# require a difference require it to be named.
+#
+# The readings, and why the later ones keep the earlier from being vacuous:
+#
+#   raw_one_form        the two writings, no transform: one canonical form. If swapping two adjacent
+#                       `let` lines moved the canonical form, the pair would not be a pair of
+#                       writings and nothing below would be measuring the transform.
+#   changes_the_graph   base fused and base unfused: two forms, naming a multiplication. A transform
+#                       that fused nothing makes every `same graph` below a `true` about nothing.
+#   renamed             base and renamed, both fused: one form. A name is for a reader.
+#   swapped             base and swapped, both fused: **the criterion.** One form exactly when
+#                       `nodes` gives the canonical order; before that it reads two, and then the
+#                       difference must name the two multiplications that were paired differently.
+#   different_constant  `y * 4` for `y * 3`, both fused: two forms -- a comparator that cannot say
+#                       `false` about the transform's own output is not a comparator.
+#
+# Before plan 丙.1 lands the `swapped` reading says **two** canonical forms, and the case accepts
+# that state only with its evidence (the difference names the multiplications; the precedent is
+# `trans.same_graph`'s `two_writes_swapped`, which reads either state and requires the reason). The
+# strict line, which the merge of 丙.1 turns this plan into, is the same command with
+# `--require-one-form` added to `args`: it fails until the two writings fuse to one canonical form.
+#
+# Item (c), wall clock of two effects on two resources: the author's ruling on `1b7905cd4` rejected the
+# first reading of this item as one resource written twice (two files are one resource, `fs`: "calls on
+# the file system keep their written order", `stdlib/fs.cml#fs`), so `effect_parallel_clock.py` now
+# runs one 200 ms effect on `clock` (`stdlib/process.cml#sleep`) and one on `rendezvous_point`
+# (`stdlib/test_support.cml#rendezvous_point`, declared `unordered`) in a `main` that is not a
+# `sync` body, alternating the serial and the parallel back end, and prints the median and the
+# range of its runs, the control (`sync` on against `sync` off on the one unordered resource, whose
+# values say how many calls met), and the parallel back end's own decision (`1 run as task graphs`).
+#
+# **Nothing here is a bound on wall clock** -- the entry exists so that the measurement is a thing the
+# tree runs and not a script nobody runs. What it asserts is that the harness ran, stated a reading, and
+# that the value reading of the control held: two calls on the unordered resource that are free of
+# `sync` both report 2 (`free  serial 1001   parallel 2002`), and two that a `sync` body orders report 1
+# and 1 (`sync  serial 1001   parallel 1001`). Those are values that follow from the scheduler's
+# decision, not durations; the medians and the ratio are on
+# `docs/handover/reports/2026-11-18-eco-measurements.cn.md`, where a number belongs.
+#
+# The torch.fx control of the same item is `test/cases/opt/writings/fx_greedy_fusion.py`. It is not a
+# test here: it needs a Python with `torch`, which the build host does not have, and a plan entry
+# that skipped for want of an interpreter would put a skip in the gate where there is nothing to
+# measure. It is run on the ECOOP side, its source is quoted in the report, and the (a) case reports
+# whether it is in the tree.
+
+id = "opt.writings"
+order = 484
+tier = "fast"
+tags = ["feat", "opt", "graph", "effects", "writings"]
+
+[[tests]]
+name = "opt.writings.greedy_fusion_reads_no_writing"
+desc = "A greedy fusion transform written in Camel, pairing adjacent multiplications in `nodes` order, on `x*2 + y*3 + x*y` written two ways (two adjacent statements swapped, every local renamed): both fused outputs must be **one canonical form**, and both sides' byte count and sha256 are printed. Four readings keep that `true` from being vacuous: the unfused pair is one form already, the fusion is not a no-op and its difference names a multiplication, a rename fuses to the same graph, and a different constant fuses to a different graph."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/writings/greedy_fusion_writings.py"
+# `${camel}` is the compiler of the build under test, named as an argument.
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["the transform asks no writing-visible query (id/name/origin/show): PASS", "control (torch.fx, run on the ECOOP side; this host has no torch): test/cases/opt/writings/fx_greedy_fusion.py present", "the two writings differ by exactly this swap of two adjacent lines (2 <-> 3):", "reading: raw_one_form", "reading: changes_the_graph", "reading: renamed", "reading: swapped", "reading: swapped_and_renamed", "reading: different_constant", "sha256=", "the greedy fusion is not a no-op, a rename fuses to the same graph, and a different constant does not: PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "opt.writings.two_effects_wall_clock"
+desc = "Item (c): one 200 ms effect on `clock` (`sleep`) and one on `rendezvous_point` (`rendezvous(2, t)`, declared `unordered`), in a `main` that is not a `sync` body, on `std::nvm` and on `std::prl` with four workers, alternating the two back ends: the median and the range of three runs each are printed, with the control (`sync` on against `sync` off on the one unordered resource) and the parallel back end's own decision for the program (`1 run as task graphs`). The entry asserts that the measurement ran, stated a reading, and that the control's values held -- two calls free of `sync` both report 2, two a `sync` body orders report 1 and 1 -- not that a wall clock fell on either side of a bound: a bound in the fast gate is a flake, and the plan asks this item for a number."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/opt/writings/effect_parallel_clock.py"
+args = ["${case}", "--camel", "${camel}", "--runs", "3"]
+expect_exit = 0
+expect_stdout_contains = ["two resources: `clock` (sleep, stdlib/process.cml:15) and `rendezvous_point` (stdlib/test_support.cml:17, unordered)", "wall clock", "serial    n=3", "parallel  n=3", "median serial / median parallel =", "reading: the two effects", "sync  serial 1001   parallel 1001", "free  serial 1001   parallel 2002", "the parallel back end's decision for the program (std::prl diag=true):", "graph 'main': 1 scope(s), 1 run as task graphs"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

@@ -2,7 +2,20 @@ id = "compile.match_type_array"
 order = 928
 tier = "fast"
 tags = ["feat", "compile", "match_type"]
-desc = "`match type`'s `case array` shape word selects every array type (design principles 5.5)"
+desc = "`match type`'s `case array` shape word selects every array type, and a dims pack in a pattern takes a stated shape apart (design principles 5.4, 5.5)"
+
+[[tests]]
+name = "match_type.array_dims"
+desc = "A case takes an array type apart (`case E[...Dims]`): the dimensions it binds are how many the shape states (a rank, read three ways -- a stated rank whatever its extents are, a scalar, an open rank), they can be put back (`E[?, ...Dims]`), and the case that binds them selects neither a scalar nor an open rank."
+kind = "behavior"
+case = "../../../cases/compile/match_type/array_dims.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true true\ntrue true\ntrue\ntrue\ntrue\ntrue\ntrue true\ntrue true\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 
 [[tests]]
 name = "match_type.array_shape"

@@ -23,8 +23,9 @@ add_camel_module(
     proto/onnx_writer.cpp
   EXTRA_INCLUDES
     ${CMAKE_CURRENT_BINARY_DIR}/generated
+  LINK_MODULES
+    tensor
+    nn
   EXTRA_LIBS
-    tensor_cmo
-    nn_cmo
     nlohmann_json::nlohmann_json
 )

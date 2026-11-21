@@ -1154,15 +1154,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "generic_signature.text_elements"
-desc = "The signature states its element type: `func f::<T>(x: T[...]) when is_numeric::<T>()` applies exactly where `T` is a number, so an array of text fills no arm of `shape` and the refusal names the condition — `WhenConditionUnmet` lists the candidate with its `when`, instead of a kernel faulting later."
-kind = "negative"
+name = "generic_signature.scalar_shape"
+desc = "A scalar has no dimensions: `shape` answers the empty list, with its length stated by the type's zero rank (design principles 5.4)."
+kind = "behavior"
 case = "../../../cases/modules/tensor/generic_signature_text_elements.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[...]) => int[] — when is_numeric::<T>()"]
+expect_exit = 0
+expect_stdout_exact = "[]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 # The kernel-timing table is a pass parameter (`std::profile opstats=true`): a run that asks for

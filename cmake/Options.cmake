@@ -60,8 +60,6 @@ add_platform_option(
     "JIT_TARGET_X64=0"
 )
 
-add_bool_option(ENABLE_FASTVM_COMPUTED_GOTO "Use computed goto in interpreter" ON)
-
 # ========== Python embedding modules (python.cmo / pyplot.cmo / py_bridge*) ==========
 # Defined in cmake/options.json; CAMEL_SKIP_PYTHON=1 forces them off during configuration (higher priority than cache).
 option(
@@ -73,6 +71,40 @@ if(DEFINED ENV{CAMEL_SKIP_PYTHON} AND "$ENV{CAMEL_SKIP_PYTHON}" MATCHES "^(1|ON|
     set(CAMEL_ENABLE_PYTHON OFF CACHE BOOL "disabled via CAMEL_SKIP_PYTHON" FORCE)
 endif()
 message(STATUS "CAMEL_ENABLE_PYTHON=${CAMEL_ENABLE_PYTHON}")
+
+# ========== The Python host binding (bindings/python: `camel._camel`) ==========
+# Independent of CAMEL_ENABLE_PYTHON, which embeds Python in Camel (the other direction): this is
+# Camel inside Python. It builds only when Python's development files are present, but a caller may
+# also want it gone by name -- a tree that is read rather than installed, or a source package whose
+# readers have no CPython 3.10.
+option(
+    CAMEL_ENABLE_PYTHON_BINDINGS
+    "Build the CPython extension camel._camel (bindings/python)"
+    ON
+)
+message(STATUS "CAMEL_ENABLE_PYTHON_BINDINGS=${CAMEL_ENABLE_PYTHON_BINDINGS}")
+
+# ========== The module set ==========
+# Which modules/*.cmo an install carries. The whole tree builds the whole list; the two knobs below
+# exist because a source package is read and built by people who do not need every library, and a
+# module that is never built is a directory they never have to compile.
+#
+#   CAMEL_PACKAGE_MINIMAL=ON   build the full list minus CAMEL_MINIMAL_DROPS (top-level
+#                              CMakeLists.txt, which is where that set is written and where the
+#                              reason each module is in or out is given) and minus the two Python
+#                              directions. This file only names the switch, not the set.
+#   CAMEL_MODULES=<list>       expert form: exactly these modules, in this order. Empty means "the
+#                              set the line above decides". A name that is not a module, or a
+#                              module whose link dependency is missing, fails the configure with a
+#                              message naming both (the link would otherwise fail much later).
+option(
+    CAMEL_PACKAGE_MINIMAL
+    "Build the subset CAMEL_MINIMAL_DROPS names, without the Python embedding modules and the Python host binding"
+    OFF
+)
+set(CAMEL_MODULES "" CACHE STRING
+    "Semicolon list of modules to build (empty = every module, or the CAMEL_PACKAGE_MINIMAL subset)")
+message(STATUS "CAMEL_PACKAGE_MINIMAL=${CAMEL_PACKAGE_MINIMAL} (CAMEL_MODULES=\"${CAMEL_MODULES}\")")
 
 # ========== Tensor module ==========
 # Consumed by modules/tensor/CMakeLists.txt; OFF uses the builtin GEMM kernels.

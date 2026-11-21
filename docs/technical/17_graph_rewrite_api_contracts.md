@@ -72,12 +72,12 @@
 
 ## 3. `inlineCallableInDraft` 契约（当前实现）
 
-**与 `std::opt::inline` pass 的区分**（阅读本节时请先建立预期）：
+**与 `std::cxx::inline` pass 的区分**（阅读本节时请先建立预期）：
 
 - **`inlineCallableInDraft`**：通用的内联原语；只要调用方传入合法的 `FUNC` 节点，就展开它的被调图。
-- **`std::opt::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
-  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::opt::inline::small`（Small）、
-  `std::opt::inline::arm`（Arm，分支臂的被调图，不要求小）、`std::opt::inline::hybrid` / `std::opt::inline`（Hybrid，
+- **`std::cxx::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
+  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::cxx::small`（Small）、
+  `std::cxx::arm`（Arm，分支臂的被调图，不要求小）、`std::cxx::hybrid` / `std::cxx::inline`（Hybrid，
   默认）。对递归的限制、`blockCallsToSccEntryCallees`、大小与增长预算等选择规则见
   [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 与 §6.1，本文不重复。
 
@@ -146,7 +146,7 @@
 
 7. 每个 `FUNC` 的普通实参数与 `with` 实参数等于被调图的端口数。
 
-旧的 `src/compile/gir/validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
+旧的 `src/compile/gir/` 下的 `validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
 已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
 测试用的故障注入遍（`src/passes/test/fault.cpp`）是只供测试的遍：在流水线里写出名字即可用，没有任何环境变量门控，
@@ -227,3 +227,56 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
   ；
 - 涉及 `BRCH`/`JOIN` 时，一个节点属于哪条臂由它的区域决定（`nodeRegion`、`armRegionOf`）；加节点时给对区域，
   提交时的校验会拦住读了另一条臂、或等待 `BRCH` 却不在任何臂里的节点。
+
+## Caller-selected deletion and boundary checks
+
+`rewrite`, `run` and `saturate` accept `protect_order` and `protect_faults`, both
+true by default. These local deletion guards are independent of numeric `strict`.
+`protect_order` keeps a computation whose place in the order is the program's -- one that
+carries an ordering edge, one something waits on, one whose value is written in place -- and
+does not decide whether an external access or a final write to a variable that
+outlives the call may be dropped: the region or the exit keeps them, only the graph interface's
+dedicated effect-deleting operation removes one, and no `replace` or `graft` does
+(design principles 9.7). `protect_faults` is the guard that still selects a deletion, and a
+wrapper forwards it explicitly. A disabled fault guard does not disable structural validation or
+the effect invariant either. Unknown calls and control-region summaries
+are conservative; sharing can make a local refusal unnecessary for actual execution.
+The guards do not certify equivalence, movement, duplication, reordering or termination.
+
+`DraftWritings` admits candidates using these guards, transfers named anchors and
+waits, and removes permitted unread nodes without an automatic keeper. Remaining
+users and synchronization can still demand a computation. Saturation applies the
+same admission checks. Extraction chooses from admitted alternatives, preserves
+structural roots and live dependencies, and trims undemanded operators; it cannot
+retrospectively restore a disabled protection. `Proof` records a derivation under
+supplied rules and guards, not a proof of full observational equality.
+
+The generic pipeline always checks ports, entry/exit and effect credentials;
+transactions also retain type, handle ownership and region checks. An effect
+operator returned to the pipeline must have a value reader, named result or chain
+place. Permitted deletion cleans up orphan operators rather than disabling this
+admission invariant.
+
+`graph::check_pass_boundary` explicitly selects the existing comparative check
+for the graphs before and after a pass and returns `after` when accepted. It compares the enclosing
+program snapshots: standard ambient resource/access-mode sets and order of matched
+effect sites, as well as ordinary admission. It emits a named context diagnostic on refusal. Although it returns `F!`, catching
+the error value does not clear that diagnostic or recover outer execution; this is
+a refusing checking stage, not a recoverable predicate.
+It does not compare traces, event counts, payloads or faults. Deleting one of two
+stdout writes may pass; deleting the only stdout write fails. Generic invocation
+and a wrapper omitting this check do not infer preservation from `(f: F) => F!`.
+The optimizer's internal `checkPassBoundary` calls retain their selected check.
+
+The support comparison sorts and deduplicates `(standard resource name, access mode)`
+from `collectEffects` over every graph, not only the invoked function's reachable body.
+The order matcher keys sites by origin, inline copy site and operator URI. It requires
+exactly one occurrence of the key before; it takes the first matching occurrence after
+and skips subsequent ones. For matched sites sharing an ambient resource, an order
+established before must still be established after. Unmatched sites are not compared.
+These are the implemented correspondence limits, not a general event bijection.
+
+The credential admission test applies to effect operators with external resources,
+ambient access, or non-read access. An operator has a credential if it has a normal
+or with user, is the graph exit/output/return, or has a sync predecessor/user or control
+input/user. This is a syntactic admission check, not a reachability or trace analysis.

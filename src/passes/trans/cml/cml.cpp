@@ -1,9 +1,9 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// `std::cml`: print the runtime program as Camel source. S1 covered the straight-line subset:
+// `std::cml`: print the runtime program as Camel source. It covers the straight-line subset:
 // module values, functions, literals, accesses, casts, operators, direct calls, `let`/`var`,
-// assignment, `return` and straight-line `sync`. S2 adds branches (`if`, `match`, the join that
+// assignment, `return` and straight-line `sync`, and branches (`if`, `match`, the join that
 // gives their value), loops (`for`, `while`, `for ... while`, their state and their regions),
 // closures (a lambda as a value, its captures, a body that is a sync block), and `with` and
 // `var` parameters. A construct outside that subset is refused by name instead of being printed
@@ -11,8 +11,10 @@
 
 #include "camel/passes/trans/cml/cml.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/loop_kind.h"
+#include "camel/core/module/module.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
@@ -60,6 +62,7 @@
 namespace {
 
 using namespace camel::core::rtdata;
+using camel::core::OperId;
 using camel::core::SymId;
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
@@ -68,8 +71,8 @@ using camel::core::type::StructType;
 using camel::core::type::TupleType;
 using camel::core::type::Type;
 using camel::core::type::TypeCode;
-using camel::runtime::GCGraph;
 using camel::runtime::gc_node_ref_t;
+using camel::runtime::GCGraph;
 using camel::runtime::Program;
 
 /// Why the printer cannot write a value. It carries the node so `apply` can point at it.
@@ -91,6 +94,36 @@ struct BigConstant {
     std::string graph;
     size_t bytes;
 };
+
+/// The operator a node runs, as the table knows it. What a node *is* -- a write, a reading, a
+/// cell -- is a fact of its declaration, so it is asked by this id and never by the letters of
+/// the operator's URI (`camel/runtime/graph.h`, `GCOperBody`).
+OperId operOf(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
+}
+
+/// Whether the operator writes a variable: `=` and every compound assignment. The table sets the
+/// family bit from the operator's own declaration of itself (`operator_table.h`, `isAssignment`),
+/// which is the one place the answer is stated.
+bool isAssignment(OperId oper) { return camel::core::OperatorTable::instance().isAssignment(oper); }
+
+/// Whether the operator is one of the core's variable operators: the cell's creation, its three
+/// readings, the in-place take and the cell a call left behind. The `:var/` namespace is the
+/// core's -- no module declares an operator in it -- so the six are the ids `operator_table.h`
+/// fixes in namespace `oper`, and that is what a reader asks instead of the URI's prefix.
+bool isVariableOperator(OperId oper) {
+    switch (oper) {
+    case camel::core::oper::VarNew:
+    case camel::core::oper::VarNewEmpty:
+    case camel::core::oper::VarGet:
+    case camel::core::oper::VarPeek:
+    case camel::core::oper::VarTake:
+    case camel::core::oper::VarAfter:
+        return true;
+    default:
+        return false;
+    }
+}
 
 /// The compiler names a lambda's graph `__g_<graph id>__`, which is no source name: the printer
 /// writes the lambda where its value is used instead of declaring a function.
@@ -125,7 +158,6 @@ std::string_view regionKindText(camel::runtime::GCRegionKind kind) {
     return "unknown";
 }
 
-
 bool isIdentifier(std::string_view text) {
     if (text.empty()) {
         return false;
@@ -149,7 +181,7 @@ bool isNamespaceName(std::string_view text) {
     if (text.find('<') != std::string_view::npos) {
         return false;
     }
-    size_t start = 0;
+    size_t start    = 0;
     size_t segments = 0;
     for (;;) {
         const size_t at = text.find("::", start);
@@ -172,7 +204,7 @@ bool isUtf8(std::string_view text) {
     size_t i = 0;
     while (i < text.size()) {
         const auto lead = static_cast<unsigned char>(text[i]);
-        size_t extra   = 0;
+        size_t extra    = 0;
         if (lead < 0x80) {
             ++i;
             continue;
@@ -288,8 +320,8 @@ constexpr int kIntervalPrecedence = 85;
 /// this printer's opinion (`src/parse/syntax/parser_expr.cpp`, `negExpr`): "looser than `->` and
 /// than `^`, tighter than the other binary operators ... `-x ^ 2` is `-(x ^ 2)`, `-a * b` is
 /// `(-a) * b`". So it sits between `*` and `^` of `precedenceOf`: a prefix as the base of a power
-/// takes the parentheses (`(-x) ^ 2`), as the left operand of `*` it does not (`-a * b`). The
-/// value 70 that used to stand here put the prefix above `^`, so `(-x) ^ 2` printed as `-x ^ 2`,
+/// takes the parentheses (`(-x) ^ 2`), as the left operand of `*` it does not (`-a * b`). A
+/// value of 70 would put the prefix above `^`, so `(-x) ^ 2` printed as `-x ^ 2`,
 /// which parses as `-(x ^ 2)` (the A7 case `parse/rulings/power`: 9 printed as -9).
 constexpr int kPrefixPrecedence = 55;
 
@@ -333,9 +365,9 @@ namespace {
 class CmlPrinter {
   public:
     CmlPrinter(
-        const Program &program, std::ostream &out, size_t maxLiteralBytes,
-        std::vector<BigConstant> &bigConstants)
-        : program_(program), out_(out), maxLiteralBytes_(maxLiteralBytes),
+        const Program &program, const camel::core::context::Context *context, std::ostream &out,
+        size_t maxLiteralBytes, std::vector<BigConstant> &bigConstants)
+        : program_(program), context_(context), out_(out), maxLiteralBytes_(maxLiteralBytes),
           bigConstants_(bigConstants) {}
 
     void run() {
@@ -345,8 +377,11 @@ class CmlPrinter {
         }
         graphs_ = camel::runtime::collectReachableGraphs(program_, root);
         classifyLambdas();
+        assignFunctionNames();
         collectTopLevelNames(root);
         findEntry(root);
+        collectOperatorModules();
+        collectConstructionTemplates();
         collectImports();
         // The named struct types have to be known before a signature is validated: a signature
         // that names `V` is printable only because the printed program will declare `V`.
@@ -362,10 +397,10 @@ class CmlPrinter {
             return;
         }
 
-        graph_    = root;
-        isRoot_   = true;
-        indent_   = "";
-        skip_     = entrySkip_;
+        graph_  = root;
+        isRoot_ = true;
+        indent_ = "";
+        skip_   = entrySkip_;
         prepareGraph(root);
         if (!topo_.empty()) {
             printStatements();
@@ -381,7 +416,9 @@ class CmlPrinter {
             }
         }
         std::stable_sort(
-            functions.begin(), functions.end(), [](const GCGraph *a, const GCGraph *b) {
+            functions.begin(),
+            functions.end(),
+            [](const GCGraph *a, const GCGraph *b) {
                 // Source order is the graph order the compiler gave them; only `main` moves,
                 // to the end, where a reader expects the entry point.
                 const bool aMain = a->name() == "main";
@@ -400,8 +437,8 @@ class CmlPrinter {
         // program *writes* its name, and a type the graph carries in a place nothing prints needs
         // no declaration (writing one would add a declaration the source never had).
         orderNamedTypes();
-        // Every import is whole (`import tensor`): a module operator is written `module::name`, and a
-        // sign a program writes needs the module that declares its rule, so no name is imported.
+        // Every import is whole (`import tensor`): a module operator is written `module::name`, and
+        // a sign a program writes needs the module that declares its rule, so no name is imported.
         for (const std::string &module : moduleImports_) {
             out_ << "import " << module << '\n';
         }
@@ -421,7 +458,13 @@ class CmlPrinter {
     }
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- the printer reads the program its pass
+    // was given; the driver owns it for the translation.
     const Program &program_;
+    /// The context the program was compiled on, for the one fact the printer cannot read off a
+    /// graph: which module a name belongs to (see `collectOperatorModules`). Null when a caller
+    /// builds a printer without one, and then a URI's own prefix is all there is.
+    const camel::core::context::Context *context_ = nullptr;
     std::ostream &out_;
     size_t maxLiteralBytes_;
     std::vector<BigConstant> &bigConstants_;
@@ -450,16 +493,38 @@ class CmlPrinter {
     std::unordered_set<gc_node_ref_t> skip_;
     std::vector<gc_node_ref_t> topo_;
 
-
     std::unordered_map<gc_node_ref_t, std::string> params_;
     std::unordered_map<gc_node_ref_t, std::string> declared_;
     std::unordered_map<gc_node_ref_t, std::string> cells_;
+    /// The value each `var` was created with, by the cell it starts: a read that stands before any
+    /// write of the same variable is folded by the builder to that value, so one node is both the
+    /// `:var/new` operand and the read, and only the variable's name says that. See `expression`.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> cellOfValue_;
+    /// The cells the text has already written. The name of a variable means "the version the text
+    /// has written so far" (`materialiseRead` says the same for a read the text has not reached),
+    /// so after a write to the cell the value it was created with is no longer what the name reads.
+    std::unordered_set<gc_node_ref_t> writtenCells_;
     std::unordered_set<std::string> usedNames_;
     std::vector<std::string> lines_;
-    /// The modules the printed program names (see `collectImports`): every operator the printer writes
+    /// The modules the printed program names (see `collectImports`): every operator the printer
+    /// writes
     /// -- as a sign or as `module::name` -- is bound by a declaration of its module, and a module
     /// imported whole brings the declaration in.
     std::set<std::string> moduleImports_;
+    /// The module each operator the text names belongs to, by the URI it was declared under (see
+    /// `collectOperatorModules`), and the module a URI's prefix answers on. Both hold the name a
+    /// program *imports*, which is not always the spelling the operator's URI uses.
+    std::unordered_map<std::string, std::string> operatorModule_;
+    std::unordered_map<std::string, std::string> protocolModule_;
+    /// The template constants of constructions whose every slot is written by the construction
+    /// (see `collectConstructionTemplates`): shapes, not values the program writes. The graph is
+    /// part of the key: a node reference is only an index inside one graph, and a reference held
+    /// for one graph named a node of another (a lambda body's template made the enclosing
+    /// function's `let count` disappear, `trans/port_fill_metadata.cml`).
+    std::unordered_map<const GCGraph *, std::unordered_set<gc_node_ref_t>> constructionTemplates_;
+    /// The name each function graph is printed under, when it is not the graph's own name (see
+    /// `assignFunctionNames`).
+    std::unordered_map<const GCGraph *, std::string> functionNames_;
     /// The named struct types the printed program mentions, in discovery order, and the ones for
     /// which no `type` statement can be written, with the reason (see `collectNamedTypes`).
     std::vector<const StructType *> namedTypeRecords_;
@@ -490,13 +555,13 @@ class CmlPrinter {
     // nothing else, and a name is not a literal, so `let c0 = 1` then `c0 + 2` keeps the node.
     std::vector<std::string> held_;
     std::unordered_map<gc_node_ref_t, std::string> heldNames_;
-    size_t heldSeq_ = 0;
-    size_t generated_          = 0;
-    std::string indent_        = "    ";
+    size_t heldSeq_     = 0;
+    size_t generated_   = 0;
+    std::string indent_ = "    ";
     /// The indent of the header lines of the function being printed: a function inside a
     /// `namespace` block sits one level in, and its body one deeper.
     std::string headerIndent_;
-    bool branchAsStatement_    = false;
+    bool branchAsStatement_ = false;
     std::unique_ptr<camel::runtime::ControlRegions> control_;
 
     // ---- names ---------------------------------------------------------------------------
@@ -529,13 +594,64 @@ class CmlPrinter {
         // The names the file will declare: `func <name>`, in the spelling `printFunction` writes
         // (the part after the last `::`).
         for (const GCGraph *graph : graphs_) {
-            const std::string name = graph->name();
+            const std::string name = printedNameOf(graph);
             if (name.empty()) {
                 continue;
             }
             const size_t at = name.rfind("::");
             writtenFunctionNames_.insert(at == std::string::npos ? name : name.substr(at + 2));
         }
+    }
+
+    /// The name a function graph is printed under: its source name, unless another graph already
+    /// carries that name. Two graphs can: a program with two `when`-overloaded declarations
+    /// (`when fast` / `when wide`) compiles to two graphs of one source name, and the condition
+    /// text that tells them apart is on the declaration and not on the graph
+    /// (`compile/when_overloads/values.cml` printed `func pick` twice, which is `Redeclaration`).
+    /// A name is for a reader -- the canonical document compares the graphs, and its graph label
+    /// carries `flags`, `root` and `entry`, not the name -- so a second name the printer makes up
+    /// is invisible to the checker, while every call still calls the graph it called (the calls
+    /// are printed from the callee's graph, see `expression` of a function constant).
+    void assignFunctionNames() {
+        std::unordered_set<std::string> taken;
+        for (GCGraph *graph : graphs_) {
+            if (lambdaGraphs_.contains(graph) || graph == program_.root()) {
+                continue;
+            }
+            // The graph's own name is what the declaration writes, namespaced functions included
+            // (`Tools::inc` is printed inside a `namespace Tools` block, see `printFunction`).
+            const std::string name = graph->name();
+            if (name.empty()) {
+                continue;
+            }
+            if (taken.insert(name).second) {
+                continue;
+            }
+            // Keep the namespace the source wrote and make the local part new.
+            const size_t at = name.rfind("::");
+            const std::string prefix =
+                at == std::string::npos ? std::string{} : name.substr(0, at + 2);
+            std::string candidate;
+            do {
+                candidate = prefix + freshName();
+            } while (!taken.insert(candidate).second);
+            functionNames_[graph] = candidate;
+        }
+    }
+
+    /// The name a printed declaration of this graph writes (see `assignFunctionNames`): the graph's
+    /// own name, or the one made up for it because another graph carries that name too.
+    std::string printedNameOf(const GCGraph *graph) const {
+        const auto found = functionNames_.find(graph);
+        return found != functionNames_.end() ? found->second
+                                             : (graph != nullptr ? graph->name() : std::string{});
+    }
+
+    /// The name a printed *call* of this graph writes: the same, but a graph with no source name
+    /// (a lambda) is refused by the caller rather than named after its internal label.
+    std::string callNameOf(const GCGraph *graph) const {
+        const auto found = functionNames_.find(graph);
+        return found != functionNames_.end() ? found->second : functionNameOf(graph);
     }
 
     std::string sourceNameIt(const GCGraph *graph, gc_node_ref_t ref) const {
@@ -565,9 +681,8 @@ class CmlPrinter {
             break;
         }
         const camel::runtime::GCNode *call = root->node(ref);
-        if (call == nullptr ||
-            (call->kind != camel::runtime::GCNodeKind::Call &&
-             call->kind != camel::runtime::GCNodeKind::Func)) {
+        if (call == nullptr || (call->kind != camel::runtime::GCNodeKind::Call &&
+                                call->kind != camel::runtime::GCNodeKind::Func)) {
             return;
         }
         entrySkip_.insert(ref);
@@ -580,9 +695,8 @@ class CmlPrinter {
         const auto with = root->withInputsOf(ref);
         if (!with.empty()) {
             const camel::runtime::GCNode *value = root->node(with.front());
-            if (value != nullptr &&
-                (value->kind == camel::runtime::GCNodeKind::Fill ||
-                 value->kind == camel::runtime::GCNodeKind::Data)) {
+            if (value != nullptr && (value->kind == camel::runtime::GCNodeKind::Fill ||
+                                     value->kind == camel::runtime::GCNodeKind::Data)) {
                 entrySkip_.insert(with.front());
                 if (value->kind == camel::runtime::GCNodeKind::Fill) {
                     const auto inputs = root->normInputsOf(with.front());
@@ -644,8 +758,8 @@ class CmlPrinter {
     }
 
     void validateGraph(GCGraph *graph, bool root) {
-        graph_  = graph;
-        isRoot_ = root;
+        graph_            = graph;
+        isRoot_           = root;
         const bool lambda = lambdaGraphs_.contains(graph);
         if (!graph->executable()) {
             fail(camel::runtime::kInvalidNodeRef, "it has writings (it is not executable)");
@@ -707,8 +821,7 @@ class CmlPrinter {
                 if (!topLevelNames_.contains(info.name) && !lambda) {
                     fail(
                         withPorts[i],
-                        std::format(
-                            "it reads '{}', which is not a top-level name", info.name));
+                        std::format("it reads '{}', which is not a top-level name", info.name));
                 }
             }
             checkSignatureType(type);
@@ -724,15 +837,15 @@ class CmlPrinter {
                     fail(
                         camel::runtime::kInvalidNodeRef,
                         std::format(
-                            "it captures '{}' from an enclosing function (a closure)", name));
+                            "it captures '{}' from an enclosing function (a closure)",
+                            name));
                 }
             }
             // A lambda is printed inside its consumer: one function constant, at most one closure.
             if (lambda) {
                 const auto siteIt = lambdaSite_.find(graph);
                 const gc_node_ref_t site =
-                    siteIt != lambdaSite_.end() ? siteIt->second
-                                                : camel::runtime::kInvalidNodeRef;
+                    siteIt != lambdaSite_.end() ? siteIt->second : camel::runtime::kInvalidNodeRef;
                 if (lambdaDataCount_[graph] > 1) {
                     fail(site, "a lambda used as more than one function value");
                 }
@@ -745,7 +858,7 @@ class CmlPrinter {
             fail(camel::runtime::kInvalidNodeRef, "it has node attributes or tags");
         }
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            const gc_node_ref_t ref           = it.ref();
+            const gc_node_ref_t ref            = it.ref();
             const camel::runtime::GCNode *node = *it;
             if (node->kind == camel::runtime::GCNodeKind::Dead) {
                 continue;
@@ -819,7 +932,9 @@ class CmlPrinter {
                     camel::runtime::kInvalidNodeRef,
                     std::format(
                         "{} is the named type '{}', whose declaration cannot be printed: {}",
-                        where, type->toString(), namedTypeObstacleOf(record)));
+                        where,
+                        type->toString(),
+                        namedTypeObstacleOf(record)));
             }
             for (size_t i = 0; i < record->size(); ++i) {
                 checkType(record->typeAt(i), "a struct field");
@@ -828,8 +943,7 @@ class CmlPrinter {
         }
         case TypeCode::Function: {
             const auto *function = static_cast<const FunctionType *>(type);
-            if (function->withTypesCount() != 0 || function->hasRest() ||
-                function->hasConstas()) {
+            if (function->withTypesCount() != 0 || function->hasRest() || function->hasConstas()) {
                 fail(
                     camel::runtime::kInvalidNodeRef,
                     std::format("{} is a partial or variadic function type", where));
@@ -845,7 +959,10 @@ class CmlPrinter {
         default:
             fail(
                 camel::runtime::kInvalidNodeRef,
-                std::format("{} has the type '{}', which std::cml does not print", where, type->toString()));
+                std::format(
+                    "{} has the type '{}', which std::cml does not print",
+                    where,
+                    type->toString()));
         }
     }
 
@@ -899,6 +1016,15 @@ class CmlPrinter {
         if (hasFunction(type)) {
             return {};
         }
+        // An array literal written with no element type at all is a value of the array whose
+        // element type nobody wrote, and `[]` is that type's shape and not a type: the annotation
+        // position reads a type, so `let cml1: [] = []` is `Unexpected '['; expected a type`
+        // (`trans/cpp/empty_literal_takes_the_position.cml`). The unannotated `let` states the
+        // same type by saying nothing -- it starts from the same literal, whose type is the one
+        // the node has.
+        if (camel::core::type::isUntypedArrayType(type)) {
+            return {};
+        }
         return ": " + writtenTypeText(type);
     }
 
@@ -910,6 +1036,8 @@ class CmlPrinter {
         params_.clear();
         declared_.clear();
         cells_.clear();
+        cellOfValue_.clear();
+        writtenCells_.clear();
         usedNames_.clear();
         lines_.clear();
         if (resetNames) {
@@ -1036,12 +1164,10 @@ class CmlPrinter {
             }
         }
         auto later = [&](gc_node_ref_t a, gc_node_ref_t b) {
-            return order.contains(a) && order.contains(b) ? order[a] > order[b]
-                                                          : a > b;
+            return order.contains(a) && order.contains(b) ? order[a] > order[b] : a > b;
         };
-        std::priority_queue<
-            gc_node_ref_t, std::vector<gc_node_ref_t>, decltype(later)>
-            ready(later);
+        std::priority_queue<gc_node_ref_t, std::vector<gc_node_ref_t>, decltype(later)> ready(
+            later);
         for (const gc_node_ref_t ref : nodes) {
             if (indegree[ref] == 0) {
                 ready.push(ref);
@@ -1073,9 +1199,8 @@ class CmlPrinter {
             if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
                 return version;
             }
-            const std::string_view uri =
-                graph_->nodeBodyAs<camel::runtime::GCOperBody>(version)->uri();
-            if (!uri.starts_with(":op/assn") && uri != ":var/after") {
+            const OperId oper = operOf(*graph_, version);
+            if (!isAssignment(oper) && oper != camel::core::oper::VarAfter) {
                 return version;
             }
             const auto inputs = graph_->normInputsOf(version);
@@ -1103,7 +1228,7 @@ class CmlPrinter {
                 if (effectful_[candidate]) {
                     continue;
                 }
-                bool effect = false;
+                bool effect              = false;
                 const FunctionType *type = candidate->funcType();
                 if (type != nullptr) {
                     for (size_t i = 0; i < type->normTypesCount(); ++i) {
@@ -1124,9 +1249,7 @@ class CmlPrinter {
                             break;
                         }
                         if (node->kind == camel::runtime::GCNodeKind::Oper) {
-                            const std::string_view uri =
-                                candidate->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-                            if (!isPureOper(uri)) {
+                            if (!isPureOper(operOf(*candidate, ref))) {
                                 effect = true;
                                 break;
                             }
@@ -1136,9 +1259,10 @@ class CmlPrinter {
                             GCGraph *callee = program_.calleeOf(*candidate, ref);
                             // A call through a function value has no graph the printer can read,
                             // so nothing here can call it pure: it counts as an effect, because
-                            // dropping it is a false print (A7's `effects/writer_table_through_callee`:
-                            // `apply((x) => { counter = x }, 41)` writes the caller's `var` through
-                            // the callee, and the printed program read `0` where the source read 41).
+                            // dropping it is a false print (A7's
+                            // `effects/writer_table_through_callee`: `apply((x) => { counter = x },
+                            // 41)` writes the caller's `var` through the callee, and the printed
+                            // program read `0` where the source read 41).
                             if (callee == nullptr || effectful_[callee]) {
                                 effect = true;
                                 break;
@@ -1155,11 +1279,36 @@ class CmlPrinter {
         return effectful_[graph];
     }
 
-    static bool isPureOper(std::string_view uri) {
-        if (uri.starts_with(":var/") || uri.starts_with(":op/assn")) {
+    /// Whether running the operator has no effect: the declaration answers it, and the variable
+    /// operators (`:var/*`, the assignments) are part of the answer -- each declares itself
+    /// state-only, so a call of one is never pure (`src/builtin`, `declareResources` and
+    /// `declareBuiltinOperatorResources`). Asking the table rather than special-casing the family
+    /// here is what keeps the two from disagreeing.
+    static bool isPureOper(OperId oper) {
+        return camel::core::OperatorTable::instance().isPure(oper);
+    }
+
+    /// Whether the one user of `ref` is a `GATE` slot the gate does not hand on. A gate answers with
+    /// its *first* ordinary input (`camel::runtime::forwardedInputOf`); the slots after it are the
+    /// statements of the region the gate closes, and the printed text of a gate is the value alone,
+    /// so a statement standing in one of those slots is written nowhere unless it is written where
+    /// it stands. `linear/runtime/order_edges_regions.cml` is the shape: the first arm's gate is
+    /// `GATE(<the value the arm leaves>, println(1), println(2))`, and the printed arm was
+    /// `sync { println(2) }` -- `println(1)` had no line, the printed program ran no first print, and
+    /// the round trip read `9 0 1 2` against the origin's `9 1 2 0 1` (design principles 3.4: a
+    /// computation that may fault, and an effect, stay where the source wrote them).
+    bool sitsInAGateSlotWithNoText(gc_node_ref_t ref) const {
+        const auto users = graph_->normOutputsOf(ref);
+        if (users.size() != 1) {
             return false;
         }
-        return camel::core::OperatorTable::instance().isPure(uri);
+        const gc_node_ref_t user           = users.front();
+        const camel::runtime::GCNode *node = graph_->node(user);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Gate) {
+            return false;
+        }
+        const auto inputs = graph_->normInputsOf(user);
+        return !inputs.empty() && inputs.front() != ref;
     }
 
     /// Whether the only thing that reads `ref` is version plumbing: a `GATE`/`COPY` chain that ends
@@ -1177,7 +1326,7 @@ class CmlPrinter {
             if (users.size() != 1) {
                 return false;
             }
-            const gc_node_ref_t user = users.front();
+            const gc_node_ref_t user           = users.front();
             const camel::runtime::GCNode *node = graph_->node(user);
             if (node == nullptr) {
                 return false;
@@ -1190,11 +1339,11 @@ class CmlPrinter {
             if (node->kind != camel::runtime::GCNodeKind::Oper) {
                 return false;
             }
-            const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(user)->uri();
-            if (uri == ":var/peek" || uri == ":var/after") {
+            const OperId oper = operOf(*graph_, user);
+            if (oper == camel::core::oper::VarPeek || oper == camel::core::oper::VarAfter) {
                 return true;
             }
-            if (uri.starts_with(":op/assn")) {
+            if (isAssignment(oper)) {
                 const auto inputs = graph_->normInputsOf(user);
                 return !inputs.empty() && inputs.front() == current;
             }
@@ -1207,8 +1356,7 @@ class CmlPrinter {
         const camel::runtime::GCNode *node = graph_->node(ref);
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Oper: {
-            const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-            return !isPureOper(uri);
+            return !isPureOper(operOf(*graph_, ref));
         }
         case camel::runtime::GCNodeKind::Func:
         case camel::runtime::GCNodeKind::Call: {
@@ -1234,6 +1382,15 @@ class CmlPrinter {
         default:
             return false;
         }
+    }
+
+    /// Whether this node is a control region the printed text runs as a whole where it stands: the
+    /// `JOIN` that spells an `if`/`match`, and the `LOOP`. A region's effects happen when it runs, so
+    /// its text cannot be lifted into the expression that reads its value -- `nodeEffect` has already
+    /// said the region has effects, and this says the node is the region.
+    static bool regionRunsWhereItStands(const camel::runtime::GCNode *node) {
+        return node != nullptr && (node->kind == camel::runtime::GCNodeKind::Join ||
+                                   node->kind == camel::runtime::GCNodeKind::Loop);
     }
 
     size_t valueUsers(gc_node_ref_t ref) const {
@@ -1283,9 +1440,9 @@ class CmlPrinter {
         }
     }
 
-    /// Whether the one place that reads this value writes its type itself. A cast states the type it
-    /// produces, so a literal under a cast of the value's own type needs no `let` of its own: the
-    /// `as` writes the type, and binding the literal first would add a node the graph does not
+    /// Whether the one place that reads this value writes its type itself. A cast states the type
+    /// it produces, so a literal under a cast of the value's own type needs no `let` of its own:
+    /// the `as` writes the type, and binding the literal first would add a node the graph does not
     /// have (a `let` is a store, the graph's copy of the value is not).
     bool typeWrittenByUse(gc_node_ref_t ref) {
         const camel::runtime::GCNode *self = graph_->node(ref);
@@ -1294,7 +1451,7 @@ class CmlPrinter {
         }
         // The graph's own copy of the value is not a name it needs: look past it to the one place
         // the value is read.
-        gc_node_ref_t user = ref;
+        gc_node_ref_t user                 = ref;
         const camel::runtime::GCNode *node = nullptr;
         for (;;) {
             const auto users = graph_->normOutputsOf(user);
@@ -1307,7 +1464,7 @@ class CmlPrinter {
                 break;
             }
         }
-        const Type *mine   = self->dataType();
+        const Type *mine = self->dataType();
         if (mine == nullptr || node->dataType() == nullptr) {
             return false;
         }
@@ -1315,7 +1472,7 @@ class CmlPrinter {
             // A `var` declaration writes the type of the value it starts with (`var w: f32 = 1.0`),
             // so a literal written there needs no `let` of its own either.
             const auto *body = graph_->nodeBodyAs<camel::runtime::GCOperBody>(user);
-            if (body == nullptr || body->uri() != ":var/new" ||
+            if (body == nullptr || body->oper != camel::core::oper::VarNew ||
                 node->dataType()->code() != TypeCode::Tuple) {
                 return false;
             }
@@ -1355,9 +1512,18 @@ class CmlPrinter {
             return false;
         }
         if (type->code() == TypeCode::Array && isConstant(ref)) {
-            const auto *array = static_cast<const ArrayType *>(type);
+            // An empty literal whose element type nobody wrote has no `let` of its own: the
+            // annotation position reads a type and `[]` is a shape, while an unannotated `let` of
+            // it is `EmptyArrayWithoutType` ("write the type: `let cml1: int[] = []`"). The type
+            // such a value has is the one the *position* gives it, so the literal is written where
+            // it stands and the position types it again -- which is what the source wrote
+            // (`[]->append<1>`, `trans/cpp/empty_literal_takes_the_position.cml`).
+            if (camel::core::type::isUntypedArrayType(type)) {
+                return false;
+            }
+            const auto *array  = static_cast<const ArrayType *>(type);
             const size_t index = static_cast<size_t>(-node->dataIndex);
-            const auto *value   = fromSlot<Array *>(graph_->staticArea()->get<slot_t>(index));
+            const auto *value  = fromSlot<Array *>(graph_->staticArea()->get<slot_t>(index));
             if (value != nullptr && value->size() == 0) {
                 return true;
             }
@@ -1386,8 +1552,8 @@ class CmlPrinter {
     // ---- printing ------------------------------------------------------------------------
 
     /// Whether a printed expression is a literal the front end folds when both operands are one: a
-/// number, a string, a boolean. `()` is not: it is the unit value, and binding it would change the
-/// type it is written at.
+    /// number, a string, a boolean. `()` is not: it is the unit value, and binding it would change
+    /// the type it is written at.
     static bool isLiteralText(std::string_view text) {
         if (text.empty()) {
             return false;
@@ -1446,6 +1612,196 @@ class CmlPrinter {
     }
 
     // ---- scopes --------------------------------------------------------------------------
+    //
+    // Which module a printed name belongs to. An operator is printed as a call of the declaration
+    // that made it an operator, and that call has to resolve in the printed file: a module
+    // operator is written `module::name`, and the module is imported whole. That module is *not*
+    // the operator URI's prefix, and two measurements say so:
+    //
+    //   * a module may answer on another prefix than its own name -- `random` registers its
+    //     operators as `rand:...` (`modules/random/module.h`) -- so the printed `import rand` was
+    //     `ModuleNotFound` (`resources/conflict_per_resource.cml`);
+    //   * the core's namespace is where an *implementation* lives, not where the name does: a
+    //     module's declaration tags its body `#op(':mark/unordered_reduce_arr')`
+    //     (`stdlib/para.cml`), and the name a program writes is that module's. Printed bare, with
+    //     no import, `unordered_reduce` was `UnresolvedReference`
+    //     (`compile/native/para_declaration_import.cml`).
+    //
+    // So the module is asked for instead of being spelled out of the URI: the run's modules are
+    // asked which of them exports the operator. The prelude and the entry module are not
+    // candidates: their names are in scope without an import, so qualifying a call with one would
+    // write a name the printed file does not have.
+    void collectOperatorModules() {
+        if (context_ == nullptr) {
+            return;
+        }
+        const auto entry   = context_->mainModule();
+        const auto prelude = context_->preludeModule();
+        for (const auto &module : context_->allUserModules()) {
+            if (module == nullptr || module == entry || module == prelude ||
+                module->name().empty()) {
+                continue;
+            }
+            for (const std::string &protocol : module->operatorProtocols()) {
+                if (!protocol.empty()) {
+                    protocolModule_.try_emplace(protocol, module->name());
+                }
+            }
+        }
+    }
+
+    /// The module a printed call of `uri` is qualified with and imported from, or empty when the
+    /// name is in scope by itself (`println`, `+`, `map`) and no import is needed. A prefix no
+    /// module claims is the answer, which keeps the reading a URI's own spelling gives wherever
+    /// the two agree.
+    std::string moduleNameOf(std::string_view uri) {
+        const size_t colon = uri.find(':');
+        if (colon == std::string_view::npos) {
+            return {};
+        }
+        if (colon != 0) {
+            const std::string prefix(uri.substr(0, colon));
+            const auto known = protocolModule_.find(prefix);
+            return known != protocolModule_.end() ? known->second : prefix;
+        }
+        const std::string key(uri);
+        const auto cached = operatorModule_.find(key);
+        if (cached != operatorModule_.end()) {
+            return cached->second;
+        }
+        std::string owner;
+        // A sign is the language's own spelling wherever the operator was declared: `:op/idx_arr`
+        // is `[]` by the group's symbol, and the printed `[7, 8, 9][2]` needs no module at all --
+        // qualifying it, or importing the module that declared the same URI, only adds a name the
+        // program did not write (`compile/native/generic_qualified.cml`, whose `at` is a
+        // declaration of `generic_module` over this URI and whose printed form is the subscript).
+        const bool languageSymbol =
+            camel::core::operatorSymbolOf(camel::core::OperatorTable::instance().groupOf(key)) !=
+            nullptr;
+        const auto oper = languageSymbol ? std::optional<camel::core::OperId>{}
+                                         : camel::core::OperatorTable::instance().lookup(key);
+        if (context_ != nullptr && oper.has_value()) {
+            const auto entry   = context_->mainModule();
+            const auto prelude = context_->preludeModule();
+            for (const auto &module : context_->allUserModules()) {
+                if (module == nullptr || module == entry || module == prelude ||
+                    module->name().empty()) {
+                    continue;
+                }
+                if (module->nativeOperatorGroup(*oper) != nullptr) {
+                    owner = module->name();
+                    break;
+                }
+            }
+        }
+        operatorModule_.emplace(key, owner);
+        return owner;
+    }
+
+    /// A construction's template constant is not always a value the program writes: an array
+    /// literal whose every slot is filled by the construction is written as that literal again, and
+    /// the compiler builds the same template. Such a constant is skipped when all of this holds,
+    /// and each part is a fact measured against a case that broke when it was left out:
+    ///
+    ///   * it is an `Array` construction (`append` grows its template rather than filling it, and
+    ///     the loop that builds an array through `append` is refused by `loopExpression` for a
+    ///     reason of its own -- `loops/edges.cml`);
+    ///   * the constant is an array whose slots are all empty: the values of the slots a
+    ///     construction does not fill come from the constant, so a constant that holds one is the
+    ///     program's value;
+    ///   * the constant has no source name (`let make = ...` binds a value the source named, and
+    ///     the closure construction around it is not a literal, `trans/port_fill_metadata.cml`);
+    ///   * nothing else reads it, and every slot is covered by a `with` input.
+    ///
+    /// What it fixes: `compile/array_shape/rank_zero_slot_array_element.cml` printed
+    /// `let cml1: f32[...][2] = [[], []]` for the skeleton of `[one, two]`, and no spelling of an
+    /// open-rank element is `[]` (`DimensionMismatch` at that position).
+    void collectConstructionTemplates() {
+        for (GCGraph *graph : graphs_) {
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                const camel::runtime::GCNode *node = *it;
+                if (node->kind != camel::runtime::GCNodeKind::Fill) {
+                    continue;
+                }
+                const auto *body = graph->nodeBodyAs<camel::runtime::GCFillBody>(it.ref());
+                if (body == nullptr || body->fillKind != camel::runtime::GCFillKind::Array) {
+                    continue;
+                }
+                const auto inputs = graph->normInputsOf(it.ref());
+                if (inputs.empty()) {
+                    continue;
+                }
+                const gc_node_ref_t templ              = inputs.front();
+                const camel::runtime::GCNode *constant = graph->node(templ);
+                if (constant == nullptr || constant->kind != camel::runtime::GCNodeKind::Data ||
+                    constant->dataIndex >= 0 || !sourceNameIt(graph, templ).empty()) {
+                    continue;
+                }
+                if (constant->dataType() == nullptr ||
+                    constant->dataType()->code() != TypeCode::Array) {
+                    continue;
+                }
+                const auto *value =
+                    fromSlot<Array *>(graph->staticArea()->get<slot_t>(-constant->dataIndex));
+                if (value == nullptr || value->size() == 0 ||
+                    body->slots().size() < value->size()) {
+                    continue;
+                }
+                bool emptyShape = true;
+                for (size_t i = 0; i < value->size(); ++i) {
+                    if (value->get<slot_t>(i) != 0) {
+                        emptyShape = false;
+                        break;
+                    }
+                }
+                if (!emptyShape) {
+                    continue;
+                }
+                // A construction that is itself an input of another construction is part of that
+                // one's shape, not a literal the program wrote: the array a closure captures is
+                // the `with` input of the closure's own construction, and skipping its template
+                // orphaned the values the closure body still names (`trans/port_fill_metadata.cml`
+                // lost `let make` and left `count` unresolved).
+                bool partOfAnotherConstruction = false;
+                for (const gc_node_ref_t user : graph->normOutputsOf(it.ref())) {
+                    const camel::runtime::GCNode *userNode = graph->node(user);
+                    if (userNode != nullptr && userNode->kind == camel::runtime::GCNodeKind::Fill) {
+                        partOfAnotherConstruction = true;
+                        break;
+                    }
+                }
+                if (!partOfAnotherConstruction) {
+                    for (const gc_node_ref_t user : graph->normOutputsOf(it.ref())) {
+                        for (const gc_node_ref_t with : graph->withInputsOf(user)) {
+                            if (with == it.ref()) {
+                                partOfAnotherConstruction = true;
+                            }
+                        }
+                    }
+                }
+                if (partOfAnotherConstruction) {
+                    continue;
+                }
+                // A template anything else reads is a value of the program, not only a shape.
+                bool onlyTheConstruction = true;
+                for (const gc_node_ref_t user : graph->normOutputsOf(templ)) {
+                    if (user != it.ref()) {
+                        onlyTheConstruction = false;
+                        break;
+                    }
+                }
+                for (const gc_node_ref_t user : graph->withOutputsOf(templ)) {
+                    if (user != it.ref()) {
+                        onlyTheConstruction = false;
+                        break;
+                    }
+                }
+                if (onlyTheConstruction) {
+                    constructionTemplates_[graph].insert(templ);
+                }
+            }
+        }
+    }
 
     /// The names the printed program calls, by the module that declares them: a call by name needs
     /// the name in scope, and `sum` is a name of the module `tensor` (`import { sum } from
@@ -1466,15 +1822,14 @@ class CmlPrinter {
                     continue;
                 }
                 const std::string_view uri = body->uri();
-                const size_t colon         = uri.find(':');
-                if (colon == std::string_view::npos || colon == 0) {
+                const std::string module   = moduleNameOf(uri);
+                if (module.empty()) {
                     continue;
                 }
-                const std::string module(uri.substr(0, colon));
                 // What the printed file writes for a module operator is `module::name`, the
                 // qualified call (`tensor::sum([1.0])` compiles to `tensor:sum`, measured), and the
-                // module is imported whole -- the one import that makes a qualified call resolve and
-                // that a sign also needs (`/` for `int[]` is a rule of `math`).
+                // module is imported whole -- the one import that makes a qualified call resolve
+                // and that a sign also needs (`/` for `int[]` is a rule of `math`).
                 //
                 // Importing the *name* instead was wrong in a way the corpus caught: a program that
                 // uses both an operator the printer spells as a sign (`@`, which imports the module
@@ -1483,8 +1838,8 @@ class CmlPrinter {
                 // had already imported whole -- `import { tanh } from tensor` came out as
                 // `import tensor` beside a bare `tanh(...)`, which the front end answered with
                 // `UnresolvedReference: 'tanh'` (`compile/entry_args/struct_param`, measured). A
-                // qualified name does not depend on which clauses were collected, so the variable is
-                // gone rather than fixed.
+                // qualified name does not depend on which clauses were collected, so the variable
+                // is gone rather than fixed.
                 moduleImports_.insert(module);
             }
         }
@@ -1528,7 +1883,9 @@ class CmlPrinter {
                     std::string(record->fieldName(i)));
             }
             if (record->typeAt(i) == nullptr) {
-                return std::format("a field ('{}') with no type", std::string(record->fieldName(i)));
+                return std::format(
+                    "a field ('{}') with no type",
+                    std::string(record->fieldName(i)));
             }
         }
         return {};
@@ -1602,7 +1959,8 @@ class CmlPrinter {
             if (!nested.empty()) {
                 namedTypeWhy_[record] = std::format(
                     "its field '{}' has a type whose declaration cannot be printed: {}",
-                    std::string(record->fieldName(i)), nested);
+                    std::string(record->fieldName(i)),
+                    nested);
                 return;
             }
         }
@@ -1714,14 +2072,14 @@ class CmlPrinter {
                 imported = imported || module == name;
             }
             if (imported) {
-                namedTypeWhy_[record] = std::format(
-                    "its name '{}' is also a name the program imports", name);
+                namedTypeWhy_[record] =
+                    std::format("its name '{}' is also a name the program imports", name);
                 continue;
             }
             const auto [found, inserted] = byName.emplace(name, record);
             if (!inserted) {
-                namedTypeWhy_[found->second] = std::format(
-                    "two different types the program uses are both named '{}'", name);
+                namedTypeWhy_[found->second] =
+                    std::format("two different types the program uses are both named '{}'", name);
                 namedTypeWhy_[record] = namedTypeWhy_[found->second];
             }
         }
@@ -1904,14 +2262,14 @@ class CmlPrinter {
     struct Body {
         std::vector<std::string> lines;
         Expr tail;
-        bool hasTail     = false;
-        bool sync        = false;
+        bool hasTail = false;
+        bool sync    = false;
         std::string closeIndent;
         std::string tailIndent;
     };
 
     void printStatements() {
-        gc_node_ref_t tail = camel::execute::resolveRuntimeTailValueRef(graph_);
+        gc_node_ref_t tail          = camel::execute::resolveRuntimeTailValueRef(graph_);
         bool tailPrintedAsStatement = false;
         // The names of one function's block are not the names of the next: two functions may both
         // bind `base` (the corpus' `linear.cml` does), and only one block's names are in scope.
@@ -1945,27 +2303,46 @@ class CmlPrinter {
         if (!isRoot_ && tail != camel::runtime::kInvalidNodeRef && !tailPrintedAsStatement) {
             const Type *type = graph_->node(tail)->dataType();
             if (type != nullptr && type->code() != TypeCode::Void) {
-                if (declared_.contains(tail)) {
+                // A branch that hands on a cell's version is not the block's value: the cell is, and
+                // the branch is the statement the source wrote (`joinEntryCell` says how one is
+                // recognised). It has to stand where it stands, and the value is read after it --
+                // `if c then {...} else {...}` and then `return t`, which is the shape the builder
+                // folded the read into. Written as `return if ...` each arm has to spell a value the
+                // source never wrote, and no spelling of it rebuilds the shared `COPY`.
+                if (const gc_node_ref_t entryCell = joinEntryCell(tail);
+                    entryCell != camel::runtime::kInvalidNodeRef) {
+                    branchAsStatement_     = true;
+                    const std::string text = expression(tail).text;
+                    branchAsStatement_     = false;
+                    emit(indent_ + text);
+                    emit(std::format("{}return {}", indent_, cells_.at(entryCell)));
+                } else if (declared_.contains(tail)) {
                     emit(std::format("{}return {}", indent_, declared_[tail]));
                 } else {
                     emit(std::format("{}return {}", indent_, expression(tail).text));
                 }
+            } else if (ifWithoutElse(tail)) {
+                // A body whose last statement is an `if` with no `else`: the branch has no value
+                // (design principles 3.7), and printing nothing dropped the arm that runs —
+                // `if debug then println('tail')` printed as an empty body
+                // (`consistency/if_without_else/statement.cml`).
+                emit(indent_ + expression(tail).text);
             }
         }
     }
 
     /// Prints the statements of one region (`0` is the graph body). `outerIndent` is the
     /// indentation of the construct that opens the region; its statements are one level deeper.
-    Body buildBody(
-        uint32_t region, gc_node_ref_t tail, std::string outerIndent, bool functionBody) {
-        auto savedParams   = params_;
-        auto savedDeclared = declared_;
-        auto savedCells    = cells_;
+    Body
+    buildBody(uint32_t region, gc_node_ref_t tail, std::string outerIndent, bool functionBody) {
+        auto savedParams     = params_;
+        auto savedDeclared   = declared_;
+        auto savedCells      = cells_;
         auto savedBlockNames = std::move(blockNames_);
         blockNames_.clear();
-        auto savedHeld     = std::move(held_);
-        auto savedHeldNames = std::move(heldNames_);
-        auto savedLines    = std::move(lines_);
+        auto savedHeld                = std::move(held_);
+        auto savedHeldNames           = std::move(heldNames_);
+        auto savedLines               = std::move(lines_);
         const std::string savedIndent = indent_;
         lines_.clear();
         indent_ = outerIndent + "    ";
@@ -2002,32 +2379,39 @@ class CmlPrinter {
             tailPrintedAsStatement = true;
         }
         if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement) {
-            // A region whose value is a gate with ordering in front of it was written as an
-            // explicit `return`; a bare last expression yields the value without that gate.
-            Expr value;
-            if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr) {
-                value = declared_.contains(tail) ? Expr{declared_[tail], 100}
-                                                 : expression(tail);
+            if (ifWithoutElse(tail)) {
+                // An `if` with no `else` has no value: the branch stands as the statement it is,
+                // and no `return` stands in front of it (`IfWithoutElseAsValue`).
+                flushHeld(body.lines);
+                body.lines.push_back(indent_ + expression(tail).text);
+            } else {
+                // A region whose value is a gate with ordering in front of it was written as an
+                // explicit `return`; a bare last expression yields the value without that gate.
+                Expr value;
+                if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr) {
+                    value =
+                        declared_.contains(tail) ? Expr{declared_[tail], 100} : expression(tail);
+                }
+                flushHeld(body.lines);
+                body.lines.push_back(
+                    value.text.empty() ? indent_ + "return" : indent_ + "return " + value.text);
             }
-            flushHeld(body.lines);
-            body.lines.push_back(value.text.empty() ? indent_ + "return"
-                                                    : indent_ + "return " + value.text);
-        } else if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr &&
-                   !tailPrintedAsStatement) {
+        } else if (
+            tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr &&
+            !tailPrintedAsStatement) {
             body.hasTail = true;
-            body.tail    = declared_.contains(tail) ? Expr{declared_[tail], 100}
-                                                    : expression(tail);
+            body.tail    = declared_.contains(tail) ? Expr{declared_[tail], 100} : expression(tail);
             flushHeld(body.lines);
         }
 
-        lines_     = std::move(savedLines);
-        params_    = std::move(savedParams);
-        declared_  = std::move(savedDeclared);
-        cells_     = std::move(savedCells);
+        lines_      = std::move(savedLines);
+        params_     = std::move(savedParams);
+        declared_   = std::move(savedDeclared);
+        cells_      = std::move(savedCells);
         blockNames_ = std::move(savedBlockNames);
-        held_      = std::move(savedHeld);
-        heldNames_ = std::move(savedHeldNames);
-        indent_    = savedIndent;
+        held_       = std::move(savedHeld);
+        heldNames_  = std::move(savedHeldNames);
+        indent_     = savedIndent;
         return body;
     }
 
@@ -2046,6 +2430,121 @@ class CmlPrinter {
         }
         text += body.closeIndent + "}";
         return text;
+    }
+
+    /// Whether the value this JOIN yields is an `if` with no `else`: an arm written and an empty
+    /// second arm, over a `void` join. Such an `if` has no value (design principles 3.7) and can
+    /// only stand as a statement, so a region that ends in one says `if ... then ...` and never
+    /// `return if ... then ...`: the front end answers that with `IfWithoutElseAsValue`
+    /// (`consistency/if_without_else/statement.cml`, whose lambda body is exactly this statement,
+    /// printed as `return if x > 2 then { ... }`).
+    bool ifWithoutElse(gc_node_ref_t joinRef) const {
+        if (joinRef == camel::runtime::kInvalidNodeRef) {
+            return false;
+        }
+        const camel::runtime::GCNode *node = graph_->node(joinRef);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Join) {
+            return false;
+        }
+        const Type *joinType = node->dataType();
+        if (joinType == nullptr || joinType->code() != TypeCode::Void) {
+            return false;
+        }
+        const auto *body = graph_->nodeBodyAs<camel::runtime::GCJoinBody>(joinRef);
+        if (body == nullptr || body->brch == camel::runtime::kInvalidNodeRef) {
+            return false;
+        }
+        // A `match` writes patterns on its branch; an `if` has none.
+        if (!graph_->withInputsOf(body->brch).empty()) {
+            return false;
+        }
+        const auto arms = control_->armsOf(body->brch);
+        if (arms.size() != 2) {
+            return false;
+        }
+        const camel::runtime::GCRegion *second = graph_->region(arms[1]);
+        return second != nullptr &&
+               (second->result == camel::runtime::kInvalidNodeRef ||
+                (graph_->node(second->result) != nullptr &&
+                 graph_->node(second->result)->kind == camel::runtime::GCNodeKind::Data &&
+                 graph_->node(second->result)->dataType() != nullptr &&
+                 graph_->node(second->result)->dataType()->code() == TypeCode::Void));
+    }
+
+    /// The cell this JOIN hands a version of, when one of its arms hands on the value the cell was
+    /// *created* with (`cellOfValue_`). Such a branch had no value of its own in the source: an arm
+    /// that answers "the value this `var` was made with" and wrote nothing has no spelling as an
+    /// arm value (a name there is a `:var/get`, and the literal is a second `DATA`), so the source
+    /// wrote the branch as a statement and read the cell after it, and the builder's version mapping
+    /// is what carries that read into the arms. `kInvalidNodeRef` otherwise, and for a JOIN whose
+    /// type is `void` (`ifWithoutElse` already says what that one is).
+    ///
+    /// Printing such a branch as a value is what made `arm_read` red on
+    /// `trans/cml.plan.toml#print_and_recompile`: `picked`'s `if c then { ... t += 1 ... } else
+    /// { report('int', 0, t) }` followed by `return t` printed as `return if c then { ... } else
+    /// { report('int', 0, t)` / `3 }`, and the arm's result was a fresh `DATA 3` where the
+    /// original's is the one `COPY` the `var` made -- no counterpart for it, and the checker said
+    /// `a structural class has 1 vertex/vertices on the left and 0 on the right` naming that
+    /// `COPY`. Spelling the arm's value with the variable's name instead is the other way to be
+    /// wrong: a second `:var/get` in the arm (measured), because the write in the sibling arm means
+    /// the name is no longer the value the cell was created with.
+    gc_node_ref_t joinEntryCell(gc_node_ref_t joinRef) const {
+        if (joinRef == camel::runtime::kInvalidNodeRef) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        // The block hands its value on through the exit's gate chain; the branch is at the bottom
+        // of it (`blockValueWrite` walks the same chain for the same reason).
+        for (int guard = 0; guard < 16; ++guard) {
+            const camel::runtime::GCNode *below = graph_->node(joinRef);
+            if (below == nullptr || (below->kind != camel::runtime::GCNodeKind::Gate &&
+                                     below->kind != camel::runtime::GCNodeKind::Copy)) {
+                break;
+            }
+            const auto slots = graph_->normInputsOf(joinRef);
+            if (slots.empty()) {
+                break;
+            }
+            joinRef = slots.front();
+        }
+        const camel::runtime::GCNode *node = graph_->node(joinRef);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Join) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const Type *joinType = node->dataType();
+        if (joinType == nullptr || joinType->code() == TypeCode::Void) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        const auto *body = graph_->nodeBodyAs<camel::runtime::GCJoinBody>(joinRef);
+        if (body == nullptr || body->brch == camel::runtime::kInvalidNodeRef) {
+            return camel::runtime::kInvalidNodeRef;
+        }
+        for (const uint32_t arm : control_->armsOf(body->brch)) {
+            const camel::runtime::GCRegion *region = graph_->region(arm);
+            if (region == nullptr || region->result == camel::runtime::kInvalidNodeRef) {
+                continue;
+            }
+            // An arm's result is the GATE that waits on the arm's last statement; the value it
+            // hands on is that gate's first normal input.
+            gc_node_ref_t value = region->result;
+            const camel::runtime::GCNode *result = graph_->node(value);
+            if (result != nullptr && result->kind == camel::runtime::GCNodeKind::Gate) {
+                const auto slots = graph_->normInputsOf(value);
+                if (slots.empty()) {
+                    continue;
+                }
+                value = slots.front();
+            }
+            const auto created = cellOfValue_.find(value);
+            if (created == cellOfValue_.end()) {
+                continue;
+            }
+            // The name has to be readable where the branch stands: a `var` whose declaration the
+            // text has not reached cannot be named.
+            if (cells_.contains(created->second)) {
+                return created->second;
+            }
+        }
+        return camel::runtime::kInvalidNodeRef;
     }
 
     /// Whether the source ended this region with an explicit `return`: the region yields a gate
@@ -2078,6 +2577,21 @@ class CmlPrinter {
         return false;
     }
 
+    /// Whether the block hands this node's value on as its own: the tail of a block that yields a
+    /// value, in a graph that has one to hand on. Nothing in the graph reads the tail's value (the
+    /// exit gate carries it), which is why a reader count cannot tell this apart from a value
+    /// nobody wants; printing it in the statement form drops what the block answers.
+    /// `opt/effects/fold_keeps_inner_fault.cml` is the case: the body is one `if` whose JOIN is the
+    /// exit, and the printed function answered nothing at all.
+    bool handsBlockValue(
+        gc_node_ref_t ref, gc_node_ref_t tail, const camel::runtime::GCNode *node) const {
+        if (isRoot_ || node == nullptr || ref != tail) {
+            return false;
+        }
+        const Type *type = node->dataType();
+        return type != nullptr && type->code() != TypeCode::Void;
+    }
+
     /// The write whose value the block yields, when the block has no chain to run it: the gate at
     /// the exit hands the block's value on and waits on that write. `kInvalidNodeRef` otherwise --
     /// a block with a chain runs its statements anyway, and a value that is no write's value has
@@ -2091,11 +2605,11 @@ class CmlPrinter {
             graph_->node(exitRef)->kind != camel::runtime::GCNodeKind::Gate) {
             return camel::runtime::kInvalidNodeRef;
         }
-        // A `sync` block writes its value out through a gate that waits on the write: the exit chain
-        // is `GATE(<value>, sync <- write)` and then `GATE(<that>, control <- write)`, so the tail the
-        // printer resolves is the value node at the bottom of it, not the exit's own input. Walk the
-        // chain down its normal inputs and accept the tail wherever it stands on that path; the value
-        // handed on is the first node on it that is not a gate.
+        // A `sync` block writes its value out through a gate that waits on the write: the exit
+        // chain is `GATE(<value>, sync <- write)` and then `GATE(<that>, control <- write)`, so the
+        // tail the printer resolves is the value node at the bottom of it, not the exit's own
+        // input. Walk the chain down its normal inputs and accept the tail wherever it stands on
+        // that path; the value handed on is the first node on it that is not a gate.
         gc_node_ref_t current = exitRef;
         gc_node_ref_t value   = camel::runtime::kInvalidNodeRef;
         bool handsTail        = false;
@@ -2107,11 +2621,10 @@ class CmlPrinter {
             if (below.empty()) {
                 break;
             }
-            const gc_node_ref_t next = below.back();
+            const gc_node_ref_t next               = below.back();
             const camel::runtime::GCNode *nextNode = graph_->node(next);
-            if (nextNode != nullptr &&
-                (nextNode->kind == camel::runtime::GCNodeKind::Gate ||
-                 nextNode->kind == camel::runtime::GCNodeKind::Copy)) {
+            if (nextNode != nullptr && (nextNode->kind == camel::runtime::GCNodeKind::Gate ||
+                                        nextNode->kind == camel::runtime::GCNodeKind::Copy)) {
                 current = next;
                 continue;
             }
@@ -2132,16 +2645,15 @@ class CmlPrinter {
     /// front of the value an assignment stands for, so that the write runs where nothing else
     /// reads the version it made (design principles 3.5, 3.4): the source's block ended with the
     /// write and the block's value is what that write wrote. `kInvalidNodeRef` otherwise.
-    gc_node_ref_t assignmentHandingOn(
-        gc_node_ref_t gate, uint32_t region, gc_node_ref_t value) const {
+    gc_node_ref_t
+    assignmentHandingOn(gc_node_ref_t gate, uint32_t region, gc_node_ref_t value) const {
         for (const gc_node_ref_t input : graph_->waitInputsOf(gate)) {
             const camel::runtime::GCNode *node = graph_->node(input);
             if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper ||
                 control_->controlOf(input) != region) {
                 continue;
             }
-            if (!graph_->nodeBodyAs<camel::runtime::GCOperBody>(input)->uri().starts_with(
-                    ":op/assn")) {
+            if (!isAssignment(operOf(*graph_, input))) {
                 continue;
             }
             const auto written = graph_->normInputsOf(input);
@@ -2252,29 +2764,53 @@ class CmlPrinter {
     }
 
     void processNode(
-        gc_node_ref_t ref, gc_node_ref_t tail, bool functionBody,
-        bool &tailPrintedAsStatement) {
+        gc_node_ref_t ref, gc_node_ref_t tail, bool functionBody, bool &tailPrintedAsStatement) {
         const camel::runtime::GCNode *node = graph_->node(ref);
         if (node == nullptr) {
+            return;
+        }
+        if (graph_ != nullptr && constructionTemplates_.contains(graph_) &&
+            constructionTemplates_.at(graph_).contains(ref)) {
+            // A construction's template is a shape, not a value the program writes: the literal
+            // written back builds its own (see `collectConstructionTemplates`).
             return;
         }
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Port:
         case camel::runtime::GCNodeKind::Gate:
-        case camel::runtime::GCNodeKind::Copy:
         case camel::runtime::GCNodeKind::Brch:
             return;
+        case camel::runtime::GCNodeKind::Copy:
+            // A copy the source named is the value a `var` was *declared* with, and it is the
+            // declaration: a `var` the builder makes a value rather than a cell
+            // (`builder_expr.cpp`'s NREF) gives the name its own copy of the initializer, and no
+            // `:var/new` exists for `emitVariable` to write. Printing it away -- which is what
+            // `expression` does with every other copy -- writes the initializer where the source
+            // had a name, and the printed program comes back one node short: `trans/cml/linear.cml`
+            // printed `let cml1: int = 1 + score` for `var bonus: int = 1` then
+            // `bonus = bonus + score`, and the `describe` graph's `DATA 1 -> COPY(bonus)` came back
+            // as the literal alone. `var` is the one spelling that rebuilds it: a `let` of the same
+            // value is that value's own node and no copy (measured), and the scan that decides a
+            // `var` is a value reads the source shape, so the printed `var` is built the same way.
+            if (!isRoot_ && !sourceName(ref).empty()) {
+                emitValueDeclaration(ref);
+                if (ref == tail) {
+                    tailPrintedAsStatement = true;
+                }
+            }
+            return;
         case camel::runtime::GCNodeKind::Oper: {
-            const std::string_view uri =
-                graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-            if (uri == ":var/new") {
+            const auto *body           = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+            const OperId oper          = body->oper;
+            const std::string_view uri = body->uri();
+            if (oper == camel::core::oper::VarNew) {
                 emitVariable(ref);
                 if (ref == tail) {
                     tailPrintedAsStatement = true;
                 }
                 return;
             }
-            if (uri == ":var/get" || uri == ":var/peek") {
+            if (camel::core::oper::isVariableRead(oper)) {
                 if (!materialiseRead(ref)) {
                     return;
                 }
@@ -2282,10 +2818,17 @@ class CmlPrinter {
                 // generic statement logic below writes it as the `let` it was in the source.
                 break;
             }
-            if (uri.starts_with(":var/")) {
+            if (isVariableOperator(oper)) {
+                // A write through a call leaves a new version of the cell without a statement of
+                // its own (`:var/after`), so from here on the variable's name no longer means the
+                // value the cell was created with (see `cellOfValue_`).
+                const auto inputs = graph_->normInputsOf(ref);
+                if (!inputs.empty()) {
+                    writtenCells_.insert(cellOf(inputs.front()));
+                }
                 return;
             }
-            if (uri.starts_with(":op/assn")) {
+            if (isAssignment(oper)) {
                 emitAssignment(ref, uri);
                 if (ref == tail) {
                     tailPrintedAsStatement = true;
@@ -2332,29 +2875,54 @@ class CmlPrinter {
                         "name twice",
                         name));
             }
-            const Expr value       = expression(ref);
-            declared_[ref]         = name;
-            emit(std::format(
-                "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
+            const Expr value = expression(ref);
+            declared_[ref]   = name;
+            emit(
+                std::format(
+                    "{}let {}{} = {}",
+                    indent_,
+                    name,
+                    annotationOf(node->dataType()),
+                    value.text));
         } else if (effect) {
             if (users == 0) {
-                if (ref == tail && !functionBody) {
-                    // The region's value: `buildBody` writes it as the block's tail.
+                if (ref == tail && (!functionBody || handsBlockValue(ref, tail, node))) {
+                    // The region's value: `buildBody` writes it as the block's tail, and a function
+                    // body's value is what the function answers -- `return <region>`, never the
+                    // statement form.
                     return;
                 }
-                branchAsStatement_ = true;
+                branchAsStatement_     = true;
                 const std::string text = expression(ref).text;
                 branchAsStatement_     = false;
                 emit(indent_ + text);
                 if (ref == tail) {
                     tailPrintedAsStatement = true;
                 }
-            } else if (users > 1) {
+            } else if (users > 1 || (ref != tail && regionRunsWhereItStands(node))) {
+                // A region whose arms or body have effects runs where the source wrote it, and its
+                // value has a name from there on. Left to the expression that reads the value, it
+                // would run where that expression runs: `linear/runtime/order_edges_regions.cml`
+                // printed `println(9)`, the loop, and then the first `if` inside the `return`, so the
+                // loop's `0 1` came out before the arm's `1 2` (design principles 3.1: a region runs
+                // as a whole with the node that owns it, and the node is where the source put it).
+                //
+                // The block's own tail is the exception, and only for the region: `return <region>`
+                // is the form the source wrote when the region is what the function answers, and a
+                // `let` of it followed by `return` of the name is that graph spelled twice
+                // (`trans/cml/arm_write.cml`: `picked_sync` printed `let cml3 = if ... else ...` and
+                // `return cml3`, and the checker's marker `return cml` -- "not the returned name" --
+                // is what said so). A region read twice keeps its name whatever it is.
                 const Expr value       = expression(ref);
                 const std::string name = freshName();
                 declared_[ref]         = name;
-                emit(std::format(
-                    "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
+                emit(
+                    std::format(
+                        "{}let {}{} = {}",
+                        indent_,
+                        name,
+                        annotationOf(node->dataType()),
+                        value.text));
             }
             // A single use keeps the call where the source had it: lifting it into a `let` would
             // move the effect ahead of the expression it belongs to -- unless the one user is
@@ -2367,8 +2935,12 @@ class CmlPrinter {
             //
             // The result needs no name here: the write that follows names the variable, not the
             // call's version, so the statement form is the whole of it.
-            else if (feedsVersionPlumbing(ref)) {
-                branchAsStatement_ = true;
+            //
+            // A statement standing on a gate's waiting slot is the same shape: the gate's text is the
+            // value it forwards and nothing else, so the statement has to be written here or nowhere
+            // (`sitsInAGateSlotWithNoText`).
+            else if (feedsVersionPlumbing(ref) || sitsInAGateSlotWithNoText(ref)) {
+                branchAsStatement_     = true;
                 const std::string text = expression(ref).text;
                 branchAsStatement_     = false;
                 emit(indent_ + text);
@@ -2376,13 +2948,30 @@ class CmlPrinter {
                     tailPrintedAsStatement = true;
                 }
             }
-        } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref) &&
-                   !(patternRefs_.contains(ref) && users <= 1)) {
+        } else if (
+            (users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref) &&
+            !(patternRefs_.contains(ref) && users <= 1)) {
+            // An empty literal whose element type nobody wrote cannot be bound: `let x = []` is
+            // `EmptyArrayWithoutType` and `let x: [] = []` is not a type. One use keeps the literal
+            // in the position that types it; two uses have no spelling at all.
+            if (node->kind == camel::runtime::GCNodeKind::Data && node->dataType() != nullptr &&
+                camel::core::type::isUntypedArrayType(node->dataType())) {
+                fail(
+                    ref,
+                    "an empty array literal whose element type nobody wrote, read in more than "
+                    "one place: the position types one use, and the language has no spelling of "
+                    "that type for a `let`");
+            }
             const Expr value       = expression(ref);
             const std::string name = freshName();
             declared_[ref]         = name;
-            emit(std::format(
-                "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
+            emit(
+                std::format(
+                    "{}let {}{} = {}",
+                    indent_,
+                    name,
+                    annotationOf(node->dataType()),
+                    value.text));
         } else if (users == 0) {
             // A value nothing reads is not part of the printed program -- but a region is not a
             // value. A `loop` or an `if` the source wrote is program structure, and a region whose
@@ -2395,10 +2984,19 @@ class CmlPrinter {
             const camel::runtime::GCNodeKind region = node->kind;
             if (region == camel::runtime::GCNodeKind::Loop ||
                 region == camel::runtime::GCNodeKind::Brch) {
+                // A region the block yields is the block's value, and nothing in the graph reads it
+                // here: the exit gate hands it on, which is why its reader count is no help. The
+                // statement form would drop that value, so the region is left to the caller, which
+                // writes it where a value stands (`return <region>`, or the block's tail):
+                // `opt/effects/fold_keeps_inner_fault.cml`'s body is one `if`, its JOIN's value is
+                // what the function answers, and the printed function had no value at all.
+                if (handsBlockValue(ref, tail, node)) {
+                    return;
+                }
                 // The statement form the source writes: `loop ... do ...` / `if ... then ...`. A
                 // JOIN is not written here -- it is the branch's merge point and `expression` of
                 // the BRCH already writes it.
-                branchAsStatement_ = true;
+                branchAsStatement_     = true;
                 const std::string text = expression(ref).text;
                 branchAsStatement_     = false;
                 emit(indent_ + text);
@@ -2409,6 +3007,40 @@ class CmlPrinter {
             }
             return;
         }
+    }
+
+    /// A `var` the builder made a value rather than a cell: there is no `:var/new` node,
+    /// and the declaration is the copy of the initializer that carries the source name, so
+    /// `emitVariable` is never reached for it and a declaration has to be written here. The name is
+    /// what the reads below take (`expression` answers with it), and `var` is what rebuilds the
+    /// copy: a `let` of the same value is the value's own node (see `processNode`).
+    void emitValueDeclaration(gc_node_ref_t ref) {
+        const auto inputs = graph_->normInputsOf(ref);
+        if (inputs.empty()) {
+            fail(ref, "'var' without an initial value");
+        }
+        std::string name = sourceName(ref);
+        if (!blockNames_.insert(name).second) {
+            // The same rule as a `let`: a block cannot declare one name twice.
+            fail(
+                ref,
+                std::format(
+                    "two bindings of the name '{}' in one block: a `var` and the bindings beside "
+                    "it share the source's names, and a block declares one name once",
+                    name));
+        }
+        const camel::runtime::GCNode *node = graph_->node(ref);
+        // The initializer is read before the name is recorded: `expression(ref)` must not answer
+        // with the name the declaration is about to give this node.
+        const Expr initial = expression(inputs.back());
+        declared_[ref]     = name;
+        emit(
+            std::format(
+                "{}var {}{} = {}",
+                indent_,
+                name,
+                annotationOf(node->dataType()),
+                initial.text));
     }
 
     void emitVariable(gc_node_ref_t ref) {
@@ -2444,8 +3076,15 @@ class CmlPrinter {
         const Expr initial = expression(inputs.front());
         cells_[ref]        = name;
         declared_[ref]     = name;
-        emit(std::format(
-            "{}var {}{} = {}", indent_, name, annotationOf(valueType), initial.text));
+        // The cell has a name now, so a read the builder folded to the value it was created with
+        // can be written as this variable (see `expression`). One value that starts two cells says
+        // nothing about which name a read of it meant, and then it keeps the value spelling.
+        if (!cellOfValue_.contains(inputs.front())) {
+            cellOfValue_[inputs.front()] = ref;
+        } else if (cellOfValue_.at(inputs.front()) != ref) {
+            cellOfValue_.erase(inputs.front());
+        }
+        emit(std::format("{}var {}{} = {}", indent_, name, annotationOf(valueType), initial.text));
     }
 
     /// Gives a read of a `var` a name of its own when the variable's name would not say what it
@@ -2473,7 +3112,8 @@ class CmlPrinter {
         }
         // The order edge to the write it must see past is what makes the read's version older than
         // the text at the place the read stands. A read whose value path already carries that order
-        // (`n + 1` reading `n` before writing it) has no such edge, and the variable's name says it.
+        // (`n + 1` reading `n` before writing it) has no such edge, and the variable's name says
+        // it.
         //
         // An arm's or a loop body's nodes are in the block's own graph -- `controlOf` says which
         // region lays them out, not which graph records their versions -- so a read inside an arm
@@ -2494,9 +3134,13 @@ class CmlPrinter {
         const camel::runtime::GCNode *node = graph_->node(ref);
         const std::string name             = freshName();
         declared_[ref]                     = name;
-        emit(std::format(
-            "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()),
-            cellName(cellOf(inputs.front()))));
+        emit(
+            std::format(
+                "{}let {}{} = {}",
+                indent_,
+                name,
+                annotationOf(node->dataType()),
+                cellName(cellOf(inputs.front()))));
         return false;
     }
     void emitAssignment(gc_node_ref_t ref, std::string_view uri) {
@@ -2514,13 +3158,16 @@ class CmlPrinter {
             }
             fail(ref, "an assignment to a cell the printer has not seen");
         }
-        // The cell's name is copied, not referred to. Reading the value's expression can restore a saved
-        // copy of `cells_` (a nested attempt that does not print puts the table back), and putting it
-        // back destroys every entry the map held -- so a reference taken before it points at freed
-        // storage. That is what the crash was: the probe showed the name's size as garbage while the
-        // value's text and the operator were intact.
+        // The cell's name is copied, not referred to. Reading the value's expression can restore a
+        // saved copy of `cells_` (a nested attempt that does not print puts the table back), and
+        // putting it back destroys every entry the map held -- so a reference taken before it
+        // points at freed storage. That is what the crash was: the probe showed the name's size as
+        // garbage while the value's text and the operator were intact.
         const std::string cellName  = cell->second;
         const std::string valueText = expression(inputs.back()).text;
+        // From here on the variable's name means the version this write leaves, not the value the
+        // cell was created with (see `cellOfValue_`).
+        writtenCells_.insert(cellOf(inputs.front()));
         emit(indent_ + std::format("{} {} {}", cellName, assignmentOperator(uri), valueText));
     }
 
@@ -2545,59 +3192,26 @@ class CmlPrinter {
                 "`fail<'Kind'>` and the kind is the value it holds, so a print that cannot read "
                 "it cannot write the statement");
         }
-        emit(indent_ + "fail<" + expression(with.front()).text + ">(" +
-             expression(norm.front()).text + ")");
+        emit(
+            indent_ + "fail<" + expression(with.front()).text + ">(" +
+            expression(norm.front()).text + ")");
     }
 
     // The assignment operator is a node of its own: `a += 5` and `a = 5` have the same shape
-    // but different payloads, so the spelling must carry the operation.
-    static std::string_view assignmentOperator(std::string_view uri) {
-        constexpr std::string_view prefix = ":op/assn";
-        if (!uri.starts_with(prefix)) {
+    // but different payloads, so the spelling must carry the operation. The declaration answers
+    // which operation it is: a compound assignment's group is the one the language holds that
+    // operation's built-in overloads in (`__assn_add__`), the language fixes the plain operator it
+    // follows (`plainGroupOfCompoundAssignment`, design principles 4.2: `a += b` is `a = a + b`),
+    // and `operatorSymbolOf` reads the sign a program writes for that group out of it
+    // (`operator_names.h`). A write is that sign and the `=` it is. A group with no compound form
+    // is the plain write (`__assn__`) or an owned one (`:op/assn_owned`), and both are `=`.
+    static std::string assignmentOperator(std::string_view uri) {
+        const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
+        if (!camel::core::plainGroupOfCompoundAssignment(group).has_value()) {
             return "=";
         }
-        std::string_view suffix = uri.substr(prefix.size());
-        const size_t version     = suffix.find('@');
-        if (version != std::string_view::npos) {
-            suffix = suffix.substr(0, version);
-        }
-        if (suffix.empty() || suffix == "_l" || suffix == "_d" || suffix == "_i" ||
-            suffix == "_f" || suffix == "_b") {
-            return "=";
-        }
-        if (!suffix.starts_with('_')) {
-            return "=";
-        }
-        suffix.remove_prefix(1);
-        const size_t typeSuffix = suffix.rfind('_');
-        if (typeSuffix != std::string_view::npos) {
-            suffix = suffix.substr(0, typeSuffix);
-        }
-        if (suffix == "add") {
-            return "+=";
-        }
-        if (suffix == "sub") {
-            return "-=";
-        }
-        if (suffix == "mul") {
-            return "*=";
-        }
-        if (suffix == "div") {
-            return "/=";
-        }
-        if (suffix == "mod") {
-            return "%=";
-        }
-        if (suffix == "pow") {
-            return "^=";
-        }
-        if (suffix == "and") {
-            return "&=";
-        }
-        if (suffix == "or") {
-            return "|=";
-        }
-        return "=";
+        const char *symbol = camel::core::operatorSymbolOf(group);
+        return symbol != nullptr ? std::string(symbol) + "=" : std::string("=");
     }
 
     std::string cellName(gc_node_ref_t ref) {
@@ -2620,8 +3234,7 @@ class CmlPrinter {
         if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
             return ref;
         }
-        const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-        if (!uri.starts_with(":op/assn")) {
+        if (!isAssignment(operOf(*graph_, ref))) {
             return ref;
         }
         const auto inputs = graph_->normInputsOf(ref);
@@ -2634,6 +3247,26 @@ class CmlPrinter {
         auto declared = declared_.find(ref);
         if (declared != declared_.end()) {
             return {declared->second, 100};
+        }
+        // A read of the value a `var` was created with *is* the variable. The builder folds a read
+        // that stands before any write of the same variable to the value the cell was made with:
+        // `var bonus = 1 ... bonus + score` gives one node that is both the `:var/new` operand and
+        // the read, and no other node in the graph is that read. Writing the value again instead
+        // (`1 + score`) is a *second* literal, so the printed program comes back one `DATA` short
+        // of the original and the shared node is gone -- `trans/cml/linear.cml` printed
+        // `1 + score` for `bonus + score`, and `trans/cml.plan.toml#print_and_recompile` was red on
+        // exactly that (`print_and_recompile` reads `linear.cml`, and the difference the checker
+        // reports first is whichever class its tie-break lands on). Naming the variable is the one
+        // spelling that builds the same graph: measured, `let cml1 = bonus + score` recompiles to
+        // the original's `DATA 1 -> COPY -> {:var/new, :op/add_l}`.
+        //
+        // The name is only used where the text can read it: the declaration has been written
+        // (`cells_` holds the name) and no write to that cell stands between it and this read.
+        if (auto value = cellOfValue_.find(ref);
+            value != cellOfValue_.end() && !writtenCells_.contains(value->second)) {
+            if (auto cell = cells_.find(value->second); cell != cells_.end()) {
+                return {cell->second, 100};
+            }
         }
         const camel::runtime::GCNode *node = graph_->node(ref);
         if (node == nullptr) {
@@ -2655,7 +3288,17 @@ class CmlPrinter {
             if (inputs.empty()) {
                 return {"()", 100};
             }
-            return expression(inputs.back());
+            // A gate hands on its *first* ordinary input (`camel::runtime::forwardedInputOf`: "the
+            // ordinary input a gate forwards is a node", and `blockValueWrite` reads the exit chain
+            // as `GATE(<value>, sync <- write)`). The slots after it are what the gate waits on, and
+            // they are written where they stand (see `sitsInAGateSlotWithNoText`). Reading the last
+            // slot made an arm's value the count of its own last `println`
+            // (`linear/runtime/order_edges_regions.cml`: the arm's value is 4, the gate's last slot is
+            // `println(2)` and prints 2, which the round trip read as rc 54 against the origin's 56).
+            // A `COPY` is the graph's own copy of one value, so it has one slot and either reading
+            // answers the same node.
+            return expression(node->kind == camel::runtime::GCNodeKind::Gate ? inputs.front()
+                                                                           : inputs.back());
         }
         case camel::runtime::GCNodeKind::Cast: {
             const auto inputs = graph_->normInputsOf(ref);
@@ -2671,7 +3314,19 @@ class CmlPrinter {
             // `plus_b.cml`). The cast is dropped and the position it stands in supplies the type;
             // a conversion between two named types (which the language only writes) stays.
             const camel::runtime::GCNode *source = graph_->node(inputs.front());
-            const Type *from = source != nullptr ? source->dataType() : nullptr;
+            const Type *from                     = source != nullptr ? source->dataType() : nullptr;
+            // A `T` and a `T[..]` are the same value (design principles 5.4): the run keeps the
+            // rank-zero array in the slot and the element in the type, and the conversion between
+            // them is the compiler's, supplied by whatever position the value stands in. It is
+            // not a program's `as` -- `as` between the two is `DynamicCastForbidden` -- so writing
+            // one is not a stronger statement, it is a program that does not compile:
+            // `compile/array_shape/rank_zero_parameter_slot` printed `(v as f32)` in the body and
+            // `elem((cml1 as f32[...]))` at the call, and neither cast is in the source.
+            if (from != nullptr && camel::core::type::isRankZeroEdge(
+                                       const_cast<Type *>(node->dataType()),
+                                       const_cast<Type *>(from))) {
+                return inner;
+            }
             if (from != nullptr && from->code() == TypeCode::Struct &&
                 static_cast<const StructType *>(node->dataType())->named() &&
                 camel::core::type::relateStructs(
@@ -2703,7 +3358,10 @@ class CmlPrinter {
                         target->toString()));
             }
             return {
-                std::format("({} as {})", parenthesize(inner, 80), writtenTypeText(node->dataType())),
+                std::format(
+                    "({} as {})",
+                    parenthesize(inner, 80),
+                    writtenTypeText(node->dataType())),
                 80};
         }
         case camel::runtime::GCNodeKind::Accs:
@@ -2747,9 +3405,9 @@ class CmlPrinter {
         if (selector.empty()) {
             fail(joinRef, "a branch without a selector");
         }
-        const auto patterns = graph_->withInputsOf(body->brch);
-        const Type *joinType = graph_->node(joinRef)->dataType();
-        const bool isIf       = patterns.empty();
+        const auto patterns    = graph_->withInputsOf(body->brch);
+        const Type *joinType   = graph_->node(joinRef)->dataType();
+        const bool isIf        = patterns.empty();
         const bool asStatement = branchAsStatement_;
 
         const auto armText = [&](size_t k) {
@@ -2758,9 +3416,16 @@ class CmlPrinter {
                 return std::string("()");
             }
             Body arm = buildBody(arms[k], region->result, indent_, false);
+            // A branch that hands on a cell's version (`joinEntryCell`) has no arm values to write:
+            // each arm hands on the version of the cell it leaves, and the arm that wrote nothing
+            // hands on the value the cell was created with. Spelling it as a value adds a node the
+            // original does not have (see `joinEntryCell`), so the arm's statements are the whole
+            // of it and the value is read after the branch.
+            if (joinEntryCell(joinRef) != camel::runtime::kInvalidNodeRef) {
+                arm.hasTail = false;
+            }
             const bool braces =
-                asStatement ||
-                (joinType != nullptr && joinType->code() == TypeCode::Void);
+                asStatement || (joinType != nullptr && joinType->code() == TypeCode::Void);
             std::string text = blockText(arm, braces);
             // An arm that is itself an `if` or `match` needs its parentheses: `then if a then
             // b else c else d` would otherwise bind the second `else` to the inner `if`.
@@ -2777,16 +3442,10 @@ class CmlPrinter {
             if (arms.size() != 2) {
                 fail(joinRef, "an `if` that does not have two arms");
             }
-            const camel::runtime::GCRegion *second = graph_->region(arms[1]);
-            const bool emptyElse =
-                joinType != nullptr && joinType->code() == TypeCode::Void && second != nullptr &&
-                (second->result == camel::runtime::kInvalidNodeRef ||
-                 (graph_->node(second->result) != nullptr &&
-                  graph_->node(second->result)->kind == camel::runtime::GCNodeKind::Data &&
-                  graph_->node(second->result)->dataType() != nullptr &&
-                  graph_->node(second->result)->dataType()->code() == TypeCode::Void));
+            const bool emptyElse = ifWithoutElse(joinRef);
             const Expr condition = expression(selector.front());
-            std::string text = std::format("if {} then {}", parenthesize(condition, 30), armText(0));
+            std::string text =
+                std::format("if {} then {}", parenthesize(condition, 30), armText(0));
             if (!emptyElse) {
                 text += " else " + armText(1);
             }
@@ -2816,11 +3475,14 @@ class CmlPrinter {
                 fail(joinRef, "a match arm without a pattern");
             }
             const auto *region = graph_->region(arms[k]);
-            std::string arm    = region != nullptr
-                                     ? blockText(
-                                           buildBody(arms[k], region->result, caseIndent, false),
-                                           false)
-                                     : std::string("()");
+            Body caseBody;
+            if (region != nullptr) {
+                caseBody = buildBody(arms[k], region->result, caseIndent, false);
+                if (joinEntryCell(joinRef) != camel::runtime::kInvalidNodeRef) {
+                    caseBody.hasTail = false;
+                }
+            }
+            std::string arm = region != nullptr ? blockText(caseBody, false) : std::string("()");
             text += " => " + arm + "\n";
         }
         text += indent_ + "}";
@@ -2855,32 +3517,32 @@ class CmlPrinter {
             // array exists (design principles 4.2: a `for` over an interval is fused): the source
             // form is the interval itself, not the pair of bounds, so the printed program compiles
             // back to the same graph.
-            const bool interval =
-                view.graph().loopIterableFormOf(view.node()) ==
-                camel::core::LoopIterableForm::Interval;
-            const auto bounds = interval ? view.graph().intervalBoundsOf(sequence) : std::nullopt;
+            const bool interval = view.graph().loopIterableFormOf(view.node()) ==
+                                  camel::core::LoopIterableForm::Interval;
+            const auto bounds   = interval ? view.graph().intervalBoundsOf(sequence) : std::nullopt;
             if (bounds.has_value()) {
                 iterable = std::format(
-                    "{}..{}", intervalOperand(expression(bounds->first), kIntervalPrecedence),
+                    "{}..{}",
+                    intervalOperand(expression(bounds->first), kIntervalPrecedence),
                     intervalOperand(expression(bounds->second), kIntervalPrecedence + 1));
             } else if (interval) {
                 // The pair of bounds is a value: a pass may have written it as the constant
                 // holding the same two integers, and the source form is still the interval
                 // (GCGraph::intervalPairValuesOf).
                 const auto values = view.graph().intervalPairValuesOf(sequence);
-                iterable          = values.has_value()
-                                        ? std::format(
-                                              "{}..{}", intervalConstantOperand(values->first),
-                                              intervalConstantOperand(values->second))
-                                        : expression(sequence).text;
+                iterable = values.has_value() ? std::format(
+                                                    "{}..{}",
+                                                    intervalConstantOperand(values->first),
+                                                    intervalConstantOperand(values->second))
+                                              : expression(sequence).text;
             } else {
                 iterable = expression(sequence).text;
             }
         }
 
-        auto savedParams   = params_;
-        auto savedDeclared = declared_;
-        auto savedCells    = cells_;
+        auto savedParams              = params_;
+        auto savedDeclared            = declared_;
+        auto savedCells               = cells_;
         const std::string savedIndent = indent_;
         std::string elementName;
         std::vector<std::string> stateNames;
@@ -2926,8 +3588,7 @@ class CmlPrinter {
     /// the values the closure closes over, in capture-port order; their source names are kept so
     /// the recompiled lambda closes over the same names.
     Expr lambdaExpression(
-        GCGraph *lambda, const std::vector<std::string> &captureTexts,
-        std::string outerIndent) {
+        GCGraph *lambda, const std::vector<std::string> &captureTexts, std::string outerIndent) {
         const FunctionType *type = lambda->funcType();
         if (type == nullptr) {
             fail(camel::runtime::kInvalidNodeRef, "a lambda without a function type");
@@ -2939,22 +3600,22 @@ class CmlPrinter {
             fail(camel::runtime::kInvalidNodeRef, "a lambda with a variadic parameter");
         }
 
-        auto savedParams   = params_;
-        auto savedDeclared = declared_;
-        auto savedCells    = cells_;
-        auto savedSkip     = skip_;
-        auto savedTopo     = topo_;
-        auto savedUsed     = usedNames_;
-        auto savedLines    = std::move(lines_);
-        auto savedControl  = std::move(control_);
+        auto savedParams                = params_;
+        auto savedDeclared              = declared_;
+        auto savedCells                 = cells_;
+        auto savedSkip                  = skip_;
+        auto savedTopo                  = topo_;
+        auto savedUsed                  = usedNames_;
+        auto savedLines                 = std::move(lines_);
+        auto savedControl               = std::move(control_);
         GCGraph *savedGraph             = graph_;
         const bool savedRoot            = isRoot_;
         const size_t savedGenerated     = generated_;
         const std::string savedIndent   = indent_;
         const bool savedBranchStatement = branchAsStatement_;
 
-        graph_             = lambda;
-        isRoot_            = false;
+        graph_  = lambda;
+        isRoot_ = false;
         skip_.clear();
         lines_.clear();
         generated_         = 0;
@@ -3041,7 +3702,7 @@ class CmlPrinter {
             if (function->graph() != nullptr && lambdaGraphs_.contains(function->graph())) {
                 return lambdaExpression(function->graph(), {}, indent_);
             }
-            const std::string name = functionNameOf(function->graph());
+            const std::string name = callNameOf(function->graph());
             if (name.empty()) {
                 fail(ref, "a function value whose graph has no source name (a lambda)");
             }
@@ -3052,22 +3713,21 @@ class CmlPrinter {
     }
 
     Expr accessExpression(gc_node_ref_t ref) {
-        const auto *body = graph_->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
+        const auto *body  = graph_->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
         const auto inputs = graph_->normInputsOf(ref);
         if (inputs.size() != 1) {
             fail(ref, "an access without one value");
         }
-        Expr base = expression(inputs.front());
+        Expr base            = expression(inputs.front());
         std::string baseText = parenthesize(base, 90);
         // A struct literal starts with `{`: an access on it needs the parentheses the source
         // wrote (`({ x: 0 }).x`), because the postfix would otherwise bind inside the braces.
         if (!baseText.empty() && baseText.front() == '{') {
             baseText = "(" + baseText + ")";
         }
-        const std::string member =
-            body->accsKind == camel::runtime::GCAccsKind::StructKey
-                ? std::string(body->key())
-                : std::to_string(body->value);
+        const std::string member = body->accsKind == camel::runtime::GCAccsKind::StructKey
+                                       ? std::string(body->key())
+                                       : std::to_string(body->value);
         if (member.empty()) {
             fail(ref, "an access without a member");
         }
@@ -3075,10 +3735,10 @@ class CmlPrinter {
     }
 
     Expr fillExpression(gc_node_ref_t ref) {
-        const auto *body   = graph_->nodeBodyAs<camel::runtime::GCFillBody>(ref);
-        const auto inputs  = graph_->normInputsOf(ref);
-        const auto with    = graph_->withInputsOf(ref);
-        const Type *type   = graph_->node(ref)->dataType();
+        const auto *body  = graph_->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+        const auto inputs = graph_->normInputsOf(ref);
+        const auto with   = graph_->withInputsOf(ref);
+        const Type *type  = graph_->node(ref)->dataType();
         if (inputs.empty() || type == nullptr) {
             fail(ref, "a construction without a template");
         }
@@ -3101,7 +3761,7 @@ class CmlPrinter {
                 return lambdaExpression(function->graph(), captureTexts, indent_);
             }
             const std::string name =
-                function != nullptr ? functionNameOf(function->graph()) : std::string{};
+                function != nullptr ? callNameOf(function->graph()) : std::string{};
             if (name.empty()) {
                 fail(ref, "a closure of an anonymous function (a lambda)");
             }
@@ -3113,12 +3773,12 @@ class CmlPrinter {
         // spelling: the front end folds such a literal into a *constant* array (one `DATA`), not
         // into a construction, so the program written back builds a different graph -- the same
         // value in another shape (measured: `[1, 2]`, `[[1.0, 2.0], [2.0, 2.0]]` and
-        // `[-9223372036854775808]` all come back as one `DATA`, while `[1.0 + 1.0]` stays a `FILL`).
-        // That is a fact about the language, not about this printer, and printing it anyway would
-        // put a language fact into `not_equivalent`, which is where a printing this printer got
-        // wrong belongs. A construction written back with a *name* in a slot keeps its shape (the
-        // front end does not fold a variable), so the check is on the text of the items, not only
-        // on their nodes: `[[1.0, x], [x, 2.0]]` is a construction and prints.
+        // `[-9223372036854775808]` all come back as one `DATA`, while `[1.0 + 1.0]` stays a
+        // `FILL`). That is a fact about the language, not about this printer, and printing it
+        // anyway would put a language fact into `not_equivalent`, which is where a printing this
+        // printer got wrong belongs. A construction written back with a *name* in a slot keeps its
+        // shape (the front end does not fold a variable), so the check is on the text of the items,
+        // not only on their nodes: `[[1.0, x], [x, 2.0]]` is a construction and prints.
         const auto isLiteralText = [](const std::string &text) {
             if (text.empty()) {
                 return false;
@@ -3131,7 +3791,7 @@ class CmlPrinter {
         if (templ == nullptr || templ->dataIndex >= 0) {
             fail(ref, "a construction whose template is not a constant");
         }
-        const slot_t slot = graph_->staticArea()->get<slot_t>(-templ->dataIndex);
+        const slot_t slot       = graph_->staticArea()->get<slot_t>(-templ->dataIndex);
         const Type *elementType = nullptr;
         size_t count            = 0;
         if (type->code() == TypeCode::Array) {
@@ -3171,7 +3831,7 @@ class CmlPrinter {
             // (`compile/array_shape/rank_zero_slot_nested_field.cml` printed `{ inner: {  } }` for
             // an `Inner`, and the front end answered `DeclaredTypeMismatch`).
             if (type->code() == TypeCode::Struct) {
-                const auto *record    = static_cast<const StructType *>(type);
+                const auto *record                    = static_cast<const StructType *>(type);
                 const camel::runtime::GCNode *written = graph_->node(with[i]);
                 const Type *writtenType = written != nullptr ? written->dataType() : nullptr;
                 const Type *fieldType   = record->typeAt(at);
@@ -3179,20 +3839,20 @@ class CmlPrinter {
                     writtenType->code() == TypeCode::Struct &&
                     fieldType->code() == TypeCode::Struct) {
                     const auto *writtenRecord = static_cast<const StructType *>(writtenType);
-                    const auto *fieldRecord    = static_cast<const StructType *>(fieldType);
-                    bool sameFields            = writtenRecord->size() == fieldRecord->size();
+                    const auto *fieldRecord   = static_cast<const StructType *>(fieldType);
+                    bool sameFields           = writtenRecord->size() == fieldRecord->size();
                     for (size_t k = 0; sameFields && k < fieldRecord->size(); ++k) {
-                        sameFields =
-                            std::string_view(writtenRecord->fieldName(k)) ==
-                                fieldRecord->fieldName(k) &&
-                            writtenRecord->typeAt(k) == fieldRecord->typeAt(k);
+                        sameFields = std::string_view(writtenRecord->fieldName(k)) ==
+                                         fieldRecord->fieldName(k) &&
+                                     writtenRecord->typeAt(k) == fieldRecord->typeAt(k);
                     }
                     if (!sameFields) {
                         fail(
                             ref,
                             std::format(
                                 "the field '{}' is written with a value of type '{}', which is not "
-                                "'{}': a literal becomes the field's type by having its fields, and "
+                                "'{}': a literal becomes the field's type by having its fields, "
+                                "and "
                                 "this one has no spelling for that conversion",
                                 record->fieldName(at),
                                 writtenType->toString(),
@@ -3218,13 +3878,12 @@ class CmlPrinter {
             } else {
                 element = fromSlot<Struct *>(slot)->get<slot_t>(i);
             }
-            const Type *fieldType = type->code() == TypeCode::Array
-                                        ? elementType
-                                        : type->code() == TypeCode::Tuple
-                                              ? static_cast<const TupleType *>(type)->typeAt(i)
-                                              : static_cast<const StructType *>(type)->typeAt(i);
-            items[i]  = constantText(element, fieldType);
-            values[i] = element;
+            const Type *fieldType = type->code() == TypeCode::Array ? elementType
+                                    : type->code() == TypeCode::Tuple
+                                        ? static_cast<const TupleType *>(type)->typeAt(i)
+                                        : static_cast<const StructType *>(type)->typeAt(i);
+            items[i]              = constantText(element, fieldType);
+            values[i]             = element;
         }
         if (type->code() == TypeCode::Array) {
             // The literal is folded into a constant array only when every item is a literal *and*
@@ -3245,8 +3904,9 @@ class CmlPrinter {
                     if (elementType != nullptr && elementType->code() == TypeCode::Int64 &&
                         fromSlot<int64_t>(value) == std::numeric_limits<int64_t>::min()) {
                         noPlainLiteral = true;
-                    } else if (elementType != nullptr && elementType->code() == TypeCode::Int32 &&
-                               fromSlot<int32_t>(value) == std::numeric_limits<int32_t>::min()) {
+                    } else if (
+                        elementType != nullptr && elementType->code() == TypeCode::Int32 &&
+                        fromSlot<int32_t>(value) == std::numeric_limits<int32_t>::min()) {
                         noPlainLiteral = true;
                     }
                 }
@@ -3254,7 +3914,8 @@ class CmlPrinter {
             if (allLiteral && noPlainLiteral) {
                 fail(
                     ref,
-                    "a construction whose slots are constants with no plain literal spelling has no "
+                    "a construction whose slots are constants with no plain literal spelling has "
+                    "no "
                     "faithful spelling: the value is written as an expression, the front end folds "
                     "the literal into a constant array, and the program written back builds a "
                     "different graph");
@@ -3287,10 +3948,11 @@ class CmlPrinter {
     }
 
     Expr operatorExpression(gc_node_ref_t ref) {
-        const auto *body   = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        const auto *body           = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        const OperId oper          = body->oper;
         const std::string_view uri = body->uri();
-        const auto inputs  = graph_->normInputsOf(ref);
-        if (uri == ":var/get" || uri == ":var/peek") {
+        const auto inputs          = graph_->normInputsOf(ref);
+        if (camel::core::oper::isVariableRead(oper)) {
             if (inputs.size() != 1) {
                 fail(ref, "a variable read without a cell");
             }
@@ -3302,7 +3964,7 @@ class CmlPrinter {
             // with nothing named `cml6`).
             return {cellName(cellOf(inputs.front())), 100};
         }
-        if (uri.starts_with(":var/")) {
+        if (isVariableOperator(oper)) {
             fail(ref, std::format("the operator '{}'", uri));
         }
         if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
@@ -3339,9 +4001,7 @@ class CmlPrinter {
                     axes += ":, ";
                 }
             }
-            return {
-                std::format("{}[{}{}]", parenthesize(base, 90), axes, index.text),
-                90};
+            return {std::format("{}[{}{}]", parenthesize(base, 90), axes, index.text), 90};
         }
         if (uri == ":struct/range") {
             // The interval `a..b` (design principles 4.2) is the one spelling of the integers from
@@ -3380,42 +4040,47 @@ class CmlPrinter {
         // own declarations name them.
         std::string name;
         const auto callForm = camel::core::OperatorTable::instance().callFormOf(uri);
+        // Who owns the name is a declaration, not a spelling: `isBuiltin` is the family bit the
+        // table sets for an operator with no module protocol (`:op/add_i`, `:io/println`), which
+        // is the interpreter's own name, and a module's operator is spelled by the name that
+        // module exports.
+        const bool builtin = camel::core::OperatorTable::instance().isBuiltin(oper);
         // A name is written when the program can write it: an operator of the core (`:io/println`,
         // the conversions of `:op/*`) has a name every program has in scope, and an operator whose
         // own module declared its call shape has a name that module exports (this is the `jvp(f)`,
         // `transpose(f)` and `split(f)` of `transforms`). A shape read off a Camel declaration is
         // the callee's name and nothing more -- the declaration may be a kernel the module keeps
         // private (`#impl(sum_kernel)`) -- so such an operator of a module is still refused.
-        // `:op/` is the language's own namespace for operators: the symbol of every group there is
-        // fixed by the language, so a program writes `+` wherever it is -- not `__add__`, which is
-        // the group's internal name. An operator of a module is spelled by the name that module
-        // exports, so the declaration's name is what a program writes for those. The test is who
-        // owns the name, not whether a symbol exists and not how the name was derived.
+        // The symbol of a language group is fixed by the language (`+` for `__add__`), so a program
+        // writes `+` wherever it is -- not `__add__`, which is the group's internal name. The test
+        // is who owns the name, not whether a symbol exists and not how the name was derived.
         const bool languageOwned =
-            uri.starts_with(":op/") &&
-            camel::core::operatorSymbolOf(
-                camel::core::OperatorTable::instance().groupOf(uri)) != nullptr;
-        const bool writable = !languageOwned && callForm.has_value() &&
-                              (callForm->declaredByModule || callForm->exported ||
-                               uri.starts_with(":")) &&
-                              // The name has to mean the same thing in the printed file. A program
-                              // that declares a function of that name shadows the module's, and a
-                              // bare `map<f>(xs)` would then call the program's own `map`: measured
-                              // on `consistency/comprehension/shadowed.cml`, whose `map` returns a
-                              // string and where the printed call only failed because the argument
-                              // types happened not to fit.
-                              !writtenFunctionNames_.contains(callForm->name);
+            builtin &&
+            camel::core::operatorSymbolOf(camel::core::OperatorTable::instance().groupOf(uri)) !=
+                nullptr;
+        const bool writable =
+            !languageOwned && callForm.has_value() &&
+            (callForm->declaredByModule || callForm->exported || builtin) &&
+            // The name has to mean the same thing in the printed file. A program
+            // that declares a function of that name shadows the module's, and a
+            // bare `map<f>(xs)` would then call the program's own `map`: measured
+            // on `consistency/comprehension/shadowed.cml`, whose `map` returns a
+            // string and where the printed call only failed because the argument
+            // types happened not to fit.
+            !writtenFunctionNames_.contains(callForm->name);
         if (writable) {
-            // A module operator is written qualified (`tensor::sum`), which is the only spelling that
-            // names one operator without depending on what else the printed file imports: a bare
-            // `sum` is the language's own function as well, and a bare `tanh` is `math`'s. A core
-            // operator (`:op/print`) has no module to qualify with and keeps its plain name.
-            const size_t colonAt = uri.find(':');
-            name                 = colonAt == std::string::npos || colonAt == 0
-                                       ? callForm->name
-                                       : std::string(uri.substr(0, colonAt)) + "::" + callForm->name;
-        } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
-                   !callForm->exported) {
+            // A module operator is written qualified (`tensor::sum`), which is the only spelling
+            // that names one operator without depending on what else the printed file imports: a
+            // bare `sum` is the language's own function as well, and a bare `tanh` is `math`'s.
+            // Which module that is comes from `moduleNameOf`, not from the URI's prefix:
+            // `:mark/...` is where `unordered_reduce` is implemented and `para` is where it is
+            // declared. An operator of the core (`:io/println`, `:op/add_l`) has no module to
+            // qualify with and keeps its plain name.
+            const std::string owner = moduleNameOf(uri);
+            name = owner.empty() ? callForm->name : owner + "::" + callForm->name;
+        } else if (
+            callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
+            !callForm->exported) {
             // There is a declaration and it has a name, but the module did not export it: a
             // body-less declaration the module keeps to itself is the kernel behind an `#impl`
             // function (`array:sum_l` is the `sum_kernel` behind `array::sum`), and a program of
@@ -3423,7 +4088,7 @@ class CmlPrinter {
             // (`shl` is exported with no body, and `1->shl<4>` is what the source writes), so the
             // test is the export and not the body: "body-less" says where the implementation is,
             // "private" says whether a program may write the name, and they are different facts
-            // (the author's ruling of 2026-11-03; design principles 6.4).
+            // ( design principles 6.4).
             fail(
                 ref,
                 std::format(
@@ -3431,9 +4096,9 @@ class CmlPrinter {
                     "declaration, and no program writes that name",
                     uri,
                     callForm->name));
-        } else if (callForm.has_value() &&
-                   (callForm->declaredByModule || callForm->exported) &&
-                   writtenFunctionNames_.contains(callForm->name)) {
+        } else if (
+            callForm.has_value() && (callForm->declaredByModule || callForm->exported) &&
+            writtenFunctionNames_.contains(callForm->name)) {
             fail(
                 ref,
                 std::format(
@@ -3442,41 +4107,41 @@ class CmlPrinter {
                     uri,
                     callForm->name));
         } else {
-                // What an operator node is written as comes from where the operator was declared,
-                // not from a table here: the group it was registered in (`__add__`, `__neg__`,
-                // `__idx__`) is the name the language writes for it, and `operatorSymbolOf` turns
-                // that name into the symbol a program writes (design principles 4.3). A group that
-                // is not an operator of the language (`tensor:sum`, `:io/println`) has no symbol,
-                // and an operator nobody declared is in no group at all: both are refused by name
-                // rather than given a spelling this printer would have had to guess.
-                const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
-                // A view, not the `const char *`: every comparison below is a comparison of the
-                // text, and `symbol == "-"` on two pointers would be a comparison of addresses.
-                const char *declared = camel::core::operatorSymbolOf(group);
-                if (declared == nullptr) {
+            // What an operator node is written as comes from where the operator was declared,
+            // not from a table here: the group it was registered in (`__add__`, `__neg__`,
+            // `__idx__`) is the name the language writes for it, and `operatorSymbolOf` turns
+            // that name into the symbol a program writes (design principles 4.3). A group that
+            // is not an operator of the language (`tensor:sum`, `:io/println`) has no symbol,
+            // and an operator nobody declared is in no group at all: both are refused by name
+            // rather than given a spelling this printer would have had to guess.
+            const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
+            // A view, not the `const char *`: every comparison below is a comparison of the
+            // text, and `symbol == "-"` on two pointers would be a comparison of addresses.
+            const char *declared = camel::core::operatorSymbolOf(group);
+            if (declared == nullptr) {
+                fail(ref, std::format("the operator '{}'", uri));
+            }
+            const std::string_view symbol = declared;
+            if (inputs.size() == 2) {
+                const int precedence = precedenceOf(symbol);
+                if (precedence < 0) {
+                    // A binary symbol this printer has no precedence for (`[]`, `@`, `=`) is
+                    // written by a construct of its own or not at all: it is refused here
+                    // rather than given parens this printer would have had to invent an
+                    // association for.
                     fail(ref, std::format("the operator '{}'", uri));
                 }
-                const std::string_view symbol = declared;
-                if (inputs.size() == 2) {
-                    const int precedence = precedenceOf(symbol);
-                    if (precedence < 0) {
-                        // A binary symbol this printer has no precedence for (`[]`, `@`, `=`) is
-                        // written by a construct of its own or not at all: it is refused here
-                        // rather than given parens this printer would have had to invent an
-                        // association for.
-                        fail(ref, std::format("the operator '{}'", uri));
-                    }
-                    return infix(ref, inputs, symbol, precedence);
-                }
-                if (inputs.size() == 1) {
-                    const bool unary = symbol == "-" || symbol == "~" || symbol == "!";
-                    if (!unary) {
-                        fail(ref, std::format("the operator '{}'", uri));
-                    }
-                    return prefix(ref, inputs, symbol);
-                }
-                fail(ref, std::format("the operator '{}' without one or two values", symbol));
+                return infix(ref, inputs, symbol, precedence);
             }
+            if (inputs.size() == 1) {
+                const bool unary = symbol == "-" || symbol == "~" || symbol == "!";
+                if (!unary) {
+                    fail(ref, std::format("the operator '{}'", uri));
+                }
+                return prefix(ref, inputs, symbol);
+            }
+            fail(ref, std::format("the operator '{}' without one or two values", symbol));
+        }
 
         // A call with configuration writes it back in `<>`, in the position the source wrote it:
         // `print<'{}-{}'>(3, 4)`, `println<'{:.2f}'>(0.5)`. The format is a `with` input of the
@@ -3484,23 +4149,23 @@ class CmlPrinter {
         // wrote `3 4` where the source wrote `3-4` -- the A7 case `trans/cpp/exec/print_formats`.
         // A configuration the printer cannot write is refused by name through `expression`, never
         // written half-way.
-        std::string text = name;
+        std::string text    = name;
         const auto withArgs = graph_->withInputsOf(ref);
         if (!withArgs.empty()) {
-            // The one configuration this printer used to write was the format of a print:
-            // `print<'{}-{}'>`, `println<'{:.2f}'>` -- a string the call holds and the source writes
-            // in `<>`. A declared operator that states a `with` parameter of its own (`shl` is
-            // `with <count: int>`, written `1->shl<4>`) holds a value there, and a value the
+            // The one configuration this printer writes is the format of a print:
+            // `print<'{}-{}'>`, `println<'{:.2f}'>` -- a string the call holds and the source
+            // writes in `<>`. A declared operator that states a `with` parameter of its own (`shl`
+            // is `with <count: int>`, written `1->shl<4>`) holds a value there, and a value the
             // printer can write is written: a literal or a string. Anything else (`:mark/map_arr`'s
             // function value, written `xs->map<f>` by the source) has no spelling here, and writing
             // the call without it would be a print that dropped the configuration: it is refused by
             // name instead.
             for (const gc_node_ref_t one : withArgs) {
                 const camel::runtime::GCNode *argument = graph_->node(one);
-                const Type *type = argument != nullptr ? argument->dataType() : nullptr;
-                const bool literal =
-                    argument != nullptr && argument->kind == camel::runtime::GCNodeKind::Data &&
-                    argument->dataIndex < 0;
+                const Type *type   = argument != nullptr ? argument->dataType() : nullptr;
+                const bool literal = argument != nullptr &&
+                                     argument->kind == camel::runtime::GCNodeKind::Data &&
+                                     argument->dataIndex < 0;
                 if (type == nullptr || (type->code() != TypeCode::String && !literal)) {
                     fail(
                         ref,
@@ -3570,7 +4235,9 @@ class CmlPrinter {
         }
         return {
             std::format(
-                "{} {} {}", parenthesize(left, precedence), op,
+                "{} {} {}",
+                parenthesize(left, precedence),
+                op,
                 parenthesize(right, precedence + 1)),
             precedence};
     }
@@ -3595,7 +4262,7 @@ class CmlPrinter {
     }
 
     Expr callExpression(gc_node_ref_t ref) {
-        GCGraph *callee = program_.calleeOf(*graph_, ref);
+        GCGraph *callee                    = program_.calleeOf(*graph_, ref);
         const camel::runtime::GCNode *node = graph_->node(ref);
         if (node->kind == camel::runtime::GCNodeKind::Call) {
             const auto with = graph_->withInputsOf(ref);
@@ -3611,19 +4278,17 @@ class CmlPrinter {
         // A direct call of a function that reads module values passes those values as `with`
         // inputs. The source omits them: the callee names the top-level values itself. The
         // function's own `with` parameters come first, and a call spells them inside `<...>`.
-        const std::string name = functionNameOf(callee);
+        const std::string name = callNameOf(callee);
         if (name.empty()) {
             fail(ref, "a call of a function whose graph has no source name (a lambda)");
         }
-        const FunctionType *type = callee->funcType();
+        const FunctionType *type  = callee->funcType();
         const size_t explicitWith = type != nullptr ? type->withTypesCount() : 0;
         const auto with           = graph_->withInputsOf(ref);
         if (with.size() < explicitWith) {
             fail(ref, "a call of a configured function without its configuration");
         }
-        return callText(
-            ref, {name, 100}, graph_->normInputsOf(ref),
-            with.subspan(0, explicitWith));
+        return callText(ref, {name, 100}, graph_->normInputsOf(ref), with.subspan(0, explicitWith));
     }
 
     Expr callText(
@@ -3671,7 +4336,10 @@ class CmlPrinter {
                     name = "<unnamed>";
                 }
                 bigConstants_.push_back(
-                    {graph->nodeOrigin(ref), name, node->dataType()->toString(), graph->name(),
+                    {graph->nodeOrigin(ref),
+                     name,
+                     node->dataType()->toString(),
+                     graph->name(),
                      bytes});
             }
         }
@@ -3688,7 +4356,7 @@ class CmlPrinter {
             if (value == nullptr) {
                 return 0;
             }
-            size_t bytes = value->size() * sizeof(slot_t);
+            size_t bytes        = value->size() * sizeof(slot_t);
             const Type *element = static_cast<const ArrayType *>(type)->elemType();
             for (size_t i = 0; i < value->size(); ++i) {
                 bytes += constantBytes(value->get<slot_t>(i), element);
@@ -3696,7 +4364,7 @@ class CmlPrinter {
             return bytes;
         }
         case TypeCode::Tuple: {
-            const auto *value    = fromSlot<Tuple *>(slot);
+            const auto *value     = fromSlot<Tuple *>(slot);
             const auto *tupleType = static_cast<const TupleType *>(type);
             if (value == nullptr) {
                 return 0;
@@ -3708,7 +4376,7 @@ class CmlPrinter {
             return bytes;
         }
         case TypeCode::Struct: {
-            const auto *value = fromSlot<Struct *>(slot);
+            const auto *value  = fromSlot<Struct *>(slot);
             const auto *record = static_cast<const StructType *>(type);
             if (value == nullptr) {
                 return 0;
@@ -3727,8 +4395,8 @@ class CmlPrinter {
         }
     }
 
-    /// The text of an array constant: one bracket per extent of the value's own shape. `rank` is the
-    /// number of extents `dim` still has to write, `dim` the one being written, and `next` the
+    /// The text of an array constant: one bracket per extent of the value's own shape. `rank` is
+    /// the number of extents `dim` still has to write, `dim` the one being written, and `next` the
     /// linear element the walk has reached -- the elements are contiguous in row-major order, so
     /// the recursion never has to multiply strides out.
     std::string arrayText(
@@ -3786,8 +4454,9 @@ class CmlPrinter {
         }
         case TypeCode::Complex64: {
             const auto *value = fromSlot<camel::core::rtdata::Complex *>(slot);
-            return complexText(value != nullptr ? value->realF() : 0.0F,
-                               value != nullptr ? value->imaginaryF() : 0.0F);
+            return complexText(
+                value != nullptr ? value->realF() : 0.0F,
+                value != nullptr ? value->imaginaryF() : 0.0F);
         }
         case TypeCode::Complex128: {
             const auto *value = fromSlot<camel::core::rtdata::Complex *>(slot);
@@ -3809,9 +4478,9 @@ class CmlPrinter {
             return arrayText(value, arrayType, static_cast<size_t>(value->rank()), 0, next);
         }
         case TypeCode::Tuple: {
-            const auto *value = fromSlot<Tuple *>(slot);
+            const auto *value     = fromSlot<Tuple *>(slot);
             const auto *tupleType = static_cast<const TupleType *>(type);
-            std::string text = "(";
+            std::string text      = "(";
             for (size_t i = 0; value != nullptr && i < tupleType->size(); ++i) {
                 text += (i ? ", " : "") + constantText(value->get<slot_t>(i), tupleType->typeAt(i));
             }
@@ -3833,12 +4502,13 @@ class CmlPrinter {
                 fail(
                     camel::runtime::kInvalidNodeRef,
                     std::format(
-                        "a template value of '{}' that holds no struct: the literal written from it "
+                        "a template value of '{}' that holds no struct: the literal written from "
+                        "it "
                         "would be an empty struct where the type has {} field(s)",
                         record->toString(),
                         record->size()));
             }
-            std::string text   = "{ ";
+            std::string text = "{ ";
             for (size_t i = 0; value != nullptr && i < record->size(); ++i) {
                 text += (i ? ", " : "") + std::string(record->fieldName(i)) + ": " +
                         constantText(value->get<slot_t>(i), record->typeAt(i));
@@ -3885,10 +4555,10 @@ class CmlPrinter {
         prepareGraph(graph);
 
         const FunctionType *type = graph->funcType();
-        const std::string name   = graph->name();
-        // A function a program declared inside a namespace is printed inside that `namespace` block,
-        // under its own name: the graph name is the qualified one (`Tools::inc`), and the source
-        // wrote the block, not the qualified name (`compile/namespace_rules/lib2.cml`).
+        const std::string name   = printedNameOf(graph);
+        // A function a program declared inside a namespace is printed inside that `namespace`
+        // block, under its own name: the graph name is the qualified one (`Tools::inc`), and the
+        // source wrote the block, not the qualified name (`compile/namespace_rules/lib2.cml`).
         std::vector<std::string> spaceParts;
         headerIndent_.clear();
         if (isNamespaceName(name)) {
@@ -3904,11 +4574,10 @@ class CmlPrinter {
             for (size_t i = 0; i < spaceParts.size(); ++i) {
                 emit(std::string(4 * i, ' ') + "namespace " + spaceParts[i] + " {");
             }
-            indent_ = std::string(4 * (spaceParts.size() + 1), ' ');
+            indent_       = std::string(4 * (spaceParts.size() + 1), ' ');
             headerIndent_ = std::string(4 * spaceParts.size(), ' ');
         }
-        const std::string localName =
-            spaceParts.empty() ? name : name.substr(name.rfind("::") + 2);
+        const std::string localName = spaceParts.empty() ? name : name.substr(name.rfind("::") + 2);
         // A function a program declared as an operator is stored under the operator's reserved
         // name (`func operator +` builds the graph `__add__`), and that name is not source a
         // program can write back: `__add__` is a reserved identifier (`ReservedIdentifier`). The
@@ -3967,7 +4636,9 @@ class CmlPrinter {
         const uint64_t origin =
             ref != camel::runtime::kInvalidNodeRef ? graph_->nodeOrigin(ref) : 0;
         throw Refusal(
-            ref, origin, graph_ != nullptr ? graph_->name() : std::string("<program>"),
+            ref,
+            origin,
+            graph_ != nullptr ? graph_->name() : std::string("<program>"),
             std::move(reason));
     }
 };
@@ -3983,19 +4654,20 @@ PassMaker cmlPass() {
     };
 }
 
-const camel::runtime::Program *CmlDumpPass::apply(
-    const camel::runtime::Program *program, std::ostream &out) {
+const camel::runtime::Program *
+CmlDumpPass::apply(const camel::runtime::Program *program, std::ostream &out) {
     if (program == nullptr) {
         return nullptr;
     }
     std::vector<BigConstant> bigConstants;
     std::ostringstream rendered;
     try {
-        CmlPrinter printer(*program, rendered, options_.maxLiteralBytes, bigConstants);
+        CmlPrinter
+            printer(*program, context_.get(), rendered, options_.maxLiteralBytes, bigConstants);
         printer.run();
     } catch (const Refusal &refusal) {
-        auto diagnostic = context_->rtmDiags()->of(
-            camel::core::error::SemanticDiag::CmlUnsupportedConstruct);
+        auto diagnostic =
+            context_->rtmDiags()->of(camel::core::error::SemanticDiag::CmlUnsupportedConstruct);
         if (refusal.origin != 0) {
             diagnostic.atOrigin(refusal.origin);
         }
@@ -4010,7 +4682,10 @@ const camel::runtime::Program *CmlDumpPass::apply(
                 diagnostic.atOrigin(constant.origin);
             }
             diagnostic.commit(
-                constant.name, constant.type, constant.graph, constant.bytes,
+                constant.name,
+                constant.type,
+                constant.graph,
+                constant.bytes,
                 options_.maxLiteralBytes);
         }
         return nullptr;
@@ -4020,4 +4695,3 @@ const camel::runtime::Program *CmlDumpPass::apply(
     out << rendered.str();
     return nullptr;
 }
-

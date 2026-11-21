@@ -102,7 +102,10 @@ MARKERS = {
     "closure": ["=>", "sync", "offset", "base"],
     "with_param": ["with <", "scale", "clamp"],
     "var_param": ["var "],
-    "write_value": ["var "],
+    # Not `var `: the body's value is the value its write wrote, and the cell's two writes are
+    # the constant that value is -- `v = 1; v = 2; v` and `v = 1; v = 2; return v` print the same
+    # body, which is the whole point of the pair of functions in this program. Pin that body.
+    "write_value": ["return 2"],
     # The declaration is the half the printed program was missing: the name alone does not compile.
     "named_type": ["type P = { x: int, y: int }", "with <m: P>", "p: P", "): P"],
     "map_with_closure": ["map<", "=>", "let ys"],
@@ -326,7 +329,7 @@ def main():
     check_refusal(
         CML / "refuse/inline_region.cml",
         "CmlUnsupportedConstruct",
-        ("std::opt::inline", "std::cml"),
+        ("std::cxx::inline", "std::cml"),
     )
     # A named struct type whose declaration cannot be written is still a refusal, and the message
     # says which half is missing: this one is a `#resource` declaration, whose tag is not readable

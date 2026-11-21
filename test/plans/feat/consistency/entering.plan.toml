@@ -48,9 +48,9 @@ golden = "golden/entering_positions.txt"
 
 [[tests]]
 name = "entering.positions.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/positions.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
@@ -66,18 +66,18 @@ golden = "golden/entering_positions.txt"
 
 [[tests]]
 name = "entering.positions.fold"
-desc = "The same program through std::opt::fold, std::fvm."
+desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/positions.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
 
 [[tests]]
 name = "entering.positions.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/positions.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_positions.txt"
@@ -92,18 +92,25 @@ backends_agree = []
 golden = "golden/entering_positions.txt"
 
 # S1's mechanism as a reading rather than a claim: the plan the executor lays out for this program
-# is 552 nodes, and every control region the pass prints reports `in-plan == members` -- the range of
+# is 546 nodes, and every control region the pass prints reports `in-plan == members` -- the range of
 # an arm is the members of its region (docs/design/effects/edges.cn.md 5.2). Both numbers are in the
 # check (`cases/consistency/entering/check_plan_regions.mjs`), so a change that computes a range from
 # liveness instead of membership, or that narrows the seed, is red here.
 #
+# The count was 552 until a sync block's chain stopped carrying the calls that are pure and cannot
+# fault (design principles 3.1, 3.4): six GATEs went with them -- a GATE is where a block hands a
+# statement's value on and where the value's wait reaches it (edges.cn.md 5.3), and a value read from
+# a freely arranged call carries no wait. The graph after `std::opt` is 548 nodes and 843 edges with
+# 4 GATEs where it was 554 and 857 with 10, and the printed positions golden did not move.
+#
 # What it deliberately does not assert: that the seeds carry the weight. While the control edges are
 # still built, the exit walk reaches every region result through its owner's ports too, so removing
 # the seeding branch leaves both readings identical -- the A/B of that change is 552 and `in-plan ==
-# members` either way. The check holds "range == members", not "the seed is load-bearing".
+# members` either way (on a tree where the chain still carried every call). The check holds
+# "range == members", not "the seed is load-bearing".
 [[tests]]
 name = "entering.positions.plan_regions"
-desc = "The plan of positions through std::opt is 552 nodes and every control region is in it as its members: the executor's ranges are the members of the regions, held as two numbers (the A/B that made this a reading: removing the seed leaves it green, breaking membership makes it red)."
+desc = "The plan of positions through std::opt is 546 nodes and every control region is in it as its members: the executor's ranges are the members of the regions, held as two numbers (the A/B that made this a reading: removing the seed leaves it green, breaking membership makes it red). The count moved from 552 when a sync block's chain stopped carrying calls that are pure and cannot fault: six GATEs -- the nodes that hand a statement's waiting value on -- went with them, and the positions golden did not change."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/consistency/entering/check_plan_regions.mjs"
@@ -111,7 +118,7 @@ args = ["${case}"]
 backends = ["nvm"]
 backends_agree = []
 expect_exit = 0
-expect_stdout_contains = ["[REGIONS] ok", "[REGIONS] graphs ", "planned 552"]
+expect_stdout_contains = ["[REGIONS] ok", "[REGIONS] graphs ", "planned 546"]
 expect_output_not_contains = ["[REGIONS] RED"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
@@ -127,9 +134,9 @@ golden = "golden/entering_empty_array.txt"
 
 [[tests]]
 name = "entering.empty_array.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_empty_array.txt"
@@ -145,18 +152,18 @@ golden = "golden/entering_empty_array.txt"
 
 [[tests]]
 name = "entering.empty_array.fold"
-desc = "The same program through std::opt::fold, std::fvm."
+desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/empty_array.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_empty_array.txt"
 
 [[tests]]
 name = "entering.empty_array.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/empty_array.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_empty_array.txt"
@@ -181,9 +188,9 @@ golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
 name = "entering.fallback_chain.inline"
-desc = "The same program through std::opt::inline, std::fvm."
+desc = "The same program through std::cxx::inline, std::fvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
@@ -199,18 +206,18 @@ golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
 name = "entering.fallback_chain.fold"
-desc = "The same program through std::opt::fold, std::fvm."
+desc = "The same program through std::cxx::fold, std::fvm."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
-args = ["${case}", "std::opt::fold", "std::fvm"]
+args = ["${case}", "std::cxx::fold", "std::fvm"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
 
 [[tests]]
 name = "entering.fallback_chain.inline_opt"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 case = "../../../cases/consistency/entering/fallback_chain.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
 backends_agree = []
 golden = "golden/entering_fallback_chain.txt"
@@ -358,10 +365,10 @@ expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
 name = "entering.arms_folded.fold"
-desc = "Arms put into T? under a constant condition, std::opt::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+desc = "Arms put into T? under a constant condition, std::cxx::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
 kind = "behavior"
 case = "../../../cases/consistency/entering/arms_folded.cml"
-args = ["${case}", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::fold", "${backend}"]
 expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
@@ -374,10 +381,10 @@ expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
 name = "entering.arms_folded.inline_fold"
-desc = "Arms put into T? under a constant condition, std::opt::inline, std::opt::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+desc = "Arms put into T? under a constant condition, std::cxx::inline, std::cxx::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
 kind = "behavior"
 case = "../../../cases/consistency/entering/arms_folded.cml"
-args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+args = ["${case}", "std::cxx::inline", "std::cxx::fold", "${backend}"]
 expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]

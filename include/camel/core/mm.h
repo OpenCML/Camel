@@ -115,7 +115,15 @@ struct AllocatorChecks {
     bool verifyAfter              = false; // ... and after
     bool markCheck                = false; // compare the cleared marks with the graph space
     bool printConfig              = false; // print the resolved configuration at start
+    // Print the foreign resources the program had not released when it stopped, beside the
+    // counters that say how many were made and how many went: the reading of a mechanism that is
+    // reclaimed by counting, which is what a `Ref<T>` box is (`--gc-check foreign`).
+    bool printForeignResources    = false; // print the counted blocks at exit
 };
+
+/// The checks this process selected, as the run asked for them: the reading side of
+/// `selectAllocatorChecks`, for the one place that reports at exit.
+const AllocatorChecks &allocatorChecks();
 
 /// Selects the checks for this process, under the same rule as the sizing.
 bool selectAllocatorChecks(const AllocatorChecks &checks);

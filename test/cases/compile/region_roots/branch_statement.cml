@@ -1,0 +1,70 @@
+/**
+ * A branch written as a statement runs with the region it is written in (design principles 3.1,
+ * 3.7). An `if` without `else` has no value, so no value of its own can need it into the execution,
+ * and nothing can leave it out of one either: the branch is a statement of the body, the arms are
+ * the regions it enters by the arm it takes, and the external writes written in the arm it takes are
+ * roots of that arm.
+ *
+ * The body here is not a `sync` block, and that was the difference: a sync edge is what carries
+ * "used" from one statement to the next, so the same branches in a `sync` body ran all along,
+ * while here the whole branch -- the arm that is taken and the print written in it -- was dropped
+ * from the graph, and the warning named the branch. A branch the program
+ * cannot choose to skip is not a region nothing needs.
+ *
+ * `untaken` is the other half of the judgement (design principles 3.1, the reverse judgement `R2`):
+ * a branch that runs does not run the arm it does not take. `one_of` puts the same two arms behind
+ * a condition the program computes, so the arm that writes is chosen at run time, not read off a
+ * literal. `picked` is a `match` written as a statement, the same shape with more than two arms.
+ * `nested` is a branch statement written inside an arm of another one, which waits for the outer arm
+ * as a write in an arm does. `value_used` is the control: a branch whose value something takes is
+ * not this rule's case and reads exactly as it did.
+ *
+ * Output: `then`, `a`, `b`, `two`, `deep`, `1 2` -- nothing from `untaken`.
+ */
+
+func taken(): int {
+    if true then { println("then") }
+    return 0
+}
+
+func untaken(): int {
+    if false then { println("never") }
+    return 0
+}
+
+func one_of(which: bool): int {
+    if which then { println("a") } else { println("b") }
+    return 0
+}
+
+func picked(k: int): int {
+    match k {
+        case 1 => { println("one") }
+        case 2 => { println("two") }
+        case _ => { println("many") }
+    }
+    return 0
+}
+
+func nested(): int {
+    if true then {
+        if true then { println("deep") }
+    }
+    return 0
+}
+
+func value_used(c: bool): int {
+    let x = if c then 1 else 2
+    return x
+}
+
+func main(): int sync {
+    taken()
+    untaken()
+    one_of(true)
+    one_of(false)
+    picked(2)
+    nested()
+    println(value_used(true), value_used(false))
+    return 0
+}

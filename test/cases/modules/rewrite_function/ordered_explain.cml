@@ -1,0 +1,29 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A run's diagnostic reuses its ordered choice, including generic rules.
+import { Node, graph_of, nodes, is_anchor } from graph
+import { Rule, run, why_not } from rewrite
+
+rule nested(a: int, b: int) { (a + 0) * b => a * b }
+rule generic_nested::<T>(a: T, b: T) { (a + 0) * b => a * b }
+func target(x: int, y: int): int {
+    return (0 + x) * y
+}
+with <law: Rule, ordered: bool>
+func check(): string {
+    return match target->run<[law], rounds: 0, explain: true, ordered: ordered> {
+        case error e => e.message
+        case r => {
+            let anchors = nodes(graph_of(r.result))->filter<is_anchor>
+            return r->why_not<law, anchors[0]> !! 'diagnostic failed'
+        }
+    }
+}
+func main(): int! sync {
+    println('concrete ordered', check<nested, true>()->contains<'where the pattern writes a constant'>)
+    println('generic ordered', check<generic_nested, true>()->contains<'where the pattern writes a constant'>)
+    println('concrete default', check<nested, false>()->contains<'the left side matches and the condition holds'>)
+    println('generic default', check<generic_nested, false>()->contains<'the left side matches and the condition holds'>)
+    return 0
+}

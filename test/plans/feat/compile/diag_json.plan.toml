@@ -185,45 +185,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
 [[tests]]
-name = "warnings_visible_text"
-desc = "A program without errors prints its warnings on stderr at the default log level, each with name, file:line:column and text, before it runs; stdout is the program's output only."
+name = "arm_write_prints_no_warning_text"
+desc = "A program whose only candidate warning is a direct write to a `var` in a branch arm prints no warning now: a write to a `var` is not an effect (design principles 3.1), and the branch hands the write on as its value (3.5; the ruling of 2026-11-16), so `SemanticDiag::IgnoredSideEffect` is not printed for it. The empty stderr is the point -- the withdrawn rule must not come back -- and the program still prints 11 and exits 11, which is the arm's write reaching the print: the same case asserts both, so the zero is not the whole of it. The text form of a warning (`file:line:col: [Warn]: ... (name=..., code=...)`) is pinned by `feat/compile/diag_options: warn.shown`, and the JSON form by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["${case}"]
 expect_exit = 11
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
-const lines = input.normalized.stderr.trim().split('\n')
-assert(lines.length === 2, 'two warnings on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
-const expect = [
-    ['warnings_visible.cml:16:5: [Warn]: The call of \'inc: (var x: int) => int uses x\' is not in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
-    ['warnings_visible.cml:17:13: [Warn]: The branch is not in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
-]
-expect.forEach(([text, name], i) => {
-    assert(lines[i].includes(text), `warning ${i + 1}: expected ${text}, got ${lines[i]}`)
-    assert(lines[i].endsWith('(name=' + name + ')'), `warning ${i + 1}: expected name ${name}, got ${lines[i]}`)
-})
+assert(input.stderr === '', 'no warning is printed for a direct write to a var: ' + JSON.stringify(input.stderr))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
-name = "warnings_visible_json"
-desc = "With --output-format json the warnings of an error-free program are one JSON array on stderr (severity Warn, source ranges); stdout stays the program's output, with no diagnostics array."
+name = "arm_write_prints_no_warning_json"
+desc = "The same program with `--output-format json`: no diagnostics array is written at all, because the arm's direct write to a `var` is a value and not an effect (design principles 3.1, 3.5; the ruling of 2026-11-16), so `SemanticDiag::IgnoredSideEffect` has no entry. stderr is empty and stdout is the program's output, 11: the zero is the conclusion here (the withdrawn rule must stay withdrawn), while the stdout and exit assertions keep the write's hand-over under test. The JSON form of a warning is pinned by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 11
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
-const diags = JSON.parse(input.stderr)
-assert(diags.length === 2, 'two warnings, got ' + diags.length)
-assert(diags.every(d => d.severity === 'Warn'), 'severity Warn')
-assert(diags.every(d => d.data.stage === 'typecheck'), 'stage typecheck')
-const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
-const want = ['SemanticDiag::IgnoredSideEffect@16:5', 'SemanticDiag::IgnoredSideEffect@17:13']
-assert(JSON.stringify(got) === JSON.stringify(want), 'names and positions: ' + got.join(' '))
-assert(diags.every(d => d.data.modulePath.endsWith('warnings_visible.cml')), 'each names its file')
+assert(input.stderr === '', 'no diagnostics array for a program with none: ' + JSON.stringify(input.stderr))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -237,7 +221,7 @@ args = ["--output-format", "json", "${case}"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'stderr is empty: ' + JSON.stringify(input.stderr))
-assert(input.normalized.stdout === '2011\n', 'stdout is the program output only')
+assert(input.normalized.stdout === '2\n2011\n', 'stdout is the program output only')
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -261,46 +245,37 @@ timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects"
-desc = "Outside a sync block an effectful expression nothing depends on is not executed; that is legal and each one gets the warning EffectNotExecuted at its position: an impure operator, a function whose body has effects, a call bound to an unused name, a write nothing reads, an assignment, a branch with an effectful arm; a chain of dropped effects gets one warning. Nothing in a sync block and no pure expression is reported, and the program runs as written."
+desc = "Which effects outside a sync block run is read from design principles 3.1, and a call is one of the nodes the ruling of 2026-11-17 names (`算子、调用、分支、循环一样`): a call to a callee that writes a resource outside the program is one of its region's writes, the region's `GATE` reads it, and it runs. So `noisy(1)` and `noisy(2)` -- whose callee prints -- run and print, as does the outer `println(noisy(4))`, and none of the three is reported. A call whose callee writes only a `var` cell is still not run: `modify(i)` at line 36 writes the Variable the caller handed in, which is not a resource outside the program (design principles 3.3), so nothing runs it -- and nothing is reported for it either, because the diagnostic that named a statement which does not run went with the region roots (the ruling of 2026-11-17). The assignment at line 37 is a dropped *value*, reported as `UnusedAssignedValue`; the branch at line 39 is a statement of its region and runs with it (the ruling of 2026-11-16), so the arm it takes prints `arm`; nothing in a sync block and no pure expression is reported."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/dropped_effects.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === 'kept 1\n0 5\n', 'program output: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === 'operator\nnoisy\nnoisy\nnoisy\n4\narm\nkept 1\n0 5\n', 'program output: ' + JSON.stringify(input.normalized.stdout))
 const diags = JSON.parse(input.stderr)
 assert(diags.every(d => d.severity === 'Warn'), 'warnings only')
-const dropped = diags.filter(d => d.data.name === 'SemanticDiag::EffectNotExecuted')
-const got = dropped.map(d => (d.range.start.line + 1) + ' ' + d.message.replace(/ has side effects.*/, ''))
-const want = [
-    "30 The call of 'println'",
-    "31 The call of 'noisy'",
-    "32 The call of 'noisy'",
-    "33 The call of 'modify'",
-    "34 The assignment",
-    "35 The call of 'println'",
-    "36 The branch",
-]
-assert(JSON.stringify(got) === JSON.stringify(want), 'dropped effects: ' + got.join(' | '))
-assert(dropped.every(d => d.message.endsWith('has side effects but is never executed: nothing depends on it and it is not in a sync block.')), 'message text')
-assert(dropped.every(d => d.code === '0x03100004'), 'code 0x03100004')
+assert(!diags.some(d => d.message.includes('is never executed')), 'no statement is reported as one that does not run: ' + JSON.stringify(diags.map(d => d.data.name)))
+// The assignment at 35 is not one of these any more: assigning to a `var` is not an effect (design
+// principles 3.1 and 3.5, the ruling of 2026-11-15), so what it drops is a value and it is reported
+// as one -- the same family as a result nobody uses.
+const assigned = diags.filter(d => d.data.name === 'SemanticDiag::UnusedAssignedValue')
+const assignedAt = assigned.map(d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1) + ' ' + d.message)
+assert(JSON.stringify(assignedAt) === JSON.stringify(["37:7 The value this assignment stores is never read."]), 'the dropped value: ' + assignedAt.join(' | '))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects_outside_sync"
-desc = "The three dropped prints of effects_outside_sync.cml (plain body, the first print of the nested sync block, a statement before the returned call) are each reported as EffectNotExecuted; the kept ones are not."
+desc = "effects_outside_sync.cml prints every line it writes and reports nothing: a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), in a plain body, in a nested sync block and before a returned call alike, so there is no dropped effect left to report."
 kind = "behavior"
 case = "../../../cases/linear/runtime/effects_outside_sync.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 0
 verify_script = """
-const diags = JSON.parse(input.stderr)
-const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
-const want = [11, 20, 33].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
-assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
-assert(!input.stdout.includes('DROPPED'), 'no dropped line is printed')
+assert(!input.stderr.includes('is never executed'), 'no effect is reported: ' + input.stderr)
+const out = input.normalized.stdout.trim()
+assert(out === 'main start\nplain\nnested 1\nnested 2\nsuffix\nreturned first\nreturned\n6\nmain end', 'program output: ' + JSON.stringify(input.normalized.stdout).slice(0, 200))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -332,7 +307,7 @@ name = "unknown_pass_after_rewrite_and_scheduler"
 desc = "The first unknown name is the one reported, wherever it is written: after a rewrite pass and a scheduling pass, in text mode. Nothing runs."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::opt::inline", "std::fvm", "std::typo_one", "std::typo_two"]
+args = ["${case}", "std::cxx::inline", "std::fvm", "std::typo_one", "std::typo_two"]
 expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout
@@ -366,7 +341,7 @@ case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "tensor::fuse", "std::nvm"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === '2\n2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
 assert(!input.stderr.includes('not found'), 'the pass is known: ' + input.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -377,13 +352,13 @@ name = "passes_never_run_text"
 desc = "Passes written after a scheduling pass can never run. The program still runs; before it does, the warning PassesNeverRun on stderr names the consuming pass and the passes after it."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::nvm", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::nvm", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === '2\n2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::opt::inline', 'std::fvm' written after it will not run."), lines[0])
+assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::cxx::inline', 'std::fvm' written after it will not run."), lines[0])
 assert(lines[0].endsWith('(name=RuntimeDiag::PassesNeverRun, code=0x0410000F)'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -415,28 +390,26 @@ name = "passes_last_consumer_quiet"
 desc = "A consuming pass written last is the normal pipeline: no warning."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'stderr: ' + input.stderr)
-assert(input.normalized.stdout === '2011\n', 'stdout: ' + input.normalized.stdout)
+assert(input.normalized.stdout === '2\n2011\n', 'stdout: ' + input.normalized.stdout)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
 name = "dropped_effects_forward"
-desc = "EffectNotExecuted does not depend on the order of definitions: a dropped call of a function with an effectful sync body is reported also when that function is written after the caller."
+desc = "The order of definitions does not decide which writes run: `later` and `earlier_dropped` are written after `caller` and both run, because a call written as a statement is one of its body's writes when its callee writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`) and the body's `GATE` reads it. Two lines print, then the value `caller` hands on (2), and nothing is reported."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/dropped_effects_forward.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout.trim() === '2', 'program output: ' + JSON.stringify(input.normalized.stdout))
-const diags = JSON.parse(input.stderr)
-const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
-const want = [7, 8].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
-assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
+assert(input.normalized.stdout.trim() === 'later\nearlier_dropped\n2', 'program output: ' + JSON.stringify(input.normalized.stdout))
+const diags = input.stderr.trim() ? JSON.parse(input.stderr) : []
+assert(diags.length === 0, 'nothing is reported, got: ' + diags.map(d => d.data.name + '@' + (d.range.start.line + 1)).join(' '))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000

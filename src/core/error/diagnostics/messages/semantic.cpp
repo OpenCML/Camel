@@ -1117,6 +1117,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ReadonlyResourceWritten,
+            {
+                "ReadonlyResourceWritten",
+                "The resource '{0}' is declared 'readonly', but the clause '{1}' writes it.",
+                "A `readonly` resource is only ever read (design principles 9.12, 15.5): the graph a function is, and the spelling of a name, are representations nothing that runs writes, so no call can declare a write of one and two accesses to it never conflict and need no order. Drop the `var` and write the entry as a read (`uses {0}`), or drop `readonly` from `resource {0}` if the program really writes it.",
+            },
+        },
+        {
+            SemanticDiag::VariableInUses,
+            {
+                "VariableInUses",
+                "The variable '{0}' is named in the resource clause '{1}'.",
+                "A clause names what a call touches outside the function's own variables: the external resources it reads or writes, and the handle parameters it is handed (design principles 3.3). A variable is declared once, where it is created: a `var` parameter in the parameter list, a module variable by the `var` in its declaration, a captured one by the `var` or `let` that binds it. Which of them a call touches is measured from the body, and the signature the compiler derives prints them. Remove the entry.",
+            },
+        },
+        {
             SemanticDiag::CmlUnsupportedConstruct,
             {
                 "CmlUnsupportedConstruct",
@@ -1693,6 +1709,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::SpellingNotDeclared,
+            {
+                "SpellingNotDeclared",
+                "This body reads the spelling of the program, and its type does not declare it.",
+                "Reading the spelling is a capability a signature writes in the same clause as 'pure' and 'uses': the name of a graph or of a function, the source position of a node, its creation number and the order it was created in, and the text it shows. A body whose type does not write 'spelling' is one the compiler guarantees reads none of them, so a rule, a 'when' condition and a pass built without it cannot depend on how the program was written (design principles 9.5). Write 'spelling' in the declaration's clause to say the body may read them, or stop reading them -- to pick one of two functions, hand the function value to the transform instead of finding it by name, and to order two nodes, use the canonical order 'nodes' gives.",
+            },
+        },
+        {
             SemanticDiag::TypeAliasRecursionUnrepresented,
             {
                 "TypeAliasRecursionUnrepresented",
@@ -1813,19 +1837,67 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RefContentHoldsRef,
+            {
+                "RefContentHoldsRef",
+                "'{0}' cannot be the content of a reference: {1}.",
+                "A reference is a box reclaimed by counting the handles that point at it: the last handle to go frees it (design principles 3.3). A box that holds a reference -- directly, or through a field, an element, a variant's payload, what a function takes or returns, or a value a closure captures -- keeps that other box's count above zero for ever, so neither is freed and the program holds values it can no longer reach. The content is any other type. When the value to store already holds a reference, read what it holds out first and make the box of that value, or keep the one reference instead of making a second box.",
+            },
+        },
+        {
+            SemanticDiag::ResourceInferenceConflict,
+            {
+                "ResourceInferenceConflict",
+                "The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.",
+                "A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.",
+            },
+        },
+        {
+            SemanticDiag::ClosureAssignsCapturedName,
+            {
+                "ClosureAssignsCapturedName",
+                "'{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name.",
+                "A closure holds a value, not a place, so an assignment to a name outside it would write nothing the closure can see. Three ways out: return the new value as the closure's result and let the caller bind it; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`, so every round hands the next one a value; or hold the state in a `Ref` (`let r = ref(0)`, `get(r)`, `set(r, v)`), which a closure may capture because a handle is a value.",
+            },
+        },
+        {
+            SemanticDiag::CapturedVarWrittenAfterTheClosure,
+            {
+                "CapturedVarWrittenAfterTheClosure",
+                "'{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read.",
+                "The closure holds the value `{0}` had when it was made, so this assignment cannot reach it. Three ways out: return the new value as the closure's result; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on assigning a name of its own, bind it first (`let x0 = x`) and let the closure mention `x0`.",
+            },
+        },
+        {
+            SemanticDiag::CapturedVarHandedToVarParameter,
+            {
+                "CapturedVarHandedToVarParameter",
+                "'{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure.",
+                "The write stands in the callee and is handed back to `{0}` where the call is, so it changes a name the closure already holds the value of. Three ways out: return the new value instead of writing it back; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on handing the name to a call, bind it first (`let x0 = x`) and hand `x0` on.",
+            },
+        },
+        {
+            SemanticDiag::VarContextParameterCannotBeBound,
+            {
+                "VarContextParameterCannotBeBound",
+                "'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.",
+                "A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.",
+            },
+        },
+        {
+            SemanticDiag::OperatorAccessesUndeclared,
+            {
+                "OperatorAccessesUndeclared",
+                "The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches.",
+                "An operator that itemizes none is read as writing the global resource, and the graph builder read the same operator a different way -- every operand read-modify-written -- so one call was on the sync chain for one reader and not for the other, and neither answer was a declaration. This is a mistake in the operator's registration, not in a program: declare its accesses where it is registered (OperatorTable::declareResources in src/builtin/executors/builtin_semantics.cpp) -- the empty list where it is pure, the operand or ambient resource it reads or writes otherwise -- and the load goes on.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
                 "{0} is not in a sync block, and {1}.",
-                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.",
-            },
-        },
-        {
-            SemanticDiag::EffectNotExecuted,
-            {
-                "EffectNotExecuted",
-                "{0} has side effects but is never executed: {1}.",
-                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync {{ ... }}'; in an arm of an 'if', write 'then sync {{ ... }}' or 'else sync {{ ... }}'; in a function body, declare the body 'func f(): T sync {{ ... }}', or use the effect's result. A bare 'sync {{ ... }}' written as a statement of a body that is not a sync block is not run either.",
+                "Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).",
             },
         },
         {
@@ -1930,6 +2002,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StatementAfterFail",
                 "This statement cannot run: the 'fail' written before it never returns.",
                 "A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.",
+            },
+        },
+        {
+            SemanticDiag::UnusedAssignedValue,
+            {
+                "UnusedAssignedValue",
+                "The value this assignment stores is never read.",
+                "An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.",
             },
         },
     };

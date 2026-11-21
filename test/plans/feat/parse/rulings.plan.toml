@@ -346,3 +346,32 @@ expect_diagnostic_line = 7
 expect_output_contains = ["names its parameters", "(x: float, y: float) => float"]
 expect_output_not_contains = ["UnknownInternalError", "expected '='"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "rulings.open_range_not_in_language"
+desc = "There is no open interval `a..` (the author's ruling of 2026-11-16): a range has only a bounded form, its result is an array, and no syntax is added for counting until a condition holds -- that is the counting `while` loop. `1..` has no right-hand side, and it is refused by name - SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself (18:17) - instead of the parser taking the `return` of the following line for the missing operand and reporting `Unexpected 'return'; expected an expression` at 8:5, which is a token that is not wrong. The help gives the author's replacement wording, and the two readings that do have a second operand are accepted in the same program above the refusal: `1..4` is the interval and `inc..dbl` is the composition, so a change that made `..` unreadable everywhere would be red here."
+kind = "negative"
+case = "../../../cases/parse/rulings/open_range.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::IntervalHasNoOpenForm"
+expect_diagnostic_code = "0x02000015"
+expect_diagnostic_line = 18
+expect_diagnostic_column = 17
+expect_output_contains = ["An interval has two ends: 'a..' has no open form", "loop i = 0, … while condition do (i + 1, …)", "its result is an array", "no syntax is added for one"]
+expect_output_not_contains = ["UnknownInternalError", "Unexpected 'return'", "expected an expression"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.count_until_by_while"
+desc = "Counting until a condition holds is the counting `while` loop, the writing the author's ruling of 2026-11-16 sends the open interval `a..` to: one counter stops at the first square that is not below 1000, and two counters stop when the running sum passes 100 (their value is the tuple of both). No range is asked for whose end is a condition, and every back end prints the same three numbers."
+kind = "behavior"
+case = "../../../cases/parse/rulings/count_until.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "32 14 105\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

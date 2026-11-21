@@ -34,7 +34,7 @@
 /// named again here because it is the whole vocabulary of what follows. A forward transform carries
 /// `Lift<T> = (T, Tangent<T>)` (`stdlib/rulesets/jvp.cml`), so the cut `split` makes between "the
 /// part computable now" and "the part computable later" is the cut between those two components --
-/// not a position among the parameters (author, 15:25).
+/// not a position among the parameters.
 /// @example is_same::<Tangent<float>, float>()    // true
 export type Tangent<T>
 
@@ -43,13 +43,14 @@ export type Tangent<T>
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
 /// @example let forward = jvp((x: float) => x * x)
+#macro
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
 /// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
 /// the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 /// graph too, so a body that needs a value it computed carries it instead of computing it again.
 ///
-/// The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+/// The cut: the front half
 /// takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
 /// residuals -- the values it reads -- and takes the tangents and nothing else.
 ///
@@ -64,6 +65,7 @@ export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 /// at the top of this file.
 /// @example let step = split
+#macro
 export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, (float, float) => float)
 
 /// The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
@@ -82,9 +84,17 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 ///
 /// **`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
-/// that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+/// that makes it is `modules/transforms/transpose/signature.cpp#transposeSignature`. So `transpose(f)` is
 /// called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
+///
+/// The member is built once for a graph version and kept: the walk reads
+/// the graph and the graphs it refers to and never the value of a call, so a second call about the
+/// same version names the member the first one built. `vjp`'s pullback and `grad`'s derivative are
+/// called once per step of a loop over one `lin` graph, and the transposition is what the transform
+/// costs, not what a call of it costs. What stays per call is the function value, closed over the
+/// residuals that call's `lin` carries.
 /// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
+#macro
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 
 
@@ -101,11 +111,11 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
 /// straight-line bodies.
 /// @example let batched = vmap((x: f32) => x * 2.0)
+#macro
 export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 
 /// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
-/// property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
-/// of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+/// property "a call of it is recomputed on the backward pass instead of kept". The property is the graph's, not the call site's and not a tag's: the call
 /// answers with a new graph whose body is the body it was given, so a call through it is a call of
 /// the same function and no value changes -- what changes is what a step that cuts the graph in two
 /// has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
@@ -154,4 +164,5 @@ export type FirstWithAsParam<F> = match type WithOf<F> { case (W, ...Rest) => <.
 /// than a value).
 /// @example-fragment `weighted` is a function the program declares, because the example needs a `with` parameter
 /// @example let reinterpreted = first_with_as_param(weighted)
+#macro
 export func first_with_as_param::<F>(f: F): FirstWithAsParam<F> when is_function::<F>()

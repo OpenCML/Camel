@@ -21,33 +21,33 @@ func isZero(n: Node): bool {
     }
 }
 
-func isAddZero(n: Node): bool {
+func isAddZero(n: Node): bool spelling {
     let ins = inputs(n)
     return opText(n) == ':op/add_l' && len(ins) == 2 && isZero(ins[1])
 }
 
-func isAdd(n: Node): bool {
+func isAdd(n: Node): bool spelling {
     return opText(n) == ':op/add_l'
 }
 
-func isString(n: Node): bool {
+func isString(n: Node): bool spelling {
     return typeText(n) == 'string'
 }
 
-func mainNodes::<F>(p: F): Node[] {
+func mainNodes::<F>(p: F): Node[] spelling {
     let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'main'>
     return nodes(found[0])
 }
 
 /// Replaces `x + 0` by `x`.
-export func fold_zero_adds::<F>(p: F): F! sync {
+export func fold_zero_adds::<F>(p: F): F! spelling sync {
     let t = open(p)
     let hits = mainNodes(p)->filter<isAddZero>
     hits->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
     return commit(t)
 }
 
-export func count_adds::<F>(p: F): F! sync {
+export func count_adds::<F>(p: F): F! spelling sync {
     println(len(mainNodes(p)->filter<isAdd>))
     return p
 }
@@ -64,7 +64,7 @@ export func commit_twice::<F>(p: F): F! sync {
 }
 
 /// A string where an integer is read: the commit refuses.
-export func break_types::<F>(p: F): F! sync {
+export func break_types::<F>(p: F): F! spelling sync {
     let t = open(p)
     let adds = mainNodes(p)->filter<isAddZero>
     let texts = mainNodes(p)->filter<isString>
@@ -73,7 +73,7 @@ export func break_types::<F>(p: F): F! sync {
 }
 
 /// The value of the node is still read.
-export func erase_read::<F>(p: F): F! sync {
+export func erase_read::<F>(p: F): F! spelling sync {
     let t = open(p)
     let adds = mainNodes(p)->filter<isAddZero>
     erase(t, adds[0])
@@ -88,7 +88,7 @@ export func abort_unused::<F>(p: F): F! sync {
 
 /// Two transactions edit the same graph of one Program: each commit is a value of its own, so
 /// both succeed (design principles 9.1), and the pass hands on the first.
-export func conflict::<F>(p: F): F! sync {
+export func conflict::<F>(p: F): F! spelling sync {
     let first = open(p)
     let second = open(p)
     let adds = mainNodes(p)->filter<isAddZero>

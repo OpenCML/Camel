@@ -1,6 +1,6 @@
 # Block kernel interface proposal
 
-Status: discussion draft for the language author. No syntax or semantics in this
+Status: discussion draft. No syntax or semantics in this
 document are implemented or approved by its existence.
 
 ## Goal and representation
@@ -15,7 +15,7 @@ address space. Physical scheduling is a separate Tiles input.
 prototype can be expressed using graph APIs once their contracts are stable;
 there is no need to introduce an independent kernel-language parser.
 
-## Decisions requested from the author
+## Open decisions
 
 - Is a logical block an ordinary shaped tensor value plus domain constraints, or
   a distinct type? Avoid duplicating all tensor operators without a semantic need.

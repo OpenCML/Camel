@@ -25,11 +25,6 @@ Camel 将可配置的 CMake 选项集中在 `cmake/Options.cmake`，并在配置
 - **注意**：非 x64 或选项为 `OFF` 时，配置日志会标明 `OFF`（含平台原因时另有说明）。
 - **实现**：通过 `add_platform_option` 同时设置编译宏（如 `ENABLE_FASTVM_JIT`、`JIT_TARGET_X64`）。
 
-### `ENABLE_FASTVM_COMPUTED_GOTO`
-
-- **含义**：FastVM 解释器是否使用 **computed goto**（标签值调度）。
-- **实现**：`add_bool_option`，向 `camel_options` 注入 `ENABLE_FASTVM_COMPUTED_GOTO=0|1`。
-
 ### `CAMEL_ENABLE_PYTHON`
 
 - **含义**：是否构建 Python 嵌入相关产物：`python.cmo`、`pyplot.cmo`、`py_bridge*` 等（需要本机具备 Python **开发**布局：头文件与导入库；详见 `modules/python` 的探测逻辑）。
@@ -83,7 +78,7 @@ CMake 会缓存布尔选项。若曾经关闭过 `CAMEL_ENABLE_PYTHON`，再次�
 -NoBuild` 又是"只验不建"（默认 `-Config Release`）——在那里按配置判会拒绝一个正确的安装。时间戳、绝对
 路径、用户名不进；ccache 不进（缓存交回的字节与它收到的一样）；clang 的**版本**也
 不进——探版本会让 `-NoBuild` 依赖 `PATH`，换一次工具链就废掉每个安装（这条是否该改，见
-`docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`）。
+`docs/handover/reviews/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`）。
 
 ## 相关文档
 

@@ -12,10 +12,9 @@
  *
  * The copy is made when the call runs, by cloning `f`'s graph into a member of a `GraphDraftGroup`
  * (the shape `split` uses for the graphs it builds); the clone is the whole graph, ports and exits
- * included, so the two graphs are the same function. The author's ruling of 2026-11-01 puts the
- * mark on the *graph* and not on a call site and not in a tag, and says the transform is
- * instantiated with the compile step; until that step exists the mark is set here, where a call can
- * carry it.
+ * included, so the two graphs are the same function. The mark is on the *graph* and not on a call site and not in a tag; the transform is
+ * instantiated with the compile step, and until that step exists the mark is set here, where a call
+ * can carry it.
  */
 
 #pragma once

@@ -7,6 +7,7 @@
  */
 
 #include "camel/compile/gct/tree.h"
+#include "camel/compile/gct/types.h"
 #include "camel/core/operator_semantics.h"
 
 #include <algorithm>
@@ -18,6 +19,7 @@
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 
 namespace camel::compile::gct {
 
@@ -239,6 +241,41 @@ Tree *Tree::of(const Node *node) {
         ->owner;
 }
 
+std::string Tree::makeTypeOfPlaceholder(node_ptr_t expression) {
+    // One expression node is one placeholder: `typeof e` asked twice about one node is one type,
+    // exactly as the placeholder object was one before the front end took it over.
+    for (size_t i = 0; i < typeOfOperands_.size(); ++i) {
+        if (typeOfOperands_[i] == expression) {
+            return std::string(kTypeOfPlaceholderPrefix) + std::to_string(i);
+        }
+    }
+    typeOfOperands_.push_back(expression);
+    return std::string(kTypeOfPlaceholderPrefix) + std::to_string(typeOfOperands_.size() - 1);
+}
+
+node_ptr_t Tree::typeOfOperandOf(const std::string &name) const {
+    const std::string_view written(name);
+    const std::string_view prefix(kTypeOfPlaceholderPrefix);
+    if (!written.starts_with(prefix)) {
+        return nullptr;
+    }
+    const std::string_view digits = written.substr(prefix.size());
+    if (digits.empty()) {
+        return nullptr;
+    }
+    size_t index = 0;
+    for (const char digit : digits) {
+        if (digit < '0' || digit > '9') {
+            return nullptr;
+        }
+        index = index * 10 + static_cast<size_t>(digit - '0');
+        if (index >= typeOfOperands_.size()) {
+            return nullptr;
+        }
+    }
+    return typeOfOperands_[index];
+}
+
 void *Tree::allocate(size_t bytes) {
     bytes = alignUp(bytes);
     if (bytes > kLargeBytes) {
@@ -376,6 +413,13 @@ node_ptr_t Tree::makeWith(size_t argCount) {
 }
 
 node_ptr_t Tree::makeTypeApplication() { return makeNode(NodeKind::TAPP); }
+
+node_ptr_t Tree::makeAssign(AssignmentForm form, std::string_view compoundGroup) {
+    Node *node          = makeNode(NodeKind::ASSIGN);
+    node->tag_          = static_cast<uint16_t>(form);
+    node->payload_.name = intern(std::string(compoundGroup));
+    return node;
+}
 
 node_ptr_t Tree::makeAccs(size_t index) {
     Node *node            = makeNode(NodeKind::ACCS);
@@ -608,6 +652,9 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
+    case NodeKind::ASSIGN:
+        copy->payload_.name = intern(*node->payload_.name);
+        break;
     case NodeKind::TCASE:
         if (node->typeCaseTypeCount() > 0) {
             const size_t count = node->typeCaseTypeCount();
@@ -702,6 +749,13 @@ std::string Node::toString() const {
         return "DREF: " + name();
     case NodeKind::LINK:
         return "LINK: argcnt=" + std::to_string(argCount());
+    case NodeKind::ASSIGN: {
+        std::string text = "ASSIGN: " + to_string(assignmentForm());
+        if (!assignmentOperator().empty()) {
+            text += " " + assignmentOperator();
+        }
+        return text;
+    }
     case NodeKind::WITH:
         return "WITH: argcnt=" + std::to_string(argCount());
     case NodeKind::TAPP:

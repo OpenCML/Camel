@@ -2,7 +2,7 @@
 
 **这是第二份计划。** 第一份是 [plan.cn.md](plan.cn.md)（决策者 2026-10-22 已批复，答复见任务书），它已经定下：`std::cml` 是翻译遍、打印的是当前的图而不是原始源码；`canon(P)` 的等价定义（§2.2）；S0–S5 的划分；§7 七问的答案（`let` 名字用源码名、声明标签用程序级事实表、`#tag { }` 建 `Block` 区域、泛型实例打印成具体函数、v1 一个文件摊平、大常量超限拒绝、打印抽取后的可执行图）。本文件不重复那些结论，只写**剩余工作**、**随仓库变化的修订**与**实测证据**；与第一份冲突的地方以本文件为准并写明原因。
 
-实测基线：`develop 102dbc5d1`（本计划的提交基底），在 88zjwei 上构建后的 `out/latest/bin/camel`。下面每个数字、每条诊断都是这一版跑出来的；测量脚本是本次临时加入、**不提交**的 `test/cases/trans/cml_probe.py`（11 个探针），命令形式是 `camel <file> std::cml [passes]`。反例程序都写在下文里，可逐条重跑。
+实测基线：`develop 102dbc5d1`（本计划的提交基底），在 88zjwei 上构建后的 `out/latest/bin/camel`。下面每个数字、每条诊断都是这一版跑出来的；测量脚本是本次临时加入、**不提交**的 `test/cases/trans/` 下的 `cml_probe.py`（11 个探针），命令形式是 `camel <file> std::cml [passes]`。反例程序都写在下文里，可逐条重跑。
 
 **基线与移动的目标**：写这份文件时 `origin/develop` 已经前进到 `38fbbb7b1`（图的边重构的数据边与顺序边语义、两份裁定——《一元算子比 `->` 结合得松》与《改写保持源码程序运行的每个效应》、数组归约内核，以及两份问题文件）。本计划依据的文件在这段区间里**只有一处变化**：`src/compile/gir/builder_expr.cpp#Builder::orderAfterLastWriter` 的注释（把待办指向裁定后的说明），行为没有变；`src/passes/trans/json/**`、`src/passes/trans/cml/**`、`test/tools/cml_roundtrip.py`、`include/camel/runtime/graph.h` 都没有改动。所以下面的数字与缺口在新基线上同样成立；实施 S3a 时以当时的 `develop` 为准，并注意 §8 第 5 问已经由那份裁定回答了一半。
 
@@ -429,7 +429,7 @@ type V = { x: int }  +  同一个 func f      -> status=0
 
 **一个口径坑（记下来）**：同一个普查脚本改成用**相对路径**跑（`camel test/cases/...`），读数变成 `printed=551 refused=1701 frontend=1125`——**和 `cml-sweep.mjs` 的 559/1814/1004 差 113 条**。`cml-sweep.mjs` 用 `ROOT` 绝对路径 + `cwd: ROOT`；复算必须照它，否则先差出 113 条再讨论分组。
 
-**2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/questions/2026-11-02-cml-sync-tail-write.md`）**
+**2026-11-02 第二十四刀：五次都没落地，交班（页：`docs/handover/reviews/2026-11-02-cml-sync-tail-write.md`）**
 
 按第二十三刀的入口判据动手，**只改入口**（`handsTail` 认"`tail` 站在退出链上"+ 放开 `regionNeedsSync(0)`），探针原文：
 
@@ -688,7 +688,7 @@ func pick(x: int): string { return 'wide' }
 | `DIFFERENT` | 50 行 | **49 行，新增 0** |
 | `families` | 52 | **52** |
 
-**这一刀没做、要单独一刀的**：①**区域内的读**（`arm_write.cml` 读的是分支留下的版本，那里变量名本来就对）；②另外两条**行为已相同**但 canonical 仍差，差的是**另一个缺陷**——循环/分支体的尾值打印成 `return i + 1` / `return println(2)`。问题页：`docs/handover/questions/2026-11-02-cml-var-version-in-printed-text.md`。
+**这一刀没做、要单独一刀的**：①**区域内的读**（`arm_write.cml` 读的是分支留下的版本，那里变量名本来就对）；②另外两条**行为已相同**但 canonical 仍差，差的是**另一个缺陷**——循环/分支体的尾值打印成 `return i + 1` / `return println(2)`。问题页：`docs/handover/reviews/2026-11-02-cml-var-version-in-printed-text.md`。
 
 **2026-11-02 第十四刀（A7 第 4 条）：前缀 `-` 比 `^` 松，括号表把它放严了一级。** 缺陷原文：`parse/rulings/power` 原程序第二行 `-9 9 -4 -4 12`；打印版 `-9 -9 -4 -4 12`——`(-x) ^ 2` 被打成 `-x ^ 2`，而解析器读它是 `-(x ^ 2)`，9 变成 -9。
 
@@ -737,7 +737,7 @@ func pick(x: int): string { return 'wide' }
 1. **今天能打印的只是少数**：`test/cases/**/*.cml` 共 **2387** 个文件，`std::cml` 打印 **348** 个，以 `CmlUnsupportedConstruct`/`CmlBigConstant` 拒绝 **1338** 个，其余 701 个本来就编译不过（诊断用例）。能打印的集中在 `compile` 122、`consistency` 50、`opt` 39、`modules` 38、`linear` 23、`trans` 21。
 2. **往返性质今天就有反例**：打印成功且能重新编译的 348 个里，**309 个等价、35 个不等价、4 个的打印结果连 `std::jgir canonical=true` 都跑不出来**。这 35 个不是「看起来不整齐」，是打印器**丢节点**或**改接线**，见 §3.9 与 §7。
 3. **最大的两类缺口是声明与类型**：拒绝理由归并后 131 类，最多的是「算子没有源码形式」463 个、「参数的类型打不出来」273 个、「`with` 参数是命名类型」66 个、「图名不是源码标识符」58 个、「宏图」38 个、「参数是命名类型」35 个、「返回类型是带标签/可空/单元组」31 个、「间接调用少了函数值」26 个。
-4. **优化过的图打不出来**：`camel x.cml std::opt std::cml` 与 `std::opt::inline std::cml` 今天都拒绝，理由是 `Inline` 区域（`cml.cpp#validateGraph`）。第一份计划把这当成给人用的附带功能；按裁决 9.7（改写必须保持源码程序运行的每个效应）它其实是**必须**能打的一条路。
+4. **优化过的图打不出来**：`camel x.cml std::opt std::cml` 与 `std::cxx::inline std::cml` 今天都拒绝，理由是 `Inline` 区域（`cml.cpp#validateGraph`）。第一份计划把这当成给人用的附带功能；按裁决 9.7（改写必须保持源码程序运行的每个效应）它其实是**必须**能打的一条路。
 5. **等价判定器看不见第三种边**：canonical v2 的节点输入只有 `normal`/`context`/`control` 三种（`gir_canonical.cpp#CanonicalDocument::inputsJson`），**没有顺序边**（实测：一个带 `var` 写与同资源效应的程序，整个 canonical 文档里 `order` 出现 0 次；节点字段只有 `callee/id/inputs/kind/payload/type/value`）。图的边重构落地后每个同资源效应对与每个 `var` 写写对都有顺序边，判定器却看不见——**这是假绿的来源**。
 6. **判定器也看不见 `Block` 区域**：canonical 主动**抹掉** `Inline` 与 `Block`（`gir_canonical.cpp#CanonicalDocument::canonicalRegionOf`），而标签是程序的一部分（设计原则 2.5 明说「含区域、写法、标签」）。`Inline` 抹掉是对的（内联体不是另一个程序），`Block` 必须留下。
 7. **与图的边重构的接口是 8 处读今天表示的地方**：`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`（`Gate`/`Sync` 节点）与 `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`（`ctrlInputsOf`）；`cml.cpp#regionNeedsSync` 不在这八处里——它已由 sync 边判定（`syncPredsOf`）。图的边重构删掉 `Ctrl` 这一种类与这两种节点（`edges.cn.md:15, 25, 48`；`README.cn.md:402, 409`）。**打印机今天就是按这些写的**，本计划的第一步就是让它不按这些写（§5）。
@@ -776,7 +776,7 @@ func pick(x: int): string { return 'wide' }
 | 闭包与函数值 | 函数常量 + `FILL` + `capturePorts` | lambda、被捕获的名字 | **能**（有边界） | 共享的 lambda（一个函数值多处用）与匿名捕获名被拒绝（`cml.cpp#validateGraph`） |
 | 调用（直接/间接） | `FUNC`/`CALL` | `f(x)`、函数值调用 | **直接能，间接常拒绝** | 26 个用例 `an indirect call without one function value`（`cml.cpp#callExpression`） |
 | 效应与资源 | 效应的资源顺序来自 `sync` 与资源（`edges.cn.md:11`）；资源冲突由 `resources.cpp` 判定 | 效应就是普通调用 | **取决于 wn 算子是否有源码形式** | `test/cases/resources/effects.cml` → `the operator 'array:sort_in_place'`；`conflict_per_resource.cml` → `the operator 'rand:seed'` |
-| 写法（egraph 等价类） | `hasWritings` + 抽取（`pass.cpp#applyPassesDetailed`） | **没有**（第一份计划 §7 已答：打印抽取后的图） | **拒绝，除非驱动器先抽取** | `std::cml` 的 `acceptsWritings()` 为假（`cml.h#CmlDumpPass::acceptsWritings`）；`std::opt::saturate std::cml` 实测打印成功（抽取后的可执行图） |
+| 写法（egraph 等价类） | `hasWritings` + 抽取（`pass.cpp#applyPassesDetailed`） | **没有**（第一份计划 §7 已答：打印抽取后的图） | **拒绝，除非驱动器先抽取** | `std::cml` 的 `acceptsWritings()` 为假（`cml.h#CmlDumpPass::acceptsWritings`）；`std::cxx::saturate std::cml` 实测打印成功（抽取后的可执行图） |
 | 命名类型（struct/enum）与类型参数 | `StructType::named()`/`typeArgCount()` | `type Point = { x: int }`、`enum` | **拒绝** | `checkType` 的 `Struct` 分支（`cml.cpp#checkType`）；`Option<int>`、`Tensor`、`Mlp`、`Node`、`Program` 全走这里 |
 | 带标签/可空/单元的元组与返回类型 | `TupleType::isTagged()/isNullable()/isCell()` | `T?`、`$tagged` 元组 | **拒绝** | `cml.cpp#checkType`（元组）、`cml.cpp#checkSignatureType`（返回类型；实测 31 个用例） |
 | 数组、匿名 struct、元组、普通函数类型 | `TypeCode::Array/Struct/Tuple/Function` | 字面量 | **能** | `cml.cpp#checkType` 放行这些；其余落到同一函数的 `default` 分支 |
@@ -794,12 +794,12 @@ func pick(x: int): string { return 'wide' }
 代价：这是**表**的工作，不是语义的工作：每个 URI 要么给一条语法（`x->map<f>` 这类高阶形式），要么确认它是编译期/内部算子（`:mark/*`、`:struct/*`）而应当写成它降级前的源码形式。判断需要逐 URI 的证据，所以它是 S5 里最大的一块。
 
 **缺口 B：命名类型与声明（273 + 66 + 35 + 31 = 405 个用例）。**
-复现：`camel test/cases/trans/cml/refuse/named_type.cml std::cml` → `std::cml cannot print get: a parameter is the named type 'Point'.`；`camel test/cases/compile/enum/generic_tree.cml std::cml` → `... a parameter has the type 'Option<int>', which std::cml does not print.`；`camel test/cases/modules/onnx/export_train_step.cml std::cml` → `a 'with' parameter is the named type 'Mlp'`。
+复现：`camel test/cases/trans/cml/named_type.cml std::cml` → `std::cml cannot print get: a parameter is the named type 'Point'.`；`camel test/cases/compile/enum/generic_tree.cml std::cml` → `... a parameter has the type 'Option<int>', which std::cml does not print.`；`camel test/cases/modules/onnx/export_train_step.cml std::cml` → `a 'with' parameter is the named type 'Mlp'`。
 停在哪：`cml.cpp#checkType`（命名 struct 与 `default` 分支）、`cml.cpp#checkType` 的元组分支（带标签元组）。
 代价：要打印声明本身（`type`/`enum` 声明、字段名、类型参数），还要一条**程序级声明表**（第一份计划 §7 问题 2 已答「程序级事实表，键为声明身份」）。`Tensor`、`Node`、`Program` 也是命名类型，所以 ONNX/autodiff/graph 三个模块语料的 38+ 个用例都挂在这一类上——它是**整程序**能不能打印的前提。
 
 **缺口 C：优化过的图（`Inline` 区域）。**
-复现：`camel test/cases/trans/cml/refuse/inline_region.cml std::opt::inline std::cml` → `std::cml cannot print main: a 'inline' region, which is not a branch or loop region`（`cml.cpp#validateGraph`）。
+复现：`camel test/cases/trans/cml/refuse/inline_region.cml std::cxx::inline std::cml` → `std::cml cannot print main: a 'inline' region, which is not a branch or loop region`（`cml.cpp#validateGraph`）。
 停在哪：`cml.cpp#validateGraph` 的区域循环只放行 `Arm`/`LoopCond`/`LoopBody`。
 代价：内联体在源码里没有专门写法，唯一正确的做法是**把它的语句按它自己的顺序摊进外层区域**——也就是判定器已经在做的抹掉（`gir_canonical.cpp#CanonicalDocument::canonicalRegionOf`）。代价是「被内联的入口提升成虚拟 `main`」这条（`gir-interchange.md` 已列为「还没做，属于让打印器必要的那一步」）要同时落；否则原文的 `main` 图在重编译后没有调用者，canonical 的「只取可达图」会把两侧的图集比得不一样。**S3b 的第一件事就是量这一条**。
 
@@ -884,8 +884,8 @@ func main(): int sync { var x = 1
 |---|---|---|
 | `test/cases/trans/cml/{linear,branch,loop,closure,with_param,var_param}.cml` | 往返等价 + stdout + 确定性 + 名字 | **全绿**（`trans.cml` 计划） |
 | 5 个 `refuse/*.cml` | 精确诊断、不产生半份输出 | **全绿**（`cml_contract.py#check_refusal`） |
-| `std::opt::saturate std::cml` | 打印抽取后的可执行图 | **绿**（实测：`let x: int = 5`） |
-| `std::opt std::cml` / `std::opt::inline std::cml` | 打印并往返等价 | **红**：`a 'inline' region ...` |
+| `std::cxx::saturate std::cml` | 打印抽取后的可执行图 | **绿**（实测：`let x: int = 5`） |
+| `std::opt std::cml` / `std::cxx::inline std::cml` | 打印并往返等价 | **红**：`a 'inline' region ...` |
 | `compile/constas/constas_column.cml` | 往返等价 | **红**：打印出 `func main(): int sync { return 0 + 1 + 2 + 3 }`，而原图多 3 个 DATA 节点与 3 个二元 OPER 节点（打印器**丢节点**） |
 | `compile/rest_params/rest_inline.cml`、`rest_params.cml`、`constas_forward_rest.cml`、`constas_with_rest.cml` | 往返等价 | **红**（4 条同族） |
 | `compile/return_type/accepted.cml` | 往返等价 | **红**：打印出 `func a(x: int): int { return x }`，原图多 1 个 DATA 节点 |

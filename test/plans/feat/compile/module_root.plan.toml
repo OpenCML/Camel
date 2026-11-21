@@ -65,7 +65,7 @@ name = "root.lib_uses_inline"
 desc = "The same after inlining."
 kind = "behavior"
 case = "../../../cases/compile/module_root/lib_uses.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::fvm"]
 expect_exit = 0
 expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
 

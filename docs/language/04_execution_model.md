@@ -47,11 +47,40 @@ Hello, Camel! x2
 
 求值由依赖驱动，没有固定的执行顺序：一个表达式被求值，当且仅当它的结果被需要，即经数据边或控制边到达函数的返回。互不依赖的表达式之间没有先后，可以乱序或并行。
 
-**同步块之外、结果没有被使用的带副作用的调用不会执行。** 这是按依赖求值的自然结果，是合法的，不是错误。编译器给出警告 `SemanticDiag::EffectNotExecuted`，以免漏写 `sync`：
+**读按需，写按区域。** 一个读——变量的读、外部资源的读——被执行，当且仅当它的结果被需要。而**对外部资源的写由所在的区域用到**（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)）：区域运行时，区域里对外部资源的写都执行，不论结果有没有人用，也不需要写成同步块。`main` 的函数体就是一个区域，所以一个不写 `sync` 的函数体里的裸 `println(x)` 照样执行：
+
+```cml
+func main(): int {
+    println('alpha')
+    println('beta')
+    return 0
+}
+```
+
+```text
+alpha
+beta
+```
+
+会写的语句随它所在的区域运行（2026-11-17 的裁定）：循环的值没人要，循环照样运行，循环体里的写照常执行；分支写成语句时，它取的那条臂同样运行。编译器不为"值没人要"这件事报任何诊断——一句没被执行的语句不是一件可报告的事，值没人要是关于值的事实，不是关于效应的：
+
+```cml
+func main(): int {
+    loop s = 0 for i in [0, 1] do { println('round'); s + i }   // 值没人用，循环体里的写照常执行
+    return 0
+}
+```
+
+```text
+round
+round
+```
+
+真正不执行的是**没人要的读**：读外部资源的结果没人用时它就不执行，和读一个变量没人用一样，这条语句同样不报任何东西。`sync` 改变的不是"写要不要执行"，而是区域里相邻语句的先后（4.3）。
 
 ```cml
 func greet(): int {
-    println('hello from greet')     // 结果没人用，也不在同步块里：不执行
+    println('hello from greet')     // 写外部资源：greet 的函数体运行，这行就执行
     return 1
 }
 
@@ -62,23 +91,11 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> greet.cml:2:5
-   |
- 2 |     println('hello from greet')     // 结果没人用，也不在同步块里：不执行
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes)
-      nothing needs does not run, and a sync block nothing needs does not run either, so the effects
-      written directly in it do not run with it. This is legal, and where the effect is written
-      decides the writing that runs it: in a loop body, make the body a sync block with
-      'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a
-      function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare
-      'sync { ... }' written as a statement of a body that is not a sync block is not run either.
-
+hello from greet
 1
 ```
 
-警告输出到标准错误，程序照常运行。用 `-Wno-effect-not-executed` 关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../cli.cn.md)“诊断”）。
+警告输出到标准错误，程序照常运行。用 `-Wno-unused-assigned-value` 关闭某个警告、`-Wnone` 全部关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../cli.cn.md)“诊断”）。
 
 ## 4.3 `sync`
 
@@ -90,7 +107,7 @@ help: Evaluation is driven by dependencies: an expression whose result (or the v
 
 - 作函数体：`func f(...): T sync { ... }`（`sync` 在返回类型之后）。
 - 作分支臂或 lambda 体：`if c then sync { ... }`、`(x: int) => sync { ... }`。
-- 单独的块语句 `sync { ... }`。注意它本身也是一个表达式：写在非同步的函数体里而值没有被使用时，整个块不执行。
+- 单独的块语句 `sync { ... }`。注意它本身也是一个表达式，值可以没人用；但块**不是**一个可以选着运行或不运行的区域，所以块里对外部资源的写照样执行（4.2，设计原则 3.1：写是所在区域的根）。
 - **同步块不向内继承**（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）：同步块只管它自己直接写着的语句，写在里面的分支臂、循环体与嵌套块按它们自己的写法执行，要同步就在那里写 `sync`——一个块的含义不随它写在哪里而变。下面这个 `if` 本身在同步链上，它的臂不是：臂按依赖求值，值没有被用到的 `println(1)` 不执行，`println(2)` 是臂的值、也就是 `if` 的值，所以只有它执行。要两句都打印，写 `if c then sync { ... }`：
 
 ```cml
@@ -109,11 +126,11 @@ func greet(): int sync {
 
 ### 4.3.2 函数的行为由它自己决定
 
-函数编译成它自己的子图。调用只是把这个子图节点放进更大的图里，不改变它的结构。所以从同步块里调用一个函数体不是同步块的函数，函数体内仍按依赖求值：
+函数编译成它自己的子图。调用只是把这个子图节点放进更大的图里，不改变它的结构。所以从同步块里调用一个函数体不是同步块的函数，函数体仍然是**一个区域**，里面的写照样执行：
 
 ```cml
 func log(x: int): int {
-    println(x)          // 结果没人用，函数体不是同步块：不执行
+    println(x)          // 结果没人用，但它是写：函数体这个区域运行它，它就执行
     return x + 1
 }
 
@@ -126,10 +143,12 @@ func main(): int sync {
 ```
 
 ```text
+1
+2
 3
 ```
 
-（另有一条 `SemanticDiag::EffectNotExecuted` 警告指向 `println(x)`。）`main` 的函数体是同步块，两次 `log` 调用按顺序执行；但 `println(x)` 属于 `log` 自己的函数体。要打印，把 `log` 写成 `func log(x: int): int sync { ... }`。
+`main` 的函数体是同步块，两次 `log` 调用按顺序执行，各自先把参数打印出来（`1`、`2`），最后 `main` 打印 `3`。`println(x)` 属于 `log` 自己的函数体，而那个函数体是一个区域，所以它执行——不需要 `sync`，也不需要警告（4.2：读按需，写按区域）。
 
 ### 4.3.3 函数体的 `sync`（函数修饰符）
 
@@ -137,12 +156,12 @@ func main(): int sync {
 
 ```cml
 func f(): int {
-    println('f')        // 不执行：函数体不是同步块
+    println('f')        // 执行：函数体是一个区域
     return 1
 }
 
 func g(): int sync {
-    println('g')        // 执行：函数体是同步块
+    println('g')        // 执行，而且与相邻语句有先后
     return 2
 }
 
@@ -153,9 +172,12 @@ func main(): int sync {
 ```
 
 ```text
+f
 g
 3
 ```
+
+`f` 和 `g` 都打印：函数体不写 `sync` 只意味着块里各语句之间没有 `sync` 给的顺序，不意味着里面的写不执行。
 
 要按顺序执行一个函数体，就把 `sync` 写在函数体位置；lambda 的函数体是块，`sync` 写在块前：`(x: int) => sync { ... }`。lambda 头上没有修饰符（`sync (x: int) => ...` 是语法错误），函数类型也没有：`sync` 是块的性质，不是类型的性质。
 
@@ -191,8 +213,8 @@ func main(): int sync {
 ```
 
 - 写入不在同步块里、且此后没有任何地方再读该变量时，这次修改不执行（按依赖求值）。
-- 不在同步块里的写仍排在它之前写着的读之后（读看到的是写在它之前的那次写的值），但它不保证执行：之后没有人读该变量时它不执行；编译器给出警告 `SemanticDiag::IgnoredSideEffect`。
-- 修改的追踪覆盖捕获：函数通过捕获写入一个 `var`，调用处记为对该变量的一次写入。调用处看得见它的函数体的函数值不是例外：在同一个函数里绑定到名字的 lambda 就是这样，`f()` 与调用一个有名字的函数一样，记为对捕获的 `c` 的一次写入。只有调用处看不见它的函数体的函数值才只能按它的类型（`var` 形参）识别副作用：作为实参传入的值、作为返回值得到的值，以及存进容器或结构之后再取出来的值。
+- 不在同步块里的写不保证执行：之后没有人读该变量时它不执行；编译器给出警告 `SemanticDiag::IgnoredSideEffect`。`var` 不是资源，它的写之间没有顺序边（[设计原则](../design-principles.cn.md) 3.1、3.5）：读者看到的先后是一条数据依赖——读看到的是写在它之前的那次写的值。
+- 修改的追踪覆盖调用里的写：函数写入一个 `var`，调用处记为对该变量的一次写入。调用处看得见它的函数体的函数值不是例外：在同一个函数里绑定到名字的 lambda 就是这样，`f()` 与调用一个有名字的函数一样，记为对 `c` 的一次写入。只有调用处看不见它的函数体的函数值才只能按它的类型（`var` 形参）识别副作用：作为实参传入的值、作为返回值得到的值，以及存进容器或结构之后再取出来的值。这样的函数体可以写的是模块的 `var` 或 `Ref` 的内容：闭包捕获的是值，不是位置，所以给创建它的那个调用里的名字赋值，就在写入处被拒绝（`SemanticDiag::ClosureAssignsCapturedName`，[设计原则](../design-principles.cn.md) 3.5），真正需要共享的可变状态放 `Ref`。
 
 副作用的管理与追踪仍在研究中（设计原则 3.5）。同一个可变对象在同步块之外被多处写入时的行为尚未决定。
 
@@ -244,6 +266,8 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 help: Ensure the index is within the valid range of the collection.
 ```
 
+位置行里的路径就是你写在命令行上的那个写法：`camel fault.cml` 打印 `fault.cml:4:15`，写成 `.\fault.cml` 就打印 `.\fault.cml:4:15`，给绝对路径就打印绝对路径。编译器不把它改写成别的形式，所以同一份源码在哪台机器上都给出同一段诊断。
+
 把故障隔离在子图边界上的算子是 `attempt`（见 [6.10.1](06_expressions.md)）。
 
 **`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。
@@ -289,7 +313,7 @@ error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) ex
 | `std::jit` | 带即时编译的字节码虚拟机；不能编译的图由解释器执行 |
 | `std::prl` | 并行调度：互不依赖的节点可以并发执行 |
 | `std::macro` | 提前求值 macro 调用 |
-| `std::opt`、`std::opt::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt` | 优化 |
+| `std::opt`（默认流水线的名字）、`std::cxx::inline`、`std::cxx::fold`、`std::cxx::cse`、`std::cxx::dce` | 优化 |
 | `std::rgir`、`std::gir` | 打印图（DOT 格式），不运行 |
 | `std::stats` | 打印图的统计数字，图原样传下去 |
 | `onnx::export`、`std::cpp` | 转译为 ONNX 模型、C++ 源码 |

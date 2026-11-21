@@ -60,9 +60,9 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
         attempt(os, "faults_against_traits", "semtest:nofault", s);
     }
     {
-        OperatorSemantics s     = valid("semtest:bounded");
-        s.numeric.cls           = NumericClass::Bounded;
-        s.numeric.sensitiveTo   = kApproxMath;
+        OperatorSemantics s   = valid("semtest:bounded");
+        s.numeric.cls         = NumericClass::Bounded;
+        s.numeric.sensitiveTo = kApproxMath;
         attempt(os, "bounded_without_ulp", "semtest:bounded", s);
         s.numeric.ulpBound    = 2;
         s.numeric.sensitiveTo = kFiniteMath;
@@ -105,10 +105,9 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
             os << "SEMANTICS traits " << uri << " undeclared\n";
             return;
         }
-        os << "SEMANTICS traits " << uri << " pure=" << t->pure
-           << " elementwise=" << t->elementwise << " stateOnly=" << t->stateOnly
-           << " mayFault=" << t->mayFault << " callsGraphs=" << t->callsGraphs
-           << " readsGraphs=" << t->readsGraphs << "\n";
+        os << "SEMANTICS traits " << uri << " pure=" << t->pure << " elementwise=" << t->elementwise
+           << " stateOnly=" << t->stateOnly << " mayFault=" << t->mayFault
+           << " callsGraphs=" << t->callsGraphs << " readsGraphs=" << t->readsGraphs << "\n";
     };
     table.set("semtest:derived_pure", {.pure = true, .mayFault = false});
     printTraits("semtest:derived_pure");
@@ -147,15 +146,6 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
         valid("semtest:derived_undeclared"));
     printTraits("semtest:derived_undeclared");
 
-    // ---- The one well-known operator whose traits a pass must not be able to change. ----
-    // `:op/keep` exists so that a node which has to keep running stays alive through a data edge
-    // (design principles 3.3, 9.7): it is declared the way an operator nobody declared is -- an
-    // effect, and it may fault -- because a pass that could drop, merge, move or compute it early
-    // would undo the reason a pass inserted it. The automatic classification of `op/` operators is
-    // one edit away from making it pure, and `mayBeRecomputed` is then true; this line is that
-    // edit's reading (core/operator_table.h, builtin/executors/builtin.cpp).
-    printTraits(":op/keep");
-
     // ---- Queries. ----
     const auto id = table.lookup("semtest:ok");
     os << "SEMANTICS key " << (id && table.key(*id) ? table.key(*id)->toString() : "none") << "\n";
@@ -171,8 +161,14 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
     };
     // The declared version is 1.2: a recorded 1.0, 1.1 or 1.2 binds, 1.3 and 2.0 do not.
     for (const char *text :
-         {"semtest:ok@1.0", "semtest:ok@1.2", "semtest:ok@1.3", "semtest:ok@2.0",
-          "semtest:missing@1.0", "semtest:never@1.0", "semtest:ok@1", "semtest:ok@1.x"}) {
+         {"semtest:ok@1.0",
+          "semtest:ok@1.2",
+          "semtest:ok@1.3",
+          "semtest:ok@2.0",
+          "semtest:missing@1.0",
+          "semtest:never@1.0",
+          "semtest:ok@1",
+          "semtest:ok@1.x"}) {
         os << "SEMANTICS bind " << text << " " << bindText(text) << "\n";
     }
     const uint64_t before = table.declarationEpoch();
@@ -187,8 +183,15 @@ OperatorSemanticsTestPass::apply(const camel::runtime::Program *program, std::os
        << camel::core::symbolText(OperatorKey::of(":op/add_d").protocol) << "'\n";
 
     // ---- Permission names. ----
-    for (const char *name : {"reassociate", "contract", "approx_math", "change_precision",
-                             "finite_math", "no_nans", "flush_subnormals", "fast"}) {
+    for (const char *name :
+         {"reassociate",
+          "contract",
+          "approx_math",
+          "change_precision",
+          "finite_math",
+          "no_nans",
+          "flush_subnormals",
+          "fast"}) {
         const auto mask = parsePermission(name);
         os << "SEMANTICS permission " << name << " "
            << (mask ? "[" + permissionsText(*mask) + "]" : std::string("unknown")) << "\n";

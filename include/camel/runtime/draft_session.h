@@ -21,6 +21,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/resources.h"
 
 #include <cstdint>
 #include <memory>
@@ -128,6 +129,11 @@ void debugDraftRootOpened(const GraphTransaction &transaction);
 void debugDraftRootClosed(const GraphTransaction &transaction);
 #endif
 
+/// A flag of a cell of its own rather than a member: the check is about every commit of the
+/// process, and a test sets it without opening a session.
+bool draftDeliveryCheckEnabled();
+void setDraftDeliveryCheckEnabled(bool enabled);
+
 class RuntimeGraphDraftSession {
   public:
     /// `location` names the place the session was opened, for the Debug-only safepoint check
@@ -143,7 +149,7 @@ class RuntimeGraphDraftSession {
         GCGraph *runtimeRoot, std::source_location location = std::source_location::current());
 
     /// The program the session rewrites; after a commit, the program it produced.
-    const Program *program() const { return program_; }
+    const Program *program() const { return program_.get(); }
     /// The program the drafts of the session read the graphs they refer to in: `program()`
     /// and what the session added to it (the graphs of function values of other programs it
     /// met, the specializations it made). Not a published program.
@@ -151,6 +157,17 @@ class RuntimeGraphDraftSession {
     /// Makes the graphs of `program` that `work()` lacks, and `graph`, visible to the drafts.
     void adoptProgram(const Program &program) const;
     void adoptGraph(GCGraph *graph) const;
+    /// A graph this transaction **made**, not one of the program's edited: the function value
+    /// `outline` hands out names one, and so does anything that builds a graph in a draft instead
+    /// of editing an existing one. What a commit delivers is the draft: the graphs the root
+    /// reaches *and the graphs this edit made* (docs/design/graph-editing 2.5), so a made graph is
+    /// delivered whether or not a draft names it yet -- while `adoptGraph` alone only makes it
+    /// visible to the drafts, and a graph nothing names is in no closure and so was dropped.
+    /// The graph is taken into the work table (`adoptGraph`) and encoded by the next commit as a
+    /// version the program did not hold, beside the graphs the root reaches.
+    void noteMadeGraph(GCGraph *graph);
+    /// The graphs this transaction made, in the order they were made.
+    const std::vector<GCGraph *> &madeGraphs() const { return madeGraphs_; }
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
     /// The context of the program the session rewrites.
     const camel::core::context::context_ptr_t &context() const { return context_; }
@@ -225,6 +242,14 @@ class RuntimeGraphDraftSession {
     /// rewrite, such as the working copy of autodiff) the program is left as it is and
     /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
     const Program *commit(bool detached = false);
+    /// The program the drafts of this session would publish as they stand, encoded but not judged
+    /// and not delivered: the graphs `commit` judges, before any of its checks. A pass whose edit
+    /// gives a body an access its type does not name (`tiles`: a device submission writes the
+    /// ambient `tiles:driver`) reads the body here -- through the same `bodySignature` the commit's
+    /// check reads -- and states the widened type on the draft (`GraphDraft::setFuncType`) before
+    /// the commit that judges it, which is how a pass declares the type its own edit needs. The commit widens nothing itself: a body whose type no
+    /// caller declared is refused.
+    const Program *prepared();
     /// The graphs the session read or wrote (decoded or edited) whose version in the context's
     /// program is not the one it started from; empty while the context's program is still the
     /// session's. A commit of a stale session with no conflict does not fail: it merges its
@@ -257,9 +282,17 @@ class RuntimeGraphDraftSession {
         /// the same way every other handle does, and the graph it commits is the transaction's.
         std::unique_ptr<GraphTransaction> transaction;
         RuntimeDraftIdentity identity;
+        /// The draft's `mutations()` when the last commit that delivered it finished. What the
+        /// session wrote since then is what the next commit has to deliver: `mutations()` counts
+        /// the commit's own closing of the draft too, so the counter alone would make a second
+        /// commit over the same draft look like a write.
+        uint64_t deliveredMutations = 0;
     };
 
     GraphTransaction &ensureDraft(GCGraph *graph);
+    /// `commit` and `prepared` are the same run of the encoder, and `staged` is the one thing that
+    /// tells them apart: true stops it after the encode, before the checks and the delivery.
+    const Program *runCommit(bool staged, bool detached);
     /// Refuses a draft whose operator port names a node the draft does not have: a graph version
     /// cannot be written around a reference to nothing, and the guard that judges a pass's program
     /// promises to refuse exactly this shape. Throws, so the pipeline names the pass that made it.
@@ -276,23 +309,40 @@ class RuntimeGraphDraftSession {
     ProgramSpecializationKey programKeyOf(const RuntimeSpecializationKey &key) const;
 
     camel::core::context::context_ptr_t context_;
-    const Program *program_ = nullptr;
+    /// The program the session rewrites, and after a commit the one it produced. Held in C++
+    /// through ProgramHold: a commit's program is a program of the context's until something
+    /// adopts or installs it, and the session is what holds it in the meantime.
+    ProgramHold program_;
     /// Whether a commit may replace the context's program: true when the session was opened over
     /// that program (it may have been overtaken since: the commit merges), or when the program it
     /// works on is the context's now (someone installed it). A session over a function value's
     /// program (a detached program: the ONNX export, a tile region, a gradient) hands its commit
     /// back to its owner and never publishes it, whatever the context's program is.
     bool mayPublish_ = false;
-    mutable std::unique_ptr<Program> work_;
+    /// The working copy of the program: the table the drafts are built and read in. A program of
+    /// the context's (reserved, so that what it binds is freed like any other graph) and held
+    /// through ProgramHold, because a commit encodes into it while the drafts' conditions may run
+    /// Camel code -- a safepoint.
+    mutable ProgramHold work_;
+    /// The program the last `prepared` encoded, held so that a pass can read the bodies of the
+    /// graphs the commit is about to judge: released by the next `commit` (or `prepared`), which
+    /// makes a program of its own.
+    ProgramHold staged_;
     GCGraph *runtimeRoot_ = nullptr;
     GraphState graphState_ = GraphState::Executable;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
     /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
     /// The commit drops those it encodes back to the same content (sameContent).
     std::unordered_set<GCGraph *> edited_;
+    /// The graphs this transaction made but the program does not have (`noteMadeGraph`), in the
+    /// order they were made: they are delivered by every commit of the session, the closure being
+    /// the graphs the root reaches and these.
+    std::vector<GCGraph *> madeGraphs_;
     struct DraftRefs {
         uint64_t revision = 0;
         bool valid        = false;
+        // program-holder-exempt: long-lived-cache -- a memo of (graph, program) pairs the
+        // session re-derives; a pin per entry would keep every program a draft ever named.
         std::vector<std::pair<GraphId, const Program *>>
             graphs; // with the program of a function value
     };
@@ -306,6 +356,10 @@ class RuntimeGraphDraftSession {
         uint64_t epoch = 0;
         uint64_t table = 0;
         size_t drafts  = 0;
+        /// The graphs this transaction made when the closure was collected. They are part of what
+        /// the commit delivers and no draft has to name them, so a closure collected before one
+        /// was made is not the closure of this session any more.
+        size_t made    = 0;
         GCGraph *root  = nullptr;
         std::vector<GCGraph *> graphs;
     };
@@ -335,9 +389,9 @@ class RuntimeGraphDraftSession {
 /// transform synthesizes. Each member is reserved first: the returned GraphId is the graph's,
 /// wherever a graph is named in the drafts (FUNC callees, static Function values), and encode()
 /// builds the graphs. The members form a program with the graphs of the one the group is made
-/// over (program()). That program is held here, in C++, so the group pins it for as long as the
-/// group lives (GCGraphManager::pin): a reserved program nothing reaches is a program whose
-/// static values the collector does not keep fresh, and a group is made inside a running call.
+/// over (program()). That program is held here, in C++ -- through ProgramHold, which roots it for
+/// as long as the group lives: a reserved program nothing reaches is a program whose static values
+/// the collector does not keep fresh, and a group is made inside a running call.
 class GraphDraftGroup {
   public:
     GraphDraftGroup(const camel::core::context::context_ptr_t &context, const Program *base);
@@ -365,7 +419,7 @@ class GraphDraftGroup {
     /// The program of the group: the graphs of the program it is made over, and the members
     /// once encoded, the first one reserved as its root. A function value made for a member
     /// before encode() can name it in this program; it resolves once the group is encoded.
-    const Program *program() const { return program_; }
+    const Program *program() const { return program_.get(); }
 
   private:
     struct Member {
@@ -381,8 +435,9 @@ class GraphDraftGroup {
     camel::core::context::context_ptr_t context_;
     std::unordered_map<GraphId, std::unique_ptr<Member>> members_;
     std::vector<GraphId> order_;
-    Program *program_ = nullptr;
-    bool encoded_     = false;
+    /// The group's program, and the root that holding it in C++ takes (ProgramHold).
+    ProgramHold program_;
+    bool encoded_ = false;
 };
 
 // A session hands out the graph it edits by reference, and a pass binds what it is given for as

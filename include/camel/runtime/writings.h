@@ -48,8 +48,9 @@ class GraphTransaction;
 /// Told which nodes change class when two classes join (the nodes of the smaller class).
 class WritingObserver {
   public:
-    virtual ~WritingObserver()                                                    = default;
-    virtual void joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) = 0;
+    virtual ~WritingObserver() = default;
+    virtual void
+    joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) = 0;
 };
 
 class WritingStore {
@@ -63,8 +64,8 @@ class WritingStore {
     /// Asserts that `a` and `b` are the same value in every context that has `perms`. Returns
     /// true when that changed the classes of the context `perms`.
     bool merge(
-        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0, uint8_t flags = 0,
-        WritingObserver *observer = nullptr);
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0,
+        uint16_t rule = 0, uint8_t flags = 0, WritingObserver *observer = nullptr);
 
     /// The smallest node of the class of `node` in the context `context`.
     gc_node_ref_t find(camel::core::sem::PermissionMask context, gc_node_ref_t node);
@@ -72,13 +73,19 @@ class WritingStore {
     /// name a class (find gives the smallest node, which changes less often but costs a lookup).
     gc_node_ref_t canon(camel::core::sem::PermissionMask context, gc_node_ref_t node);
     /// The nodes of the class ascending; empty for a node alone in its class.
-    std::span<const gc_node_ref_t> members(camel::core::sem::PermissionMask context, gc_node_ref_t node);
+    std::span<const gc_node_ref_t>
+    members(camel::core::sem::PermissionMask context, gc_node_ref_t node);
     bool same(camel::core::sem::PermissionMask context, gc_node_ref_t a, gc_node_ref_t b) {
         return find(context, a) == find(context, b);
     }
     /// True when no equivalence was asserted.
     bool empty() const { return log_.empty(); }
     std::span<const WritingUnion> log() const { return log_; }
+    /// Drops every equivalence asserted after the first `size`, and the classes it made: the log is
+    /// the whole truth, so the layers are replayed from the log that is left. A saturation round
+    /// that is taken back needs this -- its merges are not in the draft's journal, and a class that
+    /// named a node the round is about to lose would be a class of nothing.
+    void rollbackTo(size_t size);
     /// The contexts that have a layer, ascending.
     std::vector<camel::core::sem::PermissionMask> contexts() const;
     /// The roots of the classes of more than one node in the context, ascending.
@@ -108,7 +115,6 @@ class WritingStore {
     // Ascending by context.
     std::vector<Layer> layers_;
 };
-
 
 /// What a cost model may look at: the draft, and the context for the facts about the program
 /// (a back end's model reads the shapes there).
@@ -162,15 +168,15 @@ inline constexpr const char *kWritingsCostModel = "weighted";
 /// declared type, and no rule guards `isI32`-style).
 struct Pattern {
     enum class Kind : uint8_t { Var, Constant, Op, Compute };
-    Kind kind        = Kind::Var;
-    uint32_t var     = 0;
-    bool constOnly   = false;
+    Kind kind                = Kind::Var;
+    uint32_t var             = 0;
+    bool constOnly           = false;
     camel::core::OperId oper = camel::core::kNoOper;
     // Constant: the bits and the type; Var, Op, Compute: the type of the value (null: any type).
     // `value` is mutable because the patterns of a rule are compiled once and a collection during
     // a rule condition (a safepoint) can move the constant it holds.
-    mutable slot_t value               = 0;
-    camel::core::type::Type *type      = nullptr;
+    mutable slot_t value          = 0;
+    camel::core::type::Type *type = nullptr;
     std::vector<Pattern> args;
     // Compute (right side only): the constant it is, from the constants of its arguments.
     std::function<slot_t(std::span<const slot_t>)> compute;
@@ -178,7 +184,8 @@ struct Pattern {
 Pattern patVar(uint32_t var, camel::core::type::Type *type = nullptr);
 Pattern patConst(uint32_t var, camel::core::type::Type *type = nullptr);
 Pattern patLiteral(slot_t value, camel::core::type::Type *type);
-Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);
+Pattern
+patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);
 Pattern patCompute(
     camel::core::type::Type *type, std::function<slot_t(std::span<const slot_t>)> compute,
     std::vector<Pattern> args);
@@ -257,8 +264,8 @@ class RuleSkipped : public std::runtime_error {
 struct MatchRemainder {
     /// The variable that takes the terms no pattern term matched; `set` is false when the left
     /// side named every term and `terms` is empty.
-    bool set      = false;
-    uint32_t var  = 0;
+    bool set     = false;
+    uint32_t var = 0;
     /// The operator the terms are terms of: the right side builds their chain with it.
     uint32_t oper = 0;
     /// The terms, ascending by identity.
@@ -268,7 +275,7 @@ struct MatchRemainder {
 /// What a match of a rule's left side found: the value each variable stands for.
 struct Match {
     DraftWritings &writings;
-    gc_node_ref_t root;
+    gc_node_ref_t root = kInvalidNodeRef;
     std::span<const gc_node_ref_t> vars;
     /// What the variable `remainder.var` stands for: the chain of the terms the left side did not
     /// name, built with `remainder.oper`. Reading it in the condition or the right side is what
@@ -312,13 +319,22 @@ void traceRuleConstants(
 /// What a saturation may spend; the result does not depend on time. Rounds are passes over all
 /// the rules. The run stops, without an error, when a budget is used up.
 struct Budget {
-    size_t rounds       = 8;
-    size_t newWritings  = 1u << 20;
-    size_t unions       = 1u << 22;
+    size_t rounds      = 8;
+    size_t newWritings = 1u << 20;
+    size_t unions      = 1u << 22;
+};
+
+/// Local deletion guards, independent of numeric permissions and structural validity. The
+/// `order` guard keeps the computations whose place in the order is the program's to keep: one
+/// that carries an ordering edge, one something waits on, one whose value is written in place.
+/// The `faults` guard keeps a computation that may fault.
+struct DeletionProtection {
+    bool order  = true;
+    bool faults = true;
 };
 
 struct RewriteStats {
-    size_t rounds  = 0;
+    size_t rounds = 0;
     /// The nodes the matcher looked at, over all rounds: the alive nodes that take part in a
     /// rewrite.
     size_t visited = 0;
@@ -360,20 +376,26 @@ struct RewriteStep {
 using RewriteLog = std::vector<RewriteStep>;
 
 struct SaturateStats {
-    size_t rounds       = 0;
-    size_t matches      = 0;
-    size_t newWritings  = 0;
-    size_t unions       = 0;
-    bool saturated      = false; // a round found nothing new
+    size_t rounds      = 0;
+    size_t matches     = 0;
+    size_t newWritings = 0;
+    size_t unions      = 0;
+    bool saturated     = false; // a round found nothing new
+    /// The applications the last round made, and whether the run stopped inside a round instead of
+    /// at the end of one. A round the writing budget cuts is taken back whole -- nothing of it
+    /// lands -- so `appliedThisRound` is what it applied before it was undone, which is what says
+    /// where the budget ran out; `saturated` stays false for it.
+    size_t appliedThisRound = 0;
+    bool stoppedMidRound    = false;
     // Where the time went, for measuring (nothing in the engine reads them).
     double findSeconds  = 0;
     double applySeconds = 0;
 };
 
 struct ExtractStats {
-    size_t classes  = 0; // values with more than one writing
-    size_t rewired  = 0; // nodes whose inputs were changed to other writings
-    size_t erased   = 0; // writings not chosen
+    size_t classes = 0; // values with more than one writing
+    size_t rewired = 0; // nodes whose inputs were changed to other writings
+    size_t erased  = 0; // writings not chosen
 };
 
 /// True when some graph of the program has values with several writings.
@@ -409,20 +431,24 @@ class DraftWritings : private WritingObserver {
     /// and written through. It lives as long as these writings do.
     explicit DraftWritings(
         GraphDraft &draft,
-        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed(),
+        DeletionProtection protection = {}, bool ordered = false);
     /// The writings of the draft a transaction owns. The transaction is recorded, so the draft
     /// has an owner that is not a handle: a handle in a draft names this transaction and nothing
     /// else.
     explicit DraftWritings(
         GraphTransaction &transaction,
-        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed(),
+        DeletionProtection protection = {}, bool ordered = false);
     ~DraftWritings();
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
 
     /// Writes the equivalences back to the draft (`setWritings`), which keeps them
     /// until it is encoded.
-    void save() { draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end())); }
+    void save() {
+        draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end()));
+    }
 
     /// The transaction the draft belongs to. It is never null: a draft no transaction owns has
     /// no writings.
@@ -433,19 +459,28 @@ class DraftWritings : private WritingObserver {
     void build();
     /// Asserts that `a` and `b` are the same value under `perms`, then closes over congruence.
     /// Returns true when that changed the classes.
-    bool assertEqual(gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0);
+    bool assertEqual(
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0,
+        uint16_t rule = 0);
     /// The same without the closure over congruence, which the caller does with rebuild() once
     /// it has made all its merges (a saturation round).
     bool assertEqualDeferred(
-        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0);
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0,
+        uint16_t rule = 0);
     /// The node that computes this, in the class it belongs to: an existing one, or a new one
     /// with the inputs `norm` and `with` (any members of their classes). A node that does not
     /// take part in congruence is always new.
-    gc_node_ref_t
-    lookupOrAdd(const DraftNodeInit &init, std::span<const gc_node_ref_t> norm,
-                std::span<const gc_node_ref_t> with = {});
+    gc_node_ref_t lookupOrAdd(
+        const DraftNodeInit &init, std::span<const gc_node_ref_t> norm,
+        std::span<const gc_node_ref_t> with = {});
     /// Applies the rules to the writings, adding writings, until nothing new is found or the
     /// budget is used up. The same rules, graph and budget give the same writings.
+    ///
+    /// One round is one segment of the draft: what a round applies lands together or not at all, so
+    /// a round the budget cuts is taken back whole and reports what it applied before it was undone
+    /// (`SaturateStats::appliedThisRound`, `stoppedMidRound`) instead of leaving half of itself in
+    /// the draft. A run may be resumed from the draft a cut leaves and reach the fixed point a run
+    /// that was never cut reaches.
     // (a saturation matches the nodes whose permissions are the root's own)
     SaturateStats saturate(std::span<const Rule> rules, const Budget &budget = {});
     /// Applies the rules one way, in place, on a draft with one writing per value (rewrite
@@ -458,8 +493,13 @@ class DraftWritings : private WritingObserver {
     /// `log`, when given, collects one `RewriteStep` per rewrite, in the order they were made
     /// (rewrite design 8.7). It is also where the erased nodes are noted, before the draft
     /// forgets them. With no log the recording is skipped and nothing is allocated for it.
-    RewriteStats rewrite(
-        std::span<const Rule> rules, size_t maxRounds = 16, RewriteLog *log = nullptr);
+    ///
+    /// The call is one edit: a failure partway (an exception out of a rule's condition or out of the
+    /// engine) takes the draft back to what the call found, so a caller that runs the rewrite again
+    /// over the same draft gets the result of a run that never failed. The draft's journal is what
+    /// makes that possible; one application's all-or-nothing is the inner case of the same thing.
+    RewriteStats
+    rewrite(std::span<const Rule> rules, size_t maxRounds = 16, RewriteLog *log = nullptr);
     /// Why `rule` does or does not fire at `node`, as one sentence for `why_not` (rewrite design
     /// 8.7): it matches the left side the way the engine does — an operator's declared
     /// commutativity is tried when the written order fails — but does not rewrite, and reports the
@@ -468,11 +508,41 @@ class DraftWritings : private WritingObserver {
     RuleMiss whyNot(const Rule &rule, gc_node_ref_t node);
     /// The constant node `value` of `type` in this region with these permissions: the one there
     /// is, or a new one.
-    gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region);
+    gc_node_ref_t constantNode(
+        slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms,
+        uint32_t region);
     /// The constant (bits and type) a writing of the value of `node` is, if any is.
     std::optional<std::pair<slot_t, camel::core::type::Type *>> constantOf(gc_node_ref_t node);
     /// Closes the classes over congruence: nodes whose inputs changed class are looked up again.
     void rebuild();
+
+    /// Where one rule application started (docs/design/graph-editing/README.cn.md 16.1, 16.4).
+    ///
+    /// The two halves of the state an application writes have one undo, not two: the draft's
+    /// journal puts back the nodes, the bodies and the tables (`GraphDraft::Savepoint`), and the
+    /// store's log puts back the equivalences (`WritingStore::rollbackTo`), and a mark names both.
+    /// The draft keeps a copy of the log for the encoder to read, but it is a copy -- `save`
+    /// refreshes it -- so a rollback does not restore it: the store is what a rollback answers for,
+    /// and `save` after it is what makes the copy true again.
+    struct ApplicationMark {
+        GraphDraft::Savepoint draft;
+        /// `WritingStore::log().size()` when the mark was taken.
+        size_t log = 0;
+    };
+    ApplicationMark markApplication();
+    /// Opens a segment (`GraphDraft::beginUndo`) and marks it: what a round applies lands together
+    /// or not at all, and the mark names both halves of the state it would write.
+    ApplicationMark beginApplication();
+    /// Takes an abandoned application back, index first: the rows of the congruence index are keyed
+    /// by node id (`keyOf`, `takes`, `written`, and the `byKey` map by what `keyOf` sweeps), and
+    /// the draft hands the same ids out to no second node, so a row the rollback did not clear
+    /// would be read as an answer about a node that is gone -- a constant node whose row still
+    /// names it is the shape where the next constant of that value is not made at all.
+    ///
+    /// What it takes back is what the application did, both halves: the nodes it appended and the
+    /// bodies, user lists, region tables and scalars it changed in place (the draft's journal), and
+    /// the merges it made (the store's log, rolled back to the mark).
+    void abandonApplication(const ApplicationMark &mark);
 
     /// The smallest node of the value `node` is a writing of, in the context of its own
     /// permissions.
@@ -498,19 +568,25 @@ class DraftWritings : private WritingObserver {
 
   private:
     struct Index;
+    /// The rows of the congruence index a segment filled, dropped before the draft forgets the
+    /// nodes they name: `keyOf` is what names the key and `byKey` maps it to the node, so a row
+    /// that stayed would answer about a node that is gone.
+    void clearIndexRows(const ApplicationMark &mark);
+    /// Takes a saturation round back whole: the index rows and the queue the round filled, the
+    /// classes it merged, and the bodies it changed. `mark` carries the store's log before the round
+    /// and `pendingBase` its queue: the round did not finish, so nothing of it lands.
+    void abandonRound(const ApplicationMark &mark, size_t pendingBase);
     /// 1: the node takes part in congruence and in every match — it computes its value from its
     /// data inputs; 2: it does not. A control input takes no part in this question: it orders the
     /// node, it does not make the value different (design principles 3.3, 3.4).
     uint8_t shapeOf(gc_node_ref_t node);
     bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
-    /// Whether `node` and everything it is computed from is a pure computation: what a rewrite
-    /// drops has to be (design principles 9.7; rewrite design 8).
-    bool pureComputation(gc_node_ref_t node);
-    /// Whether the right side of `rule` stops reading a value of the left side that is not a pure
-    /// computation, which would drop an effect or a computation ordered after one. `remainder` is
-    /// the value the variable taking the terms no pattern term named stands for.
-    bool dropsOrdered(
+    /// Whether the selected local deletion guards admit discarding this computation.
+    bool deletionAllowed(gc_node_ref_t node);
+    /// Whether a discarded binding is vetoed by the caller's selected deletion guards.
+    /// `remainder` is the value of the associative pattern's unmatched terms.
+    bool dropsProtected(
         const Rule &rule, std::span<const gc_node_ref_t> bind, const MatchRemainder &remainder);
     camel::core::sem::PermissionMask contextOf(gc_node_ref_t node) const;
     struct Item {
@@ -530,12 +606,12 @@ class DraftWritings : private WritingObserver {
     /// not declare it is never commuted, since a law is about values and the matcher may not
     /// guess (design principles 9.5).
     ///
-    /// `commuted` says whether that fallback may run for this rule. A `<=>` rule already states both
-    /// directions, and a saturation applies its reverse as a rule of its own; the fallback is what
-    /// a law that wrote only one order needs, so a two-way rule passes false. (Trying it as well
-    /// only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
+    /// `commuted` says whether that fallback may run for this rule. A `<=>` rule already states
+    /// both directions, and a saturation applies its reverse as a rule of its own; the fallback is
+    /// what a law that wrote only one order needs, so a two-way rule passes false. (Trying it as
+    /// well only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
     /// half a second to past the 20 s timeout.) A one-way rule (`=>`) has no reverse and
-    /// passes true.
+    /// permits the fallback unless the invocation selects ordered matching.
     ///
     /// An operator whose own declaration says exchanging its operands and regrouping its chain
     /// give the same value (`BinaryLaw.commutative` and `exactAssociative`, per element type) is
@@ -545,13 +621,14 @@ class DraftWritings : private WritingObserver {
     /// float sum is never regrouped here (`reassociate` and its rules are that path), and the
     /// written order is still tried first.
     bool matchFrom(
-        camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-        std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
-        const std::function<bool()> &emit, MatchRemainder *remainder = nullptr);
-    gc_node_ref_t build(
-        const Pattern &pattern, const Match &match, const DraftNodeInit &base);
+        camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at,
+        std::vector<gc_node_ref_t> &bind, std::vector<uint8_t> &bound,
+        std::vector<gc_node_ref_t> *waits, bool commuted, const std::function<bool()> &emit,
+        MatchRemainder *remainder = nullptr);
+    gc_node_ref_t build(const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);
-    void joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) override;
+    void
+    joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) override;
     void index(gc_node_ref_t node);
 
     GraphDraft &draft_;
@@ -560,10 +637,12 @@ class DraftWritings : private WritingObserver {
     /// so a handle made from them names a transaction for as long as it can be reached.
     std::unique_ptr<GraphTransaction> ownedTransaction_;
     /// The transaction `draft_` belongs to: the caller's, or the one above.
-    GraphTransaction *transaction_ = nullptr;
+    GraphTransaction *transaction_               = nullptr;
     camel::core::sem::PermissionMask matchPerms_ = 0;
-    bool greedy_        = false; // rewrite(): nodes are replaced, so nothing is looked up by key
+    bool greedy_ = false; // rewrite(): nodes are replaced, so nothing is looked up by key
     camel::core::sem::NumericPolicy policy_;
+    DeletionProtection protection_;
+    bool ordered_; // operand positions are preserved at every pattern node
     WritingStore store_;
     std::unique_ptr<Index> index_;
     std::vector<gc_node_ref_t> pending_;
@@ -588,4 +667,3 @@ Fact classFact(DraftWritings &writings, gc_node_ref_t node, On &&on, Join &&join
 }
 
 } // namespace camel::runtime
-

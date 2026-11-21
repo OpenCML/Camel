@@ -1,5 +1,7 @@
-// Functions are values; lambdas capture variables by reference.
+// Functions are values; a lambda captures the value a name had, not the name.
 // Run: camel docs/tutorial/examples/07_closures.cml
+
+import state
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -22,8 +24,8 @@ func main(): int sync {
     let ops = [inc, dbl]                     // functions in an array
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
-    var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
-    println(total)
+    let total = state::ref(0)                // shared state: a handle a closure may capture
+    [1, 2, 3]->foreach<(x) => sync { state::set(total, state::get(total) + x) }>
+    println(state::get(total))
     return 0
 }

@@ -722,6 +722,27 @@ void reportSyntaxErrors(const Tree &tree, Diagnostics &diagnostics) {
             continue;
         }
 
+        // 10b. `1..` with nothing after it. `..` is an operator, so the parser reads the token
+        //     that follows as its missing right operand; when that token cannot start an
+        //     expression the parser stops there, and the token it stopped on is usually a keyword
+        //     that starts the next line -- the one token in the file that is not wrong. A range
+        //     has only a bounded form (design principles 4.2),
+        //     so the mistake is named at the `..` and what replaces it is in the help.
+        //     The two other readings of `..` never reach this branch: `a..b` and the composition
+        //     `f..g` have their right operand read, so the parser does not stop in front of one,
+        //     and `T..` is the stream mark of a type, taken by parseType. A line that goes on with
+        //     `+` or `-` is not this case either: there the parser reports LineStartsWithSign,
+        //     which is about the line break and is handled above.
+        if (error.kind == SyntaxError::Kind::Unexpected && previous != offending &&
+            buffer[previous].kind == TokenKind::DotDot &&
+            std::find(error.expected.begin(), error.expected.end(),
+                      static_cast<uint8_t>(SyntaxError::Expression)) != error.expected.end()) {
+            if (once(SyntaxDiag::IntervalHasNoOpenForm, previous)) {
+                diagnostics.of(SyntaxDiag::IntervalHasNoOpenForm).at(at(previous)).commit();
+            }
+            continue;
+        }
+
         // 11. Anything else: the token that does not fit and what would have.
         const std::string wanted = describeExpected(error.expected);
         const std::string clause = wanted.empty() ? std::string() : "; expected " + wanted;

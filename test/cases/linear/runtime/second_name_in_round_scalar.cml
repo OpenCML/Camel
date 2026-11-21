@@ -1,0 +1,23 @@
+// A name bound to a scalar state the loop head carries holds the value the round started with,
+// not the value the round goes on to write. The scalar has no storage a write could reach, so the
+// name is the keeper of the value (`Builder::secondNameOf`): a region of one data port reading it,
+// passed through -- the same node the design gives a value that has to be observed where it stands
+// (operator_table.h#kWellKnownCount, docs/design/effects/edges.cn.md 5.3), and the scalar
+// twin of the array case next door (`second_name_in_round.cml`), which leaves with its own
+// storage instead.
+//
+// `kept` prints the round's start value -- 0, then 1, then 2 -- and `n` ends at the value the
+// three writes made. Before the keeper the name was the carried port itself and every use of it
+// read the round's value where the use stood, so it printed the write (1, 2, 3).
+
+func main(): int sync {
+    var n: int = 0
+    let _ = loop i = 0 while i < 3 do sync {
+        let kept = n
+        n = i + 1
+        println(kept)
+        i + 1
+    }
+    println(n)
+    return 0
+}

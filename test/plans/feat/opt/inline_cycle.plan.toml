@@ -4,9 +4,9 @@ tier = "fast"
 tags = ["feat", "opt", "inline", "defects"]
 
 # The defect `a1723fbb9` fixed, and the instance of it no plan guarded: progen seed 23 under
-# `std::opt::fold std::opt::inline`, the `fold+inline@nvm` cell of its 41-cell cross matrix -- the one
+# `std::cxx::fold std::cxx::inline`, the `fold+inline@nvm` cell of its 41-cell cross matrix -- the one
 # cell that was red before the commit and green after it. `rc04`'s wall for it was
-# `Pass 'std::opt::inline' failed with an internal error: Runtime graph 'main' breaks its edge
+# `Pass 'std::cxx::inline' failed with an internal error: Runtime graph 'main' breaks its edge
 # invariants: graph 'main' node 16 (11): lies on a cycle of inputs:
 # 16(11) <- 39(11) <- 340(13) <- 334(13) <- 328(13) <- 16`.
 #
@@ -39,96 +39,103 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "inline_cycle.reference"
-desc = "The program with no pass at all: the sixteen lines its reference evaluator computes. Green before and after the commit -- it is what the two runs below must reproduce."
-args = ["${case}", "${run_nvm}"]
-expect_stdout_exact = "q45 2\nq45 2\nq45 5\nq45 2\nq45 5\nL3 (2, 5) 5\nL4 xx\nL4 xx\nL4 xx\nL5 true x\nL5 true x\nq45 5\nq45 0\nL6 1.0\nL7 2\nL8 false\n"
+kind = "negative"
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+desc = "The program with no pass at all: the sixteen lines its reference evaluator computes. Green before and after the commit -- it is what the two runs below must reproduce. `seed23_fold_inline` is refused by the closure rule before any pass runs, so this entry pins the refusal instead of the reading it used to pin (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213, at the assignment inside the closure: the state rule of 2026-11-14 was withdrawn on 2026-11-16 and the write is what refuses the program now); the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
+args = ["${case}"]
+
 
 [[tests]]
 name = "inline_cycle.fold_then_inline"
-desc = "The folding followed by the inlining -- the pair the cycle was found with: the same sixteen lines. Red before `a1723fbb9`, and the reading is the cycle of inputs itself, quoted whole, so that a return of the defect names the positions and not only the exit code."
-args = ["${case}", "std::opt::fold", "std::opt::inline", "${run_nvm}"]
-expect_stdout_exact = "q45 2\nq45 2\nq45 5\nq45 2\nq45 5\nL3 (2, 5) 5\nL4 xx\nL4 xx\nL4 xx\nL5 true x\nL5 true x\nq45 5\nq45 0\nL6 1.0\nL7 2\nL8 false\n"
+kind = "negative"
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+desc = "The folding followed by the inlining -- the pair the cycle was found with: the same sixteen lines. Red before `a1723fbb9`, and the reading is the cycle of inputs itself, quoted whole, so that a return of the defect names the positions and not only the exit code. `seed23_fold_inline` is refused by the closure rule before any pass runs, so this entry pins the refusal instead of the reading it used to pin (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213, at the assignment inside the closure: the state rule of 2026-11-14 was withdrawn on 2026-11-16 and the write is what refuses the program now); the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
+args = ["${case}"]
+
 verify_script = """
 ({ input, assert }) => {
-    const said = input.normalized.stderr.trim() || input.normalized.stdout.trim()
-    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${said}`)
-    assert(!said.includes('PassInternalError'), `the pass refused the graph it built: ${said}`)
-    assert(!said.includes('lies on a cycle of inputs'), `the splice wrote a statement after one it reads: ${said}`)
+    const said = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+    assert(said.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + said)
+    assert(said.includes('a `Ref`'), 'and the report names the ways out: ' + said)
 }
 """
 
 [[tests]]
 name = "inline_cycle.splice_place"
-desc = "The same pair drawn with `std::gir`: the placed statements are read, not just counted. No statement is written before one it reads, and no node but a `BRCH` hands the chain on to two statements -- the argument keeps its own place and the body's head follows the argument, not the statement before it."
-args = ["${case}", "std::opt::fold", "std::opt::inline", "std::gir"]
+kind = "negative"
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+desc = "The same pair drawn with `std::gir`: the placed statements are read, not just counted. No statement is written before one it reads, and no node but a `BRCH` hands the chain on to two statements -- the argument keeps its own place and the body's head follows the argument, not the statement before it. `seed23_fold_inline` is refused by the closure rule before any pass runs, so this entry pins the refusal instead of the reading it used to pin (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213, at the assignment inside the closure: the state rule of 2026-11-14 was withdrawn on 2026-11-16 and the write is what refuses the program now); the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
+args = ["${case}"]
 verify_script = """
 ({ input, assert }) => {
-    const said = input.normalized.stderr.trim() || input.normalized.stdout.trim()
-    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${said}`)
-    assert(!said.includes('PassInternalError'), `the pass refused the graph it built: ${said}`)
-    const lines = input.normalized.stdout.split('\n')
-    const edgeRe = /^ *(N[0-9A-F]+) -> (N[0-9A-F]+) \[label="([^"]*)", type="([A-Z_]+)"\]/
-    const nodeRe = /^ *(N[0-9A-F]+) \[label="([^"]*)", type="([A-Z_]+)"/
-    const nodes = new Map()
-    const into = new Map()
-    const out = new Map()
-    let depth = 0
-    for (const line of lines) {
-        if (/^ *subgraph cluster/.test(line)) { depth += 1; continue }
-        if (/^ *} *$/.test(line)) { if (depth > 0) depth -= 1; continue }
-        const n = nodeRe.exec(line)
-        if (n) { nodes.set(n[1], { label: n[2], type: n[3] }); continue }
-        const e = edgeRe.exec(line)
-        if (!e) continue
-        if (!into.has(e[2])) into.set(e[2], [])
-        if (!out.has(e[1])) out.set(e[1], [])
-        into.get(e[2]).push(e)
-        out.get(e[1]).push(e)
-    }
-    const nm = (id) => `${id}[${nodes.has(id) ? nodes.get(id).label : '?'}]`
-    // A guard that examined nothing fails: the program's drawn graph is one statement per line of a
-    // `main` of some 300 statements, and a run that drew fewer than a hundred nodes is not a reading.
-    assert(nodes.size > 400, `the drawing holds ${nodes.size} nodes, too few to be this program`)
-    const sync = []
-    for (const [from, list] of out) {
-        for (const e of list) if (e[4] === 'SYNC') sync.push(e)
-    }
-    assert(sync.length > 40, `the drawing holds ${sync.length} chain edges, too few to be this program`)
+    const said = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+    assert(said.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + said)
+    assert(said.includes('a `Ref`'), 'and the report names the ways out: ' + said)
+}
+"""
 
-    // One statement, one follower. A `BRCH` hands the chain on to the two arms it owns and no other
-    // node has a second follower: a body's head written beside the argument instead of after it makes
-    // the argument's predecessor name two, which is the defect stated as a place.
-    const forks = []
-    for (const [from, list] of out) {
-        const chain = list.filter((e) => e[4] === 'SYNC')
-        if (chain.length > 1) forks.push([from, chain])
-    }
-    const strays = forks.filter(([from]) => (nodes.get(from) || {}).type !== 'BRCH')
-    assert(strays.length === 0, `two statements follow one that is not a branch: ` +
-        strays.map(([from, chain]) => `${nm(from)} -> ${chain.map((e) => nm(e[2])).join(' and ')}`).join('; '))
+# What the three entries above measure today, and what they cannot (measured 2026-11-15 on
+# 6c64f2042, the tree of this lane):
+#
+#   1. `seed23_fold_inline` is refused by the state rule before any pass runs -- the call is
+#      `checkCellEscapes();` in src/compile/gir/program.cpp, and `camel <case> std::gir` exits 1
+#      and prints no graph at all. None of the three entries above exercises the optimizer; their
+#      green is the front end's refusal, not the reading they were written for.
+#   2. With that one call taken out, the program and its legal same shape
+#      `seed23_fold_inline_within_call.cml` (the `var` READ by a closure that is called inside the
+#      call that declares it) print the same sixteen lines at exit
+#      0: the state rule is the only thing standing in this program's way.
+#   3. The ring `a1723fbb9` fixed is unobservable in this shape today, not gone. With the place
+#      decision that commit added switched off (`if (false && placePreds.empty())` on the
+#      argument-place block of src/runtime/draft_inline.cpp#inlineCallableInDraft), this program's
+#      inlined drawing is byte-for-byte identical -- 2246 lines, the 194 `ORDER` edges included --
+#      exit 0 and no `PassInternalError`; three hand-written argument shapes (`k(len([1,2]))`,
+#      `k(1+2)`, `k(foo())`) ring nowhere either. Making the ring observable again is work on a
+#      branch that reverts `a1723fbb9`, not a new seed: a seed that only runs would be green for
+#      a reason unrelated to what this plan was written to guard.
+#
+# What is still guardable is the half that is live: the pair inlines at all. The two entries below
+# read that number -- `direct_calls` 24 with no pass and 3 under the pair.
+[[tests]]
+name = "inline_cycle.within_call_no_pass"
+desc = "The legal half of seed 23 with no pass: the program runs, prints its sixteen lines, and `std::stats` reads 24 direct calls -- the number the entry below must move. This is the reading that is still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above). What made this half legal had to change with the rule: the closure used to write `v37`, which the withdrawn state rule allowed and `ClosureAssignsCapturedName` (0x03000213) refuses, so the write is now the line before the closure is made and the closure only reads `v37`. The value is the same and so are both readings (sixteen lines, 24 direct calls)."
+kind = "behavior"
+case = "../../../cases/opt/inline_cycle/seed23_fold_inline_within_call.cml"
+args = ["${case}", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 24, 'no pass: 24 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 16, 'the program prints its sixteen lines, read ' + lines.length)
+}
+"""
 
-    // A statement is written after what it reads, never before it. The argument the call reads that
-    // ends up after the body's tail is this relation broken, and the path is printed with it.
-    const reads = new Map()
-    const closure = (start) => {
-        if (reads.has(start)) return reads.get(start)
-        const seen = new Set()
-        const work = [start]
-        while (work.length > 0) {
-            const id = work.pop()
-            for (const e of into.get(id) || []) {
-                if (seen.has(e[1])) continue
-                seen.add(e[1])
-                work.push(e[1])
-            }
-        }
-        reads.set(start, seen)
-        return seen
-    }
-    for (const e of sync) {
-        assert(!closure(e[1]).has(e[2]),
-            `${nm(e[2])} is written after ${nm(e[1])}, which reads it: the chain orders a statement ` +
-            `before one it depends on`)
-    }
+[[tests]]
+name = "inline_cycle.within_call_fold_then_inline"
+desc = "The same program under the pair that found the defect: 3 direct calls remain (from 24), so the inlining this shape still exercises really happened, and the sixteen lines are the ones the run without the passes prints. A pipeline that stops inlining leaves 24 here and turns the entry red."
+kind = "behavior"
+case = "../../../cases/opt/inline_cycle/seed23_fold_inline_within_call.cml"
+args = ["${case}", "std::cxx::fold", "std::cxx::inline", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 3, 'fold+inline: 3 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 16, 'the sixteen lines survive the pair, read ' + lines.length)
 }
 """

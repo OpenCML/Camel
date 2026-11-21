@@ -21,7 +21,7 @@
 
 // The declarations of the operators of the C++ module `modules/graph` (design principles 6.4):
 // the C++ side keeps the kernels, the executor and the handles. Every signature is stated, so the
-// module has no computed signatures and no `stdlib/signatures/graph.cml`: a function-valued
+// module has no computed signatures and no `graph.cml` under `stdlib/signatures/`: a function-valued
 // argument is `F` with `when is_function::<F>()`.
 //
 // `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared
@@ -56,13 +56,31 @@ export func graph_of::<F>(f: F): Graph when is_function::<F>()
 /// @example len(graphs_of((x: int): int => x + 1))
 export func graphs_of::<F>(f: F): Graph[] when is_function::<F>()
 
-/// The name of the graph.
+/// The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
+/// needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
+/// that would pick a function by its name takes the function value instead.
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example name(graph_of((x: int): int => x + 1))
-export func name(g: Graph): string
+export func name(g: Graph): string spelling
 
-/// The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+/// The nodes of the graph in canonical order: the order the graph's own structure decides, from the
+/// exit and the regions' outer accesses along the data and sync edges in port order, with what the
+/// ports leave open arranged for the smallest numbering table (design principles 9.5, the same walk
+/// `same_graph` and the block naming use). Two programs that differ only in what the source spelled
+/// -- two statements swapped, a variable renamed -- give one order, so a pass may pair neighbours in
+/// it and get one answer for both. The places of removed nodes are skipped; a node nothing reaches
+/// from the exit (a pure computation nobody uses) comes after the ones that are reached.
 /// @example nodes(graph_of((x: int): int => x + 1))
 export func nodes(g: Graph): Node[]
+
+/// The node the graph hands its value out of: the node a graph returns, the port of a function that
+/// returns a parameter, or the `JOIN` a body's branches end at. It is the one anchor an edit that
+/// changes what the function gives has to name, since `replace` refuses an anchor: read this node,
+/// build the value that takes its place, and `replace` this node by that value. Null for a graph
+/// that hands no value out (a function of `void`), which has no node to put anything in the place
+/// of.
+/// @example exit_of(graph_of((x: int): int => x + 1))
+export func exit_of(g: Graph): Node?
 
 // ---- reading nodes ----
 
@@ -168,7 +186,7 @@ export func is_written_slot(n: Node): bool
 /// @example is_constant(n)
 export func is_constant(n: Node): bool
 
-/// The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+/// The bytes the node's constant value occupies: the measure `std::opt` and `std::cxx::fold` clamp with
 /// `constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
 /// cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
 /// node that is no constant costs 0.
@@ -185,7 +203,12 @@ export func type_of(n: Node): TypeRef?
 /// @example type_name(t)    // 'int'
 export func type_name(t: TypeRef): string
 
-/// The graph a call or function node names, null for any other node.
+/// The graph a call or function node names, null for any other node, and null for a call whose
+/// function value names no graph -- a parameter of function type, a closure being assembled: which
+/// graph runs is decided when the call runs. A call written by name answers through the function
+/// node it reads, and a call through a value through the function value the graph holds. So the
+/// call a program's graph makes answers the graph of the program's entry function, which is how a
+/// pass reaches the body it is there to rewrite without naming a graph (design principles 9.5).
 /// @example-fragment n is a node of the surrounding pass
 /// @example callee(n)
 export func callee(n: Node): Graph?
@@ -208,7 +231,7 @@ export func tags(n: Node): string
 export func declaration_tags(g: Graph): Tag[]
 
 /// The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
-/// not declared any more.
+/// not declared.
 /// @example-fragment t is a tag read from a declaration
 /// @example tag_name(t)    // 'jvp'
 export func tag_name(t: Tag): string
@@ -225,10 +248,13 @@ export func tag_graphs(t: Tag): Graph[]
 /// @example rule_of(graph_of((x: int): int => x + 1), 'vjp')
 export func rule_of(g: Graph, name: string): Graph?
 
-/// The source origin id of the node, 0 when unknown.
+/// The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
+/// written, so reading it needs a declaration that writes `spelling` in its clause (design
+/// principles 9.5). Diagnostics and the debugger declare it; a transform does not read it.
 /// @example-fragment n is a node of the surrounding pass
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example origin(n)
-export func origin(n: Node): int
+export func origin(n: Node): int spelling
 
 /// The value of a constant node as the type T (a number, a bool or a string), null for a node
 /// that is no constant of that type. T is written (`constant::<int>(n)`).
@@ -255,21 +281,40 @@ export func region_kind(r: Region): RegionKind
 /// @example region_parent(r)
 export func region_parent(r: Region): Region?
 
-/// The node on one line: its id, kind, operator and type.
+/// The node on one line: its id, kind, operator and type. The text is *spelling*: it shows the
+/// number the node was created with, so reading it needs a declaration that writes `spelling` in
+/// its clause (design principles 9.5). Diagnostics and the debugger declare it.
 /// @example-fragment n is a node of the surrounding pass
+/// @example-fragment the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 /// @example show(n)    // '%2 Oper :op/mul_l : int'
-export func show(n: Node): string
+export func show(n: Node): string spelling
 
-/// The number a graph, a node or an operator is known by inside its function: the GraphId, the
-/// NodeId or the OperId. Stable for the function, so a pass can key a map by it.
-/// @example-fragment `n` is the graph the pass runs on
+/// The canonical number of the node: its position in the order `nodes` gives, which the graph's own
+/// structure decides (design principles 9.5). Two programs that differ only in what the source
+/// spelled -- the order two statements were written in, the names a variable was given -- number
+/// their nodes the same, so a pass may key a map by this number and compare two of them to ask which
+/// node comes first in the canonical order. A node of a draft has no canonical number at all, and
+/// reading one is refused with the fault `InvalidArgument` of `graph.id`: the position a node holds
+/// while the draft is open is the order the nodes were made in, and the commit replaces it, so an
+/// answer there would be a number that changes. Read `id` after the commit publishes the program, or
+/// read `creation_id` (which declares `spelling`) for the draft's own order.
+/// @example-fragment n is a node of the surrounding pass
 /// @example id(n)
 #op('graph:id')
-export func id(h: Graph): int
-#op('graph:id')
 export func id(h: Node): int
-#op('graph:id')
-export func id(h: Op): int
+
+/// The number a graph, a node or an operator was created with inside its program: the GraphId, the
+/// NodeId or the OperId. It is stable for the program, and it is *spelling*: it says the order the
+/// program was written in, which a transform may not depend on. Reading it needs a declaration that
+/// writes `spelling` in its clause (design principles 9.5); to order two nodes, use `id`.
+/// @example-fragment `n` is a graph, a node or an operator of the surrounding pass
+/// @example creation_id(n)
+#op('graph:creation_id')
+export func creation_id(h: Graph): int spelling
+#op('graph:creation_id')
+export func creation_id(h: Node): int spelling
+#op('graph:creation_id')
+export func creation_id(h: Op): int spelling
 
 // ---- facts ----
 
@@ -300,13 +345,13 @@ export func open::<F>(f: F): Txn<F> when is_function::<F>()
 /// @fails fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example replace(t, n, inputs(n)[0])
-export func replace::<F>(t: Txn<F>, old: Node, new: Node): void uses t
+export func replace::<F>(t: Txn<F>, old: Node, new: Node): void uses var t
 
 /// Removes a node whose value nobody reads.
 /// @fails fault `InvalidArgument` when the value is read, when the node anchors its graph, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example erase(t, n)
-export func erase::<F>(t: Txn<F>, n: Node): void uses t
+export func erase::<F>(t: Txn<F>, n: Node): void uses var t
 
 /// Evaluates the pure operator of the node over its constant operands and gives the node holding
 /// the result, null when there is no value to compute (an operand is no constant of the graph, the
@@ -315,24 +360,64 @@ export func erase::<F>(t: Txn<F>, n: Node): void uses t
 /// is left as written and warned about, as the C++ fold does.
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example eval(t, n)
-export func eval::<F>(t: Txn<F>, n: Node): Node? uses t
+export func eval::<F>(t: Txn<F>, n: Node): Node? uses var t
+
+/// Adds an ordering to the graph: when both nodes run, `before` runs before `after`. An order edge
+/// only orders and never makes a node run (the order edges of design principles 3.1), so a
+/// computation that has to happen where it is written is put in a `sync` block instead; this is how
+/// a pass gives a node the place it needs among the accesses of one resource. Both nodes must be of
+/// one graph, and the edge is refused when the graph already computes `before` from `after`, which
+/// is the cycle it would close. Ordering two nodes that are ordered that way already changes
+/// nothing and is not an error.
+/// @fails fault `InvalidArgument` when the two nodes are not of one graph, when either is gone, or when the edge would form a cycle
+/// @example-fragment t is an open transaction and a, b are nodes of its graph
+/// @example order(t, a, b)
+export func order::<F>(t: Txn<F>, before: Node, after: Node): void uses var t
+
+/// Splices the body of the function value `fn` into the region `at` is in and gives the node that
+/// holds the body's value. `at` decides the place as well: a statement of its block's chain (a
+/// call, an effect, a node that may fault) hands that place over to the code the body becomes, and
+/// the statement is gone afterwards -- what it held is read from the body's value; a node that
+/// stands in no chain only selects the region, is left as it is, and the ordering of the body's
+/// writes among the accesses already there is `order`'s to say. `fn` takes no arguments, and only a
+/// function value that captures no variable can be expanded.
+/// @fails fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, or when the transaction is over
+/// @example-fragment t is an open transaction and n a node of its graph
+/// @example inline(t, n, () => 0)
+export func inline::<F, G>(t: Txn<F>, at: Node, fn: G): Node uses var t when is_function::<G>()
+
+/// Collects a group of the graph's nodes into a function of its own and puts a call of it where the
+/// value the group handed on was read: `inline`'s reverse (design 7 and 15.3). The nodes the group
+/// reads from outside it become that function's parameters, in the order they are found, and the one
+/// value the group hands on becomes its result; the call the operator answers reads those same
+/// values, and its callee (`callee`) is the function the group became. The group's own nodes are
+/// gone from the graph afterwards, so the code stands there once.
+///
+/// A group is a segment with a clear boundary: operations only, whose values come in from outside it
+/// and go out through one node, with no anchor of the graph in it, no access, no ordering and no
+/// place in a chain. A group that is not that is refused with the rule it broke, before anything of
+/// it is copied.
+/// @fails fault `InvalidArgument` when the group is empty, when its nodes are not all of one graph the transaction holds, when one of them anchors its graph, when one of them is no pure operation, when the group hands on no value or more than one, or when the transaction is over
+/// @example-fragment t is an open transaction and ns is a group of its graph's nodes
+/// @example outline(t, ns)
+export func outline::<F>(t: Txn<F>, ns: Node[]): Node uses var t
 
 /// Adds a value the transaction creates to the graph's static values and gives the node that
 /// holds it. The value is a number, a bool or a string; a string is copied into the permanent
 /// space because a value a transaction creates may be live at a safepoint where its draft is not
 /// traced.
 /// @example add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)
-export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses t when is_ordered::<T>()
+export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses var t when is_ordered::<T>()
 
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The transaction is over.
 /// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already
 /// @example commit(open((x: int): int => x + 1))
-export func commit::<F>(t: Txn<F>): F! uses t
+export func commit::<F>(t: Txn<F>): F! uses var t
 
 /// Drops the transaction.
 /// @example abort(open((x: int): int => x + 1))
-export func abort::<F>(t: Txn<F>): void uses t
+export func abort::<F>(t: Txn<F>): void uses var t
 
 // ---- comparison ----
 // `==` of the handle types (design principles 4.3): a library defines the operators of its own
@@ -359,3 +444,13 @@ export func operator ==(a: Tag, b: Tag): bool
 /// not, then `REGION_PROBE body region of node 0: 0` and, instead of a third answer, the abort the
 /// region guard raises -- 0 is the body, so a node that is not there has no region to be given.
 export func probe_handle::<F>(f: F): F! when is_function::<F>()
+
+/// Explicitly checks standard ambient resource/access-mode support and matched effect ordering
+/// between two functions, plus the normal port, entry/exit and effect-credential admission checks.
+/// Returns `after` on success. This comparison is not an observational-equivalence proof:
+/// equal support does not count events or compare their payloads. The selected check emits a
+/// located context diagnostic on refusal; catching the error value does not recover outer
+/// execution. Ordinary invocation and CLI wrappers use this same checking stage.
+/// @fails error value `PassBoundary` when the selected boundary check refuses
+/// @example check_pass_boundary
+export func check_pass_boundary::<F>(before: F, after: F): F! when is_function::<F>()

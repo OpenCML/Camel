@@ -37,7 +37,7 @@ using type::TypeCode;
 /// grad and with_grad: (f) => the gradient function of f, and (f, has_aux) => the same for a
 /// function whose result is the pair `(value, aux)` (see stdlib/signatures/autodiff.cml).
 /// `argnums` is not a parameter: what is differentiated is the first `with` parameter (design
-/// principles 9.9), and the author's ruling keeps that the one way to choose it.
+/// principles 9.9), and that stays the one way to choose it.
 class GradResolver final : public type::FuncTypeResolver {
   public:
     explicit GradResolver(bool withValue, bool hasAux) : withValue_(withValue), hasAux_(hasAux) {}
@@ -240,12 +240,22 @@ std::unordered_map<std::string, operator_t> operatorKernels() {
 }
 
 void registerOperatorMetadata() {
-    // The transformations take a function: what a call does is what that function does, and
-    // std::macro rewrites the call away before anything runs. Declared, as every operator
-    // must be (design principles 3.3), as not pure.
+    // The transformations take a function and give a function: the node builds the derived
+    // function from the callee's graph and runs no body, so it writes nothing and is pure
+    // (design principles 3.3: `pure` is about writes, and a read is a dependency, not an effect).
+    // What a *call of the result* does is what the differentiated function does, and that effect
+    // belongs to the call node, whose callee is a function value -- not to this node.
+    //
+    // Declaring these two as not pure is what `std::opt` could not survive: the effect analysis
+    // reads an operator with no resource declaration as touching any resource it can reach
+    // (NodeAccess::anyValue, ResourceClass::Unknown), so a `grad`/`with_grad` node met every
+    // access of the graph it sat in. `test/cases/modules/autodiff/var_through_with_grad.cml`
+    // under `std::opt` is the smallest witness: the pair `(autodiff:with_grad, :var/after)` are
+    // two operands of one call and have no path by construction, and the commit check refused it
+    // -- in the graph the front end wrote, not only in the one the optimizer made.
     camel::core::OperatorTable::instance().declare(
         "autodiff",
-        {{"grad", false}, {"grad_aux", false}, {"with_grad", false}, {"with_grad_aux", false}});
+        {{"grad", true}, {"grad_aux", true}, {"with_grad", true}, {"with_grad_aux", true}});
     // grad and with_grad differentiate the graph of the function value they receive: on a
     // back end that lowered loops in a private copy they are handed the program's own graph, so
     // they refuse a loop there as everywhere else (OperatorTraits::readsGraphs; op-semantics
@@ -253,7 +263,7 @@ void registerOperatorMetadata() {
     for (const char *name :
          {"autodiff:grad", "autodiff:grad_aux", "autodiff:with_grad", "autodiff:with_grad_aux"}) {
         camel::core::OperatorTable::instance().set(
-            name, {.pure = false, .readsGraphs = true, .macro = true});
+            name, {.pure = true, .readsGraphs = true, .macro = true});
     }
     camel::core::OperatorTable::instance().set(
         "autodiff:stop_gradient",
@@ -261,9 +271,17 @@ void registerOperatorMetadata() {
     // `stop_gradient` is declared in `stdlib/autodiff.cml`, and its clause (`pure`) is what the
     // declaration says it touches: nothing. A native operator has to say the same thing here, so
     // the two are compared instead of one being taken on faith (design principles 3.3).
+    //
+    // The four transforms say it the same way, because the table refuses any other answer: an
+    // operator that is not pure must touch, allocate or affect something ("declare it pure
+    // instead"), and these touch nothing -- returning a function value is not a touch.
     camel::core::OperatorTable::instance().declareResources(
         "autodiff",
-        {{"stop_gradient", camel::core::sem::ResourceSpec{}}});
+        {{"stop_gradient", camel::core::sem::ResourceSpec{}},
+         {"grad", camel::core::sem::ResourceSpec{}},
+         {"grad_aux", camel::core::sem::ResourceSpec{}},
+         {"with_grad", camel::core::sem::ResourceSpec{}},
+         {"with_grad_aux", camel::core::sem::ResourceSpec{}}});
     camel::core::DerivativeRegistry::instance().setRule(
         "autodiff:stop_gradient",
         camel::core::noGradient);

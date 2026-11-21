@@ -142,7 +142,7 @@
 - **表示**：`LinkType::Sync`（`include/camel/compile/gir/types.h`）；运行图上不进输入端口列，单独存一列 `GCGraphSyncEdge`（`GCGraph::syncPredsOf()` / `graph.syncEdges()`；draft 侧是 `GraphDraft::syncInputsOf()` / `setSyncPredecessor()`）。
 - **由谁写**：构图器的 `writeSyncStatement(from, to)`（`src/compile/gir/builder_helpers.h`）给两端打上"同步块语句"标记，再连一条 `Sync` 边与**同对的**一条 `Ctrl` 边——后者只为仍读这个种类的消费者保留，判定不看它。链上是否写这一对由 `chainLinkSaysSomething` 决定：纯值节点不在链上，已被数据依赖蕴含的先后不再重复写。
 - **链尾**：链尾要连到块的值；值节点不归这个块独有时生成 `GATE`——数据端口读该值，等待就是链尾（同步前驱；仍在用控制边的旧图写的是 `Ctrl` 入边，封存检查两者都接受），值原样放行（`docs/design/effects/edges.cn.md` 5.3、`src/runtime/graph.cpp`）。
-- **冗余**：**顺序边**的冗余不在建图时省，由 `std::opt::order`（`reduceOrderDependencies`）与规范导出的约简（`reduceDocumentOrdering`，`src/passes/trans/json/gir_canonical.cpp`）去掉；同步链在建图时只写说了什么的那一对（上一条）。
+- **冗余**：**顺序边**的冗余不在建图时省，由 `std::cxx::order`（`reduceOrderDependencies`）与规范导出的约简（`reduceDocumentOrdering`，`src/passes/trans/json/gir_canonical.cpp`）去掉；同步链在建图时只写说了什么的那一对（上一条）。
 
 ### 4.6 `CALL` 与 `BIND`
 
@@ -271,7 +271,7 @@
 
 ### 7.5 Inline Pass 的 SCC-DAG 强正确性语义
 
-`std::opt::inline` 目前采用 **SCC 缩点 + DAG 逆拓扑** 的执行框架，而不是旧的“逐图扫描 + 反复重跑”：
+`std::cxx::inline` 目前采用 **SCC 缩点 + DAG 逆拓扑** 的执行框架，而不是旧的“逐图扫描 + 反复重跑”：
 
 > 深入版说明见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md)（覆盖会话级 use-index 重定向、`inlineCallable` 的控制入口与 `GATE` 语义、slot-safe prune 与预算哨兵）。
 
@@ -283,10 +283,10 @@
 
 关键约束：
 
-- **`std::opt::inline` 目标策略（可配置）**：当前 pass 先枚举 SCC 内 `FUNC` 候选，再按策略过滤：
-  - `std::opt::inline::small`：小子图且**非分支 arm**（非 `DATA/PORT` 节点数 `<= 4`）；
-  - `std::opt::inline::arm`：`BRCH` arm 且小子图；
-  - `std::opt::inline::hybrid` / `std::opt::inline`：满足任一条件即内联；
+- **`std::cxx::inline` 目标策略（可配置）**：当前 pass 先枚举 SCC 内 `FUNC` 候选，再按策略过滤：
+  - `std::cxx::small`：小子图且**非分支 arm**（非 `DATA/PORT` 节点数 `<= 4`）；
+  - `std::cxx::arm`：`BRCH` arm 且小子图；
+  - `std::cxx::hybrid` / `std::cxx::inline`：满足任一条件即内联；
   - 默认启用“SCC 入口 callee 保护”：SCC 内若调用目标是该 SCC 的入口 callee（被 SCC 外调用），则不内联。详见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 / §6.1。
 - **SCC 内目标冻结**：每个 SCC 只处理进入该 SCC 时捕获到的初始 inline target；处理中新增的 FUNC 不在同轮继续展开，避免振荡。
 - **重定向完整性**：编码前不允许残留 legacy 图引用。实现上以断言检查 `FUNC` 的被调图与 `DATA(Function)` 的图不再指向 source graph。
@@ -303,16 +303,16 @@
 
 ### 7.6 FastVM BRCH/JOIN/JUMP 协议收敛
 
-`std::opt::inline` 场景下，FastVM 侧做了两条强约束收敛：
+`std::cxx::inline` 场景下，FastVM 侧做了两条强约束收敛：
 
 - BRCH 生成阶段按**语义 arm 数**（if:2，match:withCnt+1）固定发射 JUMP 占位，避免“按当前可达输出数量发射”导致的 `jumpIdx` 偏移漂移。
 - BRCH 目标回填从单索引映射改为**多索引映射**（`target -> [jumpIdx...]`），保证多个 arm 收敛到同一控制头节点时不会覆盖回填位。
 
 对应回归：
 
-- `fib.cml std::opt::inline std::gir` 通过；
-- `inline_unique_subgraph.cml std::opt::inline std::gir` 通过；
-- `inline_unique_subgraph.cml std::opt::inline std::fvm` 通过。
+- `fib.cml std::cxx::inline std::gir` 通过；
+- `inline_unique_subgraph.cml std::cxx::inline std::gir` 通过；
+- `inline_unique_subgraph.cml std::cxx::inline std::fvm` 通过。
 
 ## 8. 内存与所有权模型
 

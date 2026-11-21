@@ -13,6 +13,17 @@ tags = ["showcase", "slow", "c2", "mlp", "mnist"]
 #
 # The plan runs in the slow tier: `npm run test` skips it and `--tier all` runs it;
 # the small profile takes seconds, not minutes.
+#
+# Deliberately not selectable by `--changed`: `test/plan-selection.json` names `test/plans/perf/**`
+# under "Deliberately not selectable", because the project forbids perf plans on a shared host, and
+# `scripts/perf-gate.mjs` refuses this plan by name for the same reason (`perf.showcase_c2`,
+# `refusal: 'policy'`). Nothing selects it on a change and the perf gate does not measure it, so the
+# one list that reaches it is the sweep -- `npm run test:all` (`node scripts/test.js --all --tier
+# all`), which the release run and the periodic full read take. That is on purpose, and it is why
+# this plan has to be named in that list: a plan that is deliberately unselectable and is never
+# named anywhere is the same silence as a plan that is selected and then filtered down to nothing.
+# Spelled out here because "deliberately not selectable" and "nobody ran it" read identically in
+# every report that does not say whether the plan was expected to run.
 
 [[tests]]
 name = "small"
@@ -173,12 +184,21 @@ timeout_ms = 300000
 #
 # Both halves run: the with_grad pipeline and the library's own gradient are two implementations of
 # the same training program, and the tolerance above is what says they agree.
+#
+# Read it on the gate host, not on a workstation. Measured 2026-11-15: on `88zjwei` this entry takes
+# 2.07 s and fails with the pinned sentence (`std::vjp` is still not a registered pass), while on a
+# Windows host the same program does not reach that sentence at all -- it hits `timeout_ms` and the
+# runner reports `expected exit 0, got timeout after 600000 ms`, so a reader there sees the mark
+# described by a failure that is not the one it pins. The unmarked `phases` entry beside it is the
+# same story with a smaller budget: 1.87 s on the gate host, 300 s of timeout on that Windows host.
+# 150x is not a slow host, it is a hang in the Python side of these two entries on that platform;
+# neither the mark nor the pin is wrong, and neither should be changed to satisfy that host.
 [[tests]]
 name = "implementations"
 desc = "C2 standard profile, twice: the with_grad pipeline and the library-grad pipeline print the same three-block table, and their last logged losses agree within the hand-written 1e-4 relative tolerance."
 kind = "behavior"
 known_fail = true
-known_fail_owner = "lane-transforms"
+known_fail_owner = "unowned (the `lane-transforms` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
 known_fail_reason = "the second pipeline names `std::vjp`, which no registry has (`showcase/c2-mlp-mnist/compare_implementations.py` runs `std::macro std::vjp std::nvm`), so the library half stops before it runs and there is nothing to compare"
 known_fail_msg = "std::vjp"
 known_fail_note = "The library half names a pass no registry has: `compare_implementations.py` runs the second pipeline as `std::macro std::vjp std::nvm`, and `std::vjp` is not a registered pass, so the second implementation stops before it runs and there is nothing to compare (2026-11-02). Confirmed on 2026-11-03 without running this plan: `camel <case> std::vjp` answers `Unrecognized graph rewriting/scheduling/translation pass 'std::vjp'`. The fragment is the pass name alone because this entry runs through a Python script that forwards the subprocess's stderr (`showcase/c2-mlp-mnist/compare_implementations.py`, `sys.stderr.write(result.stderr)`) and, when the subprocess stops early, also names the pipeline -- the pass name is in the failure either way, and the sentence can be tightened once this plan is next run."

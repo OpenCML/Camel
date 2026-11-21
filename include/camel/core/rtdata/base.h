@@ -192,7 +192,7 @@ using Bool    = bool;
 /// `halfText`): the shortest text that reads back as the same element of the type. The slot holds
 /// the type's 16-bit pattern in the low half; `code` says which of the two types it is. A path
 /// that has a slot and its type calls this rather than widening to f32 first, or the value would
-/// print by f32's rule (`0.100097656` for bf16 `0.1`; rule 2026-10-23, "reduced-precision-text").
+/// print by f32's rule (`0.100097656` for bf16 `0.1`).
 inline std::string halfValueText(slot_t data, camel::core::type::TypeCode code) {
     const uint16_t bits = camel::core::rtdata::halfBitsOfSlot(data);
     return code == camel::core::type::TypeCode::BFloat16

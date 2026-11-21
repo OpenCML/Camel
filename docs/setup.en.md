@@ -221,7 +221,7 @@ Intermediate build outputs are under `build/tools/<tool>/<Config>/`; `npm run bu
    npm run clean
    ```
 
-5. CMake options (FastVM JIT, computed goto, Python embedding modules) and the `CAMEL_SKIP_PYTHON` environment variable: see [Build options](build-options.en.md).
+5. CMake options (FastVM JIT, Python embedding modules) and the `CAMEL_SKIP_PYTHON` environment variable: see [Build options](build-options.en.md).
 
 ### 3.7 Editor Support
 

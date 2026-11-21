@@ -1,0 +1,54 @@
+/**
+ * `d(softmax<axis>(x))` answers the axis the **node** wrote, and the three axes answer three
+ * different numbers.
+ *
+ * `jvp_softmax` used to write `<1>` in its own left side, so the law answered one axis and, since
+ * the fit compares the `<>` value a law writes against the node's configuration, refused every other
+ * axis by name (`the rule 'jvp_softmax' writes 1 `<>` value(s) of its own`). The axis is the
+ * operator's second port and the law names it now, in `jvp_reshape`'s and `jvp_permute`'s shape,
+ * handing it to `softmax_jvp`. All three axes of one operand, one law: an implementation that names
+ * the port answers every axis, and one that writes a constant answers one.
+ *
+ * The numbers are derived by hand, not read off a run. `x` is `float[2, 2, 2]` of zeros, so every
+ * softmax is `1/2` -- exactly, because `exp(0) = 1` and a lane of two sums to 2 -- and with `W = dx`
+ * the tangent of a lane pair `(e, p)` is
+ *
+ *   t_e = y_e * (dx_e - sum<axis,true>(y * dx)_e) = (1/2) * (dx_e - (dx_e + dx_p) / 2)
+ *       = (dx_e - dx_p) / 4
+ *
+ * so the whole derivative is `(1/4) * sum over pairs of (dx_e - dx_p)^2`, and `f = sum(W * y)` is
+ * `sum(dx) / 2 = 36 / 2 = 18.0`. The pairs of `dx = [[[1,2],[3,4]],[[5,6],[7,8]]]` are
+ *
+ *   axis 0 (first):  (1,5) (2,6) (3,7) (4,8)   four pairs of distance 4  ->  64 / 4 = 16.0
+ *   axis 1 (middle): (1,3) (2,4) (5,7) (6,8)   four pairs of distance 2  ->  16 / 4 =  4.0
+ *   axis 2 (last):   (1,2) (3,4) (5,6) (7,8)   four pairs of distance 1  ->   4 / 4 =  1.0
+ *
+ * The three are distinct on purpose: the axis a law wrote answers one of them, and an implementation
+ * that confused the axis with the last one reads `1.0` where the answer is `4.0` or `16.0`.
+ */
+import rulesets.jvp
+import { jvp } from transforms
+import { softmax, sum } from tensor
+
+func axis0(x: float[...]): float {
+    return sum(softmax<0>(x) * ([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]))
+}
+
+func axis1(x: float[...]): float {
+    return sum(softmax<1>(x) * ([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]))
+}
+
+func axis2(x: float[...]): float {
+    return sum(softmax<2>(x) * ([[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]))
+}
+
+func main(): int sync {
+    let x = [[[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]] as float[2, 2, 2]
+    let dx = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]] as float[2, 2, 2]
+    let (value, tangent0) = jvp(axis0)(x, dx)
+    let (_v1, tangent1) = jvp(axis1)(x, dx)
+    let (_v2, tangent2) = jvp(axis2)(x, dx)
+    'rules_angle_args softmax-axes value={} axis0={} axis1={} axis2={}'->format<
+        value, tangent0, tangent1, tangent2>->println
+    return 0
+}

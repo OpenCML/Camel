@@ -1,0 +1,15 @@
+id = "feat.tools.tree_guard"
+tier = "fast"
+desc = "The `[TREE]` line is a verdict over two readings rather than advice: the difference between the checkout's `git status` before the first test and after the last one is the failure, the paths in it are named with the tests that were running, and a reading that cannot be taken is a failure rather than a clean tree. This plan pins the verdict on artificial readings, so the guard can be shown to go red on demand instead of once, on the night it was written."
+
+[[tests]]
+name = "runner.tree_verdict_names_the_path"
+desc = "A pure function over the two `git status` maps, measured on fixtures: an added path fails the run and the verdict names it, an identical pair passes, a path that appeared and went again is reported without failing, and an unreadable or missing reading fails. The parser is pinned on the three shapes git writes that a per-line split gets wrong: a whole new directory, a rename, a quoted name. Which run judges is pinned at both ends -- a run started inside another run's window defers, the same readings still fail the outer run, and a run nobody marked (or marked with a value this does not know) judges -- because the wrong default there is a gate that is off and still prints. No process is started and no file is written, so the case cannot leave anything behind itself."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/tree_guard.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000

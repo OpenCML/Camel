@@ -131,7 +131,9 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
   `FORBIDDEN`, whose own files say `tier = "milestone"`), the copies a sweep did not sample, and
   any other test whose cost or whose measurement is a property of the machine. No ordinary run and
-  no gate selects them; `--tier milestone` does.
+  no gate selects them by tier; `--tier milestone` does. One of those plan files can still be *named*
+  by a rule -- `feat/opt/progen.plan.toml` is named by the rule for `test/tools/progen/`, and that
+  also runs its milestone entries, because a plan named in full is not filtered by tier.
   **From 2026-11-05 this layer also runs on a schedule: the merge lane runs it once a day at 09:00
   Asia/Shanghai and once before every release, as
   `node scripts/test.js test/plans --tier milestone --jobs 8`.** A red in it is an ordinary red:
@@ -190,6 +192,43 @@ Immediately before `[SUMMARY]`, every run states the artifact its numbers belong
   looking right. A tree with no binary (a plan of `tool = "node"` cases, an unbuilt checkout) says
   `unknown` rather than an empty field. `out/latest/build-info.json` carries the build's own stamp for
   anyone who needs to know which tree produced the binary -- the two answer different questions.
+
+The line after `[SUMMARY]` says whether the run left anything in the tree it tested:
+
+```
+[TREE] clean: nothing appeared under the checkout during this run (git status --porcelain -u normal: 0 before, 0 after, 2392 directories watched)
+```
+
+- **The verdict is `git status --porcelain --untracked-files=normal` read twice**, once before the
+  first test and once after the last, and the failure is the difference: a path that appeared during
+  the run and is not ignored. Ignored is decided by `.gitignore`, not by this check, so
+  `test/results` and `tmp/test` -- the two trees a run owns -- need no exception, and there is no
+  list of paths that are allowed to be dirty.
+- **A path the run left behind fails the run.** It is not advice: a red gate whose only defect is a
+  file in the checkout is a red gate, because a tree the run made dirty is what makes the next
+  `[provenance]` read `(dirty: N files)` and stop naming a commit. `camel-remote.ps1` also carries
+  the untracked files to the host on every run, and `--changed` counts them as changed files.
+- **Each path is printed with the tests that were running when it appeared**, which is the only part
+  of the line a watcher supplies: a path the watcher did not see still fails (the attribution is a
+  diagnosis, never the verdict). `--update-golden` rewrites tracked files on purpose and prints
+  `[TREE] not judged: ...` rather than a green line; a `git status` that cannot be read is a failure,
+  not a clean tree.
+- **Paths already uncommitted when the run started are printed and are not this run's.** A lane that
+  edits and then runs `--changed` before committing would otherwise red every run it makes; the line
+  is printed anyway, because a file left by the run before this one has to be visible somewhere.
+- **Only the outermost run judges.** A test may start a run of this runner -- `feat/tools` does: the
+  layer-accounting and provenance cases drive two or three nested runs each -- and the nested window
+  lies inside the outer one's, which read the tree before its first test and after its last. A nested
+  run therefore reads no tree and starts no watcher; its own line reads
+  `[TREE] nested: tree guard deferred to the outer run`. Judging twice gave one phenomenon two
+  verdicts, and they disagreed: `test/.provenance-probe-*.tmp`, written and removed by a sibling
+  test, was still there when the nested window closed (`1 path appeared ...`, red) and gone when the
+  outer window closed (`appeared in the checkout and were gone again`, an annotation) -- same gate,
+  one line apart. The runner marks every process it starts with `CAMEL_TREE_GUARD=nested`; an unset
+  or unrecognised value means the outer run, because the failure mode of the wrong default here is a
+  gate that is off and still prints.
+- Where a test may write, and the fourteen files that made this line exist:
+  [Test Scratch](#test-scratch).
 
 Rules for a new test:
 
@@ -427,6 +466,18 @@ scratch tree, with `CAMEL_TEST_RESULTS_ROOT` and `CAMEL_TEST_RUN_DIRS_KEEP=1`, a
 
 ## Selecting Plans From A Change
 
+**A green `--changed` run says that the plans the selection named passed. It does not say the tree
+is good, and it cannot: the selection is the thing under test as much as the change is.** When the
+selection is incomplete, the run is green over a smaller question than the one it looks like it
+asked, and nothing in the report is worded differently. That is not a hypothetical: on 2026-11-15 a
+collection added after the entry graph returned in `src/passes/sched/nodevm/nodevm.cpp` selected
+`feat/linear`, `feat/para`, `feat/trans` and `smoke`, passed them at 1356/1352, and left nine
+`defun` tests red on a pushed `develop` -- eight of them killed by a signal -- because no rule tied a
+scheduler file to a plan that runs a program whose function values stay alive. So when a change
+touches a class of file that decides *when an object dies* (a scheduler, a collector, anything that
+names a root), the plans that depend on that timing belong in the rule, and the rule is written from
+the class and not from the last incident.
+
 `node scripts/test.js --changed` takes the files that differ from the base branch (committed,
 staged or not) and runs the plans they touch, so a small change does not start the whole fast
 layer. The base is `origin/develop`; `CAMEL_TEST_BASE` overrides it for a release branch or a
@@ -436,10 +487,15 @@ local comparison.
 
 - **Directory rules** (`directoryRules`): a change under `modules/`, `tools/` or `test/cases/`
   selects the plan mirroring its directory. The deepest existing match wins, so
-  `modules/tensor/ops/matmul.cpp` selects `test/plans/feat/modules/tensor/`,
+  `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
-  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. This names
-  the plan that mirrors the path; it cannot name a plan that lives outside that tree.
+  `test/cases/modules/tensor/comparison.cml` selects `test/plans/feat/modules/tensor/`. This names
+  the plan that mirrors the path; it cannot name a plan that lives outside that tree. Its `also`
+  list adds plans that read *every* change under the directory beside the mirrored one, which is
+  what a plan reading a class of files rather than a directory of them needs: the `test/cases/` rule
+  carries `{ "plan": "feat/parse/frontend.plan.toml", "layer": true }`, because the front-end AST
+  snapshot hashes every `.cml` of the repository, so a case that lands unrecorded is a file that
+  changed and no plan read.
 - **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
   reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
   `test/plans/gpu/` (a change to the tiles C++ used to select only the CPU tiles plan),
@@ -499,8 +555,7 @@ What a rule deliberately does **not** select, because the project forbids it on 
 
 - `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
 - the GC-stress plans `feat/mm/gc`, `feat/mm/gc_collections`, `feat/mm/gc_elder_exhaustion`,
-  `gpu/tiles_regions`;
-- the random-program check `feat/opt/progen.plan.toml`.
+  `feat/mm/gc_root_window`, `gpu/tiles_regions`.
 
 No file rule names them, and the `test/plans/` self rule excludes them: editing one of those plan
 files falls back to the fast layer instead of running the plan. A change that is only relevant to
@@ -509,9 +564,19 @@ way to run them is to name the plan file deliberately. The ordinary opt selectio
 `feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
 progen plan while `--tier all` runs it.
 
+The random-program plan `feat/opt/progen.plan.toml` is the one plan with a **door and a lock**. Its
+case is the generator itself, so a change under `test/tools/progen/` -- the generator, the model,
+the runner -- selects it, and nothing else does: a progen case or the plan file itself still
+selects nothing, and the self-test holds both ends of that (it also rejects the plan being
+*layered*, because a plan selected and then filtered down to one entry is the same "nobody runs
+it" in a new place). The reason for the door is that a check no change selects does not exist: the
+classes of red that `--tier fast` hid went unseen for exactly that reason. The reason for the lock
+is cost: the plan is 1,025 compiler runs (27 s of wall at `-Jobs 8`), which must not ride on an
+ordinary change of that corpus.
+
 Three ways the selection can come up empty are not the same answer and no longer read the same
 either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
-a change that only touches a class the project keeps out of `--changed` (perf, GC stress, progen)
+a change that only touches a class the project keeps out of `--changed` (perf, GC stress, a progen case)
 -- and the widening is printed as a widening, with the files that caused it and the size of the layer
 it runs. A change with **no file in it** selects nothing and starts nothing, and prints
 `changed: 0 target(s)` beside the size of the layer it did **not** run: an empty target list reaches
@@ -548,7 +613,7 @@ case out -- is not one of the branch's plans, and the self-test names it as a no
 failing the run: the live tree is shared with whoever is working in it, and two gates of another
 task went red on exactly such a draft. Committing the file makes the check red for real.
 The
-allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
+allowlist names only the deliberately unselectable layers (perf, GC stress, the PyTorch
 comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
 metadata). A new kind of file therefore cannot appear without a rule or a reason: add
 the rule, or add the class and its reason to the self-test.
@@ -633,7 +698,10 @@ Every `[[tests]]` entry may use these common fields:
   code to compare.
 - `expect_signal`
   Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
-  `"SIGABRT"`) or as the number this platform numbers it by (`6`); the three are one expectation.
+  `"SIGABRT"`) or as the number this platform numbers it by (`15`, which is SIGTERM on both Windows
+  and Linux); the three are one expectation. A number is this platform's number and no other's --
+  `6` is SIGABRT on POSIX but no signal at all on Windows, where Node numbers SIGABRT 22 -- so a
+  name is what a plan writes when it means one particular signal.
   There is no default and no boolean form: an entry that expects a death has to name the signal,
   because "it dies somehow" is not a reading a reader can check and would pass a death by any other
   signal. It stands in place of `expect_exit`, so the entry is green when the process dies of
@@ -668,6 +736,12 @@ Every `[[tests]]` entry may use these common fields:
   test whose own CPU time exceeds its wall clock is multi-threaded work: the reading sums its
   threads, so a bound on its total work belongs in `cpu_budget_ms` (measured over the whole fast
   layer on 2026-10-24: 21 tests, all ONNX-runtime, dlpack and fuzz cases).
+  Every test's `meta.json` records the reading, the line it was judged against and the room left
+  under it — `cpu_ms`, `cpu_limit_ms` and `cpu_margin_x` (`cpu_limit_ms / cpu_ms`, 1.0 at the line),
+  with `cpu_margin_basis` naming the rule the line belongs to — so a green run says how far from red
+  each test is, not only that none reached it. A green whose room nobody can read is a green nobody
+  looked at, and on 2026-11-16 two cases were read as unstable for three rounds because the record
+  held `cpu_ms: null` for them and nothing could show they were 0.1–4.2% past the line.
 - `cpu_budget_ms`
   Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
@@ -783,7 +857,7 @@ everywhere is written once:
   - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
   - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
   - the page that decides the question:
-    `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
+    `docs/handover/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
 
   It is refused at load with the same refusal the owner gets, and three more shapes are refused with
   it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
@@ -793,6 +867,18 @@ everywhere is written once:
   the history.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
+- `known_fail_ends_when`
+  The reading that removes the mark: the refusal that has to go, and the line this entry has to
+  print, both in backticks. A mark records a red; `known_fail_owner` says who ends it and
+  `known_fail_reason` where the case is stuck, and neither says *what* would end it -- so a mark can
+  outlive its wall and read as permanent debt. The runner already decides the two moments it can see
+  (the case starts passing: `marked known_fail ... but passes`; the refusal changes: `known failure
+  changed its mind`), and this field states the condition those two readings are the evidence of, in
+  the terms the run compares. `test/tools/check-plan-fields.mjs` counts the marks that carry none
+  (`mark-without-end-trigger`, ratcheted: it may not grow), refuses a trigger that quotes no reading
+  (`end-trigger-names-nothing`) and one that does not name the entry's own pinned line
+  (`end-trigger-names-another-reading`). The field is not required at load -- a mark written before it
+  existed keeps working -- but a new mark is expected to carry it.
 - `known_fail_msg`
   A fragment of the reason a marked test fails with, so the reason is pinned and not only the
   failure. When a marked test fails and the fragment does not appear in its output, the case stays
@@ -804,13 +890,24 @@ everywhere is written once:
   existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
   migration. A mark without this field is therefore still legal; one that carries it is the only kind
   that can say its reason moved.
+- **A mark names either the sentence it fails with or the reading that ends it**, and the author's
+  ruling of 2026-11-21 02:20 chose the second shape for a case whose target is a number and whose
+  wall is being built: a sentence quoted from a refused run follows the implementation, so a pin on
+  it has to be re-typed every time the wall moves, which records the wall's progress as the case's
+  debt. `known_fail_ends_when` states the line the entry has to print instead, and no wall moves
+  that. `known_fail` needs one of the two -- the plan is refused at load when it has neither, with
+  the same `checkKnownFailMark` (`test/tools/run-tests.mjs`) -- and the trade is worth stating where
+  a reader weighs it: the sentence is the only field the run *compares*, so a mark that states its
+  ending reading accepts any failure as the expected one until the numbers arrive, and a different
+  defect can wear that mark's name in the meantime. The owner and the reason are required either
+  way, and the reason keeps naming the wall as it stands today.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
 `parallel = false` test overlaps nothing), the tier filter (`fast`, `slow` and `all` select
 the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the scheduler
 plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
-layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
+layered plan, a plan file itself, the forbidden perf/GC-stress plans nothing, an unknown
 path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
 The `known_fail` gate has five plan files of its own under `test/tools/selftest/knownfail/`: four
 ways to be incomplete -- no owner, no reason, a placeholder reason and a reason that names no wall --
@@ -919,6 +1016,7 @@ Behavior-style tests may combine:
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
 - `expect_diagnostic_column`
+- `expect_no_diagnostics`
 - `expect_refusal`
 - `verify_script`
 - `verify_script_path`
@@ -1114,9 +1212,16 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
-- `input.cpu_ms`, `input.cpu_budget_ms` — the test's own CPU time (user + system) and the budget it
-  was judged against for a test that declared `cpu_budget_ms`, and `null` for every other test: the
-  payload of a test whose bound is CPU carries the numbers its verdict came from.
+- `input.cpu_ms`, `input.cpu_budget_ms`, `input.cpu_limit_ms`, `input.cpu_margin_x`,
+  `input.cpu_margin_basis` — the test's own CPU time (user + system; `null` where this host reports
+  none), the `cpu_budget_ms` it declares (`null` for a test that declares none), the line its cost
+  verdict was read against, how many times the reading fits under that line, and which rule that line
+  belongs to: `cpu_budget_ms` for a test that declares a budget, `timeout_margin` for one judged by
+  the timeout rule (whose line is `timeout_ms / 4`). `cpu_margin_x` is `cpu_limit_ms / cpu_ms`, so
+  1.0 is the line itself and 39 is a reading with thirty-nine times the room it needs; it is `null`
+  where there is no reading, and where the reading is 0 ms (below the kernel's tick, so the ratio is
+  not a number) the line and the reading are still there. The same five fields are in the test's
+  `meta.json`.
 - `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
   the plan's directory, which is what the tool was invoked with. The output may repeat it (a
   graph dump names its source file), and it is absolute, so it differs between two checkouts of
@@ -1176,8 +1281,11 @@ risk_tags = ["collections", "closures", "iterators"]  # plans whose sample is la
 risk_sample = 2                       # keep two or three of those instead
 ```
 
-Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
-`known_fail` or `sweep = false` is left out, and a sweep with `args` also leaves out the
+Every test of the `camel` tool is taken, whatever it expects: a program that runs to completion
+(`behavior`), a stored picture (`snapshot`), or a diagnostic, a refusal or a fault the test expects
+to see (`negative`). A benchmark is left out (it carries a budget, not a property), and so is a
+differential test (it compares two runs to each other, not one run to its assertions). A test
+marked `known_fail` or `sweep = false` is left out, and a sweep with `args` also leaves out the
 tests that do not drive a run (`check`, `inspect`, `--version`): the words go in front of the
 entry file of a run, and those tests have no entry file to put them in front of.
 
@@ -1236,7 +1344,7 @@ those 215 plans and the milestone layer grows by one entry that day: no command 
 the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
 split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
 than to the runner, and it is asked in
-`docs/handover/questions/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+`docs/handover/reviews/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
 
 ### The one sweep, and what it expands to
 
@@ -1441,6 +1549,22 @@ Snapshot tests require:
 
 When the runner is called with `--update-golden`, the selected snapshot stream overwrites the golden file before comparison.
 
+That switch reaches `kind = "snapshot"` and nothing else. The one test of the front end that
+records a file of its own, `frontend.ast_snapshot`, is `kind = "behavior"` with `tool = "python"`
+(it runs `test/tools/parsecheck/check.py snapshot`), and the runner never passes it `--update`: its
+record is `test/plans/feat/parse/golden/ast_hashes.txt`, written by the tool. A `.cml` case added to
+the tree is therefore *not* recorded by `--update-golden`, and until it is recorded the parse plan
+reports it as a file with no reading. Record it with the tool itself, from the repository root:
+
+```bash
+python3 test/tools/parsecheck/check.py snapshot --update
+```
+
+Through the gate, `internal/tools/camel-remote.ps1 -UpdateAstHashes` runs exactly that on the build
+host, before the plan, and brings the file back into the calling tree; `-UpdateAstHashes -Plan
+test/plans/feat/parse/frontend.plan.toml` records and then verifies in one call. A lane on a
+workstation that cannot build has no other way to record it, which is why the switch exists.
+
 ## Differential Tests
 
 Differential tests require:
@@ -1470,6 +1594,102 @@ Benchmark tests may use:
   into the test's `meta.json`, and does not change the budget comparison with it.
 
 The case must emit the expected JSON benchmark payload format used by the runner.
+
+## Fields a Kind Does Not Read
+
+The schema is closed, but it is not kind-aware: a field spelled correctly is accepted under every
+kind, and only the kind's own block in `validateTest` (`test/tools/run-tests.mjs`) evaluates it.
+`compare_to` on a `negative` entry, `golden` on a `behavior` entry, `perf_budget_mean_ms` on a
+`benchmark` entry that never emits a payload -- each is accepted, silent, and never read, so the
+entry reads as a comparison it does not make. That is the failure this section is written against:
+a plan field the runner never reads is not a test.
+
+`negative` and `positive` are labels for `behavior` (see "Common Test Fields"): the runner has no
+block for either, so a `negative` entry with no `expect_exit` (or `expect_signal`) says nothing
+about failing. Which fields each kind evaluates:
+
+| field | behavior | negative | positive | snapshot | differential | benchmark |
+| --- | --- | --- | --- | --- | --- | --- |
+| `expect_exit`, `expect_signal` | yes | yes | yes | yes | yes | yes |
+| `expect_stdout_contains`, `_matches`, `_exact`, `_starts_with`, `_not_contains` | yes | yes | yes | yes | yes | yes |
+| `expect_stdout` (legacy name of `_exact`) | yes | yes | yes | yes | yes | yes |
+| `expect_stderr_contains` | yes | yes | yes | yes | yes | yes |
+| `expect_output_contains`, `_not_contains` | yes | yes | yes | yes | yes | yes |
+| `expect_refusal`, `expect_diagnostic_*` | yes | yes | yes | yes | yes | yes |
+| `verify_script`, `verify_js`, `verify_script_path` | yes | yes | yes | yes | yes | yes |
+| `normalizers` | yes | yes | yes | yes | yes | yes |
+| `expect_no_diagnostics` | yes | yes | yes | yes | yes | yes |
+| `golden`, `snapshot_stream`, `snapshot_compare` | no | no | no | yes | no | no |
+| `compare_to`, `compare_fields` | no | no | no | no | yes | no |
+| `perf_budget_mean_ms`, `perf_budget_tolerance_pct` | no | no | no | no | no | yes |
+| `backends_agree` | only for an entry whose `backends` is a list | | | | | |
+| `perf_budget_platform` | never an assertion: provenance for `meta.json` | | | | | |
+
+Two rows are conditional on the value rather than on the kind, and both are silent:
+`expect_diagnostic_name` and `expect_diagnostic_code` are read only when they are truthy, so
+`expect_diagnostic_name = ""` names nothing; and every list field is a loop over nothing when it is
+empty, so `compare_fields = []` on a `differential` entry compares nothing at all. A
+`differential` entry with no `compare_to` is the one shape that fails loudly (`compare_to target not
+found: undefined`).
+
+**"No diagnostic at all"** is `expect_no_diagnostics = true`: the entry fails when the run recorded
+any diagnostic. It stands in place of `expect_diagnostic_*` rather than joining them, because an
+entry cannot both require a diagnostic and require none; an entry that does not name the field keeps
+exactly the meaning it had. Before this field existed the claim could not be made, and
+`expect_diagnostic_name = ""` was the nearest thing -- which is not the same thing at all: because
+`[defaults]` is merged into every entry, that empty value **cancels** the name the block inherited
+and then the whole diagnostic block is skipped. The entry holds no expectation, and nothing verifies
+the absence. Deleting such a line is not a cleanup either: the inherited name comes back and the
+entry starts demanding a diagnostic it never wanted (`match.complete` in
+`consistency/match.plan.toml` was red that way when the line was deleted). Read it as "this entry
+inherits nothing here", and write the absence as `expect_no_diagnostics = true` -- the reasoning and
+the readings are in
+[`docs/handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+
+`test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
+that writes a field its kind does not evaluate, naming the plan, the line and the entry:
+
+```bash
+node test/tools/check-plan-fields.mjs                  # report, ratcheted against the baseline
+node test/tools/check-plan-fields.mjs --enforce         # every finding fails the run
+node test/tools/check-plan-fields.mjs --verify-runner    # the table against run-tests.mjs
+node test/tools/check-plan-fields.mjs --update-baseline  # accept the count it just measured
+```
+
+It is a **wall** on the gate (`-Check all` in `internal/tools/camel-remote.ps1`): the check is pure
+static analysis over `test/plans/**`, deterministic and a few seconds, so its exit code decides the
+run. What makes that fair on the day it was turned on is the ratchet: the last accepted count lives in
+`test/tools/plan-fields-baseline.json`, findings that grow past it exit non-zero by name and by
+category, and findings that come down exit zero with the line that says to accept the new number
+(`--update-baseline` is the only writer; a missing baseline is a red, never a pass over nothing). A
+check that can only ever print is a number nobody has to answer for; the ratchet is what makes "may
+not grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count
+reaches zero, `--report-only` is the numbers without the exit code, and all three are one edit apart.
+
+The report keeps the two states apart, because they call for opposite actions and used to print the
+same three hundred lines. **A broken ratchet** -- the count moved, or a category did while the total
+did not -- prints the entries one by one, then one line saying how many entries the two disagree on,
+and exits non-zero: the set changed, the baseline has to follow, and the list is the evidence. **A
+tree in agreement** -- the count is exactly the baseline's and no category grew -- prints neither the
+rows nor any claim about them; the `ratchet=ok` line is the whole report and the exit code is zero.
+Nothing is claimed there because nothing is known: the baseline keeps a count and per-category
+counts, not per-entry identities, so with the total and every category unchanged the check has no
+evidence of a disagreement to name. A list that appears on every gate is a list that gets skipped,
+and a sentence that says "N entries do not match" on every green run is read as noise -- both cost
+what a false green costs.
+
+The table above is copied into that script, so `--verify-runner` fails by name when `validateTest`'s
+gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
+catch, one level up.
+
+**It is also a plan**: `feat/tools/plan_fields.plan.toml` (`tools.plan_fields`, fast) runs the
+ratcheted tree reading as `plan_fields.tree` and `--verify-runner` as `plan_fields.table`. `-Check
+all` was the only door before that plan existed, and a door somebody has to remember to ask for is
+not a wall: the count moved from 331 to 333 inside one lane's merge and every gate stayed green.
+The plan is the door `npm run test` opens on its own. What it must not become is a check that
+rewrites its own baseline -- `--update-baseline` stays a separate command a lane runs and commits
+with the fix, so the ratchet can only move down, and a red means the tree moved and nobody
+accepted it.
 
 ## Performance Measurement
 
@@ -1640,6 +1860,28 @@ instances run at the same time without seeing each other's files. A case run out
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
 `get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
 `onnx::export out="${test_tmp}/..."` path.
+
+**A test's own program runs from the checkout root, and a program that starts other programs must
+give them a directory of their own.** That is the rule this section is about, stated twice because
+the two halves are what a defect of 2026-11-16 got wrong. `${test_tmp}` is a *repository-relative*
+path, so a program the runner starts anywhere but here resolves it one level too deep: measured with
+the child's cwd set to its scratch directory, `feat/modules` went from 3 failures to 98, and every
+one of the 95 new ones was `ENOENT .../tmp/test/run-<pid>/<plan>/<test>/<file>` -- the file had been
+written under `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
+So the runner keeps `cwd: REPO_ROOT` (`runOneTest`), and the second half carries the weight: one gate
+of the whole `feat` tree left fourteen files in the repository root -- twelve models from
+`test/cases/modules/onnx/ort_*.cml` (`export_model<out: 'affine.onnx'>`) and `子 目录/嵌套 文件.txt`
+and `数据 文件 🐫.txt` from `env_paths.cml`, which writes beside `get_cwd()` -- because
+`test/plans/feat/tools/plan_refs_sweep.plan.toml` starts one `camel` per case in the tree
+(`scripts/check-plan-refs.mjs`) and those 3,844 case programs were executed from the checkout root.
+That script now runs each case in a directory of its own under `CAMEL_TEST_TMPDIR`, removed with the
+case: what a case writes lands where the test's other output goes and goes with it. Any other harness
+that runs case programs owes the same.
+
+What a *user* sees is unchanged: `camel x.cml` with `onnx::export out=model.onnx` still writes to
+the directory the user ran it in. Nothing here changes how the exporter resolves a path, only where a
+test's programs are started. A `skip_unless` precondition also runs from the repository root -- it is
+a command a plan writes against the checkout, not a test's own program.
 
 ## Field Constraints And Style
 

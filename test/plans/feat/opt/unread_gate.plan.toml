@@ -19,9 +19,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]
 name = "unread_gate.before"
-desc = "The setup the dce entries are a regression against: after std::inline the graph carries a gate whose value has no reader (a discarded call's return) and the caller's return anchor. The gate total is not asserted; what makes the rewrite worth testing is that an unread gate exists to drop and that the exit anchor is still there to keep."
+desc = "The setup the dce entries are a regression against: after std::cxx::inline the graph carries a gate whose value has no reader (a discarded call's return) and the caller's return anchor. The gate total is not asserted; what makes the rewrite worth testing is that an unread gate exists to drop and that the exit anchor is still there to keep."
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}","std::inline","std::jgir"]
+args = ["${case}","std::cxx::inline","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -36,7 +36,7 @@ verify_script = '''
 name = "unread_gate.graph.inline_dce"
 desc = "One dce pass: the caller's return anchor is still there, no gate is left without a value reading it, and all eight of the program's effects survive (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}","std::inline","std::opt::dce","std::jgir"]
+args = ["${case}","std::cxx::inline","std::cxx::dce","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -51,7 +51,7 @@ verify_script = '''
 name = "unread_gate.graph.inline_dce_twice"
 desc = "dce is idempotent: the second pass leaves the same anchor, still no unread gate, and the same eight effects (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}","std::inline","std::opt::dce","std::opt::dce","std::jgir"]
+args = ["${case}","std::cxx::inline","std::cxx::dce","std::cxx::dce","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -81,7 +81,7 @@ verify_script = '''
 name = "unread_gate.graph.opt_dce"
 desc = "std::opt followed by dce leaves the anchor gate, no unread gate, and the program's eight effects: the second removal finds nothing to drop (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}","std::opt","std::opt::dce","std::jgir"]
+args = ["${case}","std::opt","std::cxx::dce","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
@@ -105,7 +105,7 @@ verify_script = '''
 [[tests]]
 name = "unread_gate.results.inline"
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}","std::inline","${backend}"]
+args = ["${case}","std::cxx::inline","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''
@@ -115,7 +115,7 @@ verify_script = '''
 [[tests]]
 name = "unread_gate.results.inline_dce"
 case = "../../../cases/opt/generic/unread_gate.cml"
-args = ["${case}","std::inline","std::opt::dce","${backend}"]
+args = ["${case}","std::cxx::inline","std::cxx::dce","${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 verify_script = '''

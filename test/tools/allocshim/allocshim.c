@@ -5,7 +5,7 @@
  * allocshim: a counting allocator shim for measuring a Camel run (Linux, glibc).
  *
  *   cc -O2 -fPIC -shared -o allocshim.so allocshim.c
- *   LD_PRELOAD=./allocshim.so camel --time-phases report.json prog.cml std::fvm
+ *   LD_PRELOAD="$(pwd)/allocshim.so" camel --time-phases report.json prog.cml std::fvm
  *
  * It interposes malloc, calloc, realloc, free and the aligned variants, forwards each call to
  * glibc (`__libc_malloc` and friends, so nothing is looked up at run time and nothing can

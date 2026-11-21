@@ -2,7 +2,7 @@ id = "compile.unused_values"
 order = 413
 tier = "fast"
 tags = ["feat", "compile", "diagnostics", "negative", "unused"]
-desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and the warning takes precedence over the one for a statement that does not run); an effect outside a `sync` body is EffectNotExecuted; a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs."
+desc = "A statement whose value nobody uses gives exactly one diagnostic, whatever the body it is written in: a statement whose value is a `T!` is UnusedFallibleValue, in a `sync` body and outside one alike (the error it may hold is lost either way, and it is the only warning such a statement gets); a statement that does not run is not reported at all -- the diagnostic that named it went with the region roots (the ruling of 2026-11-17); a pure statement is UnusedPureResult. The `T!` statement of a body that is not `sync` was silent, and the same statement in a `sync` body of an effect-shaped callee was reported as an effect that never runs -- that second warning no longer exists."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -24,7 +24,7 @@ assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 5, JS
 
 [[tests]]
 name = "unused_values.fallible_body"
-desc = "The same `T!` statement in a body that is not `sync`: the call does not run, and its value is still a `T!` nothing takes. One diagnostic, UnusedFallibleValue -- not EffectNotExecuted as well."
+desc = "The same `T!` statement in a body that is not `sync`: the call does not run, and its value is still a `T!` nothing takes. One diagnostic, UnusedFallibleValue -- nothing else is reported for a statement that does not run."
 kind = "negative"
 case = "../../../cases/compile/unused_values/fallible_body.cml"
 args = ["-E", "short", "${case}"]
@@ -38,7 +38,7 @@ assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 5, JS
 
 [[tests]]
 name = "unused_values.effect_sync"
-desc = "An effect statement of a `sync` body runs: it is on the chain, so neither the unused-value warning nor EffectNotExecuted is reported, and both lines are printed in the order they are written."
+desc = "An effect statement of a `sync` body runs: it is on the chain, so neither the unused-value warning nor anything else is reported, and both lines are printed in the order they are written."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_sync.cml"
 args = ["-E", "short", "${case}"]
@@ -49,18 +49,16 @@ assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
 """
 
 [[tests]]
-name = "unused_values.effect_body"
-desc = "An effect statement of a body that is not `sync` never runs: one diagnostic, EffectNotExecuted, and the call it names prints nothing."
-kind = "negative"
+name = "unused_values.a_call_that_writes_runs"
+desc = "A call written as a statement of a body that is not `sync` is one of that body's writes when its callee writes (design principles 3.1, the author's ruling of 2026-11-17: `算子、调用、分支、循环一样`), so the body's `GATE` reads it and the call runs: the print happens and no diagnostic is reported. It replaces `unused_values.effect_body`, which pinned the reading the ruling reversed -- a call to an effectful callee in the graph and in nothing else -- and it pins the other half of the same program: the call runs, the callee still hands its value on, and the two lines keep the order they are written in."
+kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_body.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
-expect_stdout_starts_with = "4\n"
+expect_stdout_exact = "never printed\n4\n"
 verify_script = """
-assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
-assert(input.diagnostics[0].name === 'SemanticDiag::EffectNotExecuted', input.diagnostics[0].name)
-assert(input.diagnostics[0].line === 13 && input.diagnostics[0].column === 5, JSON.stringify(input.diagnostics[0]))
-assert(!input.normalized.stdout.includes('never printed'), input.stdout)
+assert(input.diagnostics.length === 0, JSON.stringify(input.diagnostics))
+assert(input.normalized.stdout.includes('never printed'), input.stdout)
 """
 
 [[tests]]
@@ -138,7 +136,7 @@ assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.
 assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
 """
 
-# ---- The help of EffectNotExecuted, per position (author's ruling of 2026-11-05, `080778522`) ----
+# ---- What a statement whose value nobody takes reports, per position (author's ruling of 2026-11-05, `080778522`) ----
 #
 # The help used to give two remedies that are not writings: a `sync { ... }` block put in a function
 # body (as a statement it is itself not needed, so it does not run) and a sync block bound to a name
@@ -150,29 +148,26 @@ assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, J
 # three shapes the question page measured. Each entry writes the remedy where the effect is and reads
 # its output, so a help that named a spelling the language does not have would be caught by the case
 # that follows it rather than by a reader. The page is
-# `docs/handover/questions/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
+# `docs/handover/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
 
 [[tests]]
-name = "unused_values.help_loop_body_names_do_sync"
-desc = "An effect written as a statement of a `loop` body that is not a sync block does not run: the loop's value `3` is what prints, the call is reported as EffectNotExecuted, and the help names the writing that works at that position -- `do sync { ... }` -- instead of a sync block inside the body or a sync block bound to a name. The two writings the help used to give are not in it: one is measured not to run (`unused_values.help_sync_statement_in_a_loop_body_does_not_run`) and one does not parse (`unused_values.help_let_sync_is_not_a_program`)."
-kind = "negative"
+name = "unused_values.loop_body_runs_each_round"
+desc = "An effect written as a statement of a `loop` body that is not a sync block runs in every round: the loop's value is used, so the loop runs, so the write its body holds is a root of the loop body's region (design principles 3.1, \"循环每一轮都执行\"). The three `i=` lines and then `total=3` print, and nothing is reported. The author's ruling of 2026-11-15 overrides the 2026-11-05 reading this entry used to measure, under which only `total=3` printed and the call was reported as one that does not run."
+kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_loop_body_dropped.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === 'total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-const text = input.normalized.stderr.replace(/\\s+/g, ' ')
-assert(text.includes('SemanticDiag::EffectNotExecuted'), `the dropped call is not reported: ${text}`)
-assert(text.includes("'do sync { ... }'"), `the help does not name 'do sync': ${text}`)
-assert(!text.includes('let u = sync'), `the help names a writing that does not parse: ${text}`)
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('is never executed'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
 }
 """
 
 [[tests]]
 name = "unused_values.help_loop_body_do_sync_runs"
-desc = "The remedy the help gives for a loop body, written: `do sync { ... }` declares the body a sync block, so the three calls run and the loop's value is unchanged (`total=3`). The one word is the whole difference from `effect_loop_body_dropped.cml`, and nothing is reported."
+desc = "`do sync { ... }` on a loop body: the three calls run and the loop's value is unchanged (`total=3`), which is now the same output as the body that is not a sync block (`unused_values.loop_body_runs_each_round`) -- a write in a running region runs either way."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_loop_body_do_sync.cml"
 args = ["--error-format", "text", "${case}"]
@@ -181,24 +176,22 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
 
 [[tests]]
-name = "unused_values.help_sync_statement_in_a_loop_body_does_not_run"
-desc = "The writing the old help invited, measured where it was offered: a `sync { ... }` block written as a statement of a loop body is itself not needed, so it does not run and the call inside it is still reported as EffectNotExecuted. Only `total=3` prints, which is why the help names `do sync` for a loop body and not a sync block written inside it."
-kind = "negative"
+name = "unused_values.sync_statement_in_a_loop_body_runs"
+desc = "A `sync { ... }` block written as a statement of a loop body is a block, not a region the program chooses to run or not, so it runs with the region around it and the call inside it runs each round (design principles 3.1). `0`, `1`, `2` and `total=3` print and nothing is reported. This entry used to measure the opposite; the ruling of 2026-11-15 is the one that stands."
+kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_sync_statement_in_a_loop_body.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === 'total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-const text = input.normalized.stderr.replace(/\\s+/g, ' ')
-assert(text.includes('SemanticDiag::EffectNotExecuted'), `the block is not reported: ${text}`)
-assert(text.includes("'do sync { ... }'"), `the help does not name 'do sync': ${text}`)
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('is never executed'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
 }
 """
 
@@ -223,7 +216,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === 'then=1|then=2', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
 
@@ -238,7 +231,7 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === 'else=1', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """
 
@@ -253,6 +246,6 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.join('|') === 'hello from greet', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+assert(!input.normalized.stderr.includes('is never executed'), input.normalized.stderr)
 }
 """

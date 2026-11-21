@@ -6,7 +6,7 @@
  * `min` are IEEE 754-2019 maximum and minimum, and relu(x) = maximum(x, +0)).
  *
  * The comparison itself is not stated here: `maximum` and `minimum` forward to `maxOf`/`minOf` of
- * modules/math/minmax.h, which is the one statement in C++ of "a NaN on either side gives the
+ * camel/core/math/minmax.h, which is the one statement in C++ of "a NaN on either side gives the
  * canonical quiet NaN, and -0 is below +0", on values widened to f32 for bf16 and f16. This file
  * adds what only a tensor has — the argmax/argmin order and the identities a reduction starts
  * from — and its file comment is where the rules are written out for the kernels that read it.
@@ -29,7 +29,7 @@
 #pragma once
 
 #include "camel/core/rtdata/half.h"
-#include "modules/math/minmax.h"
+#include "camel/core/math/minmax.h"
 
 #include <cmath>
 #include <limits>
@@ -38,7 +38,7 @@
 namespace camel::tensor::kernels {
 
 /// IEEE 754-2019 maximum: the `math` module's comparison, which the array kernels call as well
-/// (modules/math/minmax.h).
+/// (camel/core/math/minmax.h).
 template <typename T> inline T maximum(T a, T b) { return camel::core::math::maxOf(a, b); }
 
 /// IEEE 754-2019 minimum: the same one statement as `maximum`.

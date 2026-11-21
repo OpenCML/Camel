@@ -6,8 +6,8 @@
 //      entirely would pass the property entry for the wrong reason.
 //   2. Beside it, an operation over two constants the pass *does* replace, so one round both
 //      evaluates a node it leaves and replaces one it keeps.
-//   3. The two are in one round: the division is a control input of the product, which is what the
-//      source's order (`let a = 1 / 0` above `let b = x * y`) puts in the graph.
+//   3. The two are in one round: the division precedes the print on the sync chain, and the
+//      product gives the value the print reads. Pure arithmetic does not need a control wait.
 //
 // A `std::gir` golden cannot say this: it records what is there, not that the guard looked at it.
 
@@ -72,9 +72,15 @@ assert(
     `the product reads ${productOperands.map((n) => n.label).join(', ')}, not two constants`,
 )
 
-//// 3. one round holds both: the division orders the product.
+//// 3. one round holds both: the fallible division precedes the print, whose value the product gives.
 
+const println = main.nodes.find((n) => n.label === ':io/println')
+assert(println, 'the corpus no longer holds the print the division precedes')
 assert(
-    inputs(main, product.id, 'control').some((n) => n.id === division.id),
-    'the division no longer orders the product, so the two nodes are not in one round together',
+    inputs(main, println.id, 'sync').some((n) => n.id === division.id),
+    'the division no longer precedes the print on the sync chain',
+)
+assert(
+    inputs(main, println.id, 'normal').some((n) => n.id === product.id),
+    'the product no longer gives the value the print reads',
 )

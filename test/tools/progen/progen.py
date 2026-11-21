@@ -268,6 +268,19 @@ CHECK_RANGE = range(1, 26)
 # evaluator types it: the arm join holds. It is back in the batch since (a `return`
 # in an arm no longer takes the function's declared return type). See
 # test/cases/opt/progen/README.md, J5.
+# Empty since `edeaa9c41`, and the seed it held is worth recording because it left: seed 4 of
+# `generate.VERSION` 8 crashed in all four cells of the pipeline `inline` (inline@nvm, @fvm, @jit,
+# @prl) -- SIGSEGV, not a refusal of the front end -- on the call `f8(...)` inside
+# `let n69 = concat(...)` of `main`, whose spliced body owns a loop that carries the wait of the
+# statement the call was written after. `edeaa9c41` took `progen_4` of the E9 differential from
+# crash 1 to crash 0 by laying that wait before the loop's first round, and
+# test/cases/opt/inline/loop_wait_after_inline.cml is the 25-line reduction of the shape, so the
+# seed runs in `progen_check` again and the test plan reads it in fast layer as `progen_seed_4`.
+#
+# A seed recorded here names the generator version it was generated at, in the entry and in this
+# comment. `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing seeds are other programs") re-pointed
+# every seed at another program, so a record that says only "seed 4" or "seed 26" names a program
+# the next version will not generate -- the record survives, the finding it named does not.
 CHECK_EXCLUDED = {}
 CHECK_MATRIX = "cross"
 
@@ -275,15 +288,28 @@ CHECK_MATRIX = "cross"
 def cmd_check(args):
     features = parse_features(None)
     cells = matrix(CHECK_MATRIX)
-    seeds = [s for s in CHECK_RANGE if s not in CHECK_EXCLUDED]
+    known = [s for s in CHECK_RANGE if s in CHECK_EXCLUDED]
+    if args.seeds:
+        a, _, b = args.seeds.partition("-")
+        seeds = list(range(int(a), int(b or a) + 1))
+    else:
+        seeds = list(CHECK_RANGE)
+    if not args.with_excluded:
+        seeds = [s for s in seeds if s not in CHECK_EXCLUDED]
+    elif not CHECK_EXCLUDED:
+        # A flag that silently changes nothing is the same shape as a reading that cannot fail:
+        # it looks like it did something. Say so, so a run that passes it is not mistaken for one
+        # that widened the batch.
+        print("CHECK_EXCLUDED is empty: --with-excluded changed nothing")
     records = run_batch(seeds, features, cells, None, args.jobs)
     bad = [(r["seed"], cid, info["outcome"], info.get("detail", "")) for r in records for cid, info in r["bad"].items()]
     for seed, cid, outcome, detail in bad:
         print(f"seed {seed} [{cid}]: {outcome}: {detail}")
     n = sum(len(r["outcomes"]) for r in records)
     refused = sum(len(r["refused"]) for r in records)
+    left = [s for s in known if s not in seeds]
     print(f"progen check: {len(records)} programs x {len(cells)} pipelines = {n} cells "
-          f"({refused} located refusals), {len(CHECK_EXCLUDED)} seed(s) left out as known failures")
+          f"({refused} located refusals), {len(left)} seed(s) left out as known failures")
     print(f"{len(bad)} wrong")
     print("PASS" if not bad and n > 0 else "FAIL")
     return 0 if not bad and n > 0 else 1
@@ -313,8 +339,8 @@ def cmd_findings(args):
 
 
 # Rewrite sequences every fixed finding is run under besides its own (on all four schedulers).
-FIXED_ALSO = [["std::opt::inline"], ["std::opt"], ["std::opt::inline", "std::opt::dce"],
-              ["std::opt::specialize"]]
+FIXED_ALSO = [["std::cxx::inline"], ["std::opt"], ["std::cxx::inline", "std::cxx::dce"],
+              ["std::cxx::specialize"]]
 
 
 def cmd_fixed(args):
@@ -394,6 +420,10 @@ def main(argv=None):
     p.set_defaults(fn=cmd_reduce)
     p = sub.add_parser("check")
     p.add_argument("--jobs", type=int, default=4)
+    p.add_argument("--seeds", help="a seed or an interval (4, 1-25) to check instead of CHECK_RANGE")
+    p.add_argument("--with-excluded", action="store_true",
+                   help="run the seeds CHECK_EXCLUDED leaves out, to see what they show (CHECK_EXCLUDED "
+                        "is empty today, and passing the flag then prints that it changed nothing)")
     p.set_defaults(fn=cmd_check)
     p = sub.add_parser("findings")
     p.add_argument("--dir")

@@ -54,6 +54,20 @@ DraftNodeOwnerTestPass::apply(const camel::runtime::Program *program, std::ostre
     // The builder goes: nothing owns that address any more, and the handle is all that is left.
     builderA.reset();
 
+    // The first question, asked while the address belongs to no draft at all: it has no owner, and
+    // the answer must not be obtained by reading what is left at the address. The two states of the
+    // code are compared on this line, and on the `[from_ref_probe]` line the old one prints.
+    const bool releasedHasOwner = DraftGraphBuilder::fromRef(stale) != nullptr;
+    say(os, std::format("released_owner={}", releasedHasOwner ? "live" : "none"));
+
+    // The question a table of handles is asked before it is walked
+    // (`builder_linearity.cpp#Builder::settleStreamLinearity`, over the table the captures are recorded
+    // in), asked while the address belongs to no draft at all. It answered `1` here before the answer was taken from the registration: the released
+    // draft's epoch was still in the bytes the handle names, so the comparison passed on memory
+    // nobody owned. `nodeDraftOf` and the semantic analyzer's `isNamedBy` were the same read; they
+    // now refuse on the same question, and this line is what can be asked of them without aborting.
+    say(os, std::format("current_of_released={}", nodeIsCurrent(stale) ? 1 : 0));
+
     // Something that lands on the address. Node 0 of the new draft is a Gate, not a Copy, so a
     // handle read through the new draft is visibly the wrong node rather than a matching one.
     std::vector<compile_graph_ptr_t> alive;

@@ -3,15 +3,22 @@
  * it waits for the same things the product waited for (design principles 3.3, 3.4).
  *
  * `scaled` is called twice in one argument list: inlining gives the second body's entry product a
- * control input from the first call's effect, so the two products are ordered. The law
+ * control input from the first call's place on the chain, so the two products are ordered. The law
  * `t + t => t * 2` is about the data alone, so it applies to a product that waits, and the new
  * writing has to keep the order: the graph test checks the control edge, the run tests check that
  * the effects still happen in program order on every back end.
  *
- *   camel algebra_order.cml std::opt::inline std::opt::algebra std::jgir
+ * `scaled` prints its argument before it computes, and its body is a `sync` body: the print is what
+ * makes a call of it a statement of the caller's chain (design principles 3.4), where a call of a
+ * function that declares nothing and whose body only computes would be arranged freely and stand on
+ * no chain (3.1). The premise of this program is therefore that the prints are real, and they are
+ * the `2` lines the run tests expect -- `scaled` is called twice, with `2.0`.
+ *
+ *   camel algebra_order.cml std::cxx::inline std::cxx::algebra std::jgir
  */
 
-func scaled(x: float): float {
+func scaled(x: float): float sync {
+    println(x)
     let t = x * 0.1
     return t + t
 }

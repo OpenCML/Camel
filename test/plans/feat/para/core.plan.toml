@@ -240,12 +240,32 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 # Graph-level task execution: nodes of one graph with no path between them run concurrently
-# under PRL, calls included. The assertions are deterministic: calls wait for each other at a
-# rendezvous (module test_support) and report whether a peer arrived; nothing is timed. On a scheduler
-# that runs a graph node by node every rendezvous times out and the counts are 0.
+# under PRL, calls included. What these entries observe is the scheduler's ability to run two
+# calls at the same time, which is outside the language's determinism guarantee: `rendezvous`
+# is nondeterministic (its result depends on whether a peer is waiting at the same moment), so
+# the expectation is written per back end and no two back ends are held to one number. The two
+# calls reach an `unordered` resource, so the builder writes no order edge between them and the
+# plan runs them at once; `std::nvm` walks one order, so it runs them one after the other and
+# every rendezvous times out. Nothing is timed.
+[[tests]]
+name = "concurrent_calls.nvm"
+desc = "The reference back end walks one order, so the two calls run one after the other and neither meets a peer: the count is 0."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_calls.cml"
+args = ["-t", "4", "${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'calls that met a peer: 0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
 [[tests]]
 name = "concurrent_calls.prl"
-desc = "Two calls with no path between them in the graph run at the same time under PRL: both meet at a rendezvous."
+desc = "Two calls with no path between them in the graph run at the same time under PRL: both meet at a rendezvous. This is the scheduler's own reading of the same program, and it is written here rather than compared with the reference."
 kind = "behavior"
 case = "../../../cases/para/core/concurrent_calls.cml"
 args = ["-t", "4", "${case}", "${run_prl}"]
@@ -260,8 +280,24 @@ assert(out === 'calls that met a peer: 2', `unexpected output: ${out}`)
 timeout_ms = 30000
 
 [[tests]]
+name = "concurrent_recursion.nvm"
+desc = "The reference back end walks one order, so no two leaves of the tree run at the same time and none meets a peer: 0 of 8."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_recursion.cml"
+args = ["-t", "4", "${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'leaves that met a peer: 0 of 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "concurrent_recursion.prl"
-desc = "Tree recursion under PRL: the two recursive calls of every level run concurrently, so each of the 8 leaves meets a peer at a rendezvous."
+desc = "Tree recursion under PRL: the two recursive calls of every level run concurrently, so each of the 8 leaves meets a peer at a rendezvous. The scheduler's own reading, written here rather than compared with the reference."
 kind = "behavior"
 case = "../../../cases/para/core/concurrent_recursion.cml"
 args = ["-t", "4", "${case}", "${run_prl}"]
@@ -587,3 +623,86 @@ assert(out === 'light 60000 0 4 199 399 3421445 | kept 17142 3 59994 31038796 | 
 }
 """
 timeout_ms = 120000
+
+# The rows a value's count is made of, where a scheduler that only connects what the graph connects
+# can reach them. `make_box` answers a box a call made; `take_late` and `take_now` are two readers
+# of that one handle, and `junk` is an operator with an edge to none of the three. The hold is
+# taken where the call made the box and each reader gives its reference back at its own position,
+# so neither the reader that finishes first nor the operator that runs at once can take the box
+# down while the other reader still has it. Before the placement was fixed the rows were moved off
+# the calls onto the next operator, which no edge orders after either reader: `PLAN_REF_ENTRIES
+# both at 4 retain value 2` with both give-backs at that same position 4, and all four back ends
+# read `released=0 live=1 disposed=1` -- the box the call made was never released. Read now, the
+# hold is at the producing call's position, each give-back at a reader's own, and all four back
+# ends print 82 and read `created=1 counted=1 released=1 live=0 disposed=0`.
+[[tests]]
+name = "concurrent_readers_of_a_call_box"
+desc = "Two readers of one box that a call made, with an operator that has an edge to neither: the plan holds the box at the call that made it and gives one reference back at each reader's own position, and all four back ends release it while the program runs (`created=1 counted=1 released=1 live=0 disposed=0`). Written with the rows moved to the next operator, all four read `released=0 live=1 disposed=1`."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_readers_of_a_call_box.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "test::plan_refs", "${backend}"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const said = input.normalized.output.replace(/[\r\n]+/g, ' | ')
+const lines = out.split('\n')
+// The program: 41 + 41, and the operator with no edge to either reader cancels itself.
+const first = lines.indexOf('82')
+assert(first >= 0, 'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+// The plan, in the graph the two readers are in: the box a call made has two uses and one hold.
+const found = lines.filter(l => /^PLAN_REFS both at \d+ value \d+ kind \d+ copies 1 kept 0 uses 2$/.test(l))
+assert(found.length >= 1, 'a value in `both` is made by a call and read twice: ' + (found.join(' | ') || 'none'))
+const box = [found.sort((a, b) => Number(a.match(/ at (\d+) /)[1]) - Number(b.match(/ at (\d+) /)[1]))[0]]
+const position = Number(box[0].match(/ at (\d+) /)[1])
+const value = Number(box[0].match(/ value (\d+) /)[1])
+const kind = box[0].match(/ kind (\d+) /)[1]
+// The hold is taken at the node that made the box: only there is an edge to every reader.
+const retains = lines.filter(l => l === 'PLAN_REF_ENTRIES both at ' + position + ' retain value ' + value + ' x1')
+assert(retains.length === 1, 'the hold is at the producing node\'s position: ' + (retains.join(' | ') || 'none') + ' of ' + lines.filter(l => l.startsWith('PLAN_REF_ENTRIES both')).join(' | '))
+// The two give-backs are at the two readers' own positions, and at no other: each reader hands its
+// own reference back where it read, so no third position can release the box for both of them.
+const gives = lines.filter(l => /^PLAN_REF_ENTRIES both at \d+ give value \d+ x1$/.test(l))
+const mine = gives.filter(l => new RegExp(' give value ' + value + ' x1$').test(l))
+assert(mine.length === 2, 'the box comes back twice: ' + (mine.join(' | ') || 'none'))
+const at = mine.map(l => Number(l.match(/ at (\d+) /)[1]))
+assert(at[0] !== at[1] && !at.includes(position), 'at the two readers, not at the producing node: ' + mine.join(' | '))
+const nodes = at.map(p => lines.find(l => new RegExp('^PLAN_REFS both at ' + p + ' value ').test(l)) || '')
+assert(nodes.every(l => l.includes(' kind ' + kind + ' ')), 'each give-back is at a node of the kind that made the box (a call): ' + nodes.join(' | '))
+// The run: the one box the program made was released while it ran, with no stress to settle it.
+const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
+assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+const counts = Object.fromEntries(
+  line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+assert(counts.created === 1 && counts.counted === 1, 'the one box the program made was counted: ' + line)
+assert(counts.released === 1 && counts.live === 0, 'it was released while the program ran, without --gc-stress: ' + line)
+assert(counts.disposed === 0, 'so the exit had nothing left to dispose: ' + line)
+}
+"""
+timeout_ms = 60000
+[[tests]]
+name = "closure_capture_gives_its_box_back"
+desc = "A box a closure carries, in a program that keeps nothing: `test/cases/para/core/closure_capture_gives_its_box_back.cml` makes the box, captures it, reads it twice through the closure, and drops the closure when `main` returns. So the count has to come home while the program runs (`created=1 counted=1 released=1 live=0 disposed=0`) and not be left for the exit to dispose. This is the reading of `test/probe/refleak/fill_carries.cml` put where a gate reads it: the probe tier is named by no plan a lane reports, so a back end that keeps the box was a red that could live on the trunk and report green at every merge. It read `released=0 live=1 disposed=1` on `std::prl` and `released=1 live=0 disposed=0` on the other three when it was written (2026-11-18)."
+kind = "behavior"
+case = "../../../cases/para/core/closure_capture_gives_its_box_back.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["exit_code"]
+verify_script = """
+({ input, assert }) => {
+const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+assert(input.exit_code === 0, 'the program runs to its end: exit ' + input.exit_code)
+assert(said.join(' | ').includes('5 5'), 'the closure read the box it captured, twice: ' + said.join(' | '))
+const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+assert(line !== undefined, 'the counted blocks are read at exit: ' + said.join(' | '))
+const counts = Object.fromEntries(
+  line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+assert(counts.created === 1 && counts.counted === 1, 'the one box the program made was counted: ' + line)
+assert(counts.released === 1 && counts.live === 0, 'it came home while the program ran: ' + line)
+assert(counts.disposed === 0, 'so the exit had nothing left to dispose: ' + line)
+}
+"""
+timeout_ms = 60000

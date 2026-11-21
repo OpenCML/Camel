@@ -3,7 +3,7 @@
  * edge count and the count of every operator the algebraic corpora write.
  *
  * The same corpus goes through this pass on both sides of the comparison — the C++ algebraic pass
- * (`std::opt::algebra neutral_only=true`) and the rule library (`rules::simplify`) — so the two
+ * (`std::cxx::algebra neutral_only=true`) and the rule library (`rules::simplify`) — so the two
  * tables are the measurement: a line that differs is a difference, and the line carries the nodes,
  * the edges and the operators of that graph on each side.
  */
@@ -17,7 +17,7 @@ func opText(n: Node): string {
     }
 }
 
-func opsOf(g: Graph): string[] {
+func opsOf(g: Graph): string[] spelling {
     return nodes(g)->map<(n: Node): string => opText(n)>->filter<(s: string): bool => s != ''>
 }
 
@@ -30,7 +30,7 @@ func edgesOf(g: Graph): int {
     return loop total = 0 for n in nodes(g) do total + len(inputs(n)) + len(with_inputs(n)) + len(sync_inputs(n)) + len(order_inputs(n))
 }
 
-func line(g: Graph) {
+func line(g: Graph) spelling {
     let ops = opsOf(g)
     println(
         name(g), 'nodes', len(nodes(g)), 'edges', edgesOf(g),
@@ -48,7 +48,7 @@ func line(g: Graph) {
 
 /// The table of `p`, in graph order, with the root graph (`__root__`) left out: it holds the entry
 /// call alone and is the same on both sides.
-export func report::<F>(p: F): F! sync {
+export func report::<F>(p: F): F! spelling sync {
     let gs = graphs_of(p)->filter<(g: Graph): bool => name(g) != '__root__'>
     let _ = loop n = 0 for g in gs do sync {
         line(g)

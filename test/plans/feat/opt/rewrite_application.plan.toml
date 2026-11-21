@@ -1,0 +1,27 @@
+id = "opt.rewrite_application"
+order = 485
+tier = "fast"
+tags = ["feat", "opt", "rules", "rewrite", "draft"]
+
+# One application of a rule is all or nothing (docs/design/graph-editing/README.cn.md 16.1, 16.3,
+# the ruling of 2026-11-18): an application the engine abandons leaves nothing of what it had
+# already built in the draft, and the draft the commit publishes is the graph the pass started from.
+#
+# The case reads one number -- the node count of a function -- three times: before the pass, after a
+# pass whose only rule cannot be built, and after a pass whose rule applies. The rule that cannot be
+# built has a right side that makes the constant `2 * 3` and then faults on `1 / 0`, which is the
+# `RuleSkipped` path both drivers take; the constant it made before the fault is what an application
+# that is abandoned partway leaves behind.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+
+[[tests]]
+name = "opt.rewrite_application.abandoned_leaves_nothing"
+desc = "A rule whose right side faults after making a constant is abandoned: the drafts it wrote to are taken back, so the function's node count after the pass is the one before it, and the next pass still applies its own rule."
+case = "../../../cases/opt/rewrite/abandoned_application.cml"
+args = ["${case}", "abandoned_application::report", "abandoned_application::apply_leaks", "abandoned_application::report", "abandoned_application::apply_drops", "abandoned_application::report", "std::nvm"]
+expect_stdout_exact = "leak 3 drop 3\nleak 3 drop 3\nleak 3 drop 1\n7 7\n"

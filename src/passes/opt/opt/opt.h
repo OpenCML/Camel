@@ -26,11 +26,11 @@ class OptimizeRewritePass : public RuntimeGraphRewritePass {
     OptimizeRewriteConfig config_{};
 };
 
-/// The rules library's saturation under the core's name (`std::opt::saturate`): the
+/// The rules library's saturation under the core's name (`std::cxx::saturate`): the
 /// standard rules of stdlib/rules.cml applied both ways to the writings of every value, for at
 /// most `rounds` rounds, with no extraction. The program it hands on has values with several
 /// writings; the whole point of the pass is to stop there, so the dumps that follow can draw the
-/// classes (`std::gir`, `std::rgir`, `std::jgir`). `std::opt::extract` (or the driver, before a
+/// classes (`std::gir`, `std::rgir`, `std::jgir`). `std::cxx::extract` (or the driver, before a
 /// pass that runs or translates the program without accepting that state) brings it back.
 class OptimizeSaturatePass : public GraphIRPass {
   public:

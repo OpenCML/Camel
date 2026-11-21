@@ -84,8 +84,8 @@ class GraphRead {
     /// Node ids are `0 .. nodeSlotCount() - 1`, a removed node's id kept (and not alive) --
     /// `nodeCount()` on a frozen graph, `nodeSlotCount()` on a draft.
     virtual gc_cnt_t nodeSlotCount() const = 0;
-    /// The nodes that are there: `liveNodeCount()` on a frozen graph, `nodeCount()` on a draft.
-    virtual gc_cnt_t liveNodeCount() const = 0;
+    /// The nodes that are there: `storedNodeCount()` on a frozen graph, `nodeCount()` on a draft.
+    virtual gc_cnt_t storedNodeCount() const = 0;
     virtual bool alive(gc_node_ref_t ref) const = 0;
 
     virtual GCNodeKind kindOf(gc_node_ref_t ref) const = 0;
@@ -219,7 +219,7 @@ class DraftGraphRead final : public GraphRead {
         return kept_.empty() ? static_cast<gc_cnt_t>(txn_.graph().nodeSlotCount())
                              : static_cast<gc_cnt_t>(kept_.size());
     }
-    gc_cnt_t liveNodeCount() const override {
+    gc_cnt_t storedNodeCount() const override {
         return kept_.empty() ? txn_.graph().nodeCount() : static_cast<gc_cnt_t>(kept_.size());
     }
     bool alive(gc_node_ref_t ref) const override;
@@ -278,7 +278,7 @@ class FrozenGraphRead final : public GraphRead {
 
     camel::core::type::FunctionType *funcType() const override { return graph_.funcType(); }
     gc_cnt_t nodeSlotCount() const override { return graph_.nodeCount(); }
-    gc_cnt_t liveNodeCount() const override { return graph_.liveNodeCount(); }
+    gc_cnt_t storedNodeCount() const override { return graph_.storedNodeCount(); }
     bool alive(gc_node_ref_t ref) const override;
     GCNodeKind kindOf(gc_node_ref_t ref) const override;
     gc_slot_idx_t dataIndexOf(gc_node_ref_t ref) const override;

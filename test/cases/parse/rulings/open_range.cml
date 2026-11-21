@@ -1,0 +1,20 @@
+/**
+ * There is no open interval `a..` (the author's ruling of 2026-11-16, design principles 4.2): a
+ * range has only a bounded form, its result is an array, and no syntax is added for one; counting
+ * until a condition holds is the counting `while` loop that `count_until.cml` beside this file
+ * writes. The interval `1..4` and the composition `inc..dbl` stand above it, so the two readings
+ * that do have a second operand are told apart from the one that has not, inside one program. The
+ * `..` of `1..` is reported by name -- SyntaxDiag::IntervalHasNoOpenForm, at the `..` itself -- and
+ * no longer as `Unexpected 'return'; expected an expression` at the `return` of the following line,
+ * which is the token the parser used to take for the missing operand.
+ */
+
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int {
+    let bounded = 1..4
+    let composed = inc..dbl
+    let open = 1..
+    return len(open)
+}

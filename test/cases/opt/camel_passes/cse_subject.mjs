@@ -1,11 +1,13 @@
 // The corpus the property guard of `opt::cse` is about, before any pass runs: the values written
 // twice are still two nodes here. A guard that examined nothing would pass on a graph that has
 // nothing to merge, so this entry runs the same case with no pass and asserts that the duplicates
-// the sweep is about are there.
+// the sweep is about are there -- and, for `written`, that the two products are *not* duplicates
+// of one another, because the name between them is another value.
 //
-// The compiler folds constant arithmetic while it builds the graph, so `literals` and `written`
-// hold their duplicates as constants (two separate `7`s, two separate `3`s) and the operations
-// over two separate literals are separate nodes too.
+// The compiler folds constant arithmetic while it builds the graph, so `literals` holds its
+// duplicate as constants (two separate `7`s) and the operation over two separate literals is a
+// separate node too. `written` is the other half: a product written twice over two different
+// values, which the sweep has to leave as two computations.
 
 import fs from 'node:fs'
 
@@ -52,16 +54,24 @@ assert(
     `the product of 'literals' does not read its two separate constants of 7: ${literalsOperands.map((n) => `${n.label}@${n.id}`).join(', ')}`,
 )
 
-// `written`: two products over two different reads of the cell, which the pass must keep apart,
-// and two separate literals of 3, which it must merge.
+// `written`: `cell * 3` is written twice, and `cell = cell + 1` between the two writes rebinds the
+// name to another value, so the two products are two computations over two different values --
+// one over the parameter, one over the sum the rebinding made. The `3` they both read is written
+// twice, and that is the duplicate this entry is about here.
 const written = graph('written')
 const writtenProducts = written.nodes.filter((n) => n.label === ':op/mul_l')
 assert(writtenProducts.length === 2, `the graph 'written' has ${writtenProducts.length} products, not the two the source wrote`)
-const readOf = (product) => normal(written, product.id).find((n) => n.label === ':var/peek')
-const reads = writtenProducts.map(readOf)
+const firstOperand = (product) => normal(written, product.id)[0]
+const firstOperands = writtenProducts.map(firstOperand)
 assert(
-    reads.every(Boolean) && reads[0].id !== reads[1].id,
-    `the two products of 'written' do not read two separate reads of the cell: ${reads.map((n) => (n && n.id) || 'none').join(', ')}`,
+    firstOperands.every(Boolean) && firstOperands[0].id !== firstOperands[1].id,
+    `the two products of 'written' do not read two different values: ${firstOperands.map((n) => (n && n.id) || 'none').join(', ')}`,
+)
+const valueRead = (n) => (n.kind === 'PORT' ? 'the parameter' : n.label)
+const readShapes = firstOperands.map(valueRead).sort()
+assert(
+    readShapes.join(' ; ') === ':op/add_l ; the parameter',
+    `the two products of 'written' do not read the parameter and the value the rebinding made: ${readShapes.join(' ; ')}`,
 )
 const threes = constants(written, '3')
 assert(threes.length === 2, `the graph 'written' has ${threes.length} constants of 3, not the two the source wrote`)

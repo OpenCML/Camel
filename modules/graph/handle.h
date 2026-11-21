@@ -150,6 +150,8 @@ class Handle final : public rtdata::Object {
           index_(index), typeRef_(typeRef) {}
 
     HandleKind kind_;
+    // program-holder-exempt: heap-self-tracking -- Handle is a heap object, and its updateRefs
+    // relocates the Program it was read from (handle.cpp).
     const camel::runtime::Program *program_;
     const camel::runtime::GraphTransaction *transaction_;
     camel::runtime::GraphId graph_;

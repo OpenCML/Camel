@@ -24,7 +24,11 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/extent.h"
+#include "camel/core/type/typecall.h"
 
+#include <functional>
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -60,6 +64,29 @@ using type_bindings_t = std::vector<std::pair<std::string, Type *>>;
 /// The type bound to `name`, or nullptr.
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name);
 
+/**
+ * What runs the guard of a `match type` case (`case p when c => ...`, design principles 5.5).
+ * Selecting the case happens inside `substituteTypeVars`, which has no
+ * builder, and the guard is an ordinary Camel predicate that only the compiler can run; the build
+ * installs this evaluator for as long as it is compiling, exactly as `extentCallEvaluator`
+ * (`extent.h`) lets a type ask the compiler for the value of a call written in an extent.
+ *
+ * `bindings` are the type arguments of the instance and the names the pattern bound (`W`, `Rest`,
+ * `E`, `Dims`), so a guard may ask about either. The answer is true (the case is taken), false
+ * (the case is not taken and the match goes on with the case written after it), or nothing when
+ * the predicate could not be settled -- which leaves the `match type` waiting for a later
+ * substitution rather than taking a case the program did not ask for.
+ */
+using TypeCaseGuardEvaluator = std::function<std::optional<bool>(
+    const std::shared_ptr<const TypeCaseGuard> &guard, Type *subject,
+    const type_bindings_t &bindings)>;
+
+/// The evaluator in force on this thread; empty outside a build.
+inline TypeCaseGuardEvaluator &typeCaseGuardEvaluator() {
+    static thread_local TypeCaseGuardEvaluator evaluator;
+    return evaluator;
+}
+
 class TypeFunctionType : public Type {
   public:
     static TypeFunctionType *
@@ -89,35 +116,6 @@ class TypeFunctionType : public Type {
 
 /// Whether a type variable occurs anywhere in `type`.
 bool containsTypeVar(Type *type);
-
-/**
- * `typeof e` (design principles 5.6): the type of the value `e` will have. It exists only while
- * a module is compiled and only as the whole type written after `typeof`: the graph builder
- * builds `e` where the type is used and replaces the placeholder by the expression's type.
- *
- * The expression is a pointer the compiler owns (a node of the graph construction tree). The
- * core type system never looks at it, so the type stays an opaque, uninterned object here.
- */
-class TypeOfType : public Type {
-  public:
-    static TypeOfType *create(const void *expression);
-
-    const void *expression() const { return expression_; }
-
-    std::string toString() const override;
-    std::string mangle() const override;
-    Type *clone(bool deep = false) const override;
-    bool equals(Type *type) const override;
-    CastSafety castSafetyFrom(Type *sourceType) const override;
-
-  private:
-    explicit TypeOfType(const void *expression);
-
-    const void *expression_;
-};
-
-/// Whether a `typeof` placeholder occurs anywhere in `type`.
-bool containsTypeOf(Type *type);
 
 /**
  * `type` with every variable that `bindings` binds replaced by its binding; a variable they do
@@ -150,8 +148,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
  * still decide, so two graphs never share one.
  */
 OpenFunctionType *instantiateFunctionType(
-    FunctionType *type, const type_bindings_t &bindings,
-    const ExtentValues *extents = nullptr);
+    FunctionType *type, const type_bindings_t &bindings, const ExtentValues *extents = nullptr);
 
 /**
  * Binds the variables `pattern` binds (occurrences of its head-declared type parameters) from
@@ -194,4 +191,3 @@ TupleType *findRepeatedMark(Type *type);
 std::string typeBindingsToString(const type_bindings_t &bindings);
 
 } // namespace camel::core::type
-

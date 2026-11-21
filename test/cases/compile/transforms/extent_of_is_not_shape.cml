@@ -12,11 +12,18 @@
 // the program and not by a comment; the `[2]` line is the same question where only the value can
 // answer, and `extent_of::<float[...]>()` there is the refusal
 // `extent_of_refuses_an_open_rank_type.cml` pins.
+//
+// `shape` answers `ShapeOf<T>`, so on `float[2, 3]` its value has the type `int[2]` -- the length
+// the type states -- while `extent_of` answers the open list `int[]`. The two are one type once
+// they are written where `int[]` is expected, which is what the `let` lines below do; `==` needs
+// one type, and stating that the two lengths agree is the point of the first line.
 
 import { shape } from tensor
 
 func same(t: float[2, 3]): bool {
-    return shape(t) == extent_of::<float[2, 3]>()
+    let by_value: int[] = shape(t)
+    let by_type: int[] = extent_of::<float[2, 3]>()
+    return by_value == by_type
 }
 
 func by_value(t: float[...]): int[] {

@@ -882,15 +882,27 @@ class TilesModule final : public BuiltinModule {
              {"download", false},
              {"source", false},
              {"inspect", false},
-             {"regions", false},
              {"benchmark", false},
              {"available", false},
              {"device", false}});
+        // `regions` reads the graph of the function value it is handed and answers the region
+        // analysis as a string; its own contract says it neither executes the graph nor
+        // initializes CUDA (tiles/internal/regions.h, `inspectRegions`), so it touches no
+        // resource, and a clause that named one would be a claim its body contradicts.
+        // It is not foldable either: the answer is the analysis of a graph the
+        // compiler cannot see through, which is what `readsGraphs` says, and `pure` here is the
+        // resource claim and not a promise that a call may be computed ahead of time
+        // (operator_table.h, `declareUnfoldable`). The module's signature for it in
+        // stdlib/signatures/tiles.cml says the same thing the other way round -- no `uses`
+        // clause -- and the empty entry in the resource table below is the same claim once more,
+        // in the place a reader looks for an operator's accesses.
+        core::OperatorTable::instance().set(
+            "tiles:regions", {.pure = true, .readsGraphs = true, .foldable = false});
         // These compile the graph of the function value they receive: a back end that runs a
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run_compiled", "run_compiled_device", "source", "inspect", "benchmark", "regions"}) {
+             {"run_compiled", "run_compiled_device", "source", "inspect", "benchmark"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .readsGraphs = true});
@@ -902,8 +914,9 @@ class TilesModule final : public BuiltinModule {
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
         // resource `tiles:device` (upload makes one; the compiled-scope runners read the device
         // values among their inputs, the resident ones return new ones that may be inputs
-        // again); the driver and the device are ambient state `tiles:driver`. Every operator is
-        // an effect outside the program, as its traits say.
+        // again); the driver and the device are ambient state `tiles:driver`. Every operator
+        // listed here is an effect outside the program, as its traits say; `regions` is the one
+        // that touches nothing, and its empty list below is how this table states that.
         {
             using namespace core::sem;
             const Resource device{.cls = ResourceClass::Foreign, .name = "tiles:device"};
@@ -937,10 +950,53 @@ class TilesModule final : public BuiltinModule {
                      ResourceSpec{
                          .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
+                    // The region report touches nothing (the trait above says why), so its entry
+                    // is the empty one. It has to be written: an operator this table says nothing
+                    // about is the one `accessList` reads as a write of the global resource, and
+                    // that reading is not a declaration.
+                    {"regions", ResourceSpec{}},
                     {"source", externalAmbient("tiles:driver", AccessMode::Read)},
                     {"inspect", externalAmbient("tiles:driver", AccessMode::Read)},
                     {"available", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
                     {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
+                    // `retain_preferred` keeps a value where the run prefers to compute it: with a
+                    // device it uploads (`retainPreferredKernel` falls through to `uploadKernel`,
+                    // which is the `upload` entry above -- the driver read-modify-written and a
+                    // device value made), and without one it answers the host value. The union of
+                    // the two paths is what it may do, which is what a clause states.
+                    {"retain_preferred",
+                     ResourceSpec{
+                         .accesses       = {driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    // The three resident runners take the host aggregate as their ordinary
+                    // parameter and download any resident leaf inside it before the callee sees it
+                    // (`hostArgument`), so they read the device values among operand 0 and
+                    // read-modify-write the driver, exactly as `download` above. `retain_host`
+                    // keeps a value where the host can read it, `run_host_resident` hands back what
+                    // the host ran, and both answer a resident value wrapped in a `Device<...>`,
+                    // which is a new `tiles:device` handle. `run_preferred_resident` may make its
+                    // program for the device instead, and its result may be a device value it was
+                    // handed ("returned inputs share native ownership"). op-semantics 8 and 14.4
+                    // state these touches; design principles 3.3 is why they are declared here and
+                    // not read off each implementation: a body that calls one could prove nothing
+                    // about its own clause while the table said nothing about them.
+                    {"retain_host",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_host_resident",
+                     ResourceSpec{
+                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .allocates      = device,
+                         .externalEffect = true}},
+                    {"run_preferred_resident",
+                     ResourceSpec{
+                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
+                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
+                         .allocates      = device,
+                         .externalEffect = true}},
                 });
         }
         // The driver asks this before the first graph runs; the selection is the run's, and this

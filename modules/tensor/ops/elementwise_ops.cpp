@@ -348,9 +348,42 @@ void mulStatedVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// y = lhs / rhs: dlhs = dy / rhs, drhs = -dy * y / rhs.
-void divideVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+/// `add_stated`'s pullback: the sum's own, because its value is the sum's.
+///
+/// Four operands and two of them answered: `ax` and `aw` are the extents the reverse *law* reads
+/// (`stdlib/rulesets/transpose.cml#add_stated_t`), and the engine hands them over as operands
+/// although it never needs them -- it holds both operands' values, which is exactly what the lists
+/// stand in for on the library side, where the position a cotangent is answered for is a tangent
+/// and a tangent's type states no extents.
+void addStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 4, 4);
+    if (auto dy = b.gradientOf(call.output)) {
+        accumulateOperand(b, call.inputs[0], *dy);
+        accumulateOperand(b, call.inputs[1], *dy);
+    }
+}
+
+/// `subtract_stated`'s pullback: the difference's own -- `dy` for `x`, `-dy` for `w` -- with the
+/// two stated lists read by nothing on this side, for the reason `addStatedVjp` records.
+void subtractStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 4, 4);
+    if (auto dy = b.gradientOf(call.output)) {
+        accumulateOperand(b, call.inputs[0], *dy);
+        accumulateOperand(b, call.inputs[1], addTensorOper(b, "tensor:neg", {*dy}));
+    }
+}
+
+/// `divide`'s pullback and `div_stated`'s: `y = lhs / rhs`, `dlhs = dy / rhs`,
+/// `drhs = -dy * y / rhs`.
+///
+/// One body for the operator and its stated twin, because the twin's value is the quotient and its
+/// pullback is therefore the quotient's: `div_stated` carries two more operands (`ax`, `aw`) and the
+/// engine reads neither. It holds both operands' **values**, which is what the lists stand in for on
+/// the library side, where the operand a cotangent is answered for is a tangent and a tangent's type
+/// states no extents (`stdlib/rulesets/transpose.cml#div_stated_t`). The operand count is the only
+/// thing that differs between the two rows, and `scripts/vjp-parity.mjs` sees a law behind each.
+void dividePullback(VjpBuilder &b, const VjpCall &call, size_t operandCount) {
+    requireVjpInputs(call, operandCount, operandCount);
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
         const vjp_node_t dlhs = addTensorOper(b, "tensor:divide", {*dy, rhs});
@@ -385,6 +418,16 @@ void divideVjp(VjpBuilder &b, const VjpCall &call) {
             }
         }
     }
+}
+
+void divideVjp(VjpBuilder &b, const VjpCall &call) {
+    dividePullback(b, call, 2);
+}
+
+/// `div_stated`'s pullback: the quotient's own, for the reason `dividePullback` records. The two
+/// extent lists are operands this side never reads.
+void divStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    dividePullback(b, call, 4);
 }
 
 // y = lhs ^ rhs: dlhs = dy * rhs * lhs ^ (rhs - 1), drhs = dy * y * log(lhs).
@@ -531,6 +574,32 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+/// The two extents lists a **stated binary operator** carries, each compared with the shape of the
+/// operand it belongs to: `ax` (operand 2) with the left operand, `aw` (operand 3) with the right.
+///
+/// The four operators that state a binary's extents -- `mul_stated`, `add_stated`,
+/// `subtract_stated`, `div_stated` -- differ in the kernel they run and in nothing else, so the
+/// check is written once here and the operator's own name travels into the refusal it reports. A
+/// list that disagrees with its operand is a fault and not a silently reshaped answer: the reverse
+/// law builds a gradient of that shape, and an extent nobody compared would be a gradient of the
+/// wrong shape (`support.h#checkStatedExtents`).
+void checkStatedBinaryExtents(ArgsView &norm, std::string_view op) {
+    const std::vector<int64_t> ax = intListArg(norm, 2, op);
+    const std::vector<int64_t> aw = intListArg(norm, 3, op);
+    if (norm.code(0) == TypeCode::Array) {
+        checkStatedExtents(tensorArg(norm, 0), ax, 0, op);
+    } else if (!ax.empty()) {
+        reportShapeError(
+            op, "the left operand is one number, so its stated extents are the empty list");
+    }
+    if (norm.code(1) == TypeCode::Array) {
+        checkStatedExtents(tensorArg(norm, 1), aw, 0, op);
+    } else if (!aw.empty()) {
+        reportShapeError(
+            op, "the right operand is one number, so its stated extents are the empty list");
+    }
+}
+
 /// `mul_stated(x, w, ax, aw)`: the product with **both** operands' extents stated beside it.
 ///
 /// The value is `x * w` -- `binaryKernel` is the wrapper `tensor:multiply` runs, so the broadcast, the
@@ -545,21 +614,56 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
 /// two shapes differ (`[2, 2, 3] * [3]`), and one list could not say which shape each cotangent comes
 /// back to. An operand that is one number states no extents, and its list is empty.
 slot_t mulStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
-    const std::vector<int64_t> ax = intListArg(norm, 2, "mul_stated");
-    const std::vector<int64_t> aw = intListArg(norm, 3, "mul_stated");
-    if (norm.code(0) == TypeCode::Array) {
-        checkStatedExtents(tensorArg(norm, 0), ax, 0, "mul_stated");
-    } else if (!ax.empty()) {
-        reportShapeError(
-            "mul_stated", "the left operand is one number, so its stated extents are the empty list");
-    }
-    if (norm.code(1) == TypeCode::Array) {
-        checkStatedExtents(tensorArg(norm, 1), aw, 0, "mul_stated");
-    } else if (!aw.empty()) {
-        reportShapeError(
-            "mul_stated", "the right operand is one number, so its stated extents are the empty list");
-    }
+    checkStatedBinaryExtents(norm, "mul_stated");
     return binaryKernel<k::BinaryOp::Mul>(with, norm, ctx);
+}
+
+/// `add_stated(x, w, ax, aw)`: the sum with **both** operands' extents stated beside it.
+///
+/// The value is `x + w` -- `binaryKernel` is the wrapper `tensor:add` runs, so the broadcast, the
+/// element type and the one rounding are the definition's own -- and each list is checked against the
+/// shape of the operand it belongs to, exactly as `mul_stated`'s are. Nothing at run time reads the
+/// lists to compute the value: they are there for the reverse law, which reduces each cotangent to the
+/// shape its own operand had (`stdlib/rulesets/transpose.cml#add_stated_t`), and on the reverse side
+/// the position a cotangent is answered for is a **tangent** -- a `float[...]`, which states no
+/// extents (design principles 5.4) -- so the shape has to come from a known operand. The forward half
+/// that computes the two lists is `stdlib/rulesets/jvp.cml#jvp_add_tensor`, where both operands are
+/// values and `shape` of each is a value of the half that has one.
+///
+/// One list per operand and not one list, unlike the stated reductions: a sum broadcasts, so
+/// `[2, 2, 3] + [3]` has two different operand shapes and each cotangent comes back to its own. An
+/// operand that is one number states no extents, and its list is empty.
+slot_t addStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    checkStatedBinaryExtents(norm, "add_stated");
+    return binaryKernel<k::BinaryOp::Add>(with, norm, ctx);
+}
+
+/// `subtract_stated(x, w, ax, aw)`: the difference with **both** operands' extents stated beside it.
+///
+/// The value is `x - w` through `tensor:subtract`'s own wrapper, and the two lists are read by
+/// `stdlib/rulesets/transpose.cml#subtract_stated_t` for the reason `addStatedKernel` records: the
+/// cotangent of a tangent cannot be reduced to a shape the tangent's type does not state.
+slot_t subtractStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    checkStatedBinaryExtents(norm, "subtract_stated");
+    return binaryKernel<k::BinaryOp::Sub>(with, norm, ctx);
+}
+
+/// `div_stated(x, w, ax, aw)`: the quotient with **both** operands' extents stated beside it.
+///
+/// The value is `x / w` -- `binaryKernel` is the wrapper `tensor:divide` runs, so the broadcast, the
+/// element type and the one rounding are the definition's own -- and each list is checked against
+/// the shape of the operand it belongs to, exactly as `mul_stated`'s are. Nothing at run time reads
+/// the lists to compute the value: they are there for the reverse law, which reduces each cotangent
+/// to the shape its own operand had and has no value of that operand to read it from
+/// (`stdlib/rulesets/transpose.cml#div_stated_t`, and `stdlib/rulesets/jvp.cml#jvp_divide` for the
+/// half that computes them, where both operands are values).
+///
+/// One list per operand and not one list, for the reason `mul_stated` records: a quotient broadcasts
+/// as a product does, so the operands' shapes differ and each cotangent comes back to its **own**.
+/// An operand that is one number states no extents, and its list is empty.
+slot_t divStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    checkStatedBinaryExtents(norm, "div_stated");
+    return binaryKernel<k::BinaryOp::Div>(with, norm, ctx);
 }
 
 } // namespace
@@ -583,6 +687,50 @@ std::vector<OpDef> elementwiseOps() {
         .resultDoc = "float[...]",
         .infer     = binaryInfer(k::binaryProducesFloat(k::BinaryOp::Mul)),
         .kernel    = &mulStatedKernel,
+        .traits    = {}});
+    // The stated twins of the sum and the difference, one step simpler than the product's above:
+    // the same value, with the two operands' extents as two more operands (`addStatedKernel`,
+    // `subtractStatedKernel`). Their signatures are declared in `stdlib/tensor.cml` for the same
+    // reason: a sum's shape is the broadcast of two shapes, and a declaration is the only place
+    // that says so without a value.
+    defs.push_back(OpDef{
+        .name      = "add_stated",
+        .exports   = {"add_stated"},
+        .params    = {{"x", ParamKind::TensorOrScalar},
+                      {"w", ParamKind::TensorOrScalar},
+                      {"ax", ParamKind::IntArray},
+                      {"aw", ParamKind::IntArray}},
+        .resultDoc = "float[...]",
+        .infer     = binaryInfer(k::binaryProducesFloat(k::BinaryOp::Add)),
+        .kernel    = &addStatedKernel,
+        .traits    = {}});
+    defs.push_back(OpDef{
+        .name      = "subtract_stated",
+        .exports   = {"subtract_stated"},
+        .params    = {{"x", ParamKind::TensorOrScalar},
+                      {"w", ParamKind::TensorOrScalar},
+                      {"ax", ParamKind::IntArray},
+                      {"aw", ParamKind::IntArray}},
+        .resultDoc = "float[...]",
+        .infer     = binaryInfer(k::binaryProducesFloat(k::BinaryOp::Sub)),
+        .kernel    = &subtractStatedKernel,
+        .traits    = {}});
+    // The stated twin of the quotient, the fourth of the family above: the same value, with the two
+    // operands' extents as two more operands (`divStatedKernel`). Its signature is declared in
+    // `stdlib/tensor.cml` for the same reason theirs are: a quotient's shape is the broadcast of two
+    // shapes, and a declaration is the only place that says so without a value. It exists because
+    // three forward rules write a division in their linear half (`jvp_sqrt`, `jvp_log`, `jvp_divide`)
+    // and the divisor and the dividend are tangents on the reverse side.
+    defs.push_back(OpDef{
+        .name      = "div_stated",
+        .exports   = {"div_stated"},
+        .params    = {{"x", ParamKind::TensorOrScalar},
+                      {"w", ParamKind::TensorOrScalar},
+                      {"ax", ParamKind::IntArray},
+                      {"aw", ParamKind::IntArray}},
+        .resultDoc = "float[...]",
+        .infer     = binaryInfer(k::binaryProducesFloat(k::BinaryOp::Div)),
+        .kernel    = &divStatedKernel,
         .traits    = {}});
     defs.push_back(binaryDef<k::BinaryOp::Div>("divide", {"__div__"}));
     defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__"}));
@@ -635,6 +783,9 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "subtract", &subtractVjp);
     setVjp(defs, "multiply", &multiplyVjp);
     setVjp(defs, "mul_stated", &mulStatedVjp);
+    setVjp(defs, "add_stated", &addStatedVjp);
+    setVjp(defs, "subtract_stated", &subtractStatedVjp);
+    setVjp(defs, "div_stated", &divStatedVjp);
     setVjp(defs, "divide", &divideVjp);
     setVjp(defs, "pow", &powVjp);
     setVjp(defs, "maximum", &extremumVjp<true>);

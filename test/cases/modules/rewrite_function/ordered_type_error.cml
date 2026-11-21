@@ -1,0 +1,16 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// Each public entry point requires a bool, not a silently ignored policy spelling.
+import { rewrite, run, saturate } from rewrite
+
+rule add_zero(x: int) { x + 0 => x }
+func target(x: int): int {
+    return x + 0
+}
+func main(): int sync {
+    println(target->rewrite<[add_zero], ordered: 'ordered'>)
+    println(target->run<[add_zero], ordered: 'ordered'>)
+    println(target->saturate<[add_zero], ordered: 'ordered'>)
+    return 0
+}

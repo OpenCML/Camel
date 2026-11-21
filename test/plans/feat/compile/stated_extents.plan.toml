@@ -12,7 +12,7 @@ name = "stated_sum_gradient"
 desc = "The gradient of `sum(x)` over `[1.0, 2.0, 3.0]`: `jvp_sum` states `shape(xs)` in the linear call and `sum_stated_t` spreads the cotangent of 1.0 over those extents, so every element gets one -- value 6.0, `dL/dx=[1.0, 1.0, 1.0]`. The reading also names the reverse law the walk applied (`rhs=sum_stated_t`), which is what says the stated operator was reached and not the operand-reading one it replaced."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_sum_gradient.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -49,7 +49,7 @@ expect_output_contains = ["stated mean value=2.5 dL/dx=[0.25, 0.25, 0.25, 0.25]"
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 known_fail = ["nvm"]
-known_fail_owner = "lane-rank0point"
+known_fail_owner = "unowned (the `lane-rank0point` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
 known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[...]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis` computes the element at rank 0, the lift states the pair as `(float, float)` because that is the value's own type, and the tangent the rule's right side wrote (`mean_axis_stated(dxs, at)`) is typed `T[...]`; `split` then copies that node as the backward half's exit, whose declared type is `Tangent<float>`"
 known_fail_msg = "declares 'float'"
 known_fail_note = "Three things. One: this red is what removing the `keepdims = true` workaround exposed -- the case used to write `true` to stay off the rank-zero path, the author's ruling of 2026-11-04 04:20 turned it back, and the defect that workaround was hiding is now visible instead of dodged. Two: it is not `mean_axis`'s defect and not the law's port -- the same sentence appears with the port stated `T[...]` and with the conversion the language makes at a `T[...]` position (measured: `numel` of a scalar entering `float[...]` answers 1 and `shape` answers `[]`); what it pins is `split`'s exit type, the boundary between the two halves of a cut, which is why the two entries below carry the same sentence. Three: the decision this entry waits on is `docs/handover/questions/2026-11-04-who-types-the-rank-zero-tangent-at-a-cuts-exit.cn.md` -- two attempts to convert at the lift were measured and reverted (one turned this case green and made the two entries below refuse by node kind, the other built the graph and crashed at run time in `numelKernel`), and the recorded default is to convert once where the cut declares its exit. The mark comes off the day that lands, not before."
@@ -58,7 +58,7 @@ timeout_ms = 20000
 # The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
 # operand, which the entry above cannot be. It was eight SIGSEGVs in `numelKernel` while
 # `mean_axis_stated_t` stated its cotangent as `float[...]`
-# (docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
+# (docs/handover/reviews/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
 # looks like it already has a rank is a slot nothing converts, so `numel(ct)` read the number's bits
 # as a pointer. That reading is what the port's `T` was for; the ruling of 2026-11-04 04:20 has the
 # port say `T[...]` again and the conversion happen in the compiler, once, where a value's type goes
@@ -76,7 +76,7 @@ expect_output_contains = ["stated mean element value=2.5 dL/dx=[0.25, 0.25, 0.25
 expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 known_fail = ["nvm"]
-known_fail_owner = "lane-statedsig"
+known_fail_owner = "unowned (the `lane-statedsig` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
 known_fail_reason = "the graph is built and then refused by its own return type: `():?:?: [Error]: The value the graph 'split_of_jvp_of_total_backward' hands on has type 'float[...]', and the graph declares 'float'; the value is node 8.` -- `tensor:mean_axis`'s result is computed now (`cmp:mean_axis` answers the element at rank 0, which is what the declaration `T[...]` used to deny), and the transpose of the jvp graph still hands the rank-zero array where the split signature says `float`"
 known_fail_msg = "declares 'float'"
 known_fail_note = "This entry was green before this merge and is red after it, so it is the merge's damage and it is recorded rather than repaired: measured 2026-11-04 on this tree with `std::nvm`, `feat/compile/stated_extents` reads 15 = 14 / 1. Two experiments say where it is not: with the law's port stated `float[...]` instead of `T` the same sentence appears, so the port type is not the trigger; the trigger is the signature move, because the tree before this merge declared `tensor:mean_axis` as `(xs: T[...], axis: int, keepdims: bool): T[...] when is_numeric` in `stdlib/tensor.cml` and the merged tree computes it (`modules/tensor/ops/reduction_ops.cpp#meanAxisInfer`, recorded in `stdlib/signatures/tensor.cml`), which is the honest type and the one this entry's own doc argues for. Reverting the move by hand would put back a declaration the operator contradicts and would fail `--verify-ops`, so the repair belongs to whoever takes the rank-zero answer the last step -- `modules/transforms/split.cpp`'s return-type check over a computed result, or the walk's conversion at the boundary."timeout_ms = 20000
@@ -124,7 +124,7 @@ name = "stated_sum_axis_gradient"
 desc = "The gradient of `pick_at(sum<0, false>(x), 1, 3)` over a `[2, 3]` tensor, through the engine and through the library in one program: `jvp_sum_axis` states the axis, the flag and `shape(xs)` in the linear call and `sum_axis_stated_t` spreads each column's cotangent back down the column. The reading is `value=7.0` -- the middle column's lane, picked -- and `same=true`: the two legs answer the same numbers bit for bit. Picking one lane rather than summing the lanes is what makes the reading name the axis the cotangent went back along: the answer is `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and an all-ones gradient would have said nothing about where it went."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_sum_axis_gradient.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -139,7 +139,7 @@ name = "stated_sum_axis_gradient_negative_axis"
 desc = "The same reading with the axis written `-1`: `sum<-1, false>(x)` sums each row, so the lanes are `[6.0, 15.0]`, the picked lane is `15.0` and the gradient is `[[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]`. The axis reaches the stated operator exactly as the call wrote it -- the reduction resolves it on entry and no law normalizes it a second time -- and the ones landing on row 1 and not down column 1 is what rules out a spread along the wrong axis. Both legs `same=true`."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_sum_axis_gradient_negative_axis.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -154,7 +154,7 @@ name = "stated_mean_gradient"
 desc = "The gradient of `mean(x) * 2.0` over a `[2, 3]` tensor, both legs: the mean of `[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]` is `3.5`, the value is `7.0`, and every one of the six positions gets `2.0 / 6`, `0.3333333333333333`. `jvp_mean` states `shape(xs)` and `mean_stated_t` divides the cotangent by the product of those extents and spreads it, which is the engine's `dy / count` broadcast element for element; the reading is `same=true`. The multiplier is what makes the cotangent `2.0` instead of the `1.0` a bare sum ends in: with `1.0` a law that divided and one that multiplied would be hard to tell apart."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_mean_gradient.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -170,7 +170,7 @@ name = "stated_max_axis_gradient_tie"
 desc = "The gradient of `sum(max<1, false>(x))` where one row holds its maximum twice: the lanes are `[3.0, 2.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 0.0, 1.0]]` -- both tied positions get the whole cotangent. The tie is what discriminates the law: taking the first tied position answers `[[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]` and sharing the cotangent answers `[[0.0, 0.5, 0.5], [0.0, 0.0, 1.0]]`, and only the first reading is what the engine's `extremumAxisVjp` answers, which the `same=true` on the two legs says."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_max_axis_gradient_tie.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -185,7 +185,7 @@ name = "stated_min_axis_gradient_negative_axis"
 desc = "The gradient of `sum(min<-1, false>(x))` with a tie in one row: the lanes are `[1.0, 4.0]`, the value is `5.0`, and the gradient is `[[0.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. The axis written `-1` is the second reading in the case -- it reaches `min_axis_stated` unresolved and the stated extents decide where the lane's cotangent goes -- and the tie is the first: a law that kept only the first tied position would answer `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and one that spread the cotangent over the lane would answer `[[1.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`. Both legs `same=true`."
 kind = "behavior"
 case = "../../../cases/compile/transforms/stated_min_axis_gradient_negative_axis.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -276,7 +276,7 @@ expect_output_not_contains = ["skip=", "no derivative rule"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
-known_fail_owner = "lane-statedsig"
+known_fail_owner = "unowned (the `lane-statedsig` lane wrote this mark and is gone): nobody owns it yet, and the wall it is stuck on is the known_fail_reason beside this line"
 known_fail_reason = "the same wall `stated_mean_axis_element_gradient` hits, on the library leg: `The value the graph 'split_of_jvp_of_through_library_backward' hands on has type 'float[...]', and the graph declares 'float'` -- `vjp(mean<0, false>(x))` lifts through `rulesets/jvp.cml#jvp_mean_axis`, and the transposed half hands the rank-zero array where the lifted signature says `float`"
 known_fail_msg = "declares 'float'"
 known_fail_note = "The engine leg is green and stays pinned -- `value=2.5` and `dL/dw=[0.25, 0.25, 0.25, 0.25]` is what this case exists to read, and it is reached. What it cannot do yet is read the library leg beside it, because `split`'s backward graph is checked against the forward half's declared return type and the rank-zero answer arrives as `float[...]` there. Measured 2026-11-04 on the merge tree: the program stops before printing, with the sentence above. Merging this case with `known_fail` on the one backend rather than deleting the library leg keeps the comparison the case was written for; the day the rank-zero answer is typed through `split` the mark comes off and the two readings print side by side again."
@@ -324,7 +324,7 @@ name = "transpose_of_a_stated_shape_answers"
 desc = "`transpose(total)` with `total(x: float[2, 3]) = sum(x)`: the cotangent of the one number is that number at every one of the six positions, `([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])`, and the walk line names the law it applied (`rhs=sum_from_type_t`) -- the one that is handed the extents `extent_of` reads off the parameter's type. That line is what separates this reading from a law reading a value: no array in this program holds `[2, 3]`, so an answer that came out at the wrong rank would say the extents were guessed, and `skip=parameter-shape` appearing here would say the stated type was not read at all."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_of_a_stated_shape_answers.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -352,5 +352,45 @@ expect_diagnostic_name = "RuntimeDiag::TransposeNeedsParameterShape"
 expect_stdout_contains = ["open through vjp: value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]"]
 expect_output_contains = ["The transpose of 'total' needs the shape of the parameter 'x', and the type 'float[...]' does not state it.", "one dimension and no length", "A bare transposition requires the shape of every parameter to come from its type", "so the parameter 'x' declares no extents in the type 'float[...]'", "Write the extents the parameter's value has in its declaration", "answers ([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]) by `sum_from_type_t`", "over the same 'x: float[...]' answers value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]"]
 expect_output_not_contains = ["open through transpose answered", "Nothing is missing from the language here", "compiler defect", "not the program's fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The smallest reading of the lane sum's derivative, and the only case in this plan that asks for
+# the derivative of `sum<axis, keepdims>` and nothing else: the value is the reduction's, the
+# tangent is `sum_axis_stated`'s (`jvp_sum_axis`), the gradient is `sum_axis_stated_t`'s
+# (`lane_spread`, `keepdims=false`, so the reduced extent is put back before the broadcast).
+#
+# `[[1, 2], [3, 4]]` summed down the leading axis is `[4.0, 6.0]`; every element of the operand
+# lands in exactly one lane, so a cotangent of ones gives `[[1.0, 1.0], [1.0, 1.0]]`, and a tangent
+# of ones gives `[2.0, 2.0]` (two elements per lane, each contributing 1).
+[[tests]]
+name = "sum_axis_lane_derivative"
+desc = "The derivative of `sum<0, false>` on `[[1.0, 2.0], [3.0, 4.0]]`, both directions on one value: the forward is `[4.0, 6.0]`, the tangent of a ones seed is `[2.0, 2.0]`, and the pullback of a ones cotangent is `[[1.0, 1.0], [1.0, 1.0]]`. The three numbers are pinned as literals because they are the whole point of the case: the forward half and the derivative half are different laws (`jvp_sum_axis` against `sum_axis_stated_t`), and the `keepdims=false` half is the one whose adjoint has to put the dropped extent back before it broadcasts. A repeated wrong number reads as a plausible answer here -- every element of a lane holds the same value -- so the case pins the exact digits rather than a magnitude or a shape."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sum_axis_lane_derivative.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sum<0> forward=[4.0, 6.0]", "sum<0> tangent=[2.0, 2.0]", "sum<0> gradient=[[1.0, 1.0], [1.0, 1.0]]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The lane sum in the shape a real step reads it: a bias shared by both rows of a batch, whose
+# gradient is the sum down the batch axis. Both legs are pinned, and the numbers are hand-derived in
+# the case's header, so a lane sum that answered a repeated wrong value would be caught by the digits
+# and not by the shape.
+[[tests]]
+name = "sum_axis_in_a_training_step"
+desc = "A two-row MLP whose bias gradient is `sum<0, false>` of the hidden gradient, with every number hand-derived in the case's header: the engine's step answers `loss=180.0`, `dL/db=[24.0, 24.0]` and `dL/dw=[[78.0, 78.0], [102.0, 102.0], [126.0, 126.0]]`, and the library's forward transform reads four of those positions back one seed at a time -- `dL/dw[0][0]=78.0`, `dL/dw[1][0]=102.0`, `dL/dw[2][0]=126.0`, `dL/db[0]=24.0`. The four numbers are distinct on purpose: an all-ones gradient, which is what a lane sum that spread one number over the whole tensor would answer here, matches none of them. The library's reverse leg is not asked, and the case's header says why: `dy * dy` stops the transposition at `skip=law-reads-a-value uri=tensor:multiply position=1`, the wall `broadcast_product_gradient_of_an_open_rank.cml` already records, and that refusal is not the lane sum's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sum_axis_in_a_training_step.cml"
+args = ["--trace", "transforms", "${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["step engine  loss=180.0 dL/db=[24.0, 24.0] dL/dw=[[78.0, 78.0], [102.0, 102.0], [126.0, 126.0]]", "step library dL/dw[0][0]=78.0", "step library dL/dw[1][0]=102.0", "step library dL/dw[2][0]=126.0", "step library dL/db[0]=24.0"]
+expect_stderr_contains = ["jvp_sum_axis"]
+expect_output_not_contains = ["skip="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

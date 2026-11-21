@@ -1,0 +1,33 @@
+/**
+ * Two references made in one body are two resources: the operations on `a` and on `b` keep no order
+ * between them, while two operations on one reference keep the order they are written in. The body
+ * is not `sync`, so an order edge it has is the resource's and not the block's.
+ *
+ * `camel inspect --gir` shows it: graph `apart` holds no ORDER edge (its one write is the only
+ * operation on each of its two references), graph `same` holds the ones its two writes and its
+ * read on one reference ask for. The read of `same` answers 22 only if the order is there, so the
+ * program's own output is the second half of the reading.
+ */
+
+import state
+
+func apart(): int {
+    let a = state::ref(1)
+    let b = state::ref(2)
+    let x = state::set(a, 11)
+    let y = state::set(b, 22)
+    return x + y
+}
+
+func same(): int {
+    let a = state::ref(1)
+    let x = state::set(a, 11)
+    let y = state::set(a, 22)
+    return x + y + state::get(a)
+}
+
+func main(): int sync {
+    println(apart())
+    println(same())
+    return 0
+}

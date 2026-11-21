@@ -5,7 +5,7 @@ resource db
 
 var cnt: int = 0
 
-func peek(): int uses db {
+func peek(): int uses var db {
     return cnt
 }
 

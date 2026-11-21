@@ -5,6 +5,7 @@
 Read the file that matches the task:
 
 - `../AGENTS.md` for build and runtime commands
+- `dispatch.md` for the checklist to go through **before dispatching a lane**, and the delivery contract it must meet afterwards
 - `commit.md` for commit message rules
 - `refactor.md` for refactor and code-quality rules
 - `test.md` for test placement and verification rules

@@ -203,7 +203,7 @@ void ProfilePass::noteLoopsOf(const Program &program) {
 
             // Is the sequence a tensor's elements? The `for` takes an array's elements along its
             // first dimension itself (design principles 5.4: a numeric array does not go through the
-            // tensor module's `__iter__` any more), so no operator in between names it and the
+            // tensor module's `__iter__`), so no operator in between names it and the
             // type of the sequence answers: a numeric array is the tensor kind.
             bool tensor = false;
             if (const auto iterable = view.iterable(); iterable.has_value()) {

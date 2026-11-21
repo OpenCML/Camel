@@ -1,0 +1,35 @@
+// The Hessian, which is the second derivative read one row at a time.
+//
+//   f(x) = x0^3 + x0*x1^2,  at x = (2, 3)
+//   df/dx0 = 3*x0^2 + x1^2 = 12 + 9 = 21      df/dx1 = 2*x0*x1 = 12
+//   H = [ [6*x0, 2*x1], [2*x1, 2*x0] ] = [ [12, 6], [6, 4] ]
+//
+// Row i is `grad` of the function that answers component i of the gradient, so each row is a nest.
+// The numbers are the derivatives written out by hand, not read off any implementation.
+import { grad } from vjp
+
+with <x: f32[]>
+func f(): f32 {
+    return x[0] * x[0] * x[0] + x[0] * x[1] * x[1]
+}
+
+with <x: f32[]>
+func df0(): f32 {
+    let g = grad(f)<x>()
+    return g[0]
+}
+
+with <x: f32[]>
+func df1(): f32 {
+    let g = grad(f)<x>()
+    return g[1]
+}
+
+func main(): int sync {
+    let xs: f32[] = [2.0, 3.0]
+    let g = grad(f)<xs>()
+    let r0 = grad(df0)<xs>()
+    let r1 = grad(df1)<xs>()
+    'hessian g=[{},{}] row0=[{},{}] row1=[{},{}]'->format<g[0], g[1], r0[0], r0[1], r1[0], r1[1]>->println
+    return 0
+}

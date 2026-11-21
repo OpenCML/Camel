@@ -67,6 +67,7 @@ Not in this reference: the profiler (`perf`).
 | [env](#env) | `import { ... } from env` | C++ |
 | [json](#json) | `import { ... } from json` | C++ |
 | [hash](#hash) | `import { ... } from hash` | C++ |
+| [state](#state) | `import { ... } from state` | C++ |
 | [re](#re) | `import { ... } from re` | C++ |
 | [para](#para) | `import { ... } from para` | C++ |
 | [test_support](#test_support) | `import { ... } from test_support` | C++ |
@@ -104,6 +105,7 @@ Not in this reference: the profiler (`perf`).
 | [env](#env) | `import { ... } from env` |  |
 | [json](#json) | `import { ... } from json` |  |
 | [hash](#hash) | `import { ... } from hash` |  |
+| [state](#state) | `import { ... } from state` |  |
 | [re](#re) | `import { ... } from re` |  |
 | [para](#para) | `import { ... } from para` |  |
 | [test_support](#test_support) | `import { ... } from test_support` |  |
@@ -1318,7 +1320,7 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
@@ -1338,7 +1340,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -1450,7 +1452,7 @@ residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/tran
 the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 graph too, so a body that needs a value it computed carries it instead of computing it again.
 
-The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+The cut: the front half
 takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
 residuals -- the values it reads -- and takes the tangents and nothing else.
 
@@ -1489,8 +1491,15 @@ same rule for a value the body computed, a value it read from outside, and a `wi
 the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 
 **`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
-that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+that makes it is `modules/transforms/transpose/signature.cpp#transposeSignature`. So `transpose(f)` is
 called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
+
+The member is built once for a graph version and kept: the walk reads
+the graph and the graphs it refers to and never the value of a call, so a second call about the
+same version names the member the first one built. `vjp`'s pullback and `grad`'s derivative are
+called once per step of a loop over one `lin` graph, and the transposition is what the transform
+costs, not what a call of it costs. What stays per call is the function value, closed over the
+residuals that call's `lin` carries.
 
 - Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 
@@ -1522,8 +1531,7 @@ remat: (f: F) => F when is_function::<F>()
 ```
 
 Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
-property "a call of it is recomputed on the backward pass instead of kept" (the author's ruling
-of 2026-11-01). The property is the graph's, not the call site's and not a tag's: the call
+property "a call of it is recomputed on the backward pass instead of kept". The property is the graph's, not the call site's and not a tag's: the call
 answers with a new graph whose body is the body it was given, so a call through it is a call of
 the same function and no value changes -- what changes is what a step that cuts the graph in two
 has to keep across the cut. `split` reads the property: the values of a marked graph that cannot
@@ -1577,32 +1585,32 @@ than a value).
 vjp: (f: F) => Vjp<F> when is_function::<F>()
 ```
 
-The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
+The reverse transform, in JAX's order: `vjp(f)(x)` gives the pair
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
 member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
-two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+two have the shape `(ct) => (cotangents)`, so nothing is
 wrapped around it.
 
 The pullback answers a tuple in every case, one member per parameter, so a function of one
 parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
-number a gradient is comes out of it by position: `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's
-ruling of 2026-11-01 14:30: one rule for every arity, no exception for one parameter, no type
-function that takes an element out of a one-long tuple).
+number a gradient is comes out of it by position: the first cotangent of the pullback read at
+`1.0` (one rule for every arity, no exception for one parameter, no type function that takes
+an element out of a one-long tuple).
 The derivative of `f` with respect to its parameters: `vjp(f)(x, y, ...)` is the pair
 `(value, pullback)`, and `pullback(ct)` answers the cotangents of the parameters -- one member per
-parameter, so a function of one parameter has a one-long tuple (author's ruling of 2026-11-01: one
-rule for every arity, no exception for one parameter, no type function that takes an element out of
-a one-long tuple).
+parameter, so a function of one parameter has a one-long tuple (one rule for every
+arity, no exception for one parameter, no type function that takes an element out of a
+one-long tuple).
 
 One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
 pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
 instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
-stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
+stands in. The packs are values in the
 body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
 `split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
 takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
 list, because the `with` value the backward half reads is a residual the cut captured in its
-closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
+closure (`Pullback<F>` in stdlib/types.cml is
 `(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
 lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
 writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
@@ -1611,6 +1619,36 @@ parameters.
 The whole reading in one line: the function is written where the call is, so the example is a
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.
+
+**Where the cut happens** (`grad` hands back the differentiated graph, not a graph that
+transforms itself when it runs). `split(jvp(f))` is written *here*, in the body of
+`vjp`, and not inside the lambda it answers: the cut is made once, when `vjp(f)` is evaluated,
+and every call of the reading calls the graph that cut handed back instead of cutting the lifted
+function again. Cutting inside the lambda, as `split(jvp(f))<...ws>(...xs)`, would redo the whole lift and
+the whole cut on every step of a training loop, and an outer transform would meet a derivative
+that was not a graph yet.
+
+**Where the transposition happens**: the same reading, one step on.
+`transpose(lin)` is still written inside the lambda, because `lin` does not exist until the
+forward half has run -- but the *walk* is a function of the graph `lin` is of, and a call keeps
+asking about the same graph. So the module keeps the member it built for a graph version and a
+call names the stored one (`modules/transforms/transpose_operator.cpp#TransposeMember`, a fact of
+the source graph stamped by `closureRevision`), and a loop that steps a gradient many times pays
+for one transposition rather than one per step. What a call still does, and only it can, is make
+the function value closed over the residuals *that* call's `lin` carries: the residuals are
+values read off the body (`residualsOf`), not a position in a type, so they cannot be a parameter
+of the member and are not known before the forward half has run.
+
+What is **not** done here, and why: the residuals the linear half reads still travel in `lin`'s
+closure, so the member is a fresh function value per call even though its graph is not rebuilt.
+The design's next step is `split` answering `(fwd, lin)` with the residuals as explicit arguments
+(`fwd: x => (y, residuals)`, `lin: (residuals, tangents) => tangent`), which needs the residual
+*list* in a type: it is a property of the body (`residualsOf`), not of the signature, and no
+declaration can write it -- the `ResidualsOf<F>` / `_`-position hole is not an option
+for that reason. The operator resolver sees types only, so it
+gives `lin` an empty residual list while the graph has as many as the body reads, and a call site
+typed by the resolver hands the callee the wrong number of values. That ordering is open: a typed
+hole, or the `std::macro` stage evaluating the cut where the graph *is* in hand.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `let (y, pullback) = vjp((x: float) => x * x)(3.0)` gives `y = 9.0, and pullback(1.0) is (6.0)`
@@ -1622,15 +1660,49 @@ grad: (f: F) => GradientOf<F> when is_function::<F>()
 ```
 
 The gradient of a function with respect to its first `with` parameter (design principles 9.9):
-`grad(f)` takes the weight first and `f`'s own parameters after it, and answers the weight's
-cotangent -- `grad(weighted)(3.0, 2.0)` for `<x: float> func weighted(y) = x*y + x`.
+`grad(f)` answers the weight's cotangent, and it is called the way `f` is -- the weight in the
+angle brackets, `f`'s own parameters after it -- `grad(weighted)<3.0>(2.0)` for
+`with <x: float> func weighted(y) = x*y + x`.
 
 It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
-taken. The weight is on the ordinary list because that is the list `vjp` differentiates, so the
-step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
-port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
-differentiated body reads a `with` value that would need a direction of its own.
-`GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters.
+taken. The weight is moved onto the ordinary list *inside this body*, because that is the list
+`vjp` differentiates, by `first_with_as_param` -- the signature reinterpretation that reclassifies
+that one port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in
+the differentiated body reads a `with` value that would need a direction of its own. That move is
+the composition's business and not the caller's: the lambda below takes the whole `with` list
+back and hands the weight to the moved function in the parameter position the move put it in.
+`GradientOf<F>` (`stdlib/types.cml`) is the shape that is answered -- `f`'s own `with` list, then
+`f`'s own parameters -- and the first member of the pullback's answer is the weight's cotangent.
+
+**The whole `with` list is carried, and in its own order.** The reading the body builds is a `vjp`
+read, declared `<...ws> (...xs)` (`Vjp<F>`, `stdlib/types.cml`), so it takes the `with` values its
+function takes; the lambda that answers takes `f`'s list as `f` wrote it -- `grad(loss)<layer, y>(X)`
+for a loss declared `with <layer: Linear, y: f32[?, ?]>`, whose data `y` is a `with` value the
+derivative never differentiates and cannot do without. The lambda binds that list as a *named*
+first member plus the rest (`<w, ...ws>`), because the moved function's own list is the rest and
+the weight is its first parameter: `forward<...ws>(w, ...xs)`. Written with one pack and no name
+(`<...ws> (...xs)`) the weight has nowhere to come out of the pack into the parameter list. A
+function with no ordinary parameter at all is `xs` with no member, and the line is the same one:
+a lambda's rest pack is a value in its body whether or not it has a member.
+
+**The cut is made here, once**, for the reason `vjp` above states and with
+the same limit: `split(jvp(first_with_as_param(f)))` is written in `grad`'s own body, so a call of
+the gradient calls the graph the cut built instead of lifting and cutting the function again. The
+body is the composition written out (`split`, then `transpose`) rather than `vjp` read at the seed
+1, because a `vjp` read would put the cut back inside the lambda it answers: the whole point is
+that the derivative is a graph by the time `grad(f)` answers. The transposition is one call for
+the same reason and by the same rule as `vjp`'s: written where the graph is asked about, done
+once for that graph version (`modules/transforms/transpose_operator.cpp#TransposeMember`).
+
+**A nest of this `grad` is this composition twice, and it is read one wall further on.** `grad(f)`
+answers a function that still takes its weight as a `with` value, so `grad(grad(f))` finds a first
+`with` parameter to differentiate and the second derivative is the same step again:
+`grad(grad(square))<2.0>()` typechecks and builds, with no refusal from
+`first_with_as_param` ("this function has no `with` parameter: there is no first one to move") for it.
+What it does not do yet is answer 2.0: the value the outer `jvp` is asked to lift is what the inner
+`grad` answered, a function computed at run time, and `jvp` lifts a callee only when it is evident
+-- `transforms: jvp has no forward transform for this function`, at this body's `jvp` line. The
+numbers are pinned against that wall and not against the call form.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`
@@ -1645,9 +1717,11 @@ has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), flo
 The value, the auxiliary value and the gradient together, for a function whose result is the pair
 `(value, aux)`: `has_aux(f)` gives a function of the weight that answers `((value, aux), gradient)`
 -- the shape and the order the engine's `with_grad(f, has_aux: true)` answers, JAX's
-`value_and_grad(f, has_aux=True)`. The weight is the one ordinary parameter `f` takes, as it is
-for `grad` above: the library's names are functions of ordinary parameters, and the subject's
-`with` values are closed over where the lambda is written.
+`value_and_grad(f, has_aux=True)`. This name is written once, for a subject of one `float`
+parameter, and that parameter *is* the weight here: a declaration whose parameter list is a pack
+is what the generic form needs, and the library does not have it yet (see the last paragraph).
+`grad` above does not read its weight that way -- it takes the differentiated function's own
+`with` list, because that is where a `with` value is written (`GradientOf<F>`).
 
 The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
 function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --
@@ -1662,7 +1736,7 @@ to `vjp` is refused rather than guessed at (`has_aux_vjp_pair` in
 test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
 direction needs, so the composition that reads all three numbers is the one above.
 
-The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+The backward spelling of this body was tried and **refused by name**: `split(jvp(f))`
 read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
 the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
 member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph
@@ -1999,10 +2073,12 @@ a `f32` tensor of shape [labels, classes], each row a distribution over the clas
 #### `shape`
 
 ```camel
-shape: (t: T[...]) => int[] when is_numeric::<T>()
+shape: (t: T) => ShapeOf<T>
 ```
 
-The extents of a tensor, in order.
+The extents of a tensor, in order: as many as the type states dimensions, so a tensor whose
+shape the type fixes has a list whose length is fixed too (`ShapeOf`); a scalar is a tensor of
+rank zero and answers the empty list.
 
 - Pure.
 - Example: `shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[2, 2]`
@@ -2041,7 +2117,7 @@ The element at `position` of a rank-1 tensor whose length is `length`: `t[positi
 length stated by whoever holds the value.
 
 The length is a **known operand**, and it is the reason this spelling exists beside the
-language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
+language's own `t[i]`. A transpose rule may read only known operands,
 and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
 cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
 to build the zeros from unless the value's length is handed to it. A forward half can state it --
@@ -2372,6 +2448,36 @@ is one too.
 - Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
 - Example: `layer_norm(x, gamma, beta)`
 
+#### `layer_norm_grad`
+
+```camel
+layer_norm_grad: (x: f32[...], gamma: f32[...], dy: f32[...], which: int, eps?: number) => f32[...]
+```
+
+The gradient of the `f32` layer normalization with respect to one of its three operands, chosen
+by `which` (0 the input, 1 gamma, 2 beta), from the input x, `gamma` and the incoming gradient
+dy of the normalization's result. `eps` is the normalization's own and is 1e-5 by default, the
+same default the forward call has. The result has the shape of the operand `which` names.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input.
+- Failure: fault `RuntimeError` when `which` is not 0, 1 or 2.
+- Example: `layer_norm_grad(x, gamma, dy, 0)`
+
+#### `layer_norm_grad`
+
+```camel
+layer_norm_grad: (x: float[...], gamma: float[...], dy: float[...], which: int, eps?: number) => float[...]
+```
+
+The same gradient of `f64` operands, in `f64`: x, gamma and dy are `f64` and the result is one
+too.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when dy does not have the input's extents, or gamma has more elements than the input.
+- Failure: fault `RuntimeError` when `which` is not 0, 1 or 2.
+- Example: `layer_norm_grad(x, gamma, dy, 0)`
+
 ### Linear algebra
 
 #### `matmul`
@@ -2529,8 +2635,7 @@ Writes a tensor to a NumPy `.npy` file, replacing it.
 A reduction and a gather both forget something a pullback has to put back: `sum` forgets how many
 elements it added, `take` forgets how many rows it read from, and `mean` over an axis forgets the
 lane. The reverse of each spreads one cotangent over *that* shape, and it cannot read the shape
-off the operand: a transpose rule may read only **known** operands (author, 2026-11-03 11:10 and
-17:35), and the operand a cotangent comes back through has no value on that side -- while `T[...]`
+off the operand: a transpose rule may read only **known** operands, and the operand a cotangent comes back through has no value on that side -- while `T[...]`
 carries no extents in its type (design principles 5.4).
 
 So the forward half states them, and these declarations are what it states them to. Each is the
@@ -2541,8 +2646,8 @@ reads instead of the array. `pick_at` is the same arrangement for the read: `len
 The extents travel in one list because that is the list the reverse law wants whole: the axis and
 the flag decide which extents are lanes and the extents decide where each lane's cotangent goes, so
 one argument holds the three facts the adjoint reads and the value spends on nothing. (The number
-of ordinary ports is not the constraint it once was: the walk used to refuse a third position before
-looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
+of ordinary ports is not a constraint: the walk does not refuse a third position before
+looking for a law, and `TransposeRefusalCause` has no such cause -- the two extrema below take
 a third port, their tie selection, which no extent list could carry.)
 
 #### `sum_stated`
@@ -2603,6 +2708,71 @@ operand that is one number states no extents, and its list is empty.
 - Pure.
 - Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
 - Example: `mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])` gives `[3.0, 8.0]`
+
+#### `add_stated`
+
+```camel
+add_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The sum of two tensors, with **both** operands' extents stated: `x + w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the sum and spends nothing on the extents: the broadcast, the element type and the
+one rounding are `add`'s own. `rulesets.transpose`'s `add_stated_t` reads the two lists instead
+of the operand whose cotangent it is answering -- on the reverse side that operand is a tangent,
+and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+computes them is `rulesets.jvp`'s `jvp_add_tensor`, where both operands are values and
+`shape(...)` of each is one.
+
+Two lists and not one, for the reason `mul_stated` states: a sum broadcasts, so `[2, 2, 3] + [3]`
+has two different operand shapes and each cotangent comes back to its **own**. An operand that is
+one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `add_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[11.0, 22.0], [13.0, 24.0]]`
+
+#### `subtract_stated`
+
+```camel
+subtract_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The difference of two tensors, with **both** operands' extents stated: `x - w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the difference through `subtract`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `subtract_stated_t` for the reason `add_stated` records: an answer that
+may not be the operand's shape is refused and not guessed, and a tangent's shape is not in its
+type. The forward half is `rulesets.jvp`'s `jvp_subtract`.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `subtract_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [10.0, 20.0] as float[2], [2, 2], [2])` gives `[[-9.0, -18.0], [-7.0, -16.0]]`
+
+#### `div_stated`
+
+```camel
+div_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The quotient of two tensors, with **both** operands' extents stated: `x / w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the quotient through `divide`'s own kernel, and the two lists are read by
+`rulesets.transpose`'s `div_stated_t` for the reason `mul_stated` records: a quotient broadcasts
+as a product does, so each cotangent comes back to its **own** operand's shape, and on the reverse
+side the operand a cotangent is answered for is a tangent -- `float[...]`, whose type states no
+extents (design principles 5.4). The forward half that computes the two lists is
+`rulesets.jvp`'s `jvp_divide` (and its `jvp_div_stated`, for a program that writes this operator
+itself), where both operands are values.
+
+An operand that is one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `div_stated([[1.0, 2.0], [2.0, 4.0]] as float[2, 2], [2.0, 4.0] as float[2], [2, 2], [2])` gives `[[0.5, 0.5], [1.0, 1.0]]`
 
 #### `matmul_stated`
 
@@ -2789,8 +2959,8 @@ an axis reduction are the operand's extents with one axis removed -- or kept as 
 a declaration's result is a type, not a function of two values. Written here as a declaration
 the name answered `T[...]`, which is a result that states no extent at all; the operator's own
 inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
-`support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` now reads a
-`float[3]` where it used to read a `float[...]`.
+`support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` reads a
+`float[3]`, not a `float[...]`.
 
 The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
 takes them as parameters of its own, so a call that leaves them to the run states no rank, and its
@@ -2811,10 +2981,9 @@ else.
 `at` is the target itself -- the extents the answer has, written where the call is. The length is
 therefore the caller's: it is not read off another value's shape (the older spelling passed a
 zero array whose shape stood in for the target) and not off a type, and no registry, context or
-expected result type supplies it -- the extents are the runtime shape the caller states, which is
-the layer the author's ruling of 2026-11-05 puts them on.
+expected result type supplies it -- the extents are the runtime shape the caller states.
 
-**The contract is 甲: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
+**The contract: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
 summed away, and an axis `at` states 1 against a longer one is summed too -- the adjoint of a
 broadcast that handed one element along that lane (design principles 5.4). Two equal shapes are
 the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
@@ -2845,10 +3014,10 @@ broadcast_like: (t: T, like: S) => S
 `t` spread out to the shape `like` states: the **other** direction of the same adjoint, and the
 operator that owns it.
 
-The two directions used to share `sum_to`, and they are not one move: a reduction reads a target
+The two directions do not share `sum_to`, because they are not one move: a reduction reads a target
 that is a suffix of its operand's shape and adds over the axes in front of it, while a spread
 writes an element into every lane a broadcast would have handed it out along -- the operation
-`broadcast_like` is named for. `sum_to` now takes the extents themselves (ruling 甲) and refuses
+`broadcast_like` is named for. `sum_to` takes the extents themselves and refuses
 a target *longer* than its operand by name; a law that needs a rank-one value in the lanes of a
 rank-two one says `broadcast_like(value, like)` and reads the shape off a value the cut carries.
 
@@ -2883,12 +3052,15 @@ alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
 
 Types are also computed from types, in the one language (design principles 5.6, 21): a type
 function is declared with `type`, takes its arguments in the angle brackets of a type position
-and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
-of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
-key and value types of a map) take a type apart where `match type` cannot, and `RowsOf<T>` (the
-array whose first-dimension elements are `T`) puts one back together the same way; they are
-declared below without a body: the compiler provides them. They are evaluated when the instance that
-binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
+and has a type expression for its body, a `match type` among them. Those that take a type apart
+or put one back together are written that way: `ElementOf<T>` (the element of an array or a set),
+`WithElement<A, E>` (A with the element `E`) and `RowsOf<T>` (the array whose first-dimension
+elements are `T`) are `match type` cases over the array's dimensions, which a case binds as a
+dims pack (`case E[...Dims]`). `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and
+`ValueOf<T>` (the key and value types of a map, and the keys of a set) are declared below without
+a body: the compiler provides them, because what they answer is a field of the type that a
+`match type` case cannot name. A type function is evaluated when the instance that binds `T` is
+made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
@@ -4597,7 +4769,7 @@ n elements of xs drawn without replacement, as a new array.
 #### `seed`
 
 ```camel
-seed: (value: int) => void uses rng
+seed: (value: int) => void uses var rng
 ```
 
 Starts the global stream: the same seed gives the same sequence of keys.
@@ -4607,7 +4779,7 @@ Starts the global stream: the same seed gives the same sequence of keys.
 #### `next_key`
 
 ```camel
-next_key: () => Key uses rng
+next_key: () => Key uses var rng
 ```
 
 The next key of the global stream, and the stream moves on: two calls give two keys.
@@ -5005,7 +5177,7 @@ never folded away and the work of other ready nodes goes on meanwhile.
 #### `exit`
 
 ```camel
-exit: (code: int) => never uses process
+exit: (code: int) => never uses var process
 ```
 
 Ends the program with the given exit code, after the buffered output is written and the
@@ -5297,6 +5469,79 @@ The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal di
 
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
 
+<a id="state"></a>
+
+## `state`: an explicit mutable reference
+
+An explicit mutable reference: one box, and the handles that point at it.
+
+`ref(v)` makes a box holding `v` and answers a handle to it; `get` reads the content, `set` and
+`update` write it. The handle is a value: a closure may capture it, keep it after the call that
+made it returned, and two handles to one box see one content. No `var` and no cell of a `var` is
+captured by any of them (design principles 3.5, rule two: the exit for state that outlives a
+call is a reference).
+
+A reference is a **handle type** (design principles 3.3): one resource per value. Two handles
+made by two `ref` calls name two boxes, so the operations on one are ordered with the operations
+on the other only where the program puts them in one `sync` block; two operations on one
+reference keep the order they are written in. The type is provided by the module
+(`modules/state`, design principles 10.4): `stdlib/state.cml` declares it and its four
+operators, and the module keeps the kernels, the resource contract of each operator and the
+storage.
+
+The content is any type that holds no `Ref`. A reference cannot hold a reference because the
+boxes are reclaimed by counting the handles that point at them: two boxes holding each other's
+handles would keep each other's count above zero for ever, and the program would hold values it
+can no longer reach. The compiler refuses such a content where the reference is made, one layer
+at a time -- the type itself, a field, an element, a variant's payload, what a function takes or
+returns, and what a closure captures.
+
+#### `ref`
+
+```camel
+ref: (v: T) => Ref<T>
+```
+
+A new box holding `v`, and a handle to it. The box is a new resource: the value written into it
+is the value `v` gives, not the cell of a `var` the program handed in.
+
+- Example: `get(ref(3))` gives `3`
+
+#### `get`
+
+```camel
+get: (r: Ref<T>) => T uses r
+```
+
+The content of the box `r` points at: a read of the reference, and nothing else.
+
+- Example: `get(ref(3))` gives `3`
+
+#### `set`
+
+```camel
+set: (r: Ref<T>, v: T) => T uses var r
+```
+
+Writes `v` into the box `r` points at, and answers `v`. A write of the box: the handle itself is
+not replaced.
+
+- Example (a fragment, not compiled): `set(r, 7)` gives `7`
+- Why it is not compiled: the box is one the surrounding program holds, so the example names it
+
+#### `update`
+
+```camel
+update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
+```
+
+Writes `f` of the content into the box `r` points at, and answers the new content. `f` is
+`pure`, so an update touches the one reference and no other resource: what it writes is a
+function of what it read.
+
+- Example (a fragment, not compiled): `update(r, (x: int) => x + 1)`
+- Why it is not compiled: the box is one the surrounding program holds, so the example names it
+
 <a id="re"></a>
 
 ## `re`: regular expressions
@@ -5439,12 +5684,15 @@ scheduler visible.
 #### `rendezvous`
 
 ```camel
-rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
 ```
 
 Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
 passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
 showing that calls really run at the same time.
+Nondeterministic: the result depends on whether another call is waiting at the same moment,
+which is the schedule's business and not the program's. Written for a property of the
+scheduler, never for a program's result.
 
 - Failure: fault `InvalidArgument` when parties is below 1 or timeout is negative.
 - Example: `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
@@ -5560,12 +5808,15 @@ their ids; each graph once.
 #### `name`
 
 ```camel
-name: (g: Graph) => string
+name: (g: Graph) => string spelling
 ```
 
-The name of the graph.
+The name of the graph. This is *spelling*: it is the identifier the source wrote, so reading it
+needs a declaration that writes `spelling` in its clause (design principles 9.5). A transform
+that would pick a function by its name takes the function value instead.
 
-- Example: `name(graph_of((x: int): int => x + 1))`
+- Example (a fragment, not compiled): `name(graph_of((x: int): int => x + 1))`
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `nodes`
 
@@ -5573,9 +5824,30 @@ The name of the graph.
 nodes: (g: Graph) => Node[]
 ```
 
-The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+The nodes of the graph in canonical order: the order the graph's own structure decides, from the
+exit and the regions' outer accesses along the data and sync edges in port order, with what the
+ports leave open arranged for the smallest numbering table (design principles 9.5, the same walk
+`same_graph` and the block naming use). Two programs that differ only in what the source spelled
+-- two statements swapped, a variable renamed -- give one order, so a pass may pair neighbours in
+it and get one answer for both. The places of removed nodes are skipped; a node nothing reaches
+from the exit (a pure computation nobody uses) comes after the ones that are reached.
 
 - Example: `nodes(graph_of((x: int): int => x + 1))`
+
+#### `exit_of`
+
+```camel
+exit_of: (g: Graph) => Node?
+```
+
+The node the graph hands its value out of: the node a graph returns, the port of a function that
+returns a parameter, or the `JOIN` a body's branches end at. It is the one anchor an edit that
+changes what the function gives has to name, since `replace` refuses an anchor: read this node,
+build the value that takes its place, and `replace` this node by that value. Null for a graph
+that hands no value out (a function of `void`), which has no node to put anything in the place
+of.
+
+- Example: `exit_of(graph_of((x: int): int => x + 1))`
 
 ### Reading nodes
 
@@ -5783,7 +6055,7 @@ Whether the node is a constant of the graph.
 constant_bytes: (n: Node) => int
 ```
 
-The bytes the node's constant value occupies: the measure `std::opt` and `std::opt::fold` clamp with
+The bytes the node's constant value occupies: the measure `std::opt` and `std::cxx::fold` clamp with
 `constant_budget`, so that a pass written in Camel can ask the same question the native pass asks. The
 cost is the value's elements plus the shape that describes them, the walk follows members 8 deep, and a
 node that is no constant costs 0.
@@ -5819,7 +6091,12 @@ The type as a program writes it.
 callee: (n: Node) => Graph?
 ```
 
-The graph a call or function node names, null for any other node.
+The graph a call or function node names, null for any other node, and null for a call whose
+function value names no graph -- a parameter of function type, a closure being assembled: which
+graph runs is decided when the call runs. A call written by name answers through the function
+node it reads, and a call through a value through the function value the graph holds. So the
+call a program's graph makes answers the graph of the program's entry function, which is how a
+pass reaches the body it is there to rewrite without naming a graph (design principles 9.5).
 
 - Example (a fragment, not compiled): `callee(n)`
 - Why it is not compiled: n is a node of the surrounding pass
@@ -5861,7 +6138,7 @@ tag_name: (t: Tag) => string
 ```
 
 The name of the tag as the program writes it (`jvp`, `vjp`); the qualified name when the tag is
-not declared any more.
+not declared.
 
 - Example (a fragment, not compiled): `tag_name(t)` gives `'jvp'`
 - Why it is not compiled: t is a tag read from a declaration
@@ -5893,13 +6170,16 @@ names is not a function. The name is the one the program writes, or its qualifie
 #### `origin`
 
 ```camel
-origin: (n: Node) => int
+origin: (n: Node) => int spelling
 ```
 
-The source origin id of the node, 0 when unknown.
+The source origin id of the node, 0 when unknown. This is *spelling*: it is where the node was
+written, so reading it needs a declaration that writes `spelling` in its clause (design
+principles 9.5). Diagnostics and the debugger declare it; a transform does not read it.
 
 - Example (a fragment, not compiled): `origin(n)`
 - Why it is not compiled: n is a node of the surrounding pass
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `constant`
 
@@ -5953,27 +6233,51 @@ The region the region is in; null for the body (region 0).
 #### `show`
 
 ```camel
-show: (n: Node) => string
+show: (n: Node) => string spelling
 ```
 
-The node on one line: its id, kind, operator and type.
+The node on one line: its id, kind, operator and type. The text is *spelling*: it shows the
+number the node was created with, so reading it needs a declaration that writes `spelling` in
+its clause (design principles 9.5). Diagnostics and the debugger declare it.
 
 - Example (a fragment, not compiled): `show(n)` gives `'%2 Oper :op/mul_l : int'`
 - Why it is not compiled: n is a node of the surrounding pass
+- Why it is not compiled: the reading needs a declaration that writes spelling in its clause, and a doc example is a body with nowhere to write one (design principles 9.5)
 
 #### `id`
 
 ```camel
-id: (h: Graph) => int
 id: (h: Node) => int
-id: (h: Op) => int
 ```
 
-The number a graph, a node or an operator is known by inside its function: the GraphId, the
-NodeId or the OperId. Stable for the function, so a pass can key a map by it.
+The canonical number of the node: its position in the order `nodes` gives, which the graph's own
+structure decides (design principles 9.5). Two programs that differ only in what the source
+spelled -- the order two statements were written in, the names a variable was given -- number
+their nodes the same, so a pass may key a map by this number and compare two of them to ask which
+node comes first in the canonical order. A node of a draft has no canonical number at all, and
+reading one is refused with the fault `InvalidArgument` of `graph.id`: the position a node holds
+while the draft is open is the order the nodes were made in, and the commit replaces it, so an
+answer there would be a number that changes. Read `id` after the commit publishes the program, or
+read `creation_id` (which declares `spelling`) for the draft's own order.
 
 - Example (a fragment, not compiled): `id(n)`
-- Why it is not compiled: `n` is the graph the pass runs on
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `creation_id`
+
+```camel
+creation_id: (h: Graph) => int spelling
+creation_id: (h: Node) => int spelling
+creation_id: (h: Op) => int spelling
+```
+
+The number a graph, a node or an operator was created with inside its program: the GraphId, the
+NodeId or the OperId. It is stable for the program, and it is *spelling*: it says the order the
+program was written in, which a transform may not depend on. Reading it needs a declaration that
+writes `spelling` in its clause (design principles 9.5); to order two nodes, use `id`.
+
+- Example (a fragment, not compiled): `creation_id(n)`
+- Why it is not compiled: `n` is a graph, a node or an operator of the surrounding pass
 
 ### Facts
 
@@ -6026,7 +6330,7 @@ Nothing changes until `commit`.
 #### `replace`
 
 ```camel
-replace: (t: Txn<F>, old: Node, new: Node) => void uses t
+replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
 ```
 
 Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
@@ -6039,7 +6343,7 @@ ordered stays ordered.
 #### `erase`
 
 ```camel
-erase: (t: Txn<F>, n: Node) => void uses t
+erase: (t: Txn<F>, n: Node) => void uses var t
 ```
 
 Removes a node whose value nobody reads.
@@ -6051,7 +6355,7 @@ Removes a node whose value nobody reads.
 #### `eval`
 
 ```camel
-eval: (t: Txn<F>, n: Node) => Node? uses t
+eval: (t: Txn<F>, n: Node) => Node? uses var t
 ```
 
 Evaluates the pure operator of the node over its constant operands and gives the node holding
@@ -6063,10 +6367,68 @@ is left as written and warned about, as the C++ fold does.
 - Example (a fragment, not compiled): `eval(t, n)`
 - Why it is not compiled: t is an open transaction and n a node of its graph
 
+#### `order`
+
+```camel
+order: (t: Txn<F>, before: Node, after: Node) => void uses var t
+```
+
+Adds an ordering to the graph: when both nodes run, `before` runs before `after`. An order edge
+only orders and never makes a node run (the order edges of design principles 3.1), so a
+computation that has to happen where it is written is put in a `sync` block instead; this is how
+a pass gives a node the place it needs among the accesses of one resource. Both nodes must be of
+one graph, and the edge is refused when the graph already computes `before` from `after`, which
+is the cycle it would close. Ordering two nodes that are ordered that way already changes
+nothing and is not an error.
+
+- Failure: fault `InvalidArgument` when the two nodes are not of one graph, when either is gone, or when the edge would form a cycle.
+- Example (a fragment, not compiled): `order(t, a, b)`
+- Why it is not compiled: t is an open transaction and a, b are nodes of its graph
+
+#### `inline`
+
+```camel
+inline: (t: Txn<F>, at: Node, fn: G) => Node uses var t when is_function::<G>()
+```
+
+Splices the body of the function value `fn` into the region `at` is in and gives the node that
+holds the body's value. `at` decides the place as well: a statement of its block's chain (a
+call, an effect, a node that may fault) hands that place over to the code the body becomes, and
+the statement is gone afterwards -- what it held is read from the body's value; a node that
+stands in no chain only selects the region, is left as it is, and the ordering of the body's
+writes among the accesses already there is `order`'s to say. `fn` takes no arguments, and only a
+function value that captures no variable can be expanded.
+
+- Failure: fault `InvalidArgument` when the function value captures variables, when the node anchors its graph (`at` standing in a chain), when the body cannot be spliced, or when the transaction is over.
+- Example (a fragment, not compiled): `inline(t, n, () => 0)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
+
+#### `outline`
+
+```camel
+outline: (t: Txn<F>, ns: Node[]) => Node uses var t
+```
+
+Collects a group of the graph's nodes into a function of its own and puts a call of it where the
+value the group handed on was read: `inline`'s reverse (design 7 and 15.3). The nodes the group
+reads from outside it become that function's parameters, in the order they are found, and the one
+value the group hands on becomes its result; the call the operator answers reads those same
+values, and its callee (`callee`) is the function the group became. The group's own nodes are
+gone from the graph afterwards, so the code stands there once.
+
+A group is a segment with a clear boundary: operations only, whose values come in from outside it
+and go out through one node, with no anchor of the graph in it, no access, no ordering and no
+place in a chain. A group that is not that is refused with the rule it broke, before anything of
+it is copied.
+
+- Failure: fault `InvalidArgument` when the group is empty, when its nodes are not all of one graph the transaction holds, when one of them anchors its graph, when one of them is no pure operation, when the group hands on no value or more than one, or when the transaction is over.
+- Example (a fragment, not compiled): `outline(t, ns)`
+- Why it is not compiled: t is an open transaction and ns is a group of its graph's nodes
+
 #### `add_constant`
 
 ```camel
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
 ```
 
 Adds a value the transaction creates to the graph's static values and gives the node that
@@ -6079,7 +6441,7 @@ traced.
 #### `commit`
 
 ```camel
-commit: (t: Txn<F>) => F! uses t
+commit: (t: Txn<F>) => F! uses var t
 ```
 
 Checks the edits and makes the changed function: the same type as the one that was opened, with
@@ -6091,12 +6453,33 @@ the values it captured, sharing every graph nothing changed. The transaction is 
 #### `abort`
 
 ```camel
-abort: (t: Txn<F>) => void uses t
+abort: (t: Txn<F>) => void uses var t
 ```
 
 Drops the transaction.
 
 - Example: `abort(open((x: int): int => x + 1))`
+
+### Comparison
+
+`==` of the handle types (design principles 4.3): a library defines the operators of its own
+types. Two handles are equal when they name the same thing of the same function.
+
+#### `check_pass_boundary`
+
+```camel
+check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
+```
+
+Explicitly checks standard ambient resource/access-mode support and matched effect ordering
+between two functions, plus the normal port, entry/exit and effect-credential admission checks.
+Returns `after` on success. This comparison is not an observational-equivalence proof:
+equal support does not count events or compare their payloads. The selected check emits a
+located context diagnostic on refusal; catching the error value does not recover outer
+execution. Ordinary invocation and CLI wrappers use this same checking stage.
+
+- Failure: error value `PassBoundary` when the selected boundary check refuses.
+- Example: `check_pass_boundary`
 
 <a id="rewrite"></a>
 
@@ -6121,10 +6504,20 @@ no callable Camel name, so they are not declared here.
 #### `rewrite`
 
 ```camel
-rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies `rules` until no rule changes the function, and gives the rewritten function.
+`ordered: true` preserves operand positions throughout the pattern, including after guard
+rejection. The default also searches declared commutative and exact associative alternatives.
+`protect_faults` selects the conservative local deletion guard for a computation that may
+fault. `protect_order` selects the guard for a computation whose place in the order is not the
+program's to drop -- one that carries an ordering edge, one something waits on, one whose value
+is written in place. Neither decides whether an external access or a final write to a
+variable that outlives the call may be dropped: the graph that holds them keeps them
+(design principles 9.7), so no choice here removes one, while remaining users and
+synchronization can still demand the input.
+These choices do not disable structural validation or prove whole-program equivalence.
 
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example (a fragment, not compiled): `f->rewrite<rules>`
@@ -6133,11 +6526,17 @@ Applies `rules` until no rule changes the function, and gives the rewritten func
 #### `saturate`
 
 ```camel
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
-every writing the saturation found; `extract` chooses among them.
+every writing the saturation found; `extract` chooses among them. `protect_faults` selects
+candidate admission, and a candidate that would drop an external access or a final write to a
+variable that outlives the call is never admitted, whatever `protect_order` says (design
+principles 9.7). Extraction cannot restore protection disabled during saturation.
+The resulting alternatives are derivations under the rules, not full observational equalities.
+`ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
+remain searchable, and an explicit commutativity rule may still add exchanged writings.
 
 - Failure: error value `RuleInvalid` when a rule does not compile.
 - Example (a fragment, not compiled): `f->saturate<rules, rounds: 20>`
@@ -6158,7 +6557,7 @@ a writing is `cost(o, inputs)`: the operator and the costs of the writings of it
 #### `run`
 
 ```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 ```
 
 Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
@@ -6166,6 +6565,7 @@ what the application cost. This is `rewrite` with the round budget explicit and 
 `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
 the shortest chain between two values, and `explain_all` every rewrite that was made.
 Recording is off unless it is asked for, so a plain application pays nothing for it.
+`ordered` selects positional pattern binding as in `rewrite` and is retained by the proof.
 
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example (a fragment, not compiled): `f->run<rules, rounds: 8, explain: true>`
@@ -6244,7 +6644,7 @@ explain: <a: Node, b: Node> (r: Run<F>) => Proof!
 ```
 
 The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
-derivation `a = ... = b`: only that chain, not every step the run made. Each line names the
+derivation `a ~> ... ~> b`: only that chain, not every step the run made. Each line names the
 rule and whether the step is read backwards; a chain through a value that was later rewritten
 away names it too. When two chains are equally short both are printed, in the order the
 rewrites were made.
@@ -6344,7 +6744,9 @@ into a host number) downloads it, and the reports of a run list every such trans
 What a program does by hand is small: ask whether a device is there (`available`, `device`), move
 a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
 `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
-written order against the others and is never folded, merged or dropped. The functions to look
+written order against the others and is never folded, merged or dropped -- `regions` excepted:
+it reads the graph of the function it is given and touches no resource, so it writes no `uses`
+clause and needs no place in that order (it is still never folded). The functions to look
 at are the `with` argument and the data is the example input, as for `map`:
 `inputs->inspect<fn>`.
 
@@ -6355,7 +6757,7 @@ the tests use) are in `stdlib/signatures/tiles.cml`.
 #### `upload`
 
 ```camel
-upload: (value: f32[...]) => Device<f32[...]> uses driver
+upload: (value: f32[...]) => Device<f32[...]> uses var driver
 ```
 
 Uploads every leaf of the value -- an array, or a scalar of the element type it is written
@@ -6368,7 +6770,7 @@ with, alone or inside a tuple or a struct -- and gives the same tree with each l
 #### `download`
 
 ```camel
-download: (value: Device<f32[...]>) => f32[...] uses driver
+download: (value: Device<f32[...]>) => f32[...] uses var driver
 ```
 
 Downloads every device leaf of the value and gives the host value it came from. A tree with a
@@ -6380,7 +6782,7 @@ leaf that is not a device value is refused when the call is compiled.
 #### `run_preferred_resident`
 
 ```camel
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses var driver
 ```
 
 Runs the function through the device path the pipeline prepared for it -- the device when a
@@ -6414,7 +6816,7 @@ the values it would keep on the device.
 #### `benchmark`
 
 ```camel
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
 ```
 
 Times the function on the device, and on the host for comparison, and gives the report as JSON
@@ -6425,18 +6827,21 @@ text.
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
+regions: <fn: (a: f32, b: f32) => f32> () => string
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
-the device and why the others would not.
+the device and why the others would not. It reads the graph of the function and touches no
+resource -- it neither executes the graph nor initializes CUDA -- so it writes no `uses`
+clause, and it is not folded: the answer is an analysis of a graph the compiler cannot see
+through.
 
 - Example: `regions<(a: f32, b: f32): f32 => a + b>()`
 
 #### `available`
 
 ```camel
-available: () => bool uses driver
+available: () => bool uses var driver
 ```
 
 Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
@@ -6448,7 +6853,7 @@ a visible device is missing. A capability question only -- a device the run name
 #### `device`
 
 ```camel
-device: () => string! uses driver
+device: () => string! uses var driver
 ```
 
 A description of the CUDA device the run selects: its ordinal, name, compute capability and
@@ -6558,7 +6963,7 @@ run_file: (path: string) => void!
 Runs the Python script at the path.
 
 - Failure: error value `PythonError` when the file cannot be read or the script raises.
-- Example: `'scripts/hello.py'->run_file`
+- Example: `'test/cases/modules/std/python/hello.py'->run_file`
 
 #### `import_module`
 
@@ -7436,6 +7841,166 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The extents a reduction's or a gather's adjoint spreads over
+
+Each of the three laws below is linear in its data, so its tangent is the same operation on the
+tangents -- and the adjoint of that operation gives one cotangent back to every element the
+operation consumed. That is `shape(xs)` of them, a value of the primal which the tangent does not
+carry, so the **linear call states it**: one known actual argument beside the tangent, and the law
+that answers it (`stdlib/rulesets/transpose.cml`, `sum_stated_t` and its two neighbours) reads
+that argument and nothing of the operand the cotangent comes back through. A transpose law may
+read only known operands, and `T[...]` carries no extents in
+its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
+`tensor.pick_at` is the operator it states a length to.
+
+The extents do not ride inside one integer list with the axis and the flag, although the
+transpose walk refuses an operator with a third *tensor* operand (`skip=arity
+uri=tensor:mean_axis operands=3`): the
+stated reductions take their axis, their flag and their extents as three parameters
+(`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
+node with five operands, and the laws read them by name. The plain axis form does not need the
+list either: with the axis and the flag in angle brackets it carries one normal operand and two
+context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds. A list would need a function to build it, and nothing builds a
+list for a call's arguments: every one of those parameters is a parameter of its own.
+
+#### `reshape_jvp`
+
+```camel
+reshape_jvp: (dx: T[...], dims: int[]) => T[...] when is_float::<T>()
+```
+
+`d(reshape(x)) = reshape(dx)`: a reshape moves no element, so the tangent moves with the value.
+
+`dims` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+the right side as an ordinary value (the protocol stated over `jvp_sum`, and the one
+`vmap_rule_reshape` already uses). It is not written for one constant -- `reshape<[2, 2]>` --
+which would put the *law's* shape on the tangent of every reshape: `reshape<[8, 2, 8]>` would answer
+`reshape<[2, 2]>` of a 128-element tangent, which is the `TensorDimensionMismatch` read at
+`showcase/c3-char-transformer/probes/06_layout.cml` and the reason `attention` could not be
+lifted at all.
+
+The right side cannot write `reshape<dims>(dx)` itself. A rule's right side is a closure over
+the values its left side bound, and a `<>` position written there asks for something the closure
+does not carry -- it is refused by name: "jvp has no forward rule for
+`tensor:reshape` (the rule's right side passes a context argument it does not carry)". So `dims`
+is handed to a function that writes the reshape, which is the arrangement `rulesets.vmap`'s
+`vmap_reshape` already uses for the same argument.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `reshape_jvp([1.0, 2.0, 3.0, 4.0] as float[], [2, 2])` gives `[[1.0, 2.0], [3.0, 4.0]]`
+
+### The forward rules of `softmax` and `log_softmax`
+
+Two laws and the two tangents they write, indexed by the axis the call names.
+
+#### `softmax_jvp`
+
+```camel
+softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+```
+
+The tangent the rule above writes, with the axis handed over as an ordinary value: the softmax
+itself (`y`), the tangent's own sum over the axis, and the subtraction element by element. Written
+as one function and not in the rule's right side for the reason `reshape_jvp` gives.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `softmax_jvp([0.0, 0.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.25, -0.25]`
+
+#### `log_softmax_jvp`
+
+```camel
+log_softmax_jvp: (x: T[...], dx: T[...], axis: int) => T[...] when is_float::<T>()
+```
+
+The tangent the rule above writes: `p = exp(log_softmax<axis>(x))`, the product `p * dx` summed
+over the axis, and that sum subtracted from the tangent element by element -- `p` inside the sum,
+which is what makes this the forward reading and not `log_softmax_t`'s.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `log_softmax_jvp([1.0, 2.0] as float[], [1.0, 0.0] as float[], 0)` gives `[0.7310585786300049, -0.2689414213699951]`
+
+### The forward rule of `layer_norm`
+
+`layer_norm` normalizes each lane of `gamma`'s element count -- the trailing block `gamma` and
+`beta` cover -- so its tangent is not the operator applied to the tangents, and it is not an
+arithmetic this ruleset can write either: the lane is a block of axes and every reduction the
+library declares (`mean_axis`, `sum_axis`, the stated forms beside them) takes **one** axis. A
+law written over `mean<axis>` would answer one rank and call that the operator, which is the
+defect `jvp_reshape` records one section up.
+
+So the tangent is written as the normalization's own derivative, which the library already holds
+once: `layer_norm_grad`, the operator the reverse half's rule emits. Two facts make that legal
+and they are the whole of this law:
+
+  * `y = gamma * xhat + beta` with `xhat = (x - mean) * inv`, so, per element,
+    `d(y) = gamma * (J dx) + dgamma * xhat + dbeta`, and the last two terms are the element-wise
+    products written in `layer_norm_tangent` below;
+  * `J = inv * (I - e eT / n - xhat xhatT / n)` is **symmetric** -- every term of it is -- and
+    `layer_norm_grad(x, g, dy, 0)` answers `J (g * dy)`. With `g` replaced by ones it therefore
+    answers `J dx` exactly, which is the forward half, from the same kernel the reverse half
+    reads. `dgamma` and `dbeta` need nothing of that kind: they multiply `xhat` and `1`.
+
+`xhat` is the forward call with a neutral gain rather than the call's own `gamma` and `beta`,
+because the call's output is not bound on a rule's right side (`softmax_jvp` recomputes its
+`y` for the same reason) and `gamma` and `beta` are what it must *not* carry: this factor is
+the normalized value alone.
+
+`eps` is the operator's fourth parameter and this law does not write it. The law names the three
+ports `layer_norm(x, gamma, beta)` carries, both of its calls inherit the declaration's own
+default, and no constant of the operator's appears anywhere here -- which is the point: a law
+that wrote `1e-5` would be a second writing of the declaration and could drift from it. A call
+that *states* the eps (`layer_norm(x, gamma, beta, eps)`) is a four-port node, and a law names
+the ports it names, so that spelling is refused at the port count rather than answered with a
+default it does not carry. That refusal is what keeps this law safe: a three-port law that also
+matched a four-port node would answer it with `1e-5` while the node stated another eps, which is
+a wrong number and not a missing one. `jvp_softmax` above records the same trade from the other
+side, where the spelling that leaves the axis out is the one refused; the difference is that
+`softmax`'s axis is a `<>` port, so a law there *can* answer a node that states no axis, while
+`layer_norm`'s eps is a data operand, so a node that states none has one port fewer and no law
+of three ports can describe a node of four. One arity per operator is also what
+`scripts/vjp-parity.mjs` requires when it reads the two derivative tables against each other
+("`the rulesets file 'layer_norm' at 3 and 4 operand(s)`"), so a second law for the eps
+spelling would be a second writing of this key and not a second reading of it.
+
+What this does not make work is `grad` of a function that holds a `layer_norm`: the linear half
+of this law holds `layer_norm_grad` with five operands and no transpose of its own, so the
+reverse walk stops there and names it. That is the `split` wall, and it is not this law's.
+
+#### `layer_norm_tangent`
+
+```camel
+layer_norm_tangent: (gamma: T[...], dgamma: T[...], dbeta: T[...], xhat: T[...], jx: T[...]) => T[...] when is_float::<T>()
+```
+
+The three terms of `d(layer_norm)`, from the normalized value `xhat` and the input's tangent
+already through the normalization's jacobian (`jx = J dx`).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `layer_norm_tangent([1.0, 2.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [0.0, 0.0] as float[], [1.0, 1.0] as float[])` gives `[1.0, 2.0]`
+
+#### `layer_norm_neutral`
+
+```camel
+layer_norm_neutral: (t: T[...], v: float) => T[...] when is_float::<T>()
+```
+
+A tensor of `t`'s shape and element type filled with `v`: the neutral gain is this at `1.0` and
+the zero bias this at `0.0`. `zeros_like` carries the shape *and* the element type, so both
+operands of the neutral `layer_norm` below are built the same way and cannot answer different
+shapes; `full(shape(t), v)` would answer `float` and refuse a 32-bit lane.
+
+The inline spelling this replaces, `layer_norm(x, ones_like(gamma), zeros_like(beta))`, answered
+`Array shape mismatch in 'layer_norm': layer_norm: gamma and beta must share the normalized
+trailing shape` at run time, on nvm and fvm, for a function whose three parameters are all
+`float[...]` -- the shape the showcase's own `block` has. The same `ones_like`/`zeros_like` pair
+on the same two arrays is right outside a lift, and the same law is exact for parameters whose
+extents are declared, so the reading to keep is: which of the two spellings the lift answers
+correctly is what the case in `test/cases/compile/transforms/layer_norm_jvp.cml` holds, and the
+isolation of that difference is written up in the lane's report rather than guessed at here.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `layer_norm_neutral([1.0, 2.0] as float[], 1.0)` gives `[1.0, 1.0]`
+
 ### The forward rule of `^` (a power)
 
 #### `pow_tangent`
@@ -7452,9 +8017,8 @@ wherever `x ^ w` is. The second is the derivative with respect to the **exponent
 `x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
 exists only for integer exponents and has no derivative in the exponent there.
 
-**No branch on a tangent's value.** The author's ruling of 2026-11-04 (`docs/handover/reviews/
-2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md`) took the
-`if dw == T(0)` guard this helper used to carry away: the zero of a constant's tangent is
+**No branch on a tangent's value.** This helper carries no
+`if dw == T(0)` guard: the zero of a constant's tangent is
 **structurally known** -- a constant has no tangent -- and not a value a law computes and
 compares. What replaces it happens before anything runs: the rule's right side is expanded with
 the structurally-zero tangents named, and the product one of them multiplies is omitted rather
@@ -7472,6 +8036,36 @@ could omit it, which is why the law below is written out rather than called.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `pow_tangent(2.0, 3.0, 0.0, 1.0)` gives `5.545177444479562`
 - Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `nan`
+
+### The forward rules of the second tranche
+
+Eight operators the engine could already differentiate and neither half of the library could. Each
+law below is one straight line whose right side names only registered operators: a *function* of
+this module on a rule's right side becomes a call in the graph the linear half has to transpose,
+and the walk refuses a call it has no transpose for (`skip=call-no-transpose`, measured on
+`pow_tangent`, which is why `jvp_pow` writes the same law out instead of calling it). The two
+`erf`-family laws are written in the engine's own grouping because the
+two legs of one `grad` are compared bit for bit; the knot each one is tied to is written where it
+sits.
+
+#### `permute_jvp`
+
+```camel
+permute_jvp: (dx: T[...], perm: int[]) => T[...] when is_float::<T>()
+```
+
+`d(permute<perm>(x)) = permute<perm>(dx)`: a permutation moves elements and combines none, so the
+tangent is the same permutation of the tangents, and one law holds for every permutation.
+
+`perm` is the operator's second port, and this law names it, so the call's own `<>` value reaches
+the right side as an ordinary value -- the protocol the expansion states over `jvp_sum` (a rule's
+parameters are the operator's ports in port order, the normal ones then the `<>` ones) and the one
+`vmap_rule_permute` already relies on (`stdlib/rulesets/vmap.cml`). It is written as a call to
+`permute_jvp` rather than as `permute<perm>(dx)`: the right side hands the value on where a call
+states an ordinary argument, which is the shape that needs no context argument of its own.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `permute_jvp([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 0])` gives `[[1.0, 3.0], [2.0, 4.0]]`
 
 <a id="rulesets.vmap"></a>
 

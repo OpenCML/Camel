@@ -48,6 +48,7 @@ import { LOG_DIR, SCRATCH_DIR, runnerOutputPath } from '../test/tools/runner-out
 
 const THIS_FILE = fileURLToPath(import.meta.url)
 const TIERS = ['build', 'out', 'tmp', 'source']
+const STDLIB_SOURCE = /^stdlib\/[^/]+\.cml$/
 const TRACKED_FIXTURE = 'test/cases/modules/pass_not_found/unloadable.cmo'
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 
@@ -71,18 +72,30 @@ function isInside(root, target) {
     return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
-/** The reason `rel` does not belong in the list, or null when it may be removed. */
-function protectedReason(rel) {
-    if (rel.split('/').includes('.git')) {
-        return '.git is never touched'
-    }
-    if (/^stdlib\/[^/]+\.cml$/.test(rel)) {
+/**
+ * The reason `rel` is source even though a tier's shape matches it, or null.
+ *
+ * `scripts/source-package.mjs` asks this same question of a tree that has no `.git` and no history,
+ * so the answer lives here once: a `.cml` under `stdlib/` and the one tracked `.cmo` (a text fixture
+ * the module loader is tested against) are input, and neither a delete nor an inventory may name
+ * them as output.
+ */
+export function sourceOnlyReason(rel) {
+    if (STDLIB_SOURCE.test(rel)) {
         return 'stdlib/*.cml is source'
     }
     if (rel === TRACKED_FIXTURE) {
         return 'the tracked .cmo test fixture'
     }
     return null
+}
+
+/** The reason `rel` does not belong in the list, or null when it may be removed. */
+function protectedReason(rel) {
+    if (rel.split('/').includes('.git')) {
+        return '.git is never touched'
+    }
+    return sourceOnlyReason(rel)
 }
 
 /** The path from `abs` down to the first `.git` entry, or null when the tree has none. */

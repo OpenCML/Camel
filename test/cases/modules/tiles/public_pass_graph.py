@@ -20,7 +20,9 @@ for name in ("tiles::compile",):
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
     nodes = [node for graph in data["graphs"] for node in graph["nodes"]]
-    assert sum(n.get("label") == "tiles:run_preferred_resident" for n in nodes) == 10
+    # Statements remain on the host's sync chain even when their values also travel by data edges.
+    # Only the regions from chain, detour (twice), shared_values and constant_axis are outlined.
+    assert sum(n.get("label") == "tiles:run_preferred_resident" for n in nodes) == 5
     assert any(n.get("label") == "tiles:retain_preferred" for n in nodes)
     assert any(n.get("label") == "tiles:download" for n in nodes)
 print("Public Tiles pass: module loading and deferred target selection PASS")

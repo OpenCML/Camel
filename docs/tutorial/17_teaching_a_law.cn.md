@@ -30,7 +30,7 @@ func combined(x: int): int {
     return x * 3 + x * 5
 }
 
-// The same value written twice: `std::opt::saturate` keeps both writings in one class.
+// The same value written twice: `std::cxx::saturate` keeps both writings in one class.
 func doubled(x: int): int {
     return x * 2 + x * 2
 }
@@ -100,9 +100,9 @@ dot -Tsvg negated.dot -o negated.svg
 
 ## 等价图：一个值的多种写法
 
-优化不总是马上决定"用哪种写法"。`std::opt::saturate` 把标准库的定律用到不动为止，**把同一个值的几种
+优化不总是马上决定"用哪种写法"。`std::cxx::saturate` 把标准库的定律用到不动为止，**把同一个值的几种
 写法都留着**，让后面的阶段再挑。`doubled` 这一段在
-`camel docs/tutorial/examples/17_rule.cml std::opt::saturate std::rgir` 之后是这样：
+`camel docs/tutorial/examples/17_rule.cml std::cxx::saturate std::rgir` 之后是这样：
 
 ![doubled：x * 2 + x * 2 的几种写法留在一个个等价类里](images/17_rule_saturate.svg)
 

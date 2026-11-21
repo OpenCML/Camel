@@ -1,0 +1,214 @@
+# The smallest programs that show a counted box whose producer is a CALL or a FILL never giving its
+# count back, and the reading that says it does now (author review 2026-11-16, item 5). The last two
+# are the other place the count went missing: a box a loop reads, whose give-back the rounds cannot
+# place at the read, and which therefore comes back at the loop's exit (item 6).
+#
+# They are probes and not cases under test/cases: the parse plan's golden lists every `.cml` there by
+# path and hash, so a new case there is a golden update as well, and this lane's change is the count,
+# not the parser. `tier = "debug"` keeps them out of the fast and all layers so that a plan added
+# beside them cannot slow a gate down; naming this file runs it in any build.
+#
+# Each entry asserts the four numbers the count is read from -- `created`, `released`, `live` and the
+# anchor's `missing` -- and not `balanced`: the plan's own balance is built from the rows it wrote, so
+# a run that wrote a row no back end executes reads balanced too, and that is exactly the defect
+# (3961aa2bf). `released` is the number that moved when the rows started to run.
+#
+# Two entries came later, from the note `ad44fca33` left as a leak (author review 2026-11-17, item
+# 10). `call_box_loop_outer` is that note's own shape -- a box a CALL makes *before* a loop, read on
+# every round, by nothing after -- and it is green: the give-back waits at the LOOP node's position
+# (item 6), so the note measures nothing on this tree. `box_of_a_round` is the shape beside it that
+# has no answer yet -- a box a round makes and the cell keeps -- and it is the one entry here that is
+# red on purpose: its red is the measurement (`created=4 released=2 live=2`, and the read after the
+# loop is `state::get` on a released box), not a number this file grew used to.
+
+id = "probe.refleak"
+order = 9990
+tier = "debug"
+tags = ["probe"]
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "probe.call_box.released"
+desc = "`escaped_box(i)` returns a `state::Ref<int>` the loop then reads once, ten times over. The box is made by the callee's FUNC node, which is not an operator site: before item 5 its give-back row was laid out and never run, so `released` stayed 0 and `live` 10 while the plan read balanced. Now: `created` 10, `released` 10, `live` 0, `missing` 0, and the program still prints 10."
+kind = "behavior"
+case = "../../probe/refleak/call_box.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.includes('10'), 'the program kept ten boxes and prints how many it read: ' + said.join(' | '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=10 /.test(line), 'ten boxes were made: ' + line)
+  assert(/ released=10 /.test(line), 'and every one of them gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims every box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.loop_outer_ref.released"
+desc = "A `Ref` made before a loop, read on every round, and read by nothing after the loop: once the loop has left there is no use for its give-back to land at. The row waits at the LOOP node's own position and runs when the loop ends (loopEnd), so `created` 1, `released` 1, `live` 0, and the three rounds still print `box 0`."
+kind = "behavior"
+case = "../../probe/refleak/loop_outer_ref.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => !l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.join(' | ') === 'box 0 | box 0 | box 0', 'the three rounds read the box: ' + said.join(' | '))
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'and the loop gave its count back at its exit: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.loop_nested_outer_ref.released"
+desc = "The same box read inside an inner loop and by nothing after either loop: the give-back goes to the *outer* loop's exit. The inner loop is left once per round of the outer one, so a give-back at the inner exit would run twice and read `released=2`; written at the outer exit it runs once, after the last round that could read the value. The four rounds print nothing either way, so the count is what tells the two rules apart -- this is the shape that makes the outermost loop a rule and not a special case."
+kind = "behavior"
+case = "../../probe/refleak/loop_nested_outer_ref.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => !l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.join(' | ') === '', 'the rounds print nothing: ' + said.join(' | '))
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), "and it came back once, at the outer loop's exit: " + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.loop_nested_after.released"
+desc = "One box read from inside two nested loops and again after both: the give-back goes to the outer loop's exit -- the inner loop is left once per outer round, so a give-back there would release the box on the way into the second round -- so the four rounds read it, the read after the loops still finds it (`4`), and the count comes home: `created` 1, `released` 1, `live` 0."
+kind = "behavior"
+case = "../../probe/refleak/loop_nested_after.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => !l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.join(' | ') === '4', 'the read after both loops still finds the box: ' + said.join(' | '))
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'and it gave its count back once: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.fill_carries.released"
+desc = "A `Ref` is carried by a closure a FILL builds (`let f = (): int => state::get(r)`) and read at the call: the box is made by an operator and packed into the closure by the FILL, and the row that gives its producing reference back lands where the closure's last use is. Before item 5 that row was written at a position no back end applies rows at, so the box stayed counted (`live` 1) for the life of the program. Now: `created` 1, `released` 1, `live` 0, and the program still prints `5 5`."
+kind = "behavior"
+case = "../../probe/refleak/fill_carries.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.includes('5 5'), 'the closure reads the box twice: ' + said.join(' | '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'and it gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.loop_fault_ref.gives_back"
+desc = "The give-back at a loop's exit on the one path that leaves the loop without reaching it: a fault inside a round. `test/probe/refleak/loop_fault_ref.cml` makes a box before the loop, reads it on every round and reads it by nothing after the loop, so its give-back waits at the LOOP node's own position (`loopEnd`'s leaving branch). The third round divides by zero after it has read the box: the loop never leaves normally, no round after it runs, and nothing else reads the box, so if the fault path does not give the reference back the box stays counted until the run's own exit disposes it. The reading is `released=1 live=0` with `disposed=0` -- what a count that came home looks like -- and not `disposed=1`, which is the program's exit cleaning up after the count (design principles 10.5; author review 2026-11-17, item 10: '循环里出故障时那份引用是否归还，子代理未核实：补一条用例')."
+kind = "behavior"
+case = "../../probe/refleak/loop_fault_ref.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 1
+backends_agree = ["exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  assert(input.exit_code === 1, 'the round divides by zero and the run stops with the fault: exit ' + input.exit_code)
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  const reads = said.filter(l => l === 'box 0').length
+  assert(reads === 3, 'the three rounds read the box before the fault: ' + said.join(' | '))
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'the fault path gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the run stops: ' + line)
+  assert(/ disposed=0 /.test(line), 'the count reached zero on its own, before the exit disposed anything: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.call_box_loop_outer.released"
+desc = "A `state::Ref` a CALL makes before a loop, read on every round of it and by nothing after it -- the shape the note left in `ad44fca33` called a leak ('a value a CALL or a FILL makes whose hold would have to be taken inside a loop's round is still kept'). There is no use after the loop for its give-back to land at, so the row waits at the LOOP node's position and runs when the loop leaves: `created` 1, `released` 1, `live` 0, and the three rounds print `box 0`."
+kind = "behavior"
+case = "../../probe/refleak/call_box_loop_outer.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => !l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.join(' | ') === 'box 0 | box 0 | box 0', 'the three rounds read the box: ' + said.join(' | '))
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'and the loop gave its count back at its exit: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.box_of_a_round.released"
+desc = "Four boxes a CALL makes -- one before the loop and one in each of its three rounds -- the cell keeping the newest and the read after the loop taking it. This entry is RED on purpose, and the red is the measurement: the plan has one node where the run makes three boxes, so the reading is `released=2` for four boxes made, the two superseded boxes stay counted, and the read after the loop is `state::get` on a box the count already released (`created=4 released=2 live=2`, nvm/fvm/jit/prl alike). Asserted here are the numbers the shape should read -- 4 created, 4 released, 0 live, program prints `2` -- so the red names exactly what is missing: a row that can name the value the node made in the *previous* round, which is a per-round version of the value in the representation and not a rule in the plan (src/execute/exec_plan.cpp, `loopRepeatingOver`)."
+kind = "behavior"
+case = "../../probe/refleak/box_of_a_round.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout_normalized", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => !l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.join(' | ') === '2', 'the read after the loop finds the last round box: ' + said.join(' | '))
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=4 /.test(line), 'four boxes were made: ' + line)
+  assert(/ released=4 /.test(line), 'and every one of them gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims every box the anchor saw: ' + line)
+}
+'''

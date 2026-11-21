@@ -656,6 +656,22 @@ function checkCitations() {
             return target
         }
     }
+    // A citation that writes a directory which exists, does not hold the file, and is answered by
+    // the basename fallback below, is a file that moved out of that directory: the reader who
+    // follows it gets nothing. The fallback itself is not narrowed -- a citation written as a bare
+    // file name is a style the tree uses everywhere, and 400-odd citations are written that way --
+    // so this is the one shape it may not hide: the directory in the citation is real, and the
+    // file is somewhere else.
+    const misplacedIn = (file, decoded) => {
+        const slash = decoded.lastIndexOf('/')
+        if (slash <= 0) return null
+        const directory = decoded.slice(0, slash)
+        const isFile = (candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()
+        const exact = [path.resolve(path.dirname(file), decoded), path.resolve(root, decoded)]
+        if (exact.some(isFile)) return null
+        const isDirectory = (candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
+        return [path.resolve(path.dirname(file), directory), path.resolve(root, directory)].some(isDirectory)
+    }
     // The exact path first, then a unique basename; a symbol can break a tie between two files that
     // share a basename, which is the one thing a line number used to do.
     const targetOf = (file, decoded, symbol) => {
@@ -720,6 +736,14 @@ function checkCitations() {
             }
             if (names(target, symbol)) {
                 symbolVerified++
+                if (misplacedIn(file, decoded)) {
+                    problem(
+                        file,
+                        lineAt(m.index),
+                        `${m[1]}#${symbol}`,
+                        `the file is not in that directory; it is at '${relative(target)}'`,
+                    )
+                }
                 continue
             }
             problem(
@@ -771,6 +795,9 @@ function checkCitations() {
                 continue
             }
             pathCitations++
+            if (misplacedIn(file, decoded)) {
+                problem(file, lineAt(m.index), target, `the file is not in that directory; it is at '${relative(resolved)}'`)
+            }
         }
     }
 
@@ -947,7 +974,7 @@ function checkQuestionsHaveDefaults() {
 // The match is deliberately narrow: a path that starts at one of the source roots and ends in a
 // position. A `.cml` name with a position is excluded: it is a tool's output or an example program's
 // line, and rewriting one would falsify the transcript it is quoted in. Two transcripts made this
-// narrow -- a debugger session stepping through `docs/tutorial/examples/folded.cml` and printing its
+// narrow -- a debugger session stepping through `test/cases/tools/debugger/fixtures/folded.cml` and printing its
 // own positions, and a timing line from docs/cli.md that names a case file of
 // `test/cases/perf` with a position after it. (Written this way because the citation check reads
 // comments too: a comment that spells either out with a line number is itself an unpaid citation.)

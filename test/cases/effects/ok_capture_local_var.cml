@@ -1,0 +1,25 @@
+/**
+ * A body that writes a variable of its own is not reaching a resource: the name is made by this
+ * call and dies with it, the caller cannot see it, so its reads and writes are not this function's
+ * effects (design principles 3.3, effect masking). `total` still touches nothing: a caller may ask
+ * for it with `pure`.
+ *
+ * The write used to be made from a closure, and that shape is refused now: a closure captures a
+ * value, so it cannot assign the name it captured (design principles 3.5, 197; the author's ruling
+ * of 2026-11-16). The closure below only reads `acc`, which a closure may do, and the write is
+ * written where the name lives.
+ *
+ * The call runs because it writes a cell of this body, so the answer is the sum of 0..x-1.
+ */
+
+func total(x: int): int {
+    var acc = 0
+    acc = x * (x - 1) / 2
+    let read = (): int => acc
+    read()
+}
+
+func main(): int sync {
+    println(total(3))
+    return 0
+}

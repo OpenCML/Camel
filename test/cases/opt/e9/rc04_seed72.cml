@@ -1,0 +1,17 @@
+func r1(a2: int, a3: int): int {
+    return 0;
+}
+
+func k14(a15: int): (a0: int) => int sync {
+    var v16 = r1(3, 0);
+    return (p17: int): int => sync {
+        v16 /= -2;
+        return 5;
+    };
+}
+
+func main(): int sync {
+    let n62 = (if false then null else true) ?? (if false then false else null) ?? false;
+    let n75 = k14(len([1.0]));
+    return 0;
+}

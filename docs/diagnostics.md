@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-311 diagnostics: 290 errors, 21 warnings. 15 carry a machine-applicable edit, 296 say why they carry none.
+327 diagnostics: 305 errors, 22 warnings. 15 carry a machine-applicable edit, 312 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -44,6 +44,7 @@ prints one entry.
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
+| `0x02000015` | [SyntaxDiag::IntervalHasNoOpenForm](#intervalhasnoopenform) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
@@ -217,6 +218,7 @@ prints one entry.
 | `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error | no |
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error | no |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error | no |
+| `0x030001D5` | [SemanticDiag::SpellingNotDeclared](#spellingnotdeclared) | Error | no |
 | `0x030001D6` | [SemanticDiag::ParamArgumentWrongType](#paramargumentwrongtype) | Error | no |
 | `0x030001D8` | [SemanticDiag::ImplOnBodylessDeclaration](#implonbodylessdeclaration) | Error | no |
 | `0x030001D9` | [SemanticDiag::ImplKernelUnknown](#implkernelunknown) | Error | no |
@@ -270,8 +272,16 @@ prints one entry.
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
+| `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
+| `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
+| `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
+| `0x03000213` | [SemanticDiag::ClosureAssignsCapturedName](#closureassignscapturedname) | Error | no |
+| `0x03000214` | [SemanticDiag::CapturedVarWrittenAfterTheClosure](#capturedvarwrittenaftertheclosure) | Error | no |
+| `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
+| `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
+| `0x03000217` | [SemanticDiag::ReadonlyResourceWritten](#readonlyresourcewritten) | Error | no |
+| `0x03000218` | [SemanticDiag::OperatorAccessesUndeclared](#operatoraccessesundeclared) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
-| `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn | no |
 | `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn | no |
@@ -285,6 +295,7 @@ prints one entry.
 | `0x031001C0` | [SemanticDiag::NeverArgumentCall](#neverargumentcall) | Warn | no |
 | `0x031001C1` | [SemanticDiag::FailNotExecuted](#failnotexecuted) | Warn | no |
 | `0x031001C2` | [SemanticDiag::StatementAfterFail](#statementafterfail) | Warn | no |
+| `0x031001C3` | [SemanticDiag::UnusedAssignedValue](#unusedassignedvalue) | Warn | no |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
@@ -325,11 +336,16 @@ prints one entry.
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
 | `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
+| `0x040001AF` | [RuntimeDiag::PassEffectContainment](#passeffectcontainment) | Error | no |
+| `0x040001B0` | [RuntimeDiag::PassEffectBeyondType](#passeffectbeyondtype) | Error | no |
+| `0x040001B1` | [RuntimeDiag::PassEffectOrder](#passeffectorder) | Error | no |
+| `0x040001B2` | [RuntimeDiag::NullSlotUnwrapped](#nullslotunwrapped) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
 | `0x04100017` | [RuntimeDiag::DefunctionalizationIncomplete](#defunctionalizationincomplete) | Warn | no |
 | `0x04100018` | [RuntimeDiag::JitWithoutCodeGenerator](#jitwithoutcodegenerator) | Warn | no |
+| `0x04100019` | [RuntimeDiag::OptimizationStoppedShort](#optimizationstoppedshort) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -1139,6 +1155,40 @@ func g(x: float, y: float): float sync { return x + y }
 func main(): int sync {
     let f: (float, float) => float = g
     return 0
+}
+```
+
+### IntervalHasNoOpenForm
+
+`0x02000015` · Error · `SyntaxDiag::IntervalHasNoOpenForm`
+
+**Fix**
+
+None: choice: the replacement is another construct the writer chooses -- an interval with both ends, a counting 'while' loop, or 'range(a, b, step)'
+
+**Message**
+
+```text
+An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side.
+```
+
+**Help**
+
+```text
+A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.
+```
+
+**Example** (`test/cases/parse/rulings/open_range.cml`, run as `camel test/cases/parse/rulings/open_range.cml`)
+
+```camel
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int {
+    let bounded = 1..4
+    let composed = inc..dbl
+    let open = 1..
+    return len(open)
 }
 ```
 
@@ -6586,7 +6636,7 @@ Only a pure call is evaluated: a function with no effects and no reads of mutabl
 **Example** (`test/cases/compile/fold_calls/effect.cml`, run as `camel test/cases/compile/fold_calls/effect.cml`)
 
 ```camel
-func reveal(s: string): string uses stdout {
+func reveal(s: string): string uses var stdout {
     println(s)
     return s
 }
@@ -6947,6 +6997,41 @@ func f(a: int = 1, b: int): int {
 
 func main(): int sync {
     return f(2, 3)
+}
+```
+
+### SpellingNotDeclared
+
+`0x030001D5` · Error · `SemanticDiag::SpellingNotDeclared`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+This body reads the spelling of the program, and its type does not declare it.
+```
+
+**Help**
+
+```text
+Reading the spelling is a capability a signature writes in the same clause as 'pure' and 'uses': the name of a graph or of a function, the source position of a node, its creation number and the order it was created in, and the text it shows. A body whose type does not write 'spelling' is one the compiler guarantees reads none of them, so a rule, a 'when' condition and a pass built without it cannot depend on how the program was written (design principles 9.5). Write 'spelling' in the declaration's clause to say the body may read them, or stop reading them -- to pick one of two functions, hand the function value to the transform instead of finding it by name, and to order two nodes, use the canonical order 'nodes' gives.
+```
+
+**Example** (`test/cases/trans/spelling/undeclared.cml`, run as `camel test/cases/trans/spelling/undeclared.cml`)
+
+```camel
+import { Graph, graph_of, name } from graph
+
+func entry_name(g: Graph): string {
+    return name(g)
+}
+
+func main(): int {
+    let text = entry_name(graph_of(main))
+    return len(text)
 }
 ```
 
@@ -8914,6 +8999,333 @@ func main(): int sync {
 }
 ```
 
+### VariableInUses
+
+`0x0300020D` · Error · `SemanticDiag::VariableInUses`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The variable '{0}' is named in the resource clause '{1}'.
+```
+
+**Help**
+
+```text
+A clause names what a call touches outside the function's own variables: the external resources it reads or writes, and the handle parameters it is handed (design principles 3.3). A variable is declared once, where it is created: a `var` parameter in the parameter list, a module variable by the `var` in its declaration, a captured one by the `var` or `let` that binds it. Which of them a call touches is measured from the body, and the signature the compiler derives prints them. Remove the entry.
+```
+
+**Example** (`test/cases/effects/err_variable_in_clause.cml`, run as `camel test/cases/effects/err_variable_in_clause.cml`)
+
+```camel
+func bump(var acc: int): int uses var acc sync {
+    acc += 1
+    return acc
+}
+
+func main(): int sync {
+    var acc = 0
+    println(bump(acc))
+    return 0
+}
+```
+
+### RefContentHoldsRef
+
+`0x03000211` · Error · `SemanticDiag::RefContentHoldsRef`
+
+**Fix**
+
+None: choice: the content holds a reference; either store the value the reference holds, or use one reference where two boxes would be needed, and which of the two is the writer's
+
+**Message**
+
+```text
+'{0}' cannot be the content of a reference: {1}.
+```
+
+**Help**
+
+```text
+A reference is a box reclaimed by counting the handles that point at it: the last handle to go frees it (design principles 3.3). A box that holds a reference -- directly, or through a field, an element, a variant's payload, what a function takes or returns, or a value a closure captures -- keeps that other box's count above zero for ever, so neither is freed and the program holds values it can no longer reach. The content is any other type. When the value to store already holds a reference, read what it holds out first and make the box of that value, or keep the one reference instead of making a second box.
+```
+
+**Example** (`test/cases/compile/ref/err_holds_ref.cml`, run as `camel test/cases/compile/ref/err_holds_ref.cml`)
+
+```camel
+import state
+
+func main(): int sync {
+    let inner = state::ref(1)
+    let outer = state::ref(inner)
+    let back = state::get(outer)
+    println(state::get(back))
+    return 0
+}
+```
+
+### ResourceInferenceConflict
+
+`0x03000212` · Error · `SemanticDiag::ResourceInferenceConflict`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.
+```
+
+**Help**
+
+```text
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches. Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+```
+
+**Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
+
+```camel
+func same::<T>(a: T, b: T): T {
+    return a
+}
+
+func pick(b: bool): (x: int) => int {
+    return same(if b then f else g, wide)
+}
+
+func f(x: int): int {
+    return x + 1
+}
+
+func g(x: int): int {
+    return x + 2
+}
+
+func wide(x: int): int sync {
+    println(x)
+    return x + 3
+}
+
+func main(): int sync {
+    let h = pick(true)
+    println(h(1))
+    return 0
+}
+```
+
+### ClosureAssignsCapturedName
+
+`0x03000213` · Error · `SemanticDiag::ClosureAssignsCapturedName`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name.
+```
+
+**Help**
+
+```text
+A closure holds a value, not a place, so an assignment to a name outside it would write nothing the closure can see. Three ways out: return the new value as the closure's result and let the caller bind it; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`, so every round hands the next one a value; or hold the state in a `Ref` (`let r = ref(0)`, `get(r)`, `set(r, v)`), which a closure may capture because a handle is a value.
+```
+
+**Example** (`test/cases/compile/var_closure/err_closure_assigns_captured.cml`, run as `camel test/cases/compile/var_closure/err_closure_assigns_captured.cml`)
+
+```camel
+func make(x: int): int {
+    var total = 0
+    func add(k: int): int {
+        total = total + k
+        return total
+    }
+    let a = add(x)
+    a
+}
+
+func main(): int sync {
+    println(make(3))
+    return 0
+}
+```
+
+### CapturedVarWrittenAfterTheClosure
+
+`0x03000214` · Error · `SemanticDiag::CapturedVarWrittenAfterTheClosure`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read.
+```
+
+**Help**
+
+```text
+The closure holds the value `{0}` had when it was made, so this assignment cannot reach it. Three ways out: return the new value as the closure's result; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on assigning a name of its own, bind it first (`let x0 = x`) and let the closure mention `x0`.
+```
+
+**Example** (`test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`)
+
+```camel
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    x = 2
+    println(g())
+    return 0
+}
+```
+
+### CapturedVarHandedToVarParameter
+
+`0x03000215` · Error · `SemanticDiag::CapturedVarHandedToVarParameter`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure.
+```
+
+**Help**
+
+```text
+The write stands in the callee and is handed back to `{0}` where the call is, so it changes a name the closure already holds the value of. Three ways out: return the new value instead of writing it back; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on handing the name to a call, bind it first (`let x0 = x`) and hand `x0` on.
+```
+
+**Example** (`test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`)
+
+```camel
+func bump(var p: int): void {
+    p = p + 10
+}
+
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    bump(x)
+    println(g())
+    return 0
+}
+```
+
+### VarContextParameterCannotBeBound
+
+`0x03000216` · Error · `SemanticDiag::VarContextParameterCannotBeBound`
+
+**Fix**
+
+None: choice: the two ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.
+```
+
+**Help**
+
+```text
+A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.
+```
+
+**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
+
+```camel
+var total: int = 0
+
+with <var acc: int>
+func add(x: int): int sync {
+    acc = acc + x
+    return acc
+}
+
+func main(): int sync {
+    let g = add<total>
+    println(g(1), total)
+    return 0
+}
+```
+
+### ReadonlyResourceWritten
+
+`0x03000217` · Error · `SemanticDiag::ReadonlyResourceWritten`
+
+**Fix**
+
+None: choice: the write and the declaration cannot both stand, and which one changes is the intent
+
+**Message**
+
+```text
+The resource '{0}' is declared 'readonly', but the clause '{1}' writes it.
+```
+
+**Help**
+
+```text
+A `readonly` resource is only ever read (design principles 9.12, 15.5): the graph a function is, and the spelling of a name, are representations nothing that runs writes, so no call can declare a write of one and two accesses to it never conflict and need no order. Drop the `var` and write the entry as a read (`uses {0}`), or drop `readonly` from `resource {0}` if the program really writes it.
+```
+
+**Example** (`test/cases/effects/err_write_readonly_resource.cml`, run as `camel test/cases/effects/err_write_readonly_resource.cml`)
+
+```camel
+// `graph` is declared `readonly`: nothing that runs writes the graph a function is, so a clause
+// cannot declare a write of it (design principles 9.12, 15.5). `uses var graph` is that write, and
+// it is a type error -- the diagnostic names the resource and the modifier that forbids it.
+//
+// `readonly_resource_read.cml` is the same program with the bare entry, and it compiles.
+export resource graph readonly
+
+func twice(f: int): int uses var graph {
+    return f * 2
+}
+
+func main(): int {
+    println(twice(21))
+    return 0
+}
+```
+
+### OperatorAccessesUndeclared
+
+`0x03000218` · Error · `SemanticDiag::OperatorAccessesUndeclared`
+
+**Fix**
+
+None: internal: the report is about an operator's registration, and no program text changes it
+
+**Message**
+
+```text
+The operator '{0}' itemizes no accesses, and an operator of the built-in module must say what it touches.
+```
+
+**Help**
+
+```text
+An operator that itemizes none is read as writing the global resource, and the graph builder read the same operator a different way -- every operand read-modify-written -- so one call was on the sync chain for one reader and not for the other, and neither answer was a declaration. This is a mistake in the operator's registration, not in a program: declare its accesses where it is registered (OperatorTable::declareResources in src/builtin/executors/builtin_semantics.cpp) -- the empty list where it is pure, the operand or ambient resource it reads or writes otherwise -- and the load goes on.
+```
+
+*No example: no test small enough to show raises it.*
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -8931,70 +9343,25 @@ None: choice: a value that has to be taken has no single spelling - bind it, ret
 **Help**
 
 ```text
-Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
+Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. Outside one, the write runs only if something reads the variable afterwards. A 'var' argument is not reported this way: it is a value passed in and handed back, and the write is made where the call stands (design principles 3.1, 3.5).
 ```
 
-**Example** (`test/cases/compile/diag_json/warnings_visible.cml`, run as `camel test/cases/compile/diag_json/warnings_visible.cml`)
+**Example** (`test/cases/effects/callback_write_ignored.cml`, run as `camel test/cases/effects/callback_write_ignored.cml std::nvm`)
 
 ```camel
-// Line numbers below are asserted by the plan.
-func inc(var x: int): int sync {
-    x += 1
-    return 0
+var counter = 0;
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
 }
 
-func main(): int {
-    var c = 0
-    inc(c)
-    let r = if c > 0 then sync {
-        c += 10
-        return 0
-    } else 0
-    return println(c + r)
-}
-```
-
-### EffectNotExecuted
-
-`0x03100004` · Warn · `SemanticDiag::EffectNotExecuted`
-
-**Fix**
-
-None: context: an effect reachable only from a branch that never runs; the repair moves or removes the call, and where belongs to the design
-
-**Message**
-
-```text
-{0} has side effects but is never executed: {1}.
-```
-
-**Help**
-
-```text
-Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
-```
-
-**Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
-
-```camel
-func caller(x: int): int {
-    later(x)
-    earlier_dropped(x)
-    return x + 1
-}
-
-func later(x: int): int sync {
-    println('later')
-    return x
-}
-
-func earlier_dropped(x: int): int sync {
-    println('earlier_dropped')
-    return x
+func add(x: int): int {
+    apply((y: int) => { counter = y }, x)
+    return counter
 }
 
 func main(): int sync {
-    println(caller(1))
+    println(add(3))
     return 0
 }
 ```
@@ -9462,6 +9829,37 @@ func main(): int sync {
 }
 ```
 
+### UnusedAssignedValue
+
+`0x031001C3` · Warn · `SemanticDiag::UnusedAssignedValue`
+
+**Fix**
+
+None: choice: a stored value no reader takes can be removed or read, and which one is the intent
+
+**Message**
+
+```text
+The value this assignment stores is never read.
+```
+
+**Help**
+
+```text
+An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+```
+
+**Example** (`test/cases/compile/var/unused_assigned_value.cml`, run as `camel test/cases/compile/var/unused_assigned_value.cml std::nvm`)
+
+```camel
+func main(): int {
+    var x = 0;
+    let y = x;
+    x = 1;
+    return println(y)
+}
+```
+
 ## Run time and passes (`RuntimeDiag`)
 
 ### RuntimeError
@@ -9786,33 +10184,39 @@ Pass '{0}' changed the ambient resources the program touches: before {1}, after 
 **Help**
 
 ```text
-An effect is written once and stays where the program put it. A rewrite may move code, copy it, or delete what nothing needs, but the ambient resources a graph touches -- stdout, stderr, stdin, clock, env, fs, rng -- are the program's effects, and the pass list must leave them the same. This is a defect of the pass named, not of the program.
+This invocation selected a pass boundary check requiring equal standard ambient resource/access-mode support. The before and after programs differ under that check. Equal support does not establish equal event counts, payloads, or full observational behavior.
 ```
 
-**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::cxx::inline std::opt`)
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-/// The body touches nothing; the clause says a call reads and writes the handle it is given.
-func consume(s: Stream): int uses s {
+/// The body touches nothing; the clause says a call writes the handle it is given.
+func consume(s: Stream): int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {
@@ -9899,30 +10303,36 @@ Pass '{0}' returned a program whose {1} has no {2}.
 A graph runs from its entry node to its exit node. A rewrite may replace either one, but what it puts there must be a node of the graph that is alive: a graph whose entry or exit is gone is a graph nothing can run, and the pass that returned it lost the program's boundary.
 ```
 
-**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::cxx::inline std::opt`)
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-/// The body touches nothing; the clause says a call reads and writes the handle it is given.
-func consume(s: Stream): int uses s {
+/// The body touches nothing; the clause says a call writes the handle it is given.
+func consume(s: Stream): int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {
@@ -10046,30 +10456,36 @@ Pass '{0}' returned a program whose operator node {1} no longer matches its decl
 An operator node's ordinary ports are the arguments of the declaration it names, in order: a pass may rewrite the graph, but not write an operand the declaration does not have, point one at a node that is gone or dead, or leave one without a type. A node that no longer matches its declaration is a call nothing can run.
 ```
 
-**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::opt::inline std::opt`)
+**Example** (`test/cases/effects/declared.cml`, run as `camel test/cases/effects/declared.cml std::cxx::inline std::opt`)
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-/// The body touches nothing; the clause says a call reads and writes the handle it is given.
-func consume(s: Stream): int uses s {
+/// The body touches nothing; the clause says a call writes the handle it is given.
+func consume(s: Stream): int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {
@@ -10542,10 +10958,10 @@ Pass '{0}' cannot take the program: some values of it have several writings.
 **Help**
 
 ```text
-An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
+An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::cxx::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
 ```
 
-**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `camel test/cases/feat/mm/writings/congruence.cml test::tabled std::cxx::fold std::nvm`)
 
 ```camel
 func f(a: int, b: int): int {
@@ -11014,6 +11430,167 @@ func main(): int sync {
 }
 ```
 
+### PassEffectContainment
+
+`0x040001AF` · Error · `RuntimeDiag::PassEffectContainment`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' returned a program whose call site reaches past the type it declares: {1}
+```
+
+**Help**
+
+```text
+A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::camel_commit_checks std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
+}
+```
+
+### PassEffectBeyondType
+
+`0x040001B0` · Error · `RuntimeDiag::PassEffectBeyondType`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+'{0}' committed a graph that reaches past the effect its own type declares: {1}
+```
+
+**Help**
+
+```text
+A commit owes the program it publishes the effect its target function declares: what the body reaches, resolved bottom-up from the operators the nodes name, must stay inside that clause. A pass can leave a body under a type that no longer covers it, and the graph module can be handed a body the type there was never widened for. The message names the node that makes the access and the resource the declaration does not cover, because the type is the promise a caller relies on.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::commit_effect std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
+}
+```
+
+### PassEffectOrder
+
+`0x040001B1` · Error · `RuntimeDiag::PassEffectOrder`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+'{0}' committed a graph whose conflicting effects are not ordered: {1}
+```
+
+**Help**
+
+```text
+Analysis 4.1 asks a commit for order completeness: within one region, any two accesses to one resource of which at least one writes must have a path between them -- a data, sync or order edge, or a region's GATE input. Every pair of arms is a region of its own, so two accesses in different arms of one branch are never asked to be ordered; an access inside a loop and one outside are ordered through the loop node, which stands for its body. The message names the pair of nodes and the resource they touch.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::commit_order std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
+}
+```
+
+### NullSlotUnwrapped
+
+`0x040001B2` · Error · `RuntimeDiag::NullSlotUnwrapped`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and no change to the program's logic repairs a defect of the lowering
+
+**Message**
+
+```text
+The slot unwrapped here is null, and its type is '{0}': an internal error of the compiler, not a state a program can make.
+```
+
+**Help**
+
+```text
+The unwrap is placed where the compiler has already read the tag, so a null here means the value the slot should have held was never written. Nothing in the program's own logic repairs that: report the program together with the pipeline, and the branch that should have written the slot before this read is what to fix.
+```
+
+**Example** (`test/cases/compile/tagged/unwrap_null.cml`, run as `camel test/cases/compile/tagged/unwrap_null.cml`)
+
+```camel
+func main(): int {
+    let slot: int? = null
+    return __unwrap__(slot)
+}
+```
+
 ### PassesNeverRun
 
 `0x0410000F` · Warn · `RuntimeDiag::PassesNeverRun`
@@ -11034,10 +11611,11 @@ Pass '{0}' consumes the graph, so {1} written after it will not run.
 A scheduling pass executes the program and a translation pass translates it; neither hands a graph on, and the pipeline ends there. Remove the passes written after it, or move them before it.
 ```
 
-**Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::opt::inline std::fvm`)
+**Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::cxx::inline std::fvm`)
 
 ```camel
-func before(x: int): int {
+func before(x: int): int sync {
+    println(x)
     return x
 }
 
@@ -11080,7 +11658,7 @@ This constant expression faults whenever it is evaluated ({0}); it is not folded
 All its operands are known and computing it fails, so there is no value to put in its place. It is left as written: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. If it is never reached (an arm that is not taken), nothing happens.
 ```
 
-**Example** (`test/cases/opt/generic/fold_constant_fault.cml`, run as `camel -Werror test/cases/opt/generic/fold_constant_fault.cml std::opt::fold std::nvm`)
+**Example** (`test/cases/opt/generic/fold_constant_fault.cml`, run as `camel -Werror test/cases/opt/generic/fold_constant_fault.cml std::cxx::fold std::nvm`)
 
 ```camel
 import { now } from time
@@ -11214,6 +11792,39 @@ func main(): int sync {
     println('cmp {} {} {} {}'->format<cmp(1, 2, 3, 4, 0), cmp(1, 2, 3, 4, 3), cmp(4, 4, 4, 2, 5), cmp(9, 1, 9, 1, 6)>)
     println('fmix {} {} {}'->format<fmix(1.5, 2.5, 3.5, 4.5, 5.5, 0), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 4), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 7)>)
     println('fcmp {} {} {} {}'->format<fcmp(1.0, 2.0, 3.0, 4.0, 0), fcmp(1.0, 2.0, 3.0, 4.0, 3), fcmp(4.0, 4.0, 4.0, 2.0, 5), fcmp(9.0, 1.0, 9.0, 1.0, 6)>)
+    return 0
+}
+```
+
+### OptimizationStoppedShort
+
+`0x04100019` · Warn · `RuntimeDiag::OptimizationStoppedShort`
+
+**Fix**
+
+None: choice: how far to unroll a recursion of non-static depth is the writer's decision, and the program is correct at every bound
+
+**Message**
+
+```text
+`std::opt` stopped short of a fixed point: {0}.
+```
+
+**Help**
+
+```text
+Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The pass has two bounds, and either one reports here. The round count is the pass's own, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. The growth budget (`growth_budget`, the nodes specializing and inlining may copy) is the caller's: past it the remaining calls stay calls. A round that changed nothing while the inliner had left a call for that budget reports here and is not a fixed point -- it used to be reported as one, which made a spent budget look like a settled optimizer. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.
+```
+
+**Example** (`test/cases/opt/generic/rounds_exhausted.cml`, run as `camel test/cases/opt/generic/rounds_exhausted.cml std::opt std::fvm`)
+
+```camel
+func total(n: int): int {
+    return if n <= 0 then 0 else n + total(n - 1)
+}
+
+func main(): int sync {
+    println(total(40))
     return 0
 }
 ```

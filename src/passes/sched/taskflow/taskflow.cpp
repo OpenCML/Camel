@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "taskflow.h"
-#include "camel/execute/loop_frame.h"
 #include "camel/execute/function_call.h"
+#include "camel/execute/loop_frame.h"
 #include "handoff.h"
 
 #include "camel/core/effect_trace.h"
@@ -12,9 +12,11 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/operator_call.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -50,6 +52,7 @@ namespace {
 
 using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
 
+using camel::execute::ExecutionPredecessor;
 using camel::execute::RuntimeBranchArmRegion;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCAccsBody;
@@ -58,6 +61,13 @@ using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
+
+/// A structured plan obeys every edge kind, the order edge included. An order edge says which of
+/// two nodes that both run goes first (design principles 3.1, `docs/design/effects/edges.cn.md` 2),
+/// and no back end may ignore that: `std::nvm` walks one order and so obeys it, and the plan is cut
+/// along the same predecessor edges. A pair of effects that may run at once is a pair the graph
+/// builder left unordered -- an effect on an `unordered` resource, or two nodes of different
+/// resources in a body that is no `sync` block -- and never a pair it ordered.
 
 struct TaskflowHigherOrderCallSite {
     GCGraph *runtimeGraph = nullptr;
@@ -97,7 +107,11 @@ inline slot_t funcValueOf(
         withValues.push_back(callerFrame->get<slot_t>(dataIndexOf(graph, input)));
     }
     return camel::execute::runtimeFuncValue(
-        node->dataType(), calleeGraph, written, withValues, result);
+        node->dataType(),
+        calleeGraph,
+        written,
+        withValues,
+        result);
 }
 
 slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
@@ -669,7 +683,7 @@ bool TaskflowExecSchedPass::boundedLight(GraphPlan &plan) {
 
 std::unique_ptr<TaskflowExecSchedPass::GraphPlan>
 TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
-    auto plan   = std::make_unique<GraphPlan>();
+    auto plan    = std::make_unique<GraphPlan>();
     plan->graph  = graph;
     plan->shared = &graph->execPlan();
     plan->topo   = plan->shared->topo;
@@ -765,7 +779,8 @@ void TaskflowExecSchedPass::printSegments(const GraphPlan &plan) const {
         chains += scope->chains.size();
     }
     for (gc_node_ref_t ref : plan.topo) {
-        if (ref < plan.graph->nodeCount() && requireNode(plan.graph, ref)->kind == GCNodeKind::Oper) {
+        if (ref < plan.graph->nodeCount() &&
+            requireNode(plan.graph, ref)->kind == GCNodeKind::Oper) {
             ++operators;
         }
     }
@@ -817,7 +832,11 @@ void TaskflowExecSchedPass::printSegments(const GraphPlan &plan) const {
         }
         for (const auto &[from, to] : scope.chainEdges) {
             std::cerr << std::format(
-                "[taskflow] segments '{}' segment {} chain {} -> {}\n", name, s, from, to);
+                "[taskflow] segments '{}' segment {} chain {} -> {}\n",
+                name,
+                s,
+                from,
+                to);
         }
     }
     for (gc_node_ref_t ref : plan.topo) {
@@ -849,7 +868,11 @@ void TaskflowExecSchedPass::printSegments(const GraphPlan &plan) const {
         }
         if (chain < 0) {
             std::cerr << std::format(
-                "[taskflow] segments '{}' oper {} #{}: segment {}, inline\n", name, uri, ref, segment);
+                "[taskflow] segments '{}' oper {} #{}: segment {}, inline\n",
+                name,
+                uri,
+                ref,
+                segment);
         } else {
             std::cerr << std::format(
                 "[taskflow] segments '{}' oper {} #{}: segment {} chain {}\n",
@@ -912,99 +935,98 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     // The scope tree, read off the linear order exactly as the node-by-node evaluator walks
     // it: an arm is the range from its entry to its tail, the JOIN follows the arms, and what
     // lies between a BRCH and its JOIN outside every arm range never runs.
-    std::function<void(int32_t, size_t, size_t)> parse =
-        [&](int32_t scopeIdx, size_t lo, size_t hi) {
-            for (size_t i = lo; i < hi;) {
-                const gc_node_ref_t ref = topo[i];
-                const auto *node        = requireNode(graph, ref);
-                if (isElided(node->kind)) {
-                    ++i;
-                    continue;
-                }
-                PlanItem item;
-                item.node          = ref;
-                auto &items        = plan.scopes[static_cast<size_t>(scopeIdx)]->items;
-                const auto itemIdx = static_cast<uint32_t>(items.size());
+    std::function<void(int32_t, size_t, size_t)> parse = [&](int32_t scopeIdx,
+                                                             size_t lo,
+                                                             size_t hi) {
+        for (size_t i = lo; i < hi;) {
+            const gc_node_ref_t ref = topo[i];
+            const auto *node        = requireNode(graph, ref);
+            if (isElided(node->kind)) {
+                ++i;
+                continue;
+            }
+            PlanItem item;
+            item.node          = ref;
+            auto &items        = plan.scopes[static_cast<size_t>(scopeIdx)]->items;
+            const auto itemIdx = static_cast<uint32_t>(items.size());
 
-                if (node->kind == GCNodeKind::Join) {
-                    throw PlanMismatch{"a JOIN is reached outside its branch region"};
+            if (node->kind == GCNodeKind::Join) {
+                throw PlanMismatch{"a JOIN is reached outside its branch region"};
+            }
+            if (node->kind == GCNodeKind::Brch) {
+                const auto *body         = graph->nodeBodyAs<camel::runtime::GCBrchBody>(ref);
+                const gc_node_ref_t join = body ? body->join : kInvalidNodeRef;
+                if (join >= blocks || pos[join] == kNo) {
+                    throw PlanMismatch{"a BRCH has no reachable JOIN"};
                 }
-                if (node->kind == GCNodeKind::Brch) {
-                    const auto *body         = graph->nodeBodyAs<camel::runtime::GCBrchBody>(ref);
-                    const gc_node_ref_t join = body ? body->join : kInvalidNodeRef;
-                    if (join >= blocks || pos[join] == kNo) {
-                        throw PlanMismatch{"a BRCH has no reachable JOIN"};
-                    }
-                    const size_t joinPos = pos[join];
-                    if (joinPos <= i || joinPos >= hi) {
-                        throw PlanMismatch{"a JOIN lies outside the range of its BRCH"};
-                    }
-                    const auto branchIdx = static_cast<uint32_t>(plan.branches.size());
-                    plan.branches.push_back(PlanBranch{.brch = ref, .join = join, .armScopes = {}});
-                    item.kind      = ItemKind::Branch;
-                    item.branch    = branchIdx;
-                    item.afterTail = plan.anchorOk && join == plan.lastNode;
-                    items.push_back(item);
-                    place(ref, scopeIdx, itemIdx);
-                    place(join, scopeIdx, itemIdx);
-
-                    const size_t armCount = graph->armCountOf(ref);
-                    std::vector<int32_t> armScopes;
-                    armScopes.reserve(armCount);
-                    for (size_t arm = 0; arm < armCount; ++arm) {
-                        const gc_node_ref_t entry =
-                            graph->execPlan().branchArmEntriesOfNode(ref)[arm];
-                        if (entry == join) {
-                            armScopes.push_back(-1);
-                            continue;
-                        }
-                        const gc_node_ref_t tail =
-                            graph->execPlan().branchArmTailsOfNode(ref)[arm];
-                        if (entry >= blocks || tail >= blocks || pos[entry] == kNo ||
-                            pos[tail] == kNo) {
-                            throw PlanMismatch{"a branch arm is not in the linear order"};
-                        }
-                        const size_t entryPos = pos[entry];
-                        const size_t tailPos  = pos[tail];
-                        if (!(i < entryPos && entryPos <= tailPos && tailPos < joinPos)) {
-                            throw PlanMismatch{"a branch arm is not a range between BRCH and JOIN"};
-                        }
-                        const int32_t armScope = newScope(scopeIdx, itemIdx);
-                        parse(armScope, entryPos, tailPos + 1);
-                        armScopes.push_back(armScope);
-                    }
-                    plan.branches[branchIdx].armScopes = std::move(armScopes);
-                    i                                  = joinPos + 1;
-                    continue;
+                const size_t joinPos = pos[join];
+                if (joinPos <= i || joinPos >= hi) {
+                    throw PlanMismatch{"a JOIN lies outside the range of its BRCH"};
                 }
-
-                switch (node->kind) {
-                case GCNodeKind::Func:
-                    item.kind     = ItemKind::Call;
-                    item.tailCall = plan.isTailCall(ref);
-                    break;
-                case GCNodeKind::Call:
-                    item.kind = ItemKind::Call;
-                    break;
-                case GCNodeKind::Oper: {
-                    const auto *body  = graph->nodeBodyAs<GCOperBody>(ref);
-                    const auto &table = OperatorTable::instance();
-                    item.kind         = table.isMarked(body->oper)      ? ItemKind::Mark
-                                        : table.callsGraphs(body->oper) ? ItemKind::NativeCall
-                                                                        : ItemKind::Leaf;
-                    item.leaveAfter   = !table.isBuiltin(body->oper);
-                    break;
-                }
-                default:
-                    item.kind = ItemKind::Leaf;
-                    break;
-                }
-                item.afterTail = anchorPos != kNo && i > anchorPos;
+                const auto branchIdx = static_cast<uint32_t>(plan.branches.size());
+                plan.branches.push_back(PlanBranch{.brch = ref, .join = join, .armScopes = {}});
+                item.kind      = ItemKind::Branch;
+                item.branch    = branchIdx;
+                item.afterTail = plan.anchorOk && join == plan.lastNode;
                 items.push_back(item);
                 place(ref, scopeIdx, itemIdx);
-                ++i;
+                place(join, scopeIdx, itemIdx);
+
+                const size_t armCount = graph->armCountOf(ref);
+                std::vector<int32_t> armScopes;
+                armScopes.reserve(armCount);
+                for (size_t arm = 0; arm < armCount; ++arm) {
+                    const gc_node_ref_t entry = graph->execPlan().branchArmEntriesOfNode(ref)[arm];
+                    if (entry == join) {
+                        armScopes.push_back(-1);
+                        continue;
+                    }
+                    const gc_node_ref_t tail = graph->execPlan().branchArmTailsOfNode(ref)[arm];
+                    if (entry >= blocks || tail >= blocks || pos[entry] == kNo ||
+                        pos[tail] == kNo) {
+                        throw PlanMismatch{"a branch arm is not in the linear order"};
+                    }
+                    const size_t entryPos = pos[entry];
+                    const size_t tailPos  = pos[tail];
+                    if (!(i < entryPos && entryPos <= tailPos && tailPos < joinPos)) {
+                        throw PlanMismatch{"a branch arm is not a range between BRCH and JOIN"};
+                    }
+                    const int32_t armScope = newScope(scopeIdx, itemIdx);
+                    parse(armScope, entryPos, tailPos + 1);
+                    armScopes.push_back(armScope);
+                }
+                plan.branches[branchIdx].armScopes = std::move(armScopes);
+                i                                  = joinPos + 1;
+                continue;
             }
-        };
+
+            switch (node->kind) {
+            case GCNodeKind::Func:
+                item.kind     = ItemKind::Call;
+                item.tailCall = plan.isTailCall(ref);
+                break;
+            case GCNodeKind::Call:
+                item.kind = ItemKind::Call;
+                break;
+            case GCNodeKind::Oper: {
+                const auto *body  = graph->nodeBodyAs<GCOperBody>(ref);
+                const auto &table = OperatorTable::instance();
+                item.kind         = table.isMarked(body->oper)      ? ItemKind::Mark
+                                    : table.callsGraphs(body->oper) ? ItemKind::NativeCall
+                                                                    : ItemKind::Leaf;
+                item.leaveAfter   = !table.isBuiltin(body->oper);
+                break;
+            }
+            default:
+                item.kind = ItemKind::Leaf;
+                break;
+            }
+            item.afterTail = anchorPos != kNo && i > anchorPos;
+            items.push_back(item);
+            place(ref, scopeIdx, itemIdx);
+            ++i;
+        }
+    };
     (void)newScope(-1, 0);
     parse(0, 0, topo.size());
 
@@ -1064,16 +1086,12 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                 out.insert(out.end(), inner.begin(), inner.end());
             }
         };
-        for (auto inputs :
-             {graph->ctrlInputsOf(ref), graph->normInputsOf(ref), graph->withInputsOf(ref)}) {
-            for (gc_node_ref_t input : inputs) {
-                addWait(input);
-            }
-        }
-        // A sync edge is a use and an order at once (docs/design/effects/edges.cn.md 1.5): the
-        // statement written before this one runs before it, exactly as a control input does.
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(ref)) {
-            addWait(edge.pred);
+        // What the node waits for is read from the one function that says it
+        // (camel::execute::executionPredecessorsOf), every kind of edge included: the order edge
+        // orders two nodes that both run, and a plan that ignored it would run them at once.
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(*graph, ref)) {
+            addWait(predecessor.node);
         }
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -1558,7 +1576,7 @@ void TaskflowExecSchedPass::runItems(
                 tailNode.store(item.node, std::memory_order_release);
                 break;
             }
-            executeCallNode(graph, item.node, frame, region);
+            (void)executeCallNodeWithRows(graph, item.node, frame, region);
             break;
         case ItemKind::NativeCall:
             if (item.afterTail && tailNode.load(std::memory_order_acquire) != kInvalidNodeRef) {
@@ -1610,7 +1628,7 @@ void TaskflowExecSchedPass::runLinearBody(
     // Same as NodeVM: the (tail, join) pairs of the arms that enclose a nested branch.
     std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
 
-    const auto &shared = *plan.shared;
+    const auto &shared   = *plan.shared;
     uint32_t resumedLoop = camel::execute::kNoLoop;
     for (size_t i = 0; i < nodes.size(); ++i) {
         const gc_node_ref_t nodeRef = nodes[i];
@@ -1680,10 +1698,10 @@ void TaskflowExecSchedPass::runLinearBody(
                 tailNode.store(nodeRef, std::memory_order_release);
                 return;
             }
-            executeCallNode(graph, nodeRef, frame, region);
+            (void)executeCallNodeWithRows(graph, nodeRef, frame, region);
             break;
         case GCNodeKind::Call:
-            executeCallNode(graph, nodeRef, frame, region);
+            (void)executeCallNodeWithRows(graph, nodeRef, frame, region);
             break;
         case GCNodeKind::Data:
         case GCNodeKind::Port:
@@ -1789,6 +1807,29 @@ void TaskflowExecSchedPass::executeCallNode(
     frame->set(node->dataIndex, funcValueOf(graph, nodeRef, node, targetGraph, frame, result));
 }
 
+slot_t TaskflowExecSchedPass::executeCallNodeWithRows(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, TaskflowGcRegion &region) {
+    // A FUNC and a CALL are nodes like every other one: the plan lays rows at their position, and
+    // the rows are the one hook's (camel/execute/operator_call.h, `runNode`). std::nvm runs it
+    // after every kind but an operator and a LOOP, and every call instruction of the two bytecode
+    // back ends runs it; this scheduler called `executeCallNode` without it on the two paths that
+    // actually run a plan (`runItems`, `runLinearBody`), so the rows were in the table, balanced,
+    // and never run. The red that names it is a box a closure carries: `state::ref` makes it, a
+    // lambda captures it, and its give-back is laid where the closure is last read -- a CALL's
+    // position -- so `--gc-check foreign` read `released=0 live=1 disposed=1` on std::prl for a
+    // program that keeps nothing, while the other three read `released=1 live=0 disposed=0`
+    // (test/cases/para/core/closure_capture_gives_its_box_back.cml).
+    //
+    // The call leaves the region held (`executeCallNode` enters it and never leaves), so the rows
+    // run inside it exactly where the hit of a `Leaf` item runs them, and the value a call made is
+    // read back from its slot: `executeCallNode` has written it there before this returns.
+    const GCNode *node = requireNode(graph, nodeRef);
+    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+        executeCallNode(graph, nodeRef, frame, region);
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    });
+}
+
 template <typename Fill>
 slot_t TaskflowExecSchedPass::callGraph(
     GCGraph *target, GraphPlan *plan, TaskflowGcRegion &region, Fill &&fill) {
@@ -1808,6 +1849,10 @@ slot_t TaskflowExecSchedPass::callGraph(
     try {
         result = evalGraph(target, callee, region, plan);
     } catch (...) {
+        // The graph's frame goes back with a loop still open: the run is unwinding past the loop's
+        // exit, so what the loop held comes home here, while the slots still name it
+        // (camel/runtime/exec_plan.h, `applyRefEntriesOfOpenLoops`).
+        camel::runtime::applyRefEntriesOfOpenLoops(callee);
         framePool_.release(callee);
         throw;
     }
@@ -1865,6 +1910,7 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
         framePool_.release(frame);
         return result;
     } catch (...) {
+        camel::runtime::applyRefEntriesOfOpenLoops(frame);
         framePool_.release(frame);
         throw;
     }
@@ -1905,14 +1951,35 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     // On the calling thread: an operator decides itself whether its elements are worth
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
-    if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
-        return *value;
-    }
-    const auto *node = requireNode(graph, nodeRef);
-    return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    //
+    // A marked operator is an operator node like any other, so it runs through the one hook every
+    // back end calls an operator through (camel/execute/operator_call.h), and the count's rows are
+    // run by it rather than here: the rows of the values it uses come due when it has run, and its
+    // own value is a collection, so its own holds are filtered out by the slot's type -- the same
+    // answer the other back ends give.
+    return camel::execute::callOperator({graph->execPlan(), *frame, nodeRef}, [&] {
+        if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
+            return *value;
+        }
+        const auto *node = requireNode(graph, nodeRef);
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    });
 }
 
 slot_t TaskflowExecSchedPass::executeLinearNode(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
+    // The same rows as the task path's, at the same place: the node, then its position's rows
+    // (`executePreparedNode`). The two kinds that keep theirs elsewhere are the same two.
+    const auto *node = requireNode(graph, nodeRef);
+    if (node->kind == GCNodeKind::Oper || node->kind == GCNodeKind::Loop) {
+        return executeLinearNodeBody(graph, nodeRef, frame, plan);
+    }
+    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+        return executeLinearNodeBody(graph, nodeRef, frame, plan);
+    });
+}
+
+slot_t TaskflowExecSchedPass::executeLinearNodeBody(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     const auto *node = requireNode(graph, nodeRef);
 
@@ -2158,7 +2225,23 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     auto invoke = [&](operator_t function, ArgsView &with, ArgsView &normal) {
         with.setResultType(graph->node(nodeRef)->dataType());
         normal.setResultType(with.resultType());
-        const slot_t result = function(with, normal, *context_);
+        // The anchor's site, in the node form -- the same one NodeVM uses, because this scheduler
+        // runs nodes too and this is where its operator runs. Bracketed per thread: this scheduler
+        // runs nodes of one graph on several threads, and the program-wide counter's difference
+        // around one call would also hold a neighbour's box.
+        const bool anchorWanted = camel::core::mm::allocatorChecks().printForeignResources;
+        camel::runtime::CountedBoxesBracket boxes;
+        if (anchorWanted) {
+            boxes.begin();
+        }
+        const slot_t result = camel::execute::callOperator(
+            {plan != nullptr && plan->shared != nullptr ? *plan->shared : graph->execPlan(),
+             *frame,
+             nodeRef},
+            [&] { return function(with, normal, *context_); });
+        if (anchorWanted) {
+            camel::runtime::noteCountedCreationForNode(graph, nodeRef, boxes.sinceBegin());
+        }
         // Publish before this region is released, including on the task-graph path.
         frame->set(dataIndexOf(graph, nodeRef), result);
         return result;
@@ -2197,8 +2280,10 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         }
     }
 
-    // The plan names the operator: an update node whose storage must not be reused runs the plain
-    // form of the operator it names (docs/design/arrays-memory/README.cn.md 4.3.1).
+    // The plan names the operator in both directions: an update node whose storage must not
+    // be reused runs the plain form of the operator it names, and the copying form of an operator
+    // that has an in-place one runs it where the plan handed over the value it was given
+    // (docs/design/arrays-memory/README.cn.md 4.3.1).
     const std::string uri(
         plan != nullptr && plan->shared != nullptr ? plan->shared->operatorUriFor(nodeRef)
                                                    : graph->execPlan().operatorUriFor(nodeRef));
@@ -2215,7 +2300,8 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     }
     if (prepared) {
         plan->shared->resolvedOpers[nodeRef].store(
-            camel::profile::profiledOperator(uri, *opFunc), std::memory_order_release);
+            camel::profile::profiledOperator(uri, *opFunc),
+            std::memory_order_release);
     }
 
     std::vector<runtime_data_idx_t> withIndices;
@@ -2243,7 +2329,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     try {
         return invoke(camel::profile::profiledOperator(uri, *opFunc), withView, normView);
     } catch (const RuntimeFault &fault) {
-        // Reported at the operator, as on the other back ends (it used to be the start of
+        // Reported at the operator, as on the other back ends (not at the start of
         // the enclosing graph).
         raiseFault(fault, graph, nodeRef);
     }
@@ -2275,7 +2361,27 @@ slot_t TaskflowExecSchedPass::executePreparedBranchArm(
 slot_t TaskflowExecSchedPass::executePreparedNode(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf,
     const RuntimeBuildInfo *buildInfo) {
-    const auto *node = requireNode(graph, nodeRef);
+    // One node, then the rows the plan has at that node's position (camel/execute/operator_call.h,
+    // `runNode`): the same hook an operator reaches through `callOperator`, at the place this
+    // scheduler runs every other kind of node. A CALL and a FILL are nodes here too, so the count a
+    // value a call made is born with is taken where that call ran -- before every reader, because
+    // the edge from the call to each reader is the graph's, and the task graph is built from those
+    // edges alone (`connectRuntimeDependencies`). Two kinds keep their rows where they were: an
+    // operator, because `callOperator` has already run them by the time the body returns, and a
+    // LOOP node, whose position runs every round and whose rows run at its exit (`loopEnd`).
+    const GCNode *node = requireNode(graph, nodeRef);
+    if (node->kind == GCNodeKind::Oper || node->kind == GCNodeKind::Loop) {
+        return executePreparedNodeBody(graph, nodeRef, frame, sf, buildInfo);
+    }
+    return camel::execute::runNode({graph->execPlan(), *frame, nodeRef}, [&] {
+        return executePreparedNodeBody(graph, nodeRef, frame, sf, buildInfo);
+    });
+}
+
+slot_t TaskflowExecSchedPass::executePreparedNodeBody(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf,
+    const RuntimeBuildInfo *buildInfo) {
+    const GCNode *node = requireNode(graph, nodeRef);
 
     switch (node->kind) {
     case GCNodeKind::Data:
@@ -2421,10 +2527,12 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         if (!OperatorTable::instance().isMarked(body->oper)) {
             return executePreparedOperator(graph, nodeRef, frame);
         }
-        if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
-            return *value;
-        }
-        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+        // A marked operator on the prepared path is the linear form, which runs it through the one
+        // hook (camel/execute/operator_call.h) and so counts it like every other operator call. No
+        // program reaches this branch today -- its three callers cannot reach an Oper, and the only
+        // task graph that is built is the one std::tfdump prints -- and it is written this way so
+        // that a path that did have a trigger could not reach the count by a second route.
+        return executeLinearMarkedOperator(graph, nodeRef, frame);
     }
 
     case GCNodeKind::Brch: {
@@ -2545,12 +2653,6 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         }
         taskMap[inputRef].precede(task);
     };
-    auto addEdges = [&](std::span<const gc_node_ref_t> inputs, tf::Task task) {
-        for (gc_node_ref_t inputRef : inputs) {
-            addEdge(inputRef, task);
-        }
-    };
-
     for (gc_node_ref_t nodeRef : graph->execPlan().topo) {
         const auto *node = requireNode(graph, nodeRef);
         if (node->kind == GCNodeKind::Brch) {
@@ -2562,18 +2664,14 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         if (nodeRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[nodeRef] != 0) {
             continue;
         }
-        addEdges(graph->normInputsOf(nodeRef), taskMap[nodeRef]);
-        addEdges(graph->withInputsOf(nodeRef), taskMap[nodeRef]);
-        addEdges(graph->ctrlInputsOf(nodeRef), taskMap[nodeRef]);
-        // An order edge is a precedence between two tasks that both run; a predecessor that has
-        // no task of its own is skipped by addEdge, so the order never creates work.
-        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeRef)) {
-            addEdge(edge.pred, taskMap[nodeRef]);
-        }
-        // A sync edge orders the two statements as well (docs/design/effects/edges.cn.md 1.5),
-        // and both of them run: the predecessor's task is there whenever the node's is.
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(nodeRef)) {
-            addEdge(edge.pred, taskMap[nodeRef]);
+        // The whole precedence of the node, from the one function that says what it is
+        // (camel::execute::executionPredecessorsOf): its control inputs, its data ports, the
+        // statement a sync edge writes before it, and its order predecessors. An order edge is a
+        // precedence between two tasks that both run; a predecessor that has no task of its own is
+        // skipped by addEdge, so the order never creates work.
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(*graph, nodeRef)) {
+            addEdge(predecessor.node, taskMap[nodeRef]);
         }
     }
 }
@@ -2706,16 +2804,16 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
         }
     };
 
-    precedeFromInputs(runtimeGraph->normInputsOf(brchRuntimeIndex), selector);
-    precedeFromInputs(runtimeGraph->ctrlInputsOf(brchRuntimeIndex), selector);
-    // The statement written before the branch waits for it the same way when the block's chain
-    // names it with a sync edge (docs/design/effects/edges.cn.md 1.5).
-    std::vector<gc_node_ref_t> brchChainPreds;
-    for (const camel::runtime::GCGraphSyncEdge &edge :
-         runtimeGraph->syncPredsOf(brchRuntimeIndex)) {
-        brchChainPreds.push_back(edge.pred);
+    // The BRCH waits for what every node waits for, from the one function that says what that
+    // is (camel::execute::executionPredecessorsOf): the condition it reads, its control inputs,
+    // and the statement written before the branch (docs/design/effects/edges.cn.md 1.5), the
+    // order edge among them.
+    std::vector<gc_node_ref_t> brchPredecessors;
+    for (const ExecutionPredecessor &predecessor :
+         camel::execute::executionPredecessorsOf(*runtimeGraph, brchRuntimeIndex)) {
+        brchPredecessors.push_back(predecessor.node);
     }
-    precedeFromInputs(brchChainPreds, selector);
+    precedeFromInputs(brchPredecessors, selector);
 
     selector.precede(joiner);
 
@@ -2788,7 +2886,7 @@ bool elementsIndependent(GCGraph *graph, gc_node_ref_t nodeRef) {
 
 // The faults of the element calls of one unordered operator (map, apply, filter,
 // unordered_foreach; the chunks of unordered_reduce), which run concurrently and can fault
-// together. Design principles 3.6 (ruled 2026-10-31): elements that have started run to their
+// together. Design principles 3.6: elements that have started run to their
 // end; of the elements that have not started, those above the smallest fault known do not
 // start and those below it still do; the fault of the smallest index is reported. So "do not
 // start" is applied to the elements *after* the smallest faulting index known: an element
@@ -2943,9 +3041,9 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
     const auto resIdx  = dataIndexOf(graph, nodeRef);
     GCGraph *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
-    GraphPlan *plan    = planFor(target);
-    const size_t n     = arrayAt(frame, arrIdx)->size();
-    auto *resultType   = frame->typeAt<ArrayType>(resIdx);
+    GraphPlan *plan  = planFor(target);
+    const size_t n   = arrayAt(frame, arrIdx)->size();
+    auto *resultType = frame->typeAt<ArrayType>(resIdx);
     {
         Array *res = Array::create(camel::core::mm::autoSpace(), resultType, n);
         // The result array is reachable from the node's slot from here on; each element stores
@@ -2981,8 +3079,8 @@ void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRe
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
-    GraphPlan *plan    = planFor(target);
-    const size_t n     = arrayAt(frame, arrIdx)->size();
+    GraphPlan *plan = planFor(target);
+    const size_t n  = arrayAt(frame, arrIdx)->size();
     region.leave();
 
     // One byte per element: the predicates run concurrently, and the bits of a
@@ -3029,9 +3127,9 @@ void TaskflowExecSchedPass::mark_reduce_arr(GCGraph *graph, gc_node_ref_t nodeRe
     const auto funcIdx    = dataIndexOf(graph, withInputs[0]);
     GCGraph *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
-    GraphPlan *plan       = planFor(target);
-    const auto accIdx     = dataIndexOf(graph, nodeRef);
-    const size_t n        = arrayAt(frame, arrIdx)->size();
+    GraphPlan *plan   = planFor(target);
+    const auto accIdx = dataIndexOf(graph, nodeRef);
+    const size_t n    = arrayAt(frame, arrIdx)->size();
     // The accumulator lives in the node's own slot between two steps.
     frame->set(accIdx, frame->get<slot_t>(dataIndexOf(graph, withInputs[1])));
 
@@ -3064,7 +3162,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     const auto initIdx    = dataIndexOf(graph, withInputs[1]);
     GCGraph *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
-    const size_t n        = arrayAt(frame, arrIdx)->size();
+    const size_t n = arrayAt(frame, arrIdx)->size();
     if (n == 0) {
         frame->set(dataIndexOf(graph, nodeRef), frame->get<slot_t>(initIdx));
         return;
@@ -3184,8 +3282,8 @@ void TaskflowExecSchedPass::mark_foreach_arr(GCGraph *graph, gc_node_ref_t nodeR
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
-    GraphPlan *plan    = planFor(target);
-    const size_t n     = arrayAt(frame, arrIdx)->size();
+    GraphPlan *plan = planFor(target);
+    const size_t n  = arrayAt(frame, arrIdx)->size();
 
     for (size_t i = 0; i < n; ++i) {
         callClosure(
@@ -3217,8 +3315,8 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target =
         makeHigherOrderCallSite(programs_, frame->get<Function *>(funcIdx)).runtimeGraph;
-    GraphPlan *plan    = planFor(target);
-    const size_t n     = arrayAt(frame, arrIdx)->size();
+    GraphPlan *plan = planFor(target);
+    const size_t n  = arrayAt(frame, arrIdx)->size();
     region.leave();
 
     runElements(site, plan, n, [&](TaskflowGcRegion &elementRegion, size_t i) {

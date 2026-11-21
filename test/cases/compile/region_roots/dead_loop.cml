@@ -1,0 +1,19 @@
+/**
+ * A loop is one of the nodes the author's ruling of 2026-11-17 names ("算子、调用、分支、循环一样":
+ * design principles 3.1): when what runs inside it writes to a resource outside the program, the loop
+ * is one of its region's writes and the region's `GATE` reads it -- so it runs. The loop's own value
+ * being taken by nobody does not change that: the write inside it is the reason it runs, exactly as a
+ * bare `println` in a body is.
+ *
+ * This is the half the reading before it could not state. While a write stood on the *region* rather
+ * than on a node that reads it, a loop nobody needed was never started and the print inside it never
+ * happened; the case name is what it used to be, and what it pins now is the other reading.
+ */
+
+func main(): int {
+    loop s = 0 for i in [0, 1, 2] do {
+        println("round")
+        s + i
+    }
+    return 0
+}

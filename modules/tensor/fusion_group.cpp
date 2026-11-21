@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 /*
+ * The `tensor.fusion` groups the tensor module runs.
+ *
+ * Two families. A division's VJP emits a chain of elementwise nodes and marks it (below); the
+ * affine transform `x @ w + b` -- with `relu` over it, when that is what the program wrote -- is
+ * the other: `tensor::fuse` marks the pair (or the triple, `passes/fuse.cpp#markGroups`) and the
+ * kernels at the end of this file run it. Both families keep the program's operators and mark the
+ * nodes: no operator is added, renamed or removed (design principles 9.6).
+ *
  * The `tensor.fusion` groups a division's VJP emits.
  *
  * `divideVjp` builds `dlhs = divide(dy, rhs)`, `scaled = multiply(dlhs, y)`, `neg(scaled)` and
@@ -42,6 +50,7 @@
 #include "attrs.h"
 #include "camel/execute/fusion_group.h"
 #include "kernels/elementwise.h"
+#include "kernels/gemm.h"
 #include "kernels/parallel.h"
 #include "ops/support.h"
 #include "tensor.h"
@@ -440,6 +449,267 @@ FusionGroupAction divideMulNegKernel(
     return FusionGroupAction::Ran;
 }
 
+/*
+ * The affine transform: `x @ w + b`, and `relu(x @ w + b)` when the program wrote the activation
+ * over it. `tensor::fuse` marks the pair `tensor.fusion = "linear"` and the triple
+ * `tensor.fusion = "linear_relu"` (passes/fuse.cpp#markGroups); the group's nodes are still
+ * tensor:matmul, tensor:add and tensor:relu.
+ *
+ * The promise is the same one the two VJP groups keep, and it is what makes the group licensed
+ * under `#strict` and under the safe mode (7.3, 7.4): the fused run gives the bits the operators
+ * give, one by one.
+ *
+ *   * The product half is `k::linear`, not a second hand-written GEMM, and that is the whole
+ *     argument. The canonical algorithm is a chain of fused multiply-adds in ascending `k` from
+ *     `+0`, and `alpha`/`beta` are applied after it (kernels/gemm.h, gemm_blocked.inl#finish):
+ *     with `beta == 1` the last step is `product + c`, one rounding of `acc + c`. `k::linear`'s
+ *     `f32` path writes the bias into the output first and runs that same `sgemm` with `beta = 1`
+ *     (kernels/gemm.cpp#linear). So `linear(x, w, b)` is `matmul(x, w)`'s bits with `add`'s one
+ *     rounding after them -- exactly the two nodes -- and the operand the group saves is the one
+ *     buffer the product would have stored.
+ *   * The activation half of the triple is the activation operator's own kernel
+ *     (`k::unary(k::UnaryOp::Relu, ...)`), not a `> 0 ? x : 0` written here: `relu` is
+ *     `maximum(x, +0)` (stdlib/tensor_definitions.cml), a NaN gives NaN and `-0` gives `+0`, and a
+ *     second implementation would be a second definition.
+ *   * When the product is not one this kernel can promise, it returns `None` and the nodes run one
+ *     by one: that is a product the library GEMM actually takes (`tensor.kernel = "library"` and a
+ *     size above the library's measured threshold, `kernels/gemm.h#libraryGemmRuns`), because the
+ *     library chooses its own order and grouping of the accumulation -- or an operand shape the
+ *     promise above does not cover. The attribute grants nothing, so declining is always allowed,
+ *     and it is the reason the group never has to guess a bit. The decision is taken at the group's
+ *     head, not at its tail: a head that answered `Deferred` has promised that the tail computes
+ *     the product.
+ */
+
+/// The operators the pair and the triple are made of, interned once.
+struct LinearOperators {
+    OperId matmul = camel::core::kNoOper;
+    OperId add    = camel::core::kNoOper;
+    OperId relu   = camel::core::kNoOper;
+};
+
+const LinearOperators &linearOperators() {
+    static const LinearOperators ops{
+        intern("tensor:matmul"), intern("tensor:add"), intern("tensor:relu")};
+    return ops;
+}
+
+/// One `x @ w + b` (optionally `relu`) group as its head sees it: the product, the add that reads
+/// it, the bias the add reads on its other side, the activation when the group is the triple
+/// (`kInvalidNodeRef` when it is the pair), and the product's two operands, as values.
+///
+/// The bias is a node the add reads, not the product: the plan may reach it *after* the product,
+/// so its value is not promised at the head. It is read at the tail, where it is the add's own
+/// operand and therefore has one.
+struct LinearSite {
+    gc_node_ref_t matmul = camel::runtime::kInvalidNodeRef;
+    gc_node_ref_t add    = camel::runtime::kInvalidNodeRef;
+    gc_node_ref_t bias   = camel::runtime::kInvalidNodeRef;
+    gc_node_ref_t relu   = camel::runtime::kInvalidNodeRef;
+    const Array *x       = nullptr;
+    const Array *w       = nullptr;
+};
+
+/// Recognizes the group from its product; false means the nodes run one by one. Every condition
+/// here is a promise this kernel does not make, not a shape it cannot check:
+///
+///   * a product the library GEMM actually runs (the node's `tensor.kernel` says "library" **and**
+///     `kernels/gemm.h#libraryGemmRuns` says the size is one the library takes,
+///     passes/fuse.cpp#kernelChoice): that GEMM chooses its own order and grouping of the
+///     accumulation, so its result is not the canonical chain's and no kernel of ours reproduces
+///     it. When the attribute says "library" but the size is below the library's threshold,
+///     `sgemmLibrary` runs the canonical kernel, so `k::linear` still gives exactly the operator's
+///     bits and the group runs;
+///   * a product whose only reader is not a two-operand `add` reading it as its **first** operand
+///     (the kernel adds the bias after the product's chain, and the graph's order is what it
+///     copies);
+///   * a weight that is not rank two, an input of rank below two (matmul promotes a vector operand,
+///     and the promotion is a shape rule of its own), or two operands of different element types;
+///   * a product or (in the triple) an add that something outside the group observes
+///     (`isPrivateTo`): the group computes it at the tail and never stores it.
+///
+/// The decision is taken here, at the head, and not at the tail: a head that answers `Deferred` has
+/// promised its tail will compute the product, so a tail that then declined would leave the
+/// product's value unwritten. What the head cannot see -- the bias's value -- the tail may still
+/// find unusable, and it then runs the product with the operator's own kernel rather than
+/// declining (`runLinear`).
+bool linearSite(const FusionGroupView &view, gc_node_ref_t matmul, LinearSite &site) {
+    const LinearOperators &ops = linearOperators();
+    if (view.operOf(matmul) != ops.matmul || !view.memberOf(matmul)) {
+        return false;
+    }
+    const auto matmulInputs = view.inputsOf(matmul);
+    if (matmulInputs.size() != 2) {
+        return false;
+    }
+    const auto productUsers = view.usersOf(matmul);
+    if (productUsers.size() != 1) {
+        return false;
+    }
+    const gc_node_ref_t add = productUsers.front();
+    if (view.operOf(add) != ops.add || !view.memberOf(add)) {
+        return false;
+    }
+    const auto addInputs = view.inputsOf(add);
+    if (addInputs.size() != 2 || addInputs[0] != matmul) {
+        return false;
+    }
+    gc_node_ref_t relu = camel::runtime::kInvalidNodeRef;
+    if (const auto addUsers = view.usersOf(add);
+        addUsers.size() == 1 && view.memberOf(addUsers.front()) &&
+        view.operOf(addUsers.front()) == ops.relu) {
+        const auto reluInputs = view.inputsOf(addUsers.front());
+        if (reluInputs.size() != 1 || reluInputs[0] != add) {
+            return false;
+        }
+        relu = addUsers.front();
+    }
+    const gc_node_ref_t members[] = {matmul, add, relu};
+    if (!view.isPrivateTo(matmul, members)) {
+        return false;
+    }
+    if (relu != camel::runtime::kInvalidNodeRef && !view.isPrivateTo(add, members)) {
+        return false;
+    }
+    // The product's operands: they are this node's inputs, so both have values here.
+    if (!isTensorType(view.typeOf(matmulInputs[0])) ||
+        !isTensorType(view.typeOf(matmulInputs[1])) || !isTensorType(view.typeOf(addInputs[1]))) {
+        return false;
+    }
+    const auto *x = camel::core::rtdata::fromSlot<Array *>(view.valueOf(matmulInputs[0]));
+    const auto *w = camel::core::rtdata::fromSlot<Array *>(view.valueOf(matmulInputs[1]));
+    if (x == nullptr || w == nullptr) {
+        return false;
+    }
+    if (x->rank() < 2 || w->rank() != 2 || w->dim(0) == 0) {
+        return false;
+    }
+    if (x->dtype() != w->dtype() || x->dim(x->rank() - 1) != w->dim(0)) {
+        return false;
+    }
+    // The product's licence: only a product the library GEMM actually runs is one whose bits this
+    // kernel cannot promise. Below the library's threshold the operator runs the canonical kernel,
+    // which is the one `k::linear` runs, so the group may keep the promise.
+    if (usesLibraryGemm(view.graph().nodeAttrs(matmul))) {
+        const int64_t K = w->dim(0);
+        const int64_t N = w->dim(1);
+        const int64_t M = static_cast<int64_t>(x->numel()) / K;
+        if (k::libraryGemmRuns(M, N, K)) {
+            return false;
+        }
+    }
+    site = LinearSite{matmul, add, addInputs[1], relu, x, w};
+    return true;
+}
+
+/// The group's value at its tail: `x @ w + b`, with the activation's own kernel over it when the
+/// group is the triple.
+///
+/// The bias's value is read here, and when it is not the rank-1 tensor of the product's last extent
+/// this kernel promised -- the head could not see it -- the three operators' own kernels run in
+/// their own order instead (`k::matmul` with the node's licence, then the add's, then the
+/// activation's). The bits are their bits either way, and the product's value is never left
+/// unwritten.
+Array *runLinear(const FusionGroupView &view, const LinearSite &site) {
+    const auto *bias = camel::core::rtdata::fromSlot<Array *>(view.valueOf(site.bias));
+    if (bias != nullptr && bias->rank() == 1 && bias->dtype() == site.w->dtype() &&
+        bias->dim(0) == site.w->dim(1)) {
+        Array *result = k::linear(site.x, site.w, bias, ops::resultAllocator());
+        if (site.relu != camel::runtime::kInvalidNodeRef) {
+            result = k::unary(k::UnaryOp::Relu, result, ops::resultAllocator());
+        }
+        return result;
+    }
+    Array *product = k::matmul(
+        site.x, site.w, ops::resultAllocator(),
+        usesLibraryGemm(view.graph().nodeAttrs(site.matmul)));
+    if (bias == nullptr) {
+        return site.relu != camel::runtime::kInvalidNodeRef
+                   ? k::unary(k::UnaryOp::Relu, product, ops::resultAllocator())
+                   : product;
+    }
+    Array *sum = k::binary(
+        k::BinaryOp::Add, k::Operand::of(product), k::Operand::of(bias), ops::resultAllocator());
+    return site.relu != camel::runtime::kInvalidNodeRef
+               ? k::unary(k::UnaryOp::Relu, sum, ops::resultAllocator())
+               : sum;
+}
+
+FusionGroupAction linearKernel(
+    const FusionGroupView &view, gc_node_ref_t node, std::span<const gc_node_ref_t> deferred,
+    std::vector<gc_node_ref_t> &members, camel::execute::FusionGroupRef &group) {
+    const LinearOperators &ops = linearOperators();
+    if (!view.memberOf(node)) {
+        return FusionGroupAction::None;
+    }
+    // The product this node belongs to, read from whichever member the plan reached. The three
+    // spellings are the three the marking writes; anything else is not this group.
+    gc_node_ref_t matmul = camel::runtime::kInvalidNodeRef;
+    if (view.operOf(node) == ops.matmul) {
+        matmul = node;
+    } else if (view.operOf(node) == ops.add) {
+        const auto inputs = view.inputsOf(node);
+        if (inputs.size() != 2) {
+            return FusionGroupAction::None;
+        }
+        matmul = inputs[0];
+    } else if (view.operOf(node) == ops.relu) {
+        const auto reluInputs = view.inputsOf(node);
+        if (reluInputs.size() != 1 || view.operOf(reluInputs[0]) != ops.add) {
+            return FusionGroupAction::None;
+        }
+        const auto addInputs = view.inputsOf(reluInputs[0]);
+        if (addInputs.size() != 2) {
+            return FusionGroupAction::None;
+        }
+        matmul = addInputs[0];
+    } else {
+        return FusionGroupAction::None;
+    }
+    LinearSite site;
+    if (matmul == camel::runtime::kInvalidNodeRef || !linearSite(view, matmul, site)) {
+        return FusionGroupAction::None;
+    }
+    if (node != site.matmul && node != site.add && node != site.relu) {
+        return FusionGroupAction::None;
+    }
+    const gc_node_ref_t tail =
+        site.relu != camel::runtime::kInvalidNodeRef ? site.relu : site.add;
+    if (node == site.matmul) {
+        // The head: it is deferred to the tail, and so is the add when the group is the triple --
+        // the tail is where every operand of the group has a value.
+        members.push_back(node);
+        if (site.relu != camel::runtime::kInvalidNodeRef) {
+            members.push_back(site.add);
+        }
+        group.tail = tail;
+        return FusionGroupAction::Deferred;
+    }
+    if (node != tail) {
+        // The add of a triple is not a place the group runs or starts: it was deferred by the
+        // head, so the plan never asks about it (the back end skips it).
+        return FusionGroupAction::None;
+    }
+    // The group runs only when its earlier members were deferred to it. If the product ran one by
+    // one (the library kernel, another reader, an operand this kernel declines), the tail runs as
+    // the program says: that is the fallback.
+    if (!among(deferred, site.matmul)) {
+        return FusionGroupAction::None;
+    }
+    if (site.relu != camel::runtime::kInvalidNodeRef && !among(deferred, site.add)) {
+        return FusionGroupAction::None;
+    }
+    Array *result = runLinear(view, site);
+    // The nodes computed here, for the reports that say what the group stood for (profile.h).
+    members.push_back(site.matmul);
+    if (site.add != node) {
+        members.push_back(site.add);
+    }
+    group.tail = node;
+    view.setValueOf(node, ops::wrap(view.typeOf(node), result));
+    return FusionGroupAction::Ran;
+}
+
 } // namespace
 
 void registerDivideMulNegFusion() {
@@ -449,6 +719,14 @@ void registerDivideMulNegFusion() {
 
 void registerMulNegFusion() {
     camel::execute::registerFusionGroup(fusionAttrKey(), kMulNegFusion, &multiplyNegKernel);
+}
+
+void registerLinearFusion() {
+    camel::execute::registerFusionGroup(fusionAttrKey(), kLinearFusion, &linearKernel);
+}
+
+void registerLinearReluFusion() {
+    camel::execute::registerFusionGroup(fusionAttrKey(), kLinearReluFusion, &linearKernel);
 }
 
 } // namespace camel::tensor

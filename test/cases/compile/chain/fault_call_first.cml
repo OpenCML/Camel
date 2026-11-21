@@ -1,0 +1,20 @@
+/**
+ * The second counterexample: the same shape again, and the callee reaches no resource and holds no
+ * recursion -- but it divides, and an integer division by zero is a fault (design principles 3.9).
+ * A fault is observable, so the call keeps the place it is written in and stays on the block's
+ * chain (3.4); the two writings of this block must not be one document.
+ *
+ * This is the case that separates "pure" from "freely arranged": `divide` is pure, and a chain that
+ * dropped every pure statement would drop this one and move the fault past the print.
+ *
+ * Run: camel test/cases/compile/chain/fault_call_first.cml
+ */
+func divide(x: int): int {
+    return 100 / x
+}
+
+func main(): int sync {
+    let a = divide(2)
+    println(2)
+    return a
+}

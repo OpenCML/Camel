@@ -4,7 +4,7 @@
 // `exp` is the first member of the deletion difference set whose tangent **recomputes a forward
 // value**: `d(exp(x)) = exp(x) * dx` needs `exp(x)` again, and a law with one operand can only write
 // it by calling the operator a second time. That is why this pair of cases is also the experiment
-// `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
+// `docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
 // asks for -- `softmax` stopped at the cut on such a recomputation, `relu`'s mask did not, and `exp`
 // is the smallest case that tells the two apart.
 //

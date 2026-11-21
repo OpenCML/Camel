@@ -22,10 +22,10 @@ expect_stdout = "[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 5]\n[1, 2, 3, 7, 8] [1, 2, 3]\
 
 [[tests]]
 name = "new_values.append_new.passes"
-desc = "The same program through std::opt::inline, std::opt, std::jit."
+desc = "The same program through std::cxx::inline, std::opt, std::jit."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/append_new.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 5]\n[1, 2, 3, 7, 8] [1, 2, 3]\n[10, 20, 30] [1, 2, 3]\n[1, 2, 3] [1, 2, 3] [3, 1, 2]\n[1, 2] [1, 2, 3, 4]\n[[0], [0], [2]]\n"
 
@@ -42,10 +42,10 @@ expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 
 
 [[tests]]
 name = "new_values.rebinding_loop.passes"
-desc = "The same program through std::opt::inline, std::opt, std::fvm."
+desc = "The same program through std::cxx::inline, std::opt, std::fvm."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::fvm"]
 expect_exit = 0
 expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
 
@@ -168,10 +168,10 @@ expect_stdout = "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [
 
 [[tests]]
 name = "new_values.peek.passes"
-desc = "The same program through std::opt::inline, std::opt, std::jit: the passes keep `:var/peek` a read."
+desc = "The same program through std::cxx::inline, std::opt, std::jit: the passes keep `:var/peek` a read."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "1 2 [1, 2] [1, 2, 3] 2\n1 [1, 2, 3, 4] 4 true\n[1] [[1], [2], [3]]\n[5, 6] 2 [5, 6, 7]\n"
 
@@ -209,14 +209,13 @@ expect_stdout = "200010000\n"
 # was 3.2-3.6x -- under the 4x the margin rule asks for. 45 s is 4.8-5.4x those figures.
 timeout_ms = 45000
 
-[[tests]]
-name = "new_values.peek_loop.graph"
-desc = "The graph of the loop reads `out` with `:var/peek`, and the rebinding appends through the in-place form of `append`."
-kind = "behavior"
-case = "../../../cases/consistency/new_values/peek_loop.cml"
-args = ["${case}", "std::rgir"]
-expect_exit = 0
-expect_stdout_contains = [":var/peek", ":struct/append_arr_in_place", ":op/assn_owned"]
+# Removed with the capture ruling (design principles 3.5, 197): `new_values.peek_loop.graph` pinned
+# the `:var/*` vocabulary of a rebound `var` cell (`:var/peek`, `:op/assn_owned`,
+# `:struct/append_arr_in_place`). A closure may not assign the name it captured, so the rebinding
+# lives in a loop body now and the name is the loop's carried state, which the graph renders another
+# way; measured on 3773eed5c, none of the three names appears in the migrated program (the loop is
+# still linear, which is the reading `new_values.peek_loop` keeps). The entry had no object left and
+# was removed rather than re-aimed at a shape nobody asked for.
 
 [[tests]]
 name = "new_values.macro_append"
@@ -239,21 +238,17 @@ expect_stdout = "[0, 1, 25, 2] 4\n"
 
 [[tests]]
 name = "new_values.rebinding_loop.opt"
-desc = "The rebinding loops through std::macro, std::opt, std::jit and std::opt::inline, std::opt, std::prl."
+desc = "The rebinding loops through std::macro, std::opt, std::jit and std::cxx::inline, std::opt, std::prl."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
 
-[[tests]]
-name = "new_values.rebinding_loop.cpp"
-desc = "std::cpp writes the rebinding as rt::append on the variable, which gives its array up for the call (grown in place when nothing else holds it): a captured variable through its cell, a var parameter likewise. That the compiled program prints what std::fvm prints is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
-kind = "behavior"
-case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 0
-expect_stdout_contains = [".set(rt::append(", ".take(), "]
+# Removed with the same ruling: `new_values.rebinding_loop.cpp` pinned what std::cpp writes for a
+# rebound `var` (`.set(rt::append(`, `.take(), `), and a loop state is written another way -- the
+# measured migration has neither. The C++/fvm agreement the entry pointed at is its own entry
+# (feat/trans/cpp.agree_with_fvm, test/tools/cppexec/expect.txt), which is unaffected.
 
 [[tests]]
 name = "new_values.value_used"
@@ -314,33 +309,136 @@ expect_output_contains = ["'out = out->append<7>'"]
 
 [[tests]]
 name = "new_values.sort_rebinding"
-desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 11.3): a local, `sort(xs)`, merge_sort, a var parameter, a captured variable, floats. Alike on the four back ends."
+desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 11.3): a local, `sort(xs)`, merge_sort, a var parameter, a name a closure captures, floats. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 expect_output_not_contains = ["[Warn]"]
+
+# ---- where in-place is decided now: the plan's reuse, not the front end's rewrite ----
+#
+# This entry used to read `std::rgir` and ask that the operator's in-place form appear in the graph
+# (`:var/take`, `array:sort_l_in_place`, `array:sort_d_in_place`, `:op/assn_owned`). That form is
+# produced by `Builder::inPlaceRebindingOf`, a rewrite of the statement shape from when a `var` was a
+# cell; since stage S1 of the direct-SSA plan a same-region local `var` is the value it was given, so
+# there is no cell to take the array out of and no such marker is written any more. The author's
+# answer of 2026-11-18
+# (`docs/handover/reviews/2026-11-18-an-in-place-call-now-builds-as-ssa-rebinding.cn.md`) rules that
+# in-place is the execution plan's reuse decision: at `sort(v)`, when that is the old `v`'s last use,
+# the plan takes the in-place form (`StorageReuse::Input`, `ByArrayCount` when it can only count --
+# design principles 10.5), and the front-end rewrite and `inPlaceCalls_` are to be deleted with it.
+# So this entry asks that decision instead of the marker, with the ruler the plan page names for it
+# (`camel inspect --copies`, the same reading `array_sort_kernels.plan.toml#array_sort_kernels.paths`
+# takes), and the entry keeps its name for the same reason that one keeps its own.
+#
+# The four rebindings that bind a name to a sorted array are the old value's last use, so their
+# update is in place -- `in-place` (proved) or `by-count` (the array's own count decides at run
+# time), never `copied`. The first `xs = xs->sort` is not one of the four: `before` still holds that
+# value there, so that line is `before`'s last use of it and not the old value's. The closure's
+# `fs->sort` is not one either: it reads `fs` and returns the sorted array without binding it back,
+# so `fs` still holds the unsorted array and the sort may copy -- which the case prints beside the
+# sorted one, and `new_values.sort_rebinding` above pins.
+#
+# What it reads on `91f708389`, and the red this entry is owned for (S3b): `COPIES main updates 9
+# in-place 0 by-count 0 declared 0 copied 9`, with the four `sort_kernel` rows of `main` each
+# `copied`; the one rebinding the plan already places -- the `var` parameter's, in `sorted_param` --
+# reads `by-count`. This red is the S3b gap itself: it is not to be marked `known_fail` and the
+# assertion is not to be loosened, because nothing else in the tree says that a sort at the old
+# value's last use must reuse its storage.
+
+# The same program read with the ruler stage S3b's criterion is stated in
+# (`docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md`, its 2026-11-19 amendment): every
+# `v = v->append(x)` and `xs = sort(xs)` whose value nothing else reads is handed its storage and
+# runs the in-place form, and every one whose value another name still holds copies. The six
+# in-place rows below are the first readings of the mechanism; the three copied ones are the
+# second name (`before`, `kept`) and the closure's `fs`, which must keep copying or the case above
+# would print a sorted `before`.
+[[tests]]
+name = "new_values.sort_rebinding.copies"
+desc = "`camel inspect --copies` on the rebinding program: the plan's decision for each of the nine updates in `main` -- six in place (the three appends on the value the declaration made, the two `sort(xs)` at a value nothing else reads, and the float `gs = gs->sort`) and three copied (the sort under a second name, the appends after it, and the closure's `fs`) -- and the `var` parameter's sort left to the array's own count."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  // The plan chose the in-place form where the value has no other reader, and the copying form
+  // where it has one: both counts are non-zero, which is the point of the stage. The per-row list
+  // belongs to a graph and a row line does not carry its graph's name, so the counts are read off
+  // the three summaries below rather than by walking the rows.
+  const main = 'COPIES main updates 9 in-place 6 by-count 0 declared 0 copied 3'
+  assert(lines.includes(main), 'main counts six in place and three copied: ' + lines.join(' | '))
+  // The `var` parameter is a cell, so its sort is the two-layer answer and not this decision: the
+  // plan lays no row for it and the array's own count decides (`by-count`).
+  const param = 'COPIES sorted_param updates 1 in-place 0 by-count 1 declared 0 copied 0'
+  assert(lines.includes(param), 'the var parameter stays with the array count: ' + lines.join(' | '))
+  // The closure `fs` is read after the sort, so it copies: nothing about capturing is in place.
+  const closure = 'COPIES __g_235__ updates 1 in-place 0 by-count 0 declared 0 copied 1'
+  assert(lines.includes(closure), 'the closure copies: ' + lines.join(' | '))
+}
+"""
+timeout_ms = 60000
 
 [[tests]]
 name = "new_values.sort_rebinding.graph"
-desc = "The rebinding is written with the in-place form of the operator between `:var/take` and `:op/assn_owned`, for each of the four rebindings."
+desc = "The plan's verdict on each of the four rebindings that bind a name to a sorted array (`xs` twice, the `var` parameter, the float `gs`), read through `camel inspect --copies`: each is one row at its own place in the case, the row names the sort, and its verdict is `in-place` or `by-count` -- a rebinding at the old value's last use reuses its storage (design principles 10.5) -- never `copied`. The first `xs = xs->sort` (`sort_rebinding.cml:36:14`) is not one of the four: `before` still holds that value there, so it is `before`'s last use of it and the update must copy -- the `.copies` entry below already expects it to, and the case's output depends on it. The closure's `fs->sort` is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort may copy."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
-args = ["${case}", "std::rgir"]
+args = ["inspect", "--copies", "${case}"]
 expect_exit = 0
-expect_stdout_contains = [":var/take", "array:sort_l_in_place", "array:sort_d_in_place", ":op/assn_owned"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+    // The rows are `COPIES <file>:<line>:<column> <name> <verdict>`, one per update, at the place
+    // the program writes the call; the summaries count them.
+    const rows = new Map()
+    for (const line of lines) {
+        const f = line.split(' ')
+        if (f.length === 4) { rows.set(f[1], { name: f[2], verdict: f[3] }) }
+    }
+    const tally = lines.find((l) => /^COPIES main updates \d+ in-place \d+ by-count \d+ declared \d+ copied \d+$/.test(l))
+    assert(tally, `main's tally is not in the reading: ${JSON.stringify(lines)}`)
+    const reading = `${rows.size} row(s), ${tally}`
+    const verdicts = ['in-place', 'by-count', 'declared', 'copied']
+    // The four rebindings, at the place the case writes each of them. `sort_rebinding.cml:36:14`
+    // is deliberately absent: `before` still holds that value there, so the update must copy.
+    const rebindings = [
+        ['sort_rebinding.cml:26:12', 'sorted_param: v = v->sort'],
+        ['sort_rebinding.cml:39:10', 'main: xs = sort(xs)'],
+        ['sort_rebinding.cml:42:10', 'main: xs = sort(xs)'],
+        ['sort_rebinding.cml:57:14', 'main: gs = gs->sort'],
+    ]
+    for (const [place, what] of rebindings) {
+        const row = rows.get(place)
+        assert(row, `the rebinding at ${place} (${what}) has a row: ${reading}`)
+        assert(row.name === 'sort_kernel', `the row at ${place} (${what}) names the sort: ${row.name}`)
+        assert(verdicts.includes(row.verdict),
+            `the row at ${place} (${what}) gives one of the four verdicts: ${row.verdict}`)
+        // The old value's last use, so the update is in place: proved (`in-place`) or counted
+        // (`by-count`), never copied (design principles 10.5).
+        assert(row.verdict === 'in-place' || row.verdict === 'by-count',
+            `the rebinding at ${place} (${what}) is at the old value's last use and must not copy: ${reading}`)
+    }
+}
+"""
+timeout_ms = 60000
 
 [[tests]]
 name = "new_values.sort_rebinding.passes"
-desc = "The same program through std::opt::inline, std::opt, std::jit: the passes keep the in-place forms (state-only operators) in order."
+desc = "The same program through std::cxx::inline, std::opt, std::jit: the passes keep the in-place forms (state-only operators) in order."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
-args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+args = ["${case}", "std::cxx::inline", "std::opt", "std::jit"]
 expect_exit = 0
-expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 
 [[tests]]
 name = "new_values.sort_rebinding.gc_mark_sweep"
@@ -349,7 +447,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000
 
 [[tests]]
@@ -359,7 +457,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000
 
 [[tests]]
@@ -369,7 +467,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "${run_prl_segments}"]
 expect_exit = 0
-expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
@@ -392,3 +490,104 @@ for (const line of ops) {
 }
 }
 """
+
+[[tests]]
+name = "new_values.two_names_for_a_struct"
+desc = "Two names for one struct do not see each other's writes, including a write inside an array the struct holds: `var b = a` then `b.xs[0] = 9` leaves `a.xs` as it was; a read `let kept = inner` is not changed by a later write into `inner`; a struct in a struct written through a path. The invariant the memory accounting has to keep when the plan starts deciding writes in place: two names are two holders, and reuse in place happens only at count one (the author's answer, `9699824aa`). Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/two_names_for_a_struct.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "a [1, 2]\nb [9, 2]\n[3, 4] [7, 4]\n[5, 6] [5, 8]\n"
+
+# ---- the container holds its element: the clause the guard stands in for ----
+#
+# `valueMadeHere` is what answers for these updates today, and the answer is `copied`. It has to be
+# `copied` and not `by-count`: `Array::writableInPlace` answers from the element's own block count,
+# and a container's slot never increments it, so the array's own count cannot see the container's
+# hold (docs/handover/plans/2026-11-20-container-held-elements-as-one-clause.cn.md, sections 3-4).
+# The first reading below is the shape itself; the other three pin the two standing cases that the
+# clause exists for, so that the day the guard is loosened one of these goes red because a verdict
+# moved rather than because someone read the cases and noticed.
+[[tests]]
+name = "new_values.container_held"
+desc = "A value read out of a container is written by copy, not in place: `b.xs[0] = 9` after `var b = a` leaves `a.xs` as it was, and `rows[1]->append<2>` leaves `rows` as it was -- the struct's leaves and an array of references' elements are held by a container the graph does not count."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/container_held.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[1, 2] [9, 2]\n[[0], [1]] [1, 2]\n"
+
+[[tests]]
+name = "new_values.container_held.copies"
+desc = "`camel inspect --copies` on the container-held program: two updates, both `copied` -- the path assignment whose array is a struct field read and the append whose array is an element of an array of references. Neither is `in-place` (the plan did not make the value) and neither is `by-count` (the array's count cannot see the container)."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/container_held.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  const tally = 'COPIES main updates 2 in-place 0 by-count 0 declared 0 copied 2'
+  assert(lines.includes(tally), 'both updates of main copy: ' + lines.join(' | '))
+  const rows = lines.filter((l) => /\s(set_index|append)\s/.test(l))
+  assert(rows.length === 2, 'main lays two update rows, not ' + rows.length + ': ' + lines.join(' | '))
+  for (const row of rows) {
+    assert(/ copied$/.test(row), 'a container-held value is copied, never in place: ' + row)
+  }
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.two_names_for_a_struct.copies"
+desc = "`camel inspect --copies` on the two-names case: all three path assignments read `copied`. Each one writes an array the struct holds, and the struct has a second name whose leaves are not counted, so the plan must not hand the storage over -- this is the reading that says the case above still holds for that reason."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/two_names_for_a_struct.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  const tally = 'COPIES main updates 3 in-place 0 by-count 0 declared 0 copied 3'
+  assert(lines.includes(tally), 'all three writes of main copy: ' + lines.join(' | '))
+  const rows = lines.filter((l) => /\sset_index\s/.test(l))
+  assert(rows.length === 3, 'main lays three set_index rows, not ' + rows.length + ': ' + lines.join(' | '))
+  for (const row of rows) {
+    assert(/ copied$/.test(row), 'a write through a struct name copies, never in place: ' + row)
+  }
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.value_used.copies"
+desc = "`camel inspect --copies` on the value-used case: the append whose array is an element of `rows` reads `copied`, so `rows` keeps `[[0], [1]]`; the `var`-less parameter of `plus_two` copies too, its array being the caller's. Neither may read `in-place` or `by-count`, because the outer array's slot is a holder the array's own count does not see."
+kind = "behavior"
+tool = "camel"
+case = "../../../cases/consistency/new_values/value_used.cml"
+args = ["inspect", "--copies", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the ruler printed no reading: ' + input.normalized.output)
+  const main = 'COPIES main updates 2 in-place 0 by-count 0 declared 0 copied 2'
+  assert(lines.includes(main), 'both appends of main copy: ' + lines.join(' | '))
+  // The parameter is a value the caller made: the callee's update copies rather than take it over.
+  const callee = 'COPIES plus_two updates 1 in-place 0 by-count 0 declared 0 copied 1'
+  assert(lines.includes(callee), 'the callee copies the array its caller made: ' + lines.join(' | '))
+  const rows = lines.filter((l) => /\sappend\s/.test(l))
+  assert(rows.length === 3, 'three append rows, not ' + rows.length + ': ' + lines.join(' | '))
+  for (const row of rows) {
+    assert(/ copied$/.test(row), 'an element of a container is copied, never in place: ' + row)
+  }
+}
+"""
+timeout_ms = 60000

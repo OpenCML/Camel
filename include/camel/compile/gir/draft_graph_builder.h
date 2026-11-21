@@ -51,7 +51,7 @@ class DraftGraphBuilder {
 
   private:
     /// The graph itself. Private: a reader asks view(), a writer asks edit(), and this is the name the
-    /// class keeps for its own forty uses. It is not part of the interface any more.
+    /// class keeps for its own forty uses. It is not part of the interface.
     runtime::GraphDraft &draft() const { return transaction_->edit(); }
   public:
     /// The graph as it stands, for a caller that only reads it. On the writing side the same graph is
@@ -65,10 +65,12 @@ class DraftGraphBuilder {
     auto edit() -> decltype(draft()) { return draft(); }
     /// The transaction the graph belongs to: the only handle to the graph being built.
     runtime::GraphTransaction &transaction() const { return *transaction_; }
-    /// The builder that owns the draft `node` names, or null: a handle whose draft was destroyed
-    /// and whose address another draft now holds names no builder, because the epoch it carries is
-    /// not the one that draft was made with. The address alone would name the wrong builder there,
-    /// and the caller would write into a live graph that is not its own.
+    /// The builder that owns the draft `node` names, or null: no registration at the address, because
+    /// the draft was released with its builder, or a registration made by a draft of another epoch,
+    /// because the allocator put a later draft at the address. Both are answered from the
+    /// registration alone, which carries the epoch its draft was made with: the draft the handle
+    /// names is never read. A handle outlives that draft, so nothing at its address is this call's to
+    /// read -- not even the epoch that decides whether the address still names the handle's draft.
     static DraftGraphBuilder *fromRef(const runtime::DraftNodeRef &node);
     graph_arena_ptr_t arena() const { return arena_; }
     const std::string &name() const { return name_; }
@@ -92,14 +94,18 @@ class DraftGraphBuilder {
     /// Completes the signature with the result type its body decided: an open signature (the
     /// type of a function the program declared, camel/core/type/composite/func.h) is completed
     /// in place, so every value of the function sees it; any other is replaced by the interned
-    /// signature with that result type. Interned types are never modified.
+    /// signature with that result type. Interned types are never modified, and the in-place write goes
+    /// through the draft (`GraphDraft::setOpenExitType`), which journals the content it replaces so
+    /// that a rollback puts the result type back.
     void setExitType(camel::core::type::Type *exitType);
     /// Completes the signature with the resources its body was measured to reach: what a function
     /// promises about resources is part of its type, so a function that wrote no clause promises
     /// what it was measured to touch, written where the type is. An open signature is completed in
     /// place, so every value of the function and every reader of its type sees the same set; any
     /// other is replaced by the interned signature with those resources. Interned types are never
-    /// modified.
+    /// modified, and the in-place write goes through the draft
+    /// (`GraphDraft::setOpenResources`), which journals the content it replaces so that a rollback
+    /// puts the signature back.
     void setResources(const camel::core::sem::ResourceSignature &resources);
     /// The names the function captures, in capture order (runtime::GraphDraft::captureNames).
     std::vector<std::string_view> captureNames() const;
@@ -180,6 +186,14 @@ class DraftGraphBuilder {
     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
         return funcTarget(ref(nodeId));
     }
+    /// Whether a FUNC node names a body this builder registered. A FUNC node a **rewrite** made (a
+    /// rule that built one before its target existed, or one that rebuilds a body) can be in the
+    /// draft with no target, and `funcTarget` refuses that rather than answering nothing: a caller
+    /// that asks what the call reaches has to ask this first.
+    bool hasFuncTarget(runtime::DraftNodeRef node) const {
+        return funcTargets_.contains(node.id);
+    }
+    bool hasFuncTarget(runtime::gc_node_ref_t nodeId) const { return hasFuncTarget(ref(nodeId)); }
     const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
         return drefTarget(ref(nodeId));
