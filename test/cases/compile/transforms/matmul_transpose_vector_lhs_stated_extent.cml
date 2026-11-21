@@ -17,9 +17,10 @@
 // sums: `matmul` contracts a row operand's extent against the matrix's first axis. The engine's own
 // pullback answers the same three numbers, and `max_abs_diff` below says so to twelve places.)
 //
-// **The vector's extent is written in the declaration, and the call site repeats it.** The law reads
-// the *known* operand's shape -- `sum_to(..., w)` in `#ct_of_a`, the shape the answer has -- and a
-// transposed function is handed the cotangent and no parameter (`transposeSignature`), so that shape
+// **The vector's extent is written in the declaration, and the call site repeats it.** The law reduces
+// each answer to the answered operand's own shape: `sum_to(matmul(ct, transpose(b)), shape(a))` in
+// `stdlib/rulesets/transpose.cml#ct_of_a`, `sum_to(matmul(transpose(a), ct), shape(b))` in `#ct_of_b`.
+// A transposed function is handed the cotangent and no parameter (`transposeSignature`), so that shape
 // can come from one place only: the type. The walk writes the extents a type states into the graph
 // (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`, `extent_of`'s own answer) and
 // the law builds the array from them. `float[]` states the rank and no length, so nothing can be
