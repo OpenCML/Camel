@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <deque>
 #include <mutex>
 #include <shared_mutex>
 
@@ -34,7 +35,10 @@ struct Registration {
 
 struct Registry {
     std::shared_mutex mutex;
-    std::vector<Registration> entries;
+    // A deque: a registered name is handed out as a view (`FusionGroupRef::name`) that a back end
+    // reads while the group runs, so a module that registers after it must not move it. The names
+    // of the attribute keys are kept the same way (src/core/node_attrs.cpp).
+    std::deque<Registration> entries;
 };
 
 Registry &registry() {
@@ -130,7 +134,12 @@ FusionGroupAction runFusionGroup(
     if (attrs == attr::kNoAttrs) {
         return FusionGroupAction::None;
     }
-    Registration match;
+    // The registration itself, not a copy of it: `group.name` is a view of the registered name and
+    // the back end reads it after this returns (a debugger's report, nodevm.cpp), so its bytes must
+    // outlive the call. An entry's address is its own for the life of the process (see Registry),
+    // and the kernel is taken here, under the lock, as it was before.
+    const Registration *match = nullptr;
+    FusionGroupKernel kernel  = nullptr;
     {
         Registry &r = registry();
         std::shared_lock lock(r.mutex);
@@ -142,19 +151,20 @@ FusionGroupAction runFusionGroup(
             if (attr::value(value).text != entry.name) {
                 continue;
             }
-            match = Registration{entry.key, entry.name, entry.kernel};
+            match  = &entry;
+            kernel = entry.kernel;
             break;
         }
     }
-    if (match.kernel == nullptr) {
+    if (kernel == nullptr) {
         return FusionGroupAction::None;
     }
     // The key and the value stay available to the kernel without another lookup: the value is
     // the one the node carries under the key.
-    const attr::AttrValueId value = attr::valueOf(attrs, match.key);
-    const FusionGroupView view(graph, frame, plan, match.key, value);
+    const attr::AttrValueId value = attr::valueOf(attrs, match->key);
+    const FusionGroupView view(graph, frame, plan, match->key, value);
     members.clear();
-    group = FusionGroupRef{match.key, match.name, camel::runtime::kInvalidNodeRef};
+    group = FusionGroupRef{match->key, match->name, camel::runtime::kInvalidNodeRef};
 
     // The group's time is measured here, around the kernel call, and recorded as the group's
     // own row: it is not inside any operator call, so no operator row can carry it and no member
@@ -162,7 +172,7 @@ FusionGroupAction runFusionGroup(
     const bool recording = camel::profile::enabledInline();
     const auto started   = recording ? std::chrono::steady_clock::now()
                                      : std::chrono::steady_clock::time_point{};
-    const FusionGroupAction action = match.kernel(view, node, deferred, members, group);
+    const FusionGroupAction action = kernel(view, node, deferred, members, group);
 
     if (action == FusionGroupAction::Ran && recording) {
         const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
