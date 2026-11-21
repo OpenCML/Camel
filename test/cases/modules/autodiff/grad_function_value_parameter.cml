@@ -1,10 +1,14 @@
 import { reshape, sum, tanh } from tensor
-import { grad } from autodiff
+import { grad } from vjp
 
-// Refused: the function called is a parameter of the differentiated function itself, so no
-// function is named or built for it anywhere grad can look. The differentiated value is the
-// first `with` parameter; the function is ordinary data. The first of the two calls is the one
-// reported.
+// The differentiated function calls a function value that arrived as its own parameter, and that
+// value is a lambda at the call site, so which function it calls is evident where it is
+// differentiated: the library's `grad` lifts the call (`jvp`, `split`, `transpose`) and answers the
+// gradient. A pullback that cannot follow the value refuses the call instead; that refusal is a
+// precondition of the engine and not a rule of the language (design principles 9.9).
+//
+// The program is `p -> sum(f(f(p)) * p)` with `f = tanh`, whose gradient is
+// `f(f(p)) + f'(f(p)) * f'(p) * p` elementwise -- the three numbers the plan reads out.
 with <p: f64[...]>
 func loss(f: (t: f64[...]) => f64[...]): float {
     let a = f(p)

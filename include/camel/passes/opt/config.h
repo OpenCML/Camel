@@ -20,6 +20,8 @@
 #include <string_view>
 #include <vector>
 
+#include "camel/core/source/ids.h"
+
 /// Nothing is inlined into a graph that would then hold more nodes than this: the cap keeps the
 /// graphs the rewrite grows small enough to analyze.
 inline constexpr size_t kMaxInlineOwnerNodes = 4096;
@@ -94,6 +96,12 @@ struct InlineDeclined {
     size_t calleeComputeNodes = 0;
     size_t callerNodes        = 0;
     size_t callSites          = 0; // direct calls of the callee in the program
+    /// Where the call is written: the position of the call node, or of the callee's definition
+    /// when the compiler built the call (a graph's call of the function it was compiled from, such
+    /// as the entry graph's call of `main`, carries no position of its own). `kInvalidOriginId`
+    /// when neither has one -- a report about this call then names it without a position rather
+    /// than at a position the program does not have.
+    camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
 };
 
 /// What the last run of the rewrite engine with inlining enabled decided about the calls it

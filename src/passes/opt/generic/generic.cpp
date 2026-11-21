@@ -2095,14 +2095,18 @@ const camel::runtime::Program *simplifyGraph(
                     growthBudgetLeft->callee,
                     growthBudgetLeft->caller,
                     growthBudgetLeft->calleeNodes);
-                // The warning is a pass diagnostic where there is a context to carry one. With
-                // none there is no place for it, and the sentence still goes to the log rather
-                // than the round being reported as a fixed point it did not reach.
+                // The warning is a pass diagnostic where there is a context to carry one, at the
+                // call the round left (`InlineDeclined::origin`): the reader's question is which
+                // call, and where it is written, and a warning that names a call yet carries no
+                // position is unreadable beside the refusal it explains (onnx::export's, which
+                // points at the function). With no context there is no place for it, and the
+                // sentence still goes to the log rather than the round being reported as a fixed
+                // point it did not reach.
                 if (context != nullptr) {
                     raisePassWarning(
                         *context,
                         camel::core::error::RuntimeDiag::OptimizationStoppedShort,
-                        camel::source::kInvalidOriginId,
+                        growthBudgetLeft->origin,
                         stopped);
                 } else {
                     CAMEL_LOG_WARN_S("Opt", "std::opt: {}", stopped);
