@@ -13,9 +13,10 @@
  * placeholder without a specification writes the float's text), a complex number as the two
  * numbers it is (src/builtin/operators/complex_format.h: the number part of the specification
  * writes each part, the fill, alignment and width lay out the whole text), and every other value
- * as its text. What fmt does with a specification ([[fill]align][sign][#][0][width][.precision][type])
- * is reproduced here for the forms a Camel program can write; a format string fmt rejects is
- * FormatFailed at the operation's site (values: the format string, what is wrong).
+ * as its text. What fmt does with a specification
+ * ([[fill]align][sign][#][0][width][.precision][type]) is reproduced here for the forms a Camel
+ * program can write; a format string fmt rejects is FormatFailed at the operation's site (values:
+ * the format string, what is wrong).
  *
  * `println` with a format string ends with one line break and `print` with one with none, as
  * without a format. (Both used to write one more, copied from the interpreter, whose defect it
@@ -57,9 +58,9 @@ namespace camel::standalone {
 /// the literal of the greatest i64 width takes there -- with two integral conversions of one rank,
 /// and `float`, `double` and `bool` beside them made five: clang-19 with libc++ refused
 /// `println(9223372036854775807, 9223372036854775807)` -- `int64_t` is `long long` there, the
-/// literal's type is `long` (2026-11-21, `agree_with_fvm`, `every_expect_program_links_no_runtime`;
-/// on glibc `int64_t` is `long`, and on MSVC the literal is `long long`, so neither platform read
-/// it). One candidate per kind of value answers every argument, and no conversion is written at the
+/// literal's type is `long`; on glibc `int64_t` is `long`, and on MSVC the literal is `long long`,
+/// so on neither of those does the argument stand between two candidates. One candidate per kind
+/// of value answers every argument, and no conversion is written at the
 /// call to choose between two. A `bool` is not of this kind (it prints `true`/`false`, below), and
 /// an enumeration is not `std::integral`, so the `appendText` a generated enum declares (enum.h,
 /// recursive.h) keeps its own.
@@ -87,9 +88,7 @@ inline void appendText(std::string &out, const Unit &) { out += "null"; }
 
 /// A bf16 or an f16: its own shortest text (half.h, the one float text rule), so a value prints
 /// the same under `println`, `string(x)` and a `{}` of `format`.
-template <typename Format> void appendText(std::string &out, Half<Format> v) {
-    out += halfText(v);
-}
+template <typename Format> void appendText(std::string &out, Half<Format> v) { out += halfText(v); }
 
 /// One dimension of a value that has a shape: the elements from `offset`, then, for a deeper
 /// dimension, one bracket group per extent. The rows are what the interpreter prints for a value of
@@ -145,9 +144,10 @@ inline void appendText(std::string &out, const Array<uint8_t> &xs) {
 /// A value of no rank *is* the element (design principles 5.4): the brackets are the shape's, and a
 /// position of type `f32[..]` holds such a value, so `println` of it writes the element and not an
 /// array of one. A value that carries a shape of one dimension is written as the whole literal --
-/// the bracket is the difference between an element and an array of one, and a reader who cannot see
-/// it cannot tell the two apart. The rank is the whole test: a value is grown into one dimension by
-/// `push` (array.h) and made of no rank by `Array::element`, so nothing here counts elements.
+/// the bracket is the difference between an element and an array of one, and a reader who cannot
+/// see it cannot tell the two apart. The rank is the whole test: a value is grown into one
+/// dimension by `push` (array.h) and made of no rank by `Array::element`, so nothing here counts
+/// elements.
 template <typename T> void appendText(std::string &out, const Array<T> &xs) {
     if (xs.isElement()) {
         appendText(out, xs[0]);
@@ -338,8 +338,8 @@ inline std::string padded(std::string body, const Spec &spec, char defaultAlign)
 /// `body` is a number's digits without a sign; `negative` its sign. Applies sign, `#` prefix
 /// and zero padding (which goes between the sign and the digits, and only without an
 /// explicit alignment), then the alignment.
-inline std::string numeric(std::string body, bool negative, std::string_view prefix,
-                           const Spec &spec) {
+inline std::string
+numeric(std::string body, bool negative, std::string_view prefix, const Spec &spec) {
     std::string head = negative ? "-" : (spec.sign == '+' ? "+" : (spec.sign == ' ' ? " " : ""));
     head += prefix;
     if (spec.zeroPad && spec.align == '\0' && spec.width > 0) {
@@ -419,7 +419,7 @@ template <typename T> std::string formatFloat(T value, const Spec &spec) {
     std::string body;
     if (std::isnan(magnitude) || std::isinf(magnitude)) {
         const bool upper = spec.type == 'F' || spec.type == 'E' || spec.type == 'G';
-        body = std::isnan(magnitude) ? (upper ? "NAN" : "nan") : (upper ? "INF" : "inf");
+        body          = std::isnan(magnitude) ? (upper ? "NAN" : "nan") : (upper ? "INF" : "inf");
         Spec plain    = spec;
         plain.zeroPad = false; // fmt does not pad infinity and NaN with zeros
         return numeric(std::move(body), negative, "", plain);
@@ -565,8 +565,7 @@ std::string formatComplex(T real, T imaginary, std::string_view specText, bool h
     if (!hasSpec || specText.empty()) {
         return camel::utils::complexText<T>(real, imaginary);
     }
-    const camel::utils::NumberFormatSpec parts =
-        camel::utils::splitNumberFormatSpec(specText);
+    const camel::utils::NumberFormatSpec parts = camel::utils::splitNumberFormatSpec(specText);
     if (parts.zeroPadded) {
         throw FormatError{"Zero padding is not allowed in complex format specifier"};
     }
@@ -579,9 +578,9 @@ std::string formatComplex(T real, T imaginary, std::string_view specText, bool h
         (magnitudeSpec[0] == '+' || magnitudeSpec[0] == '-' || magnitudeSpec[0] == ' ')) {
         magnitudeSpec.erase(0, 1);
     }
-    const bool negative     = !std::isnan(imaginary) && std::signbit(imaginary);
-    const T magnitude       = negative ? -imaginary : imaginary;
-    std::string text        = realText;
+    const bool negative = !std::isnan(imaginary) && std::signbit(imaginary);
+    const T magnitude   = negative ? -imaginary : imaginary;
+    std::string text    = realText;
     text += negative ? '-' : '+';
     text += formatFloat(magnitude, parseSpec(magnitudeSpec));
     text += 'i';
@@ -607,7 +606,10 @@ inline std::string formatOne(const FormatArg &arg, std::string_view specText, bo
                        : camel::utils::floatText(arg.real);
     case FormatArg::Kind::C64:
         return formatComplex(
-            static_cast<float>(arg.real), static_cast<float>(arg.imaginary), specText, hasSpec);
+            static_cast<float>(arg.real),
+            static_cast<float>(arg.imaginary),
+            specText,
+            hasSpec);
     case FormatArg::Kind::C128:
         return formatComplex(arg.real, arg.imaginary, specText, hasSpec);
     case FormatArg::Kind::Array:
@@ -678,7 +680,7 @@ template <typename T> FormatArg formatArg(const Array<T> &xs) {
 /// fmt::vformat over the classified arguments.
 inline std::string vformat(std::string_view pattern, const std::vector<FormatArg> &args) {
     std::string out;
-    std::size_t next = 0;
+    std::size_t next                                         = 0;
     enum class Indexing { None, Automatic, Manual } indexing = Indexing::None;
     for (std::size_t i = 0; i < pattern.size(); ++i) {
         const char c = pattern[i];
@@ -703,7 +705,7 @@ inline std::string vformat(std::string_view pattern, const std::vector<FormatArg
         if (close == std::string_view::npos) {
             throw FormatError{"invalid format string"};
         }
-        std::string_view field = pattern.substr(i + 1, close - i - 1);
+        std::string_view field  = pattern.substr(i + 1, close - i - 1);
         const std::size_t colon = field.find(':');
         std::string_view id     = field.substr(0, colon);
         std::string_view spec =
@@ -738,8 +740,8 @@ inline std::string vformat(std::string_view pattern, const std::vector<FormatArg
     return out;
 }
 
-template <typename... Args> std::string formatted(const Str &pattern, const Site &site,
-                                                  const Args &...args) {
+template <typename... Args>
+std::string formatted(const Str &pattern, const Site &site, const Args &...args) {
     try {
         return vformat(pattern.view(), std::vector<FormatArg>{formatArg(args)...});
     } catch (const FormatError &e) {
@@ -756,8 +758,8 @@ template <typename... Args> Str format(const Str &pattern, const Site &site, con
 
 /// `println<pattern>(a, b, ...)`: the formatted text and a line break. Gives `a`.
 template <typename First, typename... Rest>
-First printlnFormatted(const Str &pattern, const Site &site, const First &first,
-                       const Rest &...rest) {
+First printlnFormatted(
+    const Str &pattern, const Site &site, const First &first, const Rest &...rest) {
     write(detail::formatted(pattern, site, first, rest...) + "\n");
     return first;
 }
@@ -767,8 +769,8 @@ inline void printlnFormatted(const Str &pattern, const Site &site) {
 
 /// `print<pattern>(a, b, ...)`: the formatted text, without a line break. Gives `a`.
 template <typename First, typename... Rest>
-First printFormatted(const Str &pattern, const Site &site, const First &first,
-                     const Rest &...rest) {
+First printFormatted(
+    const Str &pattern, const Site &site, const First &first, const Rest &...rest) {
     write(detail::formatted(pattern, site, first, rest...));
     return first;
 }
