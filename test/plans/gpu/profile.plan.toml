@@ -27,8 +27,19 @@ expect_exit = 0
 expect_stdout_contains = ["PROFILE camel", "backend              std::fvm", "operators per step"]
 timeout_ms = 60000
 
+# The premise of this entry is a back end of its own: `std::jit` reports itself as one only in a
+# build that has a native code generator. With `ENABLE_FASTVM_JIT` off (cmake/Options.cmake -- every
+# arm64 build, and the no-JIT leg of the CI) the pass is accepted and runs the bytecode interpreter
+# of `std::fvm`, and the scheduler names the back end of the report `std::fvm` for it
+# (src/passes/sched/fastvm/fastvm.cpp, `setBackend`, with the JIT compiled out), so the line this
+# entry asserts -- `backend              std::jit` -- is not printed at all, and the report is the
+# one `host_loop.fvm` above reads. That is a fact about the build and not about the program
+# (docs/cli.md, "std::jit"), so the entry declares it and is skipped there -- the same two-line
+# precondition the entries that assert a compiled line carry (feat/trans/cpp.plan.toml,
+# feat/linear/jit_native.plan.toml); `--absent` is its opposite.
 [[tests]]
 name = "host_loop.jit"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 kind = "behavior"
 case = "../../cases/gpu/profile/host_loop.cml"
 args = ["${case}", "std::profile", "std::jit"]
