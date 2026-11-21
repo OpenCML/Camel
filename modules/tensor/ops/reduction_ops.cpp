@@ -334,7 +334,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// turn a legal program away for a shape its own operand has. Measured on that tree: both sites
 /// report the extents as a value, and without the repair the reverse walk
 /// stops on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed
-/// from this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0
+/// from this node's type (`modules/transforms/transpose/walk.cpp`, `cotangentTypeOf`) and a rank-0
 /// answer under an array type has no conversion to make. The repair is not here and not in the walk
 /// -- a slot whose type already claims a rank has nothing to convert -- but in the law that reads
 /// the cotangent: it states the cotangent as the element

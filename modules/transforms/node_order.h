@@ -53,7 +53,7 @@ dependencyOrderOf(const camel::runtime::GCGraph &graph);
 /**
  * The same order the other way round: every node **before** the nodes that read it.
  *
- * A walk that hands values *back* against the edges -- the cotangent walk of `transpose.cpp`, where
+ * A walk that hands values *back* against the edges -- the cotangent walk of `transpose/walk.cpp`, where
  * a node's answer is read by the nodes upstream of it -- needs a node visited before its readers,
  * which is the forward order reversed. That is all this is, so the two walks cannot drift apart and
  * there is one answer to "what order does this graph impose" in the tree instead of two.

@@ -5,7 +5,7 @@
  * The transposition's entry point: one `TransposeGraph` for a whole function, built out of the
  * member the walk builds for it.
  *
- * The walk itself -- the state, the pair call and the member builder -- is `transpose.cpp`, and what
+ * The walk itself -- the state, the pair call and the member builder -- is `transpose/walk.cpp`, and what
  * it hands this file is declared in `transpose/walk.h`.
  */
 

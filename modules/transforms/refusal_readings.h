@@ -9,7 +9,7 @@
  * plan could assert, so the wording of a refusal became the criterion -- a word renamed in
  * `split.cpp` turned a green case red without anything about the transform changing. The same
  * defect is avoided on the other side: `transpose` names its refusals with `TransposeRefusalCause` and spells them from one table
- * (`transpose.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
+ * (`transpose/walk.cpp#transposeRefusalWord`), so a rename is one edit and the caller reads the cause
  * instead of the text (`test/tools/transpose_refusal/check.py`).
  *
  * This is the same fact for the readings, and it adds the other half:

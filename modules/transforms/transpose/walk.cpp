@@ -2639,7 +2639,7 @@ bool buildTransposeMember(
                     // `:op/idx_arr`, takes. **A member by place and an element by index are two
                     // different reads and not one spelled twice**: the `Accs` names a slot of an
                     // aggregate's layout and the array has no such slot
-                    // (`transpose.cpp#buildTransposeMember` projects an array state with
+                    // (`walk.cpp#buildTransposeMember` projects an array state with
                     // `:op/idx_arr` for the same reason). A type that states neither count is still
                     // refused here, by name.
                     const auto parts          = function->withInputsOf(ref);
