@@ -39,7 +39,7 @@ closures/branches），没有按算子的拆分，也没有捕获表；`std::gir
 
 | 名字 | 判据 |
 |------|------|
-| `capture_ports_generator` | 口所在的图是生成器机器自己造的：图名以 `__gen_` 开头（机器自己的 `__gen_step__`，`src/compile/gct/builder.cpp#Builder::visitGeneratorBody` 里的 `stepName`），**或**该图的体调用了一个 `__gen_*` 图 |
+| `capture_ports_generator` | 口所在的图是生成器机器自己造的：图名以 `__gen_` 开头（机器自己的 `__gen_step__`，`src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody` 里的 `stepName`），**或**该图的体调用了一个 `__gen_*` 图 |
 | `capture_ports_closure` | 其余图里的口：程序写的闭包按引用捕获。**这才是「目标 0」要归零的那个数** |
 | `capture_ports_unknown` | 判不出来的：文档没打印图名，或一个 `__gen_*` 名字的口坐在两个标记都不认的图里（两个信号互相矛盾）。单独报，不塞进任何一类 |
 | `capture_ports` | 合计，口径不变，便于与历史数对账 |

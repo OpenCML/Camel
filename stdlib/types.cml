@@ -263,7 +263,7 @@ export type Jvp<F> =
 /// of `f`.
 ///
 /// **This declaration is the contract**: the build makes the declared type, and the build that makes
-/// it is `modules/transforms/transpose.cpp#transposeSignature`. There is no value parameter and no
+/// it is `modules/transforms/transpose/signature.cpp#transposeSignature`. There is no value parameter and no
 /// `with` list here, because a value the transposed body needs beside the cotangent is not one its
 /// caller passes: it is a residual the function that is transposed was closed over -- `x` in
 /// `transpose((dx: float) => 2.0 * x * dx)`, and the residue a cut captured in `lin`'s closure --

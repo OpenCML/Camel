@@ -276,12 +276,12 @@ Tensor<f32>               // f32[...]
 - `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '...' ident? ']'`。
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
 - AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `...name`。
-- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[...s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
+- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder_type.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[...s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
 - 格式化器：`tools/format/fmt.cpp#Formatter` 的 `visitArrayType` 逐组打印 `[?]/[...s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
 ### 4.3 绑定规则
 
-在一个函数签名的**参数类型**里（`dimBindAllowed_` 只在 `visitFuncType` 访问形参时置位，`src/compile/gct/builder.cpp#dimBindAllowed_`）：
+在一个函数签名的**参数类型**里（`dimBindAllowed_` 只在 `visitFuncType` 访问形参时置位，`src/compile/gct/builder.h#dimBindAllowed_`）：
 
 1. 一个普通名字 `n` 第一次出现 ⇒ 绑定为维度，产生 `ExtentForm::linear({{n, 1}})`；
 2. 同一签名里再出现 `n` ⇒ 引用已绑定的维度（`T[m, m]` 表示方阵）；

@@ -159,7 +159,7 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 # Two needles over the kernel's transposition, because one prefix was not a reading of "built".
 #
-# The success line `modules/transforms/transpose.cpp#buildTransposeMember` writes -- `TRANSPOSE
+# The success line `modules/transforms/transpose/walk.cpp#buildTransposeMember` writes -- `TRANSPOSE
 # function=<name> graph=<id> type=<signature> nodes=<n> arms=<n> rhs=<rules>`, the line immediately
 # before its `return true` -- is not the only line that begins with `TRANSPOSE
 # function=autodiff::mul_tangent<float>`. The file's one refuse lambda, inside the same function,
@@ -379,7 +379,7 @@ timeout_ms = 20000
 #
 # The defect was one step later. `transpose` files a member's cotangent in the place that member has
 # in the value it was read from (`memberCotangents`,
-# `modules/transforms/transpose.cpp#buildTransposeMember`) and marks the parameter answered, and
+# `modules/transforms/transpose/walk.cpp#buildTransposeMember`) and marks the parameter answered, and
 # nothing joined those places back into the cotangent the answer needs: the answer tuple held an
 # empty reference, the encoder was handed a node whose input was no node, and the run died inside the
 # encoder's input table -- `SIGSEGV`, empty stdout, stderr ending after `REINTERP split function=...`

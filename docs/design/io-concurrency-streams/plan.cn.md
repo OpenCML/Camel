@@ -42,7 +42,7 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 `
 |---|---|---|---|
 | 维度包（已落地） | 类型位置，**只在 `[...]` 里** | `ParserImpl::parseArrayDim`；`include/camel/core/type/composite/array.h#ArrayType::openRank` | `T[...]`、`T[3, ...rest]`；实测 `f32[...]` 可声明可打印 |
 | 二元运算符 | 表达式 | `ParserImpl::parseComp`（同时吃 `...` 与 `?..`），AST 结点 `CompExpr` | 建图时报 `ConstructNotSupported` |
-| 宏算子 | 落图以后 | `src/compile/gct/builder.cpp#MacroCmp`，`:macro/cmp`，`src/builtin/operators/macro.cpp#__cmp__` | 实现体是 `return NullSlot`（空实现）；因为 AST 先报错，这条路径今天到不了 |
+| 宏算子 | 落图以后 | `src/compile/gct/builder_expr.cpp#MacroCmp`，`:macro/cmp`，`src/builtin/operators/macro.cpp#__cmp__` | 实现体是 `return NullSlot`（空实现）；因为 AST 先报错，这条路径今天到不了 |
 | 保留记号 `?..` | 表达式 | 词法 `QuestionDotDot`；`Builder::visitCompExpr` 的独立分支 | 报 `ConstructNotSupported`，并在 AST 上额外建一个 `NotNullThen` 结点 |
 
 要点：**`ParserImpl::parseComp` 是一个「零个或多个 `...`/`?..` 的列表」层次**（注释原文：`compExpr : annoExpr (('...' | '?..') annoExpr)*`），不是两层。任务书要求的「两边是函数时是组合，是数时是区间」因此是**同一个语法结点上的语义分派**，不需要新语法层次——但今天连"是数"这条分支的诊断文本都没有（见摘要第 2 条）。
@@ -596,12 +596,12 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 表达式的 `...` 层次 | `src/parse/syntax/parser_expr.cpp#ParserImpl::parseRange` | 237–253（`CompExpr` 逐层改名 `RangeExpr`，层次从 `linkExpr` 之下移到 `relationalExpr` 之下） |
 | 类型里的 `...` | `src/parse/syntax/parser_type.cpp#ParserImpl::parseArrayDim` | 155–188（`DotDot` 在 169） |
 | `...` / `?..` 的 AST → 诊断 | `src/parse/ast/builder.cpp#Builder::visitRangeExpr` | 4025–4052（`?..` 已在 A1 删除） |
-| `CompExpr` 落图 | `src/compile/gct/builder.cpp#MacroCmp` | 2944–2949 |
+| `CompExpr` 落图 | `src/compile/gct/builder_expr.cpp#MacroCmp` | 2944–2949 |
 | 宏算子本体 | `src/builtin/operators/macro.cpp#__cmp__` | 12（`return NullSlot`） |
 | 算子 id | `include/camel/core/operator_table.h#MacroCmp` | 117（`= 19`，`:macro/cmp`） |
 | `TypeCode` 无流 | `include/camel/core/type/base.h#TypeCode` | 56–100 |
 | 开秩数组 `T[...]` | `include/camel/core/type/composite/array.h#ArrayType::openRank` | 83–87、111–118 |
-| 维度包落图 | `src/compile/gct/builder.cpp#DimPack` | 5095–5120、5775–5805 |
+| 维度包落图 | `src/compile/gct/builder_type.cpp#DimPack` | 5095–5120、5775–5805 |
 | `map` / `filter` 的类型解析 | `stdlib/prelude.cml#map` | 2266–2348 |
 | 高阶算子的语义形状 | `src/builtin/executors/builtin_semantics.cpp#ElementCalls` | 190、222 |
 | 数组版签名 | `stdlib/prelude.cml#map` | 385（`zip`）、411–429（`map`/`filter`/`reduce`）、324（`range`） |

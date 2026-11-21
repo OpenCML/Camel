@@ -19,7 +19,7 @@ through, so a row can be checked again after any change.
 | `in_recompute=`, `out_recompute=` | `transforms` | `modules/transforms/remat_operator.cpp` | `readings()` |
 | `PLAN_REF_SITES ` | `plan` | `src/passes/sched/fastvm/compile.cpp#compileRuntimeGraph` | `trace(TraceArea::Plan)` |
 | `effect containment: checked` | `effects` | `src/execute/pass.cpp#passBoundaryViolation` | `trace(TraceArea::Effects)` |
-| `[DBG-FOLD] `, `[DBG-W] ` | `fold` | `src/compile/gir/builder_expr.cpp#FoldCountsReport` and the fold's own `[DBG-W]` sites | `trace(TraceArea::Fold)` |
+| `[DBG-FOLD] `, `[DBG-W] ` | `fold` | `src/compile/gir/builder_variables.cpp#FoldCountsReport` and the fold's own `[DBG-W]` sites | `trace(TraceArea::Fold)` |
 | `READING_REFUSAL ` | none needed | `modules/transforms/refusal_readings.h#noteRefusal` | `verdicts()` -- **always printed** |
 
 ## Two rules that follow from the table

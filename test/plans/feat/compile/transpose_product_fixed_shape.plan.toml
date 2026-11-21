@@ -1,7 +1,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-# The positive half of the operand-shape check (`transpose.cpp#ruleTakesOperands`): the law for two
+# The positive half of the operand-shape check (`modules/transforms/transpose/rules.cpp#ruleTakesOperands`): the law for two
 # arrays names `T[...]`, and a node whose operands are two arrays of a fixed extent is exactly the
 # shape that law was written for. Without this reading, a check that refuses an array-and-number
 # could also refuse an open rank meeting a fixed one, and every array program would stop transposing.
