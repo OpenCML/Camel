@@ -466,9 +466,6 @@ slot_t liftTransposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
        << " paired=" << (pairedCaptures ? "yes" : "no") << '\n';
     const JvpGraph lifted =
         buildJvpGraph(ctx.shared_from_this(), member.program, member.graph, os, pairedCaptures);
-    // TEMPORARY (removed before this step is committed): every graph this edit builds, node by node,
-    // so the FILL that stores a view and the node chain that feeds it can be named instead of guessed
-    // at. Shared by both kernels so the two readings are the same text.
     if (lifted.graph == nullptr) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
