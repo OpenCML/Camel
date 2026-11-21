@@ -79,6 +79,20 @@ void RunPrograms::end() {
     context_ = nullptr;
 }
 
+ProgramRunScope::ProgramRunScope(
+    camel::core::context::Context &context, const camel::runtime::Program *program)
+    : context_(&context), hold_(context, program) {
+    // Rooted first, collection off second: a collection may be requested from another thread at
+    // any moment, and the window is only safe once both are in place.
+    context_->enterRun();
+}
+
+ProgramRunScope::~ProgramRunScope() {
+    context_->leaveRun();
+    // The pin goes next, on the way out of `hold_`: from here the program lives as long as
+    // something reaches it, which is the state `begin`/`end` leave it in as well.
+}
+
 void RunPrograms::note(const camel::runtime::Program *program) {
     if (program == main_ || program == nullptr) {
         return;
