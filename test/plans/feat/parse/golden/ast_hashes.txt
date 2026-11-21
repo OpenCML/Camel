@@ -555,12 +555,12 @@ b0da3dbb545728a6 ok stdlib/tiles.cml
 0ff92f7d01468e66 ok stdlib/time.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
-f998300d401777db ok stdlib/types.cml
+1952001c97021497 ok stdlib/types.cml
 095693f2d829fcda ok stdlib/vjp.cml
 7425d1beb147ca66 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
 d4d19ff35c531955 ok stdlib/rulesets/probe_missing.cml
-dd0d538191ab20df ok stdlib/rulesets/transpose.cml
+e0ea990f694c1f3b ok stdlib/rulesets/transpose.cml
 f1249fa9455125b4 ok stdlib/rulesets/vmap.cml
 f08b2a93a3c13b34 ok stdlib/signatures/autodiff.cml
 877b8f3414539e11 ok stdlib/signatures/ckpt.cml
@@ -1966,9 +1966,9 @@ d694e84d1b8b2503 ok test/cases/compile/transforms/log_softmax_jvp_on_a_non_unifo
 b76c09e777995793 ok test/cases/compile/transforms/matmul_transpose_law.cml
 b84135c5a41ea5a7 ok test/cases/compile/transforms/matmul_transpose_rank_three.cml
 3fb8cb0ee7d7f931 ok test/cases/compile/transforms/matmul_transpose_vector_lhs.cml
-647cba3ebaf3423e ok test/cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml
+cc159ddfbc1908f1 ok test/cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml
 f195d04323fd642c ok test/cases/compile/transforms/matmul_transpose_vector_rhs.cml
-11837d2d4ab726a2 ok test/cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml
+e381890de14b0146 ok test/cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml
 2d9c37e8cb4a833c ok test/cases/compile/transforms/max_gradient_both_legs.cml
 85c3ee58b6ca2a38 ok test/cases/compile/transforms/maximum_gradient_both_legs.cml
 bc21a96dd5f047be ok test/cases/compile/transforms/mean_axis1_keepdims_gradient_reads_the_row_length.cml
@@ -2037,7 +2037,7 @@ c3c058350e49dff8 ok test/cases/compile/transforms/transpose_array_literal_member
 c8931c71de4d9c3d ok test/cases/compile/transforms/transpose_array_product.cml
 17976849c1c60911 ok test/cases/compile/transforms/transpose_branch.cml
 887d9593d6d5da8d ok test/cases/compile/transforms/transpose_call.cml
-6a228a390841041f ok test/cases/compile/transforms/transpose_call_first_argument_is_a_call.cml
+cc650662e676762f ok test/cases/compile/transforms/transpose_call_first_argument_is_a_call.cml
 ecb2207cbbd71afd ok test/cases/compile/transforms/transpose_call_first_argument_is_a_function_value.cml
 e361df985d298d69 ok test/cases/compile/transforms/transpose_call_of_a_body_closure_with_a_bare_name.cml
 9422e3c13b3b4b71 ok test/cases/compile/transforms/transpose_call_of_a_zero_argument_closure_refuses_the_kind.cml
@@ -2062,7 +2062,7 @@ cfcbac7526d7af33 ok test/cases/compile/transforms/transpose_no_tangent_closure.c
 4af6c76a2c07c864 ok test/cases/compile/transforms/transpose_of_an_open_shape_is_refused.cml
 d32658bdfde32bf5 ok test/cases/compile/transforms/transpose_product_fixed_shape.cml
 e53860a2c7275ea9 ok test/cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml
-5b191cb62489ab69 ok test/cases/compile/transforms/transpose_refuses_a_parameter_value_it_cannot_be_handed.cml
+a003da09ea9b020c ok test/cases/compile/transforms/transpose_refuses_a_parameter_value_it_cannot_be_handed.cml
 4dd9733791da9e39 ok test/cases/compile/transforms/transpose_refuses_maximum.cml
 57219de895fbcd26 ok test/cases/compile/transforms/transpose_still_turns_add_tensor.cml
 0261f99f3ef29cad ok test/cases/compile/transforms/transpose_still_turns_linear_operators.cml
@@ -4406,7 +4406,7 @@ c72182e52c15bf42 ok test/cases/transforms/nested/hessian.cml
 71e03b3887f5e0b8 ok test/cases/transforms/nested/nest_cube.cml
 9c4c6bd53eff074e ok test/cases/transforms/nested/nest_lambda.cml
 cbef3230ff276a59 ok test/cases/transforms/nested/nest_named.cml
-566624df3c43b02e ok test/cases/transforms/nested/nest_quartic.cml
+44ce19a432118d48 ok test/cases/transforms/nested/nest_quartic.cml
 f10ea5f111e3b0a5 ok test/cases/transforms/nested/nest_quartic_forward.cml
 f442c234da3252cb ok test/cases/transforms/nested/nest_square.cml
 76483a2c16d4eec9 ok test/cases/transforms/nested/rule_constant_agrees.cml
@@ -4429,7 +4429,7 @@ abb2fbd581eff852 ok test/cases/transforms/split/split_int_parameter_slot.cml
 a298299d25135b95 ok test/cases/transforms/split/split_product_chain.cml
 586c308b050044e1 ok test/cases/transforms/split/split_struct_field_read.cml
 5dca01c8f65573fd ok test/cases/transforms/split/split_struct_port.cml
-70b8a51ff8fb6df1 ok test/cases/transforms/split/split_tuple_member_read.cml
+7156650139f56fc8 ok test/cases/transforms/split/split_tuple_member_read.cml
 2d6e8e114e07466c ok test/cases/transforms/split/split_two_nested_cuts.cml
 b58af93e14f8e5f6 ok test/cases/transforms/split/split_two_params.cml
 6daeaa6a935869f5 ok test/cases/transforms/split/split_unread_member_with_no_zero_refused.cml

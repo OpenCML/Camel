@@ -1605,6 +1605,38 @@ function printRunSummary(summary) {
 }
 
 /**
+ * What ends each red the gate accepted, one line per known failure, printed after the tree verdict.
+ *
+ * A known failure is a red the run lets through, and `known failures: 41` says how many there are
+ * and nothing about any of them: which case, and what would end it. `known_fail_ends_when` is the
+ * field that answers the second question, and until this printed it the only reader was the person
+ * who opened the plan file -- the same shape this project already called worse than no mark at all
+ * (the owner had it, and printing it is why the `[XFAIL]` line carries `known_fail_owner`).
+ *
+ * `(no end condition)` in red is the reading this exists to expose: a red nobody has said how to
+ * end. The closing count is the metric -- how many of the run's known failures are of that kind --
+ * so a run whose marks are all pinned reads `0 of 41`, and a run that adds a mark without an end
+ * sentence moves that number instead of hiding inside a total.
+ *
+ * Position: after `printTreeVerdict`, because `[provenance]` then `[SUMMARY]` then what the run left
+ * in the checkout are three lines whose order is pinned (test/cases/tools/provenance.mjs), and a
+ * block inserted between them would be a fourth reading of the same run claiming a place in it.
+ */
+function printKnownRoster(summary) {
+    const rows = summary.knownRows || []
+    if (rows.length === 0) return
+    const missing = rows.filter((row) => !row.endsWhen).length
+    for (const row of rows) {
+        const ends = row.endsWhen ? row.endsWhen : `${COLORS.red}(no end condition)${COLORS.reset}`
+        console.log(`${COLORS.cyan}[KNOWN]${COLORS.reset} ${row.name}: ${ends}`)
+    }
+    console.log(
+        `${COLORS.cyan}[KNOWN]${COLORS.reset} ${missing} of ${rows.length} known failure(s) ` +
+            'carry no known_fail_ends_when'
+    )
+}
+
+/**
  * The gate's three numbers, one line. A run that names the build it just paid for (the remote
  * helper exports CAMEL_GATE_BUILD_SECONDS) prints build + test = total; a run that built nothing
  * (a local plan run, or the -NoBuild path, which exports 0) prints build 0.0 s. The format is
@@ -2805,6 +2837,11 @@ function expandBackends(test) {
             ...test,
             __knownFail: true,
             __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
+            // The sentence that ends the red, carried out of the plan file so the run's closing
+            // roster can print it beside the name. Absent unless the plan writes one, like
+            // `__knownFailMsg`: the mechanism grew by pinning cases one at a time, and a mark
+            // written before the field existed stays legal and reads as `(no end condition)`.
+            __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
         }]
     }
     if (marked === true) {
@@ -2830,6 +2867,7 @@ function expandBackends(test) {
         // Absent unless the plan pins one, so every mark written before this field existed stays
         // legal: the mechanism grows by pinning cases one at a time, never by a migration.
         __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
+        __knownFailEndsWhen: typeof test.known_fail_ends_when === 'string' ? test.known_fail_ends_when : null,
     }))
 }
 
@@ -3813,7 +3851,15 @@ async function executePlans(plans, options, sharedVars, logDir) {
     // last 150 s with no slot held at all. `jobs`-wide, the same timeouts cost one lane each.
     const probes = new Slots(options.jobs)
     const verifications = new Slots(options.jobs)
-    const summary = { pass: 0, fail: 0, skip: 0, xfail: 0, timedOut: 0, crashed: 0 }
+    const summary = {
+        pass: 0, fail: 0, skip: 0, xfail: 0, timedOut: 0, crashed: 0,
+        // One row per known failure this run accepted: the name the `[XFAIL]` line printed and the
+        // sentence the plan wrote for what would end it. Collected where the verdict is counted,
+        // because that is the one place that knows the mark fired -- a roster read off the plan tree
+        // instead would list marks that did not run here (a back end this host skipped, a tier the
+        // run did not select) as if they had.
+        knownRows: [],
+    }
     // Results by test name, as a serial run had them: a differential test and a back end after
     // the first read the result of the test they compare against.
     const completed = new Map()
@@ -3850,6 +3896,12 @@ async function executePlans(plans, options, sharedVars, logDir) {
             return
         }
         summary[outcome.status]++
+        // The known failure's own row for the closing roster: the name the red printed, and the
+        // sentence the plan says would end it. Pushed here rather than derived from the plan tree
+        // afterwards, so the roster is a reading of the run -- exactly the marks that fired in it.
+        if (outcome.status === 'xfail') {
+            summary.knownRows.push({ name: listedName(plan, test), endsWhen: test.__knownFailEndsWhen || null })
+        }
         // A failing run that ended without an exit code is one of two things, and the summary says
         // which: the timeout took it, or a signal did. (A marked failure is counted as `xfail`
         // above and is not classified here -- the mark's own note says what it is.)
@@ -4430,6 +4482,7 @@ async function main() {
     // (test/cases/tools/provenance.mjs pins it), and this is the one line that says whether the
     // tree that line named is still the tree that ran.
     printTreeVerdict(treeVerdict)
+    printKnownRoster(outcome.summary)
     if (marginSkippedTests > 0) {
         // The rule's own reading, so a run on a host without a CPU figure says what it did not judge
         // and how often, instead of leaving 105 bounds looking judged.
