@@ -274,6 +274,15 @@ const OLD_ROOTS = ['include', 'src']
 function deriveRoots (moves, root) {
   const roots = new Map() // block -> Set(root)
   const add = (block, r) => {
+    // A root that sits *inside* an `include` tree turns a project header name into a system header
+    // name: with `.../kernel/include/camel/utils` on the path, the `<assert.h>` that libstdc++'s
+    // `<cassert>` includes resolves to `camel/utils/assert.h`, and `assert` stops being declared --
+    // which is how the drill found this. The `include` root above it serves every spelling that
+    // tree answers (a spelling from inside the tree is an own-directory include), so the inner
+    // roots are dropped.
+    const segments = r.split('/')
+    const includeAt = segments.lastIndexOf('include')
+    if (includeAt >= 0 && includeAt !== segments.length - 1) return
     if (!roots.has(block)) roots.set(block, new Set())
     roots.get(block).add(r)
   }
