@@ -950,10 +950,18 @@ function applyRewrites (tree, moves, scan) {
     // The two files a hook rewrites are left alone: their hook says the same thing in place.
     for (const oldRoot of HOOK_OWNED_FILES.has(rel) ? [] : ['include', 'src']) {
       const token = `\${CMAKE_SOURCE_DIR}/${oldRoot}`
-      const hits = text.split(token).length - 1
-      if (!hits) continue
-      count += hits
-      text = text.split(token).join('${CAMEL_LAYOUT_TRANSITIONAL_ROOTS}')
+      if (!text.includes(token)) continue
+      // A spelled path that still exists is a file the move did not touch --
+      // `${CMAKE_SOURCE_DIR}/src/execute/devices.cpp` names a source in `src/execute`, one of the
+      // directories the table leaves undecided -- so the root it names still holds it.
+      text = text.replace(new RegExp(`${escapeRe(token)}(?![\\w.-])`, 'g'), (match, offset) => {
+        let j = offset + match.length
+        while (j < text.length && !/[\s()"'`,;]/.test(text[j])) j++
+        const spelled = (oldRoot + text.slice(offset + match.length, j)).replace(/^\/+/, '')
+        if (spelled && fs.existsSync(path.join(tree, spelled))) return match
+        count++
+        return '${CAMEL_LAYOUT_TRANSITIONAL_ROOTS}'
+      })
     }
     // The module loop names the directory through a variable, so no per-module rule can see it.
     const genericHits = text.match(/modules\/\$\{/g)
