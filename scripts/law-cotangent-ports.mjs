@@ -314,7 +314,8 @@ function declarationBindsElement(declaration, variable) {
 }
 
 /// A law's own port type. A bare type variable here is the element type: the transform instantiates
-/// a law at its element type first (`modules/transforms/transpose.cpp#ruleCotangent`: "`T` is the
+/// a law at its element type first
+/// (`modules/transforms/transpose/walkmachinery.cpp#ruleCotangentOf`: "`T` is the
 /// law's *element* type"), so `(ct: T)` promises one number and `(ct: T[...])` promises an array.
 function kindOfPortType(text) {
     const kind = kindOfType(text)
