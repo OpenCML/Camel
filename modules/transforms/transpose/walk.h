@@ -413,6 +413,35 @@ gc_node_ref_t componentReadOf(
     WalkContext &ctx, const std::vector<Type *> &componentTypes, gc_node_ref_t loopNode,
     uint32_t index);
 
+/// How a value is named in a diagnosis at a call: its index and its node kind, because two values
+/// with one index can only be told apart by the kind of node one of them is (a port or a computed
+/// value), and the sentence a reader gets has to say which of the two the call could not forward.
+std::string describeNodeValue(const WalkContext &ctx, gc_node_ref_t value);
+
+/// Why the value a call needs was not forwarded. The walk's last attempt is repeated with its
+/// "stopped at a region" flag cleared, so the answer is this attempt's -- a failure is not memoised,
+/// so the walk repeats the same path and stops at the same node. A value that comes out of a region
+/// is one the walk would have to transpose the region for (`CallValueComputedByTheBody`); one that
+/// does not is a value the call or its closure owes (`CallValueMissing`).
+void noteUnforwardedCause(
+    WalkContext &ctx, bool &stoppedAtARegion,
+    const std::function<gc_node_ref_t(gc_node_ref_t)> &forward, gc_node_ref_t ref, size_t param);
+
+/// The empty member `()` of an answer, at the type `unitType`: a parameter with no tangent space
+/// answers it, and the signature has one place per parameter -- this is that place with nothing in
+/// it -- which is what keeps the tuple the signature promised and the tuple the walk builds the same
+/// length and the same order.
+gc_node_ref_t unitMemberOf(WalkContext &ctx, Type *unitType);
+
+/// Which declaration leaves one of the step's operands' shapes open, asked of every operand in the
+/// order the step has them: the one walk-back `unstatedParameterBehind` (`transpose/signature.h`),
+/// which the rule-expansion path asks too, so the two entrances to the cause name the same parameter
+/// and cannot spell the same declaration two ways. Answering nothing means every operand's type
+/// states its shape, which is what a step whose law answered does not need to ask at all.
+std::optional<size_t> unstatedParameterOfAnyInput(
+    const WalkContext &ctx, std::span<const gc_node_ref_t> inputs,
+    const std::vector<size_t> &portParameter);
+
 /// Builds the transposed member of one function into state's group and answers whether it did.
 bool buildTransposeMember(
     TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,

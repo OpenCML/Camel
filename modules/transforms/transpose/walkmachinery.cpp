@@ -873,4 +873,47 @@ gc_node_ref_t componentReadOf(
     return part;
 }
 
+// Three questions a call site asks about the values it stands on, and the one empty member an answer
+// is allowed to hold. They were lambdas in `buildTransposeMember`; each is a reading of one value and
+// not of the family that reads it.
+
+std::string describeNodeValue(const WalkContext &ctx, gc_node_ref_t value) {
+    const camel::runtime::GCNode *node = ctx.function->node(value);
+    return std::to_string(value) + ':' +
+           std::to_string(node != nullptr ? static_cast<int>(node->kind) : -1);
+}
+
+void noteUnforwardedCause(
+    WalkContext &ctx, bool &stoppedAtARegion,
+    const std::function<gc_node_ref_t(gc_node_ref_t)> &forward, gc_node_ref_t ref, size_t param) {
+    stoppedAtARegion          = false;
+    const gc_node_ref_t probe = forward(ref);
+    if (probe == rt::kInvalidNodeRef && stoppedAtARegion) {
+        refuseMember(ctx, TransposeRefusalCause::CallValueComputedByTheBody, param);
+        return;
+    }
+    refuseMember(ctx, TransposeRefusalCause::CallValueMissing, param);
+}
+
+gc_node_ref_t unitMemberOf(WalkContext &ctx, Type *unitType) {
+    ::Tuple *emptyTuple = ::Tuple::create(0, camel::core::mm::autoSpace());
+    return ctx.draft->materializeStaticValue(
+        camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple), unitType);
+}
+
+std::optional<size_t> unstatedParameterOfAnyInput(
+    const WalkContext &ctx, std::span<const gc_node_ref_t> inputs,
+    const std::vector<size_t> &portParameter) {
+    const size_t paramCount =
+        ctx.function->funcType() != nullptr ? ctx.function->funcType()->normTypesCount() : 0;
+    for (const gc_node_ref_t input : inputs) {
+        if (const auto unstated = camel::transforms::unstatedParameterBehind(
+                ctx.function, input, portParameter, paramCount, ctx.book.nodeCount);
+            unstated.has_value()) {
+            return unstated;
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace camel::transforms

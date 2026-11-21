@@ -2369,19 +2369,9 @@ bool buildTransposeMember(
                         const auto unstatedArrayBehind = [&]() -> std::optional<size_t> {
                             // One walk-back, shared with the rule-expansion path below: the same
                             // question ("which declaration leaves this operand's shape open?") has
-                            // one answer, or the two entrances name different parameters.
-                            for (const gc_node_ref_t input : inputs) {
-                                if (const auto unstated = unstatedParameterBehind(
-                                        function,
-                                        input,
-                                        portParameter,
-                                        paramCount,
-                                        nodeCount);
-                                    unstated.has_value()) {
-                                    return unstated;
-                                }
-                            }
-                            return std::nullopt;
+                            // one answer, or the two entrances name different parameters. The
+                            // walk-back is `unstatedParameterOfAnyInput` in `transpose/walk.h`.
+                            return unstatedParameterOfAnyInput(walkCtx, inputs, portParameter);
                         };
                         if (const auto unstated = unstatedArrayBehind(); unstated.has_value()) {
                             refuse(TransposeRefusalCause::ParameterShape, *unstated);
@@ -3326,11 +3316,7 @@ bool buildTransposeMember(
                     // The refusal names the node that carries that value and its kind, so a
                     // reader can see what stands in the way without a dump.
                     const auto describe = [&](gc_node_ref_t value) {
-                        const camel::runtime::GCNode *carrierNode2 = function->node(value);
-                        return std::to_string(value) + ':' +
-                               std::to_string(
-                                   carrierNode2 != nullptr ? static_cast<int>(carrierNode2->kind)
-                                                           : -1);
+                        return describeNodeValue(walkCtx, value);
                     };
                     // **Not linear in the parameter this call was built from.** A bare `transpose(f)` reads every parameter of `f` as a linear
                     // input, and a call whose **callee the body made out of a parameter** is not
@@ -3595,14 +3581,9 @@ bool buildTransposeMember(
                 const auto unforwardedCause = [&](gc_node_ref_t ref, size_t param) {
                     // Ask again with the flag cleared, so the answer is this attempt's: a failure
                     // is not memoised, so the walk repeats the same path and stops at the same
-                    // node.
-                    stoppedAtARegion          = false;
-                    const gc_node_ref_t probe = forward(ref);
-                    if (probe == rt::kInvalidNodeRef && stoppedAtARegion) {
-                        refuse(TransposeRefusalCause::CallValueComputedByTheBody, param);
-                        return;
-                    }
-                    refuse(TransposeRefusalCause::CallValueMissing, param);
+                    // node. The two causes it tells apart are on `noteUnforwardedCause` in
+                    // `transpose/walk.h`.
+                    noteUnforwardedCause(walkCtx, stoppedAtARegion, forward, ref, param);
                 };
                 std::vector<gc_node_ref_t> arguments;
                 // Which of the callee's parameters this call hands a value for: this file's reading of the
@@ -3785,12 +3766,7 @@ bool buildTransposeMember(
             // nothing in it -- which is what keeps the tuple the signature promised and the tuple
             // this builds the same length and the same order.
             Type *const unitType = camel::core::type::TupleType::create(std::vector<Type *>{});
-            const auto unit      = [&]() {
-                ::Tuple *emptyTuple = ::Tuple::create(0, mm::autoSpace());
-                return draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(emptyTuple),
-                    unitType);
-            };
+            const auto unit      = [&]() { return unitMemberOf(walkCtx, unitType); };
             std::vector<Type *> partTypes;
             // The **parameters**, not the ports: the walk above says which port a parameter asks
             // for, and a `()` place has no port at all. Iterating `ports` was the same reading of a
