@@ -14,6 +14,8 @@
 
 #include "transpose.h"
 
+#include "lift.h"
+
 #include "camel/core/context/context.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
@@ -21,11 +23,15 @@
 #include "camel/runtime/graph.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <optional>
 #include <iosfwd>
 #include <ostream>
+#include <span>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace camel::transforms {
@@ -93,6 +99,55 @@ struct PairCall {
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
 };
 
+/// One value an arm's backward walk starts from: the value the arm answered and the cotangent it is
+/// handed. A branch's arm is the walk seeded with one of these and stopped at the branch's own
+/// region; a loop's body is the same walk with one per state it carries.
+struct ArmSeed {
+    gc_node_ref_t at        = rt::kInvalidNodeRef;
+    gc_node_ref_t cotangent = rt::kInvalidNodeRef;
+};
+
+/// What the walk accumulates **about the member it is building**: the cotangent each source node
+/// answered, whether it has one, the constants it forwarded, the members of an aggregate cotangent
+/// it was handed, the values whose cotangent is zero because the value cannot hold one, the capture
+/// and `with` ports its graph declares, the rules it used, and the extents the step under way was
+/// handed.
+///
+/// It is in the context because the pieces that keep these tables are no longer written in the walk
+/// (`transpose/walkmachinery.cpp`): a table is the walk's bookkeeping and not a node family's, and
+/// one table read by many readers has to be one table. The vectors and maps themselves live where
+/// they are sized -- the walk -- because their size is a fact about the graph being read; this
+/// struct borrows them, exactly as it borrows `draft` and `forwardOf`.
+struct WalkBookkeeping {
+    /// How many nodes the source graph has: the length of every per-node table below.
+    size_t nodeCount = 0;
+    /// The cotangent of each source node, in the new graph; `kInvalidNodeRef` where it has none.
+    std::vector<gc_node_ref_t> *cotangent = nullptr;
+    /// Whether the node at that index has a cotangent. One flag per node rather than a scan of the
+    /// table, because `kInvalidNodeRef` is also what a node whose cotangent a law answered nothing
+    /// for holds.
+    std::vector<bool> *hasCotangent = nullptr;
+    /// The constant each source `Data` node was forwarded as, so two reads of one constant are one
+    /// node of the new graph.
+    std::vector<gc_node_ref_t> *constantOf = nullptr;
+    /// The values whose cotangent is zero because the type has no tangent space, each recorded the
+    /// first time it is met: one line per value, not one per read. This one list is the context's
+    /// own -- it is not sized by the graph, and a reader of a zero contributes to it from wherever
+    /// the zero is met.
+    std::vector<gc_node_ref_t> zeroedValues;
+    /// An aggregate value's cotangent, member by member, keyed by the value and not by the read.
+    std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> *memberCotangents = nullptr;
+    /// The capture port each closure member of the source graph became, and the `with` port each
+    /// `with` parameter became. A cotangent that lands on either is not the answer's.
+    const std::unordered_map<gc_node_ref_t, gc_node_ref_t> *closurePortOf = nullptr;
+    const std::unordered_map<gc_node_ref_t, gc_node_ref_t> *withPortOf = nullptr;
+    /// The rules this member's answer used, in the order it first used them.
+    std::vector<std::string> *usedRules = nullptr;
+    /// The `int[]` of extents the step under way hands its law, when the law asks for one. Set by
+    /// the operand family for the duration of its answer and cleared after it.
+    gc_node_ref_t *extentsValue = nullptr;
+};
+
 /// What one node family is handed besides the node: the walk's state, the graph it is reading, the
 /// stream a refusal is written to, the draft the member is being built into, and what the walk has
 /// already forwarded. One struct for every family, because they differ in what they do and not in
@@ -117,6 +172,19 @@ struct WalkContext {
     /// (`NoCotangentArithmetic`) instead of handing the slot a `float` sum -- and a probe carries a
     /// context of its own, so a probe's fact never becomes the answer of the build that made it.
     bool cotangentArithmeticMissing = false;
+    /// The member being built: the id a law's right side is expanded into
+    /// (`group.transaction(member)`), which is a fact about the build and not about a node.
+    GraphId member = rt::kInvalidGraphId;
+    /// Whether the answer is **partial**: some place is a value the caller fills and not a place a
+    /// cotangent is answered for. Empty for an ordinary transposition, whose answer holds one
+    /// cotangent per parameter that has a tangent space.
+    bool partial = false;
+    /// Which places the answer is about: the call site's set when it has one (read as written), and
+    /// `places` -- the law's reading of a lifted signature -- otherwise.
+    const std::vector<bool> *participates = nullptr;
+    const LiftedParameters *places        = nullptr;
+    /// The tables the walk keeps about the member it is building. Borrowed: the walk sizes them.
+    WalkBookkeeping book;
 };
 
 /// Records the cause and writes the line for it, in the one place both are written: the cause on the
@@ -204,6 +272,87 @@ gc_node_ref_t sumOfCotangents(
 /// a tuple of `f32` members is a tuple of `f32` and not one of `float`.
 gc_node_ref_t aggregateOfMembers(
     WalkContext &ctx, Type *aggregateType, const std::vector<gc_node_ref_t> &parts);
+
+/// What the cotangent bookkeeping answers, one question at a time. These are the walk's own
+/// readings of a source graph -- which place the answer is about, which node is a constant, which
+/// value can hold a cotangent, where a zero goes -- and they are asked by more than one node family,
+/// which is why they are here and not a family's:
+///
+/// - `participatesInTheAnswer`: whether a cotangent landing on parameter `at` is one the answer
+///   holds. The call site's set is read as written when it has one; without it the lift law's
+///   reading decides (`places`), and a parameter outside the set is a value the graph reads.
+/// - `isConstantNode` / `constantValueOf`: a `Data` node is a constant, and its value is what a rule
+///   needs (`ct * c`). The node is forwarded once -- `book.constantOf` holds it -- so two reads of
+///   one constant are one node of the new graph.
+/// - `tupleOfValues`: a tuple of these values as a node of the new graph, at the type that names it.
+///   The types travel with the values, because a state's cotangent can be an array and a tuple that
+///   names it `float` is a tuple whose members are not the things it holds.
+/// - `aggregateSlotCount`: how many places a value of aggregate type has. A `Fill` knows its
+///   components; anything else has to be asked its type, and `tree::arity` is that one question.
+/// - `holdsACotangent`: whether a value can hold one at all, asked of its `dataType` through
+///   `tangentSpaceOf` -- the same query `jvp` asks of a parameter. This is **not** a reading of
+///   which half of a signature a place is: it asks about one node's type, and a node with no type
+///   yet is given the benefit of the doubt.
+/// - `noteZeroContribution`: one line per value whose cotangent is zero because the value cannot
+///   hold one, deduplicated: a value read in three rounds is still one value contributing one zero.
+/// - `wantsCotangentAt`: whether a cotangent landing on `target` is one the answer holds. A closure
+///   member's is not -- it is a known value, a constant of this differentiation, and no cotangent
+///   has a slot to land in -- nor is a `with` port's.
+/// - `addCotangentTo`: file one cotangent on a value, summing it with what the place already holds
+///   through the space's own addition (`sumOfCotangents`). A cotangent no parameter asks for is not
+///   collected at all, and a value with no tangent space records the zero it contributes instead.
+/// - `noteRuleUsed`: the rules this member's answer used, once each, in first-use order.
+/// - `ruleCotangentOf`: one position's cotangent -- the rule the index filed for this operator, its
+///   right side expanded where the operator stood, checked against the operand it answers for.
+/// - `joinMemberReadOf`: the adjoint of reading a value member by member -- that value's own
+///   cotangent, assembled member by member in the declaration's order (design principles 9.9), with
+///   the zero of the member's own space where nobody read a member.
+/// - `armCotangentOf`: a branch arm's answer, which is the walk seeded once and stopped at the arm's
+///   own region.
+bool participatesInTheAnswer(const WalkContext &ctx, size_t at);
+
+bool isConstantNode(const WalkContext &ctx, gc_node_ref_t ref);
+
+gc_node_ref_t constantValueOf(WalkContext &ctx, gc_node_ref_t ref);
+
+std::pair<gc_node_ref_t, Type *> tupleOfValues(
+    WalkContext &ctx, const std::vector<gc_node_ref_t> &parts,
+    const std::vector<Type *> &partTypes);
+
+size_t aggregateSlotCount(const WalkContext &ctx, gc_node_ref_t ref);
+
+bool holdsACotangent(const WalkContext &ctx, gc_node_ref_t ref);
+
+void noteZeroContribution(WalkContext &ctx, gc_node_ref_t target, gc_node_ref_t from);
+
+bool wantsCotangentAt(WalkContext &ctx, gc_node_ref_t target);
+
+void addCotangentTo(WalkContext &ctx, gc_node_ref_t ref, gc_node_ref_t node);
+
+void noteRuleUsed(WalkContext &ctx, const std::string &name);
+
+/// The rule `ruleName`'s answer at `position`, expanded at the types the step really has, for the
+/// cotangent `ct` of the value at that position. `knownValue` hands over the value of an operand the
+/// walk holds (the slot past the operands is the extents, `book.extentsValue`); `why` says what the
+/// expansion could not build, `unboundSlot` names the operand it could not bind, and
+/// `refusedAtTheLaw` records that this function itself refused (the port and answer checks) rather
+/// than the expansion.
+gc_node_ref_t ruleCotangentOf(
+    WalkContext &ctx, const std::function<gc_node_ref_t(gc_node_ref_t)> &knownValue,
+    const std::string &ruleName, std::span<const gc_node_ref_t> inputs, size_t position,
+    gc_node_ref_t ct, Type *ctType, std::string &why, bool &noInstance, bool &refusedAtTheLaw,
+    std::optional<size_t> &unboundSlot);
+
+bool joinMemberReadOf(
+    WalkContext &ctx, gc_node_ref_t ref, const std::vector<gc_node_ref_t> &slots);
+
+gc_node_ref_t armCotangentOf(
+    WalkContext &ctx,
+    const std::function<
+        std::vector<gc_node_ref_t>(uint32_t, const std::vector<ArmSeed> &,
+                                   const std::vector<gc_node_ref_t> &)> &runSeeded,
+    uint32_t oldRegion, gc_node_ref_t armResult, gc_node_ref_t armCotangent,
+    const std::vector<gc_node_ref_t> &stops);
 
 /// Builds the transposed member of one function into state's group and answers whether it did.
 bool buildTransposeMember(
