@@ -20,6 +20,7 @@ add_camel_module(
     transpose/entry.cpp
     transpose/rules.cpp
     transpose/signature.cpp
+    transpose/walkmachinery.cpp
     transpose_operator.cpp
     vmap.cpp
     vmap_operator.cpp
