@@ -95,8 +95,9 @@ timeout_ms = 60000
 # The pass has a second bound, and it ends the pass the same way: a round that copies nothing
 # further leaves every count at zero, so `std::opt` reported that round as its fixed point even
 # when the inliner had just left calls as calls because the growth budget is reached (the ruling
-# of 2026-11-20, docs/handover/questions/2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-
-# fixpoint.cn.md, (b)). The round now reports `RuntimeDiag::OptimizationStoppedShort`, the same
+# of 2026-11-20, (b), page:
+# docs/handover/questions/2026-11-20-the-optimizer-calls-a-spent-growth-budget-a-fixpoint.cn.md
+# The round now reports `RuntimeDiag::OptimizationStoppedShort`, the same
 # diagnostic the round count uses, naming the budget: `the growth_budget of 4096 node(s) is
 # reached and round 7 changed nothing -- inlining ... would copy 11 node(s), which does not fit
 # what is left of it`. Lowering the budget does not help the test -- it would report the same way

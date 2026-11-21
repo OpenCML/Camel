@@ -196,7 +196,7 @@ gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_no
 
 /// The **lifted signature** a function value stands for, read from its type alone: a value of a
 /// lifted type is the lifted function itself, and a value of `(f: F) => Lift<F>` -- the type of the
-/// `jvp(v)` node a lift writes for a call through a value (`jvp.cpp#jvpOperatorType`) -- is the
+/// `jvp(v)` node a lift writes for a call through a value (`jvp.cpp#liftedOperatorType`) -- is the
 /// operator whose **answer** is that lifted function. Both answers come from types; nothing is read
 /// about which graph the value is, because that is not known until the program runs.
 camel::core::type::FunctionType *liftedSignatureOf(const camel::core::type::Type *type) {
