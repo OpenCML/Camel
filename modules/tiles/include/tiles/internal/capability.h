@@ -49,6 +49,17 @@ class DeviceUnavailable : public std::runtime_error {
 /// and ignored (the host runs the program) when there is not.
 std::optional<int> configuredCudaOrdinal();
 
+/// Whether the run asked for the host only (`--devices cpu`). That selection needs no device and
+/// always passes (`camel/execute/devices.h`), so an operator that needs one is answered by naming
+/// the selection itself; and because it asks for no device, that answer is the same in every build
+/// of the module. A build without the Toolkit headers has nothing to add to a run that asked for
+/// no device: what it can serve is only the answer a run that wanted a device gets.
+bool selectedHostOnly();
+
+/// The sentence that answer carries: one text, so both builds of the module and the report's own
+/// diagnostic name the selection the same way.
+const char *hostOnlySelectionReason();
+
 /// Whether this run will run a graph on a device: an ordinal is configured (or the run left the
 /// choice to device 0) and the back end can be built. `--devices cpu` answers false by
 /// configuration and a machine with no usable device answers false by capability, and both are the

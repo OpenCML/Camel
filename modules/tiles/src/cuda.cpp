@@ -884,8 +884,15 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
 #else
 namespace camel::tiles {
 std::string deviceInfo() {
+    // Every entry point here answers "there is no device"; which reason it gives is the run's
+    // question and not this build's. `--devices cpu` needs no device at all and always passes
+    // (camel/execute/devices.h), so a run that selected the host only is answered by naming that
+    // selection — the same sentence the CUDA build gives (capability.cpp). What this build can
+    // serve is only what a run that wanted a device is told.
     throw BackendUnavailable(
-        "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
+        selectedHostOnly()
+            ? hostOnlySelectionReason()
+            : "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
 std::shared_ptr<const DeviceValue> placeOnDevice(std::shared_ptr<const DeviceValue>) {

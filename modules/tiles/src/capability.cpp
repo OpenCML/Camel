@@ -26,14 +26,22 @@ std::string cudaFailureText(cuda_detail::Api &api, CUresult result) {
 #endif
 } // namespace
 std::optional<int> configuredCudaOrdinal() {
+    if (selectedHostOnly())
+        return std::nullopt;
     const auto &selection = camel::execute::selectedDevices();
-    if (selection.given) {
-        if (selection.cpu || selection.cuda.empty())
-            return std::nullopt;
+    if (selection.given)
         return selection.cuda.front();
-    }
     // No --devices: the run prefers device 0 and the host runs the program when there is none.
     return 0;
+}
+
+bool selectedHostOnly() {
+    const auto &selection = camel::execute::selectedDevices();
+    return selection.given && (selection.cpu || selection.cuda.empty());
+}
+
+const char *hostOnlySelectionReason() {
+    return "the run selected the host only (--devices cpu) and does not use a CUDA device";
 }
 
 bool deviceInUse() {
