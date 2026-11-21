@@ -12,7 +12,7 @@
 // `u`'s extent is written in the declaration and repeated at the call, for the reason the left-hand
 // case states in full: the law reads the *other* operand's shape as `sum_to`'s target, a transposed
 // function is handed the cotangent and no parameter, and the shape therefore comes from the type
-// (`modules/transforms/transpose.cpp#shapeFromTypeOf`) -- which `float[]` does not state. The
+// (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`) -- which `float[]` does not state. The
 // language's answer for a declaration that leaves it open is `TransposeNeedsParameterShape`: write
 // the shape in the type.
 //

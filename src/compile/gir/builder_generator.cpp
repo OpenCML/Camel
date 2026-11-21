@@ -60,33 +60,33 @@
  *   * the state parameter is named `__gen_state__` **and that is why the port has a name at all**:
  *     `createCompileGraph` takes a port's name from the signature, and an unnamed parameter is port
  *     `__w0` with no name in scope (the same sentence the construction tree's machine keeps at
- *     `src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`). The name is not decoration: it
- *     enters the scope, which is what makes the two machines give one observable shape;
+ *     `src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`). The name is not decoration:
+ * it enters the scope, which is what makes the two machines give one observable shape;
  *   * the round state is `(answer, int)`, i.e. `((string, string..)?, int)` -- the `?` is on the
- *     **first** component and the pc is a bare `int`. A `?` on the pc, or its absence on the answer,
- *     would be a difference of structure and not of ids.
+ *     **first** component and the pc is a bare `int`. A `?` on the pc, or its absence on the
+ * answer, would be a difference of structure and not of ids.
  *
  * Two readings taken from the construction tree's own machine today. They are the *transition* and
  * not the destination (`src/compile/gct/builder_func.cpp#Builder::visitGeneratorBody`):
  *
- *   * the loop's first round state is `(Data::null(), 0)` declared as `roundStateType`: an **untyped
- *     null data node cast to the answer's type**, and the pc's zero as an ordinary `int` literal --
- *     not a null of `T?`. That is what `stateZero()` gives while every slot is a cell, and it is
- *     exactly what goes away once a slot is a `T?`: the answer's starting value then comes from the
- *     `T?` itself and no null-and-cast pair stands there. **Do not read the pair as the shape this
+ *   * the loop's first round state is `(Data::null(), 0)` declared as `roundStateType`: an
+ * **untyped null data node cast to the answer's type**, and the pc's zero as an ordinary `int`
+ * literal -- not a null of `T?`. That is what `stateZero()` gives while every slot is a cell, and
+ * it is exactly what goes away once a slot is a `T?`: the answer's starting value then comes from
+ * the `T?` itself and no null-and-cast pair stands there. **Do not read the pair as the shape this
  *     machine aims at**: it is the shape that can be built while the slots are still cells, and it
  *     is written down here so that the next reader knows which of the two they are looking at.
  *   * the loop's condition tests the round state's second part with a **call to `__eq__`**
  *     (`__eq__(state.1, 0)`), and so does an arm's dispatch (`equalTo`, at
- *     `src/compile/gct/builder.cpp#equalTo`, is
+ *     `src/compile/gct/builder_func.cpp#equalTo`, is
  *     `makeLink(2) << makeDRef("__eq__") << readCell(name) << intLiteral(value)`). **Both are the
- *     same operator, seen at two layers**, and this was read off the published graph and not off the
- *     construction tree: `std::jgir` of the generator case holds **four** `:op/eq_l` nodes, three in
- *     the arm regions and one in the *loop condition's* region (`g4r1`), each fed by a `DATA` int
- *     literal. So `__eq__` on two `int`s **is** `:op/eq_l` once the group is resolved, and a machine
- *     that built one place as a group call and the other as a direct operator would publish the same
- *     graph while differing from itself at the construction layer -- which is a difference nobody can
- *     see and everybody would have to keep in step. Build both as the group call and let the
+ *     same operator, seen at two layers**, and this was read off the published graph and not off
+ * the construction tree: `std::jgir` of the generator case holds **four** `:op/eq_l` nodes, three
+ * in the arm regions and one in the *loop condition's* region (`g4r1`), each fed by a `DATA` int
+ *     literal. So `__eq__` on two `int`s **is** `:op/eq_l` once the group is resolved, and a
+ * machine that built one place as a group call and the other as a direct operator would publish the
+ * same graph while differing from itself at the construction layer -- which is a difference nobody
+ * can see and everybody would have to keep in step. Build both as the group call and let the
  *     resolution decide. (An earlier draft of this comment called them two operators; the target
  *     said otherwise, and the target is the one that is read.)
  *
@@ -95,21 +95,21 @@
  * Two of them look like details and one of them is a trap:
  *
  *   * a loop's regions are made **before** the loop node exists, so the owner is written after it:
- *     `draft.addRegion(kind, outerRegion)` then `setRegionOwner(region, nodeIdOf(loopNode), index)`,
- *     where **`index` is `0` for the condition and `1` for the body**
- *     (`include/camel/runtime/graph.h#GCRegionKind` names the kinds, `Arm`, `LoopCond`, `LoopBody`).
- *     That `0`/`1` is **not** an order of construction and must not be
- *     read as one -- it is which of the loop's two parts the region is. **And the order of
- *     construction is visible in the graph anyway**: the published `std::jgir` numbers the regions in
- *     the order they were made. In the generator case, measured on the published `std::jgir` of
+ *     `draft.addRegion(kind, outerRegion)` then `setRegionOwner(region, nodeIdOf(loopNode),
+ * index)`, where **`index` is `0` for the condition and `1` for the body**
+ *     (`include/camel/runtime/graph.h#GCRegionKind` names the kinds, `Arm`, `LoopCond`,
+ * `LoopBody`). That `0`/`1` is **not** an order of construction and must not be read as one -- it
+ * is which of the loop's two parts the region is. **And the order of construction is visible in the
+ * graph anyway**: the published `std::jgir` numbers the regions in the order they were made. In the
+ * generator case, measured on the published `std::jgir` of
  *     `test/cases/compile/stream/generators_cell_type.cml`: the condition's region is `1`, the
  *     body's is `2`, and the **six** arm regions are `3` to `8` -- so the condition's region is
  *     made **first**, and this sentence's earlier draft named `g4r2`, `g4r4`, `g4r6` as the arm
  *     regions, which was a transcription and not a reading: the arms are six, and two of the
  *     three names were the body's region. The two
  *     sentences belong together: the index says *which part*, the numbering says *which was made
- *     first*, and a machine that read the first as the second would number the regions the other way
- *     round and change the graph.
+ *     first*, and a machine that read the first as the second would number the regions the other
+ * way round and change the graph.
  *   * a region's ports are set **twice**, and both are needed: `setRegionPorts(region, ids)` (the
  *     Port nodes, which must already have been put in that region with `setNodeRegion`) and
  *     `setRegionParams(region, params)` -- a `FunctionTypeFactory` of the same names and types with
@@ -119,17 +119,17 @@
  *
  * Where a `var` written inside an arm goes -- asked, read, answered
  * (`builder_control.cpp#Builder::mergeArmVariables`):
- * `mergeArmVariables` is not a mechanism of regions. It walks the `ArmBuild` bookkeeping a *visitor*
- * keeps (`arm->touched`, `touchedOrder`, `recordWrite`, `pendingUsesOf`) and does two things: it
- * writes a control link from the arm's last writer to the join, and it records that a reader after
- * the join sees the written version. Neither is about a region's ports -- a region is not a scope of
- * its own for a `var`, the cell is one node of the graph's body wherever it is written -- and both
- * are about *the join being where a reader stands*. This machine has no such reader: the pc is read
- * at the top of the next round, and the round state is the loop's own value. So nothing here merges
- * anything back, and `ArmBuild` is not imported: the two machines keep the same shape because the
- * values that cross a round are region ports, not writes a later statement reads. If a future arm
- * ever wrote a scope `var` that a statement *after* the branch reads, this is the paragraph that
- * says why the bookkeeping would have to come with it.
+ * `mergeArmVariables` is not a mechanism of regions. It walks the `ArmBuild` bookkeeping a
+ * *visitor* keeps (`arm->touched`, `touchedOrder`, `recordWrite`, `pendingUsesOf`) and does two
+ * things: it writes a control link from the arm's last writer to the join, and it records that a
+ * reader after the join sees the written version. Neither is about a region's ports -- a region is
+ * not a scope of its own for a `var`, the cell is one node of the graph's body wherever it is
+ * written -- and both are about *the join being where a reader stands*. This machine has no such
+ * reader: the pc is read at the top of the next round, and the round state is the loop's own value.
+ * So nothing here merges anything back, and `ArmBuild` is not imported: the two machines keep the
+ * same shape because the values that cross a round are region ports, not writes a later statement
+ * reads. If a future arm ever wrote a scope `var` that a statement *after* the branch reads, this
+ * is the paragraph that says why the bookkeeping would have to come with it.
  *
  * "By arm" therefore means "by the round's pc branch", not by a branch of the source: a call body
  * sits inside one arm, and the pc is what carries one pull across the pull before it.
@@ -153,9 +153,9 @@ namespace camel::compile::gir {
 
 namespace {
 
-/// Whether `node` writes a `yield` of its own. A function or a lambda written inside it is a body of
-/// its own: what it yields belongs to its graph, and its `yield` node is the child of its own FUNC,
-/// which this walk does not enter.
+/// Whether `node` writes a `yield` of its own. A function or a lambda written inside it is a body
+/// of its own: what it yields belongs to its graph, and its `yield` node is the child of its own
+/// FUNC, which this walk does not enter.
 bool writesOwnYieldIn(const GCT::node_ptr_t &node) {
     if (node == nullptr) {
         return false;
@@ -252,15 +252,17 @@ void Builder::buildGeneratorBody(
         // Shapes this segment of the machine does not build yet. The message says which shape was
         // met and that the program is not what is wrong -- the machine is -- because a reading that
         // stopped here has to say whether the arity was refused or the mechanism is missing.
-    const auto refuseShape = [&](const char *reason) -> void {
-        diags_->of(InternalDiag::UnknownInternalError)
+        const auto refuseShape = [&](const char *reason) -> void {
+            diags_->of(InternalDiag::UnknownInternalError)
                 .atOrigin(gct != nullptr ? gct->origin() : camel::source::kInvalidOriginId)
                 .commit(
                     "the generator body of `" +
                     (element != nullptr ? element->toString() : std::string("?")) +
-                    "..` reached the translation, and this segment of the machine builds one shape: "
+                    "..` reached the translation, and this segment of the machine builds one "
+                    "shape: "
                     "a body whose every statement is a `yield` of a literal. It met " +
-                    std::string(reason) + ". Nothing in the program is wrong: the machine missed a "
+                    std::string(reason) +
+                    ". Nothing in the program is wrong: the machine missed a "
                     "shape it builds. Its state `" +
                     roundStateType->toString() +
                     "`, its `pc` cell and its two regions are built; the shapes after this one, in "
@@ -296,7 +298,8 @@ void Builder::buildGeneratorBody(
         // The template a FILL of the round state reads: `(null, point)`. Its first part is the
         // hole the `with` input fills, and the second is the point the round state starts from --
         // a constant, so it is part of the constant and not a node of its own. Measured against
-        // the target: `(null, 0)` for the loop's first value, `(null, 1)` for a round that answered.
+        // the target: `(null, 0)` for the loop's first value, `(null, 1)` for a round that
+        // answered.
         const auto roundStateTemplate = [&](int64_t point) -> node_handle_t {
             TupleDataFactory factory;
             factory.add(Data::null());
@@ -306,7 +309,8 @@ void Builder::buildGeneratorBody(
         node_handle_t initialAnswer =
             castNodeTo(currGraph_->addStaticDataNode(Data::null()), answerType, gct);
         node_handle_t initialRoundState = currGraph_->addFillNode(
-            roundStateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
+            roundStateType,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
         linkNodes(LinkType::Norm, roundStateTemplate(0), initialRoundState);
         linkNodes(LinkType::With, initialAnswer, initialRoundState);
 
@@ -357,8 +361,8 @@ void Builder::buildGeneratorBody(
         // local that lives across a `yield`, a `yield` inside a branch arm, a closure the body made
         // before a `yield` -- is still the seam below: a refusal that says the machine missed a
         // shape, not that the program is wrong. The three shapes after this one are the next
-        // segments, in this order: a local across a `yield`, a `yield` in an arm, a closure before a
-        // `yield`. They are refused *by name* so that a reading taken now says which one was met.
+        // segments, in this order: a local across a `yield`, a `yield` in an arm, a closure before
+        // a `yield`. They are refused *by name* so that a reading taken now says which one was met.
         std::vector<GCT::node_ptr_t> statements;
         for (size_t i = 0; i < bodyGct->size(); ++i) {
             const GCT::node_ptr_t &statement = bodyGct->at(i);
@@ -382,7 +386,7 @@ void Builder::buildGeneratorBody(
         const size_t armCount = statements.size() + 1;
         // The state one round starts from, as the closure that pulls the step reads it: `(pc,)`.
         // Its constant is `(0)` and the point itself is a hole, filled where the closure is made.
-        Type *const stateType = TupleType::create({pcType});
+        Type *const stateType    = TupleType::create({pcType});
         const auto stateTemplate = [&]() -> node_handle_t {
             TupleDataFactory factory;
             factory.add(tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(0)));
@@ -409,7 +413,8 @@ void Builder::buildGeneratorBody(
         // declared as `answerType`, then packed with the point the next pull starts at.
         const auto packAnswer = [&](node_handle_t answer, int64_t point) -> node_handle_t {
             node_handle_t fill = currGraph_->addFillNode(
-                roundStateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
+                roundStateType,
+                runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
             linkNodes(LinkType::Norm, roundStateTemplate(point), fill);
             linkNodes(LinkType::With, castNodeTo(answer, answerType, bodyGct), fill);
             return fill;
@@ -419,9 +424,7 @@ void Builder::buildGeneratorBody(
         // arm has no statement of its own and no GATE -- a GATE waits for the statements of its
         // block, and this block has none (measured: the target's two `stopHere` arms end in the
         // FILL itself, while the two arms that write the point end in a GATE).
-        const auto stopHere = [&]() -> node_handle_t {
-            return packAnswer(bodyPorts.front(), 1);
-        };
+        const auto stopHere = [&]() -> node_handle_t { return packAnswer(bodyPorts.front(), 1); };
         // One `yield`: the answer, then the point written into the cell the next round's dispatch
         // reads. The write comes first in this build and not last in the graph: an arm's `yield`
         // reads the point *after* writing it, and a read takes the value the last write gave
@@ -432,14 +435,15 @@ void Builder::buildGeneratorBody(
             const int64_t resume             = static_cast<int64_t>(k) + 1;
             GCT::node_ptr_t write            = tree_->makeAssign(gct::AssignmentForm::Plain);
             *write << tree_->makeDRef("__gen_pc__")
-                   << tree_->makeData(tt::as_shared<Data>(
-                          std::make_shared<PrimaryData<int64_t>>(resume)));
+                   << tree_->makeData(
+                          tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(resume)));
             node_handle_t written = valueNodeOf(visit(write));
             // `(element, rest)`: the element is the `yield`'s literal, which is part of the
             // template; the rest is the closure, which is a node.
             const std::vector<size_t> closureSlot{1};
             node_handle_t pair = currGraph_->addFillNode(
-                pairType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, closureSlot));
+                pairType,
+                runtime::makeFillPayload(runtime::GCFillKind::Tuple, closureSlot));
             TupleDataFactory pairTemplate;
             pairTemplate.add(statement->at(0)->data());
             pairTemplate.add(Data::null());
@@ -449,7 +453,8 @@ void Builder::buildGeneratorBody(
             // closure. The target builds this tuple *inside* the closure from a captured
             // `__gen_pc__`; that difference is written down in the lane's report and not hidden.
             node_handle_t state = currGraph_->addFillNode(
-                stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
+                stateType,
+                runtime::makeFillPayload(runtime::GCFillKind::Tuple, answerSlot));
             linkNodes(LinkType::Norm, stateTemplate(), state);
             linkNodes(LinkType::With, written, state);
             insertNode("__gen_state_now__", state);
@@ -470,7 +475,8 @@ void Builder::buildGeneratorBody(
             [&]() -> node_handle_t {
                 GCT::node_ptr_t call = tree_->makeLink(2);
                 *call << tree_->makeDRef("__eq__") << tree_->makeDRef(answeredPortName)
-                      << tree_->makeData(tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(0)));
+                      << tree_->makeData(
+                             tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(0)));
                 return visitLinkNode(call);
             },
             runtime::GCRegionKind::LoopCond,
@@ -486,15 +492,18 @@ void Builder::buildGeneratorBody(
                 // tagged forms take), so the BRCH/JOIN/GATE pair and the edges that tie a `var`
                 // written in an arm to the join are the ones the target was made by.
                 std::function<node_handle_t(size_t)> chain = [&](size_t k) -> node_handle_t {
-                    const int64_t point = static_cast<int64_t>(k);
+                    const int64_t point  = static_cast<int64_t>(k);
                     GCT::node_ptr_t call = tree_->makeLink(2);
                     *call << tree_->makeDRef("__eq__") << tree_->makeDRef("__gen_pc__")
-                          << tree_->makeData(tt::as_shared<Data>(
-                                 std::make_shared<PrimaryData<int64_t>>(point)));
+                          << tree_->makeData(
+                                 tt::as_shared<Data>(
+                                     std::make_shared<PrimaryData<int64_t>>(point)));
                     node_handle_t condition = visitLinkNode(call);
                     arm_ptr_t onPoint       = buildArm(
                         bodyGct,
-                        [&]() -> node_handle_t { return k < statements.size() ? yieldArm(k) : stopHere(); },
+                        [&]() -> node_handle_t {
+                            return k < statements.size() ? yieldArm(k) : stopHere();
+                        },
                         runtime::GCRegionKind::Arm,
                         nullptr);
                     arm_ptr_t otherwise = buildArm(
@@ -563,7 +572,8 @@ void Builder::buildGeneratorBody(
         linkNodes(LinkType::Norm, loopNode, loopPoint);
         const std::vector<size_t> roundSlots{0, 1};
         node_handle_t loopValue = currGraph_->addFillNode(
-            roundStateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, roundSlots));
+            roundStateType,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, roundSlots));
         linkNodes(LinkType::Norm, roundStateTemplate(0), loopValue);
         linkNodes(LinkType::With, loopAnswer, loopValue);
         linkNodes(LinkType::With, loopPoint, loopValue);
@@ -584,7 +594,7 @@ void Builder::buildGeneratorBody(
     {
         TupleDataFactory zero;
         zero.add(tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(0)));
-        GCT::node_ptr_t start = tree_->makeData(zero.build());
+        GCT::node_ptr_t start  = tree_->makeData(zero.build());
         GCT::node_ptr_t lambda = tree_->makeFunc("");
         *lambda << tree_->makeType(stream->stepType());
         GCT::node_ptr_t lambdaBody = tree_->makeExec(gct->at(1)->synced());
@@ -594,7 +604,7 @@ void Builder::buildGeneratorBody(
         *exit << call;
         *lambdaBody << exit;
         *lambda << lambdaBody;
-    setBodyResult(graph, valueNodeOf(visit(lambda)));
+        setBodyResult(graph, valueNodeOf(visit(lambda)));
     }
 }
 

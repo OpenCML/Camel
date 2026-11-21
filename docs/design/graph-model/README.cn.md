@@ -97,7 +97,7 @@
 
 `GCGraph` 有三张图指针表与一个外层图指针【读码 `graph.h#GCGraph、459-465`】：
 
-- `dependencies`：`FUNC` 节点调用的图、分支臂的图；建图器在每次建 `FUNC` 节点或函数值时登记（`src/compile/gir/builder_calls.cpp#dependencies`、`src/compile/gir/builder_operators.cpp#FUNC`）。
+- `dependencies`：`FUNC` 节点调用的图、分支臂的图；建图器在每次建 `FUNC` 节点或函数值时登记（`src/compile/gir/builder_calls.cpp#dependencies`、`src/compile/gir/builder_call.cpp#visitLinkNode`）。
 - `subGraphs`：写在这张图"里面"的函数与臂，按词法归属。
 - `staticGraphRefs`：静态区里函数常量指向的图。
 - `outerGraph`：词法上的外层图。

@@ -21,12 +21,12 @@
 // the *known* operand's shape -- `sum_to(..., w)` in `#ct_of_a`, the shape the answer has -- and a
 // transposed function is handed the cotangent and no parameter (`transposeSignature`), so that shape
 // can come from one place only: the type. The walk writes the extents a type states into the graph
-// (`modules/transforms/transpose.cpp#shapeFromTypeOf`, `extent_of`'s own answer) and the law builds
-// the array from them. `float[]` states the rank and no length, so nothing can be written down: the
-// step stops as a value the caller does not carry, and the language's own sentence for that
-// declaration is `TransposeNeedsParameterShape` -- "state the shape in the type" (author, 2026-11-03
-// 16:15). The same rule reaches the call, where a `float[]` value is less exact than the `float[2]`
-// the parameter fixes, so the conversion is written where the value is known to fit.
+// (`modules/transforms/transpose/signature.cpp#statedExtentsNodeOf`, `extent_of`'s own answer) and
+// the law builds the array from them. `float[]` states the rank and no length, so nothing can be
+// written down: the step stops as a value the caller does not carry, and the language's own
+// sentence for that declaration is `TransposeNeedsParameterShape` -- "state the shape in the type"
+// (author, 2026-11-03 16:15). The same rule reaches the call, where a `float[]` value is less exact
+// than the `float[2]` the parameter fixes, so the conversion is written where the value is known to fit.
 //
 // **This entry is the second of two, and its green is evidence, not the road.** It proves two things
 // nothing else does in one place: the law's arithmetic at a *rank-one* operand is right (every
