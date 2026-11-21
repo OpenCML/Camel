@@ -17,6 +17,7 @@ add_camel_module(
     transpose.cpp
     transpose/cotangent.cpp
     transpose/rules.cpp
+    transpose/signature.cpp
     transpose_operator.cpp
     vmap.cpp
     vmap_operator.cpp
