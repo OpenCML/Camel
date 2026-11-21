@@ -1604,6 +1604,71 @@ Benchmark tests may use:
 
 The case must emit the expected JSON benchmark payload format used by the runner.
 
+## Comparing Two Builds, Or Two Back Ends
+
+A plan asserts what one run of a program must say. `test/tools/diff-compare.mjs` asks the other
+question: **what is different between two runs of the same suite**, which is the reading a step that
+is supposed to change nothing is accepted on (stage 0 of the refactor: the dispatch of passes, the
+loading of source modules and the reading of rules move, and no program's behaviour may move with
+them).
+
+It is configured with *what compares to what*, and it reads three things:
+
+- **output** -- exit status, standard output, standard error. Numbers are compared at the declared
+  error bound, not bit for bit: `ulp(actual, declared, bound, bits)`, the helper a `verify_script`
+  gets (`run-tests.mjs`, the block that defines `ulpStep`, `ulpDistance` and `ulp`; read from that
+  file at load time, so there is one definition of the bound). The default is the licence's two
+  ulps at 53 bits; a case that declares a wider bound in its `desc` names it in the configuration's
+  `output.overrides`. An integer is compared exactly -- it is a count, an index or a code, and no
+  licence promises those two units apart -- and a differing line that is inside the bound is
+  reported as `within-bound`, not as a difference.
+- **the canonical form of the graph** -- the block's pipeline with its terminal scheduling pass
+  replaced by `graph.pass` (default `std::gir`), compared up to isomorphism by
+  `compareGirDotIsomorphic` (`test/tools/gir-dot.mjs`, the same comparison
+  `snapshot_compare = "gir_dot_isomorphic"` uses). A dump that differs only in the drawing is
+  reported as `isomorphic`: the same shape, so not a difference and not a silence either.
+- **time** -- CPU milliseconds per run, from `test/tools/child-cpu.mjs`, the reading `cpu_budget_ms`
+  is judged against. **Reported and never judged**: this tool has no timing verdict.
+
+Two configurations ship in `test/tools/diff-compare/`:
+
+- `two-commits.example.json` -- two install roots, one build each of two revisions; the plan files
+  and cases always come from the checkout the tool lives in, so the two sides are two compilers of
+  the same programs;
+- `backends.example.json` -- one install on both sides, each side naming the pass list it runs the
+  program with (`std::nvm` against `std::fvm`, `std::jit` or `std::prl`). The block's own terminal
+  scheduling pass is replaced by the side's list. The graph reading is not part of this
+  configuration and says so: both sides share the front end, so the graph is the same graph by
+  construction.
+
+```
+node test/tools/diff-compare.mjs --config <file.json> [--jobs N] [--limit N] [--report out.json]
+```
+
+Every `[[tests]]` block under the selected plans is one case -- the block, not the runner's
+expansion of it -- and the run accounts for all of them:
+
+```
+[COVERAGE] declared=6798 compared=6424 excluded=374 measured=6424 time_only=28 plans=411 jobs=8
+[EXCLUDED] n=208 tool=node: the case drives a script of this repository rather than a binary of the install ...
+[EXCLUDED] n=155 tool=python: ...
+[EXCLUDED] n=11  tier=debug: this tier is not run on a Release install ...
+```
+
+A block that carries `--timeit` (or `kind = "benchmark"`) is `time-only`: its standard output is a
+measurement, so only the time reading applies. A block whose invocation prints no DOT is
+`not-a-graph` -- a `check`, a `-E`, a `--version` -- which is a different number from a graph that
+matched. `--limit N` measures the first N comparable cases; `--limit 0` takes the coverage reading
+and nothing else. The exit status is 0 when no case differs, 1 when one does, 2 when the
+configuration or a side is unusable.
+
+A harness that reports "identical" for everything would pass every acceptance here, so
+`--self-test` plants two differences in a scratch copy of a real case and requires the tool to see
+them: a changed string literal must come out as an output difference (and not as a graph one -- a
+literal is a value, not a structure), and a deleted statement must come out as a graph difference.
+The tool is not a gate leg: it reads two installs that a lane built, and it is run by whoever needs
+the reading.
+
 ## Fields a Kind Does Not Read
 
 The schema is closed, but it is not kind-aware: a field spelled correctly is accepted under every

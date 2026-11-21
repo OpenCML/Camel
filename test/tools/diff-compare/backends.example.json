@@ -1,0 +1,48 @@
+{
+  "//": [
+    "Configuration B: the reference executor against the other back ends. Both sides name the same",
+    "install -- this is not a comparison of two builds but of two schedulers of one build -- and",
+    "each side names the pass list it runs the program with. A block's own terminal scheduling",
+    "pass is replaced by that list, so a case that pins `std::jit` is compared with `std::nvm`",
+    "rather than with itself.",
+    "",
+    "For `std::fvm`, `std::jit` and `std::prl`, change `b.passes` and `b.name`:",
+    "  std::fvm                     the bytecode VM",
+    "  std::jit                     the same VM with the code generator (a build without one runs",
+    "                               `std::fvm` and says so on stderr; the warning is a fact about",
+    "                               the build and appears on both sides equally)",
+    "  std::cxx::inline, std::fvm   a pipeline in front of the back end, as test/vars.toml writes it",
+    "",
+    "The graph reading is not part of this configuration: both sides share the front end, so the",
+    "graph they produce is the same graph by construction. The output and time readings are."
+  ],
+  "label": "step0-b-nvm-vs-fvm",
+  "a": {
+    "name": "nvm",
+    "commit": "<sha of the install>",
+    "install": "/home/zjwei/camel-work/<worktree>/out/latest",
+    "passes": ["std::nvm"]
+  },
+  "b": {
+    "name": "fvm",
+    "commit": "<the same sha>",
+    "install": "/home/zjwei/camel-work/<worktree>/out/latest",
+    "passes": ["std::fvm"]
+  },
+  "select": {
+    "plans": ["test/plans"],
+    "skip_tiers": ["debug"]
+  },
+  "compare": {
+    "output": true,
+    "graph": false,
+    "time": true
+  },
+  "output": {
+    "bound_ulp": 2,
+    "bits": 53,
+    "overrides": []
+  },
+  "timeout_scale": 2,
+  "jobs": 8
+}
