@@ -586,6 +586,21 @@ void freeExecutable(void *p, size_t size) {
 #endif
 }
 
+// A function address that C++ calls indirectly is preceded by an eight-byte type descriptor when
+// the translation unit is built with clang's `-fsanitize=function`, which the `-fsanitize=undefined`
+// group includes: the call site reads the magic 0xc105cafe at `fn - 8` and the type hash at `fn - 4`,
+// and reports a mismatch when the magic matches and the hash does not. Generated code has no
+// descriptor, and its mapping begins at a page boundary, so that read landed in the page *before*
+// the code -- an unmapped read eight bytes below a page boundary, which is how the ASan leg saw the
+// indirect call of `runFramedJit` die (fastvm.cpp:1025, `curFn(slots, jitCtx)`) and every other
+// entry of a compiled graph with it. The slot is therefore part of the mapping, in front of the
+// code, and left zeroed: the check reads no magic, takes the callee for a function it has no record
+// of and skips it, as it does for a function from a translation unit built without the check. The
+// hash cannot be written there instead -- it is the compiler's own, and another clang would turn
+// every call into a reported mismatch. Sixteen bytes keep the entry as aligned as the page it
+// starts in; a build without the check pays them and never reads them.
+constexpr size_t kTypeDescriptorBytes = 16;
+
 } // namespace
 
 X64Backend::X64Backend() { frameBaseOffset_ = getFrameDynamicAreaOffset(); }
@@ -1898,19 +1913,22 @@ JitEntryFn X64Backend::load(std::unique_ptr<CompiledCode> code) {
     size_t pageSize = 4096;
     size_t aligned  = (size + pageSize - 1) & ~(pageSize - 1);
 
-    void *mem = allocExecutable(aligned);
+    // The descriptor slot comes with the code, in front of it (see kTypeDescriptorBytes).
+    auto *mem = static_cast<uint8_t *>(allocExecutable(aligned + kTypeDescriptorBytes));
     if (!mem)
         return nullptr;
 
+    std::memset(mem, 0, kTypeDescriptorBytes);
+    std::memcpy(mem + kTypeDescriptorBytes, code->code.data(), size);
     allocatedPages_.push_back(mem);
-    std::memcpy(mem, code->code.data(), size);
 
-    return reinterpret_cast<JitEntryFn>(mem);
+    return reinterpret_cast<JitEntryFn>(mem + kTypeDescriptorBytes);
 }
 
 void X64Backend::unload(JitEntryFn fn) {
+    auto *entry = reinterpret_cast<uint8_t *>(fn);
     for (auto it = allocatedPages_.begin(); it != allocatedPages_.end(); ++it) {
-        if (reinterpret_cast<void *>(fn) == *it) {
+        if (entry == static_cast<uint8_t *>(*it) + kTypeDescriptorBytes) {
             freeExecutable(*it, 4096);
             allocatedPages_.erase(it);
             break;
