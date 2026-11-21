@@ -51,6 +51,26 @@
     ],
     "rules": [
         {
+            "comment": "The capture-order determinism reading's only case is the checker itself (scripts/check-capture-order.mjs): no plan directory mirrors a tool under scripts/, so the rule for scripts/ selects smoke and nothing would run the plan that reads the checker's output. This rule takes that one path out of the general rule (first match wins) and names the plan the checker feeds; the rest of scripts/ still selects smoke.",
+            "paths": ["scripts/check-capture-order.mjs"],
+            "plans": ["feat/compile/capture_order.plan.toml"]
+        },
+        {
+            "comment": "The three higher-order-clause readings keep their cases under test/cases/effects/ because what they observe is the footprint, while the plan sits in feat/compile because what it states is the operator's clause. The directory rule mirrors test/cases/effects/ to the feat/effects directory and the rule for that directory names feat/compile/effects_syntax, so neither reaches this plan; these three paths name it beside them.",
+            "paths": ["test/cases/effects/hof_callback_effect_footprint.cml", "test/cases/effects/hof_map_pure.cml", "test/cases/effects/hof_map_effect.cml"],
+            "plans": ["feat/compile/higher_order_clause.plan.toml"]
+        },
+        {
+            "comment": "The commit-tier reading's fixture lives with the other commit-check cases (test/cases/opt/commit_checks/), so the directory rule mirrors it to feat/opt/commit_checks.plan.toml, while the plan that reads it sits in feat/effects because the tier it asks about is the effect analysis's own commit check. This path names that plan beside the mirrored one.",
+            "paths": ["test/cases/opt/commit_checks/inplace_edit.cml"],
+            "plans": ["feat/effects/commit_tier_inplace.plan.toml"]
+        },
+        {
+            "comment": "The savepoint readings run over the rule pairs of rules_int.cml, a corpus file that feat/mm/writings.plan.toml also names: the directory rule selects the writings plan, so this path adds the savepoint plan beside it, and the half of the savepoint that takes back a whole segment runs when the corpus it reads changes.",
+            "paths": ["test/cases/feat/mm/writings/rules_int.cml"],
+            "plans": ["feat/opt/savepoint.plan.toml"]
+        },
+        {
             "comment": "The two programs the plan-refs plan reads, one from the counted-box table of the compile plans and one from the closure cases. The plan sits in test/plans/feat/tools, which no directory under test/plans/feat mirrors from a test/cases path, so the walk from test/cases reaches nothing here and this rule is the one the self-test asks for: every plan under test/plans must be selected by a case path it names. It comes before the general rules in this list because the first matching file rule applies to a file. Naming the two files adds this plan beside the one the directory rule selects (feat/compile, feat/consistency/values), and the plan is fast, so the rule carries no layer.",
             "paths": ["test/cases/compile/ref/ref_boxes_made_per_call_ten.cml", "test/cases/consistency/values/ref_one_cell_two_holders.cml"],
             "plans": ["feat/tools/plan_refs.plan.toml"]
@@ -558,8 +578,8 @@
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
-            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. llms.txt is the root index of the reference for AI readers, so a change to it is a documentation change. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
-            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "llms.txt"],
+            "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct, and the source package's REPRODUCE.md, whose commands and paths docs_links reads like any other page); agents/ is the development guide. llms.txt is the root index of the reference for AI readers, so a change to it is a documentation change. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
+            "paths": ["docs/", "AGENTS.md", "agents/", "README.md", "CONTRIBUTING.md", "ROADMAP.md", "CODE_OF_CONDUCT.md", "SECURITY.md", "REPRODUCE.md", "llms.txt"],
             "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {

@@ -95,8 +95,15 @@ const CUDA_AWARE_MODULES = [
  * device and the runner's default hides the machine's cards from both. The lane that added the
  * Loop export left this pin at 35, and the pin is what makes that visible: the runner's self-test
  * reads the same audit, so the stale number was red there before anyone ran the guard alone.
+ * 37 -> 38 on 2026-11-18: `opt.writings.greedy_fusion_reads_no_writing` joined, the greedy-fusion
+ * reading of `feat/opt/writings.plan.toml`. Its case
+ * (`test/cases/opt/writings/greedy_fusion_writings.py`) names the `torch.fx` control beside it
+ * (`test/cases/opt/writings/fx_greedy_fusion.py`, which imports `torch`), and this guard reads the
+ * imports of a `.py` that a case names. That control is not run: the case reports whether the file
+ * is in the tree and nothing more, so the test reaches no card either way -- and because Python is
+ * named as its tool, the runner's default hides the machine's devices from it.
  */
-export const EXPECTED_EXAMINED = 37
+export const EXPECTED_EXAMINED = 38
 export const EXPECTED_DEVICE_LAYER = 17
 
 function walkPlanFiles(dir, out = []) {
