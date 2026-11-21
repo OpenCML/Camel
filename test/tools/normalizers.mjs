@@ -6,38 +6,71 @@ import { fileURLToPath } from 'url'
 
 const REPO_ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url))))
 
+const escapeForRegExp = (root) => root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /**
- * Replace the repository root with `<ROOT>` and write the rest of that path with forward slashes,
- * so a snapshot does not depend on where the checkout lives or on the platform's separator. The
- * root is recognised with forward slashes, with native separators, and with escaped backslashes
- * (a Windows path inside a quoted DOT or JSON string), in its own case and in lower case.
+ * One root, in the three spellings a path can arrive in: forward slashes, native separators, and
+ * escaped backslashes (a Windows path inside a quoted DOT or JSON string). On Windows only the
+ * separator form the root itself was written in is rewritten in the rest of the path, so an escape
+ * that follows the path (`\"`, `\n`) is left alone.
  */
-export function normalizePathText(text, repoRoot = REPO_ROOT) {
-    const forward = repoRoot.replace(/\\/g, '/')
+function replaceRoot(text, root, label) {
     let output = text
-    if (repoRoot.includes('\\')) {
-        // Windows: `C:\\repo\\a\\b` (escaped) first, then `C:\repo\a\b` (native). Only the
-        // separator form the root itself was written in is rewritten in the rest of the path,
-        // so an escape that follows the path (`\"`, `\n`) is left alone.
-        const quote = (root) => root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (root.includes('\\')) {
         const rest = '[^\\s"\'`<>|*?,;]*'
-        for (const [root, separator] of [
-            [repoRoot.replace(/\\/g, '\\\\'), /\\\\/g],
-            [repoRoot, /\\/g],
+        for (const [form, separator] of [
+            [root.replace(/\\/g, '\\\\'), /\\\\/g],
+            [root, /\\/g],
         ]) {
-            const pattern = new RegExp(`${quote(root)}(${rest})`, 'gi')
-            output = output.replace(pattern, (_, tail) => `<ROOT>${tail.replace(separator, '/')}`)
+            const pattern = new RegExp(`${escapeForRegExp(form)}(${rest})`, 'gi')
+            output = output.replace(pattern, (_, tail) => `${label}${tail.replace(separator, '/')}`)
         }
     }
-    return output.replaceAll(forward, '<ROOT>').replaceAll(forward.toLowerCase(), '<ROOT>')
+    const forward = root.replace(/\\/g, '/')
+    return output.replaceAll(forward, label).replaceAll(forward.toLowerCase(), label)
+}
+
+/**
+ * Replace the repository root with `<ROOT>`, and the installation a run measures with `<INSTALL>`,
+ * writing the rest of each path with forward slashes, so a snapshot does not depend on where the
+ * checkout lives, where the install lives, or on the platform's separator. Each root is recognised
+ * in the three spellings above, in its own case and in lower case.
+ *
+ * The install root is the second root because a run may measure an install that is not this
+ * checkout's -- `--camel <another tree>/out/latest/bin/camel` -- and the compiler then prints that
+ * install's library as that install's absolute path. The repository-root rule cannot see it, so an
+ * assertion on `stdlib/vjp.cml` hit in the checkout that owned the install and missed in a worktree
+ * that measured it: one reading, green or red by where the run started. That is a defect of the
+ * normalization, not of the assertion, so the install root is normalized and the assertion is left
+ * exactly as it was: the tail stays exact, and a run that could not find the file still prints a
+ * path that does not carry the asserted fragment.
+ *
+ * The repository root goes first, and that order is what keeps a checkout measuring its own
+ * `out/latest` byte-identical: that prefix is already `<ROOT>` by the time the install root is
+ * asked for, so this rule only fires on an install outside the checkout. A bare root (a whole
+ * drive, `/`) is refused rather than obeyed -- replacing it would rewrite every absolute path.
+ */
+export function normalizePathText(text, repoRoot = REPO_ROOT, installRoot = null) {
+    let output = replaceRoot(text, repoRoot, '<ROOT>')
+    if (!installRoot) return output
+    const install = path.normalize(installRoot)
+    if (path.dirname(install) === install) return output
+    if (path.normalize(repoRoot) === install) return output
+    return replaceRoot(output, install, '<INSTALL>')
 }
 
 /**
  * The normalizers `docs/test-plans.md` documents. One definition serves every comparison path --
  * the plan runner and a checker with its own golden comparison (exemplars/check.mjs) -- so a
  * normalizer added here reaches all of them and no harness can silently compare less than another.
+ *
+ * `roots.installRoot` is the install the run measures (`test/tools/run-tests.mjs`: the binary
+ * `--camel` names, its grandparent), used by `normalize_paths` alone. A caller that compares a
+ * recorded golden without knowing that install passes nothing and keeps the repository-root
+ * reading; the runner passes it to both sides of every comparison, so a golden and the output it is
+ * compared with are normalized by one rule.
  */
-export function applyNormalizers(text, names) {
+export function applyNormalizers(text, names, roots = {}) {
     let output = text
     for (const name of names || []) {
         if (name === 'strip_ansi') {
@@ -50,7 +83,7 @@ export function applyNormalizers(text, names) {
                 .map((line) => line.replace(/[ \t]+$/g, ''))
                 .join('\n')
         } else if (name === 'normalize_paths') {
-            output = normalizePathText(output)
+            output = normalizePathText(output, undefined, roots.installRoot)
         } else if (name === 'normalize_addresses') {
             output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
         } else if (name === 'normalize_origins') {

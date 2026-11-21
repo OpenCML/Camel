@@ -928,6 +928,15 @@ the four pass and that check red, which is the direction that matters.
   (a path inside a quoted DOT or JSON string) as well. Use it on every snapshot whose output
   carries an absolute path (for example the `srcfile` attribute of `std::rgir` / `std::argir`),
   otherwise the golden only matches the checkout it was recorded in.
+  It replaces the install a run measures with `<INSTALL>` the same way. That root is the binary
+  `--camel` names, its grandparent, and it need not be inside this checkout: a worktree running
+  another tree's `out/latest/bin/camel` is told where the file is as that install's absolute path,
+  so without this rule an assertion on `stdlib/vjp.cml` hit in the checkout that owned the install
+  and missed in the worktree -- one reading, red or green by where the run started. The repository
+  root is replaced first, so a checkout measuring its **own** `out/latest` keeps the `<ROOT>`
+  reading it has today, and the install rule only fires on an install outside the checkout. The
+  tail is untouched: `<INSTALL>/stdlib/vjp.cml` still pins the file, and a run that never found it
+  still prints a path that does not carry the asserted fragment.
 - `normalize_addresses`
 - `normalize_origins`
   Replaces an origin id with `<ORIGIN>`, in the DOT form (`origin=63` in `std::gir`, `std::rgir`,
