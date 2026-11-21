@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：65 页
+## 现在在等作者：63 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -67,15 +67,13 @@
 | [`2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows`](2026-11-20-who-reads-the-two-graphs-of-a-refused-capture-on-windows.cn.md) | Windows 上那次「捕获被拒」：三个图的名字，只有一台能构建 Windows 的机器读得到 |
 | [`2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time`](2026-11-21-how-does-a-lift-know-it-is-a-lift-at-build-time.cn.md) | 构建期怎么知道一张图已经是提升的结果 |
 | [`2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments`](2026-11-21-the-record-and-the-type-do-not-say-the-same-thing-about-a-kernels-arguments.cn.md) | 「规则把切向写在哪个实参上」这件事，被调方的类型说不出 |
-| [`2026-11-21-what-do-the-three-rewrite-operators-reach`](2026-11-21-what-do-the-three-rewrite-operators-reach.cn.md) | 三个改写算子各读写什么资源？ |
-| [`2026-11-21-what-extract-declares-and-where-a-capture-class-comes-from`](2026-11-21-what-extract-declares-and-where-a-capture-class-comes-from.cn.md) | 改写家族的另外两条：`extract` 声明什么，闭包捕获的类从哪来？ |
 | [`2026-11-21-where-does-the-capture-tangent-get-its-value`](2026-11-21-where-does-the-capture-tangent-get-its-value.cn.md) | 捕获的切向从哪里拿到它的值 |
 | [`2026-11-21-whether-transpose-can-say-its-signature-is-lifted`](2026-11-21-whether-transpose-can-say-its-signature-is-lifted.cn.md) | `Transpose<F>` 说不出「我的参数里有一半是提升出来的」 |
 | [`2026-11-21-which-reader-may-fill-a-lifts-value-half`](2026-11-21-which-reader-may-fill-a-lifts-value-half.cn.md) | `Transpose<F>` 的那一格写不进签名：提升签名的 value half 由谁填 |
 | [`2026-11-21-who-lifts-the-members-of-a-closure-fill`](2026-11-21-who-lifts-the-members-of-a-closure-fill.cn.md) | 闭包构造 Fill 的成员，在配对提升里由谁提升 |
 | [`2026-11-21-who-pairs-the-captures-of-a-body-built-closure`](2026-11-21-who-pairs-the-captures-of-a-body-built-closure.cn.md) | 体内造出的闭包，谁负责把它的捕获配成对 |
 
-## 生成器不会删的行：168 行（页已不在 `questions/` 里）
+## 生成器不会删的行：170 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -234,6 +232,8 @@
 | [`2026-11-20-whether-splits-forward-half-takes-a-tangent-port`](../reviews/2026-11-20-whether-splits-forward-half-takes-a-tangent-port.cn.md) | `split` 割「结果含函数」的图时，前向半要不要收切向端口 | 在 `reviews/` |
 | [`2026-11-20-whether-the-value-half-takes-tangent-ports`](../reviews/2026-11-20-whether-the-value-half-takes-tangent-ports.cn.md) | 值半要不要收一个切向端口 —— 割「提升过的函数」时的那条缝 | 在 `reviews/` |
 | [`2026-11-20-why-the-split-point-is-type-computable`](../reviews/2026-11-20-why-the-split-point-is-type-computable.cn.md) | （A）不必要：割点对「结果含函数」也是**类型可算**的 | 在 `reviews/` |
+| [`2026-11-21-what-do-the-three-rewrite-operators-reach`](../reviews/2026-11-21-what-do-the-three-rewrite-operators-reach.cn.md) | 三个改写算子各读写什么资源？ | 在 `reviews/` |
+| [`2026-11-21-what-extract-declares-and-where-a-capture-class-comes-from`](../reviews/2026-11-21-what-extract-declares-and-where-a-capture-class-comes-from.cn.md) | 改写家族的另外两条：`extract` 声明什么，闭包捕获的类从哪来？ | 在 `reviews/` |
 | [`2026-11-21-where-is-a-fill-built-closures-layout-recorded`](../reviews/2026-11-21-where-is-a-fill-built-closures-layout-recorded.cn.md) | 一个由 Fill 造出的函数值，闭包布局记在哪里 | 在 `reviews/` |
 | [`2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to`](../reviews/2026-11-21-whether-a-pinned-sentence-follows-the-wall-it-was-pinned-to.cn.md) | 一句被钉住的拒句，墙自己挪走之后，用例该跟着挪吗 | 在 `reviews/` |
 | [`2026-11-21-who-supplies-the-primal-to-a-transposed-lift`](../reviews/2026-11-21-who-supplies-the-primal-to-a-transposed-lift.cn.md) | 谁把原值交给「线性函数的提升」的转置 | 在 `reviews/` |
