@@ -59,3 +59,15 @@
 **③ 下一手的唯一位置**：`region_outline.cpp` 的 `holdsWidened` 或内层扫描
 （`dataIndex < 0` + `found->second == nodeType`）。order 族车道的读数是：**第 1 轮外层
 `holdsWidened` 命中了、也进了刷新段，卡在「内层」** —— 与上面的实测互相印证，内层是唯一剩下的地方。
+
+## 默认建议（写死）
+
+**默认建议**：按 §④ 的预期开工 —— 刷新循环**不跟着** `transferAggregate` 补边而改，唯一落点是
+§⑤③ 指的那一处**内层扫描**（`modules/tiles/src/region_outline.cpp` 的 `holdsWidened` 内层，
+判据 `dataIndex < 0` + `found->second == nodeType`）。
+**判据（一次读数就分叉，跑完删探针）**：在 `src/runtime/draft.cpp#GraphDraft::materializeStaticValue`
+打 `[PROBE-M]`，第 1 轮若出现该草稿的**第二次** `[PROBE-M]` 且 `found->second == nodeType` ⇒ 问题在编码/发布
+（`verifyDraftDelivery`、`staticDataType`）；若**不出现第二次** ⇒ 判据短路，改内层判据。
+两条用例转绿才算完：`gpu_scope.report_reads_the_segments_a_pass_cut`、
+`literal.tensor_element_type_gpu_scope_compiles`，且 `-Plan feat/modules/tiles` 不涨。
+另：扫到静态值节点**先看 `code()`**，不许假设它一定是函数值（§⑤② 那次的 SIGSEGV 就是这一句）。

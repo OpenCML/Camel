@@ -82,3 +82,13 @@ src/runtime/node_roles.cpp            effect 角色改调它
 - 没有改任何用例的期望值、没有改 `train.cml` / `edits-ecoop.cml` / 基线文件 / `.plan.toml`。
 - 没有动 `modules/transforms/jvp.cpp` / `split.cpp` / `lift.h`（那是 `lane-jvp-closure` 的地盘）。
 - 没有走乙，也没有动 autodiff 的声明：两条都在等 §4 的裁定。
+
+## 默认建议（写死）
+
+**默认建议**：按 §4 的 **丙** 开工 —— **在库里 `grad` 自己的声明上写子句**，一个字都不动读法
+（`2246e39ef` 那笔共享取子句保持原样）。
+**判据**：库 `grad` 版下条目（1）由 **`PassEffectBeyondType`** 拒（不是 `PassEffectOrder`）；
+`print_unordered` 的冲突对变成「新打印 × `main` 自己的某个打印」；四条读数**各报改前改后两次**、逐字对比
+（§1 就是靠这个逐字对比证明「读法改不动没写子句的值」的）。
+另外两件与这条分开记：② 的「插在 `is_inputs(n)` 上的打印根本不被求值」与效应检查无关，**单列另修**；
+**乙**（值没写子句时读值背后的图）先不做 —— 它与「按值的类型读」的字面相反，要走得先让作者改那条规则。

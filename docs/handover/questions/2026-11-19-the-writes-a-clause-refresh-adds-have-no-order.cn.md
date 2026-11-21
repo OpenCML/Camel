@@ -28,3 +28,13 @@
 `finish` 之上那句注释是「The graph is finished: …」。刷新在它之后又对同一张图开草稿、删掉一个值节点并写入
 新节点（`:393-397`）。请判：这会不会把图重新变成「没完成」；`order()` 里以 `draft.alive()` 为前提的边会不会
 指到被这次 `eraseNode` 删掉的 id 上。
+
+## 默认建议（写死）
+
+**默认建议**：按「**会**把图重新变成没完成」处理 —— 刷新之后再走一遍 order、**只对新声明出的写补边**
+（不塞进 `finish`，理由见 §②）；并且 `order()` 里所有以 `draft.alive()` 为前提的边在 `:393-397` 那次
+`eraseNode` 之后**逐条重查**，指向已删 id 的边丢掉，不许留悬空边。
+**判据**：`gpu_scope.write_outside_a_sync_block_runs_through_the_pass` 不再出现任何 `0x0400` 码；
+`-Plan feat/modules/tiles` 与 `gpu-plans` 的红数不涨。上界保持 `copy->nodeCount()` ——
+**不许**退回 `draft.nodeCount()` 换绿：§③ 已经量明那 18→1 是靠「刷新第 1 轮就停」换来的假绿，
+而冲突正是刷新真的声明出写之后才有的。
