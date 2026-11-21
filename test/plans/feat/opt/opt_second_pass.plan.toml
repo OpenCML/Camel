@@ -19,7 +19,7 @@
 #   red on the old helper and green on the new one, which is what makes it a regression case and not
 #   a description. It is not 89 ms: where the remaining 1668 ms goes is the reading the entry above
 #   this one explains (`std::cxx::fold` scanning the graph the inliner unrolled), and the step that
-#   fixes it is the rewrite core of the design page (docs/design/architecture/abstractions.cn.md §7).
+#   fixes it is the rewrite core section of the abstractions design page, still under discussion on fsh-dev.
 #
 #   `concat_chain` -- the chain written as its own program, with a depth that is a run-time count, so
 #   `fib(20)` is only there to give the program something to do. It costs 1404 ms in the second pass
