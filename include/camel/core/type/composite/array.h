@@ -253,7 +253,7 @@ bool isElementTypeUnstated(const Type *type);
 /// an entrance. `Builder::coerceTo` asks it where a value takes the type of its position and
 /// `Builder::visitCall` where an argument enters a parameter; the transposition walk asks it where
 /// it hands a law the cotangent of that law's port
-/// (`modules/transforms/transpose.cpp#ruleCotangent`, the entrance that is not some position's
+/// (`modules/transforms/transpose/walk.cpp#ruleCotangent`, the entrance that is not some position's
 /// `coerceTo` because the port is filled by the caller and not by a builder). A second reading of
 /// the same rule somewhere else is the way the two ends start disagreeing about one value.
 inline bool isRankZeroEdge(Type *target, Type *source) {

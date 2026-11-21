@@ -120,7 +120,7 @@ enum class TransposeRefusalCause {
     ///
     /// **No case in the tree reaches it** (the step's own log field,
     /// `why=no-cotangent-on-the-tangent-component`, occurs at the site in
-    /// `transpose.cpp#buildTransposeMember` and in no case, plan or page). It is kept as a guard
+    /// `transpose/walk.cpp#buildTransposeMember` and in no case, plan or page). It is kept as a guard
     /// rather than deleted, the way `CallValueMissing` is: a pair read with a cotangent wanted on
     /// its second component is a state the walk can still enter, and answering it with a cause
     /// about a missing *value* is what sent a reader to the wrong edit. A program that reaches it
@@ -185,7 +185,7 @@ enum class TransposeRefusalCause {
     /// no instance at these operands): here the law was chosen, its body ran, and what it answered
     /// is a different shape from the one it is answering for.
     ///
-    /// What is compared is what the two types **state** (`statedShapeDisagreement`, `transpose.cpp`):
+    /// What is compared is what the two types **state** (`statedShapeDisagreement`, `transpose/walk.cpp`):
     /// an extent a type leaves open is not compared, and a side whose rank is open (`T[..]`, which
     /// includes rank 0) is not compared on rank. So a law that reduces with `sum_to` -- the repair
     /// this cause was added beside -- answers `T[..]` and says nothing here.
