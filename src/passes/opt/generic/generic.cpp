@@ -2010,31 +2010,6 @@ const camel::runtime::Program *simplifyGraph(
             mayReduceOrder,
             config.checkScreens);
     };
-    /// The direct call the round's inliner left because the growth budget is spent, if it left
-    /// one. The engine already records why it left each call (`InlineDeclined`, camel/passes/opt/
-    /// config.h) and `std::opt` hands that record on as the pass fact kInlineReportFactKey; the
-    /// record is the round's, because the engine writes it at the end of every run and overwrites
-    /// the previous one. `InlineDecline::GrowthBudget` is the reason the engine only gives a call
-    /// it would otherwise have inlined (the owner cap and the strategy are asked first, engine.cpp),
-    /// so a round that changed nothing while one of these is recorded did not reach a fixed point:
-    /// it reached the budget. The two do not print the same sentence (`std::opt: fixpoint after N
-    /// round(s)` is for a settled optimizer only), so a spent budget is not read as one.
-    const auto growthBudgetRefusal = [&]() -> std::optional<InlineDeclined> {
-        if (context == nullptr) {
-            return std::nullopt;
-        }
-        const auto fact = context->passFact(kInlineReportFactKey);
-        if (!fact) {
-            return std::nullopt;
-        }
-        const auto report = std::static_pointer_cast<const InlineReport>(fact);
-        for (const InlineDeclined &entry : report->declined) {
-            if (entry.why == InlineDecline::GrowthBudget) {
-                return entry;
-            }
-        }
-        return std::nullopt;
-    };
     for (size_t round = 0; round < maxRounds; ++round) {
         const bool lastRound = round + 1 == maxRounds;
         // What the last round changes is what the message about a bound reached says, so its
@@ -2045,7 +2020,17 @@ const camel::runtime::Program *simplifyGraph(
             contentsBefore = graphContentsOf(program);
         }
         bool optChanged = false;
-        program         = applyOptimizeRewritePass(context, program, os, config, &optChanged);
+        // The call the round's inliner left because the growth budget is spent, if it left one.
+        // The engine reports it (`applyOptimizeRewritePass`, camel/passes/opt/inline/engine.h), so
+        // the round asks the run it just made. `InlineDecline::GrowthBudget` is the reason the
+        // engine only gives a call it would otherwise have inlined (the owner cap and the strategy
+        // are asked first, engine.cpp), so a round that changed nothing while one of these was
+        // left did not reach a fixed point -- it reached the budget. The two do not print the same
+        // sentence (`std::opt: fixpoint after N round(s)` is for a settled optimizer only), so a
+        // spent budget is not read as one.
+        std::optional<InlineDeclined> growthBudgetLeft;
+        program = applyOptimizeRewritePass(
+            context, program, os, config, &optChanged, nullptr, &growthBudgetLeft);
         std::deque<camel::core::mm::RootHandle> roots;
         size_t folded = 0, merged = 0, simplified = 0, removed = 0;
         program = rewriteReachableGraphs(
@@ -2100,20 +2085,28 @@ const camel::runtime::Program *simplifyGraph(
             // still stops -- the budget is the caller's to raise -- and ends with the program as it
             // stands, exactly as the fixed point does; what changes is the sentence and that the
             // spent budget is now a warning the default log level prints.
-            if (const std::optional<InlineDeclined> left = growthBudgetRefusal()) {
-                raisePassWarning(
-                    *context,
-                    camel::core::error::RuntimeDiag::OptimizationStoppedShort,
-                    camel::source::kInvalidOriginId,
-                    std::format(
-                        "the growth_budget of {} node(s) is reached and round {} changed nothing "
-                        "-- inlining '{}' into '{}' would copy {} node(s), which does not fit what "
-                        "is left of it",
-                        config.growthBudget.nodes,
-                        round + 1,
-                        left->callee,
-                        left->caller,
-                        left->calleeNodes));
+            if (growthBudgetLeft) {
+                const std::string stopped = std::format(
+                    "the growth_budget of {} node(s) is reached and round {} changed nothing "
+                    "-- inlining '{}' into '{}' would copy {} node(s), which does not fit what "
+                    "is left of it",
+                    config.growthBudget.nodes,
+                    round + 1,
+                    growthBudgetLeft->callee,
+                    growthBudgetLeft->caller,
+                    growthBudgetLeft->calleeNodes);
+                // The warning is a pass diagnostic where there is a context to carry one. With
+                // none there is no place for it, and the sentence still goes to the log rather
+                // than the round being reported as a fixed point it did not reach.
+                if (context != nullptr) {
+                    raisePassWarning(
+                        *context,
+                        camel::core::error::RuntimeDiag::OptimizationStoppedShort,
+                        camel::source::kInvalidOriginId,
+                        stopped);
+                } else {
+                    CAMEL_LOG_WARN_S("Opt", "std::opt: {}", stopped);
+                }
                 return finish(program);
             }
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
