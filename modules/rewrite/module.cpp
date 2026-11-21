@@ -4341,6 +4341,22 @@ class RewriteModule final : public BuiltinModule {
         camel::core::OperatorTable::instance().declareUnfoldable(
             "rewrite",
             {"rule", "rule_when", "rule_generic", "fact"});
+        // What the two operators that read a graph touch (graph-editing design 9 and 15.5, author
+        // 2026-11-21): the graph, read and never written. `saturate` reads the graphs of the rules'
+        // two sides and of the function it is applied to, and hands back a new function value --
+        // the graph it read is an immutable value, so no clause writes it. `check` reads the same
+        // graphs and answers a report, writing nothing. The rules arrive as a `Rule[]` value in an
+        // argument and are not a resource, so no access names them. Its random sampling takes a
+        // fixed stream: the samples of a rule are drawn from `seed` (default 0) and the rule's own
+        // identity (`sampleStreamOf`), so the operators read no generator and no clock.
+        {
+            using camel::core::sem::AccessMode;
+            using camel::core::sem::ambientAccess;
+            camel::core::sem::ResourceSpec readsGraph;
+            readsGraph.accesses = {ambientAccess("graph", AccessMode::Read)};
+            camel::core::OperatorTable::instance().declareResources(
+                "rewrite", {{"saturate", readsGraph}, {"check", readsGraph}});
+        }
         loaded_ = true;
         return true;
     }
