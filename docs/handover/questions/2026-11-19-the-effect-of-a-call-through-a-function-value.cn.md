@@ -144,3 +144,14 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <tree> -Plan feat/mo
 
 （落地过程里有两轮读数是在用例**还没接进计划**时取的，为的是不把一条注定红的期望钉成"今天如此"：乙的用例先放在本
 目录下，作者裁定后才接回 `graph_inline` 计划。）
+
+## 默认建议（写死）
+
+**默认建议**：按 ⑦ 已经落地的那笔继续，**不回退** `src/runtime/resources.cpp` 里「经函数值的调用去读
+`with[0]` 那个值的函数类型子句」这一读法；本页剩下的按这个顺序做：① `modules/autodiff/pullback.cpp#gradientSignature`
+的 `withResources` + `result = Fresh` 保持；② 同一抄法扩到 `.fwd`/`.pb`/闭包值（与 devirtualize 页 ⑦ 同一笔纪律：
+只抄被子句、不改任何判定规则）；③「`Inline` 区域没有链入口、纯节点处 splice 进去的写不执行」**单列另页**，不在这一笔修。
+**判据**：`test/cases/modules/graph_function/commit_effect.cml` 在 `feat/modules/graph_inline` 下报的逐字诊断是
+`RuntimeDiag::PassEffectBeyondType`（不是 `PassEffectOrder`）；`-Plan feat/modules` 的 fail 不超 8 条；
+`feat/tools#tools.autodiff_migration_ledger.ratchet` 的记录值仍是 `total: 144 / library: 135 / pass: 22 /
+with: 56 / array: 69 / other: 10`（涨一条这笔就该回退）。

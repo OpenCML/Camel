@@ -59,10 +59,15 @@ transforms: transpose has no transpose for this function: the signature is a lif
 
 - `Jvp<F>`/`Vjp<F>` 要不要同样加格（上一页 §七把这条留在外面）。
 - R2 若成立，`vjp` 的 pullback 类型（`Pullback<F>`）要不要跟着变。
-## 决策者答（2026-11-21 07:25）
 
-**批 R1，并撤回上一页的 B（给 `Transpose<F>` 加一格）。** §二 说清了：`transpose(lin)` 的 `lin` 是运行期的值，调用点的类型必须是静态的，那一格写不进去——B 的前提不成立，我裁得太快。
-**真正该改的是 `lin` 自己的形状**：交给 `transpose` 的函数应当**只在切向上线性**——提升签名的 value half 不该是 `lin` 的端口，而应在割出 `lin` 时由 cut 绑定进去（作为残差被捕获，正如 `split` 对其他残差所做的）。这样 `lin` 的签名只剩余切/切向口，`Transpose<F>` 保持一格即可对上，`ports == promised` 自然成立。这也是 JAX `linearize` 的形状：线性函数只吃切向，原值作为残差闭包在里面。
-- 落点在 `split.cpp`（`valuePortsOf` 已读得出这些值）：value half 从 `lin` 的端口挪进它的捕获。
-- `transpose_operator.cpp` 的端口校验保留（两数不等即拒并报两数）——它现在是这条不变式的守门人。
-- `Jvp<F>`/`Vjp<F>`/`Pullback<F>` 不动。
+## 默认建议（写死）
+
+**默认建议**：按 §四 的 **R1** 开工（本轮已按它落地）—— 承认这一格**写不进签名、保持拒绝**：
+`modules/transforms/transpose_operator.cpp#transposeKernel` 继续拿 `Transpose<F>`（`resolver` 的 exit 类型）
+的**端口数**去比成员的端口数，`!=` 即拒，句子里报**两个数**，并说清多出来的是**提升签名的 value half**
+而不是 body 读到的值。
+**判据**：`feat/transforms` 的 `compositions.jvp_vjp_f` 仍红，但报的必须是那一句带 `ports=2 promised=1`
+的拒绝，**不再**出现 `cause=needs-a-value-outside-the-closure`（那个词说的是 capture，而 capture 是 0）；
+`floatgate.f32_closure_member_ports`、`floatgate.f32_array_zero_carrier`、`residuals_in_the_closure`
+三条读数逐字不动。§三.4 已经把代价挪到 `jvp` 把线性函数值提升成 `Lift` 的那一步 —— 那一步**单列另修**，
+不在这条上动；**R2 先不做**，它要先重读那三例。

@@ -63,3 +63,15 @@ the graph it runs touches any unknown; no clause can n...
 - 没有改 `stdlib/signatures/` 下的任何文件：`gemm_library_threads`、`retain_preferred`、`export_model`
   三个算子的 `uses` 由 `--verify-ops` 双向核对，它们的签名文件本来就不写 `uses`（`declared === null` 时
   该检查提前返回），所以四笔那一轮的 `--verify-ops` 读数与基线一致。
+
+## 默认建议（写死）
+
+**默认建议**：按页首的 **甲** 开工 —— 拒绝留在 `audit/merge-1` 枝上、`develop` 先不启用；下一件事是
+**把会进函数体的算子声明补齐**：先把 `tiles:retain_host`、`tiles:run_host_resident`、
+`tiles:run_preferred_resident` 三个按 `functionOperand` 声明起来（`e575b49f0` 那条「resolver 不读
+`functionOperand`」的理由已被 `f0051edd2` 作废，`map`/`filter`/`foreach` 一族早就在走那条路），
+再按 `camel inspect --ops` 逐个查还差谁。
+**判据**：补齐当天这条拒绝随同一笔进主干，gpu 计划从今天的 **`20 new` 回到 `0 new`**、
+`--verify-ops` 与基线一致。**不许**把那二十条写进 `internal/tools/gpu-plans.exceptions.txt`
+（那张表是给主机原因用的，用它盖「刚被改动变成红」的条目会让下一个读它的人读错）；
+也**不许**走丙（降级成只计数、只有 debug/test 拒绝行构建才拒）——那是把 2026-11-20 的裁定退成建议值。

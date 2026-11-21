@@ -74,3 +74,13 @@ named」。那段代码（`unnamedReasonOf`）在基线 `52fe1b6a2` 上 `git gre
 `52fe1b6a2` 上 `git grep` 同样零命中 —— 今天没人能在 develop 上复现它。这恰恰是 ① 的另一面：它描述的
 是那条支线的诊断，不是 develop 的。用例本身在：`test/plans/feat/compile/ref.plan.toml:692`
 （`backends = ["nvm", "fvm", "jit", "prl"]` 在 `:696`，「4 个后端」的来处）。
+
+## 默认建议（写死）
+
+**默认建议**：按页首的 **甲** 开工 —— 回调足迹的地点对不上时，**读到「该类的某一份」就到此为止**
+（`src/runtime/resources.cpp` 里 `fromSignature` 给一个捕获的同一种读法：a use that cannot be placed is
+"some resource of its class"），**不给 `Fold` 累加器与 `Norm` 各补一条新绑定**。
+**判据**：`test/cases/effects/hof_callback_effect_footprint.cml` 的 `map.runtime_footprint` 仍钉住
+`:mark/map_arr: rmw ambient stdout; external`、且另一个 `map` 什么都不带；`-Plan feat/effects,feat/compile -Jobs 8`
+的红数不涨。**派工时把工作树的 sha 写进判据**（§④：读 `925c38791` 与读 develop 会得到两句不同的诊断，
+两个人各报一次「撞上同一面墙」就是这么来的）。乙要等「累加器不是形参」先在类型层写出来。
