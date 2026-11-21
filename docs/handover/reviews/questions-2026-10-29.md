@@ -6856,3 +6856,14 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 - **U19 → `lib/verify/`**（路 A）：入口名就是 `verify::`。
 
 另：0.5 的演练做得扎实（两次生成逐字节相同、整树编译过、违例 157 条各有归属）。过渡包含路径只在演练与搬家后的迁移期存在，随违例清单清空而删除，与总方案第 6 节第 1 条一致。
+
+## 返工（2026-11-22 06:35）：0.3 只反转了包含，没反转链接
+
+决策者，抽查 `92f25a7d0`。`core/` 已不再包含 `parse/`、`compile/` 的头文件，这一半做对了。但 `UserDefinedModule` 是内核的类，它的九个成员函数（`compile`、`compileAsLibrary`、`compileAsProgram`、`setProgramGraph`、`exportedFunctions`、`declaresFunction`、`declareTypes`、`declareEntities`、`operatorProtocols`）定义在 `src/compile/module_source.cpp`。也就是说，内核的类由编译器那一层实现：今天各块是 `OBJECT` 库、最后拼成一个 `libcamel`，所以能链接；但内核块单独构建或单独测试时这些符号是悬空的，依赖只是从包含行挪到了链接表里。
+
+计划 0.3 的做法是**内核定义加载器接口、编译器实现并在初始化时登记**。请改成：
+1. 内核声明一个源码模块加载器接口（抽象类或函数表，名字自定），覆盖"把这个模块编译到某一阶段""按库/按程序编译"与它要问前端的几件事；内核持有一个登记位，初始化时由 `compile/` 登记。
+2. `UserDefinedModule` 的上述成员定义回到内核：要前端做事的，经登记的加载器转调；只读前端状态的查询（`exportedFunctions`、`declaresFunction`、`operatorProtocols`），要么也走加载器，要么由加载器在编译完成时把答案写进模块的内核侧字段，按哪样更少地暴露前端类型来定。
+3. 没有登记加载器时，加载源码模块报一个清楚的错误（内核单独使用、只加载 C++ 模块的场景）。
+
+**完成**：内核块内的每个类，其成员全部在内核块里定义；在演练布局下把 `kernel_*` 块单独链接成一个库能过（只缺第三方，不缺 `compile`）。`module_source.h` 给工具读前端状态的两个函数可以保留在 `compile/`，那是上层读上层，没有问题。
