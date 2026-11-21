@@ -121,7 +121,7 @@ digraph GraphIR {
             F04 [label="ARGS", type="ARGS"];
             O04 [label="EXIT", type="EXIT"];
             N1A [label="items", type="PORT", param_name="items", param_kind="normal", param_index="0", value_type="int[]", origin=<ORIGIN>, span="7:11-7:23", srcfile="exemplars/05_effect_order/program.cml"];
-            N1B [label="i", type="PORT", param_name="i", param_kind="normal", param_index="1", value_type="FnValue___g_49___0", origin=<ORIGIN>, span="7:33-7:52", srcfile="exemplars/05_effect_order/program.cml"];
+            N1B [label="cb", type="PORT", param_name="cb", param_kind="normal", param_index="1", value_type="FnValue___g_49___0", origin=<ORIGIN>, span="7:33-7:52", srcfile="exemplars/05_effect_order/program.cml"];
             N1C [label=":struct/len_arr", type="OPER", role="scalar-boundary", origin=<ORIGIN>, span="8:19-8:22", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
             N1D [label=":op/ge_l", type="OPER", origin=<ORIGIN>, span="8:16-8:18", srcfile="exemplars/05_effect_order/program.cml", value_type="bool"];
             N1E [label="JOIN", type="JOIN", role="branch-contract", origin=<ORIGIN>, span="8:11-11:5", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
