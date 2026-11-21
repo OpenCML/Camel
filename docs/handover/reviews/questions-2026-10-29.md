@@ -6834,3 +6834,25 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 决策者。02:05 回"七处还在读语法树"时我说"求导、转置、批处理的规则挂在算子记录上"——这条撤回，它违反原则 9.11"写下一条规则不会改变任何遍的行为，规则集一律显式传"。定论（已写进原则 9.9 与 `docs/design/architecture/abstractions.cn.md` 第 3、6 节）：变换的规则集是**编译期给定的值**——规则连同它的 `Lift` 类型函数，由规则集模块导出、经 `<>` 显式交给 `reinterp`/`split`/`transpose`（`jvp` 是 `reinterp<jvp 规则集>`）；骨架在交来的规则集里按根算子编号取规则；不按名字查族、不读规则头。现状读数页仍作为重构"变换"那一步的输入。
 
 另：设计原则本轮定稿（`01b3d4c9c` 之后这一批），施工方读到的任何旧设计稿与原则冲突处，以原则为准。
+
+## 答布局对照表 C（2026-11-22 04:40）：19 项逐条定
+
+决策者。依据核心抽象第 9 节（目录按入口的 Camel 名字、内部按组件真实结构；内核是唯一公开的 C++ API；遍即函数）与第 13–19 节。定了的请改表 A/B 那一行的状态与目标。
+- **U1 `src/builtin/` → `lib/std/builtin/`**（路 B）：内核只认算子记录，内建算子像模块一样登记。
+- **U2 `src/execute/` 拆两半**：按名字调用 Camel 函数、函数登记表、遍驱动、入口实参、限额、执行观察钩子 → `kernel/`（"调用一个函数"与自省是内核的事）；执行计划的计算、帧、循环驱动、调用算子、设备、故障隔离、`graph_runtime_support` → `lib/std/exec/`。执行计划作为一种事实在内核的事实框架里登记，计算逻辑在 `lib/std/exec`。
+- **U3 → `lib/std/cxx/opt/`**（路 A）：C++ 版就是 `std::cxx::`；Camel 原生的 `opt` 模块在 `lib/opt/`。
+- **U4 按入口名一个后端一个目录**：`lib/std/nvm/`、`lib/std/fvm/`（JIT 在 `lib/std/fvm/jit/`，按架构再分）、`lib/std/prl/`（今天的 taskflow，入口名是 `std::prl`）。
+- **U5 `src/passes/test/` → `lib/test/`**：这些遍的名字是 `test::*`，就是 `test` 模块的函数（两条路都不对：它不属于 `test_support`，也不属于 `std`）。
+- **U6 `src/passes/trans/` → 按入口名进 `lib/std/`**：`lib/std/cml/`、`lib/std/cpp/`、`lib/std/stats/`、`lib/std/gir/`（`gir`、`rgir`、`agir`、`argir`、`jgir`、`gir_regions` 共用一套打印代码，放一处），其余同理。不进 `lib/transforms/`——那是程序变换（`reinterp`/`split`/`transpose`）。
+- **U7 `src/passes/trans/rulesets/` → `lib/std/rulesets/`**：它是 `std::rulesets` 这个遍。**U14 `stdlib/rulesets/` → `lib/rulesets/`**：那是规则集模块（`rulesets.jvp` 等），两者不是一回事，不合并。
+- **U8 `src/service/` 拆开**：语义查询 → `compile/semantic/`（核心抽象第 19 节"`compile/` 提供公开的语义查询接口"）；代码生成服务 → `tools/codegen/`；性能剖析服务 → `tools/profiler/`。
+- **U9 `src/profile/` → `kernel/profile/`**（路 A）：内存管理在用它，工具经自省接口读。
+- **U10、U11 → 内核的公开头**（路 A）：`kernel/include/camel/common/`、`kernel/include/camel/init.h`；内核是唯一公开的 C++ API，顶层不再有 `include/`。
+- **U12 遍的头随各自的块**（路 A）。**U13 → `lib/std/cpp/`**（路 A）：它是 `std::cpp` 导出程序的运行时，随导出后端走。
+- **U15 签名按模块散到各自目录**（路 A）：签名是模块声明的一部分。
+- **U16 C 接口进内核**：第 15 节的 C 接口是内核的模块边界 → `kernel/abi/`；构建胶水 → `cmake/camel_module.cmake`。
+- **U17 → `kernel/diagnostics/`**（路 A）：诊断码表归内核；读它的脚本与顶层构建改路径。
+- **U18 `bindings/python/` 留顶层**（路 B）：它是 Python 宿主 Camel 的一侧，不是 Camel 模块；`python::` 模块在 `lib/python/`。
+- **U19 → `lib/verify/`**（路 A）：入口名就是 `verify::`。
+
+另：0.5 的演练做得扎实（两次生成逐字节相同、整树编译过、违例 157 条各有归属）。过渡包含路径只在演练与搬家后的迁移期存在，随违例清单清空而删除，与总方案第 6 节第 1 条一致。
