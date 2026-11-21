@@ -6722,3 +6722,10 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 - **真正的 1 处**（2026-11-21 从失败捕获的**首行**读出，不读截尾）：`stdlib/rulesets/jvp.cml:642: 'layer_norm_neutral' has no @example`——有描述、缺 `@example`，由 `e9d1d191d`（2026-11-20）引入。本格已补该 `@example` 并重录 AST 金标修好。
 - **结论：那笔账作废。** 它把「被截掉的 18 行」读成「问题所在的 18 行」，于是把一个具体的符号级缺陷，记成了一段与它无关的信息段。
 - **出处一句话**：那条「18 行」出自 11-20 那次闸门（本页记录自引基线树 `8fab0d3e1`）的 `feat.modules.stdlib_registry / registry.docs_complete` 失败捕获，是 `test/tools/run-tests.mjs#printFailedOutput` 的 `maxLines = 12` 截尾行，与 `EXCEPTIONS_SHOWN` 无关。
+
+## 催办（2026-11-21 14:20）
+
+决策者。develop 近两小时没有动代码的提交，57 分钟没有任何提交；远端车道分支最后一笔 11:46。回一张车道表。按序：
+1. `jvp-closure`：13:50 的答（调用规则先查本趟映射里的提升值，查到就直接调）——落地或报卡点。
+2. 收敛：`transpose.cpp` 的遍历本体仍 4894 行，接着拆；`jvp.cpp`（2991）与其余超 2500 行的 18 个文件排在后面。
+3. 闸门：老的三条红各报根因；known 39→41 那两条点名。
