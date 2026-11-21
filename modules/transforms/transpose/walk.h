@@ -20,6 +20,7 @@
 #include "camel/runtime/graph.h"
 
 #include <cstddef>
+#include <optional>
 #include <iosfwd>
 #include <ostream>
 #include <string>
@@ -90,6 +91,24 @@ struct PairCall {
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
 };
 
+/// What one node family is handed besides the node: the walk's state, the graph it is reading, and
+/// the stream a refusal is written to. One struct for every family, because they differ in what
+/// they do and not in what they are handed.
+struct WalkContext {
+    TransposeState &state;
+    camel::runtime::GCGraph *function = nullptr;
+    std::ostream &os;
+};
+
+/// Records the cause and writes the line for it, in the one place both are written: the cause on the
+/// state (so the caller reads a value, not a sentence) and the sentence on the log. A site adds the
+/// *where* -- the node, the uri, the callee -- because that is not the cause.
+void refuseMember(WalkContext &ctx, TransposeRefusalCause cause,
+                  std::optional<size_t> param = std::nullopt);
+
+/// Records the parameter whose shape the walk had to ask for, and the name and type its declaration
+/// writes: the parameter's place, its declared name, and the type whose extents are missing.
+void noteUnstatedParameterOf(WalkContext &ctx, size_t param);
 /// Builds the transposed member of one function into state's group and answers whether it did.
 bool buildTransposeMember(
     TransposeState &state, camel::runtime::GCGraph *function, const GraphId member,
