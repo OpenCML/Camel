@@ -526,17 +526,26 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             insertNode(binding, fieldNode);
         }
     };
+    // What a case runs is the CASE's **only child**: the arm's body EXEC
+    // (`*gCaseNode << caseExprNode`, gct/builder_expr.cpp), not the CASE. Every reader below
+    // hands that body to `visitBodyNode`, which asks it for `operands` and `synced` -- accessors
+    // of an EXEC -- so a CASE reaches them and, in a Debug build, is refused there
+    // (gct/node.h, `kind_ == expected`). A `case p when c` guard is kept beside the CASE
+    // (`Tree::caseGuardOf`) and is not one of the children, so the body is child 0 in every
+    // shape this match takes.
+    const auto bodyOf = [](const GCT::node_ptr_t &caseNode) { return caseNode->at(0); };
     // The arm that runs when no case names the value: the wildcard the program wrote, or,
     // when it wrote every variant, an arm that cannot be reached. The second is needed all
     // the same: the branch it ends offers the join one value of the arms' type.
     std::function<arm_ptr_t()> defaultArm = [&]() -> arm_ptr_t {
         if (wildcard != nullptr) {
-            return buildArm(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
+            const GCT::node_ptr_t body = bodyOf(wildcard);
+            return buildArm(body, [&] { return visitBodyNode(body); });
         }
         const Arm &last = arms.back();
         return buildArm(last.caseNode, [&] {
             bindFields(last);
-            return visitBodyNode(last.caseNode);
+            return visitBodyNode(bodyOf(last.caseNode));
         });
     };
 
@@ -552,7 +561,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             CaseStep caseStep;
             caseStep.condition = applyInternalOperator(
                 "__eq__", nullptr, {tree_->makeDRef(tagName), indexData(arm.tag)}, arm.caseNode);
-            caseStep.exec  = arm.caseNode;
+            caseStep.exec  = bodyOf(arm.caseNode);
             caseStep.guard = tree_->caseGuardOf(arm.caseNode);
             caseStep.bind  = [&bindFields, arm] { bindFields(arm); };
             steps.push_back(std::move(caseStep));
@@ -562,7 +571,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             // cases written after it when its guard does not hold, and it ends the list only
             // when it has no guard.
             CaseStep caseStep;
-            caseStep.exec  = wildcard->at(0);
+            caseStep.exec  = bodyOf(wildcard);
             caseStep.guard = tree_->caseGuardOf(wildcard);
             caseStep.bind  = [] {};
             steps.push_back(std::move(caseStep));
@@ -584,7 +593,7 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
         std::vector<arm_ptr_t> two(2);
         two[0] = buildArm(arm.caseNode, [&] {
             bindFields(arm);
-            return visitBodyNode(arm.caseNode);
+            return visitBodyNode(bodyOf(arm.caseNode));
         });
         if (k + 1 < arms.size()) {
             const GCT::node_ptr_t next = arms[k + 1].caseNode;
@@ -599,7 +608,8 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
         // branch has one arm and no case value, so the arm the runtime chooses is that one.
         node_handle_t always = staticBool(true, gct);
         std::vector<arm_ptr_t> one(1);
-        one[0] = buildArm(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
+        const GCT::node_ptr_t body = bodyOf(wildcard);
+        one[0] = buildArm(body, [&] { return visitBodyNode(body); });
         return buildBranch(gct, always, &one);
     }
     return branchAt(0);
