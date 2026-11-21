@@ -805,8 +805,19 @@ expect_stdout_exact = "gemm_bits small_n=2806496542438e70a88c5c1952eb62c7b4fbc1f
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The three digests below are the **vector** unit's. The fused GELU gradient has a portable unit and
+# an AVX2+FMA one, and the wider one is compiled only for x86-64 (`modules/tensor/CMakeLists.txt`
+# tests `CMAKE_SYSTEM_PROCESSOR` for x86-64 and nothing else); the portable unit is the one selected
+# when no wider unit was built, and it is compiled with the project's `-ffp-contract=off`
+# (`kernels/gradient_generic.cpp` states why). On every arm64 build --
+# the macos-arm64 leg -- the default unit is therefore the portable one, and the three lines are
+# byte for byte the ones the `--tensor-isa generic` entry below pins: the red was a fact about the
+# processor, not about the gradient (both units round the polynomial and the slope as written;
+# `vmath::tanh`'s contraction is the one place they can part). So the entry declares the premise and
+# is skipped where it does not hold; the generic entry keeps the reading on those hosts.
 [[tests]]
 name = "gelu_grad.bits"
+skip_unless = ["node", "test/tools/have-vector-tensor-unit.mjs"]
 desc = "The fused GELU gradient's storage bits at three shapes: the step's own width ([16, 32, 512], the FFN of the d=256 cell), a length that is not a whole number of vectors (1155 = 144 vectors of 8 and a scalar tail of 3), and one element. The digests are the three-pass chain's, shape for shape, in this unit: the kernel rounds the polynomial and the slope as the chain did and takes its tangent from the same vmath::tanh, so one loop in place of three passes moves no bit. They are the vector unit's; the portable entry below carries the portable unit's, which differs in the large shape alone, through the tangent's contraction (0.062% of elements, at most 1.2e-7 — gradient_loops.inl)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_bits.cml"
