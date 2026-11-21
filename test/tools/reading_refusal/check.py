@@ -27,6 +27,10 @@ This check holds the places that have to agree, as relations and never as counts
 * **every cause has a site**: a word in the table that nothing prints is a promise nothing keeps
   (the one exception is written out below, so the day it is kept the check asks for the entry to go).
 
+The walks are read by directory, and a file anywhere under it that spells through the table yet is
+not read as a walk is a red: a check whose scope is a hand-written list checks nothing the day the
+list goes stale, which is exactly what happened to `test/tools/transpose_refusal/check.py`.
+
 No count is pinned: adding a cause with its word, its site and its record is green here.
 
 Run: `python test/tools/reading_refusal/check.py`.
@@ -39,15 +43,59 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-HEADER_FILE = ROOT / "modules" / "transforms" / "refusal_readings.h"
-# The walks, one file each: `split`'s is two, because the loop tier of the cut (`split_loop_cut.cpp`)
-# spells its causes in its own file. A site is a site wherever the walk that holds it lives.
-WALK_FILES = [
-    ROOT / "modules" / "transforms" / "jvp.cpp",
-    ROOT / "modules" / "transforms" / "split.cpp",
-    ROOT / "modules" / "transforms" / "split_loop_cut.cpp",
-    ROOT / "modules" / "transforms" / "vmap.cpp",
-]
+TRANSFORMS = ROOT / "modules" / "transforms"
+# Where the table is, found by what it says rather than by its name: a header that is renamed is
+# still the header, and one written twice is a red instead of a quiet choice of the first.
+ENUM_START = "enum class RefusalCause {"
+# What a file that spells a cause through the table says. Either call makes a file a place this
+# check has to read; `uncovered_spellers` is the relation that keeps that true for the whole
+# directory and not only for the files read as walks.
+TABLE_CALLS = ("noteRefusal(", "refusalCauseName(")
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _read_every_file() -> dict[Path, str]:
+    """Every file under `modules/transforms`, read once: a place is found by what it says."""
+    return {path: read(path) for path in sorted(TRANSFORMS.rglob("*")) if path.is_file()}
+
+
+_SOURCES = _read_every_file()
+
+
+def _the_only(marker: str, what: str) -> Path:
+    """The one file under `modules/transforms` that contains `marker`."""
+    found = [path for path, text in _SOURCES.items() if marker in text]
+    if len(found) != 1:
+        named = ", ".join(str(path.relative_to(ROOT)) for path in found) if found else "none"
+        raise SystemExit(
+            f"reading refusals: {len(found)} files under modules/transforms contain `{marker}` "
+            f"({named}), so the {what} is not one place")
+    return found[0]
+
+
+HEADER_FILE = _the_only(ENUM_START, "header that declares the causes")
+
+# The walks are read by directory, not from a list of names: a file written directly under
+# `modules/transforms` is a walk the day it appears, and one that is removed stops being one. The
+# list this replaced named four files, and that is the shape that went stale next door: the transpose
+# check named `transpose.cpp`, the walk moved out of it, and the tool exited 2 -- nothing checked,
+# and nothing red, for as long as it took someone to read it (`696eedd30`).
+#
+# Two things under this directory are not walks. Both are named here rather than filtered silently,
+# because a scope is a decision and a decision a reader cannot see is a list that goes stale:
+#
+# * `refusal_readings.h` is the table itself: it declares the causes, spells their words and defines
+#   `noteRefusal`/`refusalCauseName`. Read as a walk, its definition of `noteRefusal` is a record
+#   with no printed line beside it, so the relation that keeps the record honest is red on the file
+#   that exists to make that relation true (measured: 0 printed, 1 record);
+# * `transpose/` is another family's refusal -- `TransposeRefusalCause` with its own table
+#   `transposeRefusalWord` -- and its one `skip=` render (`transpose/walkmachinery.cpp`) is pinned by
+#   `test/tools/transpose_refusal/check.py`. Read here, that literal is red for doing exactly what
+#   that check asks of it: it would be a second guard, not a site of this table.
+WALK_FILES = sorted(path for path in TRANSFORMS.iterdir() if path.is_file() and path != HEADER_FILE)
 
 # The causes the table declares and no walk records yet. Pinned rather than deleted, so that a
 # *second* such cause is a red instead of a habit, and so the day this one gets its site this entry
@@ -123,6 +171,28 @@ def balanced(text: str, start: int) -> str:
     raise SystemExit("unbalanced parentheses in a noteRefusal call")
 
 
+def uncovered_spellers() -> list[Path]:
+    """Files under `modules/transforms` that spell through the table and are not read as a walk.
+
+    The walks are read from the top of the directory, so a walk that moves into a subdirectory stops
+    being read while the check stays green -- the same defect one level down, and the one this check
+    was fixed for. This is the relation that turns it into a red, and it names the files: a red that
+    only says how many places were missed leaves the reader to work out which, which is the work the
+    check exists to do.
+    """
+    walked = set(WALK_FILES)
+    stray: list[Path] = []
+    for path, text in _SOURCES.items():
+        if path in walked or path == HEADER_FILE:
+            continue
+        # Read in code and not in prose: a sentence that mentions `noteRefusal(` teaches a reader
+        # something and spells nothing, exactly as the words in comments above are not spellings.
+        code = strip_comments(text)
+        if any(call in code for call in TABLE_CALLS):
+            stray.append(path)
+    return stray
+
+
 def declared_causes(header: str) -> list[str]:
     body = re.search(r"enum class RefusalCause\s*\{(.*?)\};", header, re.S)
     if body is None:
@@ -143,9 +213,24 @@ def word_table(header: str) -> dict[str, str]:
 
 def main() -> int:
     problems: list[str] = []
-    header = HEADER_FILE.read_text(encoding="utf-8")
+    header = read(HEADER_FILE)
     causes = declared_causes(header)
     table = word_table(header)
+
+    # The read set is a directory, so it has to be a directory that was read: an empty one would make
+    # every relation below true of nothing.
+    if not WALK_FILES:
+        problems.append(
+            f"no file directly under modules/transforms is read as a walk, so nothing is checked "
+            f"(`{HEADER_FILE.relative_to(ROOT).as_posix()}` is the table, and it is the only file the "
+            "read set excludes)")
+    # A file that spells through the table and is not read as a walk is a place this check stopped
+    # looking at, whoever moved it there. Named one per line, because the fix is to read that file.
+    for stray in uncovered_spellers():
+        problems.append(
+            f"{stray.relative_to(ROOT).as_posix()} spells a cause through the table and is not read "
+            "as a walk, so its sites are unchecked: it belongs in the directory the walks are read "
+            "from, or this check has to read it")
 
     if not causes:
         problems.append(f"{HEADER_FILE.name}: the table declares no cause")
@@ -169,8 +254,10 @@ def main() -> int:
 
     # No site spells a cause: the words live in the table, the sites call it.
     used: set[str] = set()
+    sites = 0
+    printing: list[str] = []
     for walk in WALK_FILES:
-        text = walk.read_text(encoding="utf-8")
+        text = _SOURCES[walk]
         for body in literals(text):
             for word in re.findall(r"skip=([a-z][a-z0-9-]*)", body):
                 problems.append(f"{walk.name}: a literal spells `skip={word}`: the table is the only spelling")
@@ -182,6 +269,9 @@ def main() -> int:
         if "refusalCauseName(" in code and '#include "refusal_readings.h"' not in text:
             problems.append(f"{walk.name}: spells a cause through the table and does not include it")
         printed = [m for m in re.finditer(r'skip="\s*<<\s*refusalCauseName\(RefusalCause::(\w+)\)', code)]
+        sites += len(printed)
+        if printed:
+            printing.append(walk.name)
         causes_in_file = re.findall(r"refusalCauseName\(RefusalCause::(\w+)\)", code)
         records = re.findall(r"noteRefusal\(", code)
         for match in printed:
@@ -224,6 +314,11 @@ def main() -> int:
         return 1
 
     print(f"refusal readings: {len(causes)} cause(s), one word each, spelled in one file only -- the table")
+    print(
+        f"refusal readings: {len(WALK_FILES)} file(s) read under modules/transforms -- every file "
+        f"directly there but the table's own -- and {sites} printed cause(s) in "
+        f"{', '.join(printing)}; no file elsewhere under it spells through the table"
+    )
     print("refusal readings: no literal spells `skip=`, so a refusal site cannot hand-write the line")
     print("refusal readings: every printed cause has a record beside it, and the record names the printed cause")
     print(
