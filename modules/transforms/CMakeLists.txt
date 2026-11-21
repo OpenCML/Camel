@@ -13,6 +13,7 @@ add_camel_module(
     remat_operator.cpp
     rule_expand.cpp
     split.cpp
+    split_loop_cut.cpp
     split_operator.cpp
     transpose.cpp
     transpose_operator.cpp
