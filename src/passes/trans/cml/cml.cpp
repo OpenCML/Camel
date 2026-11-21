@@ -62,6 +62,7 @@
 namespace {
 
 using namespace camel::core::rtdata;
+using camel::core::OperId;
 using camel::core::SymId;
 using camel::core::type::ArrayType;
 using camel::core::type::FunctionType;
@@ -93,6 +94,36 @@ struct BigConstant {
     std::string graph;
     size_t bytes;
 };
+
+/// The operator a node runs, as the table knows it. What a node *is* -- a write, a reading, a
+/// cell -- is a fact of its declaration, so it is asked by this id and never by the letters of
+/// the operator's URI (`camel/runtime/graph.h`, `GCOperBody`).
+OperId operOf(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
+}
+
+/// Whether the operator writes a variable: `=` and every compound assignment. The table sets the
+/// family bit from the operator's own declaration of itself (`operator_table.h`, `isAssignment`),
+/// which is the one place the answer is stated.
+bool isAssignment(OperId oper) { return camel::core::OperatorTable::instance().isAssignment(oper); }
+
+/// Whether the operator is one of the core's variable operators: the cell's creation, its three
+/// readings, the in-place take and the cell a call left behind. The `:var/` namespace is the
+/// core's -- no module declares an operator in it -- so the six are the ids `operator_table.h`
+/// fixes in namespace `oper`, and that is what a reader asks instead of the URI's prefix.
+bool isVariableOperator(OperId oper) {
+    switch (oper) {
+    case camel::core::oper::VarNew:
+    case camel::core::oper::VarNewEmpty:
+    case camel::core::oper::VarGet:
+    case camel::core::oper::VarPeek:
+    case camel::core::oper::VarTake:
+    case camel::core::oper::VarAfter:
+        return true;
+    default:
+        return false;
+    }
+}
 
 /// The compiler names a lambda's graph `__g_<graph id>__`, which is no source name: the printer
 /// writes the lambda where its value is used instead of declaring a function.
@@ -1168,9 +1199,8 @@ class CmlPrinter {
             if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
                 return version;
             }
-            const std::string_view uri =
-                graph_->nodeBodyAs<camel::runtime::GCOperBody>(version)->uri();
-            if (!uri.starts_with(":op/assn") && uri != ":var/after") {
+            const OperId oper = operOf(*graph_, version);
+            if (!isAssignment(oper) && oper != camel::core::oper::VarAfter) {
                 return version;
             }
             const auto inputs = graph_->normInputsOf(version);
@@ -1219,9 +1249,7 @@ class CmlPrinter {
                             break;
                         }
                         if (node->kind == camel::runtime::GCNodeKind::Oper) {
-                            const std::string_view uri =
-                                candidate->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-                            if (!isPureOper(uri)) {
+                            if (!isPureOper(operOf(*candidate, ref))) {
                                 effect = true;
                                 break;
                             }
@@ -1251,11 +1279,13 @@ class CmlPrinter {
         return effectful_[graph];
     }
 
-    static bool isPureOper(std::string_view uri) {
-        if (uri.starts_with(":var/") || uri.starts_with(":op/assn")) {
-            return false;
-        }
-        return camel::core::OperatorTable::instance().isPure(uri);
+    /// Whether running the operator has no effect: the declaration answers it, and the variable
+    /// operators (`:var/*`, the assignments) are part of the answer -- each declares itself
+    /// state-only, so a call of one is never pure (`src/builtin`, `declareResources` and
+    /// `declareBuiltinOperatorResources`). Asking the table rather than special-casing the family
+    /// here is what keeps the two from disagreeing.
+    static bool isPureOper(OperId oper) {
+        return camel::core::OperatorTable::instance().isPure(oper);
     }
 
     /// Whether the one user of `ref` is a `GATE` slot the gate does not hand on. A gate answers with
@@ -1309,12 +1339,11 @@ class CmlPrinter {
             if (node->kind != camel::runtime::GCNodeKind::Oper) {
                 return false;
             }
-            const std::string_view uri =
-                graph_->nodeBodyAs<camel::runtime::GCOperBody>(user)->uri();
-            if (uri == ":var/peek" || uri == ":var/after") {
+            const OperId oper = operOf(*graph_, user);
+            if (oper == camel::core::oper::VarPeek || oper == camel::core::oper::VarAfter) {
                 return true;
             }
-            if (uri.starts_with(":op/assn")) {
+            if (isAssignment(oper)) {
                 const auto inputs = graph_->normInputsOf(user);
                 return !inputs.empty() && inputs.front() == current;
             }
@@ -1327,8 +1356,7 @@ class CmlPrinter {
         const camel::runtime::GCNode *node = graph_->node(ref);
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Oper: {
-            const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-            return !isPureOper(uri);
+            return !isPureOper(operOf(*graph_, ref));
         }
         case camel::runtime::GCNodeKind::Func:
         case camel::runtime::GCNodeKind::Call: {
@@ -1444,7 +1472,7 @@ class CmlPrinter {
             // A `var` declaration writes the type of the value it starts with (`var w: f32 = 1.0`),
             // so a literal written there needs no `let` of its own either.
             const auto *body = graph_->nodeBodyAs<camel::runtime::GCOperBody>(user);
-            if (body == nullptr || body->uri() != ":var/new" ||
+            if (body == nullptr || body->oper != camel::core::oper::VarNew ||
                 node->dataType()->code() != TypeCode::Tuple) {
                 return false;
             }
@@ -2625,8 +2653,7 @@ class CmlPrinter {
                 control_->controlOf(input) != region) {
                 continue;
             }
-            if (!graph_->nodeBodyAs<camel::runtime::GCOperBody>(input)->uri().starts_with(
-                    ":op/assn")) {
+            if (!isAssignment(operOf(*graph_, input))) {
                 continue;
             }
             const auto written = graph_->normInputsOf(input);
@@ -2773,15 +2800,17 @@ class CmlPrinter {
             }
             return;
         case camel::runtime::GCNodeKind::Oper: {
-            const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-            if (uri == ":var/new") {
+            const auto *body           = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+            const OperId oper          = body->oper;
+            const std::string_view uri = body->uri();
+            if (oper == camel::core::oper::VarNew) {
                 emitVariable(ref);
                 if (ref == tail) {
                     tailPrintedAsStatement = true;
                 }
                 return;
             }
-            if (uri == ":var/get" || uri == ":var/peek") {
+            if (camel::core::oper::isVariableRead(oper)) {
                 if (!materialiseRead(ref)) {
                     return;
                 }
@@ -2789,7 +2818,7 @@ class CmlPrinter {
                 // generic statement logic below writes it as the `let` it was in the source.
                 break;
             }
-            if (uri.starts_with(":var/")) {
+            if (isVariableOperator(oper)) {
                 // A write through a call leaves a new version of the cell without a statement of
                 // its own (`:var/after`), so from here on the variable's name no longer means the
                 // value the cell was created with (see `cellOfValue_`).
@@ -2799,7 +2828,7 @@ class CmlPrinter {
                 }
                 return;
             }
-            if (uri.starts_with(":op/assn")) {
+            if (isAssignment(oper)) {
                 emitAssignment(ref, uri);
                 if (ref == tail) {
                     tailPrintedAsStatement = true;
@@ -3169,54 +3198,20 @@ class CmlPrinter {
     }
 
     // The assignment operator is a node of its own: `a += 5` and `a = 5` have the same shape
-    // but different payloads, so the spelling must carry the operation.
-    static std::string_view assignmentOperator(std::string_view uri) {
-        constexpr std::string_view prefix = ":op/assn";
-        if (!uri.starts_with(prefix)) {
+    // but different payloads, so the spelling must carry the operation. The declaration answers
+    // which operation it is: a compound assignment's group is the one the language holds that
+    // operation's built-in overloads in (`__assn_add__`), the language fixes the plain operator it
+    // follows (`plainGroupOfCompoundAssignment`, design principles 4.2: `a += b` is `a = a + b`),
+    // and `operatorSymbolOf` reads the sign a program writes for that group out of it
+    // (`operator_names.h`). A write is that sign and the `=` it is. A group with no compound form
+    // is the plain write (`__assn__`) or an owned one (`:op/assn_owned`), and both are `=`.
+    static std::string assignmentOperator(std::string_view uri) {
+        const std::string group = camel::core::OperatorTable::instance().groupOf(uri);
+        if (!camel::core::plainGroupOfCompoundAssignment(group).has_value()) {
             return "=";
         }
-        std::string_view suffix = uri.substr(prefix.size());
-        const size_t version    = suffix.find('@');
-        if (version != std::string_view::npos) {
-            suffix = suffix.substr(0, version);
-        }
-        if (suffix.empty() || suffix == "_l" || suffix == "_d" || suffix == "_i" ||
-            suffix == "_f" || suffix == "_b") {
-            return "=";
-        }
-        if (!suffix.starts_with('_')) {
-            return "=";
-        }
-        suffix.remove_prefix(1);
-        const size_t typeSuffix = suffix.rfind('_');
-        if (typeSuffix != std::string_view::npos) {
-            suffix = suffix.substr(0, typeSuffix);
-        }
-        if (suffix == "add") {
-            return "+=";
-        }
-        if (suffix == "sub") {
-            return "-=";
-        }
-        if (suffix == "mul") {
-            return "*=";
-        }
-        if (suffix == "div") {
-            return "/=";
-        }
-        if (suffix == "mod") {
-            return "%=";
-        }
-        if (suffix == "pow") {
-            return "^=";
-        }
-        if (suffix == "and") {
-            return "&=";
-        }
-        if (suffix == "or") {
-            return "|=";
-        }
-        return "=";
+        const char *symbol = camel::core::operatorSymbolOf(group);
+        return symbol != nullptr ? std::string(symbol) + "=" : std::string("=");
     }
 
     std::string cellName(gc_node_ref_t ref) {
@@ -3239,8 +3234,7 @@ class CmlPrinter {
         if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Oper) {
             return ref;
         }
-        const std::string_view uri = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-        if (!uri.starts_with(":op/assn")) {
+        if (!isAssignment(operOf(*graph_, ref))) {
             return ref;
         }
         const auto inputs = graph_->normInputsOf(ref);
@@ -3955,9 +3949,10 @@ class CmlPrinter {
 
     Expr operatorExpression(gc_node_ref_t ref) {
         const auto *body           = graph_->nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        const OperId oper          = body->oper;
         const std::string_view uri = body->uri();
         const auto inputs          = graph_->normInputsOf(ref);
-        if (uri == ":var/get" || uri == ":var/peek") {
+        if (camel::core::oper::isVariableRead(oper)) {
             if (inputs.size() != 1) {
                 fail(ref, "a variable read without a cell");
             }
@@ -3969,7 +3964,7 @@ class CmlPrinter {
             // with nothing named `cml6`).
             return {cellName(cellOf(inputs.front())), 100};
         }
-        if (uri.starts_with(":var/")) {
+        if (isVariableOperator(oper)) {
             fail(ref, std::format("the operator '{}'", uri));
         }
         if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
@@ -4045,24 +4040,27 @@ class CmlPrinter {
         // own declarations name them.
         std::string name;
         const auto callForm = camel::core::OperatorTable::instance().callFormOf(uri);
+        // Who owns the name is a declaration, not a spelling: `isBuiltin` is the family bit the
+        // table sets for an operator with no module protocol (`:op/add_i`, `:io/println`), which
+        // is the interpreter's own name, and a module's operator is spelled by the name that
+        // module exports.
+        const bool builtin = camel::core::OperatorTable::instance().isBuiltin(oper);
         // A name is written when the program can write it: an operator of the core (`:io/println`,
         // the conversions of `:op/*`) has a name every program has in scope, and an operator whose
         // own module declared its call shape has a name that module exports (this is the `jvp(f)`,
         // `transpose(f)` and `split(f)` of `transforms`). A shape read off a Camel declaration is
         // the callee's name and nothing more -- the declaration may be a kernel the module keeps
         // private (`#impl(sum_kernel)`) -- so such an operator of a module is still refused.
-        // `:op/` is the language's own namespace for operators: the symbol of every group there is
-        // fixed by the language, so a program writes `+` wherever it is -- not `__add__`, which is
-        // the group's internal name. An operator of a module is spelled by the name that module
-        // exports, so the declaration's name is what a program writes for those. The test is who
-        // owns the name, not whether a symbol exists and not how the name was derived.
+        // The symbol of a language group is fixed by the language (`+` for `__add__`), so a program
+        // writes `+` wherever it is -- not `__add__`, which is the group's internal name. The test
+        // is who owns the name, not whether a symbol exists and not how the name was derived.
         const bool languageOwned =
-            uri.starts_with(":op/") &&
+            builtin &&
             camel::core::operatorSymbolOf(camel::core::OperatorTable::instance().groupOf(uri)) !=
                 nullptr;
         const bool writable =
             !languageOwned && callForm.has_value() &&
-            (callForm->declaredByModule || callForm->exported || uri.starts_with(":")) &&
+            (callForm->declaredByModule || callForm->exported || builtin) &&
             // The name has to mean the same thing in the printed file. A program
             // that declares a function of that name shadows the module's, and a
             // bare `map<f>(xs)` would then call the program's own `map`: measured
