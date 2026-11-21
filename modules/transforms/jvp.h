@@ -77,9 +77,15 @@ camel::core::type::FunctionType *jvpSignature(camel::core::type::FunctionType *f
 /// is read, never changed; the new graph is a member of a program of its own, the way
 /// `buildGradientGraph` builds the reverse direction. `os` receives what was built: a graph the
 /// caller cannot name yet is a graph nobody can check, so the reading is part of the interface.
+/// `pairedCaptures` says what the closure of the graph being lifted *is*: false for a graph whose
+/// captures come from outside the transform (a program's own closure, whose captures do not move --
+/// design principles 9.9 gives them a zero tangent), and true for one whose closure this lift is
+/// filling itself, out of the values its own body computes (`jvp.cpp`, `liftFuncValue`). Only the
+/// second declares a `(x, dx)` member per capture; the first keeps the single member the source
+/// closure has, which is what a root lift always is.
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os);
+    camel::runtime::GCGraph *function, std::ostream &os, bool pairedCaptures = false);
 
 /// The same build, from any face of the graph: what a caller uses when it reads a draft that
 /// is still being written. `name` and `self` are the caller's because a draft has neither until
@@ -89,5 +95,10 @@ JvpGraph buildJvpGraph(
     const camel::compile::gir::GraphRead &function, std::string_view name,
     camel::runtime::GraphId self, std::ostream &os);
 
+
+/// TEMPORARY (removed before this step is committed): one built graph's nodes, in order.
+void dumpBuiltNodesForDiagnostics(
+    std::ostream &os, const camel::runtime::GCGraph *graph,
+    const camel::runtime::Program *program);
 
 } // namespace camel::transforms

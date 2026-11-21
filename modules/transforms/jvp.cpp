@@ -477,12 +477,12 @@ bool liftGraph(
 JvpGraph buildJvpGraphInGroup(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     camel::runtime::GraphDraftGroup &group, const GraphRead &function, std::string_view name,
-    camel::runtime::GraphId self, std::ostream &os) {
+    camel::runtime::GraphId self, std::ostream &os, bool pairedCaptures = false) {
     const GraphId member =
         group.reserve("jvp_of_" + std::string(name), "jvp_of_" + std::string(name));
     LiftState state{context, program, group};
     JvpGraph refusal;
-    if (!liftGraph(state, function, name, self, member, os, refusal)) {
+    if (!liftGraph(state, function, name, self, member, os, refusal, pairedCaptures)) {
         return refusal;
     }
     // The count the "one graph per callee" rule is read from: the callee graphs this lift made, in
@@ -490,6 +490,15 @@ JvpGraph buildJvpGraphInGroup(
     os << "REINTERP jvp callees=" << state.callees.size() << '\n';
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
+    // TEMPORARY (removed before this step is committed): the encoded graph, node by node, so a graph
+    // the lift recursion built can be read like one a kernel built.
+    dumpBuiltNodesForDiagnostics(os, made, group.program());
+    // TEMPORARY: the callee graphs of the same group, which the lift recursion wrote and which no
+    // other entry encodes.
+    for (const auto &[calleeKey, calleeId] : state.callees) {
+        (void)calleeKey;
+        dumpBuiltNodesForDiagnostics(os, group.encoded(calleeId), group.program());
+    }
     return JvpGraph{
         camel::runtime::ProgramHold(*context, group.program()),
         const_cast<camel::runtime::GCGraph *>(made)};
@@ -500,17 +509,8 @@ JvpGraph buildJvpGraphInGroup(
 /// not have (it is named and numbered when it is encoded).
 JvpGraph buildJvpGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    camel::runtime::GCGraph *function, std::ostream &os) {
-    if (function == nullptr) {
-        return JvpGraph{};
-    }
-    const FrozenGraphRead face(*function);
-    return buildJvpGraph(context, program, face, function->name(), function->id(), os);
-}
-JvpGraph buildJvpGraph(
-    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const GraphRead &function, std::string_view name, camel::runtime::GraphId self,
-    std::ostream &os) {
+    std::ostream &os, bool pairedCaptures) {
     if (program == nullptr) {
         return JvpGraph{};
     }
@@ -527,7 +527,24 @@ JvpGraph buildJvpGraph(
     // wants `df/dx` and `df/dy` separately runs it twice with (1, 0) and (0, 1).
 
     camel::runtime::GraphDraftGroup group(context, program);
-    return buildJvpGraphInGroup(context, program, group, function, name, self, os);
+    return buildJvpGraphInGroup(
+        context, program, group, function, name, self, os, pairedCaptures);
+}
+JvpGraph buildJvpGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *function, std::ostream &os, bool pairedCaptures) {
+    if (function == nullptr) {
+        return JvpGraph{};
+    }
+    const FrozenGraphRead face(*function);
+    return buildJvpGraph(
+        context, program, face, function->name(), function->id(), os, pairedCaptures);
+}
+JvpGraph buildJvpGraph(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    const GraphRead &function, std::string_view name, camel::runtime::GraphId self,
+    std::ostream &os) {
+    return buildJvpGraph(context, program, function, name, self, os, false);
 }
 namespace {
 
@@ -538,6 +555,7 @@ bool liftGraph(
     const camel::core::context::context_ptr_t &context = state.context;
     const camel::runtime::Program *program             = state.program;
     camel::runtime::GraphDraftGroup &group             = state.group;
+
     // The one lifted signature: `f`'s `with` list stays its own in every lift, so the graph a
     // callee gets and the type a call site fills in are the same list.
     FunctionType *signature = jvpSignature(function.funcType());
@@ -1050,6 +1068,21 @@ bool liftGraph(
         const auto liftedValueOf = [&draft, &copyOf, &valueOf, &tangentOf, &liftedPair](
                                        gc_node_ref_t ref,
                                        Type *type) -> gc_node_ref_t {
+            // A copy that is **already the pair** is the member's lifted value as it stands: an
+            // `Accs` out of a lifted answer (`(value, tangent)`) and a loop's state port are both
+            // that. Taking its value leg would unpack it a second time and hand the fill a lone
+            // `f32` where `Lift<f32>` is declared (measured: a FILL `((f32, f32), ...)` whose
+            // first member was `1.0`). The pair is recognised by the copy's own type being exactly
+            // `Lift<T>`, so a copy that holds the plain value still takes the leg below.
+            if (type != nullptr && copyOf[ref] != rt::kInvalidNodeRef) {
+                const LiftedShape copiedShape = liftedShapeOf(type);
+                if (copiedShape.type != nullptr && copiedShape.pair) {
+                    const auto *copiedNode = draft.node(copyOf[ref]);
+                    if (copiedNode != nullptr && copiedNode->header.dataType == copiedShape.type) {
+                        return copyOf[ref];
+                    }
+                }
+            }
             if (valueOf[ref] != rt::kInvalidNodeRef) {
                 return valueOf[ref];
             }
@@ -1095,6 +1128,7 @@ bool liftGraph(
             if (shape.type == nullptr) {
                 return rt::kInvalidNodeRef;
             }
+
             const gc_node_ref_t made    = draft.addOperNode(shape.type, nullptr, "transforms:jvp");
             const gc_node_ref_t operand = copyOf[ref];
             draft.setNormInputs(made, std::span<const gc_node_ref_t>(&operand, 1));
@@ -1242,6 +1276,21 @@ bool liftGraph(
             return own != nullptr && (candidate->dataType() == own ||
                                       const_cast<Type *>(candidate->dataType())->equals(own));
         };
+        // The code a Fill builds its value from is its template, that node's own Norm input (see the
+        // Fill arm below). A function value this body **constructs** is code plus captures, so the
+        // lift of a Fill's code is the variant that pairs the captures (decision `32bcee3a0`).
+        // Read once, before any lift: "is this operand the code of a Fill" is a fact about the body,
+        // and it is the only discriminator the decision allows here.
+        std::set<gc_node_ref_t> fillCodeOperands;
+        for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
+            const NodeFace *node = function.node(ref);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Fill) {
+                continue;
+            }
+            for (gc_node_ref_t code : function.normInputsOf(ref)) {
+                fillCodeOperands.insert(code);
+            }
+        }
         auto liftFuncValue = [&](gc_node_ref_t ref) -> bool {
             const GraphId calleeId = function.calleeIdOf(ref);
             if (!rt::isValid(calleeId)) {
@@ -1251,6 +1300,7 @@ bool liftGraph(
             if (callee == nullptr) {
                 return false;
             }
+
             // The callee is read through the same kind of face as the caller: a frozen graph here,
             // because this build starts from one.
             const FrozenGraphRead calleeFace(*callee);
@@ -1295,7 +1345,7 @@ bool liftGraph(
             // 2.4): the pair is right and the transpose of a lifted closure is what has to go, which
             // is not a change this file can make. The layout below is what a lift of a closure built
             // inside a body declares; until the second step lands, it is declared for no graph.
-            const bool pairedCallee = false && isFunctionValue;
+            const bool pairedCallee = isFunctionValue && fillCodeOperands.contains(ref);
             const uint64_t calleeKey =
                 (static_cast<uint64_t>(rt::toValue(calleeId)) << 1) | (pairedCallee ? 1u : 0u);
             const auto at = state.callees.find(calleeKey);
@@ -1330,6 +1380,7 @@ bool liftGraph(
             draft.addDependency(liftedCallee);
             return true;
         };
+
         for (gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
             const NodeFace *node = function.node(ref);
             if (node == nullptr || node->kind != rt::GCNodeKind::Func) {
@@ -1620,6 +1671,24 @@ bool liftGraph(
                         slots[static_cast<size_t>(index)],
                         node->dataType(),
                         rt::kGCNodeFlagConstant);
+                    // The **code of a body-built closure**. A Fill whose type is a function clones
+                    // its template (the code constant) and writes the captures into the clone, so
+                    // the graph this constant names is what gives the new closure its layout. Lifted
+                    // as the variant that pairs the captures, it answers a code whose closure is
+                    // `(x, dx)` (decision `32bcee3a0` item 1: "a separate lift variant of its code
+                    // graph"). A constant that is nobody's code is not touched here.
+                    if (fillCodeOperands.contains(ref) && node->dataType() != nullptr &&
+                        node->dataType()->code() == camel::core::type::TypeCode::Function) {
+                        FunctionType *liftedCodeType = jvpSignature(const_cast<FunctionType *>(
+                            static_cast<const FunctionType *>(node->dataType())));
+                        if (liftedCodeType != nullptr) {
+                            const gc_node_ref_t code = copyOf[ref];
+                            const gc_node_ref_t made = draft.addOperNode(
+                                liftedCodeType, nullptr, "transforms:lift_paired_closure");
+                            draft.setNormInputs(made, std::span<const gc_node_ref_t>(&code, 1));
+                            copyOf[ref] = made;
+                        }
+                    }
                     // A constant does not move: its tangent is the one zero every rule shares --
                     // the zero of the constant's own type, since a tangent is a value of the
                     // value's space. A constant of a discrete type (a `bool` condition) has no
@@ -2461,6 +2530,55 @@ bool liftGraph(
             case rt::GCNodeKind::Oper: {
                 camel::runtime::GCOperBody operBody{};
                 const auto *body = function.bodyOf(ref, operBody) ? &operBody : nullptr;
+                // A `transpose` of a **lifted** function is the one operator whose lifted answer is
+                // not "the operator applied to the lifted operand". That shape -- the one this walk
+                // wrote until now -- is `transpose(jvp(lin))`, and it is the wrong map: a lift is not
+                // the linear map it lifts, it takes the value ports and their tangents, so the
+                // transpose of it answers a cotangent for ports `lin` never had.
+                //
+                // The answer is the transpose of `lin` **lifted**: the transposed member's code,
+                // closed over the residuals and the directions they move in -- the `(r, dr)` pairs
+                // the lifted `lin` carries (the capture ports above, and `nested-transforms` 2.4:
+                // the transposed member's captures are the residuals and their tangents).
+                // `transforms:lift_transpose` is that answer at run time (jvp_operator.cpp): it reads
+                // the primal graph its operand was lifted from (`GCGraph::liftedFrom`), transposes
+                // that (`buildTransposeGraph`, transpose.h -- an interface, not a change to that
+                // file), lifts the member with this file's paired layout, and closes the result over
+                // the operand's own pairs.
+                //
+                // An operand that is not lifted is left alone: `transpose(f)` of a plain function is
+                // the operator's own shape and keeps the reading it had.
+                if (body != nullptr && body->uri() == "transforms:transpose" &&
+                    node->dataType() != nullptr &&
+                    node->dataType()->code() == camel::core::type::TypeCode::Function) {
+                    const std::vector<gc_node_ref_t> operands = function.normInputsOf(ref);
+                    FunctionType *liftedMember = jvpSignature(const_cast<FunctionType *>(
+                        static_cast<const FunctionType *>(node->dataType())));
+                    if (liftedMember != nullptr && operands.size() == 1 &&
+                        operands.front() < function.nodeCount() && copied[operands.front()]) {
+                        const gc_node_ref_t operand =
+                            valueOf[operands.front()] != rt::kInvalidNodeRef
+                                ? valueOf[operands.front()]
+                                : copyOf[operands.front()];
+                        const NodeFace *operandFace  = function.node(operands.front());
+                        const auto *operandCopyNode = draft.node(operand);
+                        if (operandFace != nullptr && operandCopyNode != nullptr &&
+                            operandCopyNode->header.dataType != nullptr &&
+                            operandCopyNode->header.dataType != operandFace->dataType() &&
+                            operandCopyNode->header.dataType->code() ==
+                                camel::core::type::TypeCode::Function) {
+                            const gc_node_ref_t lifted = draft.addOperNode(
+                                liftedMember, nullptr, "transforms:lift_transpose");
+                            draft.setNormInputs(
+                                lifted, std::span<const gc_node_ref_t>(&operand, 1));
+                            copyOf[ref]  = lifted;
+                            valueOf[ref] = lifted;
+                            copied[ref]  = true;
+                            ++copiedKinds;
+                            break;
+                        }
+                    }
+                }
                 const gc_node_ref_t made =
                     draft.addOperNode(node->dataType(), nullptr, body->uri());
                 std::vector<gc_node_ref_t> originals;
@@ -3104,6 +3222,7 @@ bool liftGraph(
         os << "REINTERP jvp built graph=" << rt::toValue(member) << " nodes=" << draft.nodeCount()
            << " exit=" << exit << " regions=" << draft.regionCount() << " function=" << name
            << '\n';
+
     }
     return true;
 }

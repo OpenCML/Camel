@@ -15,6 +15,7 @@
 
 #include "jvp.h"
 #include "readings.h"
+#include "transpose.h"
 #include "transpose_operator.h"
 
 #include "camel/core/context/context.h"
@@ -166,6 +167,65 @@ class JvpResolver final : public FuncTypeResolver {
     }
 };
 
+/// TEMPORARY (removed before this step is committed): one graph's nodes, in order, with the operator
+/// name of an Oper, the payload of a Fill, the index of an Accs and the callee graphs of a Func.
+void dumpBuiltNodesImpl(
+    std::ostream &os, const camel::runtime::GCGraph *graph,
+    const camel::runtime::Program *program) {
+    if (graph == nullptr) {
+        return;
+    }
+    os << "DUMP graph=" << graph->name() << " nodes=" << graph->nodeCount() << '\n';
+    for (camel::runtime::gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+        const auto *record = graph->node(ref);
+        if (record == nullptr) {
+            continue;
+        }
+        camel::core::type::Type *nodeType = nullptr;
+        if (record->typeId != camel::core::type::kNoTypeId) {
+            nodeType = camel::core::type::TypeTable::instance().get(record->typeId);
+        }
+        os << "DUMP node=" << ref << " kind=" << static_cast<int>(record->kind) << " type="
+           << (nodeType != nullptr ? nodeType->toString() : "-") << " norm=";
+        for (camel::runtime::gc_node_ref_t in : graph->normInputsOf(ref)) {
+            os << in << ',';
+        }
+        if (record->kind == camel::runtime::GCNodeKind::Oper) {
+            if (const auto *operBody = graph->nodeBodyAs<camel::runtime::GCOperBody>(ref)) {
+                os << " oper=" << operBody->uri();
+            }
+        }
+        if (record->kind == camel::runtime::GCNodeKind::Fill) {
+            if (const auto *fillBody = graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)) {
+                os << " fill=" << static_cast<int>(fillBody->fillKind) << " slots=";
+                for (const auto slot : fillBody->slots()) {
+                    os << slot << ',';
+                }
+            }
+        }
+        if (record->kind == camel::runtime::GCNodeKind::Accs) {
+            if (const auto *accsBody = graph->nodeBodyAs<camel::runtime::GCAccsBody>(ref)) {
+                os << " index=" << accsBody->value
+                   << " accsKind=" << static_cast<int>(accsBody->accsKind);
+            }
+        }
+        if (record->kind == camel::runtime::GCNodeKind::Func) {
+            os << " callees=";
+            for (camel::runtime::GraphId callee : graph->dependencies()) {
+                os << static_cast<unsigned long long>(callee);
+                const auto *calleeGraph =
+                    program != nullptr ? program->graph(callee) : nullptr;
+                os << ':' << (calleeGraph != nullptr ? calleeGraph->name() : "?") << ',';
+            }
+        }
+        os << " with=";
+        for (camel::runtime::gc_node_ref_t in : graph->withInputsOf(ref)) {
+            os << in << ',';
+        }
+        os << '\n';
+    }
+}
+
 /// jvp(f) at run time: the new graph, as a function value. Nothing of `f`'s graph is changed --
 /// `buildJvpGraph` reads it and reserves a member of its own group -- and the value keeps `f`'s
 /// closure, because the nodes copied out of the body may read it.
@@ -175,11 +235,13 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (function == nullptr || function->graph() == nullptr) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "transforms: jvp needs a function value");
     }
+
     // The reading is part of the interface (jvp.h): a graph the caller cannot name yet is a graph
     // nobody can check. It goes to the diagnostic side (`readings.h`), not to the program's output:
     // the walk that explains a refusal must not land among the numbers the program prints.
     const JvpGraph built = buildJvpGraph(
         ctx.shared_from_this(), function->program(), function->graph(), readings());
+    dumpBuiltNodesForDiagnostics(readings(), built.graph, function->program()); // TEMPORARY
     if (built.graph == nullptr) {
         if (built.refusedOrigin == camel::source::kInvalidOriginId) {
             throwRuntimeFault(
@@ -260,6 +322,253 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot<::Function *>(result);
 }
 
+// ---------------------------------------------------------------------------------------------
+// `lift_transpose`: the **lift of a transpose**, and the one shape `jvp` must not answer as "the
+// transpose applied to the lifted operand".
+//
+// `transpose(jvp(lin))` is what that shape computes and it is the wrong map: a lift is not the
+// linear map it lifts -- it takes the value ports and their tangents -- so transposing it answers
+// cotangents for ports `lin` never had (`nested-transforms` 2.4, and the reading
+// `TRANSPOSE ... skip=call-value-missing`).
+//
+// What the answer is: `Lift<transpose(lin)>` -- the transposed member's code, closed over the
+// residuals and the directions they move in. Both halves are reachable at run time and neither asks
+// `transpose` to know anything about lifts:
+//
+//   * the code: `lin`'s own graph (`GCGraph::liftedFrom` of the operand, which records it) through
+//     `buildTransposeGraph` -- transpose.h's public entry, called, not changed;
+//   * the captures: the operand's own closure, which already holds one `(residual, direction)` pair
+//     per residual (jvp.cpp's capture ports), because `transpose(f)` keeps `f`'s closure and the
+//     lifted `lin` is `f`'s closure with the pairs.
+//
+// This is a **law-layer** operator: no declaration names it, no program can spell it, and the only
+// writer of a node for it is `jvp.cpp`'s walk. Nothing a user writes reaches it.
+
+/// `Lift<Transpose<F>>` for an operand of type `Lift<F>`: `F` is read back out of the lift -- the
+/// parameters are `F`'s, each followed by its tangent, and the answer is the pair `(value, tangent)`
+/// -- and the transpose of it is lifted by the same law.
+FunctionType *liftTransposeType(FunctionType *operand) {
+    if (operand == nullptr || operand->normTypesCount() == 0 ||
+        operand->normTypesCount() % 2 != 0 || !operand->hasExitType()) {
+        return nullptr;
+    }
+    const Type *answered = operand->exitType();
+    const auto *pair     = answered != nullptr && answered->code() == TypeCode::Tuple
+                               ? static_cast<const camel::core::type::TupleType *>(answered)
+                               : nullptr;
+    if (pair == nullptr || pair->size() != 2) {
+        return nullptr;
+    }
+    FunctionTypeFactory primal;
+    const size_t count = operand->normTypesCount() / 2;
+    for (size_t i = 0; i < count; ++i) {
+        primal.addNormArg(std::format("t{}", i), operand->normTypeAt(i), false);
+    }
+    primal.setExitType(pair->typeAt(0));
+    FunctionType *function = primal.build();
+    FunctionType *member   = transposeSignature(function);
+    if (member == nullptr) {
+        return nullptr;
+    }
+    return jvpSignature(member);
+}
+
+class LiftTransposeResolver final : public FuncTypeResolver {
+  public:
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
+            norm[0]->code() != TypeCode::Function) {
+            return std::nullopt;
+        }
+        FunctionType *lifted = liftTransposeType(tt::as_ptr<FunctionType>(norm[0]));
+        if (lifted == nullptr) {
+            return std::nullopt;
+        }
+        return lifted;
+    }
+
+    std::string signature() const override { return "(v: Lift<F>) => Lift<Transpose<F>>"; }
+
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        with.clear();
+        norm = {"v"};
+        return true;
+    }
+};
+
+// ---------------------------------------------------------------------------------------------
+// `lift_paired_closure`: the lift of the **code** a body-built closure is made of, with its captures
+// paired. A Fill whose type is a function does not build a tuple: it clones its template (the code
+// constant, `nodevm.cpp`, the FILL arm) and writes the captures into that clone, so the closure's
+// layout is the layout of the graph the code names. Lifting that code with `pairedCaptures` gives a
+// graph of its own whose closure type is `(x, dx)` -- and the clone carries it (decision
+// `32bcee3a0`: pairing happens when `jvp` lifts the closure construction, `split` stays untouched).
+//
+// Named by no declaration: only `jvp.cpp`'s walk writes it, and no program can spell it.
+class LiftPairedClosureResolver final : public FuncTypeResolver {
+  public:
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
+            norm[0]->code() != TypeCode::Function) {
+            return std::nullopt;
+        }
+        FunctionType *lifted = jvpSignature(tt::as_ptr<FunctionType>(norm[0]));
+        if (lifted == nullptr) {
+            return std::nullopt;
+        }
+        return lifted;
+    }
+
+    std::string signature() const override { return "(f: F) => Lift<F, captures paired>"; }
+
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        with.clear();
+        norm = {"f"};
+        return true;
+    }
+};
+
+slot_t liftPairedClosureKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    auto *function = norm.get<::Function *>(0);
+    if (function == nullptr || function->graph() == nullptr) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError, "transforms: lift_paired_closure needs a function value");
+    }
+    std::ostream &os = readings();
+    // The variant, not the plain lift: the code's own captures become `(x, dx)` because they are
+    // values this layer computes (decision `32bcee3a0` item 1).
+    JvpGraph lifted = buildJvpGraph(
+        ctx.shared_from_this(), function->program(), function->graph(), os,
+        /*pairedCaptures=*/true);
+    if (lifted.graph == nullptr) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "transforms: the code of this closure has no lifted form with paired captures");
+    }
+    // The new graph declares the layout itself (`liftGraph`'s capture ports set it from
+    // `pairedCaptures`); the value carries what it declared and nothing else.
+    const auto *closureType = lifted.graph->closureType() != nullptr
+                                  ? lifted.graph->closureType()
+                                  : function->tupleType();
+    auto *result =
+        ::Function::create(lifted.program, lifted.graph->id(), closureType, mm::autoSpace());
+    if (::Tuple *closure = function->tuple()) {
+        for (size_t i = 0; i < closure->size() && i < closureType->size(); ++i) {
+            // The captures arrive as the pairs this layer computes: `(r, dr)` (item 3).
+            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), closureType);
+        }
+    }
+    os << "REINTERP lift_paired_closure function=" << function->graph()->name()
+       << " graph=" << lifted.graph->name() << " captures=" << closureType->size()
+       << " closureType=" << closureType->toString()
+       << " originalClosure="
+       << (function->tupleType() != nullptr ? function->tupleType()->toString() : std::string("-"))
+       << '\n';
+    return toSlot<::Function *>(result);
+}
+
+slot_t liftTransposeKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    auto *function = norm.get<::Function *>(0);
+    if (function == nullptr || function->graph() == nullptr) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError, "transforms: lift_transpose needs a function value");
+    }
+    auto *program          = function->program();
+    const camel::runtime::GraphId primalId = function->graph()->liftedFrom();
+    auto *primal           = program != nullptr && primalId != camel::runtime::kInvalidGraphId
+                                 ? program->graph(primalId)
+                                 : nullptr;
+    if (primal == nullptr) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "transforms: lift_transpose takes the lift of a function, and this value is not one");
+    }
+    std::ostream &os      = readings();
+    TransposeGraph member = buildTransposeGraph(ctx.shared_from_this(), program, primal, os);
+    if (member.graph == nullptr) {
+        os << "REINTERP lift_transpose refused function=" << primal->name()
+           << " word=" << transposeRefusalWord(member.refusal.cause) << '\n';
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "transforms: transpose has no transpose for this function");
+    }
+    // TEMPORARY (removed before this step is committed): the transposed member itself and every
+    // graph it depends on -- the graphs `transpose` writes, which no lift reading covers and which
+    // only this step makes them run.
+    dumpBuiltNodesForDiagnostics(os, member.graph, member.program);
+    for (camel::runtime::GraphId callee : member.graph->dependencies()) {
+        dumpBuiltNodesForDiagnostics(os, member.program->graph(callee), member.program);
+    }
+    // The layout the operand carries is the fact, not a guess: a lift that carried
+    // `(residual, direction)` pairs closes over pairs, and one that carried the residuals alone
+    // closes over the residuals alone. `transpose(f)` keeps `f`'s closure, so both sides close over
+    // the same list of members either way and only the members' *types* differ.
+    const auto *carriedClosure = function->tupleType();
+    bool pairedCaptures        = false;
+    for (size_t i = 0; carriedClosure != nullptr && i < carriedClosure->size(); ++i) {
+        const Type *memberType = carriedClosure->typeAt(i);
+        if (memberType != nullptr && memberType->code() == TypeCode::Tuple &&
+            static_cast<const camel::core::type::TupleType *>(memberType)->size() == 2) {
+            pairedCaptures = true;
+        }
+    }
+    // The two types this step turns on, verbatim: what the transposed member's closure is, and what
+    // the lifted function the call hands in actually carries.
+    os << "REINTERP lift_transpose member=" << primal->name() << " memberType="
+       << (member.graph->funcType() != nullptr ? member.graph->funcType()->toString() : "-")
+       << " primalClosure="
+       << (primal->closureType() != nullptr ? primal->closureType()->toString() : "-")
+       << " memberClosure="
+       << (member.graph->closureType() != nullptr ? member.graph->closureType()->toString() : "-")
+       << " memberClosureNodes=" << member.graph->closureNodes().size()
+       << " carriedClosure="
+       << (carriedClosure != nullptr ? carriedClosure->toString() : "-")
+       << " paired=" << (pairedCaptures ? "yes" : "no") << '\n';
+    const JvpGraph lifted =
+        buildJvpGraph(ctx.shared_from_this(), member.program, member.graph, os, pairedCaptures);
+    // TEMPORARY (removed before this step is committed): every graph this edit builds, node by node,
+    // so the FILL that stores a view and the node chain that feeds it can be named instead of guessed
+    // at. Shared by both kernels so the two readings are the same text.
+    dumpBuiltNodesForDiagnostics(os, lifted.graph, function->program()); // TEMPORARY
+    if (lifted.graph == nullptr) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "transforms: the transpose of this function has no forward transform");
+    }
+    // The captures the member closes over, by count: the graph's own reading of them, so a member
+    // that closes over nothing and one whose closure type the encoder left implicit are told apart.
+    const size_t captureCount = lifted.graph->closureNodes().size();
+    if (carriedClosure == nullptr || carriedClosure->size() != captureCount) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "transforms: the lifted transposed member closes over {} values and the lifted "
+                "function carries {}",
+                captureCount,
+                carriedClosure != nullptr ? std::to_string(carriedClosure->size())
+                                          : std::string("none")));
+    }
+    const auto *closureType =
+        lifted.graph->closureType() != nullptr ? lifted.graph->closureType() : carriedClosure;
+    auto *result =
+        ::Function::create(lifted.program, lifted.graph->id(), closureType, mm::autoSpace());
+    if (::Tuple *closure = function->tuple()) {
+        for (size_t i = 0; i < closure->size() && i < closureType->size(); ++i) {
+            // A member the lift already made a pair of: carried as it stands, both halves at once.
+            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), closureType);
+        }
+    }
+    os << "REINTERP lift_transpose function=" << primal->name()
+       << " graph=" << lifted.graph->name() << " captures=" << closureType->size() << '\n';
+    return toSlot<::Function *>(result);
+}
+
 } // namespace
 
 void printJvpCallReading(
@@ -288,6 +597,19 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
         OperatorGroup::create(
             "jvp",
             {{"transforms:jvp", std::make_shared<JvpResolver>()}}),
+        // The lift of a transpose: written only by the lift itself (`jvp.cpp`'s walk, when the
+        // operand is a lifted function), and named by no declaration, so no program can spell it.
+        // It is a law-layer step like `jvp` -- it answers a function value it builds -- and the
+        // ordering it replaces is the one thing the design forbids: `transpose` never sees a lifted
+        // closure.
+        OperatorGroup::create(
+            "lift_transpose",
+            {{"transforms:lift_transpose", std::make_shared<LiftTransposeResolver>()}}),
+        // The lift of the code a body-built closure is made of, with its captures paired. Written
+        // only by `jvp.cpp`'s walk and named by no declaration, like `lift_transpose` above.
+        OperatorGroup::create(
+            "lift_paired_closure",
+            {{"transforms:lift_paired_closure", std::make_shared<LiftPairedClosureResolver>()}}),
     };
     return groups;
 }
@@ -295,6 +617,8 @@ const std::vector<oper_group_ptr_t> &operatorGroups() {
 std::unordered_map<std::string, operator_t> operatorKernels() {
     std::unordered_map<std::string, operator_t> kernels = transposeOperatorKernels();
     kernels["jvp"] = &jvpKernel;
+    kernels["lift_transpose"] = &liftTransposeKernel;
+    kernels["lift_paired_closure"] = &liftPairedClosureKernel;
     return kernels;
 }
 
@@ -311,6 +635,14 @@ void registerOperatorMetadata() {
     // two answers used to be one flag; they are two here, and both are true.
     camel::core::OperatorTable::instance().set(
         "transforms:jvp", {.pure = true, .readsGraphs = true, .foldable = false});
+    // The lift of a transpose builds two graphs and touches no resource either: it reads the graph
+    // the operand was lifted from and answers a function value closed over the operand's own pairs.
+    camel::core::OperatorTable::instance().set(
+        "transforms:lift_transpose", {.pure = true, .readsGraphs = true, .foldable = false});
+    // The same reading for the code of a body-built closure: it builds one graph with paired
+    // captures and touches no resource.
+    camel::core::OperatorTable::instance().set(
+        "transforms:lift_paired_closure", {.pure = true, .readsGraphs = true, .foldable = false});
     // `transpose` builds a graph of its own from the one it is handed and touches no resource
     // either, but it is not this edit's to re-declare: it is declared not pure here, as it was, and
     // the same reading as `jvp`'s above would have to be measured for it first.
@@ -326,6 +658,14 @@ void registerOperatorMetadata() {
         "transforms:jvp", {.name = "jvp", .minArgs = 1, .withCount = 0, .declaredByModule = true});
     camel::core::OperatorTable::instance().declareCallForm(
         "transforms:transpose", {.name = "transpose", .minArgs = 1, .withCount = 0, .declaredByModule = true});
+}
+
+// TEMPORARY (removed before this step is committed): the external entry of the dump above, for the
+// graphs `jvp.cpp`'s own build encodes (the lift recursion builds those, not a kernel).
+void dumpBuiltNodesForDiagnostics(
+    std::ostream &os, const camel::runtime::GCGraph *graph,
+    const camel::runtime::Program *program) {
+    dumpBuiltNodesImpl(os, graph, program);
 }
 
 } // namespace camel::transforms
