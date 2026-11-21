@@ -728,7 +728,7 @@ function rewriteSpelling (spelling, rules) {
 // this stage owes it.
 function stage0Step (file, landed) {
   // 0.4 first, and narrowly: a syntax-tree header reached from the kernel or from a module. The
-  // plan's 0.4 names `include/camel/core/forward.h:28` as its example, and its completion condition
+  // plan's 0.4 names `include/camel/core/forward.h#forward` as its example, and its completion condition
   // is that nothing in the kernel or in `modules/` includes `parse/ast/`. `parse/` reading its own
   // tree is not a violation and must not be listed as one.
   if (/^(kernel_|lib_module)/.test(blockOfPath(file)) && landed.startsWith('parse/') && landed.includes('/ast/')) return '0.4'
