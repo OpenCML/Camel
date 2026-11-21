@@ -563,7 +563,12 @@ function cmakeText (blocksInfo) {
     L.push(`        if(_block STREQUAL "${b}")`)
     L.push('            file(GLOB_RECURSE _sources')
     const trees = treesFor(b)
-    for (const t of trees) L.push(`                "\${PROJECT_SOURCE_DIR}/${t}/**/*.cpp"`)
+    // `dir/*.cpp` and not `dir/**/*.cpp`: `GLOB_RECURSE` already walks every subdirectory, and a
+    // `**/` in the expression adds a level instead of allowing none -- which left every source
+    // sitting directly in a block's own directory (`kernel/runtime/definitions.cpp`,
+    // `parse/src/parse.cpp`, all nine of `kernel/utils/`) out of the library, and the drill found
+    // it as two undefined symbols at the link of a check executable.
+    for (const t of trees) L.push(`                "\${PROJECT_SOURCE_DIR}/${t}/*.cpp"`)
     L.push('            )')
     // A checkout older than the handwritten front end can still carry `parse/src/src/antlr/` on
     // disk. The build excluded that path before the move and has to exclude it after.
