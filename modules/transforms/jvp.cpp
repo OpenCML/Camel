@@ -1140,6 +1140,12 @@ bool liftGraph(
             const gc_node_ref_t made    = draft.addOperNode(shape.type, nullptr, "transforms:jvp");
             const gc_node_ref_t operand = copyOf[ref];
             draft.setNormInputs(made, std::span<const gc_node_ref_t>(&operand, 1));
+            // **Self-registration.** This is the one place a value's lifted form is made, so it is
+            // the one place the table can learn it. The key is the value's own `ref` -- the same ref
+            // the lookup passes in -- and not the ref of whatever node asked for the lift: a call's
+            // node and the member its answer is read from are two different refs, and only the
+            // member's is the key a later read through that member will use.
+            state.liftedValues[ref] = made;
             return made;
         };
         // The body's result of a LOOP node and the loop's own value are the same shape (see
