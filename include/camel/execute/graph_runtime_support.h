@@ -98,6 +98,12 @@ class RunPrograms {
 };
 
 /// A run of `main` in `context`, ended when the scope is.
+///
+/// The scope a **back end** opens for the graph it is running. The other side of the same rule is
+/// the holder's: a C++ frame that keeps a program and the value slots a call handed it must be
+/// inside a run for as long as it keeps them (ProgramRunScope), and a back end that runs inside
+/// that frame nests its own run there. The run is a counter and the program roots are a multiset
+/// (GCGraphManager::enterRun / leaveRun / rootForRun), so neither side has to know the other's.
 class RunScope {
   public:
     RunScope(
@@ -112,6 +118,25 @@ class RunScope {
 
   private:
     RunPrograms &programs_;
+};
+
+/// A run a **holder in C++** opens for itself: it keeps `program` and the value slots a call
+/// hands back while those slots are live in C++, so the program is rooted for the whole window
+/// (ProgramHold) and the explicit collection is off for it (the run counter). The collector moves
+/// a program's static values when it collects, and a `slot_t` in a C++ local is not a root: it is
+/// only valid while a run is open and nothing may collect -- which is why the window belongs to
+/// whoever holds the slots, and not to the back end that ran the graph inside it.
+class ProgramRunScope {
+  public:
+    ProgramRunScope(
+        camel::core::context::Context &context, const camel::runtime::Program *program);
+    ~ProgramRunScope();
+    ProgramRunScope(const ProgramRunScope &)            = delete;
+    ProgramRunScope &operator=(const ProgramRunScope &) = delete;
+
+  private:
+    camel::core::context::Context *context_;
+    camel::runtime::ProgramHold hold_;
 };
 
 struct RuntimeBranchArmRegion {

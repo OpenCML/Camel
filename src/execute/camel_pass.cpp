@@ -15,6 +15,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/typevar.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/definitions.h"
@@ -270,9 +271,12 @@ class CamelPass final : public GraphIRPass {
         // runs. There is no closure left for this caller to pass, and the entry graph, not a
         // function value, is what `callGraph` is for.
         //
-        // The graph is run on the reference executor, which installs itself (graph_caller.h): the
-        // pass is a function of the module, and the interpreter it runs on is not this file's
-        // business.
+        // This frame holds a program and the slots a call hands back, so it opens the run they are
+        // only valid inside (graph_runtime_support.h, ProgramRunScope): the collector moves a
+        // program's static values when it collects, and a `slot_t` in a C++ local is not a root.
+        // The reference executor opens its own run inside this one -- the window is the holder's,
+        // and the back end that runs the graph is not this file's business.
+        camel::execute::ProgramRunScope runScope(*context_, tool->program);
         const slot_t result = camel::execute::detail::graphCaller()(
             context_,
             tool->program,
