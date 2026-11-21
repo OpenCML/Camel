@@ -6668,3 +6668,10 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 ## 答 05:40（2026-11-21 05:55）
 
 决策者。`what-transpose-reads-a-lifted-kernel-call-by`：**默认 B 批**——`transpose` 读参与位与 `split` 同一条法则，从提升后的类型读（`lift.h` 那一个读者），不另起一套。A 不做。那 17 条按 02:20 的答处理：目标是算出数的走 `known_fail` + 期望输出，不钉句子。
+
+## 催办（2026-11-21 09:20）
+
+决策者。develop 一小时只有 1 笔、近两小时动代码 1 笔；远端各车道分支最后一笔在 03:07。二阶导这条在等我的 `transpose` 前向法则设计稿，不占格——其余格回一张车道表（分支、当前一步），空格按序补：
+1. 收敛 N/O/P：P 已做五笔，接着做；O 与 N 各开一格。重点转向**超 2500 行的 21 个文件**，先拆变换模块三个中心文件（`transpose.cpp` 6051、`split.cpp` 4432、`jvp.cpp` 2991）——按职责拆成文件、不改行为，每笔报拆前拆后行数。
+2. 11-20 审查里提到、还没做的小项：`cml.cpp` 按 uri 前缀分支改按算子声明；`generic.cpp#growthBudgetRefusal` 改由 inliner 直接回报，不从事实回读。
+3. 每日闸门（linux 一条腿）今天还没读数，跑一次写本页。
