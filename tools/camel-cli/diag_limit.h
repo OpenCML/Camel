@@ -90,9 +90,7 @@ moduleDiagSinks(const std::vector<camel::core::module::module_ptr_t> &modules) {
         if (!userModule || !userModule->diagnostics()) {
             continue;
         }
-        sinks.push_back(DumpedSink{userModule->diagnostics().get(),
-                                   userModule->parser() ? &userModule->parser()->tokenPositions()
-                                                        : nullptr});
+        sinks.push_back(DumpedSink{userModule->diagnostics().get(), userModule->tokenPositions()});
     }
     return sinks;
 }

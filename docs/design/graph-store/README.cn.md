@@ -258,7 +258,7 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 | 项目 | 施工前的调查（第 1 节） | 现在（`src/` 实测） |
 |---|---|---|
 | 冻结图的构造点 | 3 处：前端旁路表建图 → 编码时第二份草稿 → 冻结图 | **1 处**：`GCGraphBuildAccess::constructInPlace`（`src/runtime/graph.cpp#GCGraphBuildAccess::constructInPlace`；`create` 只算字节再调它）。另有 `GCGraph::clone`（`src/runtime/graph.cpp#GCGraph::clone`）复制值头、共享块，不构造内容 |
-| 编码入口 | 前端与改写各有一套 | **1 个**：`encodeToRuntimeProgram`（`src/compile/gir/graph_encode.cpp#encodeToRuntimeProgram`），6 个调用点（`userdef.cpp` 1、`definitions.cpp` 2、`rule_templates.cpp` 3） |
+| 编码入口 | 前端与改写各有一套 | **1 个**：`encodeToRuntimeProgram`（`src/compile/gir/graph_encode.cpp#encodeToRuntimeProgram`），6 个调用点（`src/compile/module_source.cpp` 1、`definitions.cpp` 2、`rule_templates.cpp` 3） |
 | 编辑用的图 | 前端旁路表 + 第二份草稿 | 前端与改写共用一份 `runtime::GraphDraft`（`include/camel/runtime/draft.h`），编码直接读它，"第二份草稿"不存在了 |
 | 以节点为键的旁路表 | 8 张，键是节点指针（第 1 节） | **4 张**，键是节点编号：`nodePortNames_`、`funcTargets_`、`drefTargets_`、`operTargets_`（`include/camel/compile/gir/draft_graph_builder.h#nodePortNames_`） |
 | 以图为键的地址表 | 图的身份就是 `GCGraph*` | **1 张**：`DebugMap::runtimeGraphOrigins_`，本轮删除（9.3） |
