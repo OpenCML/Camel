@@ -4344,7 +4344,7 @@ class RewriteModule final : public BuiltinModule {
         camel::core::OperatorTable::instance().declareUnfoldable(
             "rewrite",
             {"rule", "rule_when", "rule_generic", "fact"});
-        // What the two operators that read a graph touch: the graph, read and never written.
+        // What the three operators that read a graph touch: the graph, read and never written.
         // `saturate` reads the graphs of the rules'
         // two sides and of the function it is applied to, and hands back a new function value --
         // the graph it read is an immutable value, so no clause writes it. `check` reads the same
@@ -4359,7 +4359,7 @@ class RewriteModule final : public BuiltinModule {
             readsGraph.accesses = {ambientAccess("graph", AccessMode::Read)};
             camel::core::OperatorTable::instance().declareResources(
                 "rewrite",
-                {{"saturate", readsGraph}, {"check", readsGraph}});
+                {{"saturate", readsGraph}, {"check", readsGraph}, {"extract", readsGraph}});
         }
         loaded_ = true;
         return true;
