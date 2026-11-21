@@ -2443,6 +2443,12 @@ bool liftGraph(
                     // No value half and no tangent half: the answer carries the function component
                     // as its lifted self, and the value components as their pairs.
                     valueOf[ref] = made;
+                    // The answer carries the function as its lifted self, so the table can say so:
+                    // a later call written through this value reaches this answer instead of asking
+                    // for a second lift. Two registrations, two keys, two directions: this one is
+                    // keyed by the **call node** (a reader of the answer), the one in
+                    // `liftedValueOf` is keyed by the **value** (a reader of the value itself).
+                    state.liftedValues[ref] = made;
                 }
                 copied[ref] = true;
                 ++copiedKinds;
