@@ -1585,7 +1585,8 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 return makeError(
                     "SaturateBudget",
                     std::format(
-                        "saturation stopped inside round {} after applying {} writing(s): the program "
+                        "saturation stopped inside round {} after applying {} writing(s): the "
+                        "program "
                         "is not a fixpoint, so the pass returns no program",
                         stats.rounds,
                         stats.appliedThisRound),
@@ -1810,9 +1811,9 @@ double smallestSubnormalOf(TypeCode dtype) {
 
 /// The epsilon two floating sides of an element type are compared with. It is the element type's
 /// own (camel::core::sem::elementEpsilon: bf16 2^-8, f16 2^-10, and the reduced types' instances
-/// are what this comparison exists to make checkable), except that f32 and f64 keep the two constants
-/// the check has always measured their verdicts with. Those two are one *full* ulp of the type
-/// (1.2e-7 = 2^-23, 2.3e-16 = 2^-52) where `elementEpsilon` declares the half of it (2^-24,
+/// are what this comparison exists to make checkable), except that f32 and f64 keep the two
+/// constants the check has always measured their verdicts with. Those two are one *full* ulp of the
+/// type (1.2e-7 = 2^-23, 2.3e-16 = 2^-52) where `elementEpsilon` declares the half of it (2^-24,
 /// 2^-53), and a change may neither loosen an f32 bound nor move an f32 or f64 reading: changing
 /// them halves every f32 bound and belongs to a numeric-contract change of its own.
 double checkEpsilon(TypeCode dtype) {
@@ -3493,8 +3494,9 @@ void checkOneRule(
     std::set<int64_t> axesSeen;
     if (!bound.checkable) {
         // `nondeterministic` has no numeric contract: there is nothing to compare against, so
-        // nothing was examined. The verdict stays `sampled` -- the three words are closed -- but the reason is written in its own column and
-        // is never left out, so a reader cannot take this `sampled` for one that sampled.
+        // nothing was examined. The verdict stays `sampled` -- the three words are closed -- but
+        // the reason is written in its own column and is never left out, so a reader cannot take
+        // this `sampled` for one that sampled.
         addRow(kVerdictSampled, "none", "no numeric bound", "");
         return;
     }
@@ -4047,8 +4049,9 @@ std::vector<CheckRow> rowsOfReport(const Struct *report) {
 ///
 /// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md): the verdict
 /// table, one row per rule or per instance of a generic law, each row carrying the rule, the
-/// instance, the verdict, what the verdict is about and the evidence or the reason. The verdict is published by `check` and the text output is
-/// the fixed rendering of that table, which is what a reader reads.
+/// instance, the verdict, what the verdict is about and the evidence or the reason. The verdict is
+/// published by `check` and the text output is the fixed rendering of that table, which is what a
+/// reader reads.
 slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
     // `samples` and `seed` are the whole `with` list of both overloads of `check`, in that order:
     // the two declarations name each `with` position the same way, which is what lets a named
@@ -4077,8 +4080,8 @@ slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         if (made->ruleId() != 0) {
             // A generic rule has no two sides of its own: it is checked once per instance its
-            // condition admits over the types the operator groups registered. The index is not passed:
-            // the seed of a rule follows its identity, not its place in this array.
+            // condition admits over the types the operator groups registered. The index is not
+            // passed: the seed of a rule follows its identity, not its place in this array.
             checkGenericRule(ctx, *made, samples, seed, programTypes, rows);
             continue;
         }
@@ -4341,6 +4344,23 @@ class RewriteModule final : public BuiltinModule {
         camel::core::OperatorTable::instance().declareUnfoldable(
             "rewrite",
             {"rule", "rule_when", "rule_generic", "fact"});
+        // What the three operators that read a graph touch: the graph, read and never written.
+        // `saturate` reads the graphs of the rules'
+        // two sides and of the function it is applied to, and hands back a new function value --
+        // the graph it read is an immutable value, so no clause writes it. `check` reads the same
+        // graphs and answers a report, writing nothing. The rules arrive as a `Rule[]` value in an
+        // argument and are not a resource, so no access names them. Its random sampling takes a
+        // fixed stream: the samples of a rule are drawn from `seed` (default 0) and the rule's own
+        // identity (`sampleStreamOf`), so the operators read no generator and no clock.
+        {
+            using camel::core::sem::AccessMode;
+            using camel::core::sem::ambientAccess;
+            camel::core::sem::ResourceSpec readsGraph;
+            readsGraph.accesses = {ambientAccess("graph", AccessMode::Read)};
+            camel::core::OperatorTable::instance().declareResources(
+                "rewrite",
+                {{"saturate", readsGraph}, {"check", readsGraph}, {"extract", readsGraph}});
+        }
         loaded_ = true;
         return true;
     }
