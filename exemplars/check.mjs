@@ -51,7 +51,16 @@ function normalize(text) {
     // The same normalizers the plan runner applies, from the one definition in test/tools, so an
     // exemplar golden cannot pin an id or a path that a plan snapshot would have normalized. The
     // backslash folding is this checker's own: a program may print a path in any separator style.
-    return applyNormalizers(text.replace(/\\/g, '/'), [
+    //
+    // A path inside a quoted DOT attribute arrives with every backslash **escaped** -- the writer
+    // must escape it (`src/passes/trans/dot/graphviz.cpp`, `escape`: `\` -> `\\`, DOT's own rule),
+    // so a Windows tree prints `srcfile="D:\\a\\Camel\\out\\latest\\stdlib\\x.cml"`. Folding the
+    // doubled pair straight to `//` would leave `D://a//Camel//…`, which is a spelling no root can be
+    // recognised in: `normalize_paths` handles the escaped form and the native form, not that one,
+    // so `<ROOT>` went unsubstituted and the dump differed from its golden for a reason that is not
+    // a defect. Undo the escape first, then fold: one `\` and one `\\` both become one `/`, which is
+    // what this folding has always meant.
+    return applyNormalizers(text.replace(/\\\\/g, '\\').replace(/\\/g, '/'), [
         'strip_ansi',
         'normalize_newlines',
         'trim_trailing_space',
