@@ -413,13 +413,15 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 前两项在 §6.1 的判定中最后检查，所以被它们拦下的调用是引擎原本会内联的调用。
 
 触及上限时不报错：相应调用保持为调用，程序语义不变，只是展开得更少。引擎最后一轮检查过而未内联的
-直接调用及其原因（`InlineDecline`）记录在 `InlineReport` 中，作为 pass fact `kInlineReportFactKey`
-挂在 `Context` 上，供后续遍解释某个调用为何仍是调用。
+直接调用及其原因（`InlineDecline`）记录在一份 `InlineReport` 里，这份记录有两个读者（**同一个对象**，
+不是同一个答案的两份拷贝）：运行引擎的那一次调用经 `applyOptimizeRewritePass` 的返回值拿到它，
+`std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，而不是「到了不动点」；同一份记录又以 pass
+fact `kInlineReportFactKey` 挂在 `Context` 上，供运行结束之后再问的读者（`onnx::export`）解释某个调用
+为何仍是调用。
 
-运行引擎的那一次调用不从这里回读：`applyOptimizeRewritePass` 把这一轮因预算触顶而留下的调用经
-`growthBudgetLeft` 直接交回给调用者（`std::opt` 用它说明「这一轮什么都没改，是因为预算用完了」，
-而不是「到了不动点」）。答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 也就没有 pass
-fact，而预算触顶这件事照样成立。`InlineReport` 留给运行结束之后再问的读者（`onnx::export`）。
+答案属于这一次运行，所以它不依赖 `Context`：没有 `Context` 就没有 pass fact，而预算触顶这件事照样
+成立。「因预算触顶而留下的那条调用」只有一种取法——`InlineReport::firstLeftFor(InlineDecline::
+GrowthBudget)`——运行本身的读者和事后的读者都从这一条读。
 
 ### 8.2 提交时的收口与结构检查
 

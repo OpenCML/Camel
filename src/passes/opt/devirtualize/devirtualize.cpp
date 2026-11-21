@@ -6,7 +6,7 @@
 #include "../inline/engine.h"
 
 const camel::runtime::Program *
-DevirtualizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
+DevirtualizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &) {
     OptimizeRewriteConfig config{};
     config.growthBudget           = growthBudget_;
     config.enableDevirtualization = true;
@@ -19,5 +19,5 @@ DevirtualizeRewritePass::apply(const camel::runtime::Program *program, std::ostr
     // so the count a run spends is one the pass keeps, cleared here where the run starts.
     growthSpent_            = 0;
     config.growthSpentNodes = &growthSpent_;
-    return applyOptimizeRewritePass(context_, program, os, config);
+    return applyOptimizeRewritePass(context_, program, config);
 }
