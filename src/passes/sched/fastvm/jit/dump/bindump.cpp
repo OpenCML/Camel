@@ -10,6 +10,7 @@
 #include "../backend/backend.h"
 #include "../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
+#include "camel/execute/pass/registration.h"
 #include <unordered_map>
 #endif
 
@@ -176,3 +177,12 @@ JitBinaryDumpPass::apply(const camel::runtime::Program *program, std::ostream &o
     return nullptr;
 #endif
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel jitBinaryDumpKernel("std::fastvm::jit_bin", makePass<JitBinaryDumpPass>());
+
+} // namespace

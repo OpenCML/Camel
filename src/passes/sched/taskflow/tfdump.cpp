@@ -3,6 +3,7 @@
 
 #include "taskflow.h"
 
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
@@ -160,3 +161,12 @@ TfDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     tfPass.buildAndDump(program, graph, os);
     return nullptr;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel tfDumpKernel("std::tfdump", makePass<TfDumpPass>());
+
+} // namespace

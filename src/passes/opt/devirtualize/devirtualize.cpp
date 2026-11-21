@@ -5,6 +5,9 @@
 
 #include "../inline/engine.h"
 
+#include "camel/execute/pass/registration.h"
+#include "passes/opt/budget.h"
+
 const camel::runtime::Program *
 DevirtualizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &) {
     OptimizeRewriteConfig config{};
@@ -21,3 +24,18 @@ DevirtualizeRewritePass::apply(const camel::runtime::Program *program, std::ostr
     config.growthSpentNodes = &growthSpent_;
     return applyOptimizeRewritePass(context_, program, config);
 }
+
+namespace {
+
+using camel::execute::growthBudgetOf;
+using camel::execute::PassKernel;
+
+const PassKernel devirtualizeKernel(
+    "std::cxx::devirtualize",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DevirtualizeRewritePass>(
+            ctx,
+            growthBudgetOf(args, "std::cxx::devirtualize"));
+    });
+
+} // namespace

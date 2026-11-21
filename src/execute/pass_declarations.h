@@ -50,6 +50,27 @@ struct DeclarationProblem {
     std::optional<camel::core::error::DiagLabel> location;
 };
 
+/// What one file said: its declarations, or why it could not be read. Never both, and never a
+/// throw.
+struct DeclarationFile {
+    std::vector<PassDeclaration> declarations;
+    std::optional<DeclarationProblem> problem;
+};
+
+/// The reader of one declaration file: `<module>.cml` at `path`, with `module` for the reports it
+/// writes. Reading a `.cml` is the parse layer's work, so this is an interface, not a dependency:
+/// `src/parse/pass_declarations.cpp` implements it and installs it when the program loads, and no
+/// file of the pipeline knows the parser (docs/handover/plans/2026-11-22-refactor-stage0.cn.md,
+/// 0.2).
+using DeclarationFileReader = DeclarationFile (*)(const std::string &module, const std::string &path);
+
+/// Installs the reader. Called once, by the parse layer, while the program loads.
+void setDeclarationFileReader(DeclarationFileReader reader);
+
+/// The installed reader, or null before the parse layer has loaded. A caller that finds none says
+/// so in its own words: the declarations of every module are unreadable, which is exactly true.
+DeclarationFileReader declarationFileReader();
+
 /// The pass declarations of `module` (`std` for the core), read from `<module>.cml` under the
 /// context's module search paths. Empty when the module has no declaration file, and empty when
 /// the file could not be read: `declarationProblem` is what says which of the two it was.

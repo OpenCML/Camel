@@ -15,6 +15,8 @@
 #include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
 #include "camel/execute/operator_call.h"
+#include "camel/execute/pass/registration.h"
+#include "execute/graph_caller.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -1236,3 +1238,56 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
     return (*opFunc)(withView, normView, *context_);
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// `std::nvm`: the reference executor a pipeline runs a program on, and the fallback pass of a
+/// pipeline that produced no empty graph (AGENTS.md, "Pass Execution Model").
+const PassKernel nodeVmKernel("std::nvm", makePass<NodeVMSchedPass>());
+
+} // namespace
+
+namespace {
+
+/// The reference executor's answer to `camel::execute::detail::graphCaller()`: a graph of a
+/// program, run here, for a caller that holds no function value (a pass written in Camel).
+slot_t callOnReferenceExecutor(
+    const camel::core::context::context_ptr_t &ctx,
+    const camel::runtime::Program *program,
+    camel::runtime::GCGraph *graph,
+    std::span<const slot_t> arguments,
+    std::span<const slot_t> withArguments,
+    std::span<const slot_t> closure) {
+    NodeVMSchedPass vm(ctx);
+    return vm.callGraph(program, graph, arguments, withArguments, closure);
+}
+
+camel::execute::detail::GraphCaller &installedGraphCaller() {
+    static camel::execute::detail::GraphCaller caller = nullptr;
+    return caller;
+}
+
+/// Installs the caller while the program loads, so the pipeline can run a pass written in Camel
+/// without naming the executor it runs on (src/execute/graph_caller.h).
+struct GraphCallerInstalled {
+    GraphCallerInstalled() { camel::execute::detail::setGraphCaller(&callOnReferenceExecutor); }
+};
+
+const GraphCallerInstalled graphCallerInstalled;
+
+} // namespace
+
+namespace camel::execute::detail {
+
+void setGraphCaller(GraphCaller caller) {
+    installedGraphCaller() = caller;
+}
+
+GraphCaller graphCaller() {
+    return installedGraphCaller();
+}
+
+} // namespace camel::execute::detail

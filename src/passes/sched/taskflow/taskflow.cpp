@@ -17,6 +17,7 @@
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/operator_call.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -3406,3 +3407,28 @@ TaskflowExecSchedPass::executeIsolateNode(GCGraph *graph, gc_node_ref_t nodeRef,
 
 template void TaskflowExecSchedPass::instantiate_graph_instance_generic<tf::Taskflow>(
     tf::Taskflow &flowLike, GCGraph *runtimeGraph, Frame *frame);
+
+namespace {
+
+using camel::execute::PassKernel;
+
+/// `std::taskflow`: the execution of `std::nvm` on a task graph, with the parameters the scheduler
+/// declares in stdlib/std.cml.
+const PassKernel taskflowKernel(
+    "std::taskflow",
+    [](const camel::core::context::context_ptr_t &ctx, const PassArgs &args) {
+        TaskflowOptions options;
+        options.linear         = args.getBool("linear");
+        options.fanOutAll      = args.getBool("fanout_all");
+        options.diag           = args.getBool("diag");
+        options.segments       = args.getBool("segments");
+        options.bytecode       = args.getBool("bytecode");
+        options.gcStats        = static_cast<int>(args.getInt("gc_stats"));
+        options.gcStress       = args.getBool("gc_stress");
+        options.blockingLeaves = args.getBool("blocking_leaves");
+        auto pass              = std::make_unique<TaskflowExecSchedPass>(ctx);
+        pass->setOptions(options);
+        return pass;
+    });
+
+} // namespace

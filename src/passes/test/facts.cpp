@@ -11,6 +11,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
@@ -685,3 +686,19 @@ FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     restore.edit(changed->root()).edit().setNodeDataIndex(kept, index);
     return restore.commit();
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel factNodeKernel(kFactNodeTestPass, makePass<FactNodeTestPass>());
+const PassKernel factStoreKernel(kFactStoreTestPass, makePass<FactStoreTestPass>());
+const PassKernel factLoadRulesKernel(kFactLoadRulesTestPass, makePass<FactLoadRulesTestPass>());
+const PassKernel factSeedKernel(kFactSeedTestPass, makePass<FactSeedTestPass>());
+const PassKernel factCheckKernel(kFactCheckTestPass, makePass<FactCheckTestPass>());
+const PassKernel factPersistKernel(kFactPersistTestPass, makePass<FactPersistTestPass>());
+
+} // namespace

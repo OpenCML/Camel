@@ -10,6 +10,7 @@
 #include "../backend/backend.h"
 #include "../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
+#include "camel/execute/pass/registration.h"
 #include <unordered_map>
 #endif
 
@@ -126,3 +127,13 @@ JitMirDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) 
     return nullptr;
 #endif
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+const PassKernel jitRmirDumpKernel("std::fastvm::jit_rmir", makePass<JitRmirDumpPass>());
+const PassKernel jitMirDumpKernel("std::fastvm::jit_mir", makePass<JitMirDumpPass>());
+
+} // namespace

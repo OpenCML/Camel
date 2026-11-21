@@ -21,6 +21,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/draft_session.h"
 #include "runtime/graph_build.h"
 
@@ -682,3 +683,14 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     os << " refused=" << (refused ? 1 : 0) << " rule=" << (ownerRule ? 1 : 0) << "\n";
     return last;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel regionsKernel(kRegionsTestPass, makePass<RegionsTestPass>());
+
+} // namespace

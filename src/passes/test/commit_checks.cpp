@@ -21,6 +21,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/pass/registration.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
@@ -1520,3 +1521,28 @@ ValueRetypeTwiceTestPass::apply(const camel::runtime::Program *program, std::ost
         << std::flush;
     return program;
 }
+
+namespace {
+
+using camel::execute::makePass;
+using camel::execute::PassKernel;
+
+/// The test-only passes this file implements. Each name is the constant its own header
+/// declares, so the name a pipeline writes and the class that answers it are one fact.
+const PassKernel foldFunctionTypeKernel(kFoldFunctionTypeTestPass, makePass<FoldFunctionTypeTestPass>());
+const PassKernel camelCommitChecksKernel(kCamelCommitChecksTestPass, makePass<CamelCommitChecksTestPass>());
+const PassKernel commitOrderKernel(kCommitOrderTestPass, makePass<CommitOrderTestPass>());
+const PassKernel commitEffectKernel(kCommitEffectTestPass, makePass<CommitEffectTestPass>());
+const PassKernel commitLegalSpliceKernel(kCommitLegalSpliceTestPass, makePass<CommitLegalSpliceTestPass>());
+const PassKernel valueRetypeTwiceKernel(kValueRetypeTwiceTestPass, makePass<ValueRetypeTwiceTestPass>());
+const PassKernel commitExitRegionKernel(kCommitExitRegionTestPass, makePass<CommitExitRegionTestPass>());
+const PassKernel commitCycleKernel(kCommitCycleTestPass, makePass<CommitCycleTestPass>());
+const PassKernel commitAncestorKernel(kCommitAncestorTestPass, makePass<CommitAncestorTestPass>());
+const PassKernel commitTierKernel(kCommitTierTestPass, makePass<CommitTierTestPass>());
+const PassKernel commitInPlaceKernel(kCommitInPlaceTestPass, makePass<CommitInPlaceTestPass>());
+const PassKernel commitSiblingArmKernel(kCommitSiblingArmTestPass, makePass<CommitSiblingArmTestPass>());
+const PassKernel commitLoopBodyReadKernel(kCommitLoopBodyReadTestPass, makePass<CommitLoopBodyReadTestPass>());
+const PassKernel commitPortTypeKernel(kCommitPortTypeTestPass, makePass<CommitPortTypeTestPass>());
+const PassKernel commitMadeGraphPortsKernel(kCommitMadeGraphPortsTestPass, makePass<CommitMadeGraphPortsTestPass>());
+
+} // namespace
