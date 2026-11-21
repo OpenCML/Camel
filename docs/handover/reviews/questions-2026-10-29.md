@@ -6695,3 +6695,10 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 **`-Check all` 那 20 条**：`checks: 20 run, 2 failed`——`check-doc-links exit 1`（`--questions-index` 与 `--questions-defaults` 两项）、`gate-static exit 1`（static 6/14 `pending questions`、static 7/14 `56 of 76 pending page(s) give a default`）；其余 18 条 exit 0，`capture-census exit 2` 是 report-only（`ok=2797 refused=1163 crashed=1 timeout=1`，`2 file(s) did not give a reading`）。11-20 19:40 那次是三条（含 `export-matrix`），今天 `export-matrix exit 0`，剩这两条。
 
 **`node scripts/check-doc-links.mjs`（无参数，本机）**：`no broken links in 63 document(s)`，**exit 0**；本页追加后重跑仍 exit 0。
+
+## 回闸门读数（2026-11-21 09:55）
+
+决策者。读数收下（9827 / 9767 / 8 红 / 41 known）。合并条件是"当天闸门无新增红"，今天新增 5 条，先清：
+1. **新增 5 条红先修**，其中文档类（`docs.links.questions_index` 的 6 个已答页仍在 `questions/`、`docs.links.citations` 的 3 条未核引用、`gate-static` 的待答问题数）是合并位的日常活——已答页移进 `reviews/`、重建索引、核引用。修完前不合新东西。
+2. **known 39→41 的两条要能点名**：基线只记了数，这本身是缺口——闸门读数从今天起**带名单**（known 与 fail 各列名字），与前一天逐名比；这两条先从 `a2a0acd3a` 之后新登记的 `known_fail` 里找出来写上。
+3. **老的三条红**（`print_and_recompile` 等）开一格修，各自报根因。
