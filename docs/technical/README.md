@@ -46,7 +46,7 @@
 | [44_values_with_several_writings.md](44_values_with_several_writings.md) | Values with several writings (graph store step 7): the log of equivalences as a column of the graph, the executable state, classes per permission context, congruence closure, rules and saturation with count budgets, extraction by cost, the driver gate, and what is left open |
 | [45_graph_module.md](45_graph_module.md) | The module `graph`: a program as a value. Handles, reads, transactions, function to function, passes written in Camel, and the differential tests against the C++ passes |
 | [47_command_line_over_environment.md](47_command_line_over_environment.md) | 行为从命令行来，不从环境来：GC 与集合树的 21 个开关如何变成选项、--coll/--gc-stress/--gc-check 的取值写法、迁移代价（poison sweep 3508 → 3054）与那片没有人钉住的用例 |
-| [46_rules.md](46_rules.md) | Rules (graph store step 8): `rule` as a pair of functions and the `Rule` value it declares, rule sets as `Rule[]`, the scheduling combinators of `stdlib/rules.cml`, the module `rewrite` (`rewrite`, `run`, `saturate`, `extract`, `check`) and the cost a run reports, compiling a rule to the engine, the check a rule passes before it enters a library, and what is left open |
+| [46_rules.md](46_rules.md) | Rules (graph store step 8): `rule` as a pair of functions and the `Rule` value it declares, rule sets as `Rule[]`, the scheduling combinators of `lib/rules/rules.cml`, the module `rewrite` (`rewrite`, `run`, `saturate`, `extract`, `check`) and the cost a run reports, compiling a rule to the engine, the check a rule passes before it enters a library, and what is left open |
 | [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化能否推迟到首次 `plot`：`cmo_load` 的数字、边际导入测量、为什么导入期错误码与“第一个初始化者”设置使推迟可见，以及需要作者裁定的 P1/P2 |
 | [53_import_cost_audit.md](53_import_cost_audit.md) | `import` 不执行任何代码的逐模块审计：标准库 28 个模块导入时除声明名字外还做什么、a/b/c 分类（a=0 / b=2 / c=26）、每行的探针与源码扫描两份证据、`python` 与 `pyplot` 的 CPython 初始化价格、搜索根与目录扫描和声明模块整份编译的价格，以及为什么模块顶层 `let` 的探针只能断言"不依赖就永不发生" |
 | [54_profiler_allocations.md](54_profiler_allocations.md) | `std::profile` 的分配列：三个值分配器的计时点、按线程归属到算子调用、报告里的总行/步行/算子列与 JSON、开启与关闭的代价、看不到的 `new`/BLAS 打包/`memcpy`/首次触页、d=256 与 d=1024 的测量（分配占一步 0.40% / 0.02%，因此 34% 的差距是内核时间），以及它替换掉的旧说明 |
@@ -61,7 +61,7 @@
 | [63_what_the_348_units_are.md](63_what_the_348_units_are.md) | 剩下的 348 个 `:var/new` 按"为什么存在"分成 A/B/C/D/E 五类（A 0、B 117、C 81、D 79、E 71）：每一类的名单、判据（节点与图的形状，不看文件名）、以及**建图时直接构造 SSA 之后每个单元还在不在**——270 消失、78 留（64 机器状态 + 10 模块级共享 → `Ref` + 4 判不了）；含"两个口径差 64"与"54 是没有读者、不是可以删"两句 |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
-| [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
+| [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `lib/autodiff/` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
 | [optim.md](optim.md) | 模块 `optim`：用 Camel 写在 `tree` 上的优化器（`sgd` / `adam` / `adamw` / 学习率表，纯函数 `init` / `update`），一步的逐叶算术与原生路径逐位一致，与 `nn` 的对照测试，以及挡住删除 C++ 优化器的缺口 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |

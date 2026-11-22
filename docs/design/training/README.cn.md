@@ -89,7 +89,7 @@ let next = run_preferred_resident<update>((m, vg.1, mu, nu, ...))               
 
 ### 3.2 操作
 
-树操作分在两处：`tree_paths` 在纯 Camel 的 `tree` 库（`stdlib/tree.cml`），其余四个在原生模块 `ckpt`（`modules/ckpt`）：
+树操作分在两处：`tree_paths` 在纯 Camel 的 `tree` 库（`lib/tree/tree.cml`），其余四个在原生模块 `ckpt`（`lib/ckpt/`）：
 
 | 操作 | 含义 | 类型规则 |
 |---|---|---|

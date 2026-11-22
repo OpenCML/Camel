@@ -18,9 +18,9 @@
 
 | 组件 | 路径 |
 |------|------|
-| NodeVM 调度入口 | `src/passes/sched/nodevm/nodevm.cpp`（`apply`、`call`） |
-| 拓扑工具 | `include/camel/common/algo/topo.h`（`findReachable`） |
-| FastVM 编译期 TAIL 判定 | `src/passes/sched/fastvm/compile.cpp` |
+| NodeVM 调度入口 | `lib/std/nvm/nodevm.cpp`（`apply`、`call`） |
+| 拓扑工具 | `kernel/include/camel/common/algo/topo.h`（`findReachable`） |
+| FastVM 编译期 TAIL 判定 | `lib/std/fvm/compile.cpp` |
 
 ---
 
@@ -48,7 +48,7 @@
 
 该规则与 FastVM 的 `resolveTailValueNode` 一致，用于避免把「纯副作用链」误当作返回值尾结点。
 
-**分支臂内的尾调**：尾值为 **JOIN** 时，某一臂的值经转发 **GATE** 到达臂尾；只有当「臂在产生该值之后不再做任何事」时，产生该值的调用才是尾调。判定由 `runtimeArmEndsWithValue`（`src/execute/graph_runtime_support.cpp`）给出：从臂尾沿 GATE 回溯，GATE 等待的结点要么是该值本身、要么是其它转发 GATE、要么不依赖该值；若某个 GATE 等待一个排在该值之后的副作用（`let r = f(x); println(...); return r` 被内联进臂），则该调用**不是**尾调，否则帧被替换后那个副作用永远不会执行。NodeVM（`collectRuntimeTailJoinArmValues`）与 FastVM/JIT（臂出口 JUMP 处）共用这一判定。
+**分支臂内的尾调**：尾值为 **JOIN** 时，某一臂的值经转发 **GATE** 到达臂尾；只有当「臂在产生该值之后不再做任何事」时，产生该值的调用才是尾调。判定由 `runtimeArmEndsWithValue`（`lib/std/exec/graph_runtime_support.cpp`）给出：从臂尾沿 GATE 回溯，GATE 等待的结点要么是该值本身、要么是其它转发 GATE、要么不依赖该值；若某个 GATE 等待一个排在该值之后的副作用（`let r = f(x); println(...); return r` 被内联进臂），则该调用**不是**尾调，否则帧被替换后那个副作用永远不会执行。NodeVM（`collectRuntimeTailJoinArmValues`）与 FastVM/JIT（臂出口 JUMP 处）共用这一判定。
 
 ---
 
@@ -91,7 +91,7 @@
   1. 全部 **ctrlInputs**（控制依赖优先）；
   2. 全部 **dataInputs**（值依赖在后）。
 
-`findReachable` 在 `include/camel/common/algo/topo.h` 中实现为：自出口做 DFS，**先深入各输入，再在回溯时将当前结点追加到向量末尾**，得到的是依赖先于消费者的**后序**列表；对该列表**从头到尾**线性扫描，即满足「上游先于下游」的执行顺序。
+`findReachable` 在 `kernel/include/camel/common/algo/topo.h` 中实现为：自出口做 DFS，**先深入各输入，再在回溯时将当前结点追加到向量末尾**，得到的是依赖先于消费者的**后序**列表；对该列表**从头到尾**线性扫描，即满足「上游先于下游」的执行顺序。
 
 ### 4.2 缓存
 

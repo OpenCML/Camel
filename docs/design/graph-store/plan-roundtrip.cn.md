@@ -117,11 +117,11 @@ declaration, and no program writes that name
 | 文件 | 算子 URI | 私有 kernel |
 | --- | --- | --- |
 | `compile/when_import/array_sum.cml` | `array:sum_l` | `sum_kernel` |
-| `modules/std/array/sort_basic.cml` | `array:sort_l` | `sort_kernel` |
+| `test/cases/modules/std/array/sort_basic.cml` | `array:sort_l` | `sort_kernel` |
 | `compile/fstring/basic.cml` | `:str/format` | `format` |
-| `modules/math_calls/erf_values.cml` | `math:round_d` | `round_kernel` |
-| `modules/stdlib/fault_array_min_empty.cml` | `array:min_l` | `min_kernel` |
-| `modules/stdlib/fault_array_max_empty.cml` | `array:max_l` | `max_kernel` |
+| `test/cases/modules/math_calls/erf_values.cml` | `math:round_d` | `round_kernel` |
+| `test/cases/modules/stdlib/fault_array_min_empty.cml` | `array:min_l` | `min_kernel` |
+| `test/cases/modules/stdlib/fault_array_max_empty.cml` | `array:max_l` | `max_kernel` |
 | `trans/cpp/math_min_max_int.cml` | `math:min_l` | `min_kernel` |
 | `compile/transforms/rulesets_probe_missing.cml` | `math:pow_d` | `pow_kernel` |
 
@@ -185,7 +185,7 @@ the literal into a constant array, and the program written back builds a differe
 **一处更正（把我上一刀的读数收回）：** 上一刀我报"`PLAIN` 两个、名字是 `rulesets.`（以句点结尾）⇒ 前端拼前缀漏了成员名"——**不成立**：那是我统计脚本的截断错误（`sed` 在第一个句点处截断），真名是 `rulesets.jvp::lift<float>` 与 `rulesets.probe_missing::add_ok__lhs`。用正确的提取重扫：**以 `::`、`.` 或 `<` 结尾的名字计数为 0**，`PLAIN` 为 0。所以"前端拼名字漏成员名"这条缺陷**没有可修的点**，这一刀只有分类、没有代码改动。
 **2026-11-02 第十一刀（作者缺陷清单 A7 的第 1 条）：`fail<'Kind'>(message)` 是语句，打印机漏了它。** 缺陷原文：`consistency/fail_never/statement_after_fail` 原程序打印 `before`、报故障、`exit 1`；打印出来的程序打印 `before`、`after`、`exit 0`——**`fail` 语句被丢了**。
 
-`git grep -n ":op/fail\|kFailOperatorUri" -- src include` 指到 `include/camel/core/operator_names.h#kFailOperatorUri`：`kFailOperatorUri = ":op/fail"`，注释写着"它**不是效果**，所以它的值不被需要的地方没有东西运行它"。`src/passes/trans/cml/cml.cpp` 的语句走查（`processNode`）只把 `nodeEffect(ref)` 为真的节点当语句打印，而 `fail` 的值类型是 `never`、用户数 0、又不是效果 ⇒ **它是被"跳过"的，不是被当成值表达式丢了**（值表达式那条路也走不到：`users == 0` 时那一支只在有名字或有效果时产出）。
+`git grep -n ":op/fail\|kFailOperatorUri" -- src include` 指到 `kernel/include/camel/core/operator_names.h#kFailOperatorUri`：`kFailOperatorUri = ":op/fail"`，注释写着"它**不是效果**，所以它的值不被需要的地方没有东西运行它"。`lib/std/cml/cml.cpp` 的语句走查（`processNode`）只把 `nodeEffect(ref)` 为真的节点当语句打印，而 `fail` 的值类型是 `never`、用户数 0、又不是效果 ⇒ **它是被"跳过"的，不是被当成值表达式丢了**（值表达式那条路也走不到：`users == 0` 时那一支只在有名字或有效果时产出）。
 
 修法：在语句走查里按 URI 认出它，按语言的写法打印（`emitFail`）——`with` 槽里的常量字符串是 `'Kind'`、唯一一个 norm 输入是消息；**kind 不是常量字符串时具名拒绝**（`fail<'Kind'>` 是唯一写法，写别的 kind 就是假打印）：
 
@@ -212,7 +212,7 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 
 **2026-11-02 第十二刀（A7 第 2 条）：`41` 从哪来——写作表的第三张凭据，穿过函数值的调用是"可能的写者"。** 缺陷原文：`effects/writer_table_through_callee` 原程序 `0` `41`；打印版 `0` `0`。
 
-`41` 的来源在 `src/compile/gir/builder_expr.cpp#recordWrite`（`throughCallee`）的注释里：**"穿过一个函数值的调用只是一个变量*可能的*写者（保守写者集合），所以写在它前面的那次写必须继续运行，而调用之后读到的版本要指名它"**。源里的 `apply((x: int) => { counter = x }, 41)` 正是这条：`counter` 是闭包捕获的 `var`，调用是它的写，所以**调用之前的读读到 `0`、之后的读读到 `41`**。
+`41` 的来源在 `compile/src/gir/builder_expr.cpp#recordWrite`（`throughCallee`）的注释里：**"穿过一个函数值的调用只是一个变量*可能的*写者（保守写者集合），所以写在它前面的那次写必须继续运行，而调用之后读到的版本要指名它"**。源里的 `apply((x: int) => { counter = x }, 41)` 正是这条：`counter` 是闭包捕获的 `var`，调用是它的写，所以**调用之前的读读到 `0`、之后的读读到 `41`**。
 
 **打印机把它丢了**：`program_.calleeOf` 只对**已知的图**给得出被调者，穿过函数值的调用它给出 `nullptr` ⇒ `nodeEffect` 判"无效果"、图的纯性扫描也判这个函数纯 ⇒ `apply` 的体 `f(v)` 与 `main` 里的 `apply(...)` **都当"没有值的非效果"被跳过**。打印版于是从不调用，两次读都是 `0`。
 
@@ -234,7 +234,7 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 
 **2026-11-02 第十三刀（A7 第 5、6 条）：`print` 的格式说明就在 `with` 槽里，读法与 `fail<'Kind'>` 同源。** 缺陷原文：`trans/cpp/exec/print_formats` 原程序 `3-4|1+2` / `next` / `[5][a]` / `0.50`；打印版 `3 4|1 2` / `next` / `5a` / `0.5`。`consistency/values/float_special` 原程序末三行 `nan` / `     nan` / `+nan`；打印版三行都是 `nan`。
 
-**`with` 槽的形状**（`stdlib/prelude.cml` 的声明）：
+**`with` 槽的形状**（`lib/std/prelude.cml` 的声明）：
 
 ```
 /// With a format, print<fmt>(...), writes the format with the arguments put in,
@@ -288,12 +288,12 @@ print family, and this operator's configuration is not a string, so its call has
 
 **2026-11-02 第二十八刀：族 4 + 族 9 闭合，两半都落地——接受命名结构类型，并写出 `type` 声明**
 
-**做了什么**（`src/passes/trans/cml/cml.cpp`）：①`checkType` 的 `record->named()` 分支不再一律拒绝，改为问"这个类型的声明写得出来吗"；②新增收集/校验/排序/写出四步：`collectNamedTypes` 从签名与节点类型里收命名结构类型，`namedTypeObstacle` 逐个判可写性（泛型、`#resource`、名字不是源标识符、字段名不是标识符、字段无类型），`orderNamedTypes` 按字段依赖排序（自引用合法，跨类型环拒绝），`namedTypeText` 用 `StructType::fieldName(i)/typeAt(i)` 写出 `type V = { x: int }`。③**只声明打印文本真正写到的类型**——正文先写到 `body_`，头部后拼，否则会给源里根本没有的类型添一条声明，往返当场变成不等价（第一版就是这个错：34 条新印出来的里有 19 条 not_equivalent、15 条连文档都产不出）。④拒绝文本现在说清**缺哪一半**：`the named type 'V', whose declaration cannot be printed: <理由>`。
+**做了什么**（`lib/std/cml/cml.cpp`）：①`checkType` 的 `record->named()` 分支不再一律拒绝，改为问"这个类型的声明写得出来吗"；②新增收集/校验/排序/写出四步：`collectNamedTypes` 从签名与节点类型里收命名结构类型，`namedTypeObstacle` 逐个判可写性（泛型、`#resource`、名字不是源标识符、字段名不是标识符、字段无类型），`orderNamedTypes` 按字段依赖排序（自引用合法，跨类型环拒绝），`namedTypeText` 用 `StructType::fieldName(i)/typeAt(i)` 写出 `type V = { x: int }`。③**只声明打印文本真正写到的类型**——正文先写到 `body_`，头部后拼，否则会给源里根本没有的类型添一条声明，往返当场变成不等价（第一版就是这个错：34 条新印出来的里有 19 条 not_equivalent、15 条连文档都产不出）。④拒绝文本现在说清**缺哪一半**：`the named type 'V', whose declaration cannot be printed: <理由>`。
 
 **两个最小例子（判据四是"输出忠实"，不是"不再拒绝"）**：
 
 - 族 9 `consistency/operator_overloads/mods/plus_b.cml`：打印 `type V = { x: int }` + `func operator +(a: V, b: V): V { return { x: 0 } }`，往返 **`EQUAL (18 vertices, 31 edges)`**。
-- 族 4 `modules/tensor/shape_inference/loaded_struct_as.cml`：过了命名类型这一关，停在**下一道墙** `the operator 'tensor:sum'`（不是本刀的缺陷，是它挡在后面的另一层）。同形状的最小例子（`type P = { x: int, y: int }` + `with <m: P>`，即"`with` 参数是命名类型"）打印、编译、运行 `exit 7`（与源相同），并由 `test/cases/trans/cml/named_type.cml` 钉住往返。
+- 族 4 `test/cases/modules/tensor/shape_inference/loaded_struct_as.cml`：过了命名类型这一关，停在**下一道墙** `the operator 'tensor:sum'`（不是本刀的缺陷，是它挡在后面的另一层）。同形状的最小例子（`type P = { x: int, y: int }` + `with <m: P>`，即"`with` 参数是命名类型"）打印、编译、运行 `exit 7`（与源相同），并由 `test/cases/trans/cml/named_type.cml` 钉住往返。
 
 **这一刀还被迫补了两半**（不补的话打出来的程序不忠实，正是判据四禁止的形状）：
 
@@ -346,7 +346,7 @@ print family, and this operator's configuration is not a string, so its call has
 
 | 族 | 计数 | 最小例子 | 拒绝原文 |
 | --- | --- | --- | --- |
-| 4 | 86 | `modules/tensor/shape_inference/loaded_struct_as.cml` | `std::cml cannot print f: a 'with' parameter is the named type 'P'.` |
+| 4 | 86 | `test/cases/modules/tensor/shape_inference/loaded_struct_as.cml` | `std::cml cannot print f: a 'with' parameter is the named type 'P'.` |
 | 9 | 51 | `consistency/operator_overloads/mods/plus_b.cml` | `std::cml cannot print __add__: a parameter is the named type 'V'.` |
 
 `where` 那个参数是 `"a 'with' parameter"` 还是 `"a parameter"`，判据是同一个 `record->named()`。
@@ -406,10 +406,10 @@ type V = { x: int }  +  同一个 func f      -> status=0
 
 | # | 计数 | 理由（归一化） | 最小例子（字节） |
 | --- | --- | --- | --- |
-| 1 | 374 | 算符没有可打印的名字：它是**无体的 kernel 声明**，程序不写那个名字 | `modules/math_calls/err_shl_int.cml`（89） |
+| 1 | 374 | 算符没有可打印的名字：它是**无体的 kernel 声明**，程序不写那个名字 | `test/cases/modules/math_calls/err_shl_int.cml`（89） |
 | 2 | 353 | 图名不是源标识符 | `compile/namespace_rules/lib2.cml`（72） |
 | 3 | 306 | 算符 `<name>`（没有声明可依据） | `trans/cpp/fault_tensor_negative_shape.cml`（162） |
-| 4 | 86 | 参数是命名类型 | `modules/tensor/shape_inference/loaded_struct_as.cml`（344） |
+| 4 | 86 | 参数是命名类型 | `test/cases/modules/tensor/shape_inference/loaded_struct_as.cml`（344） |
 | 5 | 85 | 参数的类型打印器不写 | `compile/enum/warn_redundant_wildcard.cml`（261） |
 | 6 | 73 | 返回类型是带 tag／可空／cell 的元组 | `consistency/unused_fallible/main_declared.cml`（150） |
 | 7 | 57 | 图带节点属性或 tag | `trans/cml/refuse/tagged_node.cml`（275） |
@@ -592,8 +592,8 @@ func pick(x: int): string { return 'wide' }
 **答：既不是"打印器没打 `with` 槽"，也不是"声明在 GIR 里没有 `with` 槽"**——`with <fast: bool, wide: bool>` **打出来了，与源逐字相同**。丢的是 **`when` 条件**，而三处证据说明它不在打印器能读到的地方：
 
 1. **GIR 里没有它**：`std::gir` 里两张图都叫 `pick`，`with` 端口 `fast`/`wide` 与普通参数 `x` 一模一样，**签名完全相同**，没有任何条件节点或属性；
-2. **声明记录里没有它**：打印器唯一能问的声明表是 `camel::core::OperatorTable::instance().callFormOf(uri)`，`CallForm` 的字段是 `name`/`minArgs`/`withCount`/`declaredByModule`/`kernelDeclaration`（`include/camel/core/operator_table.h#CallForm`）——**没有条件文本**；
-3. **条件只活在编译期的树上**：`include/camel/compile/gct/tree.h#whenOf`（`WhenClause`，带 `condition` 与 `text`），建图器用它判重载是否互斥（`src/compile/gir/builder.cpp` 的 `whenClauses_`），**过不了图这道门**。
+2. **声明记录里没有它**：打印器唯一能问的声明表是 `camel::core::OperatorTable::instance().callFormOf(uri)`，`CallForm` 的字段是 `name`/`minArgs`/`withCount`/`declaredByModule`/`kernelDeclaration`（`kernel/include/camel/core/operator_table.h#CallForm`）——**没有条件文本**；
+3. **条件只活在编译期的树上**：`compile/include/camel/compile/gct/tree.h#whenOf`（`WhenClause`，带 `condition` 与 `text`），建图器用它判重载是否互斥（`compile/src/gir/builder.cpp` 的 `whenClauses_`），**过不了图这道门**。
 
 ⇒ **这是声明/建图侧的债**：要让打印器写出 `when fast`，条件文本得先挂在**声明**上（`CallForm` 加字段，或图/声明记录带上它）。**它不在打印这一层，硬印只能印出"看起来对"的两条同名声明**。所以 `unfaithful` **10 → 9 这一刀做不到**，得等条件文本上到声明层。
 
@@ -634,7 +634,7 @@ func pick(x: int): string { return 'wide' }
 
 **一、尾值的 `return` 不是缺陷，别再改。** 最小用例（循环体尾值 `i + 1` → 打印 `return i + 1`）回程 `EQUAL: the two canonical documents are equivalent (37 vertices, 125 edges)`。它不是"尾值没名字"，是"尾值需要一个带门的返回"（`CmlPrinter::buildBody`："a bare last expression yields the value without that gate"）。**"修"它就会修坏一个正确的打印。**
 
-**二、`git grep -n 'var/new' src modules stdlib`**：建图器在 `builder.h`/`builder_expr.cpp`（`var v = e` 就是 `:var/new`），执行器在 `src/builtin/executors/builtin.cpp`，`stdlib` **一处都没有**。
+**二、`git grep -n 'var/new' src modules stdlib`**：建图器在 `builder.h`/`builder_expr.cpp`（`var v = e` 就是 `:var/new`），执行器在 `lib/std/builtin/executors/builtin.cpp`，`stdlib` **一处都没有**。
 
 **三、`var_read_before_region` 丢的不是 `:var/new`，是整个**没人用的区域**。** 那份 canonical 文档里两边各有 4 个 `:var/new`，**数量一样**；差的是 `nothing_written` 那张图：**左 15 个顶点、2 个区域，右 5 个顶点、0 个区域**。而左图**本来就没有 `:var/new`**——`var n = 7` 没人写，编译器早已把它折成常量 `7`（`n0 DATA 7 -> n1 COPY`，那个 COPY 悬空），打印器又把这个**值没人用、什么也不写**的 `LOOP` 整段丢了。所以检查器那行 `{"op": ":var/new@1.0"}` 只是**它在整份文档里挑给"右缺失"的代表**，不是病因；**病因是"没人用的区域被丢"**，与 `:var/new` 无关。**由此得第二条仪器规则：结构差异检查器报的"某个 op 少了 1 个"可能只是它挑的代表**——要看**顶点数与区域数**才知道丢的是哪一个量级（15/2 对 5/0 是"整段区域没了"，65/6 对 63/6 才是"少了两个顶点"）。今晚这是第二次"仪器报的东西不是病因"（第一次是按 kernel 条数认 `:op/atos`）。
 
@@ -642,7 +642,7 @@ func pick(x: int): string { return 'wide' }
 
 **五、该修的是"丢区域"。** 打印器的 `users == 0` 丢弃对**纯值**是对的（那是个死值），对**区域**不是：源里写下的 `loop` 是程序的一部分，丢了它，回程就不再同构（这一刀就是这条）。判据仍是 canonical 判等：修完之后 `var_read_before_region` 应当 `EQUAL`。
 
-**2026-11-02 第十六刀（区域内的读）：先证明是同一个事实，再拆那条守卫。** 上一刀留了一句"区域内的读要单独一刀"。**动手前先查"记录版本的位置"**：`git grep -n 'recordWrite' src/compile/gir/` 只有三处调用点——`builder_expr.cpp#recordWrite` 本体、`builder_control.cpp#mergeArmVariables`（对 JOIN/LOOP 的那一次，`mergeArmVariables` 的调用点在分支与循环的构建里）、`builder_operators.cpp` 里经调用的那三处写。**版本只在一处记**，但它对"写本身就是区域节点"另走一条：`regionExit` 时写的是 **control** 边（`writeControlLink`），注释把另一半说清了——"a read in the region around the write … stays pending: the write that meets it is the region's own"。
+**2026-11-02 第十六刀（区域内的读）：先证明是同一个事实，再拆那条守卫。** 上一刀留了一句"区域内的读要单独一刀"。**动手前先查"记录版本的位置"**：`git grep -n 'recordWrite' compile/src/gir/` 只有三处调用点——`builder_expr.cpp#recordWrite` 本体、`builder_control.cpp#mergeArmVariables`（对 JOIN/LOOP 的那一次，`mergeArmVariables` 的调用点在分支与循环的构建里）、`builder_operators.cpp` 里经调用的那三处写。**版本只在一处记**，但它对"写本身就是区域节点"另走一条：`regionExit` 时写的是 **control** 边（`writeControlLink`），注释把另一半说清了——"a read in the region around the write … stays pending: the write that meets it is the region's own"。
 
 **关键的一问"臂里的读和块里的读是不是同一个事实"，答案在图上是**：臂的节点**就在块的图里**（`controlOf` 说的是"哪个区域来铺开它们"，不是"哪个图记它们的版本"）。`~/a7/arm_inner.cml`（`if` 的 then 臂里 `let before = t; t += 1; report(before, t)`）的 gir 里 `N0C -> N10 [ORDER]`，两端 `controlOf` 都是那个 BRCH——**同一条 `recordWrite` 写的同一条 ORDER 边**。所以它不是另一个事实，上一刀那条 `controlOf(ref) != 0` 的守卫只是把真缺陷挡在门外：改前的打印是 `report('int', t, t)`，跑出 `int 4 4`，源是 `int 3 4`。
 
@@ -666,7 +666,7 @@ func pick(x: int): string { return 'wide' }
 
 **2026-11-02 第十五刀（A7 第 3、7、8 条，同一机制）：`let before = z` 消失，读版本打成变量名。** 三条用例（`var_read_before_region`、`var_read_before_write`、`order_edges_regions`）是**一件事**，不是三件：`:var/get` 只打 `cellName(cellReadBy(...))`，**读的是哪一版它不打**。
 
-**判据不是"有没有 ORDER 边"这种猜测，而是建图器自己写的那句话**（`src/compile/gir/builder_expr.cpp#recordWrite`）："读要看见写之前的值……读在写之前由一条 order 边排定"。图上就是 `N03 -> N0E [ORDER]` 这样的边：**一个读若被排在一次写之前，它的版本就一定比文本在该处写到的旧**——因为文本里变量名只表示"文本此刻写到的那一版"。
+**判据不是"有没有 ORDER 边"这种猜测，而是建图器自己写的那句话**（`compile/src/gir/builder_expr.cpp#recordWrite`）："读要看见写之前的值……读在写之前由一条 order 边排定"。图上就是 `N03 -> N0E [ORDER]` 这样的边：**一个读若被排在一次写之前，它的版本就一定比文本在该处写到的旧**——因为文本里变量名只表示"文本此刻写到的那一版"。
 
 改法（两档，按父裁的默认）：
 
@@ -692,7 +692,7 @@ func pick(x: int): string { return 'wide' }
 
 **2026-11-02 第十四刀（A7 第 4 条）：前缀 `-` 比 `^` 松，括号表把它放严了一级。** 缺陷原文：`parse/rulings/power` 原程序第二行 `-9 9 -4 -4 12`；打印版 `-9 -9 -4 -4 12`——`(-x) ^ 2` 被打成 `-x ^ 2`，而解析器读它是 `-(x ^ 2)`，9 变成 -9。
 
-**这一格的原话是解析器写的，不是打印机猜的**（`src/parse/syntax/parser_expr.cpp`）：
+**这一格的原话是解析器写的，不是打印机猜的**（`parse/src/syntax/parser_expr.cpp`）：
 
 ```
  *   powerExpr       ^                                           right
@@ -708,7 +708,7 @@ func pick(x: int): string { return 'wide' }
 
 打印机这边原来是 `prefix()` 返回 `70`——**比 `^`（60）严**，于是 `^` 的底数不加括号。改成 `kPrefixPrecedence = 55`（`*` 的 50 与 `^` 的 60 之间），一格一行注释，出处写在常量上。
 
-**"别处还有一份表"的检查**：`git grep -n precedenceOf -- src` 只有 `src/passes/trans/cml/cml.cpp#precedenceOf` 一处（打印侧）；解析侧没有第二份"优先级数字表"，它是 `parser_expr.cpp` 里逐层的语法函数（`parsePower` / `parseNeg`），**这一刀不动它**——我们只是把括号加上，解析器本来就按那套规则读。**所以这次不存在"两张表只改一张"的形状；只改了一处，且改的那处把出处指向了解析器的原话。**
+**"别处还有一份表"的检查**：`git grep -n precedenceOf -- src` 只有 `lib/std/cml/cml.cpp#precedenceOf` 一处（打印侧）；解析侧没有第二份"优先级数字表"，它是 `parser_expr.cpp` 里逐层的语法函数（`parsePower` / `parseNeg`），**这一刀不动它**——我们只是把括号加上，解析器本来就按那套规则读。**所以这次不存在"两张表只改一张"的形状；只改了一处，且改的那处把出处指向了解析器的原话。**
 
 原程序与打印版（`std::nvm`）三行输出：
 
@@ -747,12 +747,12 @@ func pick(x: int): string { return 'wide' }
 
 | 有什么 | 在哪 |
 |---|---|
-| 打印机 | `src/passes/trans/cml/cml.cpp`（2433 行）、`include/camel/passes/trans/cml/cml.h`；`CmlDumpPass` 是 `RuntimeGraphTranslatePass`，`acceptsWritings()` 为假（`cml.h#CmlDumpPass`） |
+| 打印机 | `lib/std/cml/cml.cpp`（2433 行）、`lib/std/cml/include/camel/passes/trans/cml/cml.h`；`CmlDumpPass` 是 `RuntimeGraphTranslatePass`，`acceptsWritings()` 为假（`cml.h#CmlDumpPass`） |
 | 注册与声明 | 每个遍在自己的源文件里登记 `PassKernel`，驱动按名字从 `pass.cpp#passImplementations` 取；遍的声明（名字、说明、参数）在 `lib/std/std.cml#cml` |
 | 诊断码 | `CmlUnsupportedConstruct = 0x1A5`、`CmlBigConstant = 0x1A6`（`semantic.h#CmlUnsupportedConstruct`） |
 | 参数 | `maxLiteralBytes` 默认 64 KiB（`cml.h#CmlOptions`），写出为 `std::cml max_literal_bytes=...` |
 | 抽取写法 | 有写法状态时，驱动器挑一个写法再交给消费者（`pass.cpp#applyPassesDetailed`）；不知道状态的遍拒绝（同一函数里的 `RuntimeDiag::PassNeedsExtraction`） |
-| 规范转储（normalizer） | `std::jgir canonical=true`，版本 2，实现在 `src/passes/trans/json/gir_canonical.cpp`，规格在 `docs/technical/gir-interchange.md`「Canonical documents」 |
+| 规范转储（normalizer） | `std::jgir canonical=true`，版本 2，实现在 `lib/std/gir/json/gir_canonical.cpp`，规格在 `docs/technical/gir-interchange.md`「Canonical documents」 |
 | 等价检查器 | `test/tools/cml_roundtrip.py`（互异个体化细化，预算 20000 节点 / 200000 步；预算用尽返回 2，**绝不报等价**；`cml_roundtrip.py#equivalent`） |
 | 共享比较工具 | `test/tools/gir-dot.mjs#compareGirDotIsomorphic` + `test/tools/normalizers.mjs#applyNormalizers`，用于 `graph_equal.mjs#GOLDENS` 记的那份语料 |
 | 已钉住的合同 | `test/plans/feat/trans/cml.plan.toml`、`test/cases/trans/cml_contract.py`（语料 8 个程序、执行对照、确定性、名字保留、5 类拒绝、大常量拒绝） |
@@ -891,7 +891,7 @@ func main(): int sync { var x = 1
 | `compile/return_type/accepted.cml` | 往返等价 | **红**：打印出 `func a(x: int): int { return x }`，原图多 1 个 DATA 节点 |
 | `compile/diag_json/warnings_visible.cml` | 往返等价 | **红**：节点种类多重集相同、接线不同（检查器第一条差异：`a structural class has 1 vertex/vertices on the left and 0 on the right`） |
 | `compile/static_expansion/indices_graph.cml` | 往返等价 | **红** |
-| `modules/rules/check_rules.cml`、`trans/macro/*` | 打印 `rule`/`#macro` | **红**：`the operator 'rewrite:rule'`、`it is a macro graph` |
+| `test/cases/modules/rules/check_rules.cml`、`trans/macro/*` | 打印 `rule`/`#macro` | **红**：`the operator 'rewrite:rule'`、`it is a macro graph` |
 | `trans/library_module.cml` | 库模块打印 | **红**：`it captures 'offset' from an enclosing function` |
 | 整语料 | 每一个能编译的用例要么往返等价要么在允许拒绝清单里 | **348/2387 打印，35 不等价，4 打印不出 canonical** |
 
@@ -927,7 +927,7 @@ ROUNDTRIP checked=700 equivalent=649 not_equivalent=51 over_budget=0 unfaithful=
 
 `printed 589 → 707`（+118）、`equivalent 543 → 649`（+106）、`refused 1779 → 1664`、`not_equivalent 43 → 51`（+8，同样要逐条定性，不许当形状差异放过）、`families 58`。重扫里最大的一族换成了 `the operator '<name>'`（429 条：没有调用形状也没有符号的算子），`import { name } from module` 那族（171 条）还在。
 
-**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的行号引用（`627-632`），判据要求引用写成符号，改成 `lib/math/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
+**自检**：全量 fast suite `8447 / 8435 / 0`（skip 10、known failures 2）。第一次跑出 1 条红是 `docs.links.citations`：本页引了作者原话里的行号引用（`627-632`），判据要求引用写成符号，改成 `lib/math/math.cml#shl` 并在括号里注明原文是行号，`docs_links` 14/14 通过。契约计划 `feat.trans.cml` 1/1：新增 `map_with_closure.cml`（`map<closure>(xs)` 往返 EQUAL 22 顶点 / 55 边），拒绝例子换成 `test/cases/modules/stdlib/array_kernels_read_back.cml`（`array:sort_l` 是模块没导出的内核）。
 
 ## 8. 要裁定的问题（本计划不擅自决定）
 
@@ -939,4 +939,4 @@ ROUNDTRIP checked=700 equivalent=649 not_equivalent=51 over_budget=0 unfaithful=
 
 ## 9. 本计划明确不做
 
-不把源码或文本存进图；不为打印在图里加"源形状"字段；不因为打印不出就改语言语义；不把 `std::cml` 做成部署格式；不合并 `graph_equal.mjs` 与 `cml_roundtrip.py`；不在本计划里动 `src/runtime/**`（边的实现）、类型系统、`modules/tensor` 与 runner——那些是别的任务；GPU 与 `std::cml` 的交互（`#gpu` 块）留给 GPU 那两项落地后另立计划。
+不把源码或文本存进图；不为打印在图里加"源形状"字段；不因为打印不出就改语言语义；不把 `std::cml` 做成部署格式；不合并 `graph_equal.mjs` 与 `cml_roundtrip.py`；不在本计划里动 `kernel/runtime/**`（边的实现）、类型系统、`lib/tensor/` 与 runner——那些是别的任务；GPU 与 `std::cml` 的交互（`#gpu` 块）留给 GPU 那两项落地后另立计划。

@@ -15,7 +15,7 @@ the collector.
 
 `graphSpace`, `permSpace` and `metaSpace` hold what the program is made of, so their size
 follows the size of the program. Each is a list of segments
-(`include/camel/core/mm/alloc/growable.h`): `GrowableFreeListAllocator` for the graph and meta
+(`kernel/include/camel/core/mm/alloc/growable.h`): `GrowableFreeListAllocator` for the graph and meta
 spaces (one `FreeListAllocator` per segment), `GrowableBumpAllocator` for the permanent space
 (one `BumpPointerAllocator` per segment). The first segment is as large as the whole space used
 to be (64, 32 and 16 MB); when no segment has room, a further one is reserved, as large as
@@ -62,7 +62,7 @@ space for a function of one expression, 1.9 KB with an `if` (three graphs), 1.5 
 lambda; 0.6 to 1.8 KB of the permanent space before the type table (5 to 17 type objects:
 composite types were created anew at every use; see below for what is shared now); about 1.2 KB of the meta space when its graph owns a constant
 object or a function value (the first block of its arena, see
-`include/camel/compile/gir/arena.h`). That first block was 256 KB, which is what limited a
+`compile/include/camel/compile/gir/arena.h`). That first block was 256 KB, which is what limited a
 program to 62 such graphs.
 
 The permanent space never releases, so **a question must not allocate in it**. Resolving an
@@ -73,15 +73,15 @@ left 1.4 million function types (more than 256 MB) behind under `std::cxx::speci
 Two rules follow, and code on a query or probe path has to keep them:
 
 - Overload questions that do not depend on constant argument values go through
-  `runtime::operatorOverloadType` (`include/camel/runtime/draft_writes.h`), which keeps the
+  `runtime::operatorOverloadType` (`kernel/include/camel/runtime/draft_writes.h`), which keeps the
   answer per operator and argument types (types are permanent, so their addresses identify them
   for good). A resolution with constant arguments is still made anew each time.
 - A commit that re-encodes a graph whose static area did not change keeps the graph's static
-  tuple type (`draftStaticDataType` in `src/runtime/draft_session.cpp`) instead of creating an
+  tuple type (`draftStaticDataType` in `kernel/runtime/draft_session.cpp`) instead of creating an
   equal one for the size computation and another for the encoding.
 
 Since 2026-10-13/14 (graph data model, migration step 2) the type table
-(`include/camel/core/type/intern.h`) shares types at the constructor instead of at each
+(`kernel/include/camel/core/type/intern.h`) shares types at the constructor instead of at each
 caller:
 
 - Tuple types (`TupleType::create`, frame and static-area layouts among them) and array types
@@ -140,7 +140,7 @@ The important consequences are:
 ## Graph space lifetime
 
 The graph space holds the `Program`s of a context and the graph versions they hold, both objects
-of the graph space (`include/camel/runtime/program.h`, `GCGraphManager` in `graph.h`). A graph
+of the graph space (`kernel/include/camel/runtime/program.h`, `GCGraphManager` in `graph.h`). A graph
 version lives as long as a live `Program` holds it, a `Program` as long as something reaches it:
 
 - **Roots** (the `Program`s in `GCGraphManager::gcRoots()`): the installed program, the detached

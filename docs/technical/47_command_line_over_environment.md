@@ -49,7 +49,7 @@ all: it names the installation the run was started from.
 that is left, by call site -- `file:function`, never by variable name, so a renamed helper cannot
 quietly allow a new site. Six lines remain: the three `include/` readings (`CAMEL_ERROR_FORMAT` in
 a generated program, the one `getEnvIfSet` that reads the process environment for the platform's
-names, and the `PATH` walk of the library search path), and the three of `modules/tiles`. The
+names, and the `PATH` walk of the library search path), and the three of `lib/tiles/`. The
 target is one line, `CAMEL_TILES_NVRTC`.
 
 ## 3. What the move cost

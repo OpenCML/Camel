@@ -2,7 +2,7 @@
 
 > **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
 >
-> 与设计原则的对应（第 9 节）：遍序列由用户在命令行上组合，语言核心不限制顺序，不同顺序可以给出不同结果；不指定遍时执行 `std::default`（即 `std::nodevm` 的别名，见 `src/execute/pass.cpp`）；标准优化遍不应把程序改错，这是软件质量要求而非语言约定；自动微分与导出都是建立在遍机制之上的库/转译遍。
+> 与设计原则的对应（第 9 节）：遍序列由用户在命令行上组合，语言核心不限制顺序，不同顺序可以给出不同结果；不指定遍时执行 `std::default`（即 `std::nodevm` 的别名，见 `kernel/execute/pass.cpp`）；标准优化遍不应把程序改错，这是软件质量要求而非语言约定；自动微分与导出都是建立在遍机制之上的库/转译遍。
 
 ## 1. 总体流程
 
@@ -30,7 +30,7 @@
 
 ### 2.1 词法与语法
 
-- **词法**：`src/parse/syntax/lexer.cpp`，记号表 `include/camel/parse/syntax/token_kinds.def`。
+- **词法**：`parse/src/syntax/lexer.cpp`，记号表 `parse/include/camel/parse/syntax/token_kinds.def`。
 - **语法**：`src/parse/syntax/parser*.cpp`，每个函数对应一条产生式（语言参考 8.5）。
 - 解析器是手写的递归下降解析器，产出 CST（`syntax::Tree`），见 [34_handwritten_parser.md](34_handwritten_parser.md)。
 - 入口与错误处理见 `main.cpp`、`parse/parse.h`、`error/listener.h`。
@@ -43,13 +43,13 @@
 
 ### 2.3 AST → GCT
 
-- **GCT Builder**（`src/compile/gct/builder.cpp`）将 AST 转为 **图构造树（GCT）**。树由 `gct::Tree`（`include/camel/compile/gct/tree.h`）持有：节点是 arena 里 32 字节的记录，名字在树内驻留，模块存活多久树就存活多久，详见 [03](03_trees_and_structures.md) 4.7。
+- **GCT Builder**（`compile/src/gct/builder.cpp`）将 AST 转为 **图构造树（GCT）**。树由 `gct::Tree`（`compile/include/camel/compile/gct/tree.h`）持有：节点是 arena 里 32 字节的记录，名字在树内驻留，模块存活多久树就存活多久，详见 [03](03_trees_and_structures.md) 4.7。
 - GCT 节点种类（`NodeKind`）：DECL, FUNC, DATA, TYPE, NREF, DREF, VARI, LINK, WITH, ACCS, BRCH, CASE, CAST, ANNO, EXIT, EXEC, EXPT 等。
 - GCT 仍是树形结构，但已按「图构造」的语义组织（声明、链接、分支、退出等）。
 
 ### 2.4 GCT → GIR
 
-- **GIR Builder**（`src/compile/gir/builder.cpp`）遍历 GCT，生成 **GraphIR** 命名空间下的 **Graph** 与 **Node**。
+- **GIR Builder**（`compile/src/gir/builder.cpp`）遍历 GCT，生成 **GraphIR** 命名空间下的 **Graph** 与 **Node**。
 - 每个 GCT `NodeKind` 对应一个 `visitXxxNode`：递归访问子节点、创建 GIR 节点、用 `Node::link(LinkType, from, to)` 建立边。
 - 典型模式：单子节点（如 ACCS、CAST、VARI）访问 `gct->at(0)` 得到值节点，创建目标 GIR 节点后以 `Norm` 边连接 `valueNode → targetNode`。
 - 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT, CAST 等）及 Norm/With/Ctrl 边。
@@ -60,13 +60,13 @@
 
 （设计原则 10.1；图模型设计稿 3.7、3.9、第 8 节。）
 
-- **一个建图器**：程序的所有模块由同一个 `gir::Builder`（`Builder::of(context)`，`src/compile/gir/program.cpp`）建在同一张 `__root__` 上。每个模块是一个 `ModuleUnit`：它的 GCT、诊断与顶层作用域。模块顶层的值是 root 上的节点；函数各是各的图。导出表也是**程序的一份**（`gir::Builder::exports()`，`ProgramExports`，`include/camel/core/module/module.h`）：模块对象只留它自己的原生声明（C++ 模块的算子组、常量与标签，以及类型声明），Camel 模块导出的函数图、泛型与顶层值记在程序的表里，所以同一个模块可以同时是两个程序的一部分（`compileAsProgram` 另开 builder，写另一张表），互不覆盖（设计原则 10.1）。
-- **捕获绑定到值**（`src/compile/gir/captures.cpp`）：捕获端口记着它代表的节点（"来源"）。直接调用处与函数值处，调用者按同一个来源取它看到的值（`captureInto`），不在调用处按名字重找。直接调用的捕获在链接步按被调图的端口次序接线（`linkCaptureSites`，不动点）。
+- **一个建图器**：程序的所有模块由同一个 `gir::Builder`（`Builder::of(context)`，`compile/src/gir/program.cpp`）建在同一张 `__root__` 上。每个模块是一个 `ModuleUnit`：它的 GCT、诊断与顶层作用域。模块顶层的值是 root 上的节点；函数各是各的图。导出表也是**程序的一份**（`gir::Builder::exports()`，`ProgramExports`，`kernel/include/camel/core/module/module.h`）：模块对象只留它自己的原生声明（C++ 模块的算子组、常量与标签，以及类型声明），Camel 模块导出的函数图、泛型与顶层值记在程序的表里，所以同一个模块可以同时是两个程序的一部分（`compileAsProgram` 另开 builder，写另一张表），互不覆盖（设计原则 10.1）。
+- **捕获绑定到值**（`compile/src/gir/captures.cpp`）：捕获端口记着它代表的节点（"来源"）。直接调用处与函数值处，调用者按同一个来源取它看到的值（`captureInto`），不在调用处按名字重找。直接调用的捕获在链接步按被调图的端口次序接线（`linkCaptureSites`，不动点）。
 - **三步加载**：
-  1. *声明*：`import` 只绑定名字。GCT 先声明本模块的类型（导出的类型立即导出），再把被导入的模块编译到 `CompileStage::Declared`，再建其余部分；之后 `Builder::declareModule` 建函数图（无函数体）、登记模板、顶层值与类型、填导出表。导出的值是 `ExportedValue`（`include/camel/compile/gir/value_entity.h`）。
+  1. *声明*：`import` 只绑定名字。GCT 先声明本模块的类型（导出的类型立即导出），再把被导入的模块编译到 `CompileStage::Declared`，再建其余部分；之后 `Builder::declareModule` 建函数图（无函数体）、登记模板、顶层值与类型、填导出表。导出的值是 `ExportedValue`（`compile/include/camel/compile/gir/value_entity.h`）。
   2. *建图*：入口模块的 `compile(Done)` 调 `Builder::buildProgram`：按导入次序建各模块的顶层声明；函数与值在第一次被用到时按需建（`ensureFunctionBuilt`、`buildTopLevelValue`，跨模块也是），所以顶层与书写顺序无关；正在建的值又被用到是 `ModuleValueCycle`。
   3. *链接*：捕获接线、入口调用、效应摘要的不动点（`settleEffectfulGraphs`）与依赖它的告警，逐模块报告。
-- **名字**（`src/compile/gir/names.cpp`，类型在 GCT 的 `lookupType`）：一条优先级规则——局部 > 本模块（所在命名空间、外层命名空间、顶层；模块名可作限定）> 按名字导入的 > `using namespace` 带来的 > 内建。`using namespace` 按块生效：模块顶层、命名空间块（作为声明的 `scopeUsings`）、函数体里的块，GCT 树的旁表 `Tree::usingsOf` 记着每个块与顶层声明的 `using`。导入分 `ImportLayer::Named` 与 `ImportLayer::Ambient` 两层。
+- **名字**（`compile/src/gir/names.cpp`，类型在 GCT 的 `lookupType`）：一条优先级规则——局部 > 本模块（所在命名空间、外层命名空间、顶层；模块名可作限定）> 按名字导入的 > `using namespace` 带来的 > 内建。`using namespace` 按块生效：模块顶层、命名空间块（作为声明的 `scopeUsings`）、函数体里的块，GCT 树的旁表 `Tree::usingsOf` 记着每个块与顶层声明的 `using`。导入分 `ImportLayer::Named` 与 `ImportLayer::Ambient` 两层。
 
 ### 2.5 图优化与 Pass
 

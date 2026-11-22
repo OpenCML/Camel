@@ -4,14 +4,14 @@
 
 覆盖对象（名字以代码为准）：
 
-- `RuntimeGraphDraftSession`（`include/camel/runtime/draft_session.h`）：一次重写事务；
-- `GraphDraft`（`include/camel/runtime/draft.h`）：一张运行时图 `GCGraph` 的可写副本；
+- `RuntimeGraphDraftSession`（`kernel/include/camel/runtime/draft_session.h`）：一次重写事务；
+- `GraphDraft`（`kernel/include/camel/runtime/draft.h`）：一张运行时图 `GCGraph` 的可写副本；
 - `GraphDraftGroup`（同在 `draft_session.h`）：一组新建的、可以互相引用的图；
-- `inlineCallableInDraft` 等改写原语（`include/camel/runtime/draft_inline.h`）；
+- `inlineCallableInDraft` 等改写原语（`kernel/include/camel/runtime/draft_inline.h`）；
 - 提交时的校验 `validateRuntimeGraphPayload` / `validateRuntimeBranchArms` / `validateRuntimeGraphCalls`
-  （`src/runtime/graph_build.h`）。
+  （`kernel/runtime/graph_build.h`）。
 
-前端建图用的是另一套对象（`src/compile/gir/` 下的 `Builder` 与 `DraftGraphBuilder`），它最终同样编码成
+前端建图用的是另一套对象（`compile/src/gir/` 下的 `Builder` 与 `DraftGraphBuilder`），它最终同样编码成
 `GCGraph`，并经过同一组校验（第 4 节）。
 
 ---
@@ -26,7 +26,7 @@
   程序，所以持有指向（直接或经调用、函数值间接）出现新版本之图的函数值的图也要重编码。其余的图原样放进新的
   `Program`。被要求编辑而没有改动的草稿（`GraphDraft::mutations() == 0`），以及编码后内容与原图相同的图
   （且不持有函数值），沿用原图；
-- 没有任何改写时不要提交：`rewriteReachableGraphs`（`src/passes/opt/generic/rewrite.cpp`）在改写数为 0 时
+- 没有任何改写时不要提交：`rewriteReachableGraphs`（`lib/std/cxx/opt/generic/rewrite.cpp`）在改写数为 0 时
   直接返回原来的根图；
 - pass 不应绕过会话直接改已编码的 `GCGraph`：它是只读的。
 
@@ -59,7 +59,7 @@
 
 - 草稿里只需把 `FUNC` 的被调图与静态 `Function` 值写对；`dependencies` / `subGraphs` / `staticGraphRefs` 由
   编码按节点的实际引用重建（`collectDraftDependencyGraphs` / `collectDraftStaticGraphRefs`，
-  `src/runtime/draft_session.cpp`）；
+  `kernel/runtime/draft_session.cpp`）；
 - 提交后，同一次提交的所有图里不会留下指向旧图的引用。
 
 ### 2.4 没有控制输入的 `GATE`
@@ -76,7 +76,7 @@
 
 - **`inlineCallableInDraft`**：通用的内联原语；只要调用方传入合法的 `FUNC` 节点，就展开它的被调图。
 - **`std::cxx::inline`（`InlineRewritePass`）**：按策略（`InlineTargetStrategy`，
-  `include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::cxx::small`（Small）、
+  `lib/std/cxx/opt/include/camel/passes/opt/config.h`）选择目标并调用该原语：`std::cxx::small`（Small）、
   `std::cxx::arm`（Arm，分支臂的被调图，不要求小）、`std::cxx::hybrid` / `std::cxx::inline`（Hybrid，
   默认）。对递归的限制、`blockCallsToSccEntryCallees`、大小与增长预算等选择规则见
   [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 与 §6.1，本文不重复。
@@ -128,28 +128,28 @@
 ## 4. 验证器约束（提交时必须满足）
 
 结构检查在**所有构建模式**下执行（不是 `ASSERT`），位置是运行时图编码之后：前端编码
-（`src/compile/gir/graph_encode.cpp`）、每次 `RuntimeGraphDraftSession::commit()` 与
-`GraphDraftGroup::encode()`（`src/runtime/draft_session.cpp`）。失败时抛出 `std::runtime_error`；在 pass
-内由 pass 驱动（`src/execute/pass.cpp`）转为 `RuntimeDiag::PassInternalError`，诊断中给出**pass 名**
+（`compile/src/gir/graph_encode.cpp`）、每次 `RuntimeGraphDraftSession::commit()` 与
+`GraphDraftGroup::encode()`（`kernel/runtime/draft_session.cpp`）。失败时抛出 `std::runtime_error`；在 pass
+内由 pass 驱动（`kernel/execute/pass.cpp`）转为 `RuntimeDiag::PassInternalError`，诊断中给出**pass 名**
 （即哪个遍的提交），程序不会开始执行。
 
-`validateRuntimeGraphPayload`（单图，`src/runtime/graph.cpp`）：
+`validateRuntimeGraphPayload`（单图，`kernel/runtime/graph.cpp`）：
 
 1. 入口/出口/输出/返回锚点、端口、闭包节点、所有边的节点引用有效；数据槽位在范围内；无残留 `DREF`；
 2. 邻接表双向一致（每条输入边在对端的输出表中出现，反之亦然）；
 3. `BRCH` 有唯一选择输入，`BRCH`/`JOIN` 的臂数与负载一致；
 4. `GATE` 同时有值输入与控制输入；
 5. `FUNC` 有被调图，`CALL` 有被调输入；
-6. 分支臂不变量（4.1；`validateRuntimeBranchArms`，`src/runtime/branch_arms.cpp`）。
+6. 分支臂不变量（4.1；`validateRuntimeBranchArms`，`kernel/runtime/branch_arms.cpp`）。
 
 `validateRuntimeGraphCalls`（同一次提交的图全部编码之后）：
 
 7. 每个 `FUNC` 的普通实参数与 `with` 实参数等于被调图的端口数。
 
-旧的 `src/compile/gir/` 下的 `validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
+旧的 `compile/src/gir/` 下的 `validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
 已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
-测试用的故障注入遍（`src/passes/test/fault.cpp`）是只供测试的遍：在流水线里写出名字即可用，没有任何环境变量门控，
+测试用的故障注入遍（`lib/test/fault.cpp`）是只供测试的遍：在流水线里写出名字即可用，没有任何环境变量门控，
 用来验证破坏结构的图会在提交时被拒绝：`test::drop_call_argument`（条款 7）、`test::leak_branch_arm`
 （条款 6）与 `test::arm_loop_regions`（4.1 里循环区域的规则）。
 
@@ -160,14 +160,14 @@
 个 with 输入是第 `i` 条臂的结果。没有臂头、臂尾这样的记录。
 
 **后端怎样执行一个分支。** 四个调度器（NodeVM、FastVM 及其 JIT、Taskflow）和宏求值器都从同一个线性顺序出发
-（`computeExecutionOrder`，`src/execute/graph_runtime_support.cpp`）：从出口沿三种输入边（norm / with / ctrl）
+（`computeExecutionOrder`，`lib/std/exec/graph_runtime_support.cpp`）：从出口沿三种输入边（norm / with / ctrl）
 做后序遍历。遇到 `JOIN` 时，先排好各臂从分支外面读的一切，再排 `BRCH`，然后**按臂的顺序**把各臂区域的节点
 各排成一段连续的区间，最后是 `JOIN`。执行计划（`ExecPlan::branchArmEntries`、`branchArmTails`）给出每条臂的
 入口（区间里**第一个**节点，哪怕它只是臂里的一个常量或端口；`BRCH` 跳到入口后，执行器先跑这个位置上的循环
 事件，再跑节点，所以入口必须是区间开头而不是"第一个真正干事的节点"）与末尾：`BRCH` 跳到被选中那条臂的入口，
 末尾之后跳到 `JOIN`；其余区间整段跳过。
 
-**不变量**（`validateRuntimeBranchArms`，`src/runtime/branch_arms.cpp`，每次提交都检查；只看活节点，即出口沿
+**不变量**（`validateRuntimeBranchArms`，`kernel/runtime/branch_arms.cpp`，每次提交都检查；只看活节点，即出口沿
 输入边可达的节点）。对每个活的 `BRCH` `B`，`J` 是它负载里的 `JOIN`：
 
 1. **配对**：`J` 是 `JOIN`，它的 norm 输入是 `B`；`J` 是活的；`B` 的每条臂都有一个区域。
@@ -223,7 +223,7 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
 
 - 通过 `RuntimeGraphDraftSession` 完成改写，不直接改已编码的图；
 - 不要假设“值出口等于控制完成出口”，统一使用 `DraftInlineResult` 的三个字段；
-- 删除或替换节点时用 `replaceNode`（`src/passes/opt/generic/rewrite.h`）：它把被删节点的顺序约束交给使用者，
+- 删除或替换节点时用 `replaceNode`（`lib/std/cxx/opt/generic/rewrite.h`）：它把被删节点的顺序约束交给使用者，
   ；
 - 涉及 `BRCH`/`JOIN` 时，一个节点属于哪条臂由它的区域决定（`nodeRegion`、`armRegionOf`）；加节点时给对区域，
   提交时的校验会拦住读了另一条臂、或等待 `BRCH` 却不在任何臂里的节点。

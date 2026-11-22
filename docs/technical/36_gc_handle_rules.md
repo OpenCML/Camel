@@ -29,7 +29,7 @@ reaches it. What it holds -- its graphs, and the references their static areas c
 traced only while the `Program` itself is reachable, so a `Program` that a C++ holder keeps
 across a safepoint is a root the holder has to take, the way rule 7 takes one for an auto-space
 object: **a C++ holder of a `Program` holds it only through `camel::runtime::ProgramHold`**
-(`include/camel/runtime/graph.h`), which pins it in its constructor and unpins it in its
+(`kernel/include/camel/runtime/graph.h`), which pins it in its constructor and unpins it in its
 destructor. A bare `Program *` member is a defect unless it declares at the declaration one of the
 four reasons rule 7 lists, which `scripts/check-program-holders.mjs` reads and checks; the page
 that decided it is
@@ -47,8 +47,8 @@ safepoints and nowhere else. A safepoint is reached by exactly these:
 | A call of a Camel function | `std::nvm`: entry of every graph. `std::fvm`, `std::jit` (interpreter): every `CALL`, `FUNC`, `TAIL`. `std::tf` / `std::prl`: whenever a worker is outside a region (below) |
 | A round of a loop | the round boundary of every back end that runs loops in the frame (`loopEnd`, `LEND`): `std::nvm`, `std::fvm`, `std::jit` (compiled or interpreted, `07_jit_architecture.md` 17.9), the macro evaluator and `std::prl` — once per round, before the next round's state is bound |
 | A higher-order operator calling its element function | the same, once per element: `map`, `apply`, `filter`, `reduce`, `foreach` and everything built on them |
-| The macro evaluator | before every static operator, at every function entry, at every node (`src/execute/macro/eval.cpp`) |
-| A pass boundary | before and after every pass (`src/execute/pass.cpp`) |
+| The macro evaluator | before every static operator, at every function entry, at every node (`lib/std/macro/eval.cpp`) |
+| A pass boundary | before and after every pass (`kernel/execute/pass.cpp`) |
 | `autoSpace().safepoint()`, `minorGC()`, `majorGC()` | explicit calls |
 | Another worker of the parallel scheduler | while this worker is outside every `TaskflowGcRegion` |
 
@@ -120,7 +120,7 @@ one step of a pass.
 
 7. **Keeping an object: `mm::RootHandle`.** While the handle exists the object is alive, and
    after every safepoint `handle.get()` is where the object is now.
-   `include/camel/core/mm/root_handle.h` states the cost (one lock on creation and on
+   `kernel/include/camel/core/mm/root_handle.h` states the cost (one lock on creation and on
    destruction, no allocation) and the restrictions (not copyable, not movable: keep several in
    a `std::deque<RootHandle>` or behind `std::unique_ptr`). The handle carries the static type
    of the object, which the collector needs to trace what the object refers to; pass `nullptr`
@@ -273,9 +273,9 @@ root tracers), and nothing read before a call is used after it.
   takes the second way: one `RuntimeGraphDraftSession` rewrites graph after graph, a `when`
   condition is Camel code and so a safepoint, and `RuntimeGraphDraftSession::RootScope` keeps the
   static values of every draft the session has opened relocatable until the commit reads them
-  (`modules/rewrite/module.cpp`; the defect and its reproducer are recorded). A
+  (`lib/rewrite/module.cpp`; the defect and its reproducer are recorded). A
   transaction opens one too, for its whole lifetime: its value may stay reachable across
-  safepoints while the drafts are open (`modules/graph/txn.cpp`).
+  safepoints while the drafts are open (`lib/graph/txn.cpp`).
 - **The invariant is checked, not remembered.** A Debug build checks it at the start of every
   safepoint (`mm::observeSafepoint`, installed by the first `RuntimeGraphDraftSession`): if a
   session has a draft open that no `RootScope` (and no `DraftWritings::EngineRootScope` for that
@@ -297,7 +297,7 @@ root tracers), and nothing read before a call is used after it.
 - Objects carry no type. The collector traces an object with the static type of the slot it
   was reached through, or, for an object that describes itself (a function value, a tensor, a
   foreign wrapper, a `Json`), with the types the object itself knows. Every slot has a
-  determined type (graph invariant, `src/runtime/graph_types.cpp`): `any`, which a slot could
+  determined type (graph invariant, `kernel/runtime/graph_types.cpp`): `any`, which a slot could
   have and the collector could not trace, is removed (section 9).
 - An object born old (large, or small while the birth space was full) is tracked until the
   next minor collection and scanned when a typed reference reaches it, so its creator may fill
@@ -333,24 +333,24 @@ generational collector as it was.
 
 | # | Where | What is held or written | Crosses | Why it worked | Moving | Handling |
 |---|---|---|---|---|---|---|
-| 1 | `src/core/mm/gen.cpp` minor collection | a slot visited twice (static area as graph root and through each active frame) | — | early promotion hid the second copy | yes: roots left pointing at freed memory | fixed: an object in the To space is final |
-| 2 | `src/execute/macro/macro.cpp`, `src/runtime/draft.cpp` (`staticSlots_`) | copies of static slots and of evaluated values in a draft | later evaluations of the round | objects never moved; the evaluator kept them alive | yes: committed constants dangle (the defect of `31_map_and_set.md` section 11) | fixed: evaluate, then rewrite, then commit |
+| 1 | `kernel/core/mm/gen.cpp` minor collection | a slot visited twice (static area as graph root and through each active frame) | — | early promotion hid the second copy | yes: roots left pointing at freed memory | fixed: an object in the To space is final |
+| 2 | `lib/std/macro/macro.cpp`, `kernel/runtime/draft.cpp` (`staticSlots_`) | copies of static slots and of evaluated values in a draft | later evaluations of the round | objects never moved; the evaluator kept them alive | yes: committed constants dangle (the defect of `31_map_and_set.md` section 11) | fixed: evaluate, then rewrite, then commit |
 | 3 | `gen.cpp` allocation fallback, large objects | object born old, filled with plain stores | next minor collection | nothing moved | yes | fixed in the collector (objects born old are scanned); covers 4 to 9 |
 | 4 | `rtdata/array.h` Array constructor | `Array` → `FixedArray` edge without barrier | — | — | yes, when the birth space fills between the two allocations | by 3 |
-| 5 | `modules/json/operators.cpp` (`decode`) | young values into a fresh array / struct, untyped | — | — | yes | by 3 for typed results; an `any` result: section 9 |
-| 6 | `modules/random/operators.cpp` (`sample`) | references copied into a fresh array, untyped | — | — | yes above 512 elements | by 3; test `gc.born_old.*` |
-| 7 | `modules/onnx/module.cpp` (`supported_operators`) | fresh strings into a fresh array, untyped | — | — | yes above 512 | by 3 |
-| 8 | `modules/tensor/tensor.cpp` (`createView`) | `owner_` of a view, no barrier | — | — | yes, view born old and owner young | by 3 |
-| 9 | `src/execute/entry_args.cpp` | loaded leaves into a fresh struct / tuple, untyped | — | — | yes, aggregate born old | by 3 |
+| 5 | `lib/json/operators.cpp` (`decode`) | young values into a fresh array / struct, untyped | — | — | yes | by 3 for typed results; an `any` result: section 9 |
+| 6 | `lib/random/operators.cpp` (`sample`) | references copied into a fresh array, untyped | — | — | yes above 512 elements | by 3; test `gc.born_old.*` |
+| 7 | `lib/onnx/module.cpp` (`supported_operators`) | fresh strings into a fresh array, untyped | — | — | yes above 512 | by 3 |
+| 8 | `lib/tensor/tensor.cpp` (`createView`) | `owner_` of a view, no barrier | — | — | yes, view born old and owner young | by 3 |
+| 9 | `kernel/execute/entry_args.cpp` | loaded leaves into a fresh struct / tuple, untyped | — | — | yes, aggregate born old | by 3 |
 | 10 | `gen.cpp` minor collection, `rtdata/func.cpp` | static area of a graph reached only through a `Function` | — | nothing moved | yes | fixed: such graphs are traced once per minor collection |
 | 11 | `gen.cpp` scan of copied objects | an object copied without a static type was not scanned | — | — | yes for self-describing objects (tensor views, optimizer state, functions) | fixed |
 | 12 | `gen.cpp` promotion | `std::bad_alloc` when the elder space was full | — | — | yes: the program ended | fixed: the elder space grows |
 | 13 | `fastvm/jit/backend/x64` (`emitLoadStaticConst`) | an object constant baked into machine code as its address | every later collection | constants never moved | yes | fixed: when objects move the code reads the constant from the static area each time; a safepoint under frameless code is refused |
-| 14 | `modules/onnx/module.cpp`, `exporter.cpp` | function, path, examples, constants as raw slots; `unordered_map<slot_t, ...>` keyed by address | macro expansion inside the operator | nothing moved | yes | `NoCollectionScope` around the export |
-| 15 | `rtdata/foreign.cpp`, `modules/python/operators.cpp` | deleter ran inside the collection, allocator locked, and took the GIL | — | one thread | deadlock with a thread that holds the GIL and allocates; self-deadlock for a deleter that allocates (both collectors) | fixed: releases run after the collection, unlocked |
-| 16 | `modules/onnx/emitter.cpp`, `autodiff/pullback.cpp` | rooted, but the raw slot is what is read later | none today | no safepoint inside translate / rewrite | no; latent | rule 2 applies if a safepoint is ever added there |
+| 14 | `lib/onnx/module.cpp`, `exporter.cpp` | function, path, examples, constants as raw slots; `unordered_map<slot_t, ...>` keyed by address | macro expansion inside the operator | nothing moved | yes | `NoCollectionScope` around the export |
+| 15 | `rtdata/foreign.cpp`, `lib/python/operators.cpp` | deleter ran inside the collection, allocator locked, and took the GIL | — | one thread | deadlock with a thread that holds the GIL and allocates; self-deadlock for a deleter that allocates (both collectors) | fixed: releases run after the collection, unlocked |
+| 16 | `lib/onnx/emitter.cpp`, `autodiff/pullback.cpp` | rooted, but the raw slot is what is read later | none today | no safepoint inside translate / rewrite | no; latent | rule 2 applies if a safepoint is ever added there |
 | 17 | `rtdata/array.h` untyped `reserve` / `append` / `resize` / `shrinkToFit` | new backing store without barrier | — | no caller on an existing array | no; latent | rule 6; left in place |
-| 18 | `src/compile/gir/builder.cpp` (`typeFoldedValues_`) | raw copy next to its `RootHandle` | none today | — | no; latent | — |
+| 18 | `compile/src/gir/builder.cpp` (`typeFoldedValues_`) | raw copy next to its `RootHandle` | none today | — | no; latent | — |
 | 19 | `rtdata/foreign.h` `movable` / `pinned` flags | never read | — | — | no; both descriptors use the defaults | left; a pinned wrapper needs `ForeignPinnedHandle` |
 | 20 | `rtdata/collection.cpp` (`compareKeys` default) | would order keys by address | — | unreachable: key types are restricted | no; latent | — |
 | 21 | slots typed `any` (frame, array element, tuple field) | a reference the collector does not see | any collection | large heap, rare collections | **use after free with both collectors** | fixed: `any` removed, `json.decode` gives a self-describing `Json` (section 9) |
@@ -364,11 +364,11 @@ higher-order operators of all three schedulers re-read after every element call;
 auto-space memory is given to NumPy, DLPack or Python (they copy).
 
 Not read line by line (covered by pattern searches and by the poisoned test runs only): most of
-`modules/onnx/exporter.cpp` and `lowering*.cpp`, `modules/autodiff/pullback.cpp`, the tensor
+`lib/onnx/exporter.cpp` and `lowering*.cpp`, `lib/autodiff/pullback.cpp`, the tensor
 kernels.
 
-**The standard library added since** (`modules/str`, the additions to `math` and `statistics`,
-`stdlib/array.cml`, `rtdata::Table` and its operators, `json.decode_as`): 98 operator bodies
+**The standard library added since** (`lib/str/`, the additions to `math` and `statistics`,
+`lib/array/array.cml`, `rtdata::Table` and its operators, `json.decode_as`): 98 operator bodies
 under 151 registered names, the 15 table functions and the functions of `array.cml` were read.
 No violation of rules 2, 3, 5 or 6: every reference store goes into an
 object created in the same call, the only in-place operators (`sort` and its variants) admit
@@ -381,8 +381,8 @@ here and left to the standard-library work:
 
 | # | Where | What | Effect |
 |---|---|---|---|
-| 22 | `src/builtin/operators/array.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
-| 23 | `src/builtin/operators/array.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
+| 22 | `lib/std/builtin/operators/array.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
+| 23 | `lib/std/builtin/operators/array.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
 | 24 | `rtdata/collection.cpp` (`Table::equals`, `deep == false`) | values compared with `memcmp` | reachable through 22 and through `contains` on an array of maps |
 
 ## 8. Tools
@@ -411,6 +411,6 @@ a stale pointer that is never used again; code that no test runs.
   used, not right after `decode` (a value converted after `decode` failed
   on all four back ends under forced collection). Design principles 5.10 settled it:
   `any` is removed from the language and from the type system, `json.decode` gives a `Json`
-  (`modules/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
+  (`lib/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
   function value or a tensor), and a commit refuses a graph with an undetermined type.
 - **Whether the generational collector becomes the default.** `--gc generational` 可用；默认仍是标记-清除。

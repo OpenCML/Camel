@@ -23,10 +23,10 @@ remain inside the kernel row and are still not separable; §7 says so in the rep
 The allocators already counted *what* they did:
 
 - `mm::blockBytesLive()`, `blockBytesPeak()`, `blockLiveCount()`, `blockCreations()`,
-  `blockFrees()` and `resetBlockStatsForTests()` in `include/camel/core/mm/block.h` / `block.cpp`,
+  `blockFrees()` and `resetBlockStatsForTests()` in `kernel/include/camel/core/mm/block.h` / `block.cpp`,
   exposed to Camel as `std::mem::blocks()` (`allocs`, `frees`, `live`, `bytes`);
 - `mm::space usage()` (used, reserved, segments, allocations) for each space;
-- `src/core/mm/profiler.cpp` writes a GC/heap snapshot as JSON (an unrelated tool, despite the
+- `kernel/core/mm/profiler.cpp` writes a GC/heap snapshot as JSON (an unrelated tool, despite the
   name).
 
 None of it was time, and none of it was attributed to a graph node or an operator. A program could
@@ -35,7 +35,7 @@ not the counters, is what this change adds.
 
 ## 2. Where the hooks are
 
-`include/camel/profile/allocation.h` declares one function and one RAII scope:
+`kernel/include/camel/profile/allocation.h` declares one function and one RAII scope:
 
 ```cpp
 void noteAllocation(uint64_t ns, uint64_t bytes, bool block) noexcept;
@@ -53,9 +53,9 @@ Three places construct it, which is the whole set of Camel value allocators:
 
 | site | file | `block` | counted as |
 |---|---|---|---|
-| `Block::create` and `Block::grow` | `src/core/mm/block.cpp` | `true` | data block, with `bytes` = the payload length the block was asked for |
-| `GenerationalAllocatorWithGC::alloc` | `src/core/mm/gen.cpp` | `false` | collected-heap object (`mm::autoSpace()`) |
-| `GrowableBumpAllocator::alloc` | `src/core/mm/growable.cpp` | `false` | permanent-space object (`mm::permSpace()`) |
+| `Block::create` and `Block::grow` | `kernel/core/mm/block.cpp` | `true` | data block, with `bytes` = the payload length the block was asked for |
+| `GenerationalAllocatorWithGC::alloc` | `kernel/core/mm/gen.cpp` | `false` | collected-heap object (`mm::autoSpace()`) |
+| `GrowableBumpAllocator::alloc` | `kernel/core/mm/growable.cpp` | `false` | permanent-space object (`mm::permSpace()`) |
 
 `GrowableFreeListAllocator` is the block space's own free list and is entered from `Block::create`
 already; it is not instrumented twice. The `Block` header itself comes from `new` and is not
