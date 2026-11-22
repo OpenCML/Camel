@@ -11,8 +11,8 @@ CMakeLists.txt  conanfile.txt  package.json  package-lock.json      （及 .gith
 
 src/                                                              我们自己的源码，统计代码量就数这一个目录
     kernel/  parse/  compile/  tools/  bindings/        （tools/ 只放随 Camel 发布的工具）
-    stdlib/                                    随发布附带的 Camel 标准库，与安装后的 stdlib/ 一一对应
-    lib/<模块>/                                各模块的 C++ 原生实现，编出 .cmo
+    stdlib/                                    随发布附带的标准库：<模块>.cml 与安装后位置相同，
+                                               同名目录 <模块>/ 放它的 C++ 实现（打包时按文件类型跳过）
 third_party/  cmake/                                              第三方源码与构建辅助
 packaging/                                                        发布配置（PyPI 等）
 examples/  benchmarks/  test/  docs/  scripts/                    示例、基准、测试、文档、脚本
@@ -27,8 +27,9 @@ internal/                                                         内部协作�
 | `tools/` 里随 Camel 发布的七个：`camel-cli`、`debugger`、`format`、`profiler`、`lang-server`、`codegen`、`camel-cpp` | `src/tools/` | 产品源码，计入代码量（负责人 2026-11-22） |
 | `tools/` 里开发用的三个：`parsecheck`、`diff-gate`、`graph-diff` | `test/tools/` | 只给开发与测试用；根目录不再有 `tools/` |
 | `editors/vscode/` | 删除 | 插件有专门的仓库（负责人 2026-11-22："删了吧"）。同批改掉依赖它的：`test/plans/feat/tools/grammar.plan.toml` 删除；`scripts/context-keywords.mjs`、`scripts/install.js`、`scripts/source-package.mjs`、`test/tools/tree-guard.mjs` 去掉对它的引用；`docs/editor-support.*` 改为指向插件仓库，`docs/debugging.*` 里的插件安装步骤同样改指 |
-| `lib/<模块>/` 里 Camel 写的部分：`.cml` 声明与定义、规则集、签名表 | `src/stdlib/`，排成安装后 `stdlib/` 的样子 | 负责人 2026-11-22：`stdlib` 是随 Camel 发布附带的标准库目录，Camel 运行与测试时看到的就该是它，不能让它到 `lib` 里去翻。打包改为原样拷贝 `src/stdlib/` 加上编好的 `.cmo`；`scripts/collect-out.js` 里按模块挑文件、铺平、特例（规则集、签名表）的那段拼装删掉 |
-| `lib/<模块>/` 里的 C++ | `src/lib/<模块>/` | 目录名与 `src/stdlib/` 里的模块一一对应 |
+| `lib/<模块>/` 里的 `.cml` | `src/stdlib/` 里与安装后相同的位置（`<模块>.cml`、`rulesets/*.cml` 等） | 负责人 2026-11-22：`stdlib` 是随 Camel 发布附带的标准库目录，Camel 运行与测试时看到的就该是它 |
+| `lib/<模块>/` 里的 C++ | `src/stdlib/<模块>/`，与 `<模块>.cml` 并排 | 一个模块的声明与实现挨在一起；这也是第三方 Camel 库的写法（一个 `.cml` 加同名的原生实现目录）。打包规则只有一条：拷贝 `src/stdlib/`，跳过 C++ 源文件，放入编好的 `.cmo`；`scripts/collect-out.js` 的按模块挑选、铺平与特例全部删掉。安装布局不变，`packaging/pypi/` 与模块加载不用改 |
+| `lib/<模块>/signatures/<模块>.cml`（计算出来的签名的记录） | `src/stdlib/<模块>/signatures.cml`，不安装 | 只给参考文档生成用，跟着该模块的 C++ 实现（那些签名正由 C++ 算出）；以后类型函数有了 Camel 入口（核心抽象第 17 节），这些签名改写成模块 `.cml` 里的类型函数，这个文件随之消失 |
 | `hello.cml` | `examples/hello.cml` | |
 | `logo.png` | 删除 | 与 `assets/logo.png` 逐字节相同；引用改指 `assets/` |
 | `assets/` | 留在根目录 | README、打包、宣传都用，不只是文档（待负责人确认） |
@@ -46,7 +47,7 @@ internal/                                                         内部协作�
 
 ## 依赖原有结构、要同批改的
 
-- **打包**：`packaging/pypi/` 的 wheel 内容与 `_native.py` 找 `stdlib/`、`libs/` 的逻辑，按新的安装布局核对；`pyproject.toml` 里写的目录跟着改。
+- **打包**：安装布局不变，`packaging/pypi/` 只改它自己被挪动后的相对路径；`scripts/collect-out.js` 换成上面那条拷贝规则。
 - **运行与测试**：开发构建与测试运行时，标准库搜索路径直接指向安装出的 `stdlib/`（来自 `src/stdlib/` 原样拷贝加 `.cmo`）；`CAMEL_STD_LIB` 的用法（如 `test/tools/check-vjp-ruleset.mjs`）照旧可用。
 - **其余读路径的**：所有权表、违例清单、`test/plan-selection.json`、各检查脚本、文档引用、`.github` 工作流。
 
