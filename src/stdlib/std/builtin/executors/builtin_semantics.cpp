@@ -414,6 +414,59 @@ void declareBuiltinOperatorFaults() {
                 "' states `panic` one way at the record and the other in its fault table.");
         }
     }
+    // The same statement for the operators that can fault and that no Camel declaration names: the
+    // core's own syntax forms (the compound assignments, the generic divisor forms, the two index
+    // writes), the enum tag, and the tangent arrays autodiff inserts. The C++ entrance is the only
+    // one they have, so `panic` is written here; the fault table is not, because `declare` above
+    // states the arithmetic ones and the rest are left at the conservative default. The read-back
+    // is the same one the list above takes: the table and the record must answer alike, and a
+    // faulting operator whose fault table says otherwise refuses the load instead of loading with
+    // two answers.
+    static constexpr CppPanicStatement kCppPanicStatementsFaulting[] = {
+        // `enum:tag` refuses a value of another tag (operators/enum.h).
+        {":enum/tag", true},
+        // A compound assignment divides or takes a remainder: a divisor of zero is a fault, as it
+        // is for `/` and `%`.
+        {":op/assn_div_bf", true},
+        {":op/assn_div_c", true},
+        {":op/assn_div_d", true},
+        {":op/assn_div_f", true},
+        {":op/assn_div_f6", true},
+        {":op/assn_div_i", true},
+        {":op/assn_div_l", true},
+        {":op/assn_div_z", true},
+        {":op/assn_mod_i", true},
+        {":op/assn_mod_l", true},
+        // The generic forms the compiler emits before the numeric type is known.
+        {":op/div", true},
+        {":op/mod", true},
+        // A write at an index outside the array, and a member of a shape at a position it has not.
+        {":op/set_field", true},
+        {":op/set_index", true},
+        {":op/set_index_in_place", true},
+        // The tangent arrays autodiff inserts (operators/struct.cpp): a scatter whose index is out
+        // of the array is a fault.
+        {":tangent/add_arr", true},
+        {":tangent/init_arr", true},
+        {":tangent/last_arr", true},
+        {":tangent/scatter_slice_arr", true},
+        {":tangent/zeros_arr", true},
+    };
+    for (const CppPanicStatement &statement : kCppPanicStatementsFaulting) {
+        camel::ops::CppRegistration registration(statement.uri, statement.panic);
+        camel::ops::Registry::instance().registerOperator(registration);
+        const std::optional<camel::core::OperatorTraits> traits = table.find(statement.uri);
+        const auto id     = table.lookup(statement.uri);
+        const camel::ops::Record *record = id ? table.recordOf(*id) : nullptr;
+        const bool tableAnswer           = traits.has_value() ? traits->mayFault : true;
+        const bool recordAnswer          = record == nullptr ? true : record->mayFault();
+        if (tableAnswer != recordAnswer) {
+            throw std::invalid_argument(
+                "The operator '" + std::string(statement.uri) +
+                "' states `panic` at the C++ entrance while its fault table states that a call "
+                "cannot fault.");
+        }
+    }
     // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag has
     // already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's value --
     // it is the absence of one -- and it is the compiler's own error, so it names no arithmetic kind.

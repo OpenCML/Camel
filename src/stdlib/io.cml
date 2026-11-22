@@ -30,7 +30,8 @@ export func has_input(): bool
 /// @effect reads the terminal
 /// @fails fault `InvalidArgument` when max is negative
 /// @example get_chars(3)    // at most three characters
-export func get_chars(max: int): string
+#op('io:get_chars')
+export func get_chars(max: int): string panic
 
 /// The next character of the input that is waiting; null when none is.
 /// @example get_char() ?? ''    // 'w'

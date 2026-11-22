@@ -155,8 +155,9 @@ export func run::<F>(f: F): Run<F>! panic when is_function::<F>()
 /// checked at the types every operator group registered.
 /// @example-fragment `rules` comes from the caller
 /// @example rules->check<samples: 1000, seed: 7>
+#op('rewrite:check')
 with <samples: int = 100, seed: int = 0>
-export func check(rules: Rule[]): CheckReport
+export func check(rules: Rule[]): CheckReport panic
 
 /// The same, with the law also checked at the types of the values `over` has, each once, in the
 /// order its graphs write them. `over` is an ordinary argument, not a `with` one, so that both
