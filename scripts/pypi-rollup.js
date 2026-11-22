@@ -643,7 +643,7 @@ function main() {
             if (!layout) {
                 logFail(
                     `Compile-time Python is ${compile.major}.${compile.minor} (${compile.executable}), but no ` +
-                        `matching modules/python/sdks/python* and no full interpreter dev tree (headers/libs under ` +
+                        `matching lib/python/sdks/python* and no full interpreter dev tree (headers/libs under ` +
                         `sys.base_prefix / sysconfig). Install CPython with dev files, run sync-python-sdks, or ` +
                         `set CAMEL_PYPI_ALL_SDKS=1.`
                 )
@@ -682,7 +682,7 @@ function main() {
         return
     }
 
-    logWarn('No modules/python/sdks/python* trees — linking py_bridge from current interpreter (sys.base_prefix)')
+    logWarn('No lib/python/sdks/python* trees — linking py_bridge from current interpreter (sys.base_prefix)')
     let compile
     try {
         compile = probeCompilePythonInterpreter()

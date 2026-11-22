@@ -1,0 +1,15 @@
+include(${PROJECT_SOURCE_DIR}/cmake/camel_module.cmake)
+add_camel_module(
+  NAME rewrite
+  SOURCES
+    fact.cpp
+    checkreport.cpp
+    module.cpp
+    proof.cpp
+    rule.cpp
+    ${CAMEL_VERIFY_SOURCES}
+  LINK_MODULES
+    graph
+  EXTRA_INCLUDES
+    ${CMAKE_SOURCE_DIR}/modules
+)

@@ -307,7 +307,7 @@ already done. OpenBLAS gets 28 GFLOP/s at the same shape, so the shape, not the 
 what binds.
 
 **The one change: `tensor:divide` ran a switch per element.** In
-[`modules/tensor/kernels/elementwise.cpp`](../../../modules/tensor/kernels/elementwise.cpp)
+[`lib/tensor/kernels/elementwise.cpp`](../../../lib/tensor/kernels/elementwise.cpp)
 `binaryTyped` gave `+`, `-` and `*` their own row loop and sent every other operator through one
 `default:` that handed the runtime `op` to the inner loop, so `x / y` ran a switch and a scalar
 division per element while the comment above the function promised the operator was hoisted out.

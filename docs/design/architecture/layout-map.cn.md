@@ -94,9 +94,11 @@
 | `src/execute/camel_pass.h` | `kernel/execute/camel_pass.h` | `kernel` | 搬 | U2：函数登记表 |
 | `src/execute/entry_args.cpp` | `kernel/execute/entry_args.cpp` | `kernel` | 搬 | U2：入口实参 |
 | `src/execute/function_call.cpp` | `kernel/execute/function_call.cpp` | `kernel` | 搬 | U2：调用一个函数 |
+| `src/execute/graph_caller.h` | `kernel/execute/graph_caller.h` | `kernel` | 搬 | U2：调用一个函数（它的头随它） |
 | `src/execute/limits.cpp` | `kernel/execute/limits.cpp` | `kernel` | 搬 | U2：限额 |
 | `src/execute/observer.cpp` | `kernel/execute/observer.cpp` | `kernel` | 搬 | U2：执行观察钩子 |
 | `src/execute/pass.cpp` | `kernel/execute/pass.cpp` | `kernel` | 搬 | U2：遍驱动 |
+| `src/execute/registration.cpp` | `kernel/execute/registration.cpp` | `kernel` | 搬 | U2：函数登记表 |
 | `src/execute/pass_declarations.cpp` | `kernel/execute/pass_declarations.cpp` | `kernel` | 搬 | U2：遍驱动 |
 | `src/execute/pass_declarations.h` | `kernel/execute/pass_declarations.h` | `kernel` | 搬 | U2：遍驱动 |
 | `src/execute/pass_spec.cpp` | `kernel/execute/pass_spec.cpp` | `kernel` | 搬 | U2：遍驱动 |
@@ -127,6 +129,9 @@
 | `src/passes/trans/gir_metadata.cpp` | `lib/std/gir/gir_metadata.cpp` | `lib/std` | 搬 | U6：gir/rgir/agir/argir/jgir/gir_regions 六个别名共用的元数据，一处 |
 | `src/passes/trans/profile/` | `lib/std/profile/` | `lib/std` | 搬 | U6：`std::profile` |
 | `src/passes/trans/tns/` | `lib/std/tns/` | `lib/std` | 搬 | U6：`std::tns`（别名 `std::topo_node_seq`） |
+| `src/passes/trans/gc/` | `lib/std/gc/` | `lib/std` | 搬 | U6：`std::gc` |
+| `src/passes/trans/nop/` | `lib/std/nop/` | `lib/std` | 搬 | U6：`std::nop` |
+| `src/passes/trans/selftest/` | `lib/std/selftest/` | `lib/std` | 搬 | U6：`std::selftest` |
 | `src/passes/trans/rulesets/` | `lib/std/rulesets/` | `lib/std` | 搬 | U7：`std::rulesets` 这个遍 |
 | `src/profile/` | `kernel/profile/` | `kernel` | 搬 | U9：工具经内核的自省接口读它 |
 | `src/service/` | 拆到本表以下三行 | — | 搬 | U8：语义查询、代码生成、性能剖析三份 |

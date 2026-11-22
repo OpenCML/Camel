@@ -12,7 +12,7 @@
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/path.h"
-#include "service/codegen/source/generator.h"
+#include "tools/codegen/source/generator.h"
 #include <filesystem>
 #include <format>
 #include <fstream>

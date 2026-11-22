@@ -3,7 +3,7 @@
 
 // A spread is `broadcast_like`'s, not `sum_to`'s. The adjoint of a broadcast does run both ways, but
 // only one of the two is a reduction: `sum_to` takes the extents of a leading-axis reduction
-// (ruling 甲, `stdlib/tensor.cml#sum_to`) and refuses a target that is not a suffix of its operand by
+// (ruling 甲, `lib/tensor/tensor.cml#sum_to`) and refuses a target that is not a suffix of its operand by
 // name, while the direction that writes one element into many lanes belongs to the operator those
 // lanes come from. A rank-zero operand is an element and nothing else (design principles 5.4), so it
 // spreads as that value.

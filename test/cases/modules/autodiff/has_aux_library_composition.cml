@@ -3,7 +3,7 @@
  * answers `((value, aux), gradient)` -- `((9.0, 13.0), 6.0)` for `loss(w) = (w*w, w + 10.0)` at 3,
  * which are the engine's three numbers in the engine's order.
  *
- * The body is `jvp` read at the weight's direction (`stdlib/vjp.cml#has_aux`): `jvp(loss)(3.0, 1.0)`
+ * The body is `jvp` read at the weight's direction (`lib/vjp/vjp.cml#has_aux`): `jvp(loss)(3.0, 1.0)`
  * answers the pair and the pair's tangent, so the value's derivative is the tangent's first member.
  * It is the forward direction because the transposed one cannot carry a pair: `vjp`'s second half
  * turns a cotangent around, a pair has no cotangent, and handing a pair-returning function to `vjp`

@@ -18,7 +18,7 @@
 |---|---|---|---|---|---|
 | 1 | `src/runtime/graph.cpp#validateRuntimeGraphPayloadImpl`（第 583–584 行） | `23b2e69e3` | GATE 的"没有等待"断言 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncPredsOf`（图侧） |
 | 2 | `src/passes/opt/generic/gates.cpp#bypassValueGate`（第 32–33 行） | `222cf318c`（32 行）、`21f2f3be8`（33 行） | 门节点的旁路判定 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧）；用户集在 44、45、67、78 行另读，不进 facts |
-| 3 | `src/execute/fusion_group.cpp#isPrivateTo`（第 92–94 行） | `a882b3aaf` | 融合组的成员判定 | `hasDataUser`、`isWaitedOn`、`isSyncStatement`（3） | 用户：`withOutputsOf`（92 行）、`ctrlOutputsOf`（93 行）；输入：`syncPredsOf`（94 行）；另手扫 `syncEdges`（95–102 行）；norm 用户在 82–85 行另读 |
+| 3 | `lib/std/exec/fusion_group.cpp#isPrivateTo`（第 92–94 行） | `a882b3aaf` | 融合组的成员判定 | `hasDataUser`、`isWaitedOn`、`isSyncStatement`（3） | 用户：`withOutputsOf`（92 行）、`ctrlOutputsOf`（93 行）；输入：`syncPredsOf`（94 行）；另手扫 `syncEdges`（95–102 行）；norm 用户在 82–85 行另读 |
 | 4 | `src/runtime/draft_inline.cpp#inlineCallableInDraft`（第 1754–1755 行） | `f9e2ecc63` | 内联拼接：一次调用的等待 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`controlFrontier`（1739–1748 行，`include/camel/runtime/control.h#controlFrontier`）、`syncInputsOf`；用户集在 1765–1769 行另读 |
 | 5 | `src/runtime/writings_extract.cpp#extract`（第 1147–1148 行） | `38b5880fa` | 写作折叠：成员迁移 | `hasWaitEdge`、`isSyncStatement`（2） | 输入：`ctrlInputsOf`、`syncInputsOf`（草稿侧） |
 | 6 | `src/runtime/graph.cpp#isUnanchoredPure`（第 1300–1319 行） | `61f5b677b` | 无锚纯节点的判定 | 不建 facts（0）；直接读 6 组 | 输入 3 组：`ctrlInputsOf`、`orderInputsOf`、`syncInputsOf`；用户 3 组：`ctrlUsersOf`、`orderUsersOf`、`syncUsersOf`（1316–1318 行） |
@@ -116,7 +116,7 @@
 
 ## 10. 重起的第一笔：一条遍边界不变量
 
-守的是一句话：**一个活着的执行区域，它的结果节点必须在这次遍历的 `live` 集合里**。位置 `src/execute/graph_runtime_support.cpp#computeExecutionOrder`（第 184–202 行，`GUARD` 在第 194 行，`a67652d18`）：`live` 是从图的出口（`exitNodeRef`，没有则 `returnNodeRef`）沿 ctrl / norm / with 输入与 sync 前驱走出来的那批节点。
+守的是一句话：**一个活着的执行区域，它的结果节点必须在这次遍历的 `live` 集合里**。位置 `lib/std/exec/graph_runtime_support.cpp#computeExecutionOrder`（第 184–202 行，`GUARD` 在第 194 行，`a67652d18`）：`live` 是从图的出口（`exitNodeRef`，没有则 `returnNodeRef`）沿 ctrl / norm / with 输入与 sync 前驱走出来的那批节点。
 
 为什么先加它：在它之前，能红的东西只有"跑出来的数不对"；而"区域的结果没人取"这种改写错误不改数——一样活干完，然后扔掉，图上和数上都看不出来。`GUARD` 在 `NDEBUG` 下也在，所以它是当场判死的一句话，不是只在调试版里响的提醒。
 

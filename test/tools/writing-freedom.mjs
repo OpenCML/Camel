@@ -96,18 +96,28 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 
 /// The repository root: the first ancestor of this tool that holds the standard library. The runner
 /// resolves a case against the plan that names it, so neither `process.cwd()` nor `HERE` can be
-/// assumed to be the root.
+/// assumed to be the root. The library is `stdlib/std.cml` before the layout move and
+/// `lib/std/std.cml` after it, and this tool runs against both trees, so either marker answers.
+const ROOT_MARKERS = [
+    ['stdlib', 'std.cml'],
+    ['lib', 'std', 'std.cml']
+]
+const holdsLibrary = (dir) =>
+    ROOT_MARKERS.some((parts) => {
+        try {
+            readFileSync(path.join(dir, ...parts), 'utf8')
+            return true
+        } catch {
+            return false
+        }
+    })
 function repositoryRoot(start) {
     let dir = path.resolve(start)
     for (;;) {
-        try {
-            readFileSync(path.join(dir, 'stdlib', 'std.cml'), 'utf8')
-            return dir
-        } catch {
-            const parent = path.dirname(dir)
-            if (parent === dir) throw new Error(`no stdlib/std.cml above ${start}`)
-            dir = parent
-        }
+        if (holdsLibrary(dir)) return dir
+        const parent = path.dirname(dir)
+        if (parent === dir) throw new Error(`no stdlib/std.cml or lib/std/std.cml above ${start}`)
+        dir = parent
     }
 }
 

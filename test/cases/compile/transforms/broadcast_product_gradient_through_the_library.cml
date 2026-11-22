@@ -9,7 +9,7 @@
 // the cotangent and never the value it differentiates), but the extents `w`'s type states, handed to
 // the law as an operand of its own -- `shape(w)` answered by the rule layer out of the law's own port
 // (`modules/transforms/rule_expand.cpp#expandRuleRightSide`), and read by `sum_to_stated`
-// (`stdlib/tensor.cml#sum_to`'s twin for a target shape that arrives as a list rather than as a value).
+// (`lib/tensor/tensor.cml#sum_to`'s twin for a target shape that arrives as a list rather than as a value).
 //
 //     total = sum(w * h),  h = [1.0, 2.0, 3.0],  w = 1.0 everywhere
 //     value  = 24

@@ -1,0 +1,15 @@
+include(${PROJECT_SOURCE_DIR}/cmake/camel_module.cmake)
+add_camel_module(
+  NAME ckpt
+  SOURCES
+    module.cpp
+    src/checkpoint.cpp
+    src/checkpoint_io.cpp
+  LINK_MODULES
+    tensor
+  EXTRA_LIBS
+    nlohmann_json::nlohmann_json
+)
+file(READ "${CMAKE_SOURCE_DIR}/package.json" _checkpoint_package)
+string(JSON _checkpoint_version GET "${_checkpoint_package}" version)
+target_compile_definitions(ckpt_cmo_objects PRIVATE "CAMEL_CHECKPOINT_VERSION=\"${_checkpoint_version}\"")

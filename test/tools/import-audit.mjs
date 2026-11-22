@@ -484,7 +484,14 @@ function declarationCost(reps) {
             }
             samples.sort((a, b) => a - b)
             const median = samples[Math.floor(samples.length / 2)]
-            const text = fs.readFileSync(path.join(REPO_ROOT, 'stdlib', `${module}.cml`), 'utf8')
+            // The declaration is beside the module's own sources after the layout move, in the flat library
+            // before it; `lib/std/` holds the ones that belong to the core.
+            const declaration = [
+                path.join(REPO_ROOT, 'lib', module, `${module}.cml`),
+                path.join(REPO_ROOT, 'lib', 'std', `${module}.cml`),
+                path.join(REPO_ROOT, 'stdlib', `${module}.cml`),
+            ].find((file) => fs.existsSync(file))
+            const text = fs.readFileSync(declaration, 'utf8')
             out.push({
                 module,
                 lines: text.split(/\r?\n/).filter((line) => line.trim() !== '').length,

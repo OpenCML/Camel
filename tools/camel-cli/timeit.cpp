@@ -32,11 +32,11 @@
 #include "camel/utils/path.h"
 #include "config.h"
 #include "module_failures.h"
-#include "passes/trans/dot/graphviz.h"
-#include "passes/trans/tns/topo_node_seq.h"
-#include "service/codegen/source/generator.h"
-#include "service/profiler/advanced/advanced_tracer.h"
-#include "service/profiler/core/trace.h"
+#include "lib/std/gir/dot/graphviz.h"
+#include "lib/std/tns/topo_node_seq.h"
+#include "tools/codegen/source/generator.h"
+#include "tools/profiler/advanced/advanced_tracer.h"
+#include "tools/profiler/core/trace.h"
 
 #include <algorithm>
 #include <chrono>

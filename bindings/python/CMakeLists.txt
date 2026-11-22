@@ -49,7 +49,7 @@ target_compile_definitions(camel_python_ext_objects PRIVATE Py_LIMITED_API=0x030
 target_link_libraries(camel_python_ext_objects PRIVATE Python3::Module)
 
 # `Python3::Module`, not `Python3::Python`: a module is imported by an interpreter it does not
-# contain, so the extension must not link libpython. Only modules/python (the embedding side,
+# contain, so the extension must not link libpython. Only lib/python (the embedding side,
 # pybind11::embed + Python3::Python) links one, and that is what stays version-specific.
 Python3_add_library(camel_python_ext MODULE WITH_SOABI USE_SABI 3.10
   $<TARGET_OBJECTS:camel_python_ext_objects>)

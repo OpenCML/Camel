@@ -85,13 +85,13 @@ const git = (args) =>
 // ---------------------------------------------------------------------------------------------
 
 const FILES = [
-    "src/runtime/graph_edges.cpp",
-    "src/runtime/draft.cpp",
-    "src/runtime/graph.cpp",
-    "src/runtime/draft_session.cpp",
-    "src/runtime/draft_inline.cpp",
-    "src/runtime/control.cpp",
-    "src/runtime/graph_txn.cpp",
+    "kernel/runtime/graph_edges.cpp",
+    "kernel/runtime/draft.cpp",
+    "kernel/runtime/graph.cpp",
+    "kernel/runtime/draft_session.cpp",
+    "kernel/runtime/draft_inline.cpp",
+    "kernel/runtime/control.cpp",
+    "kernel/runtime/graph_txn.cpp",
 ];
 
 /// The owner today's facts say a rule of this file belongs to, when its comment names none.

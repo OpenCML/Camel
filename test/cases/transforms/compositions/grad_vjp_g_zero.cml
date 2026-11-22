@@ -11,7 +11,7 @@
  * numbers (flattened, that matrix is 1, 2, 3, 4 and its gradient is 2, 4, 6, 8), so nothing is
  * lost by not needing a batch axis for this one.
  *
- * The calls are the surface `stdlib/vjp.cml#vjp` declares: the cotangent is the pullback's
+ * The calls are the surface `lib/vjp/vjp.cml#vjp` declares: the cotangent is the pullback's
  * argument (`vjp(g)(w).1(1.0).0`), and the weight is a `with` parameter, because `grad`
  * differentiates the first `with` parameter of a function that returns a `float` (design
  * principles 9.9) -- a plain `(w: f32[4]) => ...` lambda has none.

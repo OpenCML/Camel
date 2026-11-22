@@ -787,7 +787,7 @@ verify_script = '''
 # it, so the array is what holds the box. Read as a producer, `xs[0]` looked like a value born at
 # the index, and the plan gave back a reference nobody had taken: the box was released while the
 # array still held it, a write through it ran on a released handle, and `state::get` answered "the
-# value is not a reference". `src/execute/exec_plan.cpp#forwardsItsValue` now says the element read
+# value is not a reference". `lib/std/exec/exec_plan.cpp#forwardsItsValue` now says the element read
 # forwards, as it already said for `:enum/field` -- the same defect, the same shape of answer. A row
 # of a higher-rank array stays a producer's value: the operator makes that one (a view or a copy).
 

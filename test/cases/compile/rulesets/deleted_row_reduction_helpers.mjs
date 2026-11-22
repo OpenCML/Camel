@@ -13,28 +13,42 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 
 // The case is copied into the tree the run happens in, so the repository root is the first ancestor
-// that holds the ruleset the case is about.
+// that holds the ruleset the case is about. The rulesets moved with the library -- `lib/rulesets/`
+// now that the declarations live one per module under `lib/`, `stdlib/rulesets/` before it -- so
+// either spelling answers and the case runs in both trees.
+function rulesetPath(dir) {
+    for (const parts of [
+        ['lib', 'rulesets', 'vmap.cml'],
+        ['stdlib', 'rulesets', 'vmap.cml'],
+    ]) {
+        const file = join(dir, ...parts)
+        try {
+            readFileSync(file, 'utf8')
+            return file
+        } catch {
+            // The next spelling, and then the parent directory.
+        }
+    }
+    return null
+}
+
 function repositoryRoot(start) {
     let dir = resolve(start)
     for (;;) {
-        try {
-            readFileSync(join(dir, 'stdlib', 'rulesets', 'vmap.cml'), 'utf8')
-            return dir
-        } catch {
-            const parent = dirname(dir)
-            if (parent === dir) throw new Error(`no stdlib/rulesets/vmap.cml above ${start}`)
-            dir = parent
-        }
+        if (rulesetPath(dir)) return dir
+        const parent = dirname(dir)
+        if (parent === dir) throw new Error(`no lib/rulesets/vmap.cml or stdlib/rulesets/vmap.cml above ${start}`)
+        dir = parent
     }
 }
 
 const root = repositoryRoot(here)
-const ruleset = readFileSync(join(root, 'stdlib', 'rulesets', 'vmap.cml'), 'utf8')
+const ruleset = readFileSync(rulesetPath(root), 'utf8')
 
 const deleted = ['fold_max_axes', 'fold_min_axes']
 for (const name of deleted) {
     if (ruleset.includes(name)) {
-        throw new Error(`${name} is still in stdlib/rulesets/vmap.cml: the duplicate was not deleted`)
+        throw new Error(`${name} is still in the vmap ruleset: the duplicate was not deleted`)
     }
 }
 
