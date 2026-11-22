@@ -30,7 +30,7 @@ internal/                                                         内部协作�
 | `lib/<模块>/` 里 Camel 写的部分：`.cml` 声明与定义、规则集、签名表 | `src/stdlib/`，排成安装后 `stdlib/` 的样子 | 负责人 2026-11-22：`stdlib` 是随 Camel 发布附带的标准库目录，Camel 运行与测试时看到的就该是它，不能让它到 `lib` 里去翻。打包改为原样拷贝 `src/stdlib/` 加上编好的 `.cmo`；`scripts/collect-out.js` 里按模块挑文件、铺平、特例（规则集、签名表）的那段拼装删掉 |
 | `lib/<模块>/` 里的 C++ | `src/lib/<模块>/` | 目录名与 `src/stdlib/` 里的模块一一对应 |
 | `hello.cml` | `examples/hello.cml` | |
-| `logo.png` | 删除 | 与 `assets/logo.png` 逐字节相同；引用改指 `docs/assets/` |
+| `logo.png` | 删除 | 与 `assets/logo.png` 逐字节相同；引用改指 `assets/` |
 | `assets/` | 留在根目录 | README、打包、宣传都用，不只是文档（待负责人确认） |
 | `export_matrix.csv`、`export_matrix.md` | 不入库 | 生成物：生成它的脚本输出到 `out/`，引用它的文档改为"运行某命令生成" |
 | `changes.log` | `CHANGELOG.md` | 按 Keep a Changelog；`agents/branching.md` 与发布脚本跟着改 |
