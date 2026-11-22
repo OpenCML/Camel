@@ -206,6 +206,15 @@ bool is_chain_statement(
         if (!table.isPure(oper) || table.hasExternalEffect(oper)) {
             return true;
         }
+        // The operator's own statement, from the record: `panic` is the one item it is stated
+        // with, at either entrance, and the built-in module states it for every operator whose
+        // fault table is empty (`src/stdlib/std/builtin/executors/builtin_semantics.cpp`). An
+        // operator nobody registered has no record to read, and the trait derived from its facts
+        // is then the whole statement there is.
+        const camel::ops::Record *record = table.recordOf(oper);
+        if (record != nullptr) {
+            return record->mayFault();
+        }
         return traits.has_value() && traits->mayFault;
     }
     default:
