@@ -225,13 +225,11 @@ std::string typeTextOf(const std::vector<Type *> &types) {
 /// the rank is what a law that dispatches on rank is declining. An operand that is not an array has
 /// rank 0 -- it carries no extents to reduce and no lane to spread over -- and an open-rank array
 /// (`float[..]`) reports the prefix it states, which is the number of axes the law can count on.
-std::string
-operandRanksText(const camel::runtime::GCGraph *function, std::span<const gc_node_ref_t> operands) {
+std::string operandRanksText(
+    const camel::graph::GraphView *function, std::span<const gc_node_ref_t> operands) {
     std::string text;
     for (const gc_node_ref_t operand : operands) {
-        const camel::runtime::GCNode *node =
-            function != nullptr ? function->node(operand) : nullptr;
-        Type *type  = node != nullptr ? const_cast<Type *>(node->dataType()) : nullptr;
+        Type *type  = function != nullptr ? const_cast<Type *>(function->typeOf(operand)) : nullptr;
         size_t rank = 0;
         if (type != nullptr && type->code() == camel::core::type::TypeCode::Array) {
             if (const auto *array = tt::as_ptr<camel::core::type::ArrayType>(type)) {

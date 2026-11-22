@@ -390,16 +390,15 @@ gc_node_ref_t statedExtentsNodeOf(camel::runtime::GraphDraft &draft, Type *type)
 /// the same class -- the declaration states no shape -- so both must name the same parameter, and a
 /// second walk-back would be a day when they disagree about which declaration to edit.
 std::optional<size_t> unstatedParameterBehind(
-    const camel::runtime::GCGraph *function, gc_node_ref_t value,
+    const camel::graph::GraphView *function, gc_node_ref_t value,
     const std::vector<size_t> &portParameter, size_t paramCount, size_t nodeCount) {
-    const camel::runtime::GCNode *const valueNode =
-        function != nullptr ? function->node(value) : nullptr;
-    const Type *const valueType = valueNode != nullptr ? valueNode->dataType() : nullptr;
+    const Type *const valueType = function != nullptr ? function->typeOf(value) : nullptr;
     if (valueType == nullptr || valueType->code() != camel::core::type::TypeCode::Array ||
         camel::core::type::statedExtentsOf(valueType).has_value()) {
         return std::nullopt;
     }
-    const auto ports = function->normPorts();
+    const std::vector<gc_node_ref_t> ports =
+        function->ports(camel::graph::PortGroup::Normal);
     std::vector<gc_node_ref_t> pending{value};
     std::vector<bool> seen(nodeCount, false);
     while (!pending.empty()) {
@@ -408,12 +407,13 @@ std::optional<size_t> unstatedParameterBehind(
         if (at >= nodeCount || seen[at]) {
             continue;
         }
-        seen[at]                                 = true;
-        const camel::runtime::GCNode *const node = function->node(at);
-        if (node == nullptr) {
+        seen[at] = true;
+        // A place the view does not answer is not a node: a tombstone of the numbering, a draft's
+        // placeholder, or a JOIN, which owns no place of its own here.
+        if (!function->contains(at)) {
             continue;
         }
-        if (node->kind == rt::GCNodeKind::Port) {
+        if (function->kindOf(at) == camel::graph::NodeKind::Port) {
             for (size_t p = 0; p < ports.size(); ++p) {
                 if (ports[p] != at) {
                     continue;
@@ -430,7 +430,7 @@ std::optional<size_t> unstatedParameterBehind(
             }
             continue;
         }
-        for (const gc_node_ref_t in : function->normInputsOf(at)) {
+        for (const gc_node_ref_t in : function->inputs(at, camel::graph::PortGroup::Normal)) {
             pending.push_back(in);
         }
     }

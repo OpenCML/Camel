@@ -17,6 +17,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
+#include "graph/graph_view.h"
 
 #include <cstddef>
 #include <functional>
@@ -47,9 +48,10 @@ RuleChoice chooseTransposedRule(
 /// The type list as the index's reports write it: `(float[..], float)`, `()` when empty.
 std::string typeTextOf(const std::vector<camel::core::type::Type *> &types);
 
-/// The ranks of the operands a cotangent was asked for, in the law's own order: `(3, 2)`.
+/// The ranks of the operands a cotangent was asked for, in the law's own order: `(3, 2)`. Each rank
+/// is read off the operand's type, which is a query of the view and not of a representation.
 std::string operandRanksText(
-    const camel::runtime::GCGraph *function,
+    const camel::graph::GraphView *function,
     std::span<const camel::runtime::gc_node_ref_t> operands);
 
 /// Whether a law's answer and the operand it answers for state shapes that cannot both be right,
