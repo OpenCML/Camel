@@ -6890,3 +6890,7 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 2. 新带进来的当轮修掉或回退那一笔，优先于其余一切；
 3. 列表写进 `docs/handover/reports/`，回来报一行读数。
 阶段 1 的搬家窗口以 develop 头四条腿全绿为前提。
+
+## 派工（2026-11-22 12:05）：阶段 0 完成，开搬家窗口
+
+决策者。develop 头 CI `44980539602` 五条腿全绿，0.1–0.6 全部完成。按重构总方案开阶段 1 的搬家窗口，步骤见 `docs/handover/plans/2026-11-22-refactor-stage1-move.cn.md`。合并位一条车道执行，其余车道暂停合入，直到关窗。
