@@ -81,16 +81,25 @@ const std::string ResourceClauseLoad::toString() const {
     std::string result = "ResourceClause: ";
     if (spelling_) {
         result += "spelling";
-        if (pure_ || !uses_.empty()) {
+        if (pure_ || panic_ || !uses_.empty()) {
             result += " ";
         }
     }
     if (pure_) {
-        return result + "pure";
+        result += "pure";
+        if (panic_) {
+            result += " panic";
+        }
+        return result;
     }
     for (size_t i = 0; i < uses_.size(); ++i) {
         result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
                   uses_[i].resource.toString();
+    }
+    // `panic` is written last, after the resources it is declared beside (3.9): `uses fs panic`
+    // reads as the clause it is, and a clause that writes only `panic` is that word alone.
+    if (panic_) {
+        result += (spelling_ || !uses_.empty() ? " " : "") + std::string("panic");
     }
     return result;
 }
@@ -99,17 +108,26 @@ const std::string ResourceClauseLoad::geneCode() const {
     std::string result;
     if (spelling_) {
         result = "spelling";
-        if (pure_ || !uses_.empty()) {
+        if (pure_ || panic_ || !uses_.empty()) {
             result += " ";
         }
     }
     if (pure_) {
-        return result + "pure";
+        result += "pure";
+        if (panic_) {
+            result += " panic";
+        }
+        return result;
     }
-    result += "uses ";
-    for (size_t i = 0; i < uses_.size(); ++i) {
-        result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
-                  uses_[i].resource.toString();
+    if (!uses_.empty()) {
+        result += "uses ";
+        for (size_t i = 0; i < uses_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
+                      uses_[i].resource.toString();
+        }
+    }
+    if (panic_) {
+        result += (spelling_ || !uses_.empty() ? " " : "") + std::string("panic");
     }
     return result;
 }
