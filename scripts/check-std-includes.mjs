@@ -18,7 +18,8 @@
 // Exit status 2 when a target does not exist, the scan holds no source file, or no file uses a
 // name in the table: a check of nothing is refused, never reported as a pass.
 //
-// What is checked: every .h / .cpp under src/, include/, modules/ and tools/. For each file the
+// What is checked: every .h / .cpp under the four source roots (kernel/, parse/, compile/, lib/)
+// and tools/. For each file the
 // standard headers it reaches are collected: its own `#include <...>` lines and those of the
 // project headers it includes with `#include "..."`, transitively. Headers of third-party
 // libraries count for nothing (what they include is theirs to change), and neither does an
@@ -36,11 +37,44 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SCAN_DIRS = ['src', 'include', 'modules', 'tools']
-// Where `#include "a/b.h"` is looked up after the directory of the including file.
-const INCLUDE_ROOTS = ['include', 'src', '.', 'third_party', 'modules', 'tools', 'tools/debugger']
+// The blocks the layout map files the sources under (`docs/design/architecture/layout-map.cn.md`,
+// tables A and B): the four source roots and `tools/`. The flat `src/`, `include/`, `modules/` and
+// `stdlib/` of the tree before the move are gone, and naming them here is a scan of nothing -- the
+// run exits 2 with `no such file or directory` instead of checking the tree, which is what it did
+// on the first gate after the move. A root that is not there is left out rather than spelled.
+const SCAN_DIRS = ['kernel', 'parse', 'compile', 'lib', 'tools'].filter((dir) =>
+    fs.existsSync(path.join(ROOT, dir))
+)
+// Where `#include "a/b.h"` is looked up after the directory of the including file: every block
+// carries its own `include/` (`kernel/include`, `parse/include`, `compile/include`, and one per
+// module directory under `lib/`), and a tool names a header of another tool from the tree root.
+// The list is read off the tree and not written down, so a block that gains or loses its
+// `include/` changes the lookup instead of silently leaving an include unresolved.
+function includeRoots() {
+    const roots = ['.', 'third_party', 'tools', 'tools/debugger']
+    const walk = (dir, depth) => {
+        if (depth < 0) return
+        let entries
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true })
+        } catch {
+            return
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue
+            const full = path.join(dir, entry.name)
+            if (entry.name === 'include') roots.push(rel(full))
+            else if (entry.name !== 'third_party' && entry.name !== 'node_modules') walk(full, depth - 1)
+        }
+    }
+    for (const block of ['kernel', 'parse', 'compile', 'lib']) {
+        walk(path.join(ROOT, block), 2)
+    }
+    return roots
+}
+const INCLUDE_ROOTS = includeRoots()
 // Sources that are not the project's own.
-const SKIP = [/^third_party\//, /^modules\/python\/sdks\//, /\/third_party\//, /(^|\/)ui\//]
+const SKIP = [/^third_party\//, /^lib\/python\/(sdks|dlls)\//, /\/third_party\//, /(^|\/)ui\//]
 const SOURCE = /\.(h|hpp|cpp|cc)$/
 
 const PLATFORM_MACRO =
@@ -297,8 +331,9 @@ function read(file) {
 function resolveInclude(from, name) {
     const candidates = [path.resolve(path.dirname(from), name)]
     for (const root of INCLUDE_ROOTS) candidates.push(path.resolve(ROOT, root, name))
-    // A module names its own headers from its directory (modules/<name>/...).
-    const module = /^(modules\/[^/]+|tools\/[^/]+)\//.exec(rel(from))
+    // A module names its own headers from its directory (`lib/<name>/...`; `modules/<name>/...`
+    // before the layout move, which put a module's C++ and its declaration in one directory).
+    const module = /^(lib\/[^/]+|tools\/[^/]+)\//.exec(rel(from))
     if (module) candidates.push(path.resolve(ROOT, module[1], name))
     for (const candidate of candidates) {
         if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {

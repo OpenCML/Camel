@@ -305,8 +305,11 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // Where a reference counts: the compiler, the standard library, the modules, the tools, the tests
 // and the scripts -- the paths a gate or a plan reads a case through. A document or a report that
 // *describes* a measurement is not a reader of the workload it measured, and neither is the
-// benchmark pipeline, which is a harness of its own outside the plans.
-const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
+// benchmark pipeline, which is a harness of its own outside the plans. The layout move split `src/`
+// and `include/` into the four blocks (`kernel/`, `parse/`, `compile/`) and the library (`lib/`),
+// which also took `stdlib/` and `modules/`; the old names stay in the list so a checkout of either
+// layout is read the same way.
+const NAMING_ROOTS = ['test/', 'scripts/', 'kernel/', 'parse/', 'compile/', 'lib/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
 
 // What the runner writes while it runs (a million files after a few weeks of runs) is not part of
 // the tree the ledger judges: the walk would read it all, and the check would grow with the
@@ -316,7 +319,16 @@ const RUN_OUTPUT_DIRS = new Set(['test/results', 'test/tmp', 'node_modules'])
 function walkTreeFiles(dir) {
     const out = []
     const walk = (abs, prefix) => {
-        for (const name of fs.readdirSync(abs).sort()) {
+        let entries
+        try {
+            entries = fs.readdirSync(abs).sort()
+        } catch {
+            // A naming root this checkout does not have: the layout move left some of the names in
+            // the list above behind, and a list that named only one layout would walk nothing
+            // there and report no reader at all.
+            return
+        }
+        for (const name of entries) {
             const child = `${abs}/${name}`
             if (RUN_OUTPUT_DIRS.has(`${prefix}/${name}`) || name === 'node_modules') continue
             if (fs.statSync(child).isDirectory()) walk(child, `${prefix}/${name}`)

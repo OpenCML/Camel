@@ -26,8 +26,19 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const EXT_ROOT = path.dirname(HERE)
 const REPO_ROOT = path.resolve(EXT_ROOT, '..', '..')
 
-const TOKENS = path.join(REPO_ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def')
-const TYPE_SCOPE = path.join(REPO_ROOT, 'src', 'compile', 'gct', 'builder.cpp')
+// Where the lexer's tables and the compiler's root type scope are is a layout, not a path: the
+// layout map (docs/design/architecture/layout-map.cn.md, table B) moved `include/camel/parse/` to
+// `parse/include/camel/parse/` and `src/compile/` to `compile/src/`, and this script runs in both
+// trees. Whichever spelling the tree has decides; the moved one is tried first.
+const firstOf = (candidates) => candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+const TOKENS = firstOf([
+    path.join(REPO_ROOT, 'parse', 'include', 'camel', 'parse', 'syntax', 'token_kinds.def'),
+    path.join(REPO_ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def'),
+])
+const TYPE_SCOPE = firstOf([
+    path.join(REPO_ROOT, 'compile', 'src', 'gct', 'builder.cpp'),
+    path.join(REPO_ROOT, 'src', 'compile', 'gct', 'builder.cpp'),
+])
 const GRAMMAR = path.join(EXT_ROOT, 'syntaxes', 'camel.tmLanguage.json')
 // The one table of the contextual keywords, shared with scripts/check-grammar.mjs and with the
 // language reference (02, 2.4.1). Imported rather than copied: the words of this grammar, of the
