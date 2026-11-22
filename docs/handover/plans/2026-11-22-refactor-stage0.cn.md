@@ -24,6 +24,18 @@
 **现状**：`include/camel/core/forward.h:28` 包含 `parse/ast/rule_head.h`；变换的 7 处直接读规则头（`docs/handover/reviews/` 里的规则头审计页）。
 **做法**：编译器把规则编成内核里的规则对象（`Rule` 的内容），规则头里变换要用的信息（名字、根算子、元数、右侧被调者、左侧绑定的变量）全部进这个对象；规则集按核心抽象第 6 节是编译期给定的值，变换从交来的规则集里按根算子编号取规则，不按名字查族、不读语法树。本步只做"不读语法树"；变换骨架的重组属于后面的变换一步。
 **完成**：内核与 `modules/` 下没有任何文件包含 `parse/ast/` 的头文件；求导、转置、批处理的全部用例读数不变。
+**已验收**（作者 `f0756385f`）。完成标志可数：`git grep -l 'parse/ast/' -- include/camel/core modules` 无输出
+（基线 8 个文件，其中 6 处是包含、2 处是注释提及，注释也一并改写）。规则头由 `camel::core::collectRuleHead`
+（`src/core/rule_index.cpp:34`）填进 `camel::core::RuleObject`（`include/camel/core/rule_index.h:48`），五事实
+各是一个成员；`forward.h` 改为包含 `camel/core/rule_index.h`。差分 `output_differ=0 graph_differ=0`。
+**留给变换一步的三处**（作者同上，进变换一步的施工计划，不在 0.4 返工）：
+1. 索引是全局的、按族名与算子拼写取规则；核心抽象第 6 节要的是显式交来的规则集值、按根算子编号取。
+2. `condition` 与 `parameterTypes` 曾存源码文字、判重靠比字符串（类型的第二份真相）。`parameterTypes`
+   已编译化并留两条用例各钉一个错误方向（`87a8b5749`）；`condition` 无读者，已从 `RuleObject` 删掉
+   （作者 `4d85c528c`，`1ee54d446`），随统一规则值回到匹配处。
+3. `RuleObject` 与重写模块的规则值是两样东西，要不要合成一个由变换一步定。**作者已答**：一条规则就是
+   一个值；`RuleObject` 加全局索引是过渡形态，**不再加字段、不再改键**，第 1 项不在它上面做
+   （`docs/handover/questions/2026-11-22-one-rule-value-or-two.md`）。
 
 ## 0.5 搬家脚本与违例清单（结构车道）
 
