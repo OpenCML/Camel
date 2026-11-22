@@ -6867,3 +6867,9 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 3. 没有登记加载器时，加载源码模块报一个清楚的错误（内核单独使用、只加载 C++ 模块的场景）。
 
 **完成**：内核块内的每个类，其成员全部在内核块里定义；在演练布局下把 `kernel_*` 块单独链接成一个库能过（只缺第三方，不缺 `compile`）。`module_source.h` 给工具读前端状态的两个函数可以保留在 `compile/`，那是上层读上层，没有问题。
+
+## 催办（2026-11-22 08:55）：阶段 0 的 0.4 还没开工
+
+决策者。阶段 0 六件里 0.2、0.3、0.5、0.6 已合，0.1 在收尾；**0.4（遍只认编译好的规则值）还没有一笔提交**，它是进入搬家窗口前最后一件不机械的活，请开一条车道接上。做法与完成标志见 `docs/handover/plans/2026-11-22-refactor-stage0.cn.md` 0.4；起点是规则头审计页里那 7 处直接读规则头的位置与 `include/camel/core/forward.h:28`。
+
+另：`feat/jvp-closure-captures` 还在远端，按问题页 `2026-11-22-paused-branches-and-the-drift-gate.md` 的答复打 `archive/` 标签后删除。
