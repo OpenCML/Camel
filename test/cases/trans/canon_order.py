@@ -3,7 +3,7 @@
 
 """Canonical order: the numbering is the graph's, not the spelling's.
 
-Five readings, each named after the rule it belongs to (docs/design-principles.cn.md 9, "the
+Six readings, each named after the rule it belongs to (docs/design-principles.cn.md 9, "the
 graph interface does not see the spelling"):
 
   `order`  two programs that differ only in the order two values were captured in -- which is also
@@ -36,6 +36,22 @@ graph interface does not see the spelling"):
            wide is reported by `camel inspect --ties`, not arranged in the order the source wrote it
            in. Both are read here: the swapped capture order writes one document, and the report has
            no part left over the limit.
+
+  `same`   the same eight captures, but of ONE type and one value, so the key leaves the whole group
+           equal and the tie is wider than the limit: nothing the key says tells the members apart,
+           and only the shape of what reads them does. The two writings declare the eight cells in
+           the opposite order and read them in the opposite order, so the order the nodes were
+           created in, and the order the closure captured them in, are both the opposite
+           arrangement. The numbering must still be the graph's: every node's number, read as the
+           `id` the document gives it next to its `label`, must be the same in both writings, and
+           the report must not call any part of the tie a known limitation.
+           This one is read for less than it looks: the eight cells are interchangeable to every
+           reader the document records -- they are one node each, made from one constant, all
+           reaching the same binder -- so an arrangement of them moves no number the document can
+           print, and both writings wrote one document before the walk read the shape too. What was
+           wrong was the walk's claim: it presented the order it met them in as the settled
+           structural order. That claim is what the report is checked for here, because it is the
+           only place such a part can be seen at all.
 
 `--camel` names the install under test (the gate passes `${camel}`). `--probe` prints the document
 it reads and exits 1: it is how this case is debugged by hand, and the plan never uses it.
@@ -205,6 +221,67 @@ func main(): int sync {
         let q = b
         let p = a
         return u + p + t
+    }
+    return read(0)
+}
+"""
+
+
+# Eight captured values of ONE type, all made from the same constant: the keys of the eight cells
+# agree down to the type and the value they hold, so the whole capture tie is one equal-key part
+# wider than kMaxTieWidth and the node key cannot tell a single member of it from another. What does
+# tell them apart is the shape of what uses them -- the port of the closure each one is bound to, and
+# the constant that port's reader adds -- and that shape is in the graph, not in the source's order.
+# The second writing declares the eight cells in the opposite order and reads them in the opposite
+# order, so both the order the cells were created in and the order the closure captured them in are
+# reversed; the values are all 1 and every `let` is pure, so it is the same program. A numbering that
+# fell back to either order would number the two writings differently while neither of them is a
+# different graph.
+WIDE_SAME_AB = """
+func main(): int sync {
+    var a = 1
+    var b = 1
+    var c = 1
+    var d = 1
+    var e = 1
+    var f = 1
+    var g = 1
+    var h = 1
+    let read = (u: int): int => {
+        let p = a + 1
+        let q = b + 2
+        let r = c + 3
+        let s = d + 4
+        let t = e + 5
+        let w = f + 6
+        let x = g + 7
+        let y = h + 8
+        return u + p + q + r + s + t + w + x + y
+    }
+    return read(0)
+}
+"""
+
+WIDE_SAME_BA = """
+func main(): int sync {
+    var h = 1
+    var g = 1
+    var f = 1
+    var e = 1
+    var d = 1
+    var c = 1
+    var b = 1
+    var a = 1
+    let read = (u: int): int => {
+        let y = h + 8
+        let x = g + 7
+        let w = f + 6
+        let t = e + 5
+        let s = d + 4
+        let r = c + 3
+        let q = b + 2
+        let p = a + 1
+        return u + p + q + r + s + t + w + x + y
     }
     return read(0)
 }
@@ -525,14 +602,9 @@ def read_run(camel, workdir):
     return "std::nvm printed '1 2', exit 0"
 
 
-def canonical_documents(camel, workdir, left_name, left, right_name, right):
-    """The two programs' canonical (`canonical=true`) documents, compared byte for byte."""
-    first, proc = jgir(camel, workdir, left_name, left, ("std::jgir", "canonical=true"))
-    if first is None:
-        raise AssertionError(f"{left_name} did not compile: {proc.stderr[:2000]}")
-    second, proc = jgir(camel, workdir, right_name, right, ("std::jgir", "canonical=true"))
-    if second is None:
-        raise AssertionError(f"{right_name} did not compile: {proc.stderr[:2000]}")
+def canonical_text_lines(first, second, left_name, right_name):
+    """Two documents compared line by line with the source positions taken out, returning the line
+    count; the first line that moved is named when they differ."""
     left_lines = document_text(first).splitlines()
     right_lines = document_text(second).splitlines()
     for index, (a, b) in enumerate(zip(left_lines, right_lines)):
@@ -548,7 +620,18 @@ def canonical_documents(camel, workdir, left_name, left, right_name, right):
             f"{left_name} and {right_name} wrote canonical documents of different lengths "
             f"({len(left_lines)} and {len(right_lines)} lines)"
         )
-    return first, len(left_lines)
+    return len(left_lines)
+
+
+def canonical_documents(camel, workdir, left_name, left, right_name, right):
+    """The two programs' canonical (`canonical=true`) documents, compared byte for byte."""
+    first, proc = jgir(camel, workdir, left_name, left, ("std::jgir", "canonical=true"))
+    if first is None:
+        raise AssertionError(f"{left_name} did not compile: {proc.stderr[:2000]}")
+    second, proc = jgir(camel, workdir, right_name, right, ("std::jgir", "canonical=true"))
+    if second is None:
+        raise AssertionError(f"{right_name} did not compile: {proc.stderr[:2000]}")
+    return first, canonical_text_lines(first, second, left_name, right_name)
 
 
 def tie_report(camel, workdir, name, text):
@@ -607,6 +690,80 @@ def read_wide(camel, workdir):
     )
 
 
+def numbering_of(document):
+    """Each graph's nodes as `(id, label)`, in the document's order: the number the document gives a
+    node next to the node it gives it to. This is the reading the rule is about -- which number a
+    node has -- and not a count of nodes or a byte total, both of which can agree while the numbers
+    moved."""
+    graphs = []
+    for graph in document["graphs"]:
+        graphs.append(
+            (
+                graph["name"],
+                [(node["id"], node.get("label")) for node in graph["nodes"]],
+            )
+        )
+    return graphs
+
+
+def read_wide_same(camel, workdir):
+    """Reading 6: a tie wider than the limit is still the graph's, not the source's order."""
+    first, proc = jgir(camel, workdir, "wide_same_ab.cml", WIDE_SAME_AB)
+    if first is None:
+        raise AssertionError(f"wide_same_ab.cml did not compile: {proc.stderr[:2000]}")
+    second, proc = jgir(camel, workdir, "wide_same_ba.cml", WIDE_SAME_BA)
+    if second is None:
+        raise AssertionError(f"wide_same_ba.cml did not compile: {proc.stderr[:2000]}")
+    report, summary = tie_report(camel, workdir, "wide_same_ab.cml", WIDE_SAME_AB)
+    # The reading is only about the case under test when the program really reaches it: a group of
+    # eight nodes the key leaves equal, which the limit keeps from being enumerated. This is what
+    # says the eight cells were one tie at all, rather than eight groups of one.
+    if "equal keys 8" not in report:
+        raise AssertionError(
+            "the eight same-type captures did not form one equal-key part of width 8, so this "
+            f"reading says nothing about a wide tie:\n{report[:2000]}"
+        )
+    # And the numbering must be the graph's: a part this program leaves for the walk's own order is
+    # a part whose numbers the graph did not decide, which is what this reading forbids even when
+    # the two writings happen to agree. The eight cells are told apart by the port of the closure
+    # each one is bound to -- the binding is in the graph -- so nothing here needs the source's
+    # order. Before the walk read the shape, this program's report called the part `a known
+    # limitation` and left it in the order the nodes were created in.
+    for phrase in ("known limitation", "unresolved"):
+        if phrase in report:
+            raise AssertionError(
+                f"the wide tie is still called '{phrase}': a part of it was left to the order the "
+                "nodes were created in, though the eight cells differ in the port of the closure "
+                f"each one is bound to, which is the graph's to read:\n{report[:2000]}"
+            )
+    # The criterion: the same number for the same node, node by node, in both writings.
+    left, right = numbering_of(first), numbering_of(second)
+    moved = []
+    for (name_a, nodes_a), (name_b, nodes_b) in zip(left, right):
+        if nodes_a == nodes_b:
+            continue
+        moved.append(f"graph {name_a} / {name_b}:")
+        for index in range(min(len(nodes_a), len(nodes_b))):
+            if nodes_a[index] != nodes_b[index]:
+                moved.append(
+                    f"  {index}: a-then-b {nodes_a[index][0]} {nodes_a[index][1]!r}"
+                    f" | b-then-a {nodes_b[index][0]} {nodes_b[index][1]!r}"
+                )
+    if moved:
+        raise AssertionError(
+            "the two declaration orders numbered the same graph differently "
+            f"({len(first['graphs'])} graphs, {len(moved)} line(s) moved):\n"
+            + "\n".join(moved[:40])
+        )
+    # And the stronger reading: nothing else moved either, once the positions are compared out.
+    lines = canonical_text_lines(first, second, "wide_same_ab.cml", "wide_same_ba.cml")
+    return (
+        f"eight captures of one type, declaration order swapped: one canonical document "
+        f"({lines} lines), the same number for every node in both writings; "
+        f"inspect --ties: {summary.strip()}"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--camel", required=True, help="the compiler of the build under test")
@@ -631,6 +788,7 @@ def main():
         readings.append("run: " + read_run(args.camel, workdir))
         readings.append("program: " + read_program(args.camel, workdir))
         readings.append("wide: " + read_wide(args.camel, workdir))
+        readings.append("same: " + read_wide_same(args.camel, workdir))
     print("canonical order: PASS")
     for reading in readings:
         print(f"  {reading}")

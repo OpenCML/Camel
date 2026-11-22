@@ -44,11 +44,15 @@
  *    key, and only the part the key leaves equal -- the nodes that are the same thing, down to the
  *    numbers their ports carry and the type of the value they make -- is enumerated. The cost is
  *    linear in the graph's size when nothing is tied and exponential only in the width of that
- *    equal-key part, which the enumeration limit kMaxTieWidth bounds: a wider part is not
- *    enumerated, and it is not silently arranged in the order the nodes came in either -- it is
- *    cut once more by what each node writes on its own (its own fragment table, and the numbers of
- *    the nodes that read it), and a part that is still equal at that point is reported by
- *    CanonicalProgram::ties() (`camel inspect --ties`) as a known limitation, with its width.
+ *    equal-key part, which the enumeration limit kMaxTieWidth bounds. A wider part is not
+ *    enumerated, and it is not arranged in the order the nodes came in either: it is cut by what
+ *    each node writes on its own (its own fragment table, and the numbers of the nodes that read
+ *    it), and then by the shape it has in the graph -- the class of the node among the nodes it
+ *    reads and the nodes that read it, refined round after round until no class splits, and the
+ *    port of the graph it binds that a captured value is passed to. A part those cuts leave equal
+ *    is reported by CanonicalProgram::ties() (`camel inspect --ties`) as a part the graph does not
+ *    separate, and it is the only place where the numbering reads the order the nodes were created
+ *    in -- which is why it is reported rather than passed off as a compared minimum.
  *
  *  - A node the walk does not reach is a *section* of the order, and the section is the whole of
  *    what this answer says about one. What it says is: after everything the walk reaches, one
@@ -91,16 +95,19 @@
 namespace camel::runtime {
 
 /// A tie part wider than this is not enumerated: the arrangements of a part that wide are not
-/// compared one by one (6! is 720). Such a part is cut by the nodes' own fragments first, and what
-/// stays equal is reported by CanonicalProgram::ties() instead of being arranged silently.
+/// compared one by one (6! is 720). Such a part is cut by the nodes' own fragments and then by the
+/// shape each node has in the graph, so the order it is given does not come from the order the
+/// nodes were created in; a part those cuts leave equal is reported by CanonicalProgram::ties().
 inline constexpr size_t kMaxTieWidth = 6;
 
 /// One tie the walk met while numbering a graph: how many nodes the ports left unordered, how much
-/// of that the node key left equal, and whether that equal part was enumerated.
+/// of that the node key left equal, whether that equal part was enumerated, and how wide a part the
+/// structure left equal (the part whose numbers are not decided by the graph).
 struct CanonicalTie {
     const GCGraph *graph       = nullptr;
     size_t width               = 0; // nodes the ports left unordered
     size_t equalKeyWidth       = 0; // the widest part of it the node key left equal
+    size_t unresolvedWidth     = 0; // the widest part of that the graph did not separate
     bool enumerated            = false;
 };
 
