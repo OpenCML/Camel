@@ -54,13 +54,15 @@ tags = ["feat", "opt", "effects", "commit-checks"]
 #                              added none. The check is now read where a rewrite reaches it, on a
 #                              spliced write in a graph whose type declares nothing -- which is the
 #                              defect `test::fold_function_type` leaves behind, reached by the door a
-#                              rewrite uses. The type-replacement reading moved to `commit_refusal.retier`,
-#                              where it is the "adds nothing, so nothing is asked" half of ③.
+#                              rewrite uses. The type-replacement reading moved to
+#                              `commit_refusal.narrowed_signature`, where it is the other side of the
+#                              same comparison (see the note on that case: the side moved, so the
+#                              commit is asked).
 #   `commit_refusal.legal_splice`  kept as it was: the positive half that says the refusals above are
 #                              about the defect and not about the pass being named.
 #
 # The four readings the rework adds are `commit_refusal.exit_region` (①), `commit_refusal.cycle` (②),
-# `commit_refusal.retier` (③) and `commit_refusal.ancestor_region` (④).
+# `commit_refusal.narrowed_signature` (③) and `commit_refusal.ancestor_region` (④).
 #
 # The two readings of the six that the review of 2026-10-29 lists last are `commit_refusal.sibling_arm`
 # and `commit_refusal.loop_body_read` (a read across regions), the sixth is `commit_refusal.port_type`
@@ -115,7 +117,7 @@ desc = "A splice of the same write, ordered after the write the program already 
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_legal_splice", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["commit_legal_splice: the draft splices a write to stdout ordered after the write that was already there", "so the commit asks the effect and order checks in every build", "writes stdout at node", ", ordered after it", "commit_legal_splice: the commit published it, and nothing was refused"]
 
 # 乙's other side, on a splice the check really has nothing to say about: two *reads* of one ambient
@@ -143,24 +145,25 @@ expect_stdout_contains = ["7"]
 
 # ③, the tier itself, as two drafts read under both answers the one build cell can hold. The first
 # draft adds an access and is refused with the cell off; the second adds no node at all and is
-# published with the cell on. Under the ruling of 2026-11-16 the first line would have read
-# `published` and the second `refused` -- the tier followed the cell; here neither moves.
+# refused with the cell on. Under the earlier tier the second line read `published`: the record said
+# the draft added nothing, and the commit asked nothing. It was the weak reading of containment --
+# the comparison has two sides, the body and the clause, and a commit that republishes a graph under
+# a narrower type changed the second one. The body did not move and the access was already there, yet
+# the graph now declares less than its body reaches. So the change is one the check must see: any
+# change of the clause asks the effect question, and a narrowed clause is refused where the body
+# already stands outside it. The refusal names the access and says which side changed, with the
+# clause it declared before and the one it declares now.
 #
-# The second draft is the type replacement the old `commit_refusal.effect` read: `announced` takes
-# `doubled`'s type and keeps its printing body. No node is made, so no access is added, so the commit
-# is not asked -- and it publishes a graph whose body reaches past the type it just published. That
-# is the reading, and it is why the containment reading above moved to a splice: under ③ a commit
-# answers for what a draft *adds*, and a type replacement adds nothing. What still refuses the
-# uncontained program is the pass boundary (`opt.commit_checks`), which is a different question
-# asked at a different place -- the pass's own return, not the commit.
+# This case changed under that reading. It is not "made to pass": the old expectation was the weak
+# reading, and the refusal is what the principle asks for.
 [[tests]]
-name = "commit_refusal.retier"
-desc = "Two drafts and the one build cell: the draft that adds an access is refused with the cell off, the draft that adds none is published with the cell on, and the tier follows the draft and not the build."
+name = "commit_refusal.narrowed_signature"
+desc = "Two drafts and the one build cell: the draft that adds an access is refused with the cell off, the draft that only narrows the graph's type is refused with the cell on, and the refusal names the access and the clause that changed."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_tier", "std::nvm"]
-expect_exit = 48
-expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_tier: cell=0, refused, check=order", "the tier is the draft's, not the build's", "commit_tier: cell=1, draft adds no access", "commit_tier: cell=1, published, and nothing was asked", "the tier is the draft's, not the build's", "cell=0 add-an-access -> refused=1, cell=1 adds-nothing -> published=1", "the same two drafts answer the same under both builds"]
+expect_exit = 54
+expect_stdout_contains = ["commit_tier: cell=0, draft adds an access", "commit_tier: cell=0, refused, check=order", "the tier is the draft's, not the build's", "commit_tier: cell=1, draft adds no access", "commit_tier: cell=1, refused, check=effect", "the signature moved and the body was read against the new one", "makes an access the type does not cover", "write stdout", "the graph's signature changed at this commit", "and now declares nothing", "cell=0 add-an-access -> refused=1, cell=1 narrows-the-signature -> refused=1", "the tier is the draft's, and the signature is the other side of the same comparison"]
 
 # ①, refused, in the seal and in every build. The exit is moved onto a node of one arm -- the shape
 # the calculus's counter-example lands in (`f(b) = let y = if b then {not(b)} else {false}; not(y)`,
@@ -187,7 +190,7 @@ desc = "A draft leaves one node reading itself: the commit refuses the graph as 
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::commit_cycle", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["commit_cycle: the draft's input setters do not look for a cycle, the commit does", "now reads itself", "commit_cycle: refused at the commit:", "breaks its edge invariants", "lies on a cycle of inputs"]
 
 # ④, refused. The write is spliced into one arm, ordered against nothing; the body already writes
@@ -214,7 +217,7 @@ expect_output_contains = ["commit_ancestor: the regions a commit answers for are
 # value, with the branch's JOIN reading the copy where the first arm's own value stood, so the read
 # sits on the edge the arm ends at and nothing can be dead about it.
 #
-# Both halves are one run, the way `commit_refusal.retier` reads two drafts in one: the copy across
+# Both halves are one run, the way `commit_refusal.narrowed_signature` reads two drafts in one: the copy across
 # the arms is refused at the commit, naming the node it reads and the two arms; the same copy reading
 # a value of the arm it sits in is published, and the program runs to its own value. Without the
 # second half, "it was refused" would mean only "a copy is always refused", which is a reading of
@@ -302,6 +305,26 @@ expect_stdout_contains = ["commit_port_type: a graph publishes one statement abo
 #
 # Neither draft touches the fixture: what `std::nvm` runs afterwards is `port_type.cml`, so the two
 # graphs never execute and their being well-formed elsewhere is not this reading's question.
+# The same door, read for the check that used to have no reader there at all. A graph a transaction
+# makes has no version the program held and no draft that recorded an edit of it, so the commit's
+# list of "nodes the draft made or changed" was empty and both questions were skipped -- a new graph
+# is exactly where two conflicting writes can stand in one body with nothing explaining their order,
+# and nothing asked. Every node of a made graph is one this transaction put there, so the whole graph
+# is the region the commit answers for.
+#
+# The negative half is a made graph with two writes to stdout and nothing between them: the commit
+# must refuse the pair, naming both nodes and the resource. The positive half is the same graph with
+# an edge from the first write to the second, published: without it, "it was refused" would only mean
+# "a made graph is always refused". Neither graph is held by the program or reached by it.
+[[tests]]
+name = "commit_refusal.made_graph_order"
+desc = "Two graphs a transaction makes with two writes to the console in the body: the one with nothing ordering the two writes is refused at the commit, naming both nodes and the resource, and the one with an edge between them is published."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/port_type.cml"
+args = ["${case}", "test::commit_made_order", "std::nvm"]
+expect_exit = 42
+expect_stdout_contains = ["commit_made_order: a made graph has no version the program held", "made graph 'made$unordered' writes stdout twice and nothing orders the two", "commit_made_order: refused, check=order", "has no order against", "write stdout", "made graph 'made$ordered' writes stdout twice with the second waiting for the first", "the same graph with the two ordered -- published", "made graph, two writes unordered -> refused=1, the same two ordered -> published=1"]
+
 [[tests]]
 name = "commit_refusal.made_graph_port_type"
 desc = "Two graphs a transaction makes out of nothing, handed to the session as made: the one whose port node carries another type than its own signature declares is refused, naming the parameter, and the one whose port agrees is published."
@@ -319,5 +342,5 @@ desc = "A call site retyped twice through materializeStaticValue carries the sec
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/fold_function_type.cml"
 args = ["${case}", "test::value_retype_twice", "std::nvm"]
-expect_exit = 48
+expect_exit = 54
 expect_stdout_contains = ["value_retype_twice: graph '__root__' names 'main'", "the two clauses differ: yes", "first uses var stdout, second uses var stdout, var retype_twice", "value_retype_twice: the encode says uses var stdout, var retype_twice"]
