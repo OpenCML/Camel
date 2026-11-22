@@ -663,6 +663,34 @@ void arrayConvertVjp(VjpBuilder &b, const VjpCall &call) {
 void dtofVjp(VjpBuilder &b, const VjpCall &call) { convertVjp<F64>(b, call, ":op/ftod"); }
 void ftodVjp(VjpBuilder &b, const VjpCall &call) { convertVjp<F32>(b, call, ":op/dtof"); }
 
+// The conversion the operator `:op/cast` performs. The value it makes has the type the node is
+// declared with, so the way back is the same operator with the input's own type: a conversion
+// between two spellings of one tensor (`f32[2, 3]` and `f32[?, 3]`) checks the value and changes
+// nothing, which is what makes the result's gradient the input's gradient; a conversion into a
+// value that has no tangent (an integer, a name) has no gradient to give back, and the input is
+// not active, so no gradient ever reaches this rule through it (design principles 9.9).
+void castVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 1);
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    Type *const back = b.nodeType(call.inputs[0]);
+    if (back == nullptr) {
+        return;
+    }
+    const type::ArrayType *array =
+        back->code() == TypeCode::Array ? tt::as_ptr<const type::ArrayType>(back) : nullptr;
+    const bool floating =
+        type::isFloatingScalar(back->code()) ||
+        (array != nullptr && type::isFloatingScalar(array->elemTypeCode()));
+    if (!floating) {
+        return;
+    }
+    const std::array<vjp_node_t, 1> inputs{*dy};
+    b.accumulateGradient(call.inputs[0], b.addOper(back, ":op/cast", inputs));
+}
+
 template <typename F> void registerFloatRules(DerivativeRegistry &registry) {
     registry.setRule(F::add, addVjp<F>);
     registry.setRule(F::sub, subVjp<F>);
@@ -699,6 +727,10 @@ void registerBuiltinDerivatives() {
          {":op/atoi", ":op/atol", ":op/atof", ":op/atod", ":op/atobf", ":op/atof6"}) {
         registry.setRule(uri, arrayConvertVjp);
     }
+    // A conversion between two tensor types is one operator now, not a node kind, and the four
+    // float-width rules above are the same conversion written narrower: the rule reads the input's
+    // type for the way back instead of being filed under a URI per pair of widths.
+    registry.setRule(":op/cast", castVjp);
     registry.setRule(":op/idx_arr", idxArrayVjp);
     // `t[idx]` takes whole slabs along the axis it names, so its adjoint scatters them back into
     // the array's gradient along the same axis.
