@@ -25,7 +25,7 @@
  *   onnx_outputs = "output"
  *
  * Usage:
- *   node exemplars/check.mjs [--update] [exemplar ...]   (a directory, or a name under exemplars/)
+ *   node internal/exemplars/check.mjs [--update] [exemplar ...]   (a directory, or a name under internal/exemplars/)
  * --update rewrites the expected stdout files and run.log from the current
  * build (review the diff); without it the exemplars are checked. Exits 1 when
  * a check fails.
@@ -36,10 +36,12 @@ import os from 'os'
 import path from 'path'
 import url from 'url'
 import { spawnSync } from 'child_process'
-import { applyNormalizers } from '../test/tools/normalizers.mjs'
+import { applyNormalizers } from '../../test/tools/normalizers.mjs'
 
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
-const REPO_ROOT = path.dirname(HERE)
+// The checker sits two levels below the repository root (`internal/exemplars/`), so the root is the
+// grandparent of this file: the goldens' `srcfile` is a path relative to it.
+const REPO_ROOT = path.dirname(path.dirname(HERE))
 const { parseTomlFile } = await import(url.pathToFileURL(path.join(REPO_ROOT, 'test/tools/toml-lite.mjs')).href)
 const { readOnnxModel } = await import(
     url.pathToFileURL(path.join(REPO_ROOT, 'test/cases/modules/onnx/onnx_ops.mjs')).href

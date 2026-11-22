@@ -1,6 +1,6 @@
 """Checks the effect trace written by `std::profile effect_trace=...`.
 
-  order   exemplars/05_effect_order runs under NodeVM, FastVM and inline + NodeVM; the three
+  order   internal/exemplars/05_effect_order runs under NodeVM, FastVM and inline + NodeVM; the three
           traces are identical line by line once `seq` is dropped, every line names an
           effectful operator with a source origin, and stdout is the same.
   stage   a macro function with a println in its body: the println is traced with stage
@@ -86,7 +86,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as t:
         trace = Path(t) / "trace.jsonl"
         if mode == "order":
-            program = REPO_ROOT / "exemplars" / "05_effect_order" / "program.cml"
+            program = REPO_ROOT / "internal" / "exemplars" / "05_effect_order" / "program.cml"
             pipelines = {"nvm": ["std::nvm"], "fvm": ["std::fvm"], "inline+nvm": ["std::cxx::inline", "std::nvm"]}
             results = {name: run(program, passes, trace) for name, passes in pipelines.items()}
             ref_code, ref_out, ref_lines = results["nvm"]
