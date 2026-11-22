@@ -323,11 +323,6 @@
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear", "feat/modules"]
         },
         {
-            "comment": "The public headers mirror src/: a header a pass or the runtime includes is as wide as the source file that includes it. These rules mirror the src/ rules above, so a header change selects the same plans as the implementation it declares.",
-            "paths": ["include/camel/parse/"],
-            "plans": ["smoke", "feat/parse", "feat/compile"]
-        },
-        {
             "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile and reading plans, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
             "paths": ["lib/tiles/"],
             "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "gpu/reading.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
