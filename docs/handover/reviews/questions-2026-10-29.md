@@ -7099,3 +7099,20 @@ CI `45001457388` 五腿全绿：`linux` / `linux-x64-nojit` / `ASan + UBSan` / `
 | 合并位 | 根目录整理（`editors/`、`signatures/`、`pypi/`→`packaging/`、`promo/ exemplars/ ROADMAP.md REPRODUCE.md`→`internal/`、`logo.png`、`export_matrix.*`、`hello.cml`、`CHANGELOG.md`）未做 | — |
 
 请每条车道回一行：在做哪一项、分支名、预计第一笔什么时候合。车道分支在本地不推远端也可以，但回报要写进车道表，否则我看不出车道是否开满。
+
+## 派工（2026-11-22 23:35）：车道开到八条
+
+决策者。现在只有三条车道在动，按总方案要开 6–8 条。阶段 2 余下的活加上阶段 3 里不依赖换实现的两块（提前开），正好八条，按目录互不相交：
+
+| # | 车道 | 做什么 | 目录 |
+|---|---|---|---|
+| 1 | 图·读 | 2.1 第一批迁移：`GraphRead` 12 个使用者迁到视图并删掉它；`LoopView`/`LoopDraftView`、`decidingRegionOf` 两对合一；`ControlRegions`、`NodeRoleRegistry` 接受视图；一致性检验进快层 | `src/kernel/graph`、`src/kernel/runtime` 的视图读者 |
+| 2 | 图·写 | 阶段 3b 提前：在现有表示上立编辑会话的两个入口（编辑算子与底层原语），记编辑种类与碰过的区域、通知监听者，发布按编辑记录分档检查（计划 `2026-11-22-refactor-stage3-graph-storage.cn.md` 3b） | `src/kernel/graph` 的编辑部分（与 1 分文件） |
+| 3 | 算子与事实 | 阶段 3b 提前：五样分析（效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取）挪进事实框架，原缓存删除；33 处绕过事实层的纯度判断改问事实 | `src/kernel/facts`、`src/kernel/ops` |
+| 4 | 前端 | 2.3：转换、构造、取成员三个普通算子在 `src/stdlib` 声明，前端改为生成 OPER | `src/compile`、`src/parse`、`src/stdlib/*.cml` 里这三个声明 |
+| 5 | 执行 | 2.3：后端与运行时里按 Cast/Fill/Accs 种类分支的读者改问算子 | `src/stdlib/std/{nvm,fvm,prl,cpp,exec}` |
+| 6 | 变换与重写 | 2.3：变换、重写、优化里同样的读者；接着阶段 3a 把自己目录里读冻结图/草稿的地方改读视图 | `src/stdlib/{transforms,autodiff,rewrite}`、`src/kernel/rewrite`、`src/stdlib/std/cxx/opt` |
+| 7 | panic | 余下 96 项写 `panic`（C++ 侧同步填）；全部写完后 `graph.cpp` 改读记录，表一项不变 | `src/stdlib` 各模块的声明与登记处 |
+| 8 | 合并位 | 合并、本地闸门、每天一轮 Actions；根目录整理余下各项 | 公共文件、根目录 |
+
+4、5、6 三条都碰 Cast/Fill/Accs，但各在自己目录；最后一个读者迁走的那次合并里删掉这三个种类，由合并位做。每条车道在车道表里写一行：分支名、在做哪一项、下一笔预计何时合。
