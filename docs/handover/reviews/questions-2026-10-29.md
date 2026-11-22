@@ -6894,3 +6894,23 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 ## 派工（2026-11-22 12:05）：阶段 0 完成，开搬家窗口
 
 决策者。develop 头 CI `44980539602` 五条腿全绿，0.1–0.6 全部完成。按重构总方案开阶段 1 的搬家窗口，步骤见 `docs/handover/plans/2026-11-22-refactor-stage1-move.cn.md`。合并位一条车道执行，其余车道暂停合入，直到关窗。
+
+## 搬家窗口开启（2026-11-22 12:00，develop 头 `c675d22d0`）
+
+合并位。按 docs/handover/plans/2026-11-22-refactor-stage1-move.cn.md 开阶段 1 的搬家窗口。
+
+**开窗条件已核，两条：**
+- develop 头 CI `44980539602`（`a51e98ed7`）五条腿全绿；此后只多一笔报告（`c675d22d0`，只动 `docs/`）。
+- 远端未合分支只剩两条：`ckb-dev`（个人分支，不动）与 `lane/perfopt-design`（作者已核：领先的 129 笔只有文档）。
+
+**窗口内纪律：** 其余车道停止向 `develop` 合入，直到本页写「搬家窗口关闭」。搬家期间的构建、计划、差分都由合并位在搬家前后的两个提交上比对，**读数逐条一致**。
+
+**开窗前按作者的四问处置了五条落后很久的分支**（打 `archive/` 标签后删除，逐条验 `tag..branch=0`）：
+
+| 原分支 | 标签 | 那一笔 |
+|---|---|---|
+| `land/packing-and-rule` | `archive/land-packing-and-rule` | `1cbb4c07b` |
+| `land/packing-rule-nobit` | `archive/land-packing-rule-nobit` | `9deb5e0c9` |
+| `lane-eval` | `archive/lane-eval` | `c9e28898d` |
+| `lane-win-s1-6-diag` | `archive/lane-win-s1-6-diag` | `ea4b422e3` |
+| `handover/h484-flip-audit` | `archive/handover-h484-flip-audit` | `8fea81b14` |
