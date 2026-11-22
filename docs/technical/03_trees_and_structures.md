@@ -25,7 +25,7 @@
 
 ### 2.1 角色与来源
 
-- **CST** 由手写的解析器（`src/parse/syntax/`）直接产生：一棵平铺存储的无损语法树，节点种类见 `include/camel/parse/syntax/node_kinds.def`（[34_handwritten_parser.md](34_handwritten_parser.md)）。
+- **CST** 由手写的解析器（`parse/src/syntax/`）直接产生：一棵平铺存储的无损语法树，节点种类见 `parse/include/camel/parse/syntax/node_kinds.def`（[34_handwritten_parser.md](34_handwritten_parser.md)）。
 - 保留**语法规则与词法单元**：括号、关键字、运算符的层次与顺序，与源码一一对应，便于错误定位和格式化。
 
 ### 2.2 顶层结构
@@ -184,7 +184,7 @@ GIR Builder 在 `visitCastNode` 中递归访问子节点 0、创建 `CastNode`�
 
 ### 4.7 表示：`gct::Tree` 与 32 字节的节点
 
-一个模块的 GCT 由一个 `gct::Tree`（`include/camel/compile/gct/tree.h`）持有，节点只能由它的 `make*` 函数创建，读取一律经过 `gct::Node`（`node.h`）的访问器（`name()`、`data()`、`dataType()`、`argCount()`、`caseType()` ……，每个访问器断言节点种类）。
+一个模块的 GCT 由一个 `gct::Tree`（`compile/include/camel/compile/gct/tree.h`）持有，节点只能由它的 `make*` 函数创建，读取一律经过 `gct::Node`（`node.h`）的访问器（`name()`、`data()`、`dataType()`、`argCount()`、`caseType()` ……，每个访问器断言节点种类）。
 
 - **节点**：32 字节、无虚函数、无析构：种类（1 字节）、种类专用的标志与小枚举（3 字节）、子节点数（4）、origin（8）、子节点指针数组（8）、一个载荷字（8：常量、类型、名字、数字或导出名列表之一）。
 - **内存**：节点、子节点数组与导出名列表从树的 arena 顺序分配（16 KiB 的块，按块大小对齐，块头记着所属的树，故 `*parent << child` 无需传入树），树销毁时整块释放；名字在树内驻留一次，节点只存指针；`DATA` 节点指向树保存的 `shared_ptr` 常量。

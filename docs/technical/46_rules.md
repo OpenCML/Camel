@@ -73,7 +73,7 @@ as an internal error at every match. The hidden node parameter exists whether th
 `node_of(c)` or not -- what the declaration must do is use the parameter on the left, as in
 `x * c`.
 
-`__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
+`__rule` and `__rule_when` are operators of the module `rewrite` (`lib/rewrite/`), which the
 declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type
 `Rule`): the name, the direction, the permissions the rule needs, a bit per `const` parameter and
 the function values. The rule is a value, so it can be held in a variable, passed to and returned
@@ -160,7 +160,7 @@ it needs from a rule object before the next allocation; a condition still runs t
 
 ### 3.1 Scheduling, and what an application costs
 
-The scheduling combinators are ordinary Camel functions in `stdlib/rules.cml`, over stages (a
+The scheduling combinators are ordinary Camel functions in `lib/rules/rules.cml`, over stages (a
 stage is a `Rule[]` applied by `run` to a fixpoint). The rule sets and the choices are `with`
 parameters, so they are written in the angle brackets of the call:
 
@@ -181,7 +181,7 @@ drops a match: a stage that applies nothing leaves the count at zero.
 
 `p->run<rules, rounds: 8, strict: true>` is the same engine with the round budget explicit and the
 cost kept in a `Run` value: the rule array is the ordinary argument and the three settings are
-`with` parameters, each with a default, so `p->run<rules>` is the whole call for the common case. `Run` is a plain Camel struct declared in `stdlib/rewrite.cml`; the native
+`with` parameters, each with a default, so `p->run<rules>` is the whole call for the common case. `Run` is a plain Camel struct declared in `lib/rewrite/rewrite.cml`; the native
 kernel fills its eight fields in that order, so a field is read as `r.rewrites` and the program is
 `r.result`. `seconds` is the wall time of one application: compiling the rules, matching,
 rewriting the graphs and the commit; it is measured in the kernel with
@@ -299,7 +299,7 @@ reports `never fired`.
 
 ## 5. The standard rules
 
-`stdlib/rules.cml` (`import ... from rules`) holds the laws that hold bit for bit: for the
+`lib/rules/rules.cml` (`import ... from rules`) holds the laws that hold bit for bit: for the
 integers (wrapping arithmetic) the neutral elements, `x * 0`, `x - x`, double negation, folding
 of constants, commutation, association and distribution; for the floats the ones rounding does
 not touch (`x * 1.0`, `x + -0.0`, `x - 0.0`, `x / 1.0`, double negation, commutation). Two passes:
@@ -421,7 +421,7 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
 ## Invocation matching policy
 
 `rewrite`, `run`, and `saturate` append `ordered: bool = false` to their `with`
-configuration. `modules/rewrite/module.cpp` passes it through `applyRewrite` or
+configuration. `lib/rewrite/module.cpp` passes it through `applyRewrite` or
 `saturateKernel` into `DraftWritings`. `DraftWritings::matchFrom` receives a false
 commuted-search flag in ordered mode, so recursive operand swaps and the exact
 associative-chain remainder path are disabled, even after a guard rejects a binding.

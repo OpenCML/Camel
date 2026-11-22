@@ -11,11 +11,11 @@
 |------|----------|------|
 | `pip install` 的包 | 有包壳，没有可调用的东西 | `pypi/camel-lang/src/camel/__init__.py` 全文只有 `__version__` 与作者元数据 |
 | CPython 扩展模块 | 没有 | `git ls-tree 578d43f3b -- bindings` 输出为空，`bindings/` 目录当时不存在 |
-| 数组的 DLPack 通道 | **已有** | `include/camel/core/array/dlpack.h`、`src/core/array/dlpack.cpp` 的 `toDLPack` / `fromDLPack` |
-| "按名字调用一个模块的导出函数"的 C++ 门 | **已有** | `DefinitionStore::libraryFunction`（`include/camel/runtime/definitions.h`），既有调用方是 `src/execute/camel_pass.cpp` |
+| 数组的 DLPack 通道 | **已有** | `kernel/include/camel/core/array/dlpack.h`、`kernel/core/array/dlpack.cpp` 的 `toDLPack` / `fromDLPack` |
+| "按名字调用一个模块的导出函数"的 C++ 门 | **已有** | `DefinitionStore::libraryFunction`（`kernel/include/camel/runtime/definitions.h`），既有调用方是 `kernel/execute/camel_pass.cpp` |
 | 从 Python 调用模块函数 | 没有 | 没有扩展模块，也没有任何 Python 侧代码引用 `libraryFunction` |
 | 诊断/故障变成 Python 异常 | 没有 | 同上 |
-| ONNX 方向的 py_bridge | 有，但方向相反 | `modules/python/` 是 Camel 调 Python / 导出 ONNX 用的桥，不是 Python 调 Camel |
+| ONNX 方向的 py_bridge | 有，但方向相反 | `lib/python/` 是 Camel 调 Python / 导出 ONNX 用的桥，不是 Python 调 Camel |
 
 缺口的位置很清楚，也不在 C API 上：**运行时的门已经有了**（`libraryFunction` + `NodeVMSchedPass`），
 **DLPack 的两个方向已经有了**，pybind11 也不必用（它解决的是 C++ 类的绑定，这里要绑的是"一个
@@ -40,7 +40,7 @@
 
 不选的两条路，以及理由：
 
-- **pybind11**：仓库里已经有它（`modules/python`），但那一层要绑的是 C++ 类型；这里要绑的是
+- **pybind11**：仓库里已经有它（`lib/python/`），但那一层要绑的是 C++ 类型；这里要绑的是
   模块名、函数名、一组 `slot_t`，用 `Python.h` 直接写反而少一层语义转换，也少一个"Python 版本与
   pybind11 版本"的组合。
 - **先把 C API 抽成一个稳定的 C 头**：那是更大的工程（要定义 ABI、版本、生命周期），而这里要的是
@@ -100,7 +100,7 @@ memory:        8 results of a 4 MiB pass-through hold 4.0 MiB, 8 results of a 4 
 
 （4.0 MiB 是输入那块自己；34.0 MiB = 4.0 + 8×4.0 取整后的读数。）
 
-数组进来的这条路只在分配器是 `mm::autoSpace()` 时零拷贝（`src/core/array/dlpack.cpp` 的
+数组进来的这条路只在分配器是 `mm::autoSpace()` 时零拷贝（`kernel/core/array/dlpack.cpp` 的
 `fromDLPack`），扩展模块用的就是它；其余分配器会 memcpy，这一点没有改变。
 
 ## 57.5 诊断与故障 → Python 异常（逐字映射）

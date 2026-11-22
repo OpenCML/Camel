@@ -102,12 +102,12 @@
 | 读法 | 今天的读数 |
 |---|---|
 | `camel test/cases/modules/autodiff/loop_grad_capture_table.cml std::stats` | `GRAPH_STATS {"graphs":3,"nodes":23,"edges":19,"opers":6,"direct_calls":0,"indirect_calls":2,"closures":0,"branches":0,"loops":1,"bytes":848,"specializations":0,"cycle_dropped_sessions":0}`——12 个字段，**没有一个与残差有关**（`loops:1` 只说明图里有一个 `LOOP`） |
-| `std::gir` | 不打印 `collectionCount`（`src/passes/trans/json/gir.cpp` 里没有这个字段），所以连"每轮几个残差"都读不到 |
-| 日志（`-v` 到 `trace`） | `modules/autodiff` 里没有任何日志点，`residual` 在 `src/`、`include/` 里也没有一处被打印 |
+| `std::gir` | 不打印 `collectionCount`（`lib/std/gir/json/gir.cpp` 里没有这个字段），所以连"每轮几个残差"都读不到 |
+| 日志（`-v` 到 `trace`） | `lib/autodiff/` 里没有任何日志点，`residual` 在 `src/`、`include/` 里也没有一处被打印 |
 
-残差这件事在引擎里是有的，只是**没有外露成一个数**：它在两处，形状不同——循环的磁带（`include/camel/runtime/loop.h#LoopView::collectionCount`，每个 `LOOP` 一个数，表示每轮收集几个残差）和直线代码的回传捕获（`modules/autodiff/pullback.cpp` 的 `captures_` / `residualTypes`，只在建回传图的那一刻存在）。
+残差这件事在引擎里是有的，只是**没有外露成一个数**：它在两处，形状不同——循环的磁带（`kernel/include/camel/runtime/loop.h#LoopView::collectionCount`，每个 `LOOP` 一个数，表示每轮收集几个残差）和直线代码的回传捕获（`lib/autodiff/pullback.cpp` 的 `captures_` / `residualTypes`，只在建回传图的那一刻存在）。
 
-**加它要改的那一处**：`modules/autodiff/pullback.cpp` 中建回传图、`captures_` 与 `residualTypes` 都已定下的那一处——这是全树唯一同时知道"哪些值是残差"的地方；图走一遍读不出来，因为走图时残差与普通捕获的值没有区别。所以它不能塞进 `std::stats`（那是图尺寸的读数，不是"这次求导存了几个值"的读数），得由求导自己报一行。
+**加它要改的那一处**：`lib/autodiff/pullback.cpp` 中建回传图、`captures_` 与 `residualTypes` 都已定下的那一处——这是全树唯一同时知道"哪些值是残差"的地方；图走一遍读不出来，因为走图时残差与普通捕获的值没有区别。所以它不能塞进 `std::stats`（那是图尺寸的读数，不是"这次求导存了几个值"的读数），得由求导自己报一行。
 
 **M1/M3 之后这一处就不需要了**：`split` 的额外输出**按定义**就是残差（`docs/design/program-transforms/README.cn.md` 4.2），所以那时残差数等于 `split` 结果的元数——一个图的读数，`remat` 的"数变少了"可以断言成"`split` 的输出少了几个"。在那之前，"下降"不可断言，只能记。
 
@@ -115,5 +115,5 @@
 
 ## 5. 边界
 
-- 这一页只是数。`modules/transforms`、`modules/autodiff`、`stdlib/rulesets` 的接口在 M1 / M4 通之前不动。
+- 这一页只是数。`lib/transforms/`、`lib/autodiff/`、`lib/rulesets/` 的接口在 M1 / M4 通之前不动。
 - 三组组合的期望值不依赖实现细节（批的排布、余切的形状除外，而约定已在第 2 节写死）。实现若要换约定，先改这一页的数，再改代码。

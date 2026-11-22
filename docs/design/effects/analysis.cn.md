@@ -8,13 +8,13 @@
 
 | 地方 | 算什么 | 与别处的关系 |
 |---|---|---|
-| `src/compile/gir/builder_resources.cpp`（`reachOfOper`、`settleEffectfulGraphs`） | 建图时在草稿上测每个函数体的资源 | 注释自称与 `runtime/resources.cpp` 做同样的事，只共用 `conservativeResources`，遍历另写一遍 |
-| `src/runtime/resources.cpp`（`Resolver`、`FootprintWalk`） | 冻结图上每个节点、每个函数的资源足迹，最小不动点 | 有自己的缓存（按闭包版本） |
-| `src/runtime/effects.cpp`（`effectSummaryOf`） | 图级效应摘要：对外、写程序状态、可能出故障、可能不终止 | 节点的"可能出故障"直接读算子特征，不用 `nodeMayFault` |
-| `src/runtime/graph.cpp`（`nodeMayFault`、`nodeIsFreelySchedulable`，以及"是不是语句"） | 节点级判定 | 与 `effects.cpp` 的规则不同，同一个节点可能得出不同答案 |
-| `src/execute/pass.cpp`（`nodeHasEffect`） | 遍的边界检查用 | 注释写明抄自 tiles |
-| `src/passes/trans/cml/cml.cpp`（`isEffectful`、`isPureOper`） | 打印器判断语句能不能省 | 自己的不动点，外加按 URI 前缀的特例 |
-| `modules/tiles/src/{graph_regions,census,region_outline}.cpp` | 能不能放上设备 | 同一个表达式抄了三处 |
+| `compile/src/gir/builder_resources.cpp`（`reachOfOper`、`settleEffectfulGraphs`） | 建图时在草稿上测每个函数体的资源 | 注释自称与 `runtime/resources.cpp` 做同样的事，只共用 `conservativeResources`，遍历另写一遍 |
+| `kernel/runtime/resources.cpp`（`Resolver`、`FootprintWalk`） | 冻结图上每个节点、每个函数的资源足迹，最小不动点 | 有自己的缓存（按闭包版本） |
+| `kernel/runtime/effects.cpp`（`effectSummaryOf`） | 图级效应摘要：对外、写程序状态、可能出故障、可能不终止 | 节点的"可能出故障"直接读算子特征，不用 `nodeMayFault` |
+| `kernel/runtime/graph.cpp`（`nodeMayFault`、`nodeIsFreelySchedulable`，以及"是不是语句"） | 节点级判定 | 与 `effects.cpp` 的规则不同，同一个节点可能得出不同答案 |
+| `kernel/execute/pass.cpp`（`nodeHasEffect`） | 遍的边界检查用 | 注释写明抄自 tiles |
+| `lib/std/cml/cml.cpp`（`isEffectful`、`isPureOper`） | 打印器判断语句能不能省 | 自己的不动点，外加按 URI 前缀的特例 |
+| `lib/tiles/src/{graph_regions,census,region_outline}.cpp` | 能不能放上设备 | 同一个表达式抄了三处 |
 
 另外，"是否纯"由 `registerBuiltinOperatorTraits` 按名字前缀推断，"会不会出故障"在 `kNeverFaults` 与 `builtin_semantics.cpp` 各说一遍。
 
@@ -34,7 +34,7 @@
 
 ### 3.1 接口
 
-放在 `graph` 层（现在的 `src/runtime`，新文件 `effect_analysis.{h,cpp}`）。输入是一张图的**读接口**：`graph_read.h` 已经让冻结图与草稿回答同样的问题，建图器与提交都经它调用。
+放在 `graph` 层（现在的 `kernel/runtime/`，新文件 `effect_analysis.{h,cpp}`）。输入是一张图的**读接口**：`graph_read.h` 已经让冻结图与草稿回答同样的问题，建图器与提交都经它调用。
 
 ```
 struct Access { ResourceRef resource; Mode mode; };      // Mode = Read | Write
@@ -97,13 +97,13 @@ Footprint  footprintOf(const GraphReadFace&);          // 调用图上的最小�
 - **编辑前的图**（2026-11-20）：一次就地编辑从"编辑前的图"开始，而那是编译器自己交出的一张图（前端建的，或某次提交在答完之后发布的）。它若已经超出自己声明的类型，就不是程序写得出来的事，而是编译器的缺陷：提交不回答"这次编辑加了什么"，直接报内部错误（`RuntimeDiag::PassInternalError`），诊断点出那张图、做越界访问的节点、以及声明没盖住的那一处。原先这种情形是**跳过**的，代价不只是少一次拒绝——"编辑后的图有没有越界"这个问题也随之不问。量这张图要**在它自己的程序版本里**量（`commitViolation` 的 `beforeProgram`）：这一次提交正在改写被调方的声明，拿新声明去量旧图，量出来的是没人有的那个程序（2026-11-20 的探针，见 `docs/handover/reviews/2026-11-20-the-before-edit-graph-beyond-its-type-costs-six-green-cases.cn.md` §7）。
 两项都只读分析的结果，不另写判断。诊断文本收进 `diagnostics/registry.tsv`，ECOOP 论文会照印，措辞定了就不随手改。
 
-**在哪些构建里查**（负责人 2026-11-16）：只用 `graph` 模块 API 的遍造不出带访问的节点，所以两项检查对它们是定理（11-15 的裁定）；但**发行构建里跳过，调试构建与测试里一律照查**——定理没人读过就只是猜测，省下的开销只该省在付这笔钱的那一侧。落地在 `include/camel/execute/pass/base.h`：遍自己只回答"是不是只用 graph 模块"这个事实（`rewritesThroughTheGraphModuleOnly`，Camel 写的遍一律是），**要不要查由调用方按构建回答**（`camelPassCommitChecksEnabled` / `setCamelPassCommitChecksEnabled`：`NDEBUG` 下默认关，调试构建默认开，发行构建里由测试显式打开）。计数器同理：包含检查在每个边界报一行"查了几处、放弃了几处"，走 `Pass` 作用域的 info 日志（`-vv`，或用 `--log-include Pass` 只留这一个作用域），不是环境变量——计数只决定打印多少，而打印由日志阈值决定，阈值是命令行上的东西；环境变量不是一次运行的设置该来的地方（遍的设置就是遍的 `with` 参数，同一条规矩）。
+**在哪些构建里查**（负责人 2026-11-16）：只用 `graph` 模块 API 的遍造不出带访问的节点，所以两项检查对它们是定理（11-15 的裁定）；但**发行构建里跳过，调试构建与测试里一律照查**——定理没人读过就只是猜测，省下的开销只该省在付这笔钱的那一侧。落地在 `kernel/include/camel/execute/pass/base.h`：遍自己只回答"是不是只用 graph 模块"这个事实（`rewritesThroughTheGraphModuleOnly`，Camel 写的遍一律是），**要不要查由调用方按构建回答**（`camelPassCommitChecksEnabled` / `setCamelPassCommitChecksEnabled`：`NDEBUG` 下默认关，调试构建默认开，发行构建里由测试显式打开）。计数器同理：包含检查在每个边界报一行"查了几处、放弃了几处"，走 `Pass` 作用域的 info 日志（`-vv`，或用 `--log-include Pass` 只留这一个作用域），不是环境变量——计数只决定打印多少，而打印由日志阈值决定，阈值是命令行上的东西；环境变量不是一次运行的设置该来的地方（遍的设置就是遍的 `with` 参数，同一条规矩）。
 
 ## 5. 语言层的改动
 
 1. **`uses` 只列外部资源与句柄形参**：`uses fs` 读、`uses var fs` 写；在 `uses` 里写变量（`var` 形参、捕获的、模块顶层的、局部的）报一条新诊断，提示可变性已在声明处写明、由编译器推出；类型打印与诊断列出推出的变量及其读写方式（负责人 2026-11-14）。
 2. **`pure`** 按新定义检查：没有写入（不写活得比调用长的变量、不写外部资源，遮蔽后）；读什么都可以。`UsesPromiseViolated` 的提示点出第一个写。
-3. **`map`、`filter` 的声明改为 `pure`**；新增 `para::unordered_map`；传入带效应的函数时，诊断要说出它写了什么（现在只报"找不到匹配的函数"，类型里也不显示 `uses`）。`stdlib/opt.cml` 里在 `map` 中改事务的那处改成 `foreach`。
+3. **`map`、`filter` 的声明改为 `pure`**；新增 `para::unordered_map`；传入带效应的函数时，诊断要说出它写了什么（现在只报"找不到匹配的函数"，类型里也不显示 `uses`）。`lib/opt/opt.cml` 里在 `map` 中改事务的那处改成 `foreach`。
 4. **`console`**：标准库里 `stdout`、`stderr`、`stdin` 合成一个资源 `console`；写标准错误、读标准输入前刷出标准输出（在运行时的 I/O 里做，一处）。不留旧名字（不考虑兼容）。
 5. **同步块当值**：`let r = sync { ... }` 的语法；点名语句。
 6. **规则引擎的 `protect_effects` 删掉**：外部访问与最终写入由区域用到，丢掉数据用处不会让它们消失（原则 9.7）。`protect_faults` 保留。
@@ -112,11 +112,11 @@ Footprint  footprintOf(const GraphReadFace&);          // 调用图上的最小�
 
 | 地方 | 改成 |
 |---|---|
-| `src/runtime/effects.cpp`、`resources.cpp` | 由新分析取代；对外接口（`effectSummaryOf`、`resourcesOf`）若有调用者，改调新分析后删除 |
+| `kernel/runtime/effects.cpp`、`resources.cpp` | 由新分析取代；对外接口（`effectSummaryOf`、`resourcesOf`）若有调用者，改调新分析后删除 |
 | `graph.cpp` 的 `nodeMayFault`、`nodeIsFreelySchedulable`、"是不是语句" | 改为读 `NodeEffect` 的字段，三处合一 |
 | `pass.cpp` 的 `nodeHasEffect` 与边界检查 | 读分析；比较前后足迹时比访问列表 |
 | `cml.cpp` 的 `isEffectful`、`isPureOper` | 读分析；URI 前缀特例删掉 |
-| tiles 三处、`builder_diagnostics.cpp`、`modules/transforms/jvp.cpp` 的 `hasExternalEffect` | 读分析 |
+| tiles 三处、`builder_diagnostics.cpp`、`lib/transforms/jvp.cpp` 的 `hasExternalEffect` | 读分析 |
 
 目标架构第 7 节"效应只经事实层判定"的检查脚本，在本路合入时对这些文件转为硬门槛。
 

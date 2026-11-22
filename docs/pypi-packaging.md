@@ -97,7 +97,7 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
    - 将 `out/<tag>/` **整树**复制到 `pypi/camel-lang/src/camel/.cmlenv/`（打完再删）。  
    - 删掉 `bin/` 里测试专用工具（`camel-parsecheck`）与 `.o/.a/.obj/.d/.pdb`：它们不是发布物。  
    - 检查 `[project.scripts]` 声明的每条命令都在 `.cmlenv/bin/` 里有对应可执行文件——**没有 wrapper-dist，也不改
-     `pyproject.toml`**：入口是 `src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
+     `pyproject.toml`**：入口是 `pypi/camel-lang/src/camel_cli.py` 里的函数，它 `exec` 自带的那只二进制。
 
 3. **构建与改标签**（同一份 packaging 打两遍，内容差一个 `.cmlenv/python/`）  
    - 使用该 SDK 的 **`python`**（或回退时的 `python`）执行：  
@@ -132,7 +132,7 @@ rollup 扫描 `modules/python/sdks/`，仅当同时满足：
   `Python3_add_library(... USE_SABI 3.10)`），所以一只文件覆盖 3.10 以后的**所有**版本，包括还没发布的。
   **`cp310` 是稳定 ABI 的下限，不是"编它时的解释器"**：Linux 上构建用的是 `python3.11`，出来的文件名仍是 `cp310-abi3`。
 - `py3-none` 那只**必须**没有扩展，`cp310-abi3` 那只**必须**有；`scripts/check_wheel_tags.py --ruling` 查文件名也查文件内容。
-- 嵌入方向（`modules/python` 的 `python.cmo`/`pyplot.cmo`，pybind11 嵌入）仍按构建解释器链接 `libpython`，它与互操作
+- 嵌入方向（`lib/python/` 的 `python.cmo`/`pyplot.cmo`，pybind11 嵌入）仍按构建解释器链接 `libpython`，它与互操作
   扩展无关，也不改任何 wheel 的名字（见 7.1）。
 
 ---
@@ -162,8 +162,8 @@ Linux job 用 `/usr/bin/python3.11`（`dnf install python3.11-devel python3.11-p
 `PyTuple_GetItem` / `PyTuple_SetItem`、`PyObject_GetAttrString(__name__)`、`PyType_GenericAlloc`、`PyObject_Free`）。
 注意 `docs/pypi-packaging.md` 早先记的是"5 处"（3 处宏 + 2 处成员访问），实际成员访问是 3 处，共 6 处；数量漂移本身记在这里。
 
-`modules/python` 那一侧**改不了**：pybind11 不支持受限 API（`buffer_info.h` 里 `Py_buffer` 不可见），`-DPy_LIMITED_API`
-直接编译失败——这是 2026-10-25 决定之前记下的读数，本次没有动 `modules/python`，所以没有重测。决定对这种情况的出口是
+`lib/python/` 那一侧**改不了**：pybind11 不支持受限 API（`buffer_info.h` 里 `Py_buffer` 不可见），`-DPy_LIMITED_API`
+直接编译失败——这是 2026-10-25 决定之前记下的读数，本次没有动 `lib/python/`，所以没有重测。决定对这种情况的出口是
 "在报告里列出是哪几个、换成了什么写法"，而这里连"换写法"都不在 `bindings` 里：嵌入模块的接口由 pybind11 提供，不是
 本文件能改的。结论：extension 是 abi3，`python.cmo` 仍只能对着某一个解释器编。
 

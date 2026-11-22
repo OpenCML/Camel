@@ -57,7 +57,7 @@ is entered only when the branch selects it: that is the whole of "evaluated only
 
 `T?` and `T!` are **tuple types with a form mark**, exactly as the variable cell `var T`
 already is (`TupleType::cell`): `TupleType::nullable(T)` and `TupleType::fallible(T)`
-(`include/camel/core/type/composite/tuple.h`). They have `TypeCode::Tuple`, so every part of
+(`kernel/include/camel/core/type/composite/tuple.h`). They have `TypeCode::Tuple`, so every part of
 the system that stores, traces, copies, compares or prints a value by its static type treats
 them as the tuples they are, and they are distinct *types*: `int?` equals neither `int` nor
 `(int)`, and no tuple operation of the language accepts them (section 4.4).
@@ -90,7 +90,7 @@ graph.
 Three things happen to a value of these forms, and each is an existing node kind.
 
 **Reading the tag and the parts: `OPER`.** Six built-in operators
-(`src/builtin/operators/tagged.cpp`, group names are reserved identifiers):
+(`lib/std/builtin/operators/tagged.cpp`, group names are reserved identifiers):
 
 | Operator | Type | Meaning |
 |---|---|---|
@@ -210,7 +210,7 @@ function or union payload).
 - `T?` is assignable from `T?` only, and `T!` from `T!` only (payloads equal).
 - A value of type `T` enters a `T?`/`T!` position by itself wherever the target type is
   known (design principles 3.8); never the other way. The rule is two functions of the type
-  library (`include/camel/core/type/composite/tuple.h`):
+  library (`kernel/include/camel/core/type/composite/tuple.h`):
   - `entersImplicitly(target, source)`: `source` is assignable; or `target` is tagged and
     `source` enters its payload (so several levels are entered at once: `int` into `int?!`);
     or `source` is `void` (the type of `null`) and `target` is a `T?`; or `source` is the type
@@ -315,13 +315,13 @@ Three operators that can fail, added without changing an existing signature:
 | `fs::read_text(path)` | `(string) => string!` | `IOError` |
 
 An operator written in C++ builds its result with `rtdata::makeOk` / `rtdata::makeError`
-(`include/camel/core/rtdata/tagged.h`); the position of an error raised by an operator is the
+(`kernel/include/camel/core/rtdata/tagged.h`); the position of an error raised by an operator is the
 operator's name (`<parse_int>`), as an operator does not know its call site.
 
 ## 9. A defect met in a pass
 
 Not caused by this work, and not fixed (the optimisation passes are being repaired on other
-lines). `tryResolveStaticValue` (`src/runtime/draft_inline.cpp`) looks through a `CAST` node
+lines). `tryResolveStaticValue` (`kernel/runtime/draft_inline.cpp`) looks through a `CAST` node
 to the constant under it and takes that constant, unconverted, as the value of the argument
 when a callee is specialised on a constant argument. Any conversion of a constant is
 affected, with or without the tagged forms:

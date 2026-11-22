@@ -16,18 +16,18 @@
 
 | 类别 | 位置 | 协议名 | 加载方式 |
 |------|------|--------|----------|
-| 全局内置模块（`GlobalsBuiltinModule`） | `src/builtin/`，编入 libcamel | 空字符串 `""` | `Context::create` 时加载，其导出对每个用户模块默认可见 |
+| 全局内置模块（`GlobalsBuiltinModule`） | `lib/std/builtin/`，编入 libcamel | 空字符串 `""` | `Context::create` 时加载，其导出对每个用户模块默认可见 |
 | 标准库与第三方模块 | `modules/<name>/`，各自编译为 `<name>.cmo` 动态库 | 模块名，如 `math`、`tensor`、`python` | 被 `import` 时，或其协议下的算子首次被查找时加载 |
 
-libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`math`、`tensor`、`nn`、`process`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
+libcamel 内部的模块工厂表 `builtinModuleFactories`（`kernel/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`math`、`tensor`、`nn`、`process`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
 
-一个例外是 `array`：它是写在 Camel 里的库（`stdlib/array.cml`），不能同时有同名的 `.cmo` 模块——那样 `stdlib/array.cml` 会变成声明模块，函数体被拒绝。它的原生算子（排序族、`argsort`、`flatten`、`unique`）的内核因此编在 libcamel 里（`src/builtin/operators/array.cpp`），由全局内置模块在 `load()` 里以协议名 `array` 注册执行器工厂并声明纯性与就地形式；`array.cml` 里没有函数体的 `export func` 就是这些算子的声明，不需要第二个模块来加载它们。
+一个例外是 `array`：它是写在 Camel 里的库（`lib/array/array.cml`），不能同时有同名的 `.cmo` 模块——那样 `lib/array/array.cml` 会变成声明模块，函数体被拒绝。它的原生算子（排序族、`argsort`、`flatten`、`unique`）的内核因此编在 libcamel 里（`lib/std/builtin/operators/array.cpp`），由全局内置模块在 `load()` 里以协议名 `array` 注册执行器工厂并声明纯性与就地形式；`array.cml` 里没有函数体的 `export func` 就是这些算子的声明，不需要第二个模块来加载它们。
 
 ## 2. OperatorGroup 与类型解析
 
 ### 2.1 结构
 
-`OperatorGroup`（`include/camel/core/operator.h`）包含：
+`OperatorGroup`（`kernel/include/camel/core/operator.h`）包含：
 
 - **name**：算子组名，如 `"sort"`、`"__add__"`，即模块导出的名字。
 - **resolvers**：`vector<pair<uri, resolver_ptr_t>>`，每个重载对应一个 URI 和一个类型解析器。
@@ -53,11 +53,11 @@ OperatorGroup::create(
     });
 ```
 
-构造 `OperatorGroup` 时，每个重载的解析器同时登记到算子表（`OperatorTable::setResolver`，`include/camel/core/operator_table.h`），以 URI 为键。图上的 `OPER` 节点只记录解析得到的算子编号（`OperId`）；改变了实参已知信息的遍（例如绑定输入形状）通过算子表重新运行对应重载的解析器。
+构造 `OperatorGroup` 时，每个重载的解析器同时登记到算子表（`OperatorTable::setResolver`，`kernel/include/camel/core/operator_table.h`），以 URI 为键。图上的 `OPER` 节点只记录解析得到的算子编号（`OperId`）；改变了实参已知信息的遍（例如绑定输入形状）通过算子表重新运行对应重载的解析器。
 
 ### 2.2 类型解析器
 
-解析器定义在 `include/camel/core/type/resolver.h`：
+解析器定义在 `kernel/include/camel/core/type/resolver.h`：
 
 - **StaticFuncTypeResolver**：参数类型固定。实参个数须与声明一致，且每个实参可赋值给对应的形参类型。
 - **DynamicFuncTypeResolver**：参数个数或类型可变，由 `ResolverFunc` 动态推断返回类型。`create` 的三个参数依次为参数声明、签名文本（用于诊断与文档）、`ResolverFunc`。
@@ -105,13 +105,13 @@ OperatorGroup::create(
 
 ### 3.2 Executor 与 opsMap
 
-`Executor`（`include/camel/execute/executor.h`）持有 `opsMap_`：`unordered_map<string, operator_t>`。`operator_t` 的签名为：
+`Executor`（`lib/std/exec/include/camel/execute/executor.h`）持有 `opsMap_`：`unordered_map<string, operator_t>`。`operator_t` 的签名为：
 
 ```cpp
 using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &ctx);
 ```
 
-`ExecutorManager::find(uri)`（`src/execute/executor.cpp`）返回 URI 对应的 `operator_t`：
+`ExecutorManager::find(uri)`（`lib/std/exec/executor.cpp`）返回 URI 对应的 `operator_t`：
 
 1. 按第一个 `:` 拆分得到 protocol 和 suffix；
 2. 若该 protocol 的 Executor 已实例化，直接在其中查找 suffix；
@@ -127,29 +127,29 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 ### 3.3 全局内置算子
 
 - protocol 为空，由 `BasicBuiltinExecutor` 处理；`GlobalsBuiltinModule::load()` 以空协议名注册其工厂。
-- 实现表是 `src/builtin/executors/builtin.cpp` 中的 `getOpsImplMap()`，key 形如 `op/itoi`、`op/add_i`、`str/format`、`struct/len_arr`、`coll/len`。
-- 算子组在 `src/builtin/modules/globals.cpp` 中声明，URI 形如 `:op/add_i`、`:str/format`，suffix 与实现表的 key 一致。
-- 各算子的实现按主题分布在 `src/builtin/operators/` 下（`ops`、`cast`、`str`、`struct`、`collection`、`array`、`tagged`、`io`、`macro` 等）。
+- 实现表是 `lib/std/builtin/executors/builtin.cpp` 中的 `getOpsImplMap()`，key 形如 `op/itoi`、`op/add_i`、`str/format`、`struct/len_arr`、`coll/len`。
+- 算子组在 `lib/std/builtin/modules/globals.cpp` 中声明，URI 形如 `:op/add_i`、`:str/format`，suffix 与实现表的 key 一致。
+- 各算子的实现按主题分布在 `lib/std/builtin/operators/` 下（`ops`、`cast`、`str`、`struct`、`collection`、`array`、`tagged`、`io`、`macro` 等）。
 
 ### 3.4 `.cmo` 模块算子
 
-以 `str` 为例（`modules/str/`）：
+以 `str` 为例（`lib/str/`）：
 
-- `module.cpp`：构造 `BuiltinModule("str")`；`load()` 调用 `context_->registerExecutorFactory("str", factory)`，并用 `OperatorTable::declare("str", ...)` 声明每个算子的纯性。签名不在这里：它们在声明模块 `stdlib/str.cml`，模块不再导出 `OperatorGroup`。
+- `module.cpp`：构造 `BuiltinModule("str")`；`load()` 调用 `context_->registerExecutorFactory("str", factory)`，并用 `OperatorTable::declare("str", ...)` 声明每个算子的纯性。签名不在这里：它们在声明模块 `lib/str/str.cml`，模块不再导出 `OperatorGroup`。
 - `operators.cpp`：`getStrOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `split`、`trim` 等。
 - `executor.cpp`：`createStrExecutor()` 用上述映射构造 `Executor`。
 
 `.cmo` 模块的类继承 `camel::core::module::BuiltinModule`，以模块名作为名字。
 
-`array` 的算子由内置模块以协议 `array` 注册（第 1 节），形状相同：`src/builtin/operators/array.cpp` 的 `getArrayOpsMap()` 给出 suffix → `operator_t`，`GlobalsBuiltinModule::load()` 注册工厂并调用 `declareArrayOperatorFacts()`；`sort` 的各元素类型内核的 `*_in_place` 形式同样用 `OperatorTable::setInPlaceForm` 登记（`xs = xs->sort` 用）。
+`array` 的算子由内置模块以协议 `array` 注册（第 1 节），形状相同：`lib/std/builtin/operators/array.cpp` 的 `getArrayOpsMap()` 给出 suffix → `operator_t`，`GlobalsBuiltinModule::load()` 注册工厂并调用 `declareArrayOperatorFacts()`；`sort` 的各元素类型内核的 `*_in_place` 形式同样用 `OperatorTable::setInPlaceForm` 登记（`xs = xs->sort` 用）。
 
 ### 3.5 模块导出的值
 
-C++ 模块也可以导出值（设计原则 10.1）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
+C++ 模块也可以导出值（设计原则 10.1）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `kernel/include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
 
 ## 4. 语义性质（纯度）注册
 
-算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits` **不是另存的一份声明**：每个字段都由该算子的语义记录 `sem::OperatorSemantics` 的对应事实派生（`OperatorTable::traitsOf`，`src/core/operator_table.cpp`），派生是唯一的映射。`set(uri, traits)` 登记的是记录上的效果事实（`effect`、`elementwise`、`callsGraphs`、`readsGraphs`、`faults`），`declareSemantics` 登记记录的其余部分，两者写同一份记录、互不覆盖。因此不可能出现“trait 说纯、语义记录说会写”的分歧：只有一份事实。
+算子表 `OperatorTable`（`kernel/include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits` **不是另存的一份声明**：每个字段都由该算子的语义记录 `sem::OperatorSemantics` 的对应事实派生（`OperatorTable::traitsOf`，`kernel/core/operator_table.cpp`），派生是唯一的映射。`set(uri, traits)` 登记的是记录上的效果事实（`effect`、`elementwise`、`callsGraphs`、`readsGraphs`、`faults`），`declareSemantics` 登记记录的其余部分，两者写同一份记录、互不覆盖。因此不可能出现“trait 说纯、语义记录说会写”的分歧：只有一份事实。
 
 | 字段 | 含义 | 记录上的来源 |
 |------|------|------|
@@ -172,23 +172,23 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 登记发生在模块加载时：
 
-- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get`、`:var/peek`、`:var/take` 与各算子的原地形式（`:struct/append_arr_in_place`、`:op/set_index_in_place`）登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_owned`（写成语句的 `acc = acc->append<v>`、`xs = xs->sort`）属于 `op/assn` 族，不纯。
-- `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
+- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`lib/std/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get`、`:var/peek`、`:var/take` 与各算子的原地形式（`:struct/append_arr_in_place`、`:op/set_index_in_place`）登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_owned`（写成语句的 `acc = acc->append<v>`、`xs = xs->sort`）属于 `op/assn` 族，不纯。
+- `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `lib/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
 
 另有两处按 URI 或按值类型登记的信息，供需要的模块使用：
 
 - 算子表上的类型折叠（`OperatorTable::setTypeFolder`）：当实参类型已能确定结果时（如类型带形状的张量的形状、元素个数），给出该常量结果。
-- `ValueTypeRefinerRegistry`（`include/camel/core/operator_traits.h`）：给出常量的精确类型（如张量常量的 dtype 与形状）。
+- `ValueTypeRefinerRegistry`（`kernel/include/camel/core/operator_traits.h`）：给出常量的精确类型（如张量常量的 dtype 与形状）。
 
-可微算子的反向规则登记在 `DerivativeRegistry`（`include/camel/core/derivative.h`）。
+可微算子的反向规则登记在 `DerivativeRegistry`（`kernel/include/camel/core/derivative.h`）。
 
 ### 4.1 单一来源的算子定义（tensor）
 
-`tensor` 模块不分别书写上述各表，而是用一份 `OpDef`（`modules/tensor/ops/op_def.h`）描述一个算子：名字（URI suffix）、导出名、参数、类型推断函数、kernel、性质、反向规则、类型折叠函数。`OpRegistry::add()`（`modules/tensor/ops/registry.cpp`）据此向各核心注册表登记，`OpRegistry::operatorGroups()` 与 `kernelMap()` 再分别生成模块导出的算子组和 Executor 的 opsMap。同一 URI 重复登记会抛出错误。详见 [25_tensor_stack_and_onnx_export.md](25_tensor_stack_and_onnx_export.md)。
+`tensor` 模块不分别书写上述各表，而是用一份 `OpDef`（`lib/tensor/ops/op_def.h`）描述一个算子：名字（URI suffix）、导出名、参数、类型推断函数、kernel、性质、反向规则、类型折叠函数。`OpRegistry::add()`（`lib/tensor/ops/registry.cpp`）据此向各核心注册表登记，`OpRegistry::operatorGroups()` 与 `kernelMap()` 再分别生成模块导出的算子组和 Executor 的 opsMap。同一 URI 重复登记会抛出错误。详见 [25_tensor_stack_and_onnx_export.md](25_tensor_stack_and_onnx_export.md)。
 
 ### 4.2 算子语义：数值、下标与归约律
 
-同一份语义记录（`include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)）既带 §4 的效果事实，也带数值、下标、归约律等部分，由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。`set` 先登记的效果事实在 `declareSemantics` 时保留，反之亦然。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
+同一份语义记录（`kernel/include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)）既带 §4 的效果事实，也带数值、下标、归约律等部分，由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。`set` 先登记的效果事实在 `declareSemantics` 时保留，反之亦然。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
 
 | 部分 | 内容 |
 |------|------|
@@ -198,17 +198,17 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 | `callsGraphs` / `readsGraphs` | 调用/读取实参里的函数值；`elementCalls` 蕴含 `callsGraphs` |
 | `numeric` | 精确、正确舍入（规范算法）、有 ulp 上界、不透明；舍入所在类型；对哪些 `@numeric` 许可敏感 |
 | `faults` | 会出的故障（可缺省，缺省时按“可能出故障”读；空表表示不会出故障） |
-| `indexing` | 实例化函数（`include/camel/core/index_semantics.h`）：一次调用的迭代域、各操作数的访问映射、写映射 |
+| `indexing` | 实例化函数（`kernel/include/camel/core/index_semantics.h`）：一次调用的迭代域、各操作数的访问映射、写映射 |
 | `laws` | 归约律（每种元素类型一条）：运算、输入/累加/结果类型、初值、顺序、空域、确切的结合与交换性、单位元 |
 
 **下标语义是函数，不是数据**：同一个算子在不同秩、不同常量实参下的映射不同，所以登记的是 `InstantiateFn`，它对一次调用的类型（张量类型带形状，未知维为 -1）与常量实参返回 `IndexedInstance`，事实不足时返回 `nullopt`（秩未知、常量不是常量、某一维可能是 1 的广播）。表达式是准仿射的（常数、维、参数、和、乘以常数或参数、按正常数或正参数的 floordiv 与 mod），按实例驻留。查询：
 
 - `sem::instantiate(id, InstanceContext{norm 类型, with 类型, statics})`：调用实例化函数，再做结构检查（`sem::validate`）；抛异常或检查不过都当作没有实例。
-- `runtime::instanceOf(graph, node)`（`include/camel/runtime/operator_instance.h`）：冻结图上一个 `OPER` 节点的实例，事实取自输入节点的类型与静态 `DATA` 输入；`runtime::reorderFreedomOf(graph, node)` 再结合节点的许可列给出这次归约能否分组、置换（`sem::reorderFreedom`）。
+- `runtime::instanceOf(graph, node)`（`kernel/include/camel/runtime/operator_instance.h`）：冻结图上一个 `OPER` 节点的实例，事实取自输入节点的类型与静态 `DATA` 输入；`runtime::reorderFreedomOf(graph, node)` 再结合节点的许可列给出这次归约能否分组、置换（`sem::reorderFreedom`）。
 - `sem::toString(instance, semantics)`：规范的文本形式；`camel inspect --instances <文件>` 对程序里每个声明了下标语义的算子节点打印一行 `INSTANCE {json}`。
 - `sem::splitDims`（分块，原来的界成为 `guard`）、`sem::rowMajorView`（访问与行主序存储复合得到偏移与步长）。
 
-`tensor` 模块的声明：数值部分在 `modules/tensor/ops/semantics.cpp` 的一张表里；下标语义与归约律在 `modules/tensor/ops/indexing.cpp`，与类型推断用同一个 `InferContext`，放在 `OpDef::index`（与 `OpDef::infer` 并列），注册时由 `OpRegistry::add` 包成 `indexing` 交给算子表。共用的构造工具是 `IndexBuilder`（`ops/indexing.h`；`nn` 模块的池化也用它）。已经持有 `InferContext` 的后端可以直接调 `ops::instantiate(def, ctx)`。内建的 `:op/` 标量算子与 `:mark/unordered_reduce_arr` 的记录在 `src/builtin/executors/builtin_semantics.cpp`。
+`tensor` 模块的声明：数值部分在 `lib/tensor/ops/semantics.cpp` 的一张表里；下标语义与归约律在 `lib/tensor/ops/indexing.cpp`，与类型推断用同一个 `InferContext`，放在 `OpDef::index`（与 `OpDef::infer` 并列），注册时由 `OpRegistry::add` 包成 `indexing` 交给算子表。共用的构造工具是 `IndexBuilder`（`ops/indexing.h`；`nn` 模块的池化也用它）。已经持有 `InferContext` 的后端可以直接调 `ops::instantiate(def, ctx)`。内建的 `:op/` 标量算子与 `:mark/unordered_reduce_arr` 的记录在 `lib/std/builtin/executors/builtin_semantics.cpp`。
 
 **声明是代码，登记时查不出它与内核是否一致**，所以每个声明都要过声明求值器：`camel test/cases/modules/tensor/index_semantics.cml tensor::test_index_eval` 对每个已声明的算子生成大量随机调用（空、长度 1、广播、负轴、可选参数缺省、NaN、±∞、±0、次正规数、int64 与 bool），只按声明（域、访问映射及其越界策略、写映射、归约律）算出结果，与 CPU 内核逐位比较（有上界的 `exp`、`log` 按上界），并顺带检查映射的健全性（读不越界、写落在结果内、唯一写恰好写一次）。新增或修改一个声明时，在 `index_eval.cpp` 的表里加上它的用例生成器；测试计划 `test/plans/feat/modules/index_semantics.plan.toml` 要求全部一致。
 
@@ -216,15 +216,15 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 ### 5.1 全局内置算子
 
-1. 在 `src/builtin/operators/` 中实现 `operator_t` 函数。
-2. 在 `src/builtin/executors/builtin.cpp` 的 `getOpsImplMap()` 中加入 suffix → `operator_t`。
-3. 在 `src/builtin/modules/globals.cpp` 的算子组中加入重载，URI 为 `:` 加上同一 suffix。
+1. 在 `lib/std/builtin/operators/` 中实现 `operator_t` 函数。
+2. 在 `lib/std/builtin/executors/builtin.cpp` 的 `getOpsImplMap()` 中加入 suffix → `operator_t`。
+3. 在 `lib/std/builtin/modules/globals.cpp` 的算子组中加入重载，URI 为 `:` 加上同一 suffix。
 4. 若算子是纯函数且不在 `registerBuiltinOperatorTraits()` 已覆盖的前缀之内，把它加入该函数的纯算子列表。
 
 ### 5.2 `.cmo` 模块
 
-1. 在 `modules/<name>/` 下建立模块目录，`CMakeLists.txt` 中 `include` `modules/camel_module.cmake` 并调用 `add_camel_module(NAME <name>)`。默认源文件为 `executor.cpp`、`module.cpp`、`operators.cpp`，可用 `SOURCES` 指定；输出为 `<name>.cmo`。
-2. 该 CMake 函数会自动编入 `modules/camel_module_abi.cpp`，由它导出 `camel_module_abi_version()`。加载器（`loadCmoModule`，`include/camel/core/module/dynamic.h`）先比对 `CAMEL_MODULE_ABI_VERSION`，不一致则拒绝加载。
+1. 在 `modules/<name>/` 下建立模块目录，`CMakeLists.txt` 中 `include` `cmake/camel_module.cmake` 并调用 `add_camel_module(NAME <name>)`。默认源文件为 `executor.cpp`、`module.cpp`、`operators.cpp`，可用 `SOURCES` 指定；输出为 `<name>.cmo`。
+2. 该 CMake 函数会自动编入 `kernel/abi/camel_module_abi.cpp`，由它导出 `camel_module_abi_version()`。加载器（`loadCmoModule`，`kernel/include/camel/core/module/dynamic.h`）先比对 `CAMEL_MODULE_ABI_VERSION`，不一致则拒绝加载。
 
 `ArgsView::resultType()` 提供本次单态调用的静态结果布局，供 `ckpt::load_tree::<T>` 等仅凭输入类型无法确定返回布局的原生算子使用。它不是一个运行时类型值，也不属于 `with` 或普通实参。节点、字节码/JIT 和并行调度器，以及标准库的原生常量求值入口，在调用前设置该元数据；自行构造 `ArgsView` 的宿主也必须为此类算子设置它。该字段改变 C++ 对象布局，模块 ABI 已升至 3，旧模块须与核心一起重建。算子不能跨调用保存实参中的堆对象裸指针。
 3. 实现并导出 `extern "C" Module *camel_module_create(Context *ctx)`，返回新建的模块对象，所有权交给运行时。
@@ -246,9 +246,9 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 | **纯度默认保守** | 未在算子表中声明的算子视为有副作用、可能出故障；只有确实不读写外部状态的算子才能登记为 `pure`。 |
 | **工厂只注册一次** | 同一 protocol 重复调用 `registerExecutorFactory` 会触发断言；`load()` 应以 `loaded_` 判重。 |
 | **Executor 加载时机** | Executor 按需懒加载，首次查找该 protocol 的算子时才实例化。并行调度器可能从多个工作线程同时查找，`ExecutorManager` 内部已加锁。 |
-| **`load()` 的职责** | `load()` 中只做让声明能成立的事：Executor 工厂注册、性质登记、类型导出。`import` 不执行代码（设计原则 3.1），所以进程级资源（如 CPython 解释器）不在这里获取，而在第一次真正使用它的算子里（`modules/python/embed.h`；见 [50](50_pyplot_cpython_init.md)）。 |
+| **`load()` 的职责** | `load()` 中只做让声明能成立的事：Executor 工厂注册、性质登记、类型导出。`import` 不执行代码（设计原则 3.1），所以进程级资源（如 CPython 解释器）不在这里获取，而在第一次真正使用它的算子里（`lib/python/embed.h`；见 [50](50_pyplot_cpython_init.md)）。 |
 | **复合赋值的臂是兜底臂** | `a op= b` 在解析算子之前就被写成 `a = a op b`（设计原则 4.2，`Builder::compoundAssignmentByRebinding`），所以 `+=` 走的是普通算子的臂（`:op/add_bf` 这族），**不是**组里的 `:op/assn_*` 臂。`globals.cpp` 里 `CAMEL_HALF_ASSIGN` 展开的 10 条窄 `assn_*` 因此今天是语言层面不可达的兜底臂，与 f32 组同构；把它们当死代码删掉是错的（组的形状就是一算子一组、赋值算子也在其中），为它们写用例也是错的（没有写法能走到）。实测：删 `:op/assn_pow_bf` 不动任何用例，删 `:op/add_bf` 会让复合赋值的用例红。 |
-| **删执行臂会让声明模块加载失败** | 声明模块里的 `export func` 指名一个算子 URI，那个 URI 就必须被某个已加载模块实现，否则声明模块自己报 `SemanticDiag::NativeDeclarationNotLoaded`，**导入它的每个程序都编译不过**（不是"这一条调用不可用"）。实测：把 `{"op/f6tof", __f6tof__}` 从 `builtin.cpp` 的 opsMap 删掉，`stdlib/prelude.cml` 的 `f32(x: f16)` 声明立刻失效，`test/plans/feat/modules/stdlib_reduced.plan.toml` 整个计划 0 pass / 43 fail，全是 `Cannot import module 'prelude'`。所以"看起来没人用"的转换臂可能正是某条声明的支撑点，删之前先看 `--verify-ops` 会不会红。 |
+| **删执行臂会让声明模块加载失败** | 声明模块里的 `export func` 指名一个算子 URI，那个 URI 就必须被某个已加载模块实现，否则声明模块自己报 `SemanticDiag::NativeDeclarationNotLoaded`，**导入它的每个程序都编译不过**（不是"这一条调用不可用"）。实测：把 `{"op/f6tof", __f6tof__}` 从 `builtin.cpp` 的 opsMap 删掉，`lib/std/prelude.cml` 的 `f32(x: f16)` 声明立刻失效，`test/plans/feat/modules/stdlib_reduced.plan.toml` 整个计划 0 pass / 43 fail，全是 `Cannot import module 'prelude'`。所以"看起来没人用"的转换臂可能正是某条声明的支撑点，删之前先看 `--verify-ops` 会不会红。 |
 
 ## 7. 纯度声明的规则与检查
 
@@ -292,7 +292,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
   URI 默认是 `<模块>:<名字>`，算子名不是 Camel 标识符或是本模块算子的另一个前缀时，用
   `#op('模块:算子')` 标签写出。声明没有函数体：带函数体的 `func` 就是普通函数。声明模块同样可以有函数体
   （声明模块的 `.cml` 与同名 `.cmo` 是同一个模块，声明之外还可以写这个模块的 Camel
-  定义；`DeclarationModuleHasBody` 已删除），`stdlib/tensor.cml` 的 `log_softmax` 就是这样一条定义加内核声明。
+  定义；`DeclarationModuleHasBody` 已删除），`lib/tensor/tensor.cml` 的 `log_softmax` 就是这样一条定义加内核声明。
 - `stdlib/signatures/<模块>.cml` 只作参考、不参与编译：它保留尚未声明化的 C++ 模块的签名，以及声明
   表达不了的计算签名（`json` 的 `encode`/`decode_as`）。条目同样是无函数体的声明（`*` 通配一组只在
   类型上不同的重载）；`--verify-ops` 拒绝其中带函数体的条目。
@@ -322,17 +322,17 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 ## 9. 参考
 
-- `include/camel/core/operator.h`：`operator_t`、`ArgsView`、`OperatorGroup`、`OperatorIndex`。
-- `include/camel/core/operator_table.h`：`OperId`、`OperatorTraits`、`OperatorTable`（性质、类型解析器、类型折叠）；`include/camel/core/symbol.h`：符号表。
-- `include/camel/core/operator_semantics.h`、`include/camel/core/index_semantics.h`、`include/camel/runtime/operator_instance.h`：算子语义的记录、下标语义与归约律、节点上的实例（4.2 节）。
-- `include/camel/core/operator_traits.h`：`ValueTypeRefinerRegistry`。
-- `include/camel/core/type/resolver.h`：`FuncTypeResolver`、`StaticFuncTypeResolver`、`DynamicFuncTypeResolver`。
-- `include/camel/execute/executor.h`、`src/execute/executor.cpp`：`Executor`、`ExecutorManager`，URI 解析与分派。
-- `include/camel/core/module/builtin.h`、`include/camel/core/module/dynamic.h`：`BuiltinModule`、`.cmo` 的 ABI 与加载入口。
-- `src/builtin/modules/globals.cpp`、`src/builtin/executors/builtin.cpp`：全局内置模块的算子组、实现表与性质登记。
-- `modules/camel_module.cmake`：`.cmo` 模块的 CMake 封装。
-- `src/builtin/operators/array.cpp`：作为 Camel 模块 `array` 的原生算子内核与就地形式声明。
-- `modules/python/`：带外部运行时初始化的 `.cmo` 模块示例（`python.cmo`）。
-- `modules/tensor/ops/`：以 `OpDef` 为单一来源的算子注册。
-- `include/camel/core/module/introspect.h`：列出模块的算子（`camel inspect --ops`）。
-- `modules/str/`：一个只有纯算子的小模块，可作新模块的样板；`modules/python/`：带外部运行时的模块。
+- `kernel/include/camel/core/operator.h`：`operator_t`、`ArgsView`、`OperatorGroup`、`OperatorIndex`。
+- `kernel/include/camel/core/operator_table.h`：`OperId`、`OperatorTraits`、`OperatorTable`（性质、类型解析器、类型折叠）；`kernel/include/camel/core/symbol.h`：符号表。
+- `kernel/include/camel/core/operator_semantics.h`、`kernel/include/camel/core/index_semantics.h`、`kernel/include/camel/runtime/operator_instance.h`：算子语义的记录、下标语义与归约律、节点上的实例（4.2 节）。
+- `kernel/include/camel/core/operator_traits.h`：`ValueTypeRefinerRegistry`。
+- `kernel/include/camel/core/type/resolver.h`：`FuncTypeResolver`、`StaticFuncTypeResolver`、`DynamicFuncTypeResolver`。
+- `lib/std/exec/include/camel/execute/executor.h`、`lib/std/exec/executor.cpp`：`Executor`、`ExecutorManager`，URI 解析与分派。
+- `kernel/include/camel/core/module/builtin.h`、`kernel/include/camel/core/module/dynamic.h`：`BuiltinModule`、`.cmo` 的 ABI 与加载入口。
+- `lib/std/builtin/modules/globals.cpp`、`lib/std/builtin/executors/builtin.cpp`：全局内置模块的算子组、实现表与性质登记。
+- `cmake/camel_module.cmake`：`.cmo` 模块的 CMake 封装。
+- `lib/std/builtin/operators/array.cpp`：作为 Camel 模块 `array` 的原生算子内核与就地形式声明。
+- `lib/python/`：带外部运行时初始化的 `.cmo` 模块示例（`python.cmo`）。
+- `lib/tensor/ops/`：以 `OpDef` 为单一来源的算子注册。
+- `kernel/include/camel/core/module/introspect.h`：列出模块的算子（`camel inspect --ops`）。
+- `lib/str/`：一个只有纯算子的小模块，可作新模块的样板；`lib/python/`：带外部运行时的模块。

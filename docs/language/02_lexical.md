@@ -2,7 +2,7 @@
 
 [English](en/02_lexical.md) | 中文
 
-本章描述源码的词法结构。记号表在 `include/camel/parse/syntax/token_kinds.def`，词法分析器在 `src/parse/syntax/lexer.cpp`。
+本章描述源码的词法结构。记号表在 `parse/include/camel/parse/syntax/token_kinds.def`，词法分析器在 `parse/src/syntax/lexer.cpp`。
 
 ---
 
@@ -57,7 +57,7 @@ let c = a + b
 
 ### 2.4.1 上下文关键字
 
-下面这些词**只在列出的位置是关键字，别处是普通的名字**：`let when = 1` 里的 `when` 是一个名字，`func f(x: T): T when is_integer::<T>()` 里的 `when` 是适用条件的开头。它们不是保留字，也不是 `token_kinds.def` 里的记号：读它们的是按位置判断的解析代码（`src/parse/syntax/parser*.cpp` 里的 `atWord` 与同类的判断）。词表只有一份，在 `scripts/context-keywords.mjs`，每条都带着读它的那行代码；下面这张表由 `scripts/check-grammar.mjs --write` 写出，插件的文法与它逐个对得上（`editors/vscode/` 的 `contextual-keywords` 规则里就是这些词，快照用例在 `test/cases/tools/grammar/context_keywords.cml`）。
+下面这些词**只在列出的位置是关键字，别处是普通的名字**：`let when = 1` 里的 `when` 是一个名字，`func f(x: T): T when is_integer::<T>()` 里的 `when` 是适用条件的开头。它们不是保留字，也不是 `token_kinds.def` 里的记号：读它们的是按位置判断的解析代码（`parse/src/syntax/parser*.cpp` 里的 `atWord` 与同类的判断）。词表只有一份，在 `scripts/context-keywords.mjs`，每条都带着读它的那行代码；下面这张表由 `scripts/check-grammar.mjs --write` 写出，插件的文法与它逐个对得上（`editors/vscode/` 的 `contextual-keywords` 规则里就是这些词，快照用例在 `test/cases/tools/grammar/context_keywords.cml`）。
 
 反过来，位置名里的 `func` 与 `type` 是保留字，列在 2.4 的表里，只有跟在 `on` 之后时才读作位置名；`match type` 的 `case` 里紧跟 `case` 的 `func` 也一样，命名的是函数类型这种形状。
 

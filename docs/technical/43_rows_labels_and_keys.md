@@ -119,7 +119,7 @@ the printed form and `==` agree across schedulers and `std::cpp`.
 
 ### Algorithm (normative)
 
-Philox4x32-10, one implementation in `include/camel/utils/philox.h` included by both the random
+Philox4x32-10, one implementation in `kernel/include/camel/utils/philox.h` included by both the random
 module's kernels and the programs `std::cpp` writes:
 
 - **Block function**: eight 32-bit words (`c0..c3`, `k0..k1`), ten rounds of

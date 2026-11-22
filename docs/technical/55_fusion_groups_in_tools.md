@@ -1,7 +1,7 @@
 # Fusion groups in the tools: `std::profile` and the debugger
 
 A back end may run several marked nodes as one pass at the last of them
-(`include/camel/execute/fusion_group.h`; design principles 9.6 keeps the operators on the graph,
+(`lib/std/exec/include/camel/execute/fusion_group.h`; design principles 9.6 keeps the operators on the graph,
 so the program is the same program). Two tools used to lie about that:
 
 - the profile's operator table had no row for the group's own time, because a group is not an

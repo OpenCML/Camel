@@ -76,7 +76,7 @@
 |---|---|
 | `utils` | 与语言无关的工具 |
 | `core` | 值、类型、内存、算子定义（2.4） |
-| `graph` | 图存储与草稿、事务与提交校验、事实（2.3）、执行语义（2.2）；现在的 `src/runtime` |
+| `graph` | 图存储与草稿、事务与提交校验、事实（2.3）、执行语义（2.2）；现在的 `kernel/runtime/` |
 | `frontend` | 解析、GCT、GIR 建图器 |
 | `execute` | 驱动：`Context`、模块加载（现在的 `core/context`、`core/module/userdef`）、遍的执行、共用的节点语义 |
 | `backends` | nodevm、fastvm、jit、taskflow、宏求值器 |

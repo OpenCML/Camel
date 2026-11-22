@@ -27,8 +27,8 @@ Names match the configure log (booleans are CMake `ON` / `OFF`).
 
 ### `CAMEL_ENABLE_PYTHON`
 
-- **Meaning**: Build Python embedding artifacts: `python.cmo`, `pyplot.cmo`, `py_bridge*`, etc. Requires a Python **development** layout (headers and import library; see `modules/python` probing).
-- **Implementation**: Plain `option()` — **not** `add_bool_option`, so there is no global `CAMEL_ENABLE_PYTHON=0|1` preprocessor macro; it only controls `add_subdirectory(modules/python)` and, when dev is available, `modules/pyplot`.
+- **Meaning**: Build Python embedding artifacts: `python.cmo`, `pyplot.cmo`, `py_bridge*`, etc. Requires a Python **development** layout (headers and import library; see `lib/python/` probing).
+- **Implementation**: Plain `option()` — **not** `add_bool_option`, so there is no global `CAMEL_ENABLE_PYTHON=0|1` preprocessor macro; it only controls `add_subdirectory(lib/python/)` and, when dev is available, `lib/pyplot/`.
 - **Environment override**: If **`CAMEL_SKIP_PYTHON`** is set to `1`, `ON`, `YES`, or `TRUE` (see `Options.cmake` for the exact pattern), **`CAMEL_ENABLE_PYTHON` is forced to `OFF`** at configure time (cache write; overrides prior cache). Useful for CI or builds that do not need Python modules.
 
 ### `CAMEL_TARGET_ARCH`
@@ -40,11 +40,11 @@ Names match the configure log (booleans are CMake `ON` / `OFF`).
 - **How to set it**: `-DCAMEL_TARGET_ARCH=<value>` when invoking CMake directly, or the **`CAMEL_TARGET_ARCH` environment variable** with `npm run build` / `debug` / `profile` / `pypi:rollup`. The environment variable wins over the cache for that configure run and is not written back, so unsetting it returns to the cached value (default `native`).
 - **Scope**: only `libcamel`. Modules (`*.cmo`) and tools are compiled without `-march`; the tensor module compiles its AVX2/AVX-512 kernels as separate units and selects them at run time after a CPUID check. The FastVM JIT emits SSE2 scalar code only.
 - **Release packages** must not use `native`; `.github/workflows/build-pypi.yml` pins the value.
-- **Rounding does not depend on it.** Everything is compiled with `-ffp-contract=off`: no `a * b + c` is fused into one multiply-add, whatever `-march` allows, so a program prints the same numbers on every target (`docs/design-principles.cn.md` 11.5; arm64 always has FMA and Clang fuses by default). Only the tensor GEMM and unary units opt back in (`modules/tensor/CMakeLists.txt`); they fuse wherever the processor has FMA, so the x86-64 AVX2/AVX-512 units and the arm64 portable unit compute the same bits.
+- **Rounding does not depend on it.** Everything is compiled with `-ffp-contract=off`: no `a * b + c` is fused into one multiply-add, whatever `-march` allows, so a program prints the same numbers on every target (`docs/design-principles.cn.md` 11.5; arm64 always has FMA and Clang fuses by default). Only the tensor GEMM and unary units opt back in (`lib/tensor/CMakeLists.txt`); they fuse wherever the processor has FMA, so the x86-64 AVX2/AVX-512 units and the arm64 portable unit compute the same bits.
 
 ### No Python development layout
 
-- If `modules/python` cannot build `python.cmo`, it skips; when `CAMEL_PYTHON_DEV_AVAILABLE` is false, the root `CMakeLists.txt` does not add `modules/pyplot`, avoiding a failing `find_package(Python3 REQUIRED)`.
+- If `lib/python/` cannot build `python.cmo`, it skips; when `CAMEL_PYTHON_DEV_AVAILABLE` is false, the root `CMakeLists.txt` does not add `lib/pyplot/`, avoiding a failing `find_package(Python3 REQUIRED)`.
 
 ## Interaction with the CMake cache
 

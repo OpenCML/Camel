@@ -3,7 +3,7 @@
 This note describes the graph facts of `docs/design/op-semantics` section 10 as implemented:
 what a pass or a back end derives about the program is kept beside it, so that whoever asks
 again gets the answer without deriving it again, and never an answer that no longer holds. The
-headers are `include/camel/runtime/facts.h` (registry, store, stamps), `core_facts.h` (the core's
+headers are `kernel/include/camel/runtime/facts.h` (registry, store, stamps), `core_facts.h` (the core's
 kinds) and `fact_persist.h` (the hooks a cache will call).
 
 ## 1. Three classes of information
@@ -88,7 +88,7 @@ declaration increments `OperatorTable::declarationEpoch()` (`operator_table.h`).
 that reads declarations is therefore stale after any module load, even when the graph it is about
 did not change. `std::opt` does this: its algebra phase resolves `rules::simplify`, which imports
 the `rules` library, and that imports `math` (`resolvePassWithModule` in
-`src/execute/pass.cpp`); the epoch moves on its first run. The stamp is conservative by design
+`kernel/execute/pass.cpp`); the epoch moves on its first run. The stamp is conservative by design
 (10.3 lists the declaration epoch beside the graph revision, and a kind opts in with
 `readsDeclarations`), so this is invalidation, not a defect: the recompute path is reached and the
 facts are rebuilt. A case must not turn the resulting totals into the property — `FACTS epoch` and
