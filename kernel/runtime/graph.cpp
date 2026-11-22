@@ -30,6 +30,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 
@@ -76,17 +77,42 @@ bool shapesAreFixed(const camel::core::type::Type *type) {
 bool nodeMayFault(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
+    // The four operators the front end still builds as nodes of their own -- a conversion, a
+    // copy, a construction, an access -- are asked by their shape, not by their kind: that is the
+    // one seam for them (`camel/execute/shaped_operators.h`, refactor stage 2.3), and what each of
+    // them can fail is a property of the operator, not of the record it is stored in today.
+    //
+    // Design principles 3.9 makes "may fault" one item of the operator record, stated by `panic`,
+    // and this shape answer stands in for that item only while the record says nothing about these
+    // four: of them only `copy` is an operator (`:op/copy`), and it states no `panic`, so asking
+    // its record today would read "nobody said" -- the conservative `true` -- instead of the
+    // `false` this answer gives. A conversion, a construction and an access are not operators at
+    // all yet: each takes a compile-time parameter a record keyed by URI cannot carry
+    // (`lib/std/builtin/modules/globals.cpp`, refactor plan 2.3).
+    //
+    // So this is where the two readings would part: once the record states `panic` for the four,
+    // each arm below becomes that item's reading --
+    // `camel::ops::Registry::instance().find(oper)->mayFault()`, which is
+    // `!panic.stated() || panic.value` in `camel/ops/operator_record.h` -- and this switch goes.
+    // `oper` is the operator the node names once the front end builds these four as ordinary OPER
+    // nodes; today these kinds carry `kNoOper` and have no record to ask.
+    switch (camel::execute::shapeOfKind(kind)) {
+    case camel::execute::OperShape::Conversion:
+        return castMayFault(castTarget, castSource);
+    case camel::execute::OperShape::Clone:
+    case camel::execute::OperShape::Construction:
+    case camel::execute::OperShape::Access: // reads a field of a value whose type has it
+        return false;
+    case camel::execute::OperShape::None:
+        break;
+    }
+
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Copy:
-    case GCNodeKind::Fill:
-    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
     case GCNodeKind::Brch:
     case GCNodeKind::Join:
         return false;
-    case GCNodeKind::Cast:
-        return castMayFault(castTarget, castSource);
     case GCNodeKind::Oper: {
         const std::optional<camel::core::OperatorTraits> traits =
             camel::core::OperatorTable::instance().find(oper);
@@ -113,8 +139,7 @@ bool may_be_rearranged(
     // kind -- and, for an operator, one a pass may run again. `mayBeRecomputed` is the one question
     // the fault table does not answer: a pure operator a rule writes, and one a macro expands, does
     // not fault, yet a pass may neither drop it nor copy it.
-    if (kind == GCNodeKind::Oper &&
-        !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
+    if (kind == GCNodeKind::Oper && !camel::core::OperatorTable::instance().mayBeRecomputed(oper)) {
         return false;
     }
     // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing refuses an
@@ -127,11 +152,7 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     if (node == nullptr) {
         return false;
     }
-    switch (node->kind) {
-    case GCNodeKind::Oper: {
-        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
-    }
-    case GCNodeKind::Cast: {
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return may_be_rearranged(
@@ -139,6 +160,10 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
             camel::core::kNoOper,
             node->dataType(),
             source != nullptr ? source->dataType() : nullptr);
+    }
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
     }
     default:
         return may_be_rearranged(node->kind, camel::core::kNoOper);
@@ -148,6 +173,11 @@ bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
 bool is_chain_statement(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool standsForRegion) {
+    if (camel::execute::shapeOfKind(kind) == camel::execute::OperShape::Conversion) {
+        // A conversion is a statement exactly when running it can fail: a value check the model
+        // cannot move is one the chain has to reach (design principles 3.4, 3.9).
+        return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
+    }
     switch (kind) {
     case GCNodeKind::Call:
     case GCNodeKind::Func:
@@ -164,10 +194,6 @@ bool is_chain_statement(
         // A `GATE` is where a `sync` block hands its value on and where the chain's wait reaches
         // that value (edges.cn.md 5.3): the chain orders it even though the gate computes nothing.
         return true;
-    case GCNodeKind::Cast:
-        // A conversion is a statement exactly when running it can fail: a value check the model
-        // cannot move is one the chain has to reach (design principles 3.4, 3.9).
-        return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
     case GCNodeKind::Oper: {
         const auto &table = camel::core::OperatorTable::instance();
         const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
@@ -181,8 +207,8 @@ bool is_chain_statement(
         return traits.has_value() && traits->mayFault;
     }
     default:
-        // A `Data`, a `Port`, a `Copy`, a `Fill`, an `Accs`, a `Join`: computed from what it
-        // reads, with nothing to fail and nothing to order.
+        // A `Data`, a `Port`, a `Join`, and the three of the four operators that cannot fail:
+        // computed from what it reads, with nothing to fail and nothing to order.
         return false;
     }
 }
@@ -193,6 +219,16 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
         return false;
     }
     const bool standsForRegion = nodeStandsForItsRegion(graph, ref);
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs    = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return is_chain_statement(
+            node->kind,
+            camel::core::kNoOper,
+            node->dataType(),
+            source != nullptr ? source->dataType() : nullptr,
+            standsForRegion);
+    }
     switch (node->kind) {
     case GCNodeKind::Oper: {
         const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
@@ -201,16 +237,6 @@ bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
             body != nullptr ? body->oper : camel::core::kNoOper,
             nullptr,
             nullptr,
-            standsForRegion);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs    = graph.normInputsOf(ref);
-        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-        return is_chain_statement(
-            node->kind,
-            camel::core::kNoOper,
-            node->dataType(),
-            source != nullptr ? source->dataType() : nullptr,
             standsForRegion);
     }
     default:
@@ -279,12 +305,7 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     if (node == nullptr) {
         return true;
     }
-    switch (node->kind) {
-    case GCNodeKind::Oper: {
-        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
-        return body == nullptr || nodeMayFault(node->kind, body->oper);
-    }
-    case GCNodeKind::Cast: {
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion) {
         const auto inputs    = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
         return nodeMayFault(
@@ -292,6 +313,11 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
             camel::core::kNoOper,
             node->dataType(),
             source != nullptr ? source->dataType() : nullptr);
+    }
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        return body == nullptr || nodeMayFault(node->kind, body->oper);
     }
     default:
         return nodeMayFault(node->kind, camel::core::kNoOper);
@@ -629,12 +655,12 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     // which lands the exit on the arm's value.
     //
     // Here, beside the cross-reference check and not in the commit's own checks, because it is a
-    // property of the graph published and not of what a commit added: every commit runs this seal in
-    // every build, whether or not it added an access, and no draft is exempt from it.
-    // "In the function body" is "runs whenever the function runs", which is not the same as "region
-    // 0": a block and an inlined body are regions the function enters unconditionally, and the front
-    // end leaves the exit in one whenever the last thing a body says is inside one (an inlined call
-    // at the tail, a tagged block). What never runs for a value nothing asks for is an arm, a loop's
+    // property of the graph published and not of what a commit added: every commit runs this seal
+    // in every build, whether or not it added an access, and no draft is exempt from it. "In the
+    // function body" is "runs whenever the function runs", which is not the same as "region 0": a
+    // block and an inlined body are regions the function enters unconditionally, and the front end
+    // leaves the exit in one whenever the last thing a body says is inside one (an inlined call at
+    // the tail, a tagged block). What never runs for a value nothing asks for is an arm, a loop's
     // condition and a loop's body -- those run only when their owner says so -- and that is what
     // this refuses, at any depth.
     const auto validateRunsWithTheBody = [&](gc_node_ref_t ref, std::string_view what) {
@@ -642,7 +668,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             return; // no such node, or a number `validateRef` above has already thrown about
         }
         for (uint32_t region = graph->nodeRegion(ref); region != 0;
-             region            = graph->region(region)->parent) {
+             region          = graph->region(region)->parent) {
             const GCRegionKind kind = graph->region(region)->kind;
             if (kind != GCRegionKind::Arm && kind != GCRegionKind::LoopCond &&
                 kind != GCRegionKind::LoopBody) {
@@ -650,8 +676,10 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
             throw std::runtime_error(
                 std::format(
-                    "Runtime graph '{}' has its {} at node {}, which is in region {} instead of the "
-                    "function body: that region runs only when its owner says so, so a value nothing "
+                    "Runtime graph '{}' has its {} at node {}, which is in region {} instead of "
+                    "the "
+                    "function body: that region runs only when its owner says so, so a value "
+                    "nothing "
                     "asks for never runs there, and the read never happens.",
                     graph->name(),
                     what,
@@ -797,13 +825,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             // A GATE is "let a value through once the sync chain has", and it waits through a
             // **sync predecessor** (docs/design/effects/edges.cn.md 5.3 -- it has no control input
             // there at all: it is a pure value-forwarding node with one data port and one sync
-            // predecessor). A path that has not moved onto the sync edge may still carry the wait as a
-            // control input, and the ones that have carry the sync edge instead.
-            // The wait a GATE carries is either a block's chain or an edge of its own, and this
-            // refuses a gate with neither. It is a structural reading, and it is written where it
-            // is read: `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h
-            // says why -- four call sites filled that field in three spellings, and none of them
-            // was the liveness answer).
+            // predecessor). A path that has not moved onto the sync edge may still carry the wait
+            // as a control input, and the ones that have carry the sync edge instead. The wait a
+            // GATE carries is either a block's chain or an edge of its own, and this refuses a gate
+            // with neither. It is a structural reading, and it is written where it is read:
+            // `EffectLivenessFacts` does not carry it (camel/runtime/effect_liveness.h says why --
+            // four call sites filled that field in three spellings, and none of them was the
+            // liveness answer).
             const bool hasWaitEdge     = !graph->ctrlInputsOf(ref).empty();
             const bool isSyncStatement = !graph->syncPredsOf(ref).empty();
             // A gate may also wait through **what it reads**: the inputs after the value are nodes
@@ -963,7 +991,8 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
 /// they ask it here so that they cannot answer it two ways.
 bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
     const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+    if (header == nullptr || header->kind == GCNodeKind::Dead ||
+        camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion ||
         !nodeIsFreelySchedulable(draft, id)) {
         return false;
     }
@@ -1063,10 +1092,10 @@ DraftPayloadPlan planDraftPayload(
         // The finished node answers for itself here: the payload the graph will hold is the one the
         // draft holds, so the question the seal check asks of the frozen graph (nodeTakesNoOrder,
         // graph_edges.cpp) is asked of this node before it is written, and the answer decides both
-        // the edge count and the edges emitted. It cannot be asked where the edge is written: a node
-        // still being built has no payload, so nodeIsFreelySchedulable answers for a half-made node
-        // and every writer believes the edge is wanted.
-        const bool dropsOrder = takesNoOrder(draft, draftId);
+        // the edge count and the edges emitted. It cannot be asked where the edge is written: a
+        // node still being built has no payload, so nodeIsFreelySchedulable answers for a half-made
+        // node and every writer believes the edge is wanted.
+        const bool dropsOrder  = takesNoOrder(draft, draftId);
         size_t keptOrderInputs = 0;
         for (gc_node_ref_t ref : draft.orderInputsOf(draftId)) {
             if (dropsOrder) {
@@ -1174,11 +1203,11 @@ void emitDraftPayload(
                 // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff
                 // -- is a graph built with a hole in it, and read as an index it walks 16 GB past
                 // the table. An `ASSERT` would be `((void)0)` under `NDEBUG`: the build that
-                // ships would have no check here at all, so a hole the passes made would arrive as a SIGSEGV
-                // with an empty stdout and no sentence (a transposed half
-                // whose answer tuple was handed an empty cotangent). A throw and not an abort: a
-                // pass that builds a graph the encoder cannot write is the pass's answer to give,
-                // and the driver reports it as one (`reportPassFailure`), by name.
+                // ships would have no check here at all, so a hole the passes made would arrive as
+                // a SIGSEGV with an empty stdout and no sentence (a transposed half whose answer
+                // tuple was handed an empty cotangent). A throw and not an abort: a pass that
+                // builds a graph the encoder cannot write is the pass's answer to give, and the
+                // driver reports it as one (`reportPassFailure`), by name.
                 throw std::runtime_error(
                     std::format(
                         "The {} input list of node {} names draft node {}, which is not one of the "
@@ -1212,14 +1241,13 @@ void emitDraftPayload(
     };
 
     // A GATE forwards its **first** norm input: FastVM reads the producer, NodeVM reads the gate's
-    // slot, so the slot must be the input's. The inputs after the first are the reads the gate takes
-    // and are not what it hands on (design principles 3.1), and the walk to the forwarding value is
-    // the one walk (`camel/runtime/draft.h#ungated`).
-    // Rewrites that rebind a
-    // gate's input (inlining binds parameter gates to the caller's arguments) leave a stale slot, so
-    // it is derived here. The owner of this rule is the encoder -- the payload plan in this file --
-    // not the draft's writers: it is the place that decides what the frozen graph holds, which is
-    // where the order-edge filter sits too.
+    // slot, so the slot must be the input's. The inputs after the first are the reads the gate
+    // takes and are not what it hands on (design principles 3.1), and the walk to the forwarding
+    // value is the one walk (`camel/runtime/draft.h#ungated`). Rewrites that rebind a gate's input
+    // (inlining binds parameter gates to the caller's arguments) leave a stale slot, so it is
+    // derived here. The owner of this rule is the encoder -- the payload plan in this file -- not
+    // the draft's writers: it is the place that decides what the frozen graph holds, which is where
+    // the order-edge filter sits too.
     const auto slotOf = [&](gc_node_ref_t id) {
         const gc_node_ref_t value = ungated(draft, id);
         const DraftNodeHeader *h  = value == kInvalidNodeRef ? nullptr : draft.header(value);
@@ -1781,6 +1809,15 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     if (header == nullptr || !draft.alive(id)) {
         return false;
     }
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs             = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeIsFreelySchedulable(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -1796,15 +1833,6 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
                    nullptr,
                    nullptr,
                    fixed);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeIsFreelySchedulable(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
     }
     default:
         return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
@@ -1825,6 +1853,16 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
             break;
         }
     }
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs             = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return isChainStatement(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr,
+            standsForRegion);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -1835,16 +1873,6 @@ bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
                 : camel::core::kNoOper,
             nullptr,
             nullptr,
-            standsForRegion);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return isChainStatement(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr,
             standsForRegion);
     }
     default:
@@ -1925,6 +1953,15 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     if (header == nullptr || !draft.alive(id)) {
         return true;
     }
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        const auto inputs             = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeMayFault(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(id);
@@ -1940,15 +1977,6 @@ bool nodeMayFault(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
                    nullptr,
                    nullptr,
                    fixed);
-    }
-    case GCNodeKind::Cast: {
-        const auto inputs             = draft.normInputsOf(id);
-        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
-        return nodeMayFault(
-            header->kind,
-            camel::core::kNoOper,
-            header->dataType,
-            source != nullptr ? source->dataType : nullptr);
     }
     default:
         return nodeMayFault(header->kind, camel::core::kNoOper);
@@ -1967,7 +1995,7 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
                 reinterpret_cast<const GCOperBody *>(payload.data())->oper)) {
             return false;
         }
-    } else if (header->kind != GCNodeKind::Cast) {
+    } else if (camel::execute::shapeOfKind(header->kind) != camel::execute::OperShape::Conversion) {
         return false;
     }
     const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };

@@ -12,12 +12,18 @@
  * a commit, a pass, a back end -- asks the framework and never computes a fact for itself, and
  * never keeps a cache of its own beside the store.
  *
- * The anchor is the view. A fact is about one or more (graph view, node) pairs, where the view is
- * the read-only interface to a graph the graph lane gives (core abstractions sections 1 and 2):
- * a frozen graph and an editing session both give it, so a fact can be asked for while a program
- * is being built as well as about the graph it was built into. A fact about a frozen view lives
- * as long as the program that holds it and is answered again and again; a fact about a session's
- * view dies with the session, because what it was computed from does not outlive it.
+ * The anchor is the graph, as a value. A fact is about one or more (graph, node) pairs, where the
+ * graph is the graph itself -- the frozen graph a program holds, or the graph an editing session is
+ * building (core abstractions sections 1 and 2) -- so a fact can be asked for while a program is
+ * being built as well as about the graph it was built into. A view is only how a graph is read: an
+ * adapter is made on demand, so its address neither names a graph nor stays with one, and a fact
+ * keyed on it would be lost when the same graph is read through another. A fact about a frozen
+ * graph lives as long as the program that holds it and is answered again and again; a fact about a
+ * session's graph dies with the session, because what it was computed from does not outlive it.
+ *
+ * How a graph is read, and which version its content has, are the owner's: it hands both to the
+ * store when it creates it (`GraphAccess`), because it is the only one that knows the
+ * representations. A computation reads through that view; nothing is keyed on it.
  *
  * A fact says what it read, and that record is what invalidates it. A computation reports the
  * nodes and regions it read, the names it resolved and the graphs those names were bound to, and
@@ -71,10 +77,17 @@
 #include <vector>
 
 namespace camel::graph {
-/// The read-only view of a graph (core abstractions sections 1 and 2). The framework asks it for
-/// two things and nothing else: an identity that names the same graph across versions, and the
-/// version of its content. Everything else about a graph a fact reads, it reads through the view.
+/// The read-only view of a graph (core abstractions sections 1 and 2): how a graph is read and
+/// nothing more. It is not the graph -- an adapter is made on demand, so its address neither names
+/// a graph nor stays with one. Everything a fact reads from a graph, it reads through the view.
 class GraphView;
+
+/// The graph, as a value (design principles 2.3: in the process a graph's identity is the value
+/// itself, not a number). A frozen graph and the graph an editing session is building are its two
+/// representations, and every version of a graph is one such value. The graph lane declares it;
+/// this header only names it, so that a fact can be anchored on the graph without the framework
+/// learning what the graph is made of.
+class Graph;
 } // namespace camel::graph
 
 namespace camel::facts {
@@ -87,24 +100,28 @@ using NodeId = std::uint32_t;
 inline constexpr NodeId kWholeGraph = UINT32_MAX;
 
 /// The number a view gives one of its regions (an arm of a branch, a loop's condition or body).
-using RegionId = std::uint32_t;
+using RegionId                      = std::uint32_t;
 inline constexpr RegionId kNoRegion = UINT32_MAX;
 
-/// What a fact is about: a node of a view, or the view as a whole.
+/// What a fact is about: a node of a graph, or the graph as a whole.
 struct Anchor {
+    /// The graph itself, by the value identity. Never a view of it: the same graph read through
+    /// another adapter is the same anchor, and a graph that was collected at no time names another.
     // program-holder-exempt: long-lived-cache -- a store keeps anchors for the life of the
-    // program, and a pin here would root every view a fact was ever asked about.
-    const graph::GraphView *view = nullptr;
-    NodeId node                  = kWholeGraph;
+    // program, and a pin here would root every graph a fact was ever asked about.
+    const graph::Graph *graph = nullptr;
+    NodeId node               = kWholeGraph;
 };
 
 /// A name a computation resolved while it ran, and the graph it was bound to at that moment. A
 /// name may be bound to a graph again later; the fact is stale when it was, because what it read
 /// through the name is then a different graph.
 struct NameRead {
-    const graph::GraphView *view = nullptr;
+    /// The graph whose environment table was read.
+    const graph::Graph *in = nullptr;
     std::string name;
-    const graph::GraphView *holds = nullptr;
+    /// The graph the name was bound to; null when it was bound to nothing.
+    const graph::Graph *holds = nullptr;
 };
 
 /// What a computation read: the record its stamp is made of.
@@ -124,6 +141,20 @@ struct Reads {
 };
 
 /**
+ * How a store reaches a graph it is anchored on: the view to read it through, and the version of
+ * its content. The owner of the store gives both when it creates the store -- a program answers
+ * from the frozen graphs it holds, an editing session from the draft it is editing -- because it
+ * is the one that knows the representations. A fact names the graph; a view is handed to a
+ * computation when it runs, and is never what a fact is keyed on.
+ */
+struct GraphAccess {
+    /// The read-only view of `graph`, or null when the graph is not one this store's owner holds.
+    std::function<const graph::GraphView *(const graph::Graph &)> view;
+    /// The version of the graph's content: a stored fact is stale when it changed.
+    std::function<std::uint64_t(const graph::Graph &)> version;
+};
+
+/**
  * What a computation writes its Reads into while it runs. A computation that reports nothing has
  * read nothing, and a fact computed from it is stale as soon as anything it is anchored on
  * changes; that is why a kind states its dependence as well as reporting.
@@ -132,8 +163,8 @@ class ReadLog {
   public:
     void node(NodeId id) { reads_.nodes.push_back(id); }
     void region(RegionId id) { reads_.regions.push_back(id); }
-    void name(const graph::GraphView &view, std::string_view name, const graph::GraphView *holds) {
-        reads_.names.push_back(NameRead{&view, std::string(name), holds});
+    void name(const graph::Graph &in, std::string_view name, const graph::Graph *holds) {
+        reads_.names.push_back(NameRead{&in, std::string(name), holds});
     }
     void record(ops::OperId id) { reads_.records.push_back(id); }
 
@@ -164,9 +195,9 @@ enum class Class : std::uint8_t {
 /// What a fact is about.
 enum class Scope : std::uint8_t {
     Node,       // one node
-    Graph,      // a view as a whole
-    CrossNode,  // several nodes of one view
-    CrossGraph, // nodes or views of several views
+    Graph,      // a graph as a whole
+    CrossNode,  // several nodes of one graph
+    CrossGraph, // nodes or graphs of several graphs
 };
 
 /// How a stored fact is found stale.
@@ -174,13 +205,13 @@ enum class Dependence : std::uint8_t {
     /// The computation reports what it read (ReadLog): the fact is stale when a node, region,
     /// name binding or operator record it reported changed.
     Reported,
-    /// The conservative rule: any change in the anchored view, or in a view it reaches (a callee,
-    /// a nested graph, a function constant's graph, at any depth), makes it stale. What a fact
-    /// computed by code written before this framework declares.
+    /// The conservative rule: any change in the anchored graph, or in a graph it reaches (a
+    /// callee, a nested graph, a function constant's graph, at any depth), makes it stale. What
+    /// a fact computed by code written before this framework declares.
     Anchors,
 };
 
-using KindId = std::uint32_t;
+using KindId                    = std::uint32_t;
 inline constexpr KindId kNoKind = UINT32_MAX;
 
 /// The type-erased registration of a kind, as the registry keeps it.
@@ -189,11 +220,11 @@ struct KindInfo {
     /// to that owner; the core's is `core`.
     std::string key;
     std::string owner;
-    std::uint16_t version = 1;
+    std::uint16_t version   = 1;
     std::type_index payload = typeid(void);
-    Class cls              = Class::Derived;
-    Scope scope            = Scope::Node;
-    Dependence dependence  = Dependence::Reported;
+    Class cls               = Class::Derived;
+    Scope scope             = Scope::Node;
+    Dependence dependence   = Dependence::Reported;
     /// Whether the values of this kind merge at all (see Kind::merge).
     bool merges = false;
     /// Whether adding nodes or edges to a graph can make a stored value false.
@@ -202,15 +233,17 @@ struct KindInfo {
     /// How to compute it, which is also the validator: a verify recomputes and compares. Null only
     /// for a kind computed by its owner alone (a module's fact) or for a Content kind (whose
     /// value is read from the view).
-    std::function<std::shared_ptr<const void>(std::span<const Anchor>, ReadLog &)> compute;
+    std::function<std::shared_ptr<const void>(
+        std::span<const Anchor>, const GraphAccess &, ReadLog &)>
+        compute;
     /// The law that makes two values one value (see Kind::merge). Null when the kind has none.
     std::function<std::shared_ptr<const void>(const void *left, const void *right)> merge;
     std::function<bool(const void *, const void *)> equal;
     std::function<std::string(const void *)> print;
 
-    /// The anchors in `view` at which the kind has a fact to compute, for `computeAll`: by default
-    /// every node (Node scope) or the view (Graph scope); a CrossNode or CrossGraph kind that
-    /// wants to be computed in bulk says where.
+    /// The anchors in the view at which the kind has a fact to compute, for `computeAll`: by
+    /// default every node (Node scope) or the graph (Graph scope); a CrossNode or CrossGraph kind
+    /// that wants to be computed in bulk says where.
     std::function<std::vector<std::vector<Anchor>>(const graph::GraphView &)> anchorsIn;
 };
 
@@ -218,7 +251,8 @@ struct KindInfo {
  * The declaration of a kind whose values are `T`. Hooks, all but `print` optional:
  *
  *   compute   the value at the anchors, or nullopt when there is none (an operator that declares
- *             no index semantics has no instance), reporting what it read into `log`.
+ *             no index semantics has no instance), reading the graphs through `graphs` and
+ *             reporting what it read into `log`.
  *   merge     the law that makes two values one: with `left` the value of one part and `right`
  *             the value of another, the value of the union. Stating it is what makes the kind an
  *             analysis rather than a cache (design principles red line 4); a kind with no merge
@@ -230,11 +264,12 @@ template <typename T> struct Kind {
     std::string key;
     std::string owner;
     std::uint16_t version = 1;
-    Class cls              = Class::Derived;
-    Scope scope            = Scope::Node;
-    Dependence dependence  = Dependence::Reported;
-    bool monotone          = false;
-    std::function<std::optional<T>(std::span<const Anchor>, ReadLog &)> compute;
+    Class cls             = Class::Derived;
+    Scope scope           = Scope::Node;
+    Dependence dependence = Dependence::Reported;
+    bool monotone         = false;
+    std::function<std::optional<T>(std::span<const Anchor>, const GraphAccess &, ReadLog &)>
+        compute;
     std::function<std::optional<T>(const T &left, const T &right)> merge;
     std::function<std::string(const T &)> print;
     std::function<std::vector<std::vector<Anchor>>(const graph::GraphView &)> anchorsIn;
@@ -249,23 +284,26 @@ KindId registerKind(KindInfo info);
 
 template <typename T> KindId registerKind(Kind<T> kind) {
     KindInfo info{
-        .key          = std::move(kind.key),
-        .owner        = std::move(kind.owner),
-        .version      = kind.version,
-        .payload      = typeid(T),
-        .cls          = kind.cls,
-        .scope        = kind.scope,
-        .dependence   = kind.dependence,
-        .merges       = bool(kind.merge),
-        .monotone     = kind.monotone,
-        .anchorsIn    = std::move(kind.anchorsIn),
+        .key        = std::move(kind.key),
+        .owner      = std::move(kind.owner),
+        .version    = kind.version,
+        .payload    = typeid(T),
+        .cls        = kind.cls,
+        .scope      = kind.scope,
+        .dependence = kind.dependence,
+        .merges     = bool(kind.merge),
+        .monotone   = kind.monotone,
+        .anchorsIn  = std::move(kind.anchorsIn),
     };
     if (kind.compute) {
         info.compute = [compute = std::move(kind.compute)](
-                           std::span<const Anchor> anchors,
-                           ReadLog &log) -> std::shared_ptr<const void> {
-            std::optional<T> value = compute(anchors, log);
-            return value ? std::make_shared<const T>(std::move(*value)) : nullptr;
+                           std::span<const Anchor>
+                               anchors,
+                           const GraphAccess &graphs,
+                           ReadLog &log) {
+            std::optional<T> value = compute(anchors, graphs, log);
+            return value ? std::make_shared<const T>(std::move(*value))
+                         : std::shared_ptr<const void>{};
         };
         info.equal = [](const void *left, const void *right) {
             return *static_cast<const T *>(left) == *static_cast<const T *>(right);
@@ -311,31 +349,32 @@ struct Counts {
 /// One stored fact, as forEach shows it.
 struct StoredFact {
     KindId kind = kNoKind;
-    /// The anchor of each view the fact is about.
-    std::vector<std::pair<const graph::GraphView *, NodeId>> anchors;
+    /// The anchors the fact is about.
+    std::vector<Anchor> anchors;
     std::shared_ptr<const void> value;
-    /// The version of each anchored view, and what the computation reported.
-    std::vector<std::pair<const graph::GraphView *, std::uint64_t>> versions;
+    /// The version of each anchored graph's content, and what the computation reported.
+    std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
     Reads reads;
-    std::uint64_t epoch   = 0;
-    std::uint64_t target  = 0;
+    std::uint64_t epoch  = 0;
+    std::uint64_t target = 0;
 };
 
 /**
  * The facts of one program version, or of one editing session, by kind and anchor.
  *
  * There is one store per program and one per session, and the owner creates it: a fact about a
- * frozen view is answered for as long as the program exists, and a fact about a session's view
- * is dropped with the session, because the view it was computed from does not outlive it. Nobody
+ * frozen graph is answered for as long as the program exists, and a fact about a session's graph
+ * is dropped with the session, because the graph it was computed from does not outlive it. Nobody
  * else keeps a cache of a fact; a reader that finds its own cache beside this store has it there
  * for a reason that should be a kind of fact instead.
  */
 class Store {
   public:
-    /// `persistent` when the views it will be asked about outlive every change of them (a
-    /// program's frozen views) and the answers are worth keeping; false for a session, whose
-    /// answers are dropped with it in any case.
-    explicit Store(bool persistent = true);
+    /// `graphs` is how this store reads and versions the graphs its anchors name, which only the
+    /// owner can say. `persistent` when the graphs it will be asked about outlive every change of
+    /// them (a program's frozen graphs) and the answers are worth keeping; false for a session,
+    /// whose answers are dropped with it in any case.
+    explicit Store(GraphAccess graphs, bool persistent = true);
     ~Store();
     Store(const Store &)            = delete;
     Store &operator=(const Store &) = delete;
@@ -348,12 +387,10 @@ class Store {
     std::shared_ptr<const void>
     getValue(KindId kind, std::span<const Anchor> anchors, std::uint64_t target = 0);
     /// Stores `value` at `anchors`, replacing what was there. Throws std::invalid_argument for a
-    /// Content kind (its value is the view's content and is never stored), a Target kind without
+    /// Content kind (its value is the graph's content and is never stored), a Target kind without
     /// a target hash, a value of another type, or anchors that do not fit the kind's scope.
     void putValue(
-        KindId kind,
-        std::span<const Anchor> anchors,
-        std::shared_ptr<const void> value,
+        KindId kind, std::span<const Anchor> anchors, std::shared_ptr<const void> value,
         std::uint64_t target = 0);
     /// What a read at `anchors` finds, discarding a stale entry as `getValue` would, and saying
     /// which of the four answers it was.
@@ -364,9 +401,9 @@ class Store {
     /// are equal. This is the validator of a kind, and what a test asks rather than trusting it.
     std::optional<bool> verify(KindId kind, std::span<const Anchor> anchors);
 
-    /// Drops the fact at `anchors`, every fact anchored on `view`, or everything.
+    /// Drops the fact at `anchors`, every fact anchored on `graph`, or everything.
     void invalidate(KindId kind, std::span<const Anchor> anchors);
-    void invalidateView(const graph::GraphView *view);
+    void invalidateGraph(const graph::Graph *graph);
     void clear();
 
     /// Calls `visitor` for every stored fact, without checking a stamp: what is stored.
@@ -406,24 +443,23 @@ class Store {
         return get<T>(kind, std::span<const Anchor>(&anchor, 1), target);
     }
     template <typename T>
-    std::shared_ptr<const T>
-    obtain(KindId kind, const Anchor &anchor, std::uint64_t target = 0) {
+    std::shared_ptr<const T> obtain(KindId kind, const Anchor &anchor, std::uint64_t target = 0) {
         return obtain<T>(kind, std::span<const Anchor>(&anchor, 1), target);
     }
 
   private:
     /// One stored fact: what it is about, the value, and what makes it stale.
     struct Entry {
-        std::vector<std::pair<const graph::GraphView *, NodeId>> anchors;
+        std::vector<Anchor> anchors;
         std::shared_ptr<const void> value;
-        std::vector<std::pair<const graph::GraphView *, std::uint64_t>> versions;
+        std::vector<std::pair<const graph::Graph *, std::uint64_t>> versions;
         Reads reads;
         std::uint64_t epoch  = 0;
         std::uint64_t target = 0;
     };
     struct Key {
         KindId kind;
-        const graph::GraphView *view;
+        const graph::Graph *graph;
         NodeId node;
 
         bool operator==(const Key &) const = default;
@@ -435,24 +471,27 @@ class Store {
     static void checkType(KindId kind, const std::type_info &type);
     Entry *find(KindId kind, std::span<const Anchor> anchors, std::uint64_t target, Status &status);
 
+    GraphAccess graphs_;
     bool persistent_;
     mutable std::mutex mutex_;
     std::unordered_map<Key, std::vector<Entry>, KeyHash> entries_;
     Counts counts_;
 };
 
-/// Computes and stores, for every view reachable from `root`, the facts of every registered kind
-/// that has compute and is not a Content kind, at every anchor the kind names (`anchorsIn`): what
-/// a consumer would obtain one by one. Facts already stored and valid are kept.
-void computeAll(Store &store, const graph::GraphView &root);
+/// Computes and stores, for every graph reachable from `root` (read through `rootView`), the facts
+/// of every registered kind that has compute and is not a Content kind, at every anchor the kind
+/// names (`anchorsIn`): what a consumer would obtain one by one. Facts already stored and valid
+/// are kept.
+void computeAll(Store &store, const graph::Graph &root, const graph::GraphView &rootView);
 
 /**
- * `camel inspect --facts`: one line `FACT {json}` per fact about the views reachable from
- * `root`. Fields: "kind", "version", "class" ("content", "derived", "target"), "anchors" (a list
- * of {"graph", "node"}, the node omitted for a view as a whole), "value" (the kind's print),
+ * `camel inspect --facts`: one line `FACT {json}` per fact about the graphs reachable from `root`.
+ * Fields: "kind", "version", "class" ("content", "derived", "target"), "anchors" (a list of
+ * {"graph", "node"}, the node omitted for a graph as a whole), "value" (the kind's print),
  * "stamp" ({"versions": [...], "reads": {"nodes", "regions", "names", "records"}, "epoch",
  * "target"}; null for a Content kind). A stale fact is not printed, and is dropped.
  */
-void dump(Store &store, const graph::GraphView &root, std::ostream &os);
+void dump(
+    Store &store, const graph::Graph &root, const graph::GraphView &rootView, std::ostream &os);
 
 } // namespace camel::facts
