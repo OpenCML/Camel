@@ -11,8 +11,8 @@
     python3 test/tools/cppexec/run.py --standalone <program.cml>...
 
 For every program: `camel <program> [passes] std::cpp` writes a C++ file; the C++ compiler
-($CXX, else clang++, g++ or c++) builds it with the headers of the repository (include/, where
-camel/standalone/ lives); the executable runs; `camel <program> [passes] std::fvm` runs too
+($CXX, else clang++, g++ or c++) builds it with the headers of the repository (lib/std/cpp/include,
+where camel/standalone/ lives); the executable runs; `camel <program> [passes] std::fvm` runs too
 (after the same passes, so on the same graph). The two agree when their standard output and
 exit code are the same (a fault's report is on standard output in both, design note
 docs/design/cpp-standalone/README.cn.md 7.1).
@@ -75,6 +75,24 @@ CAMEL = os.environ.get("CAMEL", os.path.join(ROOT, "out", "latest", "bin", "came
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # A statement that is only `x->append<...>` or `x->extend<...>`: it relies on the change in place.
 IN_PLACE = re.compile(r"^\s*[\w.\[\]]+->(append|extend)<.*>\s*$", re.M)
+# Where the C++ headers a generated program includes live, newest layout first. The tree was laid
+# out again ("move: the tree is laid out as the map says"): camel/standalone/ is a header set of
+# the standard library and sits under lib/std/cpp/include; it was under include/ before that.
+CPP_INCLUDE_LAYOUTS = ("lib/std/cpp/include", "include")
+
+
+def cpp_include():
+    """The directory the generated programs are compiled against, found rather than assumed: the
+    one of the two layouts that actually holds camel/standalone/runtime.h. A single written-down
+    path is what went stale here -- the tests kept feeding the compiler a directory the move had
+    emptied, and every program failed to build with the header not found."""
+    for rel in CPP_INCLUDE_LAYOUTS:
+        directory = os.path.join(ROOT, *rel.split("/"))
+        if os.path.isfile(os.path.join(directory, "camel", "standalone", "runtime.h")):
+            return directory
+    # Neither layout has it: name the newest one, so the compiler's own "file not found" carries
+    # the path that was tried instead of the tool passing silently.
+    return os.path.join(ROOT, *CPP_INCLUDE_LAYOUTS[0].split("/"))
 
 
 def find_compiler():
@@ -93,7 +111,7 @@ def build_command(compiler, msvc, source, target, bridged, camel_home, pch=None)
     """A program that uses operators of runtime modules (bridged) links libcamel. `pch` is a
     precompiled camel/standalone/runtime.h (clang only): most of a compilation is spent in
     the standard library's headers it includes."""
-    include = os.path.join(ROOT, "include")
+    include = cpp_include()
     lib = os.path.join(camel_home, "libs")
     if msvc:
         cmd = [compiler, "/nologo", "/std:c++20", "/O2", "/EHsc", "/I", include, source,
@@ -180,9 +198,9 @@ def build_pch(workdir, args):
     if args.no_pch or not compiler or "clang" not in os.path.basename(compiler).lower():
         return None
     pch = os.path.join(workdir, "runtime.pch")
-    header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
+    header = os.path.join(cpp_include(), "camel", "standalone", "runtime.h")
     code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off",
-                         "-I", os.path.join(ROOT, "include"),
+                         "-I", cpp_include(),
                          "-x", "c++-header", header, "-o", pch], 600)
     args.pch = pch if code == 0 else None
     return args.pch
@@ -915,8 +933,8 @@ def main():
     args.pch = None
     if not args.no_pch and "clang" in os.path.basename(compiler).lower():
         pch = os.path.join(workdir, "runtime.pch")
-        header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
-        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-I", os.path.join(ROOT, "include"),
+        header = os.path.join(cpp_include(), "camel", "standalone", "runtime.h")
+        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-I", cpp_include(),
                              "-x", "c++-header", header, "-o", pch], 600)
         args.pch = pch if code == 0 else None
     try:
