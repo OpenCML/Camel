@@ -19,6 +19,7 @@
 
 #include "../generic/rewrite.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/source/manager.h"
@@ -207,11 +208,17 @@ bool bodyNeedsOrder(
         if (!node) {
             continue;
         }
+        // A conversion may fail, so a body that holds one orders itself like a body that holds an
+        // operator that may; the shape says it is a conversion
+        // (`camel/execute/shaped_operators.h`).
+        if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Conversion &&
+            !camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
+            return true;
+        }
         switch (node->kind) {
         case GCNodeKind::Call:
             return true;
         case GCNodeKind::Oper:
-        case GCNodeKind::Cast:
             if (!camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
                 return true;
             }
@@ -367,7 +374,8 @@ struct MacroOperandGraphs {
 GCGraph *functionConstantGraph(const GCGraph *graph, gc_node_ref_t ref) {
     using camel::core::type::TypeCode;
     const auto *node = graph->node(ref);
-    if (node->kind == GCNodeKind::Fill && !graph->normInputsOf(ref).empty()) {
+    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Construction &&
+        !graph->normInputsOf(ref).empty()) {
         ref  = graph->normInputsOf(ref).front();
         node = graph->node(ref);
     }

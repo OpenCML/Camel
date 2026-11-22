@@ -29,6 +29,7 @@
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/registration.h"
 #include "camel/execute/pass/warnings.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
@@ -1457,9 +1458,12 @@ size_t foldDraft(
                 continue;
             }
             // An element projected out of a tuple built in this graph is the value filled there;
-            // an element of a constant tuple or struct is a constant.
+            // an element of a constant tuple or struct is a constant. The four node kinds that
+            // still spell these operators are asked by their shape
+            // (`camel/execute/shaped_operators.h`).
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Accs && isFoldable(transaction, id)) {
+                h && camel::execute::shapeOfKind(h->kind) == camel::execute::OperShape::Access &&
+                isFoldable(transaction, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
                     replaceFoldResult(transaction, id, value);
@@ -1473,7 +1477,9 @@ size_t foldDraft(
             }
             // A tuple, struct or array built from constants is a constant.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Fill && isFoldable(transaction, id)) {
+                h && camel::execute::shapeOfKind(h->kind) ==
+                         camel::execute::OperShape::Construction &&
+                isFoldable(transaction, id)) {
                 if (foldStaticFill(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
@@ -1482,7 +1488,9 @@ size_t foldDraft(
             }
             // A conversion of a constant is a constant, when the conversion succeeds.
             if (const auto *h = draft.header(id);
-                h && h->kind == GCNodeKind::Cast && isFoldable(transaction, id)) {
+                h && camel::execute::shapeOfKind(h->kind) ==
+                         camel::execute::OperShape::Conversion &&
+                isFoldable(transaction, id)) {
                 if (foldStaticCast(transaction, id, roots, constantBudget)) {
                     ++folded;
                     changed = true;
