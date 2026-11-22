@@ -3,7 +3,7 @@
 **日期**：2026-11-20
 **车道**：`lane-container-elements`（基线 `origin/develop = 740c8c9c6`）
 **状态**：判完并落地读数；**`src/` 一行未动**（判定是不需要改）
-**上游**：[2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md](../questions/2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md)
+**上游**：[2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md](../reviews/2026-11-19-an-in-place-argument-has-to-be-one-this-graph-made.cn.md)
 §5 把这一半记成「缺陷本身」。本页做那页留下的两件事：给这半一条**可测的判据**，并回答「哪一条改动能让守卫不必再挡」——现在每一句都有 §7 记的那几次运行做读数，不是推的。
 
 ## 1. 判据（一条能说不的性质）
