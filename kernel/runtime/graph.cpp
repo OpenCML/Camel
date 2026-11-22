@@ -76,6 +76,23 @@ bool shapesAreFixed(const camel::core::type::Type *type) {
 bool nodeMayFault(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
+    // The four shaped operators -- a conversion, a copy, a construction, an access -- are answered
+    // here by their shape: a conversion may fault when the conversion it performs is checked
+    // (`castMayFault`), and a copy, a construction and an access cannot fault at all. Design
+    // principles 3.9 makes "may fault" one item of the operator record, stated by `panic`, and
+    // this shape answer stands in for that item only while the record says nothing about these
+    // four: of them only `copy` is an operator (`:op/copy`), and it states no `panic`, so asking
+    // its record today would read "nobody said" -- the conservative `true` -- instead of the
+    // `false` this line answers. A conversion, a construction and an access are not operators at
+    // all yet: each takes a compile-time parameter a record keyed by URI cannot carry
+    // (`lib/std/builtin/modules/globals.cpp`, refactor plan 2.3).
+    //
+    // So this is where the two readings would part: once the record states `panic` for the four,
+    // each arm below becomes that item's reading --
+    // `camel::ops::Registry::instance().find(oper)->mayFault()`, which is
+    // `!panic.stated() || panic.value` in `camel/ops/operator_record.h` -- and the four arms below
+    // go. `oper` is the operator the node names once the front end builds these four as
+    // ordinary OPER nodes; today these kinds carry `kNoOper` and have no record to ask.
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
