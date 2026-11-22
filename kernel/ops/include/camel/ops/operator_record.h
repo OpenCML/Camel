@@ -20,8 +20,10 @@
  * keyword, and a declaration that does not write it promises that no call fails; the C++ entrance
  * takes it as a required parameter, so a C++ operator always states one of the two answers. It
  * carries no list of kinds: a fault's kind is reported where the fault happens, by the operator
- * that raises it. `T!` states the same fact in the signature, so the two are compared when the
- * record is completed.
+ * that raises it. `T!` is not that fact and says nothing about it: an error is a value (3.9, and
+ * `T!` is a built-in `enum`), so an operator can return `T!` and never fail, and can fail while its
+ * result is a plain `int` (a zero divisor). The signature records the `T!` as its own fact
+ * (`Signature::fallible`); neither is derived from the other, and completion does not compare them.
  *
  * A label is graph information and is no member here. `#jvp` and `#transpose`, the numeric
  * permissions a program grants, the hints a target reads, the concepts a library gives its own
@@ -154,8 +156,10 @@ struct Signature {
     /// result. Null when the operator has no stated signature (a dynamic rule, a kernel a module
     /// declares without a body).
     const type::FunctionType *type = nullptr;
-    /// The result is written `T!`: a call may fail to give one. This is `panic` stated in the
-    /// type; the completion check compares the two.
+    /// The result is written `T!`: a call gives a value of the payload type, or hands on the error
+    /// it came back with (3.9; an error is a value, not a fault). This is the signature's own fact
+    /// and **not** `panic`: it does not imply that a call can fail, and `panic` does not imply it
+    /// (`div` fails and returns `int`).
     bool fallible = false;
 };
 
@@ -505,9 +509,9 @@ class Registry {
     // ---- Completion ------------------------------------------------------------------------
 
     /**
-     * Checks a record whose entrances are all in and publishes it: `T!` against `panic`, purity
-     * against the accesses, an in-place form against its plain operator, and an elementwise
-     * algebra against the bit that states it. Throws std::invalid_argument naming
+     * Checks a record whose entrances are all in and publishes it: the two entrances' `panic`
+     * against each other, purity against the accesses, an in-place form against its plain operator,
+     * and an elementwise algebra against the bit that states it. Throws std::invalid_argument naming
      * the operator and the item that does not hold; a refused record is left as it was.
      *
      * A published record is never changed again: everything a program can ask about an operator
