@@ -1386,7 +1386,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "SameShapeComprehensionMismatch",
                 "The shape {0} is filled from the fields of {1}.",
-                "Write `T {{ static for n, F in fields T => ... }}`: the generator must walk the shape the comprehension constructs.",
+                "Write `T {{ static for n, F in fields T do ... }}`: the generator must walk the shape the comprehension constructs.",
             },
         },
         {
@@ -1737,7 +1737,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::StructComprehensionWithoutFields,
             {
                 "StructComprehensionWithoutFields",
-                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.",
+                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... do ... )', or walk 'fields T'.",
                 "A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.",
             },
         },

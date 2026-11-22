@@ -40,7 +40,7 @@ func kind_of::<T>(): string {
 /// A tuple read back from the type after `fields`: `Tangent<(float, float)>` is `(float, float)`,
 /// whose members the rounds walk.
 func zeros(): Tangent<(float, float)> {
-    return Tangent<(float, float)> { static for n, _ in fields Tangent<(float, float)> => 0.0 }
+    return Tangent<(float, float)> { static for n, _ in fields Tangent<(float, float)> do 0.0 }
 }
 
 func main(): int sync {

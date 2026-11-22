@@ -1207,20 +1207,22 @@ void ParserImpl::parseTypeCase() {
     close(m, NK::TypeCase);
 }
 
-/// staticForExpr : 'static' staticForHeader '=>' blockExpr
-/// `static for n, F in fields T => 块`：把结构体或元组的字段表在实例化时展开，
+/// staticForExpr : 'static' staticForHeader 'do' blockExpr
+/// `static for n, F in fields T do 块`：把结构体或元组的字段表在实例化时展开，
 /// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
-/// `static for j in indices ts => 块`：把元组 `ts` 的每个位置展开一次，`j`
+/// `static for j in indices ts do 块`：把元组 `ts` 的每个位置展开一次，`j`
 /// 是这一轮的位置（编译期整数）。两种头共用一个解析函数，只有 `in` 后面的写法不同。
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
 /// The header is shared with `static loop`: the same `for ... in ...` says what is walked, and
-/// only what follows it differs (`=> 块` or `do 表达式`).
+/// the two spell one word after it (`do`), as the ordinary loop does -- `=>` follows a type or a
+/// value that stands for another (`case`, a rule), and a loop body is neither (design principles
+/// 4.1).
 /// `fields` 后面是类型位置：`(` 一律按类型读，`fields ()` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
     parseStaticForHeader();
-    if (!panic_ && expect(TK::FatArrow)) {
+    if (!panic_ && expect(TK::KwDo)) {
         parseBlockExpr();
     }
     close(m, NK::StaticForExpr);

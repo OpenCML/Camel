@@ -4706,7 +4706,7 @@ A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable
 
 ```camel
 func walk(t: int) {
-    static for n, F in fields int => {
+    static for n, F in fields int do {
         println(n, t)
     }
 }
@@ -4867,7 +4867,7 @@ The block is the value of one field: its last statement must have a value. A cal
 
 ```camel
 func broken(t: {a: int, b: int}) {
-    return { static for n, F in fields {a: int, b: int} => {} }
+    return { static for n, F in fields {a: int, b: int} do {} }
 }
 
 func main(): int sync {
@@ -6004,7 +6004,7 @@ func nothing(): void {
 }
 
 func main(): int sync {
-    static for j, C in fields typeof(nothing()) => println(j)
+    static for j, C in fields typeof(nothing()) do println(j)
     return 0
 }
 ```
@@ -6033,7 +6033,7 @@ typeof is written inside the larger type {0}.
 
 ```camel
 func main(): int sync {
-    static for j, C in fields typeof(1)[] => println(j)
+    static for j, C in fields typeof(1)[] do println(j)
     return 0
 }
 ```
@@ -6064,7 +6064,7 @@ A same-shape comprehension names a struct or a tuple type; a leaf has no fields.
 type N = int
 
 func build(t: int) {
-    return N { static for n, F in fields N => t }
+    return N { static for n, F in fields N do t }
 }
 
 func main(): int sync {
@@ -6090,7 +6090,7 @@ The shape {0} is filled from the fields of {1}.
 **Help**
 
 ```text
-Write `T { static for n, F in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+Write `T { static for n, F in fields T do ... }`: the generator must walk the shape the comprehension constructs.
 ```
 
 **Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
@@ -6100,7 +6100,7 @@ type A = {a: int}
 type B = {b: int, c: int}
 
 func build(u: B) {
-    return A { static for n, F in fields B => u.[n] }
+    return A { static for n, F in fields B do u.[n] }
 }
 
 func main(): int sync {
@@ -8129,7 +8129,7 @@ None: choice: whether the value is a struct or a tuple is the writer's to write
 **Message**
 
 ```text
-A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.
+A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... do ... )', or walk 'fields T'.
 ```
 
 **Help**
@@ -8142,7 +8142,7 @@ A struct value is written as one value per field name, and `indices` walks the p
 
 ```camel
 func bad(t: (int, int)): {a: int, b: int} {
-    return { static for j in indices t => t.[j] }
+    return { static for j in indices t do t.[j] }
 }
 
 func main(): int {

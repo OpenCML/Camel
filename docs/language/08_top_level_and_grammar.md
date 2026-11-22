@@ -200,7 +200,7 @@ tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
 funcData           : 'func' angledParams? parentParams ('=>' typeExpr)? blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
-staticForExpr      : 'static' staticForHeader '=>' blockExpr
+staticForExpr      : 'static' staticForHeader 'do' blockExpr
 staticForHeader    : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr

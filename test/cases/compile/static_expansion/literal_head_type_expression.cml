@@ -22,12 +22,12 @@ func zero_of::<F>(x: F): Tangent<F> {
 
 /// `Tangent<(float, int)>` is `(float, ())`: each member's tangent has the member's place.
 func zeros(x: (float, int)): Tangent<(float, int)> {
-    return Tangent<(float, int)> { static for n, F in fields (float, int) => zero_of(x.[n]) }
+    return Tangent<(float, int)> { static for n, F in fields (float, int) do zero_of(x.[n]) }
 }
 
 /// The tangent space of two floats is the same two floats, so the rounds give floats.
 func pair_zero(x: (float, float)): Tangent<(float, float)> {
-    return Tangent<(float, float)> { static for n, F in fields (float, float) => 0.0 }
+    return Tangent<(float, float)> { static for n, F in fields (float, float) do 0.0 }
 }
 
 func main(): int sync {

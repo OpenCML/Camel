@@ -406,7 +406,7 @@ func main(): int sync {
 
   ```cml
   func column(constas n: string, ...ts): (int, int) {
-      return ( static for j in indices ts => ts.[j].[n] )
+      return ( static for j in indices ts do ts.[j].[n] )
   }
   ```
 

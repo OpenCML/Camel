@@ -1436,7 +1436,7 @@ any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) { return conte
 
 /*
 staticForExpr
-    : STATIC staticForHeader '=>' blockExpr
+    : STATIC staticForHeader DO blockExpr
     ;
 staticForHeader
     : FOR (identDef | '_') (',' (identDef | '_'))* IN
@@ -1450,11 +1450,11 @@ any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
     const auto mode = context->tok(TK::Identifier);
     if (mode && mode.text() == "indices") {
         return "static for " + formatStaticHeadNames(context) + " in indices " +
-               any_cast<string>(visit(context->expr())) + " => " +
+               any_cast<string>(visit(context->expr())) + " do " +
                any_cast<string>(visitBlockExpr(context->lastChild().node()));
     }
     return "static for " + formatStaticHeadNames(context) + " in fields " +
-           formatTypeInTypePosition(context->type()) + " => " +
+           formatTypeInTypePosition(context->type()) + " do " +
            any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
 

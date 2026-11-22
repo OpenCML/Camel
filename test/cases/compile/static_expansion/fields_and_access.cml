@@ -8,7 +8,7 @@
 
 func showStruct(t: {a: int, b: int}) {
     sync {
-        static for n, F in fields {a: int, b: int} => {
+        static for n, F in fields {a: int, b: int} do {
             let v: F = t.[n]
             println(n, v)
         }
@@ -17,7 +17,7 @@ func showStruct(t: {a: int, b: int}) {
 
 func showTuple(t: (int, int)) {
     sync {
-        static for n, F in fields (int, int) => {
+        static for n, F in fields (int, int) do {
             let v: F = t.[n]
             println(n, v)
         }
@@ -26,9 +26,9 @@ func showTuple(t: (int, int)) {
 
 func nested(t: {p: {x: int}, q: (int, int)}) {
     sync {
-        static for n, F in fields {p: {x: int}, q: (int, int)} => {
+        static for n, F in fields {p: {x: int}, q: (int, int)} do {
             let p: F = t.[n]
-            static for m, G in fields F => {
+            static for m, G in fields F do {
                 let v: G = p.[m]
                 println(n, m, v)
             }
@@ -38,7 +38,7 @@ func nested(t: {p: {x: int}, q: (int, int)}) {
 
 func emptyStruct(t: {}): int {
     var count = 0
-    static for n, F in fields {} => {
+    static for n, F in fields {} do {
         count = count + 1
     }
     return count
@@ -47,7 +47,7 @@ func emptyStruct(t: {}): int {
 /** `fields` is followed by a type position, so `` is the empty tuple type (rule 1). */
 func emptyTuple(): int {
     var count = 0
-    static for n, F in fields () => {
+    static for n, F in fields () do {
         count = count + 1
     }
     return count
