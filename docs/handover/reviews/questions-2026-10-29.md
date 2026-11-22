@@ -7038,3 +7038,9 @@ CI `45001457388` 五腿全绿：`linux` / `linux-x64-nojit` / `ASan + UBSan` / `
 - `tools/` 里开发用的三个进 `test/tools/`；`editors/vscode/` 删除（插件有专门仓库）；`pypi/` 进 `packaging/pypi/`；`agents/`、`assets/` 留根目录；`promo/ exemplars/ ROADMAP.md REPRODUCE.md` 与论文评估脚本进 `internal/`；`showcase/` 这次不动。
 
 **时机**：算子记录返工已合入（`2fa53b263`）。先把 2.2 收尾——那 92 个算子的 `panic` 写上、`graph.cpp` 改读记录并出"改前改后每个算子 `mayFault` 一项不变"的表——合入且 CI 全绿后开窗。做法同阶段 1：对照表、一笔只移动、一笔跟改引用，比对前后读数逐条一致，CI 五腿全绿关窗。窗口期间其余车道不合入。
+
+## 返工（2026-11-22 20:15）：`129068ff9` 为了让两个入口一致，删掉了一句真话
+
+决策者。`array` 的八个 min/max 内核在空数组上会故障，`d39cd2464` 给它们写了 `panic`，是对的；`129068ff9` 因为 C++ 那一侧"还说不出 `panic`"、登记表报两边不一致，就把声明里的 `panic` 删了。结果是两边一致地说错了：声明现在承诺它们不会故障。设计原则第 14 节第 11 条：不为让检查通过而改变语义。
+
+请回退 `129068ff9`，改为让 C++ 那一侧也说出 `panic = true`：`ce8332713` 已经给 `CppRegistration` 补了各项的设置函数；这八个内核若不经 `CppRegistration` 登记，就让它们的登记路径能填这一项，或者先改走 `CppRegistration`。在那之前，登记表对这八个的"两边不一致"是**对的红**，留着，列进 `docs/handover/reports/2026-11-22-panic-has-no-writer.cn.md` 的待办，不要用删掉真话的办法消掉它。同类的情况以后一律这样处理。
