@@ -1,6 +1,6 @@
 # Camel 路线图
 
-本文档是当前这一轮开发的目标与大纲：要把 Camel 推到哪里，分成哪些方面，每个方面做什么，哪些已经裁定，哪些还要先定设计。语义以 [`docs/design-principles.cn.md`](docs/design-principles.cn.md) 为准，本文档与它冲突时以它为准。
+本文档是当前这一轮开发的目标与大纲：要把 Camel 推到哪里，分成哪些方面，每个方面做什么，哪些已经裁定，哪些还要先定设计。语义以 [`docs/design-principles.cn.md`](../docs/design-principles.cn.md) 为准，本文档与它冲突时以它为准。
 
 ## 1. 目标
 
@@ -32,7 +32,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
   - 统一的效应与别名分析，供各遍共用；分析结果的缓存与失效。（状态：未开始）
   - `[定]` 给标准库各模块的算子补上纯度声明。（状态：已完成——内建算子与 `algo`、`hash`、`fs`、`json`、`math`、`process`、`para`、`random`、`re`、`sim`、`statistics`、`str`、`env`、`this`、`time`、`tensor`、`nn`、`autodiff`、`onnx`、`pyplot`、`python` 的每个算子都有声明，由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束（`camel inspect --ops` 可查））
 - **图的容量** `[定]`：单张图 65,535 的上限不放宽。查清是哪个遍把子图压平到超限（已知案例：gru 的一步需要 100,533 个边表项），让它在容量内工作。（状态：部分完成——上限没有放宽，超限是带位置的 `RuntimeDiag::GraphTooLarge` 或导出时的拒绝（`test/plans/feat/opt/generic.plan.toml`）；已查明压平到超限的是 ONNX 导出时不设上限的内联与展开（`benchmarks/README.md`），但它还不能在容量内工作）
-- **下游工具链的适配**：导出器覆盖更多构造；与封闭语言近邻（Futhark、Dex、Relay 等）做同一批程序的实测对比。（状态：部分完成——导出能力见 `export_matrix.md`（119 个算子中 65 个前向算子、23 个梯度算子有 ONNX 下降）；与 Futhark、Dex、Relay 等的同批程序实测对比未做）
+- **下游工具链的适配**：导出器覆盖更多构造；与封闭语言近邻（Futhark、Dex、Relay 等）做同一批程序的实测对比。（状态：部分完成——导出能力已由算子表覆盖 119 个算子，其中 65 个前向算子、23 个梯度算子有 ONNX 下降；与 Futhark、Dex、Relay 等的同批程序实测对比未做）
 - **论文**：稿件与证据在归档仓库中维护，不在本文档展开。（状态：未核实——稿件与证据不在本仓库中）
 
 ## 4. 方面二：运行时核心
@@ -124,6 +124,6 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 ## 8. 工作方式
 
 - 语义问题按"Camel 应当是什么"提交语言作者裁定，不按现有实现将就；裁定写入设计原则文档后再据以开发。
-- 每条工作线在独立的克隆与分支上进行，从 `develop` 建分支，完成后合回 `develop`（`git merge --no-ff`）；发布由维护者把 `develop` 合入 `main` 并打标签。贡献流程见 [贡献指南](CONTRIBUTING.md)。
+- 每条工作线在独立的克隆与分支上进行，从 `develop` 建分支，完成后合回 `develop`（`git merge --no-ff`）；发布由维护者把 `develop` 合入 `main` 并打标签。贡献流程见 [贡献指南](../CONTRIBUTING.md)。
 - 每项改动附带测试；标准库里的优化遍不得把程序改错。
 - 发现的缺陷如实记录并附最小复现；只修复明确的实现错误，不用临时规则掩盖。
