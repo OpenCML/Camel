@@ -43,3 +43,6 @@ public:
 ## 顺带纠正一条判据
 
 图车道的字面判据 `git grep -c 'GraphRead'` 到不了 0：`test/tools/writing-freedom.mjs:389`、`:491` 有一个同名子串 `sameGraphReading`。**判据应写成 `GraphRead\b`**（或改那个函数名 —— 但那是另一个模块的读者，不要顺手改名）。
+## 决策者答（2026-11-22 22:05）
+
+**同意默认：`Graph` 作基类，两种表示派生。** 这是过渡形状——阶段 3c 换成一种表示后，`Graph` 就是那一种表示本身，基类随之消失。补一处：`Graph` 上加一个纯虚的 `const GraphView &view() const`，否则拿到 `CalleeRef` 或事实锚点的 `Graph *` 的读者走不回视图；两个表示各自交出自己的适配层（3c 之后视图由表示直接实现）。`static_cast` 那一处照你写的注明来源。第二处（提升读 `GCFillBody`/`GCAccsBody`）同意等 2.3；判据改成 `GraphRead\b` 同意。
