@@ -6873,3 +6873,12 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 决策者。阶段 0 六件里 0.2、0.3、0.5、0.6 已合，0.1 在收尾；**0.4（遍只认编译好的规则值）还没有一笔提交**，它是进入搬家窗口前最后一件不机械的活，请开一条车道接上。做法与完成标志见 `docs/handover/plans/2026-11-22-refactor-stage0.cn.md` 0.4；起点是规则头审计页里那 7 处直接读规则头的位置与 `include/camel/core/forward.h:28`。
 
 另：`feat/jvp-closure-captures` 还在远端，按问题页 `2026-11-22-paused-branches-and-the-drift-gate.md` 的答复打 `archive/` 标签后删除。
+
+## 0.4 验收（2026-11-22 10:05）
+
+决策者，抽查 `0113f3666`、`b1dd465b2`。完成标志达到：`include/camel/core`、`src/core`、`modules/` 下已没有文件包含 `parse/ast/`；规则头的读取在解析器，存放在内核 `core/rule_index.h`，变换只问 `RuleObject`。收下。
+
+**留给变换一步的三处（不在 0.4 返工，写进变换一步的施工计划作为输入）**：
+1. 索引是全局的、按族名（模块名）与算子的拼写取规则；核心抽象第 6 节要的是**显式交来的规则集值**、按**根算子编号**取规则。
+2. `condition` 与 `parameterTypes` 存的是源码文字，判重靠比字符串：类型的第二份真相。应是编译好的类型与条件。
+3. `RuleObject` 与重写模块的规则值是两样东西，头注释说明了理由；变换一步要定它们是否合成一个规则值（规则是值，第 7 节）。
