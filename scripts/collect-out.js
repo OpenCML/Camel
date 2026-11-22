@@ -430,7 +430,15 @@ function collect(config, tag) {
     // loader asks for exactly that name inside `libs/` (`bridgeFileNameForTag` in
     // src/core/module/dynamic.cpp), so a Linux host that built its bridge still failed to find it
     // while only the Windows spelling was collected here.
-    const bridgeDir = path.join(BASEDIR, 'build', 'modules', 'python', config)
+    //
+    // The bridge's build directory follows its module: `build/lib/python` now that the module lives
+    // in `lib/python`, `build/modules/python` while it lived in `modules/python`. Both are tried so
+    // one script collects either tree -- `fs.existsSync` turning a wrong guess into "no bridge" is
+    // exactly how a build that produced one installs without it.
+    const bridgeDir = [
+        path.join(BASEDIR, 'build', 'lib', 'python', config),
+        path.join(BASEDIR, 'build', 'modules', 'python', config),
+    ].find((dir) => fs.existsSync(dir))
     if (fs.existsSync(bridgeDir)) {
         const files = fs.readdirSync(bridgeDir)
         for (const f of files) {

@@ -430,7 +430,16 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
  */
 function removeStaleModuleArtifacts(config, moduleFiles) {
     const built = new Set(moduleFiles.map((file) => path.resolve(file)))
-    const baseDirs = [path.join(BASEDIR, 'build', 'libs'), path.join(BASEDIR, 'build', 'modules')]
+    // A module's output directory follows the module: `build/lib/<name>/<config>` now that it lives
+    // in `lib/<name>`, `build/modules/<name>/<config>` while it lived in `modules/<name>`. Both are
+    // scanned, because a sweep that only knows the old one leaves a renamed module's `.cmo` in the
+    // build tree and the next install copies it back onto the search path -- the exact leak this
+    // sweep exists to close.
+    const baseDirs = [
+        path.join(BASEDIR, 'build', 'libs'),
+        path.join(BASEDIR, 'build', 'modules'),
+        path.join(BASEDIR, 'build', 'lib'),
+    ]
     for (const baseDir of baseDirs) {
         if (!fs.existsSync(baseDir)) continue
         for (const ent of fs.readdirSync(baseDir, { withFileTypes: true })) {

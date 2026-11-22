@@ -73,13 +73,23 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
+// The library, in either layout. After the layout move it is one declaration per `lib/<name>/`:
+// `<name>.cml` beside the module's C++, the computed half in `<name>/signatures/`, and the two
+// declarations that have no module of their own (`std.cml`, `prelude.cml`) in `lib/std/`. A tree
+// that has not been moved keeps the same files flat in `stdlib/`. A reader that knew one layout
+// only would answer "not in the library" for every module of the other, so both are read, in that
+// order, and the first spelling that exists is the file a module reads.
+const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
+const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
+const firstThere = (candidates) => candidates.find((one) => fs.existsSync(one)) ?? candidates[0]
 
 // The install a run measures: `--camel <path>` (parsed in the main section below), else this tree's
 // `out/latest`. Every install a run measures passes the build stamp of `scripts/install-stamp.mjs`,
 // named there or not.
 let camelPath = null
-const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
+/// The directory the library is walked from: `lib/` after the move, `stdlib/` before it. Walking
+/// either finds the same `.cml` files, which is what the match-type table reads.
+const STDLIB_DIR = [MOVED_LIBRARY, FLAT_LIBRARY].find((dir) => fs.existsSync(dir)) ?? FLAT_LIBRARY
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'stdlib-reference.md')
 const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
 
@@ -443,13 +453,80 @@ function announcePending() {
     }
 }
 
+// `source` is the file's name inside the library: `rewrite.cml` (the module's own directory),
+// `rulesets/jvp.cml` (a dotted prefix, which the moved layout keeps as `lib/rulesets/jvp.cml`),
+// `prelude.cml` (the one declaration in `lib/std/`). Every candidate is tried in the moved layout
+// first and the flat one second, so one reader serves a moved tree and an unmoved one.
 function sourceOf(module) {
     if (module.source) {
-        return path.join(STDLIB_DIR, module.source)
+        const name = module.source
+        return firstThere([
+            path.join(MOVED_LIBRARY, name),
+            path.join(MOVED_LIBRARY, module.name, name),
+            path.join(MOVED_LIBRARY, 'std', name),
+            path.join(FLAT_LIBRARY, name),
+            path.join(FLAT_LIBRARY, module.name, name),
+            path.join(FLAT_LIBRARY, 'std', name),
+        ])
     }
     return module.kind === 'camel'
-        ? path.join(STDLIB_DIR, `${module.name}.cml`)
-        : path.join(SIGNATURE_DIR, `${module.name}.cml`)
+        ? firstThere([
+            path.join(MOVED_LIBRARY, module.name, `${module.name}.cml`),
+            path.join(FLAT_LIBRARY, `${module.name}.cml`),
+        ])
+        : computedOf(module)
+}
+
+/// The computed half of a module's declarations: `signatures/<name>.cml` beside the module after
+/// the move, in the one flat directory before it.
+function computedOf(module) {
+    return firstThere([
+        path.join(MOVED_LIBRARY, module.name, module.computed),
+        path.join(FLAT_LIBRARY, module.computed),
+    ])
+}
+
+/// Every signature file on disk, in either layout. A file the module table does not name still has
+/// to be read, or a body written in it would go unchecked.
+function signatureFiles() {
+    const out = new Set()
+    const flat = path.join(FLAT_LIBRARY, 'signatures')
+    if (fs.existsSync(flat)) for (const name of fs.readdirSync(flat)) if (name.endsWith('.cml')) out.add(path.join(flat, name))
+    if (fs.existsSync(MOVED_LIBRARY)) {
+        for (const entry of fs.readdirSync(MOVED_LIBRARY, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue
+            const dir = path.join(MOVED_LIBRARY, entry.name, 'signatures')
+            if (!fs.existsSync(dir)) continue
+            for (const name of fs.readdirSync(dir)) if (name.endsWith('.cml')) out.add(path.join(dir, name))
+        }
+    }
+    return [...out].sort()
+}
+
+/// The declaration files of the library, the way `scripts/collect-out.js` assembles the install:
+/// every `lib/<name>/<name>.cml`, the ones in `lib/std/`, the dotted `lib/rulesets/` and the
+/// signature files beside their modules -- or, in a tree that has not been moved, the same set in
+/// `stdlib/`, `stdlib/rulesets/` and `stdlib/signatures/`. The audit's "no module of the table
+/// reads this file" half is only worth reading if it walks the library the install is built from.
+function libraryFiles() {
+    const out = new Set()
+    const push = (dir) => {
+        if (!fs.existsSync(dir)) return
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isFile() && entry.name.endsWith('.cml')) out.add(path.join(dir, entry.name))
+        }
+    }
+    for (const dir of [FLAT_LIBRARY, path.join(FLAT_LIBRARY, 'rulesets'), path.join(FLAT_LIBRARY, 'signatures')]) push(dir)
+    if (fs.existsSync(MOVED_LIBRARY)) {
+        push(path.join(MOVED_LIBRARY, 'std'))
+        push(path.join(MOVED_LIBRARY, 'rulesets'))
+        for (const entry of fs.readdirSync(MOVED_LIBRARY, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue
+            push(path.join(MOVED_LIBRARY, entry.name))
+            push(path.join(MOVED_LIBRARY, entry.name, 'signatures'))
+        }
+    }
+    return [...out].sort()
 }
 
 // ---- reading declarations ------------------------------------------------------------------
@@ -614,9 +691,7 @@ function declarationBody(rest, lines, lineIndex) {
 // page would still agree with the registered operators.
 function signatureBodyProblems() {
     const problems = []
-    for (const name of fs.readdirSync(SIGNATURE_DIR).sort()) {
-        if (!name.endsWith('.cml')) continue
-        const file = path.join(SIGNATURE_DIR, name)
+    for (const file of signatureFiles()) {
         const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
         const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
         for (let i = 0; i < lines.length; i++) {
@@ -910,7 +985,7 @@ native: !declarationBody(after, lines, i),
 function parseDeclarations(module) {
     const files = [sourceOf(module)]
     if (module.computed) {
-        files.unshift(path.join(STDLIB_DIR, module.computed))
+        files.unshift(computedOf(module))
     }
     const entries = []
     const sectionNotes = new Map()
@@ -1322,7 +1397,7 @@ const moduleSources = new Map()
 function moduleSource(module) {
     if (!moduleSources.has(module.name)) {
         const files = [sourceOf(module)]
-        if (module.computed) files.push(path.join(STDLIB_DIR, module.computed))
+        if (module.computed) files.push(computedOf(module))
         moduleSources.set(
             module.name,
             files
@@ -3550,10 +3625,11 @@ function verifyOps() {
         }
     }
     // A signature file without a module of the reference would never be checked.
-    for (const file of fs.readdirSync(SIGNATURE_DIR)) {
-        const name = file.replace(/\.cml$/, '')
+    for (const file of signatureFiles()) {
+        const name = path.basename(file).replace(/\.cml$/, '')
         if (!MODULES.some((m) => m.kind === 'cpp' && m.name === name)) {
-            problems.push(`stdlib/signatures/${file}: not a module of the reference (see MODULES in scripts/stdlib-reference.mjs)`)
+            const shown = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+            problems.push(`${shown}: not a module of the reference (see MODULES in scripts/stdlib-reference.mjs)`)
         }
     }
     for (const module of MODULES.filter((m) => m.kind === 'camel')) {
@@ -3732,7 +3808,7 @@ if (mode === '--write' || mode === '--verify-doc') {
     for (const module of MODULES) {
         const pending = pendingReason(module)
         const files = [sourceOf(module)]
-        if (module.computed) files.push(path.join(STDLIB_DIR, module.computed))
+        if (module.computed) files.push(computedOf(module))
         const absent = files.filter((file) => !fs.existsSync(file))
         for (const file of absent) {
             problems.push(`${shown(file)}: what the module '${module.name}' reads is not in the library`)
@@ -3775,16 +3851,11 @@ if (mode === '--write' || mode === '--verify-doc') {
     const readBy = new Set()
     for (const module of MODULES) {
         readBy.add(path.resolve(sourceOf(module)))
-        if (module.computed) readBy.add(path.resolve(path.join(STDLIB_DIR, module.computed)))
+        if (module.computed) readBy.add(path.resolve(computedOf(module)))
     }
     const unread = []
-    for (const dir of [STDLIB_DIR, path.join(STDLIB_DIR, 'rulesets')]) {
-        if (!fs.existsSync(dir)) continue
-        for (const file of fs.readdirSync(dir)) {
-            if (!file.endsWith('.cml')) continue
-            const full = path.resolve(path.join(dir, file))
-            if (!readBy.has(full)) unread.push(shown(full))
-        }
+    for (const full of libraryFiles()) {
+        if (!readBy.has(path.resolve(full))) unread.push(shown(path.resolve(full)))
     }
     // A module the page leaves out is announced with its reason in every mode, and this one is a
     // mode too: a `pending` column says *that* it is out, and only this line says why.
