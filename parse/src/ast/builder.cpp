@@ -745,7 +745,7 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
 }
 
 /*
-resourceClause : ('uses' useEntry (',' useEntry)* | 'pure')+
+resourceClause : ('spelling'? ('pure' | 'panic')* ('uses' useEntry (',' useEntry)* | 'pure')*)
 useEntry : 'var'? identRef
 */
 Value Builder::visitResourceClause(cst::ResourceClause context) {
@@ -759,13 +759,26 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
     // than as a syntax error. `spelling` is read the same way and is written before the rest
     // (design principles 9.5), so the prefix is read here too -- and `uses spelling` names a
     // resource of that name, which starts with `uses`.
+    //
+    // `panic` is read the same way and stands beside `pure` (design principles 3.9): it is a word
+    // with no list, so nothing follows it to read. The run stops at `uses`, which keeps `uses
+    // panic` a resource named `panic` rather than this word, and it keeps the reading of a clause
+    // to the words the parser consumes before the list.
     std::string clauseText = context->text();
     if (clauseText.starts_with("spelling")) {
         clause->setSpelling(true);
         clauseText = clauseText.substr(std::string_view("spelling").size());
     }
-    if (clauseText.starts_with("pure")) {
-        clause->setPure(true);
+    for (;;) {
+        if (clauseText.starts_with("pure")) {
+            clause->setPure(true);
+            clauseText = clauseText.substr(std::string_view("pure").size());
+        } else if (clauseText.starts_with("panic")) {
+            clause->setPanic(true);
+            clauseText = clauseText.substr(std::string_view("panic").size());
+        } else {
+            break;
+        }
     }
     for (const auto entry : context->all<cst::UsesEntry>()) {
         // One resource, and whether it is written with `var` (design principles 3.3): the entry

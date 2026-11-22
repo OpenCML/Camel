@@ -75,6 +75,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Clauses of a declaration | `uses` | the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses s` reads, `uses var fs` writes, written the way a `var` parameter is) |
 | Clauses of a declaration | `spelling` | the leading word of a resource clause: it declares that the body may read the spelling of the program (a graph's or a function's name, a node's source position, creation order and creation numbers, the text a node shows). It is the mechanism an effect uses, written before `pure`/`uses` in that clause (design principles 9.5) |
 | Clauses of a declaration | `pure` | the `pure` of a resource clause: a promise to touch no resource at all (the same position as `uses`) |
+| Clauses of a declaration | `panic` | the `panic` of a resource clause: a call of the operator can fail (no kind list -- the kind is what the call raises), and a declaration that leaves it out promises that no call of it fails (design principles 3.9). It stands where `pure` does, before the `uses` entries; `uses panic` names a resource called `panic` |
 | Clauses of a declaration | `join` | a trailing clause of a fact declaration: how two facts merge (after the fact body, one per line) |
 | Clauses of a declaration | `meet` | a trailing clause of a fact declaration: how equivalent writings meet |
 | Clauses of a declaration | `widen` | a trailing clause of a fact declaration: the widening of a loop |
