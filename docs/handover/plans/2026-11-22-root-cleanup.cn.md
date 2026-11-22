@@ -12,7 +12,8 @@ CMakeLists.txt  conanfile.txt  package.json  package-lock.json      （及 .gith
 src/                                                              我们自己的源码，统计代码量就数这一个目录
     kernel/  parse/  compile/  lib/  tools/  bindings/
 third_party/  cmake/                                              第三方源码与构建辅助
-editors/                                                          编辑器插件（VS Code，TypeScript，单独打包）
+packaging/                                                        发布配置（PyPI 等）
+editors/                                                          编辑器插件（去留待定：插件另有专门仓库）
 examples/  benchmarks/  test/  docs/  scripts/                    示例、基准、测试、文档、脚本
 internal/                                                         内部协作，公开时整体删除
 ```
@@ -33,7 +34,7 @@ internal/                                                         内部协作�
 | `exemplars/` | `internal/exemplars/` | 第 6 节 I1：论文评估材料 |
 | `agents/` | `internal/agents/` | 第 6 节 I1；根目录的 `AGENTS.md` 留下并改指新位置 |
 | `showcase/` | `examples/models/` | 旗舰模型 |
-| `pypi/` | `src/bindings/python/` | Python 包的打包配置，与 Python 绑定合在一处 |
+| `pypi/` | `packaging/pypi/` | 发布配置不是源码，不进 `src/`；以后其他发布渠道的配置也放 `packaging/`（负责人 2026-11-22） |
 | `benchmarks/` 里的论文评估脚本（e*/d*） | `internal/benchmarks/` | 第 6 节 I1；对外有意义的基准留下 |
 | `test/` | 不改名 | 原稿写 `tests/`；改名牵动全部脚本、计划与文档，收益只是一个字母，不做 |
 
