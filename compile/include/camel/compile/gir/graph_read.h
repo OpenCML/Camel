@@ -37,9 +37,9 @@ using camel::runtime::kInvalidNodeRef;
  * is a change of the type it holds and not a rewrite of what it asks.
  *
  * What it is *not*: a second model of a graph, or a place to decide anything. It answers only what
- * a frozen graph answers, and `firstDifference` proves the two answers agree (see below). A reader
- * that wants something a frozen graph does not answer is asking for a new graph fact, and that
- * belongs in the model first.
+ * a frozen graph answers, and that the two answers agree is `camel::graph::firstDifference`'s
+ * question (kernel/graph/consistency.h), asked over the view. A reader that wants something a frozen
+ * graph does not answer is asking for a new graph fact, and that belongs in the model first.
  *
  * Two facts the frozen side answers from the graph and a draft answers differently, both kept
  * here because the lift reads them:
@@ -325,44 +325,19 @@ class FrozenGraphRead final : public GraphRead {
     const camel::runtime::GCGraph &graph_;
 };
 
-/**
- * The first fact two faces of the same graph disagree on, as text; empty when they agree on
- * everything this face answers.
+/*
+ * What this header used to hold beyond the face itself -- `firstDifference`, `describe`,
+ * `DraftGraphs` and `liveDraftNodes` -- is gone, because the face those functions compared is being
+ * replaced by `camel::graph::GraphView` (kernel/graph/graph_view.h) and a second implementation of
+ * the check would be a second answer:
  *
- * This is the check that the face is a face and not a second reading: a draft and the frozen graph
- * built from it are the same graph, so every question above must have the same answer twice. The
- * encoder asks it of every graph of every program and refuses a graph whose two readings disagree
- * (src/compile/gir/graph_encode.cpp), so the claim is asked wherever a program is compiled and not
- * only where a test looks -- a program that compiles is a program the two answers agreed on.
+ *   - the check is `camel::graph::firstDifference` (kernel/graph/consistency.h), over the view, so
+ *     it compares what a reader of the view will read and asks it of both representations;
+ *   - the reading is `camel::graph::describe`;
+ *   - the id table is still the encoder's (`camel::runtime::liveNodesOf`), which `liveDraftNodes`
+ *     only forwarded to;
+ *   - a draft beside the graph it calls is `camel::graph::DraftGraphAdapter` with a
+ *     `camel::graph::CalleeGraphOf` (graph/callee_graph_of.h), which names a callee by value
+ *     instead of handing out a second face.
  */
-std::string firstDifference(const GraphRead &draft, const GraphRead &frozen);
-
-/// The drafts a build answers, by graph id: the entry `Program::graph(id)` gives on the frozen
-/// side, so a lift that walks from a graph to the graphs it calls walks the same way on a draft.
-class DraftGraphs {
-  public:
-    void add(const camel::runtime::GraphTransaction &txn);
-    const GraphRead *byId(GraphId id) const;
-
-  private:
-    std::map<GraphId, std::unique_ptr<DraftGraphRead>> byId_;
-};
-
-/// One line about a graph, for a reading: how many nodes, which kind each is, and what its FUNC
-/// and OPER nodes name. The sequence is per node, in node id order, so two graphs are the same
-/// line exactly when they are the same graph as far as this face can tell.
-std::string describe(const GraphRead &graph);
-
-/**
- * The nodes a draft reaches from its roots, in the order the encoder numbers them.
- *
- * This is the id table `DraftGraphRead(txn, kept)` reads a draft through: `kept[i]` is the draft's
- * node the runtime graph's node `i` is built from. The encoder builds the same list to number the
- * graph it writes (src/compile/gir/graph_encode.cpp), so a reader that uses this table reads the
- * numbers the frozen graph will have, and `firstDifference` is what proves it: the encoder compares
- * the two readings of every graph it writes.
- */
-std::vector<gc_node_ref_t> liveDraftNodes(const camel::runtime::GraphTransaction &transaction);
-
-
 } // namespace camel::compile::gir

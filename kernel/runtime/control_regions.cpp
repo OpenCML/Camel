@@ -1,15 +1,21 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+/*
+ * The control-region tree (camel/runtime/control_regions.h), built from the view's region records:
+ * one build for both representations, because the tree is a reading of the region table and the view
+ * answers that table the same way for a frozen graph and for a draft.
+ */
+
 #include "camel/runtime/control_regions.h"
 
 namespace camel::runtime {
 
-ControlRegions::ControlRegions(const GCGraph &graph) : graph_(graph) {
-    const uint32_t count = static_cast<uint32_t>(graph.regionCount());
+void ControlRegions::build() {
+    const uint32_t count = view_.regionCount();
     enclosing_.assign(count, 0);
-    tin_.assign(count == 0 ? 1 : count, 0);
-    tout_.assign(count == 0 ? 1 : count, 0);
+    tin_.assign(count, 0);
+    tout_.assign(count, 0);
     order_.push_back(0);
     if (count == 0) {
         return;
@@ -23,29 +29,29 @@ ControlRegions::ControlRegions(const GCGraph &graph) : graph_(graph) {
         uint32_t at = r;
         while (at != 0 && at < count && !done[at]) {
             chain.push_back(at);
-            if (isControl(graph.region(at)->kind)) {
+            if (isControl(view_.region(at).kind)) {
                 break;
             }
-            at = graph.region(at)->parent;
+            at = view_.region(at).parent;
         }
         uint32_t found = 0;
         if (at != 0 && at < count) {
-            found = done[at] ? enclosing_[at] : (isControl(graph.region(at)->kind) ? at : 0);
+            found = done[at] ? enclosing_[at] : (isControl(view_.region(at).kind) ? at : 0);
         }
         for (const uint32_t id : chain) {
-            enclosing_[id] = isControl(graph.region(id)->kind) ? id : found;
+            enclosing_[id] = isControl(view_.region(id).kind) ? id : found;
             done[id]       = 1;
         }
     }
     // The tree of the control regions and a walk of it.
     std::vector<std::vector<uint32_t>> children(count);
     for (uint32_t r = 1; r < count; ++r) {
-        const GCRegion &region = *graph.region(r);
+        const camel::graph::RegionRecord region = view_.region(r);
         if (!isControl(region.kind)) {
             continue;
         }
         children[parentControl(r)].push_back(r);
-        if (region.kind == GCRegionKind::Arm) {
+        if (region.kind == camel::graph::RegionKind::Arm) {
             auto &arms = armsOf_[region.owner];
             if (arms.size() <= region.index) {
                 arms.resize(region.index + 1, 0);
@@ -54,7 +60,7 @@ ControlRegions::ControlRegions(const GCGraph &graph) : graph_(graph) {
         } else {
             auto &parts = loopsOf_.try_emplace(region.owner, std::array<uint32_t, 2>{0, 0})
                               .first->second;
-            parts[region.kind == GCRegionKind::LoopCond ? 0 : 1] = r;
+            parts[region.kind == camel::graph::RegionKind::LoopCond ? 0 : 1] = r;
         }
     }
     std::vector<std::pair<uint32_t, size_t>> stack{{0, 0}};

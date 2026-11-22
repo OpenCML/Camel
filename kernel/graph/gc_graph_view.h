@@ -28,7 +28,7 @@
  *   GCNodeKind::Func / Call / Gate           NodeKind::Func / Call / Gate
  *   GCNodeKind::Bind                         NodeKind::Bind      (reserved: nothing makes one)
  *   GCNodeKind::Oper                         NodeKind::Oper
- *   GCNodeKind::Cast / Copy / Fill / Accs    NodeKind::Oper      -- see the refusal below
+ *   GCNodeKind::Cast / Copy / Fill / Accs    NodeKind::Oper      -- see the four kinds below
  *   GCNodeKind::Join / Dref / Dead           no node: `contains` is false, and the NodeRef is a gap
  *
  *   GCNode::kind                             kindOf
@@ -57,17 +57,26 @@
  *   nodeOrigin                               originOf
  *   nodePayloadBytes / nodeBodyAs            nothing: no payload bytes leave this face
  *
- * The refusal, and why it is not a fifth kind: until plan 2.3 declares `cast`, `copy`, `fill` and
- * `accs` as operators with records in the operator table, `operatorOf` on a stored node of one of
- * those four kinds would have to answer `kNoOper`. A reader handed `kNoOper` takes the "this
- * operator is not known" path -- a different answer, silently -- where a refusal stops in the one
- * place a person has to finish. `kindOf` therefore answers `NodeKind::Oper` for them (so the shape
- * of the graph is already the target's) and `operatorOf` refuses (so no reader can act on the gap).
+ * The four kinds and `operatorOf`: `kindOf` answers `NodeKind::Oper` for a CAST, a COPY, a FILL and
+ * an ACCS (so the shape of the graph is already the target's), and `operatorOf` answers `kNoOper`
+ * for them, because neither representation gives those four an operator record yet -- they keep
+ * their own payload (a kind, a place, a template). That is what the old face said too (an empty URI
+ * from `operUriOf`, which asked a stored OPER), so a reader that asks "which operator does this node
+ * name" gets exactly the answer it got before, and a reader that asks "is this an operator" asks the
+ * kind. Plan 2.3 declares the four as operators with records, and that is the change which fills
+ * this gap -- in one place, here.
+ *
+ * `view()` on the graph (`camel/graph/graph.h`) hands out this adapter: a reader holding a
+ * `const Graph *` -- the callee of a FUNC node, the anchor of a fact -- reads that graph again
+ * through the view. The adapter answers every question but naming a callee, which needs the program
+ * that holds the graphs (`CalleeGraphOf`); that one is reported to the author rather than guessed,
+ * because a graph does not know its program.
  */
 
 #pragma once
 
 #include "camel/runtime/graph.h"
+#include "callee_graph_of.h"
 #include "graph/graph_view.h"
 
 #include <optional>
@@ -86,7 +95,13 @@ static_assert(
 
 class FrozenGraphAdapter final : public GraphView {
   public:
-    explicit FrozenGraphAdapter(const camel::runtime::GCGraph &graph) : graph_(graph) {}
+    /// `calleeGraphOf` is how a callee referred to by value is named: the frozen graph stores a
+    /// `GraphId` and its owner holds the graph (`callee_graph_of.h`). Without it the adapter still
+    /// answers every other question and refuses a callee, rather than answering that a node calls
+    /// nothing.
+    explicit FrozenGraphAdapter(
+        const camel::runtime::GCGraph &graph, CalleeGraphOf calleeGraphOf = {})
+        : graph_(graph), calleeGraphOf_(std::move(calleeGraphOf)) {}
 
     camel::core::type::FunctionType *funcType() const override;
     std::vector<NodeRef> ports(PortGroup group) const override;
@@ -120,11 +135,9 @@ class FrozenGraphAdapter final : public GraphView {
     /// it: `contains` refuses them first, so this function's answer for them would be a kind the
     /// view does not have and is not asked for.
     static NodeKind viewKind(camel::runtime::GCNodeKind stored);
-    /// True for the four kinds that are operators once 2.3 declares them: `operatorOf` refuses
-    /// there instead of answering `kNoOper`.
-    static bool awaitsOperatorRecord(camel::runtime::GCNodeKind stored);
 
     const camel::runtime::GCGraph &graph_;
+    CalleeGraphOf calleeGraphOf_;
 };
 
 } // namespace camel::graph

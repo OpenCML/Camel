@@ -18,6 +18,8 @@
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/region_roots.h"
+#include "graph/draft_view.h"
+#include "graph/gc_graph_view.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/context/frame.h"
@@ -2042,7 +2044,7 @@ struct DraftLiveFace {
         return draft.normInputsOf(ref);
     }
     gc_node_ref_t decidingOwnerOf(uint32_t region) const {
-        return camel::runtime::decidingOwnerOfDraft(draft, region);
+        return camel::runtime::decidingOwnerOf(camel::graph::DraftGraphAdapter(draft), region);
     }
 
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
@@ -2107,7 +2109,7 @@ struct FrozenLiveFace {
         return graph.normInputsOf(ref);
     }
     gc_node_ref_t decidingOwnerOf(uint32_t region) const {
-        return camel::runtime::decidingOwnerOf(graph, region);
+        return camel::runtime::decidingOwnerOf(camel::graph::FrozenGraphAdapter(graph), region);
     }
 
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
@@ -3513,6 +3515,11 @@ const ExecPlan &GCGraph::execPlan() const {
 }
 
 GCGraph::~GCGraph() {
+    // The view is the graph's own (`view()`, camel/graph/graph.h): it holds a reference to this
+    // graph, so it goes before the graph does. `GraphView` is complete in this file
+    // (graph/gc_graph_view.h), which is why the deleting is here rather than in the header.
+    delete static_cast<const camel::graph::GraphView *>(viewCache_);
+    viewCache_ = nullptr;
     delete uses_.load(std::memory_order_acquire);
     delete execPlan_.load(std::memory_order_acquire);
 }

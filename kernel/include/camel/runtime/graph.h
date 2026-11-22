@@ -42,6 +42,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
+#include "camel/graph/graph.h"
 #include "camel/runtime/graph_id.h"
 #include "camel/utils/assert.h"
 
@@ -733,7 +734,12 @@ struct GCStaticFunctionAnswer {
     std::string describe() const;
 };
 
-class GCGraph : public camel::core::rtdata::Object {
+// The frozen representation of a graph. `camel::graph::Graph` is the graph as a value (the name a
+// callee and a fact anchor use, `kernel/graph/include/camel/graph/graph.h`): this class is one of
+// the two representations that derive from it, so a `const Graph *` names a frozen graph without
+// saying it is a `GCGraph`. The base adds no member and is not a second way to read a graph -- that
+// is `GraphView` and its two adapters (`kernel/graph`); it is here so the identity has a type.
+class GCGraph : public camel::core::rtdata::Object, public camel::graph::Graph {
   public:
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
@@ -1233,6 +1239,9 @@ class GCGraph : public camel::core::rtdata::Object {
     void print(std::ostream &os, const camel::core::type::Type *type) const override;
     void onMoved() override {}
     ~GCGraph() override;
+    /// The face this graph is read through (`camel/graph/graph.h`): the frozen adapter, made on the
+    /// first call and kept here, so a reader holding a `const Graph *` can walk back to the view.
+    const camel::graph::GraphView &view() const override;
     void updateRefs(
         const camel::core::rtdata::Object::RefRelocator &relocate,
         const camel::core::type::Type *type) override;
@@ -1241,6 +1250,11 @@ class GCGraph : public camel::core::rtdata::Object {
     friend class GCGraphManager;
     friend class GraphDraft;
     friend struct GCGraphBuildAccess;
+
+    /// The view `view()` answers, made on the first call and freed with the graph (`~GCGraph`).
+    /// Kept as an opaque pointer and not as the adapter: the adapter names this type, so this
+    /// header cannot hold one. `view()` casts it back; nothing else reads it.
+    mutable const void *viewCache_ = nullptr;
 
     /// Gives up this graph's share of each node chunk (the graph is being freed).
     void releaseNodeChunks();
