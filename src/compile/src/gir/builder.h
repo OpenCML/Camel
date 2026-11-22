@@ -3772,6 +3772,12 @@ class Builder {
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t
     castNodeTo(node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The same conversion written as the operator it is (`cast::<T, U>` of the prelude): an OPER
+    /// node whose written type arguments are the operand's type and the target, and whose result
+    /// type is the target. Falls back to `castNodeTo` where no declaration answers, so a pair the
+    /// operator's rule does not cover keeps the node kind it had instead of disappearing.
+    node_handle_t conversionNodeOf(
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
     /// `node` where a value of type `target` is expected (design principles 5.5): `node`
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of

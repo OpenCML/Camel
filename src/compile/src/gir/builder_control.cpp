@@ -51,6 +51,36 @@ namespace camel::compile::gir {
 
 node_handle_t
 Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    // A conversion is an ordinary operator, so a conversion the compiler makes is a call of it
+    // like any other: the operator's rule is the conversion the CAST node ran, and the value is
+    // the same either way (design principles 5.1: the target type is a type name applied to a
+    // value, and `cast` is the operator that name is).
+    return conversionNodeOf(value, target, origin);
+}
+
+node_handle_t
+Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    // `cast::<T, U>` says a conversion is about a pair of types: the source is the type of the
+    // value it reads and the target is the call's result type. Both are known here, which is why
+    // the call is resolved with them as the written type arguments and the expected result.
+    Type *source = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (source != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("cast");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(1);
+            const auto op = group->resolveForCall({source, target}, target, {}, {source}, statics);
+            if (op.has_value()) {
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, value, node);
+                registerNodeOrigin(context_, node, origin, "gir.cast");
+                return node;
+            }
+        }
+    }
+    // No declaration answered: the CAST node is what the graph gets, and it is the same
+    // conversion. A pair the operator's rule does not cover says so here rather than building a
+    // node the rule cannot name.
     node_handle_t castNode = currGraph_->addCastNode(target);
     linkNodes(LinkType::Norm, value, castNode);
     registerNodeOrigin(context_, castNode, origin, "gir.cast");
