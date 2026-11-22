@@ -62,8 +62,8 @@
  * same tree: a build directory holds a copy of the sources, and a bench run leaves one under
  * `.cache/parser-bench-dual/` that is stale by however long ago it was made. A directory walk
  * cannot tell a copy from the original, so it read that copy as the source and reported eight
- * kernels of `modules/algo/operators.cpp` as missing from a file nobody had edited -- the file it
- * was reading was not in the repository at all.
+ * kernels as missing from a file nobody had edited -- the file it was reading was not in the
+ * repository at all.
  *
  * So the file list comes from `git ls-files`, and from nowhere else: a path that is not in that
  * list can never enter the run, and the check says so instead of skipping it. `.cache/`, `out/`,
