@@ -75,6 +75,6 @@ expect_exit = 0
 # The absence of a diagnostic, said properly: `[defaults]` gives this entry a diagnostic name, and
 # `expect_no_diagnostics` stands in place of that expectation and asserts that nothing was recorded.
 # The empty `expect_diagnostic_name` this replaces only cancelled the inherited name and asserted
-# nothing (docs/handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+# nothing (internal/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
 expect_no_diagnostics = true
 expect_output_not_contains = ["match_fail"]

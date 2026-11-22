@@ -329,7 +329,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 # really do run this loop. The defect is fixed; nothing about this entry's reading is what changed.
 
 # The A16 group of the same campaign (A16a-A16e, pages
-# `docs/handover/reviews/questions-2026-10-29.md`): five reduced programs that came back from the
+# `internal/reviews/questions-2026-10-29.md`): five reduced programs that came back from the
 # optimizer with the *wrong program*, not with a refusal. Every one of them exits 0, and the fault
 # is the value it prints -- which is why each entry here pins the exact stdout rather than "no
 # error", and why the same program with no pass at all is in the plan beside it: that run is the
@@ -966,7 +966,7 @@ expect_stdout_exact = "P 5\n"
 # docs/design/effects/edges.cn.md 4.6 and 5.7).
 #
 # Five of the six turned correct with it and the sixth did not; these five entries are those five,
-# the bisection's own reductions (docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md,
+# the bisection's own reductions (internal/reports/2026-11-18-e9-six-bisected-by-seed.cn.md,
 # section 4), 10 to 23 lines each. Each is one pair: the reading with no pass at all, which the
 # optimized run is held to, and the shortest prefix of the ladder the bisection named as the one
 # that loses the statement. Both cells of all five were measured on the `draft.cpp` of `2779ad600^1`
@@ -1193,7 +1193,7 @@ timeout_ms = 20000
 # --- The sixth: the wait a splice let evaporate behind a macro expanded in an argument ----------
 #
 # `rc29_seed311` is the 20-line program of the sixth figure of
-# `docs/handover/reports/2026-11-18-e9-six-bisected-by-seed.cn.md` section 4 (reproduced 5/5), and
+# `internal/reports/2026-11-18-e9-six-bisected-by-seed.cn.md` section 4 (reproduced 5/5), and
 # it is the sixth of the six wrong values the merge `2779ad600` turned correct -- the one that merge
 # left wrong. Under `std::macro std::cxx::inline` the `println('')` written *before* the call does
 # not run, so the program prints one blank line where it should print two. The inline expands the

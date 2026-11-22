@@ -6,7 +6,7 @@ editing, its nodes' places are the order they were made in, and the commit repla
 the canonical one. So a node of a draft has no canonical number, and the handover's ② left the
 reading answering the draft's position instead: a number of the right shape and the wrong value,
 which is the one thing a reading of the canonical order exists to replace
-(`docs/handover/reports/2026-11-18-commit-checks-and-spelling-spelling.cn.md`, item 2).
+(`internal/reports/2026-11-18-commit-checks-and-spelling-spelling.cn.md`, item 2).
 
 The lane answered it by **refusing the reading**: a node of a draft raises the runtime fault
 `RuntimeDiag::InvalidArgument` of `graph.id`, with a message that says why and what to read instead

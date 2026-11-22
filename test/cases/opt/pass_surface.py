@@ -2,7 +2,7 @@
 C++ passes, and the names it retired.
 
 The isolation keeps **no alias** for the old sub-pass names (the author's rework, 2026-11-18,
-docs/handover/reviews/questions-2026-10-29.md: "旧的子遍名不留别名 ... 内测期旧写法干净删除").
+internal/reviews/questions-2026-10-29.md: "旧的子遍名不留别名 ... 内测期旧写法干净删除").
 `std::opt::fold` and the rest are refused as unknown passes, and the one name that stays is
 `std::opt` -- not an alias but the default pipeline's own name, the choice "optimize by default",
 which today selects the C++ implementation.

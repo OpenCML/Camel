@@ -95,7 +95,7 @@ const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(RO
 /// `unmeasurable`, a `differs` of 1 for a reason that is not a defect -- the one thing this file
 /// exists to prevent. It is dropped rather than marked, and the page that asks the author whether
 /// the subset should grow instead is
-/// `docs/handover/questions/2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md`.
+/// `internal/questions/2026-11-19-a-write-then-read-through-a-call-has-no-printable-subject.cn.md`.
 const CASES = [
     'consistency/fail_never/statement_after_fail',
     'linear/runtime/var_read_before_region',

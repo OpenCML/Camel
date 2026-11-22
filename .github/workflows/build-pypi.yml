@@ -1,7 +1,7 @@
 # Multi-platform native build + camel-lang wheels.
 #
 # Two wheels come out of one native build, per platform (5.37 item 7, carried out 2026-11-02 as
-# the abi3 ruling; docs/handover/README.cn.md item 7, review index C28):
+# the abi3 ruling; internal/archive/handover-README.cn.md item 7, review index C28):
 #   camel_lang-<ver>-cp310-abi3-<platform>.whl   body + the Python interop extension, every
 #                                                CPython 3.10 and later
 #   camel_lang-<ver>-py3-none-<platform>.whl     body only; installs on any Python 3

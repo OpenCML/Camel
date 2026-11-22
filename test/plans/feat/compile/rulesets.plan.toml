@@ -525,7 +525,7 @@ timeout_ms = 20000
 # today (`rulesets.vmap#vmap_dim` writes that spread per row, in Camel, over `shape(xs)[0]`). The
 # question is written up for the author, with the three ways to answer it and the default this lane
 # works by until then:
-# `docs/handover/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`.
+# `internal/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`.
 #
 # What the pair above does prove about this case: after the walk was made to read the nodes in the
 # order the graph's own edges impose, `width`'s four places are read as the two nodes that are there
@@ -537,7 +537,7 @@ timeout_ms = 20000
 # pair, because the right answer is not known yet; when the ruling lands this entry changes with it.
 [[tests]]
 name = "vmap_refuses_an_answer_of_one_row"
-desc = "`vmap(width)(planes)` after `std::opt`: the pass folds `width(r) = dim<1>(r)` to the constant `2`, so the body's whole answer is a constant and the lift of it is the batch of one row. One row is not the batch the caller has (`planes` has two), and no node of the batched graph spreads one row over it, so the transform refuses instead of handing back a one-row array: `skip=body construct=an answer of one row` and `transforms: vmap has no batching for this function.`, exit 1. The eight lines before `width` are asserted as they are printed, so the refusal is still the *tenth* reading and not an earlier one. What the answer should be -- a batch of `[2, 2]`, as the same program answers with no pass -- is the author's call (`docs/handover/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`)."
+desc = "`vmap(width)(planes)` after `std::opt`: the pass folds `width(r) = dim<1>(r)` to the constant `2`, so the body's whole answer is a constant and the lift of it is the batch of one row. One row is not the batch the caller has (`planes` has two), and no node of the batched graph spreads one row over it, so the transform refuses instead of handing back a one-row array: `skip=body construct=an answer of one row` and `transforms: vmap has no batching for this function.`, exit 1. The eight lines before `width` are asserted as they are printed, so the refusal is still the *tenth* reading and not an earlier one. What the answer should be -- a batch of `[2, 2]`, as the same program answers with no pass -- is the author's call (`internal/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_layout_ops.cml"
 args = ["--trace", "transforms", "${case}", "std::opt", "std::nvm"]

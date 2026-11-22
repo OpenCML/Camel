@@ -1,0 +1,356 @@
+# M4 迁移：autodiff 用例的库层分类表
+
+**这一页的数由 `scripts/autodiff-migration-ledger.mjs` 产出**，不是人手抄的：下面这一行是工具打印的原样，
+日期在行下，提交就是**最后一次改动本页的那个提交**
+（`git log -1 --format=%h -- internal/archive/m4-autodiff-migration-table.cn.md`）。人写的是结论，数是工具给的。
+
+追平读数（2026-11-04，分支 `lane-ledger2b`（`lane-ledger` 的 tip 之上；任务书里的分支名 `lane-ledger2` 已被另一条车道占用），宿主 `88zjwei`，`out/latest/bin/camel` 2026-11-03 构建）：
+
+```
+[LEDGER] total=132 library=123 pass=19 with=45 array=71 other=7
+```
+
+`pass` 是**跑**出来的那一列，依赖上面那个二进制（`n/a` 表示二进制起不来，工具拒绝报数）；`total`、
+`library` 从树上数，换机器不变。这一行是脚本 2026-11-04 的原样输出，逐字一致：要复核就跑
+`node scripts/autodiff-migration-ledger.mjs`——它今天打印的是 `[LEDGER] total=… library=… pass=…`，
+`with`/`array`/`other` 三列已于 2026-11-21 与分类器一起删掉（见下面 `--ledger-check` 那一节）。
+
+**本页下文凡是 2026-11-01 / 2026-11-02 的读数（`127`、`118`、`pass=12`、`with=54 array=46 other=6`、
+`with=44 array=67` 等）都保留为那两天的读数，不再当今天的数看**——它们记录的是那时候量到了什么，
+以及量错在哪。
+
+对象：`test/cases/modules/autodiff/` 下全部 **132** 个 `.cml`。
+问题：**只 `import vjp`/`grad` 能不能过？** 答案逐条量出来，不是估的。
+
+## 分母（计划里实际跑的）
+
+| 计划 | `[SUMMARY]` |
+| --- | --- |
+| `test/plans/feat/modules/autodiff.plan.toml` | `total: 263, pass: 263, fail: 0` |
+| `test/plans/feat/modules/autodiff_value_with.plan.toml` | `total: 6, pass: 6, fail: 0` |
+| `test/plans/feat/modules/autodiff_inspection.plan.toml` | `total: 36, pass: 36, fail: 0` |
+| `test/plans/feat/modules/remat.plan.toml` | `total: 6, pass: 6, fail: 0` |
+| 合计 | **311 条执行，0 fail** |
+
+127 个文件跑出 311 条执行（一个用例多后端、多参数各算一条）。`remat` 那一行 2026-11-01 从 2 条长到 6 条
+（`remat` 的名字与重算属性在 `77b962cc9` 上已经有了，计划跟着长出四条）；其余三张计划的总数没动。
+
+## 怎么量的
+
+1. 每个用例复制成同目录下的 `<name>.probe.cml`，把 `from autodiff` 改成 `from vjp`，**只保留库里有的
+   名字**（`vjp`、`grad`、`with_grad`）；兄弟模块仍能解析，用例本身一行没改，跑完即删。
+2. `std::nvm` 跑一遍，退出码 0 记"过"，否则记诊断原文的第一条。
+3. 诊断里说得出原因的按诊断记（库里没有某个名字、参数是数组、`with` 写法），说不出的按源码形态记。
+
+## 今天重算：四类的分母与分子（2026-11-01，`77b962cc9` 之上）
+
+每一步做完重跑一次、贴出新的分子，从今天起这一节就是那个读数。分母按**源码形态**分成四类
+（`with` 函数 + `grad(f)<x>()`、数组/张量参数、库里没有的名字、不在这条路上），加"过"一类，五者
+**51 + 54 + 10 + 11 + 1 = 127**，也就是目录里的全部文件：
+
+| 类 | 分母 | 分子（只 import 库、退出码 0 且打出数） | 今天挡在哪 |
+| --- | --- | --- | --- |
+| ① `with` 函数 + `grad(f)<x>()` | 51 | **0** | `grad` 声明的参数是 `(x: float) => float`，`f` 是函数值或数组函数时匹配不上：`No matching function found for argument types: <> (<f: (x: float) => float> (x: float) => float)`；带进 `with_grad` 的走 `stdlib/vjp.cml#vjp`（`with_grad` 体里 `vjp(f)`） |
+| ② 数组/张量参数 | 54 | **0** | 同一处声明面：`No matching function found for argument types: <> (<xs: float[]> () => float pure)`（`array_slice_grad.cml:63:18` 起四行同一句） |
+| ③ 库里没有的名字 | 10 | **0** | `Unresolved reference: 'stop_gradient'`（`scalar_grad.cml:22:24`）；补上名字后仍卡 `with_grad<<x: float> (y: float) => float pure>` 在 `stdlib/vjp.cml:93:15` |
+| ④ 不在这条路上（`prelude` 的 `jvp`/`vmap`/`remat`，或只测名字解析） | 11 | **4** | 不再挡：`jax_batching`、`jax_vmap`、`jax_vmap_tensor`、`jax_names/remat` 今天退出码 0 且打出数（它们的名字在 `transforms` 里，本就不经过 `vjp`）。余 7 条仍在名字解析上 |
+| **过** | **1** | `grad_refuse_no_with`（今天分子 **1**） |
+| 合计 | **127** | **5**（库层真正走通的是 **1**，另 4 条不经过库） | |
+
+四类的分母相加等于 127（判据①），五类的分子相加等于 5，其中"库层走通"仍是 **1**
+（判据②：`jax_*` 那 4 条退出码 0、有数，但它们不 import 库，不能算进"库层能过"）。
+
+**可复现的命令**（一条类一条，改写的规则：`from autodiff` → `from vjp`，只留 `vjp`/`grad`/`with_grad`，
+其余名字整行丢掉）：
+
+```powershell
+# ① 写法：with 函数 + grad(f)<x>()
+sed -E 's/import \{ grad \} from autodiff/import { grad } from vjp/' test/cases/modules/autodiff/grad_refuse_function.cml > /tmp/p1.cml
+camel /tmp/p1.cml std::nvm
+#   [Error]: No matching function found for argument types: <> (<f: (x: float) => float> (x: float) => float).
+
+# ② 数组/张量参数
+sed -E 's/import \{ grad \} from autodiff/import { grad } from vjp/' test/cases/modules/autodiff/array_slice_grad.cml > /tmp/p2.cml
+camel /tmp/p2.cml std::nvm
+#   [Error]: No matching function found for argument types: <> (<xs: float[]> () => float pure).
+
+# ③ 库里没有的名字
+sed -E 's/import \{ grad, with_grad \} from autodiff/import { grad, with_grad } from vjp/' test/cases/modules/autodiff/scalar_grad.cml > /tmp/p3.cml
+camel /tmp/p3.cml std::nvm
+#   [Error]: Unresolved reference: 'stop_gradient'.
+
+# ④ 不在这条路上（本就不 import 库，直接跑原文件）
+camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出数
+```
+
+全目录的分子由同一改写规则跑一遍得来（`test/probe/m4probe.py`，不提交）：逐条复制成同目录
+`<name>.probe.cml`、`camel <probe> std::nvm`、记退出码与第一条诊断、跑完删掉。两次读数：
+
+- 改表**前**：`M4S cases=127 passed=5`（四类 0/0/0/4 + 过 1）。
+- 改表**后**：四片 `M4S` 的 `passed` 是 0 / 5 / 0 / 0，合 5；与改表前同一次读数，因为改的是文档，不是事实。
+
+**今天的新事实（`vjp::<F>` 声明不能单飞，写进第 2 步的代价）**：把 `vjp` 写成
+`vjp::<F>(f: F): ...` 的**泛型声明**与库体并存时，**不报 `Redeclaration`**，但它**盖掉库体**：写进去
+的那一刻起 `grad` 全线拒绝（声明取代了那条有函数体的 `vjp`，而没有任何函数体或 C++ 算子扛着这个名字）。
+所以"声明 + 建图"必须**同一笔落下**，不能先落声明、再补函数体——那中间的树是红的。这与此前量到的
+另一条并不矛盾：同模块里一条泛型声明**加**一条非泛型声明才报 `Redeclaration`；泛型对非泛型是静默覆盖。
+
+## 结论
+
+> **量法（2026-11-01 定）**：一条用例算不算“过”，按**它自己的期望退出码**判——有的用例守的就是 exit 1（`with_grad_old_name` 守 `value_and_grad` 不存在，`grad_refuse_*` 守具名拒绝），一律按 exit 0 量会把它们的“过”记成“不过”。四类的数按这个口径重记。
+
+**库层今天能过：12 / 118**（`node scripts/autodiff-migration-ledger.mjs` 的读数：`[LEDGER] total=127 library=118 pass=12 with=54 array=46 other=6`）。12 条里 **4 条真的跑出数**（`transform_rules`、`jax_batching`、`jax_vmap`、`jax_vmap_tensor`），**8 条守住的是拒绝**（`err_vjp_annotation`、6 条 `grad_function_value_*`、`with_grad_old_name`——它们期望 exit 1，库也确实拒了）。
+
+**2026-11-04 追平：库层今天能过 19 / 123**（上面页首那一行）。19 条里 **6 条真的跑出数**（上面那 4 条
+再加上 `rules_angle_args_reshape`、`rules_angle_args_softmax`），**13 条守住的是拒绝**（上面那 8 条再加上
+`transpose_needs_parameter_shape`、`var_tensor_local`、`var_tensor_read_after_call`、
+`var_tensor_read_after_write`、`var_tensor_read_in_callee`）。
+
+这个数为什么会动，写清楚：**不是用例变了，是量它的期望第一次是它自己的。** 台账原来只从
+`test/plans/feat/modules/*.plan.toml` 读期望，而 **132 条里有 14 条的计划条目根本不在那里**
+（`feat/linear/var_reference` 8 条、`feat/compile/rules_angle_args` 4 条、`feat/mm` 2 条），于是它拿
+一条**没人写过的 `expect_exit = 0`** 去量。14 条里 **5 条钉的是 `expect_exit = 1`**——它们守的就是拒绝，
+本来就该 exit 1，台账却把"按设计 exit 1"记成"不过"。改成"扫 `test/plans` 下所有计划、按用例自己那条
+条目量"之后，同一个二进制上 `pass` 从 **14 变 19**，逐条只差 9 行：那 5 条由"不过"变"过"，另外 4 条
+（`probe_library_grad`、`vjp_lib`、`vjp_user_a`、`vjp_user_b`）从"按编的 0 量"改成 `want = none` 且**不算过**。
+**没有一条用例的退出码动过，动的是拿它跟什么比。**
+
+`12 → 14` 那两条不在这笔账里：那是宿主换了一版二进制（`pass` 依赖二进制，页首与脚本文件头都记着
+这件事；脚本文件头在 2026-11-04 之前早就写着"读数 14、记录 12"）。**数和东西要分清**：这一页记的
+是"东西动对了、数字跟着动"，不是"数字动了、东西没动"。
+
+上一版手记的 **2** 就是这么错的：手记一律按 exit 0 数"过"，把 8 条"期望被拒"的用例记成了"不过"。工具按**每条用例自己的期望**（退出码 + 计划里点名的输出串）判，所以是 12。
+
+**`--ledger-check` 是棘轮，而且只有一个方向**（2026-11-21 改）：基准是**上一次记录里通过的那批用例的路径名单**（`test/cases/tools/autodiff_migration_ledger/baseline.json`），记录里列着的用例**不许变成不通过**——掉一条就红，**并且点名是哪一条**（带它自己的 `want` 与 `got`）。记名单而不是记计数，因为**计数只说得掉了几条，名单说得掉的是哪一条**。用例从不通过变成通过不是回退：`--record` 把它写进记录、抬高基准，`--record` **不许悄悄把名字删掉**，删要 `--force`，那样 diff 里看得见是哪条掉了、提交里也就非得写清为什么。**脚本里不再有一个写死的数**：原来那六个计数就记在编辑这个文件的人手上的常量里，读数一动就得在同一个提交里手改常量——**改读数的人同时改它比的那个东西，这样的棘轮只拦得住"没人愿意再改第二遍"的那种改动**。三列分类（`with`/`array`/`other`）和两个分母一并**删掉**，不是调参：它们数的是源码里的字样，而**注释里的字样也算字样**，用例解释自己一句就换了类（`05e1145a9`），于是那句话还得改回去——尺子在掰它量的东西。**它记的是"库层能过哪些条"，不是"能求导几条"**：守拒绝的用例算通过，但它们不能求导。
+
+**取数行修好之后（2026-11-02）**：`runCase` 原来按 `l.startsWith('error[')` 找诊断，而这棵树早已不再输出那个形式——`include/camel/core/error/diagnostics/render.h` 写明短格式是 `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`，`git grep -c 'error\[' -- src` 是 **0**。于是它一条也匹配不到，把**每一条不过的用例**都记成 `other`，读出 **`total=127 library=118 pass=12 with=0 array=0 other=106`**——一个瞎了的尺子，而且 `other` 只许降，于是 `--ledger-check` 每天红一条"其实什么都没变"的账。取数行改成 `l.includes(': [Error]: ')` 之后，读数回到 **`pass=12 with=54 array=46 other=6`**，与 `LEDGER_RECORDED` 记的完全一致，所以**棘轮不重记**（新读数等于旧记录，`[LEDGER-CHECK] ok`）。**留档的错数**：`with=0 array=0 other=106`（2026-11-02 取数行修好前的一读），它错在尺子，不在用例。
+
+这里的分账是**计量修正**（取数行错），不是断言升级、不是新用例、也不是删码：`pass`、`total`、`library` 一个都没动，`with`/`array`/`other` 也没有真的换类。
+
+**这个工具读用例、读计划、读本机的二进制；唯一会写的文件是它自己的那份记录**（而且只在 `--record` 时写）：它不更新本页——本页仍由人手改，工具给数。
+
+**仪表退役（2026-11-02，撤除之后）**：上表的 `with`/`array`/`other` 三列从 2026-11-02 起**不再按“失败时那条诊断的措辞”分**——旧实现是三条正则（`[]`/`[..]`/`f32`/`Model`/`Plain` 与 `<x: float>`），撤除把拒绝点搬走之后措辞不再命中，四个桶一起塌进 `other`（实测 `pass=0 with=0 array=0 other=118`）。**量措辞的仪表只能量出措辞**，所以那个分类器是**删掉**，不是调参。
+
+现在的口径（`scripts/autodiff-migration-ledger.mjs` 的文件头就是契约）：
+
+- **分类列已经没有了（2026-11-21）**：`with`/`array`/`other` 三列与 `total`/`library` 两个分母随分类器一起删掉。本页下文出现的这些数都是**它们被删之前**的读数，留着是因为它们记的是那几天量到了什么、以及量错在哪；今天的工具只打印 `[LEDGER] total=… library=… pass=…`，其中 `pass` 是跑出来的，另两个从树上数。
+- **`pass` 是运行读数，依赖宿主机上的二进制**：它跑 `out/latest/bin/camel`，**同一棵树换个二进制读数就不同**（同一棵树在 2026-11-01 13:44 的二进制下读 `pass=6`，没有二进制时读 `pass=0`），所以**它不可跨机比较**。
+- **A/B（同一棵树，2026-11-02）**：连跑两遍 `pass=12 with=44 array=67 other=7`；把 `CAMEL_HOME` 指到没有二进制的目录再跑，`pass=0` 而 **`with=44 array=67 other=7` 一位不变**——分类不随二进制动，这是这次改口径的验收本身。**并且：二进制起不来（或根本不在）时台账现在拒绝报数**（见下）。
+
+**一次测量错误，记在这里**：改口径时我第一版读数写的是 `pass=6`，并在文件头据此写了“六条守拒绝的用例掉出来了”。**那是错的**——跑台账的 shell 没有 `LD_LIBRARY_PATH`，编译器加载不到新的 `libstdc++`，每条都 exit 1 且没有诊断，于是六条本来能过的被记成失败。**量它的工具包含它的运行环境**，这条与“包含哪个二进制”是同一条。现在台账遇到“二进制起不来（缺库或根本不在）”会**拒绝报数**：打印 `[LEDGER] the binary could not start: …`、非零退出，`--ledger-check` 也不再比对——**看不见的尺子要先说自己看不见**。
+- **旧分类的数（54 / 46 / 6）作废**，它们量的是措辞，不再与任何一列对齐。**新记录**：`total=127 library=118 pass=12 with=44 array=67 other=7`（`--ledger-check` 通过）。**`pass` 没有动，仍是 12**：八条守拒绝的用例（`err_vjp_annotation`、6 条 `grad_function_value_*`、`with_grad_old_name`）依旧按各自的 exit 1 过，四条真跑数的（`transform_rules`、`jax_batching`、`jax_vmap`、`jax_vmap_tensor`）依旧过。
+
+**`array` 这一列的验收作废（显式作废，别让下一个人再去追它）**：**此后数组那一步的进度以 `grad(f)([3.0, 2.0])` 打印 `[2.0, 3.0]` 与 `skip=body` 消失为准，不再以台账的 `array` 列为准**——那一列只数“有多少条用例的源码里写着数组类型”，它不会因为工作落地而下降。（那一列本身 2026-11-21 已随分类器删掉，这条作废仍然算数：进度还是按那两个读数看。）
+（2026-11-01 23:00 重算：118 个顶层用例逐条跑，另 9 个在 `jax_names/` 子目录。）
+
+重算方法与上一版同一套（复制成 `.probe.cml`、把 `from autodiff` 里的 `vjp`/`grad`/`with_grad` 改从 `vjp` 取、跑 `std::nvm`、跑完即删），**只改了一处错**：上一版把 `import { … } from autodiff` 整条换成 `from vjp`，于是库里仍有的辅助名（`add_tangent`、`zero_tangent` 等）被判成"库里没有这个名字"。正确写法是**两行**——transform 的三个名字从 `vjp` 取，其余仍从 `autodiff` 取。改对之后 `transform_rules` 从"不过"变"过"（它只用 `add_tangent`，而 `add_tangent` 一直在 `stdlib/autodiff.cml` 里）。
+
+四类的分子/分母（118 个顶层用例，分母不变）：
+
+| 类（按今天第一条诊断的形态量，不是按写法归类） | 条数 | 过 | 卡在哪 |
+| --- | --- | --- | --- |
+| `with` 形参函数（诊断里是 `(<x: float> () => float pure)` 这种带 `with` 的函数类型） | 54 | 0 | 声明面：函数的类型带 `with` 形参，库的 `grad`/`vjp` 只收 `(x: float) => float`；`with_grad` 的体（`return vjp(f)`）给不出 `F` |
+| 数组/张量形参（诊断里是 `[]`、`[..]`、`f32`、`Model` 等） | 46 | 0 | 声明面 + 走图：`jvpSignature` 的四处 float 写死（见 `questions-2026-11-01-the-array-parameter-waits-for-the-compile-time-step.md`） |
+| 其余（名字缺失、注解写法、只测名字解析） | 6 | 0 | 名字本身（`remat`、`stop_gradient`、`value_and_grad`）、`@vjp` 注解 |
+| 过 | — | 12 | 见上一段：4 条跑出数、8 条按期望拒绝 |
+
+118 个顶层用例的账：54 + 46 + 6 + 12 = 118。另有 `jax_names/` 子目录 9 个（`jax_vmap*`、`jax_names/jvp` 等）不在 `vjp` 这条路上，不记入分母。
+
+**100 条 `NoMatchingFunction` 的形态只有两种**：函数的类型带 `with` 形参（`(<x: float> () => float pure)`、`(<w: float> (n: int) => float)` 等），或函数的形参是数组/张量（`(<xs: float[]> …)`、`(<x: f32[..]> …)`）。**没有一条是"只差一个拼写"**——这是这一版和上一版一致的结论，只是现在有了逐条证据（`/tmp/m4/probe127b.tsv` 的 118 行）。
+
+
+**试点 5 条已判完（`with` 类 3、数组类 2）：已迁 0 条 — 纯拼写 0、需要库补 2、需要新能力 3。**
+判法：把 5 条真的按库的写法改一遍、跑一遍，改不动或跑不过的记下走图/声明面拒绝它的那一档；
+用例文件一条都没改（`git diff test/cases/modules/autodiff/` 为空），老读数在各行里作对照。
+
+**声明面这一笔落到哪（量过的，不是判断）**：`stdlib/vjp.cml` 里 **`vjp` 现在泛型于参数类型**——
+`vjp::<T>(f: (x: T) => float): (x: T) => (float, (ct: float) => T)` 与二元的那条；`grad` **仍是**
+`grad(f: (x: float) => float): (x: float) => float`。为什么不是一个 `::<F>`：量了三条捷径，都不通——
+① 同一模块里"一条泛型 + 一条 `float`"是 `error[SemanticDiag::Redeclaration]: Redeclaration of reference: 'vjp'`；
+② 声明处的默认类型参数 `::<T = float>` 是 `error[SyntaxDiag::UnexpectedToken]: Unexpected '='; expected ',' or '>'`；
+③ 只留一条 `::<F>` 加 `Vjp<F>` 能解析，但没有函数体就得有 C++ 算子（`NativeDeclarationNotLoaded`），
+而写函数体要 pack 形参（`SyntaxDiag::UnexpectedToken: Unexpected '..'`）。让 `grad` 也泛型则会打死
+`grad(x => x + 1.0)`：`LambdaParameterWithoutType: The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type.`
+（`grad_where_the_tangent_ignores_the_operands` 三行全红，m-train 第 161 趟就是这么红的）。
+所以 `grad` 留具体类型、`vjp` 泛型：**lambda 那种写法在 `grad` 上保住了，数组那种写法在 `vjp` 上通了**。
+
+**数组现在落到哪**：`vjp(subscript)(xs)`（`subscript(xs: float[]): float`）编得过，停在
+`error[SemanticDiag::ArgumentsRejected]: Invalid call to 'jvp' with argument types <> ((x: float[]) => float): `jvp` lifts a `float` parameter into the pair `(value, tangent)`, and parameter 0 is a `float[]`, whose tangent space is self and which this transform does not lift yet.`
+`note: in the instance 'vjp<float[]>' of the generic function 'vjp' with T = float[], instantiated by the call`
+—— 这是"编过、卡在具名拒绝"，不是"编不过"。用 `grad(subscript)` 拼写的那两条（试点 4/5）仍停在
+`NoMatchingFunction … ((xs: float[]) => float pure)`，因为 `grad` 为 lambda 推定保留了具体 `float`。
+| 试点用例 | 类 | 结论 | 卡在哪一档 |
+| --- | --- | --- | --- |
+| `collapse` | `with` | 需要新能力 | `REINTERP split … skip=forward construct=a tangent port`（体里有函数调用） |
+| `control_flow_grad` | `with` | 需要新能力 | `REINTERP split … skip=exit`（体里有分支）；其后还要多参 `grad` |
+| `whole_extrema_grad` | `with` | 需要新能力 | `REINTERP jvp function=high skip=body`（体里建张量取 `max`） |
+| `array_slice_grad` | 数组 | 需要库补 | `No matching function … ((xs: float[]) => float pure)`：库只声明 `(x: float) => float` |
+| `array_take_grad` | 数组 | 需要库补 | 同上 |
+
+| 缺什么 | 条数 | 用例 |
+| --- | --- | --- |
+| 数组/张量参数 + `grad(f)<x>()` 写法 | 35 | `adjoint_*`、`grad_tuple_read`、`var_*` 等（今天分子 **0**） |
+| `with` 函数 + `grad(f)<x>()`（库签名是 `grad(f)(x)`，`f: (x: float) => float`） | 51 | `collapse`、`loop_grad_*`、`grad_module_var_sync` 等（今天分子 **0**） |
+| 只用数组/张量参数 | 19 | `slice_grad`、`tensor_grad_check` 等（今天分子 **0**） |
+| 库里没有这个名字 | 9 | `remat`、`stop_gradient`、`value_and_grad`、`*_tangent`（今天分子 **0**） |
+| `@vjp` 注解写法（现在是 `#vjp(rule)` 声明标签） | 1 | `err_vjp_annotation`（今天分子 **0**） |
+| 不在 `vjp` 这条路上（`prelude` 的 `jvp`/`vmap`，或只测名字解析） | 11 | `jax_vmap*`、`jax_names/jvp` 等（今天 **4** 条退出码 0：`jax_batching`、`jax_vmap`、`jax_vmap_tensor`、`jax_names/remat`） |
+| **过** | **1** | `grad_refuse_no_with`（今天分子 **1**） |
+
+## 走图与声明面拒绝它的地方（两条最小探针 + 5 条试点量的，不是估计）
+
+- `grad(x => x*x*x)` 过（27.0）；`grad(x => x + 1.0)` 在本分支的基线上**仍不过**：
+  `TRANSPOSE function=autodiff::add_tangent<float> skip=output`（lambda 形）或
+  `TRANSPOSE function=split_of_jvp_of_…_backward skip=call node=5 callee=autodiff::add_tangent<float>`（具名函数形）
+  → `transpose has no transpose for this function`。
+  **注意**：`skip=output` 这一族的修法在 `e9ab3bdd9`（"answer a zero for a parameter no
+  cotangent reached"），记这一行时它**不在** `origin/develop` 的 `bcf970332` 里（`git branch -a --contains e9ab3bdd9`
+  当时只列 `lane-reinterp2`，该分支已删、tip `67509bd1a`）；所以本表按当时本分支的读数记。
+  这一笔现在已在 `origin/develop` 的历史里（`f130ac445`），**这一行要重测**。
+- 函数体里有调用（`sq(x) * sq(x)`）→ `REINTERP split … skip=forward construct=a tangent port`；
+  函数体里有分支 → `skip=exit`；函数体里建张量再取 `max` → `REINTERP jvp … skip=body`。
+- 数组参数 → 声明面：`No matching function … ((xs: float[]) => float pure)`。
+
+所以"过半"的真正账不是每条用例缺一条规则，而是三件事：库的**声明面**（`Vjp<F>` 泛型，设计 6.1）、
+**`add_tangent` 的转置**（`e9ab3bdd9` 已修，现在已在 `develop` 里）、**`split`/`jvp` 对调用、分支、张量体的支持**。
+这三件都不在用例那边：试点 5 条里 0 条是改写法就能过的。
+
+## 逐条（127 行，2026-11-01 那一版）
+
+> 这张逐条表是 2026-11-01 按 127 个文件录的，**没有重录**：用例目录此后长到 132 个（台账 `total=132`），
+> `vjp` 的声明面也换过。要今天的逐条读数就跑 `node scripts/autodiff-migration-ledger.mjs`，它逐行打印
+> `exit`/`want`/`class`；这一节的结论（哪些类卡在声明面、哪些卡在走图）与今天一致，数按工具那一行。
+
+| # | 用例 | 库层 | 缺什么 |
+| --- | --- | --- | --- |
+| 1 | `adjoint_cast_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 2 | `adjoint_concat_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 3 | `adjoint_reshape_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 4 | `array_slice_grad` | 不过 | **试点 4/5：需要库补** — `with <xs: float[]>` 改成 `func subscript(xs: float[]): float` 是拼写，`grad(subscript)(xs)` 仍编不过（`NoMatchingFunction … ((xs: float[]) => float pure)`，`grad` 为 lambda 推定保留具体 `float`）；改拼成 `vjp(subscript)(xs).1(1.0)` 就编得过，停在 `jvp` 的具名拒绝（`parameter 0 is a 'float[]', whose tangent space is self and which this transform does not lift yet`，`note: in the instance 'vjp<float[]>'`）。老读数 `[0.0, 2.0, 3.0, 0.0, 0.0]` / `[0.0, 0.0, 5.0, 3.0, 2.0]` / `nonzero=115.0` |
+| 5 | `array_take_grad` | 不过 | **试点 5/5：需要库补** — 同 `array_slice_grad`：`func repeated(xs: float[]): float` 是拼写，`grad(repeated)(xs)` 卡在 `NoMatchingFunction`，`vjp(repeated)` 编得过并停在 `jvp` 那句（`vjp<float[]>` 实例）。老读数 `[7.0, 0.0, 3.0, 0.0, 0.0]` / `[0.0, 3.0, 0.0, 0.0, 2.0]` / `nonzero=136.0` |
+| 6 | `collapse` | 不过 | **试点 1/5：需要新能力** — `with <x: float>` 改成参数是纯拼写，`func h(x: float)` + `grad(h)(2.0)` 编得过（老读数 `collapse dh=22.0`，改写后同一输入应仍是 22.0）；但函数体里调了 `sq`，`split` 拒绝：`REINTERP split function=jvp_of_h skip=forward construct=a tangent port uri=- why=the value half reads the tangent of parameter 0, which the forward half does not take` |
+| 7 | `collapse_random` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 8 | `collapse_runtime` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 9 | `concat_array_part` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 10 | `control_flow_grad` | 不过 | **试点 2/5：需要新能力** — 五条里最简单的一条（`leaky`，单个 `with <x: float>`）改成参数后仍然过不去：`REINTERP split function=jvp_of_leaky skip=exit (a lifted function answers with the pair (result, tangent); this graph's exit is not a two-member tuple fill, so there is no pair to cut)`——函数体里有分支。其后还有一件库补：`power`/`pick`/`walk` 是 `(x, n)` 多参，库只有一元 `grad`。老读数 `a=6.0 b=0.5 c=80.0 d=12.0 e=0.0 w=-10.0` |
+| 11 | `custom_rule` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 12 | `discrete_zero` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 13 | `discrete_zero_refuse` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 14 | `err_vjp_annotation` | 不过 | 写法：@vjp 注解（现在是 #vjp(rule) 声明标签） |
+| 15 | `f64_broadcast_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 16 | `f64_matmul_grad_width` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 17 | `flat_element_pullback` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 18 | `fused_grad_check` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 19 | `gather_discrete_index_zero` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 20 | `grad_captured_var_written` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 21 | `grad_closure` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 22 | `grad_data_input` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 23 | `grad_effects_kept` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 24 | `grad_first_with_parameter` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 25 | `grad_function_value_branch` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 26 | `grad_function_value_container` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 27 | `grad_function_value_parameter` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 28 | `grad_function_value_passed` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 29 | `grad_function_value_recursion` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 30 | `grad_function_value_static_branch` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 31 | `grad_function_values` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 32 | `grad_function_values_arms` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 33 | `grad_function_values_effects` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 34 | `grad_int_zero` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 35 | `grad_module_var_sync` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 36 | `grad_refuse_function` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 37 | `grad_refuse_no_with` | **过** | — |
+| 38 | `grad_refuse_return` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 39 | `grad_refuse_string` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 40 | `grad_refuse_struct` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 41 | `grad_refuse_tuple` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 42 | `grad_refuse_var` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 43 | `grad_scalar_width` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 44 | `grad_specialized_callee` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 45 | `grad_struct_all_discrete` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 46 | `grad_through_as` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 47 | `grad_tuple_discrete_member` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 48 | `grad_tuple_read` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 49 | `grad_unexpanded_inline` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 50 | `grad_unexpanded_specialize` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 51 | `jax_batching` | **过**（今天） | 库层不适用：不 import `autodiff`，用的是 `prelude` 的 `vmap`/`map`；退出码 0 并打出数 |
+| 52 | `jax_derivatives` | 不过 | 库里没有 `stop_gradient` |
+| 53 | `jax_has_aux` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 54 | `jax_names/argnums` | 不过 | 库里没有 vjp |
+| 55 | `jax_names/checkpoint` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 56 | `jax_names/has_aux_false` | 不过 | 库里没有 vjp |
+| 57 | `jax_names/has_aux_plain` | 不过 | 库里没有 vjp |
+| 58 | `jax_names/jvp` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 59 | `jax_names/remat` | **过**（今天） | 库层不适用：`remat` 的名字在 `transforms` 里；退出码 0 并打出数 |
+| 60 | `jax_names/vjp` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 61 | `jax_names/vmap_in_axes` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 62 | `jax_names/vmap_two_parameters` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 63 | `jax_vmap` | **过**（今天） | 库层不适用：`vmap` 是 `prelude` 的变换；退出码 0 并打出数 |
+| 64 | `jax_vmap_tensor` | **过**（今天） | 库层不适用：同上，张量秩的 `vmap`；退出码 0 并打出数 |
+| 65 | `literal_pullback` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 66 | `loop_grad_affine` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 67 | `loop_grad_capture_table` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 68 | `loop_grad_closure_in_body` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 69 | `loop_grad_composite_read` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 70 | `loop_grad_in_place` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 71 | `loop_grad_iterable` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 72 | `loop_grad_iterable_length` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 73 | `loop_grad_iterable_records` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 74 | `loop_grad_iterable_tensors` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 75 | `loop_grad_literal_array` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 76 | `loop_grad_nested` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 77 | `loop_grad_parameter_array` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 78 | `loop_grad_product` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 79 | `loop_grad_record_tensor_fd` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 80 | `loop_grad_refuse_capture` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 81 | `loop_grad_refuse_no_element_tangent` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 82 | `loop_grad_refuse_slice_iterable` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 83 | `loop_grad_struct_state` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 84 | `loop_grad_sum` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 85 | `loop_grad_tensor_iterable` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 86 | `loop_grad_tuple_state` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 87 | `loop_grad_zero_rounds` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 88 | `macro_round_lifetime_gc` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 89 | `math_erf` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 90 | `math_sqrt` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 91 | `nn_grad_check` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 92 | `pb_statics_gc` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 93 | `probe_library_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 94 | `refuse_container_concat` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 95 | `refuse_container_reshape` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 96 | `refuse_gradient_element_type_rule` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 97 | `remat_identity` | 不过 | 库里没有 `remat` |
+| 98 | `scalar_grad` | 不过 | 库里没有 `stop_gradient` |
+| 99 | `second_order` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 100 | `second_order_array_add` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 101 | `second_order_array_append_init_blocked` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 102 | `second_order_array_scatter` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 103 | `second_order_array_slice` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 104 | `second_order_array_zeros` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 105 | `slice_grad` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 106 | `slice_grad_negative_step` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 107 | `slice_open_end` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 108 | `tensor_grad_check` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 109 | `transform_rules` | 不过 | 库里没有 `add_tangent`、`div_tangent`、`mul_cotangent`、`mul_tangent`、`neg_tangent`、`sub_tangent` |
+| 110 | `two_contexts_grad` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 111 | `value_with_grad` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |
+| 112 | `value_with_reduce` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 113 | `value_with_refusal` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 114 | `var_array_append` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 115 | `var_tensor_local` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 116 | `var_tensor_read` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 117 | `var_tensor_read_after_call` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 118 | `var_tensor_read_after_write` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 119 | `var_tensor_read_in_callee` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 120 | `var_through_with_grad` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元） |
+| 121 | `vjp_cross_module` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 122 | `vjp_lib` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 123 | `vjp_user_a` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 124 | `vjp_user_b` | 不过 | 不在 `vjp` 这条路上：不 import `autodiff` 的名字（`prelude` 的 `jvp`/`vmap`） |
+| 125 | `whole_extrema_grad` | 不过 | **试点 3/5：需要新能力** — 改成 `func high(w: float)` + `grad(high)(5.0)` 后，前向走图直接拒绝函数体：`REINTERP jvp function=high skip=body`（体里用 `w` 建 `float[2, 2]` 再取 `max`）。老读数 `1.0 / 0.0 / 1.0 / 0.0` |
+| 126 | `whole_extrema_tie_grad` | 不过 | 写法：`grad(f)<x>()` + 被求导的是 `with` 函数（库的签名是 `grad(f)(x)`，`f` 是 `(x: float) => float`） |
+| 127 | `with_grad_old_name` | **过**（按期望退出码） | 它守的就是这个名字不存在：`UnresolvedReference: 'value_and_grad'`，exit 1 —— 按 exit 0 量会把它记成"不过" |
+## 这一笔没做的
+
+- 没有改任何用例（`git diff test/cases/modules/autodiff/` 为空），迁移哪一批等点名。
+- 没有把"库层能过"的判定推广到 `compile/transforms/` 之外的目录：只量了这一个目录。

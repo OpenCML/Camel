@@ -4,7 +4,7 @@
 #
 # Why the entry exists. `perf_fib_smoke.opt_twice` ran `std::opt` twice over the timed helper and
 # cost 4005 ms of CPU, of which the *second* pass was 3607 ms against 89 ms for the first
-# (`docs/handover/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`). The helper's own shape was
+# (`internal/reports/2026-11-20-where-the-opt-twice-cpu-goes.cn.md`). The helper's own shape was
 # what made the program expensive -- it returned one array built by `concat` at every level of a
 # recursion -- so rewriting the helper (2026-11-22) takes the workload away with it. This entry keeps
 # the reading: it names the case, runs the same pipeline, and pins how many times the first pass the

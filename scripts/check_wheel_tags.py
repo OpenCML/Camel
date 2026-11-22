@@ -26,7 +26,7 @@ the one it was asked for. Every alternative has to be publishable, and `--expect
 it is one of them.
 
 `--ruling` checks the other half of a release: that the *set* of wheels is the two forms the
-2026-10-25 decision allows (docs/handover/README.cn.md item 7; review index C28), carried out on
+2026-10-25 decision allows (internal/archive/handover-README.cn.md item 7; review index C28), carried out on
 2026-11-02 --
 
     cp310-abi3-<platform>   the body *and* the interop extension; every CPython 3.10 and later
@@ -59,7 +59,7 @@ ABI_TAGS = ("none", "abi3")
 INTEROP = ("cp310", "abi3")
 RUNTIME_ONLY = ("py3", "none")
 RULING = (
-    "the 2026-10-25 ruling (docs/handover/README.cn.md item 7, review index C28) allows exactly "
+    "the 2026-10-25 ruling (internal/archive/handover-README.cn.md item 7, review index C28) allows exactly "
     "two forms: %s-%s-<platform> with the interop extension, and %s-%s-<platform> without it"
     % (INTEROP + RUNTIME_ONLY)
 )

@@ -34,9 +34,9 @@
 // where a pack stands". The quotes are out of `LEFT` now, and the grammar positions are named here
 // as well, because a production can put the dots right after a `(`.
 //
-// Files: the standard library, the cases, the language and design documents. `docs/handover/reviews/`
+// Files: the standard library, the cases, the language and design documents. `internal/reviews/`
 // is a record of what was written at the time and is never rewritten (author, 18:35); the pages under
-// `docs/handover/questions/` are proposals, and only the one about taking a type pack apart names the
+// `internal/questions/` are proposals, and only the one about taking a type pack apart names the
 // spelling, so that page is edited by hand rather than by this script.
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -102,9 +102,9 @@ function* walk(dir) {
         if (full.replaceAll('\\', '/').endsWith('test/cases/probe')) {
             continue;
         }
-        // `docs/handover/` is the record of what was written at the time -- reports, reviews and
+        // `internal/` is the record of what was written at the time -- reports, reviews and
         // questions. It is read as history, so the spelling in it stays the one that was written.
-        if (full.replaceAll('\\', '/').endsWith('docs/handover')) {
+        if (full.replaceAll('\\', '/').endsWith('internal')) {
             continue;
         }
         // This file quotes the old spelling on purpose: its header is the table of the positions

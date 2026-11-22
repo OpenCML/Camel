@@ -2,7 +2,7 @@ id = "tools.inspect_copies"
 order = 919
 tier = "fast"
 tags = ["feat", "tools", "inspect", "copies", "storage_reuse"]
-desc = "`camel inspect --copies` reports, for every update node, whether the update reuses the storage of the value it is given -- the ruler the direct-SSA plan's S3b is read with (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md)"
+desc = "`camel inspect --copies` reports, for every update node, whether the update reuses the storage of the value it is given -- the ruler the direct-SSA plan's S3b is read with (internal/plans/2026-11-16-direct-ssa-construction.cn.md)"
 
 # The plan's storage-reuse table (camel/runtime/exec_plan.h, StorageReuse) decides, once, whether an
 # update -- `v = v->append(x)`, a path assignment, a sort rebinding -- reuses the storage of the

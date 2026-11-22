@@ -148,7 +148,7 @@ assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, J
 # three shapes the question page measured. Each entry writes the remedy where the effect is and reads
 # its output, so a help that named a spelling the language does not have would be caught by the case
 # that follows it rather than by a reader. The page is
-# `docs/handover/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
+# `internal/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
 
 [[tests]]
 name = "unused_values.loop_body_runs_each_round"

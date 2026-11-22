@@ -22,7 +22,7 @@ snapshot  Every .cml case of the parse corpus (test/cases/parse), every probe (p
           can change without a test noticing it: the standard library (the migration's own
           subject), the exemplars, the examples and the benchmarks are where a reading that moved
           hides, and a plan that owns the file only catches what it happens to assert. A .cml
-          file under docs/handover is not in the corpus (corpus.HANDOVER): that directory holds
+          file under internal is not in the corpus (corpus.HANDOVER): that directory holds
           the language author's drafts, not the repository's surface.
           --update merges into the recorded list: the selected lines are re-hashed and replaced,
           a file the list does not hold yet is hashed and added, every other line whose file

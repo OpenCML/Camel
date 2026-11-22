@@ -1,6 +1,6 @@
 # 变换嵌套乙 — the readings this lane's four items are judged by
 #
-# Section 乙 of `docs/handover/plans/2026-11-18-nested-transforms.cn.md`. Each entry is one of the
+# Section 乙 of `internal/plans/2026-11-18-nested-transforms.cn.md`. Each entry is one of the
 # shapes that section names, written the way the plan writes it, with the number derived by hand
 # from the derivative (no implementation was read to get it).
 #
@@ -61,7 +61,7 @@ expect_stdout_contains = ["nest_named x=2.0 d1=12.0 d2=12.0"]
 # A wall, not a wish: this case wants the number. The inner `grad(cube)` runs to the end (under
 # `--trace transforms` its `first_with_as_param`, `jvp`, `split` and `transpose` all leave a reading)
 # and the OUTER `jvp` refuses with no cause and no place -- not one `REINTERP` line for it. Written up
-# in `docs/handover/reviews/2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md`.
+# in `internal/reviews/2026-11-20-the-outer-jvp-needs-split-to-hand-out-static-code.cn.md`.
 known_fail = ["nvm"]
 known_fail_owner = "lane-nested-transforms (nested-b)"
 known_fail_reason = "the outer `jvp`'s lift refuses a call whose callee's code is not readable, and the callee here is what `split` handed out: `transforms: jvp has no forward transform for this function`, raised from `modules/transforms/jvp_operator.cpp:188` with `refusedOrigin == kInvalidOriginId` (no cause, no place). The nest stops here, one wall before `compositions.jvp_vjp_f`, whose composition does get past the lift"
