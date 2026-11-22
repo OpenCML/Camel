@@ -424,7 +424,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 19  annoExpr            -                                  repeat, left
 ```
 
-The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
+The production of each level, as `parse/src/syntax/parser_expr.cpp` writes it above the
 function that parses it:
 
 ```text
