@@ -173,7 +173,7 @@ func value_only(n: Node): bool {
 // such a node takes that computation's last use away, which is the one thing design principles 3.3
 // forbids: a removal that takes the last use of a node whose running is observed hands that use to a
 // `GATE` (data port reading the value that was there, sync predecessor that node). The C++ sweep
-// does exactly that (`keepThroughValue`, src/passes/opt/generic/rewrite.cpp); a transaction can write
+// does exactly that (`keepThroughValue`, lib/std/cxx/opt/generic/rewrite.cpp); a transaction can write
 // no node of the graph's own, so this sweep does not stand a keeper in the statement's place -- it
 // keeps the reader instead, and the computation keeps the read that says it runs.
 func last_read_of_a_fault(n: Node): bool {

@@ -10,9 +10,9 @@
  * `f(2) = 5.5` and `f'(2) = 3.25` for `f(x) = x*x + 3/x`.
  *
  * The module's other half is the value-level transform `jvp(f)` -- `reinterp<jvp>(f)` as a call,
- * not a pass: it answers with a new function, which a pass cannot (modules/transforms/jvp.h).
+ * not a pass: it answers with a new function, which a pass cannot (lib/transforms/jvp.h).
  * Its signature is computed from the argument, so it is recorded in
- * `stdlib/signatures/transforms.cml`.
+ * `lib/transforms/signatures/transforms.cml`.
  */
 
 /// Builds the transform's own graph for every function of the program that is made of operators and

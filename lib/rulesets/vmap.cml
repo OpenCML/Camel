@@ -8,7 +8,7 @@
  *     let rows = lift(xs);          // the batch of rows a function of one value takes
  *
  * `Lift<T>` is `RowsOf<T>`: the one value a primitive works on, with one dimension of unknown length
- * in front of it (`stdlib/types.cml`), which is exactly the type `vmap`'s parameter has. A scalar
+ * in front of it (`lib/types/types.cml`), which is exactly the type `vmap`'s parameter has. A scalar
  * `f32` lifts to the batch of `f32` rows (`f32[]`); a row `f32[3]` lifts to the batch of rows
  * (`f32[?, 3]`). So a batched program is a program over the same values with one more dimension in
  * front, and an elementwise primitive needs no new arithmetic for it: `bx + bw` is `x + w` applied
@@ -79,10 +79,10 @@ export func lift::<T>(x: T): Lift<T> {
 //
 // Five keys cover the scalar arithmetic: `+`, `-`, `*`, `/` at two operands and `-` at one. `-x` and
 // `x - w` are two primitives that share one token, which is why the operand count is part of the
-// key (stdlib/rulesets/jvp.cml files the same five).
+// key (lib/rulesets/jvp.cml files the same five).
 
 // The bodies below are one element at a time (`range` + `map`), not a binary array operator,
-// because the language has no elementwise `+` between two arrays yet: `stdlib/tensor.cml` declares
+// because the language has no elementwise `+` between two arrays yet: `lib/tensor/tensor.cml` declares
 // `exp` over `float[...]` and the reductions, and array-binary arithmetic is a gap of its own. What
 // the batch is, is still one element at a time -- the same elements, in the same order, with the
 // same primitive -- so the readings agree bit for bit; the day an elementwise array operator exists,
@@ -157,7 +157,7 @@ export rule vmap_rule_neg::<T>(x: T) when is_numeric::<T>() {
 // The five keys above are the *scalar* arithmetic: `x * w` on two `f32` is `:op/mul_d`. On two
 // arrays the same spelling resolves to another primitive, `tensor:multiply`, and the two are one law
 // at two ranks -- the product, element by element -- but they are not one rule, because a rule is
-// instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/transforms/vmap.cpp):
+// instantiated at its primitive's *element* type (`ruleElementTypeOf`, lib/transforms/vmap.cpp):
 // `f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
 // a key holds one rule each.
 //
@@ -170,7 +170,7 @@ export rule vmap_rule_neg::<T>(x: T) when is_numeric::<T>() {
 // The key is `mul_tensor`, a call, because the array product has no infix spelling a rule's left side
 // could be written with -- `r * r` resolves to the operator, but the operator is not a token. A call
 // is a key like any other (`f(a, b)` is `f` at two operands), and `tensor:multiply` is bound to this
-// one where the operator is declared: `modules/tensor/module.cpp`, `bindVmapRule` -- the batching
+// one where the operator is declared: `lib/tensor/module.cpp`, `bindVmapRule` -- the batching
 // table, which is what a batching transform reads. An operator with no binding is an operator no rule
 // is reachable for, and the transform says so by name at the primitive. The right side names a
 // *different* function than the left side does, which the index requires: a name the left side binds
@@ -212,7 +212,7 @@ export rule vmap_rule_mul_tensor::<T>(x: T[...], w: T[...]) when is_numeric::<T>
 // ---- the element of a row ----
 // `r[0]` on a row is `:op/idx_arr`, and batching it gathers one element per row. This is the one rank
 // where the rule's type parameter is not the type the operand has: a rule is instantiated at its
-// primitive's *result* type (`modules/transforms/vmap.cpp`, `elementType = node->dataType()`), which
+// primitive's *result* type (`lib/transforms/vmap.cpp`, `elementType = node->dataType()`), which
 // for an index is the element (`f32`) while the value being indexed is the row (`f32[3]`). So the row
 // is spelled from the element -- `T[]`, an array of `T` -- and the batch of rows is one dimension in
 // front of that, `Lift<T[]>`, which for a row of `f32` is `f32[?, ?]`. The index is a batch as well
@@ -255,7 +255,7 @@ export rule vmap_rule_idx::<T>(x: T[], i: int) {
 /// says nothing about `T` to a call's inference (the element is one layer down a type computation),
 /// so the rule's right side could not call this function without naming the type again -- and a
 /// right side that names a type argument is a right side no transform can read the callee from
-/// (`rhsCalleeOf`, include/camel/parse/ast/rule_head.h). An open rank takes the batch all the same:
+/// (`rhsCalleeOf`, parse/include/camel/parse/ast/rule_head.h). An open rank takes the batch all the same:
 /// it is the type that states nothing about the extents, and the batch's own extents are the value's.
 /// @example vmap_matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])    // [[11.0]]
 export func vmap_matmul::<T>(lhs: T[...], rhs: T[...]): T[...] when is_numeric::<T>() {
@@ -327,7 +327,7 @@ export func vmap_min_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): T[...
 // they take any numeric tensor and answer `int` positions (the operator's own signature spells that
 // type `int64`). That is why their rules are the ones that show what a batching rule is generic in
 // -- the element the operands are made of, read from an operand, never from the type of the node the
-// result is (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
+// result is (`lib/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
 // result's element type would be a rule about `int` arrays applied to floats.
 
 /// `argmax<axis, keepdims>(xs)` batched: each row's position of its largest element along the

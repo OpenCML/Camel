@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Computed signatures of the `tiles` module (C++ operators, modules/tiles).
+ * Computed signatures of the `tiles` module (C++ operators, lib/tiles).
  *
- * `available`, `device` and the pass `compile` are declared in stdlib/tiles.cml. The entries here
+ * `available`, `device` and the pass `compile` are declared in lib/tiles/tiles.cml. The entries here
  * take their signature from an argument that a declaration cannot name:
  *   - `upload` wraps every leaf of its argument in the device handle `Device<...>`, `download`
  *     strips that handle from every leaf (the handle is exported by C++ and keeps one resource for
@@ -13,7 +13,7 @@
  *     their `with` argument, to the example inputs, which are their ordinary argument, a tuple with
  *     one value for each parameter of the function;
  *   - `regions` takes the function as its `with` argument and no data.
- * The `DynamicFuncTypeResolver` of modules/tiles is the one source of these signatures. Each entry
+ * The `DynamicFuncTypeResolver` of lib/tiles is the one source of these signatures. Each entry
  * below writes one instance of its rule, for functions of two `f32` parameters.
  *
  * For reference only: these declarations are not compiled. They are checked against the operators

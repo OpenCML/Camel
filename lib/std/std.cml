@@ -293,7 +293,7 @@ export func taskflow::<F>(f: F): F! when is_function::<F>()
 // The passes below are the C++ implementations, and their names say which set they belong to:
 // every one of them is written under `cxx` -- `std::cxx::opt`, `std::cxx::fold` -- while the
 // passes written in Camel are the module `opt` (`opt::fold`, `opt::cse`, `opt::dce`,
-// `opt::saturate`; stdlib/opt.cml). The two sets are kept apart so that they can be compared, which
+// `opt::saturate`; lib/opt/opt.cml). The two sets are kept apart so that they can be compared, which
 // is what decides whether the Camel ones can carry the optimization: the same program is folded, or
 // swept for repeated expressions, by the C++ pass and by the Camel one, and the two graphs are read
 // with `std::jgir canonical=true` and compared byte for byte
@@ -367,7 +367,7 @@ with <
 >
 export func fold::<F>(f: F): F! when is_function::<F>()
 
-/// Algebraic simplification (the laws of stdlib/rules.cml, under the strict numeric policy when
+/// Algebraic simplification (the laws of lib/rules/rules.cml, under the strict numeric policy when
 /// `safe_fp` is true).
 with <
     /// Keep the algebraic stage to strictly equivalent floating-point transformations
@@ -387,7 +387,7 @@ with <
 >
 export func extract::<F>(f: F): F! when is_function::<F>()
 
-/// Saturates the standard rules library (stdlib/rules.cml) and leaves the program in the state
+/// Saturates the standard rules library (lib/rules/rules.cml) and leaves the program in the state
 /// where a value has several writings; nothing is extracted. The dumps that accept that
 /// state draw it: `camel f.cml std::cxx::saturate std::gir`.
 with <

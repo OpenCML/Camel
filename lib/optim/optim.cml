@@ -18,7 +18,7 @@
  * Every number is computed in double and rounded once, when it is stored. The arithmetic follows the
  * element type the leaf's own type writes: a tensor leaf of `adam` is widened to f64 and updated
  * there, and stored back at the element type the leaf has, so a trajectory written here is the
- * trajectory `modules/tensor/kernels/update.h` defines, bit for bit.
+ * trajectory `lib/tensor/kernels/update.h` defines, bit for bit.
  */
 
 import math
@@ -145,7 +145,7 @@ export func update::<P, G>(opt: Adam, params: P, grads: G, state: AdamState<P>):
 
 // The numbers one update uses: the rate of this step, the two decay rates, `eps`, and the bias
 // corrections `1 - beta1^step` and `1 - beta2^step`, which the native path computes with `pow`
-// (modules/nn/optim.cpp). `step` is one-based, as it is there.
+// (lib/nn/optim.cpp). `step` is one-based, as it is there.
 type Rates = {
     rate: float,
     beta1: float,
@@ -183,7 +183,7 @@ func zeros_tree::<P>(t: P) {
 // A zero of the leaf's own type: an f32 number stays f32, and a tensor becomes a tensor of zeros of
 // the element type the leaf writes, at whatever rank the leaf has -- the two written floating
 // element types get their own arm, and any other leaf takes `zeros_like`, which follows the value's
-// element type, as the native `adam_state` builds a moment (modules/nn/optim.cpp, `zerosLeaf` reads
+// element type, as the native `adam_state` builds a moment (lib/nn/optim.cpp, `zerosLeaf` reads
 // the value's element type). The moments have to come back at the leaf's own element type: a state
 // whose leaves changed type after one update could not be a loop state (the state's type is the
 // initial value's type, docs/language/06_expressions.md, "状态").
@@ -314,7 +314,7 @@ func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
 // time (design principles 5.10: Camel has no run-time type test). An f64 leaf keeps the double
 // result of `adam_wide`; every other floating leaf is computed in double and rounded once on the
 // store, which is the pass the fused kernel takes for an f32 leaf
-// (modules/tensor/kernels/update.h). A leaf of any other element type never reaches an optimizer --
+// (lib/tensor/kernels/update.h). A leaf of any other element type never reaches an optimizer --
 // it has no tangent, `tensorTangentType` -- and the native leaf refuses it by name rather than
 // converting it, which is what the `when` condition says here.
 func adam_value_leaf::<T>(p: T[...], g: T[...], m: T[...], v: T[...], c: Rates) when is_float::<T>() {
@@ -325,7 +325,7 @@ func adam_value_leaf::<T>(p: T[...], g: T[...], m: T[...], v: T[...], c: Rates) 
 }
 
 // The Adam formula of one number, in double, in the order the reference kernel writes it
-// (modules/tensor/kernels/update.h, `adaptiveUpdateOne`): `m` and `v` are the stored moments and
+// (lib/tensor/kernels/update.h, `adaptiveUpdateOne`): `m` and `v` are the stored moments and
 // `correct1`/`correct2` the bias corrections of this step.
 func adam_number(p: float, g: float, m: float, v: float, c: Rates): (float, float, float) {
     let nm = c.beta1 * m + (1.0 - c.beta1) * g

@@ -51,7 +51,7 @@ export func log_softmax(x: f32[...], axis: int): f32[...] {
 /// tensor:mean of a whole tensor: the sum and the division both happen in f64 and their result is
 /// rounded into the element type once, never a sum rounded to the element type and divided again,
 /// which would round twice — the canonical form of the element type T is
-/// `mean::<T>(x: T[...]): T = T(sum(float(x)) / float(numel(x)))` (stdlib/signatures/tensor.cml).
+/// `mean::<T>(x: T[...]): T = T(sum(float(x)) / float(numel(x)))` (lib/tensor/signatures/tensor.cml).
 /// A definition has one graph and is written at the element type this library serves, f32; a mean
 /// of another element type is the operator's own kernel, not an expansion. The widening is written
 /// `f64(x)` because `float(x)` is a scalar conversion and a conversion does not map over an

@@ -5,9 +5,9 @@
  * The computed signatures of the `tensor` module: the operators whose element type or shape
  * follows their arguments, so a declaration cannot state them (a declaration has one signature
  * per name, and no `TensorLike`, `TensorOrScalar` or optional parameter). The C++ operators in
- * `modules/tensor` are the one source of these types; this file is for reference only (it is not
+ * `lib/tensor` are the one source of these types; this file is for reference only (it is not
  * compiled) and feeds `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed
- * signatures are declared in `stdlib/tensor.cml` (design principles 6.4).
+ * signatures are declared in `lib/tensor/tensor.cml` (design principles 6.4).
  */
 
 // ---- creation ----
@@ -410,11 +410,11 @@ export func ones_like(t: float[...]): float[...]
 // ---- conversion and display ----
 
 // `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
-// (a tensor, and any array). See `stdlib/tensor.cml`.
+// (a tensor, and any array). See `lib/tensor/tensor.cml`.
 
 // `load_npy` is computed: the element type of its result is the one the call declares, and a
 // declaration's parameters cannot mention a type variable that only the result mentions. Its
-// group is `loadNpyOperatorGroup` in `modules/tensor` (the `#op` tag below names its rules): one
+// group is `loadNpyOperatorGroup` in `lib/tensor` (the `#op` tag below names its rules): one
 // per element type a `.npy` file can hold.
 
 /// The tensor a NumPy `.npy` file holds, as the element type the program declares: the extents are

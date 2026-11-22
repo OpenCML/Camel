@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Computed signatures of the `nn` module (C++ operators, modules/nn).
+ * Computed signatures of the `nn` module (C++ operators, lib/nn).
  *
- * `save_params` has one fixed signature and is declared in stdlib/nn.cml. The entries here take
+ * `save_params` has one fixed signature and is declared in lib/nn/nn.cml. The entries here take
  * their signature from the tensors they receive, which a declaration cannot express:
  *   - the convolution and pooling operators infer the result's dtype and shape from the input's
  *     shape, the kernel's shape and the window parameters, and the gradient operators answer the
@@ -19,7 +19,7 @@
  *     and `adam` the pair `(parameter tree, OptimizerState)`; the gradient parameter is typed by
  *     the parameter tree, and `adam_state` accepts only a tree with a differentiable tangent,
  *     which the source cannot write.
- * The `OpDef` infer rules of modules/nn and the `OptimizerResolver` are the one source of these
+ * The `OpDef` infer rules of lib/nn and the `OptimizerResolver` are the one source of these
  * signatures. Each entry below writes one instance of its rule.
  *
  * For reference only: these declarations are not compiled. They are checked against the operators

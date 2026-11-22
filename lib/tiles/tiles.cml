@@ -22,7 +22,7 @@
  *
  * The functions that compute their type from an argument (`upload`, `download`, `source`,
  * `inspect`, `benchmark`, `regions`, and `run_preferred_resident`, the entry `tiles::compile` and
- * the tests use) are in `stdlib/signatures/tiles.cml`.
+ * the tests use) are in `lib/tiles/signatures/tiles.cml`.
  */
 
 /// A value that lives on a device, with the host type of what it holds: `Device<f32[3]>`.
