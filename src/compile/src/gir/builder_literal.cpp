@@ -369,9 +369,8 @@ node_handle_t Builder::convertStructValue(
         const size_t from     = *source->findField(name);
         Type *sourceFieldType = source->typeAt(from);
         Type *targetFieldType = target->typeAt(i);
-        node_handle_t access =
-            currGraph_->addAccsNode(sourceFieldType, std::string(source->fieldName(from)));
-        linkNodes(LinkType::Norm, valueOf(value), access);
+        node_handle_t access = memberReadNodeOf(
+            valueOf(value), sourceFieldType, std::string(source->fieldName(from)));
         node_handle_t field = access;
         if (targetFieldType != nullptr && sourceFieldType != nullptr &&
             !targetFieldType->equals(sourceFieldType)) {

@@ -791,7 +791,7 @@ node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
     if (type != nullptr && type->code() == TypeCode::Tuple) {
         partType = static_cast<const TupleType *>(type)->typeAt(part);
     }
-    node_handle_t node = currGraph_->addAccsNode(partType, part);
+    node_handle_t node = memberReadNodeOf(call, partType, part);
     // The node reads the call's value, and that value exists from the call on, so the node belongs
     // to the call's region and not to the region the first reader happens to stand in. It was made
     // in the region being built, which for the first reader inside a branch arm is that arm: a
@@ -808,7 +808,6 @@ node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
         value.parts.resize(part + 1, nullptr);
     }
     value.parts[part] = node;
-    linkNodes(LinkType::Norm, call, node);
     return node;
 }
 

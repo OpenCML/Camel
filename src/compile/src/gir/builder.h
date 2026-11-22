@@ -3778,6 +3778,19 @@ class Builder {
     /// operator's rule does not cover keeps the node kind it had instead of disappearing.
     node_handle_t conversionNodeOf(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// A member read written as the operator it is (`access::<T, U>` by place, `access_key::<T, U>`
+    /// by name, of the prelude): an OPER node whose first ordinary operand is the place or the name
+    /// -- a constant of the program, so a DATA node -- and whose second is the value it reads,
+    /// which is the order the declaration writes. `target` is the member's type and the value's type
+    /// is the aggregate's; the two are the call's written type arguments. Falls back to
+    /// `addAccsNode` where no declaration answers, so a read the rule does not cover keeps the node
+    /// kind it had instead of disappearing.
+    node_handle_t memberReadNodeOf(
+        node_handle_t value, camel::core::type::Type *target, uint32_t at,
+        const GCT::node_ptr_t &origin = nullptr);
+    node_handle_t memberReadNodeOf(
+        node_handle_t value, camel::core::type::Type *target, const std::string &key,
+        const GCT::node_ptr_t &origin = nullptr);
     /// `node` where a value of type `target` is expected (design principles 5.5): `node`
     /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
     /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of

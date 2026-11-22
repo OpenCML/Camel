@@ -244,8 +244,7 @@ void Builder::buildGeneratorBody(
         // The point of the body the pull starts from: the state's first part, taken out and put in
         // a cell of its own, so that an arm which moves the point on is read by the dispatch of the
         // same pull (a value would be read as it was before the round began).
-        const node_handle_t pcMember = currGraph_->addAccsNode(pcType, 0);
-        linkNodes(LinkType::Norm, statePort, pcMember);
+        const node_handle_t pcMember = memberReadNodeOf(statePort, pcType, 0);
         const node_handle_t pcCell = newVariable(pcMember);
         insertNode("__gen_pc__", pcCell);
 
@@ -520,10 +519,8 @@ void Builder::buildGeneratorBody(
                 // What the round hands to the next one, rebuilt as one value: the two parts of the
                 // dispatch's answer, in the round state's own layout.
                 const std::vector<size_t> bothSlots{0, 1};
-                node_handle_t answerPart = currGraph_->addAccsNode(answerType, 0);
-                linkNodes(LinkType::Norm, dispatch, answerPart);
-                node_handle_t pointPart = currGraph_->addAccsNode(pcType, 1);
-                linkNodes(LinkType::Norm, dispatch, pointPart);
+                node_handle_t answerPart = memberReadNodeOf(dispatch, answerType, 0);
+                node_handle_t pointPart  = memberReadNodeOf(dispatch, pcType, 1);
                 node_handle_t round = currGraph_->addFillNode(
                     roundStateType,
                     runtime::makeFillPayload(runtime::GCFillKind::Tuple, bothSlots));
@@ -544,10 +541,8 @@ void Builder::buildGeneratorBody(
         // construction machine reaches the same shape by declaring one state and letting
         // `visitLoopNode` split a tuple state into its parts; this machine declares the parts, so
         // its head and its tail are written here rather than derived.
-        node_handle_t initAnswerPart = currGraph_->addAccsNode(answerType, 0);
-        linkNodes(LinkType::Norm, initialRoundState, initAnswerPart);
-        node_handle_t initPointPart = currGraph_->addAccsNode(pcType, 1);
-        linkNodes(LinkType::Norm, initialRoundState, initPointPart);
+        node_handle_t initAnswerPart = memberReadNodeOf(initialRoundState, answerType, 0);
+        node_handle_t initPointPart  = memberReadNodeOf(initialRoundState, pcType, 1);
         node_handle_t loopNode =
             currGraph_->addRegionLoopNode(camel::core::LoopKind::While, roundStateType);
         linkNodes(LinkType::Norm, initAnswerPart, loopNode);
@@ -566,10 +561,8 @@ void Builder::buildGeneratorBody(
         }
         // What one pull answers: the answer the loop's value carries, rebuilt out of the loop's two
         // parts (the shape the target publishes, and the only reader of the point).
-        node_handle_t loopAnswer = currGraph_->addAccsNode(answerType, 0);
-        linkNodes(LinkType::Norm, loopNode, loopAnswer);
-        node_handle_t loopPoint = currGraph_->addAccsNode(pcType, 1);
-        linkNodes(LinkType::Norm, loopNode, loopPoint);
+        node_handle_t loopAnswer = memberReadNodeOf(loopNode, answerType, 0);
+        node_handle_t loopPoint  = memberReadNodeOf(loopNode, pcType, 1);
         const std::vector<size_t> roundSlots{0, 1};
         node_handle_t loopValue = currGraph_->addFillNode(
             roundStateType,
@@ -577,8 +570,7 @@ void Builder::buildGeneratorBody(
         linkNodes(LinkType::Norm, roundStateTemplate(0), loopValue);
         linkNodes(LinkType::With, loopAnswer, loopValue);
         linkNodes(LinkType::With, loopPoint, loopValue);
-        node_handle_t pull = currGraph_->addAccsNode(answerType, 0);
-        linkNodes(LinkType::Norm, loopValue, pull);
+        node_handle_t pull = memberReadNodeOf(loopValue, answerType, 0);
         // The step's body is the head's `sync`, so its value goes behind a GATE that waits for the
         // loop -- the same GATE a sync block of any other function ends in.
         node_handle_t exitGate = currGraph_->addGateNode(answerType);

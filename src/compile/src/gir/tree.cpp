@@ -46,11 +46,17 @@ node_handle_t Builder::expandTreeCall(
 
     const auto access = [&](node_handle_t parent, size_t index) {
         Type *type = valueTypeOf(nodeTypeOf(parent));
-        auto out =
-            type->code() == TypeCode::Struct
-                ? currGraph_->addAccsNode(fieldType(type, index), fieldName(type, index))
-                : currGraph_->addAccsNode(fieldType(type, index), static_cast<uint32_t>(index));
-        linkNodes(LinkType::Norm, valueOf(parent), out);
+        auto out   = type->code() == TypeCode::Struct
+                         ? memberReadNodeOf(
+                               valueOf(parent),
+                               fieldType(type, index),
+                               fieldName(type, index),
+                               origin)
+                         : memberReadNodeOf(
+                               valueOf(parent),
+                               fieldType(type, index),
+                               static_cast<uint32_t>(index),
+                               origin);
         registerNodeOrigin(context_, out, origin, "gir.tree.access");
         return out;
     };

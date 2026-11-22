@@ -87,6 +87,70 @@ Builder::conversionNodeOf(node_handle_t value, Type *target, const GCT::node_ptr
     return castNode;
 }
 
+node_handle_t Builder::memberReadNodeOf(
+    node_handle_t value, Type *target, uint32_t at, const GCT::node_ptr_t &origin) {
+    // `access::<T, U>(at: int, x: T): U` reads a member by place: the aggregate's type is the
+    // value's and the member's type is the result, which are the call's two written type
+    // arguments, and the place comes first because the program wrote it -- a constant, so it is a
+    // DATA node rather than a value anything computes.
+    Type *aggregate = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (aggregate != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("access");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(2);
+            const auto op = group->resolveForCall(
+                {aggregate, target}, target, {}, {Type::Int64(), aggregate}, statics);
+            if (op.has_value()) {
+                const data_ptr_t place =
+                    tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(at));
+                node_handle_t placeNode = currGraph_->addStaticDataNode(place);
+                rememberConstant(placeNode, place);
+                registerNodeOrigin(context_, placeNode, origin, "gir.data");
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, placeNode, node);
+                linkNodes(LinkType::Norm, value, node);
+                return node;
+            }
+        }
+    }
+    // No declaration answered: the ACCS node is what the graph gets, and it is the same read.
+    node_handle_t accsNode = currGraph_->addAccsNode(target, at);
+    linkNodes(LinkType::Norm, value, accsNode);
+    return accsNode;
+}
+
+node_handle_t Builder::memberReadNodeOf(
+    node_handle_t value, Type *target, const std::string &key, const GCT::node_ptr_t &origin) {
+    // `access_key::<T, U>(key: string, x: T): U` reads the same member by name. The name is a
+    // constant of the program for the same reason the place is, and it is a different operator
+    // rather than a second rule of `access` because a graph that holds the URI has said which of
+    // the two reads it is (prelude.cml says why).
+    Type *aggregate = nodeTypeOf(value) != nullptr ? valueTypeOf(nodeTypeOf(value)) : nullptr;
+    if (aggregate != nullptr && target != nullptr) {
+        const oper_group_ptr_t group = importedOperatorGroupNamed("access_key");
+        if (group != nullptr) {
+            const std::vector<StaticArg> statics(2);
+            const auto op = group->resolveForCall(
+                {aggregate, target}, target, {}, {Type::String(), aggregate}, statics);
+            if (op.has_value()) {
+                const data_ptr_t name = tt::as_shared<Data>(std::make_shared<StringData>(key));
+                node_handle_t keyNode  = currGraph_->addStaticDataNode(name);
+                rememberConstant(keyNode, name);
+                registerNodeOrigin(context_, keyNode, origin, "gir.data");
+                node_handle_t node = currGraph_->addOperNode(*op, 0);
+                stampPermissions(node);
+                linkNodes(LinkType::Norm, keyNode, node);
+                linkNodes(LinkType::Norm, value, node);
+                return node;
+            }
+        }
+    }
+    node_handle_t accsNode = currGraph_->addAccsNode(target, key);
+    linkNodes(LinkType::Norm, value, accsNode);
+    return accsNode;
+}
+
 namespace {
 
 /// The value a body hands on, read on the graph rather than by how the source spelled it.
@@ -2254,8 +2318,7 @@ node_handle_t Builder::attachVisibleLoopState(
     const size_t count  = states.size();
     node_handle_t value = nullptr;
     if (count == 1) {
-        value = currGraph_->addAccsNode(states.front(), firstState);
-        linkNodes(LinkType::Norm, loopNode, value);
+        value = memberReadNodeOf(loopNode, states.front(), firstState);
     } else {
         Type *valueType = static_cast<Type *>(TupleType::create(states));
         std::vector<size_t> slots(count);
@@ -2272,8 +2335,7 @@ node_handle_t Builder::attachVisibleLoopState(
         linkNodes(LinkType::Norm, source, value);
         for (size_t j = 0; j < count; ++j) {
             node_handle_t component =
-                currGraph_->addAccsNode(states[j], static_cast<uint32_t>(firstState + j));
-            linkNodes(LinkType::Norm, loopNode, component);
+                memberReadNodeOf(loopNode, states[j], static_cast<uint32_t>(firstState + j));
             linkNodes(LinkType::With, component, value);
         }
     }
@@ -2945,9 +3007,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                         components[j] = at < bodyPart->ports.size() ? bodyPart->ports[at] : nullptr;
                         continue;
                     }
-                    node_handle_t part =
-                        currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                    linkNodes(LinkType::Norm, returned, part);
+                    node_handle_t part = memberReadNodeOf(
+                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -2979,9 +3040,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                     if (components[j] != nullptr) {
                         continue;
                     }
-                    node_handle_t part =
-                        currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                    linkNodes(LinkType::Norm, returned, part);
+                    node_handle_t part = memberReadNodeOf(
+                        returned, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
                     registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
                     components[j] = part;
                 }
@@ -3063,9 +3123,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         Type *partType = aggregatePartType(type, step);
         node_handle_t access =
             type->code() == TypeCode::Struct
-                ? currGraph_->addAccsNode(partType, aggregatePartName(type, step))
-                : currGraph_->addAccsNode(partType, static_cast<uint32_t>(step));
-        linkNodes(LinkType::Norm, value, access);
+                ? memberReadNodeOf(value, partType, aggregatePartName(type, step), gct)
+                : memberReadNodeOf(value, partType, static_cast<uint32_t>(step), gct);
         registerNodeOrigin(context_, access, gct, "gir.loop.split");
         return access;
     };
@@ -3402,8 +3461,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         const size_t index  = declaredStates + j;
         node_handle_t value = loopNode;
         if (stateCount > 1) {
-            value = currGraph_->addAccsNode(stateTypes[index], static_cast<uint32_t>(index));
-            linkNodes(LinkType::Norm, loopNode, value);
+            value = memberReadNodeOf(
+                loopNode, stateTypes[index], static_cast<uint32_t>(index), gct);
             registerNodeOrigin(context_, value, gct, "gir.loop.value");
         }
         if (carried[j].ssa) {
@@ -3428,9 +3487,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 componentValues[j] = loopValue;
                 continue;
             }
-            node_handle_t access =
-                currGraph_->addAccsNode(splitComponents[j]->type, static_cast<uint32_t>(j));
-            linkNodes(LinkType::Norm, loopValue, access);
+            node_handle_t access = memberReadNodeOf(
+                loopValue, splitComponents[j]->type, static_cast<uint32_t>(j), gct);
             registerNodeOrigin(context_, access, gct, "gir.loop.value");
             componentValues[j] = access;
         }
@@ -3682,15 +3740,14 @@ node_handle_t Builder::buildStreamLoop(
                     // The element this round is about and the rest of the stream, taken out of
                     // the pull that has just answered.
                     node_handle_t pair = applyTagOperator(TagNullValue, pullTemp, gct->loopBody());
-                    node_handle_t element = currGraph_->addAccsNode(elementType, 0);
-                    linkNodes(LinkType::Norm, pair, element);
+                    node_handle_t element =
+                        memberReadNodeOf(pair, elementType, 0, gct->loopBody());
                     registerNodeOrigin(context_, element, gct->loopBody(), "gir.loop.element");
                     insertNode(gct->loopElementName(), element);
                     if (recorder_) {
                         recordDeclaration(gct->loopElementName(), element, gct->loopBody());
                     }
-                    node_handle_t rest = currGraph_->addAccsNode(stream, 1);
-                    linkNodes(LinkType::Norm, pair, rest);
+                    node_handle_t rest = memberReadNodeOf(pair, stream, 1, gct->loopBody());
                     registerNodeOrigin(context_, rest, gct->loopBody(), "gir.loop.rest");
 
                     // What the program's body gives is the state of the next round.
@@ -3709,9 +3766,8 @@ node_handle_t Builder::buildStreamLoop(
                         next.push_back(state);
                     } else {
                         for (size_t j = 0; j < k; ++j) {
-                            node_handle_t component =
-                                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
-                            linkNodes(LinkType::Norm, state, component);
+                            node_handle_t component = memberReadNodeOf(
+                                state, stateTypes[j], static_cast<uint32_t>(j), gct->loopBody());
                             registerNodeOrigin(
                                 context_,
                                 component,
