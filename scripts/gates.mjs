@@ -13,7 +13,7 @@
  * left `docs/handover/questions/` with an answered page still listed as pending, which
  * `check-doc-links.mjs --questions-index` reports. Neither check was broken. Neither was on the list.
  *
- * So the list is this file, and it is nine long. A number in a name goes stale -- "the six gates" was
+ * So the list is this file, and it is ten long. A number in a name goes stale -- "the six gates" was
  * already wrong when it was still being said -- so the count is printed by the run and not written
  * anywhere else.
  *
@@ -32,17 +32,26 @@
  *   7  headers --check                  every hand-written source carries the two-line header
  *   8  check-ast-hashes                 every `.cml` file's AST is the one the golden records
  *   9  check-operator-panic             every operator that can fail declares that it can
+ *  10  check-generated                  every file a generator writes is byte for byte what that
+ *                                       generator produces now, and the artifacts it could not
+ *                                       regenerate are named rather than counted as green
  *
  * Exit status is 1 when any gate fails, and the summary says which ones: the first line of a failing
  * gate's block carries its number, its exit code and the exact command line, because "one of the
  * gates is red" is the least useful sentence this script could print.
  *
- * This is the whole-tree static layer: it needs no install and no build except where a gate says so
- * (8 reads the tree through the parsecheck tool, which a build produces). It is not
- * `scripts/release-gate.mjs`: that one runs the plan layers and the fourteen static checks a release
- * decision needs. These nine are the ones a change must pass before it is handed over.
+ * Each generated artifact has one gate that reads it. Gate 10 compares the four files the node
+ * generators write, and lists the AST golden as gate 8's to read: it prints the exit gate 8 reported
+ * for it in the same run, because reading it twice would look like two pieces of evidence and be one,
+ * at the price of a whole corpus of hashing to agree with the first.
  *
- *   node scripts/gates.mjs              # all nine
+ * This is the whole-tree static layer: it needs no install and no build except where a gate says so
+ * (8 reads the tree through the parsecheck tool, which a build produces; 10 regenerates the files the
+ * node generators write and names the one that needs a build instead of passing over it). It is not
+ * `scripts/release-gate.mjs`: that one runs the plan layers and the fourteen static checks a release
+ * decision needs. These ten are the ones a change must pass before it is handed over.
+ *
+ *   node scripts/gates.mjs              # all ten
  *   node scripts/gates.mjs --list       # the list, and nothing run
  *   node scripts/gates.mjs --only 5,8   # a PARTIAL run, and it says so in the summary
  */
@@ -89,12 +98,16 @@ const GATES = [
         name: 'operator panic: every operator that can fail declares that it can',
         args: ['scripts/check-operator-panic.mjs'],
     },
+    {
+        name: 'generated artifacts: every generator\'s file is the bytes it produces now',
+        args: ['scripts/check-generated.mjs'],
+    },
 ]
 
 function usage() {
     console.log('Usage: node scripts/gates.mjs [--list] [--only N,M,...]')
     console.log('')
-    console.log('Runs the nine gates a change must pass before it is handed over, one after another, and')
+    console.log('Runs the ten gates a change must pass before it is handed over, one after another, and')
     console.log("prints each one's exit code. Exit status 1 when any gate failed, 2 when the command line")
     console.log('is not understood (nothing is run in that case).')
 }
@@ -139,17 +152,26 @@ function main(argv) {
     }
     const picked = only === null ? GATES.map((_, index) => index + 1) : only
     const failed = []
+    // The exits of the gates that already ran, handed to the next one: a gate whose subject is another
+    // gate's to read points at it with a reading rather than a guess, instead of repeating the work to
+    // produce a second copy of the same evidence.
+    const ran = []
     const startedAll = Date.now()
     for (const number of picked) {
         const gate = GATES[number - 1]
         const command = `node ${gate.args.join(' ')}`
         console.log(`[gate ${number}/${GATES.length}] ${gate.name}`)
         const started = Date.now()
-        const result = spawnSync(process.execPath, gate.args, { cwd: ROOT, stdio: 'inherit' })
+        const result = spawnSync(process.execPath, gate.args, {
+            cwd: ROOT,
+            stdio: 'inherit',
+            env: { ...process.env, CAMEL_GATES_EXITS: JSON.stringify(ran) },
+        })
         const seconds = ((Date.now() - started) / 1000).toFixed(1)
         // A gate that a signal ended has no exit code, and a missing code is not a pass: `null`
         // there means the process was killed, which is a failed gate and not a green one.
         const code = result.status === null ? `killed by ${result.signal || 'a signal'}` : result.status
+        ran.push({ number, code: result.status })
         if (code !== 0) {
             failed.push({ number, name: gate.name, code, command })
             console.log(`[gate ${number}/${GATES.length}] FAIL exit=${code} after ${seconds} s: ${command}`)
