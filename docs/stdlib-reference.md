@@ -635,6 +635,82 @@ and what its static type is -- so the operator answers with their rule and not a
 - Pure.
 - Example: `copy([1, 2])` gives `[1, 2]`
 
+#### `cast`
+
+```camel
+cast: (x: T) => U panic
+```
+
+A conversion as an ordinary operator: the CAST node kind written as a call of the operator that
+does the same thing (plan 2.3, step 2). The target type is the call's own result type and the
+source type is the operand's, so a conversion needs no compile-time parameter beside them: the
+two facts a record keyed by URI holds are the two a conversion asks. The implementation is the
+type's own conversion (`lib/std/builtin/operators/cast.cpp`), which is the rule the CAST node
+ran, so a conversion that checks its value still checks it and one that cannot fail still
+cannot. It states `panic` because one conversion of a pair whose types make it safe is not the
+one being looked at here: the operator is a call of every pair the compiler builds.
+
+A program writes a conversion as `T(x)` or `x as T`, and those reach this operator by the
+language's own conversion rules; the call form is the name a graph holds the conversion under.
+The two type parameters are the pair a conversion is about, so a call names them.
+
+- Pure.
+- Example: `cast::<int, float>(1)` gives `1.0`
+
+#### `fill`
+
+```camel
+fill: (template: T, ...fields: ...F) => T panic
+```
+
+A construction as an ordinary operator: the FILL node kind written as a call of the operator
+that does the same thing (plan 2.3, step 2). `template` is the aggregate the value is made from
+-- the compiler builds one constant of the target type and every construction of that type
+clones it -- and the rest parameters are the field values. The fill kind is the target type's
+own: a tuple is filled by position, an array by element, a struct by field and a function value
+by capture (`lib/std/builtin/operators/struct.cpp`). A caller whose field order is not the
+component order states the component each field fills as an `int` before the template.
+
+A program writes a construction as the aggregate itself, `(1, 'a')` or `Point { x: 1 }`, and
+those reach this operator through the language's own rules; the call form is the name a graph
+holds the construction under.
+
+- Pure.
+- Example: `fill((0, 0), 1, 2)` gives `(1, 2)`
+
+#### `access`
+
+```camel
+access: (at: int, x: T) => U panic
+```
+
+A member read as an ordinary operator: the ACCS node kind written as a call of the operator
+that does the same thing (plan 2.3, step 2). The position is a compile-time parameter of the
+node and an ordinary operand of the call: an `int` for the element of a tuple, a `string` for
+the field of a struct. It comes first because the compiler makes the node before it links the
+value the node reads (`lib/std/builtin/operators/struct.cpp`).
+
+A program writes a member read as `t[0]` or `s.x`, and those reach this operator through the
+language's own rules; the call form is the name a graph holds the read under.
+
+- Pure.
+- Example: `access::<(int, int), int>(0, (1, 2))` gives `1`
+
+#### `access_key`
+
+```camel
+access_key: (key: string, x: T) => U panic
+```
+
+The same member read by name: the field of a struct, which the compiler spells `s.x`. It is a
+second URI rather than a second rule of `:op/access`, because the two read different things of
+the value (an element by position, a field by name) and a graph says which it means by the URI
+it holds -- the operand's type would answer the same question, but a rule that has to be asked
+the type to know what it does is what the node kinds were.
+
+- Pure.
+- Example: `access_key::<{ x: int, y: int }, int>('y', { x: 1, y: 2 })` gives `2`
+
 ### Arrays
 
 #### `range`

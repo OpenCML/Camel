@@ -504,7 +504,7 @@ d4d19ff35c531955 ok src/stdlib/rulesets/probe_missing.cml
 c32080d3581938e7 ok src/stdlib/sim.cml
 879b3dadd508cc8f ok src/stdlib/state.cml
 eba878f8d66c3dbe ok src/stdlib/statistics.cml
-06d4fd27c3bfa3c5 ok src/stdlib/prelude.cml
+33d2c5cbd2677f06 ok src/stdlib/prelude.cml
 b977ad3118f481ca ok src/stdlib/std.cml
 2d58dc2aaf202f75 ok src/stdlib/str.cml
 1df6aaef0265dfcb ok src/stdlib/stream.cml

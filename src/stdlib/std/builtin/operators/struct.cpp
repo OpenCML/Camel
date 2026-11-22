@@ -12,10 +12,15 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/graph.h"
+#include "camel/utils/assert.h"
 #include "camel/utils/type.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
 #include <format>
+#include <numeric>
+#include <vector>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
@@ -1489,4 +1494,89 @@ slot_t __tangent_last_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
             "autodiff: the gradient of an appended array has no last element");
     }
     return dy->get<slot_t>(dy->size() - 1);
+}
+
+// The fill kind a target type states (plan 2.3, step 2): a construction is told what it makes by
+// the type it makes, which is the one fact the node's payload held besides the slot list. The
+// compiler chooses the same four answers when it builds a FILL (`fillKindForType`,
+// `compile/src/gir/builder_expr.cpp`) and refuses a fifth at the same place, so this reads the type
+// rather than deciding again -- and refuses it here too, as a fault, instead of guessing a kind
+// nobody asked for.
+static camel::runtime::GCFillKind fillKindOfType(camel::core::type::Type *type) {
+    switch (type->code()) {
+    case TypeCode::Tuple:
+        return camel::runtime::GCFillKind::Tuple;
+    case TypeCode::Array:
+        return camel::runtime::GCFillKind::Array;
+    case TypeCode::Struct:
+        return camel::runtime::GCFillKind::Struct;
+    case TypeCode::Function:
+        return camel::runtime::GCFillKind::FunctionClosure;
+    default:
+        break;
+    }
+    throwRuntimeFault(
+        RuntimeDiag::RuntimeError,
+        std::format(
+            "a construction's target type '{}' is not one a fill makes", type->toString()));
+}
+
+// A construction as an ordinary operator (`fill::<T, ...F>` of `lib/std/prelude.cml`; plan
+// 2.3, step 2). The first ordinary operand is the template -- one constant of the target type per
+// construction site, made by the compiler -- and the `with` operands are the field values in
+// component order; the node's two payload facts are that order and the fill kind, and neither is
+// left to the payload now: the kind is the target type's own, and the order is the order the call
+// is built with (`writeRuntimeFillSlots` writes component i with the i-th value). The template is
+// cloned rather than written to, which is what a FILL did with its constant too.
+slot_t __fill_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)ctx;
+    Type *type = norm.resultType();
+    GUARD(type != nullptr, "a construction must state the type it makes.");
+    GUARD(
+        isGCTraced(type->code()), "a construction's target type is not GC-traced.");
+    Object *templateValue = norm.get<Object *>(0);
+    GUARD(templateValue != nullptr, "a construction's template value is null.");
+    const size_t fieldCount = with.size();
+    std::vector<size_t> slots(fieldCount);
+    std::iota(slots.begin(), slots.end(), size_t{0});
+    const std::vector<std::byte> payload =
+        camel::runtime::makeFillPayload(fillKindOfType(type), slots);
+    const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(payload.data());
+    std::vector<slot_t> values(fieldCount);
+    for (size_t i = 0; i < fieldCount; ++i) {
+        values[i] = with.slot(i);
+    }
+    Object *made = templateValue->clone(mm::autoSpace(), type, false);
+    GUARD(made != nullptr, "a construction's target value is null.");
+    camel::execute::writeRuntimeFillSlots(made, type, body, values);
+    return rtdata::toSlot(made);
+}
+
+// A member read as an ordinary operator (`access::<T, U>` of `lib/std/prelude.cml`; plan 2.3,
+// step 2). The position or the name is the node's compile-time parameter and the call's first
+// ordinary operand -- an `int` for the element of a tuple, a `string` for the field of a struct --
+// and the second operand is the value it reads. Which of the two it is stays the operand type's
+// answer, the way `GCAccsBody`'s two kinds were the payload's answer: the value's type says whether
+// a member is read by place or by name.
+slot_t __access_value__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    GUARD(norm.size() >= 2, "a member read must have a position and a value.");
+    if (norm.code(0) == TypeCode::String) {
+        String *key = norm.get<String *>(0);
+        GUARD(key != nullptr, "a member read by name must read a name.");
+        auto *object = norm.get<Struct *>(1);
+        GUARD(object != nullptr, "a member read by name must read a struct.");
+        auto *structType = norm.type(1);
+        GUARD(structType != nullptr, "a member read must state the type it reads.");
+        return object->get<slot_t>(std::string(key->view()), structType);
+    }
+    const Int64 at = norm.get<Int64>(0);
+    GUARD(at >= 0, "a member read by place must be given a place that is not negative.");
+    auto *tuple = norm.get<Tuple *>(1);
+    GUARD(tuple != nullptr, "a member read by place must read a tuple.");
+    GUARD(
+        static_cast<uint64_t>(at) < tuple->size(),
+        "a member read's tuple index is out of bounds.");
+    return tuple->get<slot_t>(static_cast<size_t>(at));
 }
