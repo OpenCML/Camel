@@ -87,15 +87,20 @@ function canonicalLines(ext) {
 
 // Which directories hold the product's C/C++ and where the standard library's declarations lie is
 // a layout, not a path (docs/design/architecture/layout-map.cn.md): the map gives the product five
-// blocks -- `kernel`, `parse`, `compile`, `lib/<module>`, `tools` -- and, before the move, the same
-// code stood under the four container directories `src/`, `include/`, `modules/` and `stdlib/`. The
-// two rules below therefore name no directory: they read the layout the tree being checked has, and
-// the tree's answer decides. A move of a block is then a line of the two lists here and not a
-// rewrite of a rule.
-const BLOCK_DIRECTORIES = ['kernel', 'parse', 'compile', 'lib', 'tools', 'bindings', 'src', 'include', 'modules']
-// `lib/<module>/<module>.cml` after the move, the flat `stdlib/` before it. A C/C++ module's native
-// half was `stdlib/<module>/native/` and is `lib/<module>/` now, so the same two roots cover it.
-const LIBRARY_DIRECTORIES = ['lib', 'stdlib']
+// blocks -- `kernel`, `parse`, `compile`, `stdlib/<module>`, `tools` -- and, before the 2026-11-22
+// move, the same code stood under the four container directories `src/`, `include/`, `modules/` and
+// `stdlib/`. After it every block is under `src/`, so `src` is the one root that covers all five; the
+// older spellings stay listed, because a tree of either layout is a tree this check reads. The two
+// rules below therefore name no directory: they read the layout the tree being checked has, and the
+// tree's answer decides. A move of a block is then a line of the two lists here and not a rewrite of
+// a rule. `src/stdlib` is the library root, and it must be named: `src` alone would call every `.cml`
+// under the library source, and the 52 declarations would stop being checked while the run stayed
+// green (the count said 1640 member files instead of 1692).
+const BLOCK_DIRECTORIES = ['src', 'kernel', 'parse', 'compile', 'lib', 'tools', 'bindings', 'include', 'modules']
+// `src/stdlib/` after the 2026-11-22 move, `lib/<module>/` after the layout move, the flat `stdlib/`
+// before it. A C/C++ module's native half was `stdlib/<module>/native/` and is `src/stdlib/<module>/`
+// now, so the same roots cover it.
+const LIBRARY_DIRECTORIES = ['src/stdlib', 'lib', 'stdlib']
 
 /** The directories of `names` the tree at rootDir has, as one alternation; null when it has none. */
 function rootsOf(rootDir, names) {
@@ -184,7 +189,7 @@ const RULES = [
     },
 
     // Allow: the standard library's declarations, in whichever root the tree keeps its library in:
-    // `lib/<module>/` after the move, the flat `stdlib/` before it.
+    // `src/stdlib/<module>/` after the move, the flat `stdlib/` before it.
     {
         path: AT_LIBRARY_ROOT,
         ext: /\.cml$/,
@@ -325,7 +330,7 @@ function splitText(text) {
     const bom = text.startsWith('\uFEFF') ? '\uFEFF' : ''
     const body = bom ? text.slice(1) : text
     // The dominant ending, not "contains a CRLF": one stray CRLF used to flip a whole file to CRLF
-    // on the way out (a single `\r` in `lib/transforms/vmap.cpp` rewrote all 857 of its lines),
+    // on the way out (a single `\r` in `src/stdlib/transforms/vmap.cpp` rewrote all 857 of its lines),
     // and `.gitattributes` says the tree is LF because the tests compare bytes. A file that is
     // mostly CRLF is still written as CRLF.
     const crlfCount = (body.match(/\r\n/g) || []).length
@@ -701,11 +706,11 @@ const USAGE = `usage: node scripts/headers.mjs --check|--fix [--root DIR] [--dry
   --dry-run   with --fix: list the rewrites, write nothing
   --help      this text
 
-A member file is a hand-written source file: C/C++ in the product's blocks -- kernel/, parse/,
-compile/, lib/, tools/ and bindings/ in the layout docs/design/architecture/layout-map.cn.md gives
-(kernel, parse, compile, lib/<module>, tools, plus the host binding), or src/, include/, modules/ and
+A member file is a hand-written source file: C/C++ in the product's blocks -- src/kernel/, src/parse/,
+src/compile/, src/stdlib/, tools/ and src/bindings/python/ in the layout docs/design/architecture/layout-map.cn.md gives
+(kernel, parse, compile, src/stdlib/<module>, tools, plus the host binding), or src/, include/, modules/ and
 tools/ in the tree before that move -- and the standard library's .cml in whichever root the tree
-keeps it (lib/, or the flat stdlib/), plus .js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake scripts everywhere
+keeps it (src/stdlib/, or the flat stdlib/), plus .js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake scripts everywhere
 except the denied trees (third_party/, docs/, examples/, showcase/, test/cases/, test/plans/). Which
 of those directories a tree has is read from the tree; a tree with none of them is refused.
 

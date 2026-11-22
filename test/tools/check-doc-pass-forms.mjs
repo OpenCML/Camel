@@ -20,7 +20,7 @@
  *
  *   * A page's `camel …` command line is split the way the command line splits itself:
  *     `splitPassList` for a `--passes` list and `groupPassWords` for the words after the
- *     program (`kernel/execute/pass_spec.cpp`). Each specification that comes out is then read by
+ *     program (`src/kernel/execute/pass_spec.cpp`). Each specification that comes out is then read by
  *     the parser's own rule, `parseSpec` in the same file: the name may contain no `(`, and
  *     every word after the name is a `key=value` word whose key is a bare name and whose value
  *     is not empty. A command line is a fenced block line (`camel …`, optionally after a `//`
@@ -30,7 +30,7 @@
  *     after a pass name is a positional parameter. Both are refused, and both are exact shapes.
  *   * A pass name immediately followed by `(` is refused as well, anywhere in the scanned
  *     pages, run or only quoted in prose. That is how the one defect found by hand read:
- *     `lib/rules/rules.cml` described `simplify_strict` with `std::opt(safe_fp=true)`.
+ *     `src/stdlib/rules.cml` described `simplify_strict` with `std::opt(safe_fp=true)`.
  *   * Each distinct specification is then run through the **real parser**. The invocation is
  *     followed by a pass name no build registers, so the pipeline is resolved and refused
  *     before any pass runs: a spelling the parser rejects is `RuntimeDiag::InvalidPassParameter`,
@@ -47,7 +47,7 @@
  *     note still writes) is not a spelling problem: `UnrecognizedGraphPass` is also what a page
  *     shows on purpose (`docs/cli.md` uses `std::no_such_pass` as its example). Names are not
  *     checked here. A rule for them is possible and exact — a `std::` name in a page must be a
- *     declaration of `lib/std/std.cml` or an alias of the core — but it needs the deliberate
+ *     declaration of `src/stdlib/std.cml` or an alias of the core — but it needs the deliberate
  *     unknown-name examples excepted, so it is not part of this guard.
  *   * The colon and positional spellings are reported on a `camel` command line, and the paren
  *     spelling anywhere; a page that teaches the colon spelling in prose alone is not caught.
@@ -130,7 +130,7 @@
  *     runner owns: both are gitignored, `tmp` holds no tracked file at all (asserted), and a page
  *     written into either one is a run's scratch, not a page of the tree.
  *   * One parser invocation decides several specifications: `requireKnownPasses`
- *     (`kernel/execute/pass.cpp`) resolves every name of a pipeline, and refuses the pipeline,
+ *     (`src/kernel/execute/pass.cpp`) resolves every name of a pipeline, and refuses the pipeline,
  *     before the first pass runs, so a pipeline of specifications followed by the probe reads
  *     all of them and runs nothing. The pipeline is refused at the first name it cannot resolve,
  *     so a batch is taken as proof of all its members only when the complaint names the probe;
@@ -220,14 +220,14 @@ const SKIP_DIRS = new Set(['.git', 'out', 'build', 'node_modules', 'third_party'
 const DELIBERATE_SKIP = ['tmp']
 
 // A text file that is a page of the documentation a reader is meant to read. The library's
-// declarations are pages too: one flat `stdlib/` before the layout move, `lib/<module>/` after it.
+// declarations are pages too: one flat `stdlib/` before the layout move, `src/stdlib/<module>/` after it.
 // `desc` in a test plan is not one of them: it is the plan's own label (see the header).
 function isPage(rel) {
     if (NOT_A_PAGE.some((entry) => rel === entry.replace(/\/$/, '') || rel.startsWith(entry))) return false
     if (GENERATED.includes(rel)) return false
     return (
         rel.endsWith('.md') ||
-        (rel.startsWith('lib/') && rel.endsWith('.cml')) ||
+        (rel.startsWith('src/stdlib/') && rel.endsWith('.cml')) ||
         (rel.startsWith('test/plans/') && rel.endsWith('.toml'))
     )
 }
@@ -436,11 +436,11 @@ process.on('exit', () => {
 
 const PASS_NAMES = new Set()
 
-// The core's passes are the declarations of lib/std/std.cml, and the alias table of
-// kernel/execute/pass.cpp names the spellings that resolve to them.
+// The core's passes are the declarations of src/stdlib/std.cml, and the alias table of
+// src/kernel/execute/pass.cpp names the spellings that resolve to them.
 {
     let namespace = []
-    for (const line of read('lib/std/std.cml').split(/\r?\n/)) {
+    for (const line of read('src/stdlib/std.cml').split(/\r?\n/)) {
         const opened = line.trim().match(/^namespace\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{$/)
         if (opened) {
             namespace.push(opened[1])
@@ -453,12 +453,12 @@ const PASS_NAMES = new Set()
         const func = line.trim().match(/^export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)::<F>/)
         if (func) PASS_NAMES.add('std::' + [...namespace, func[1]].join('::'))
     }
-    const text = read('kernel/execute/pass.cpp')
+    const text = read('src/kernel/execute/pass.cpp')
     const start = text.indexOf('const std::map<std::string, std::string> passAliases = {')
     const end = start < 0 ? -1 : text.indexOf('\n};', start)
     if (start < 0 || end < 0) {
         problems.push(
-            'kernel/execute/pass.cpp: the core alias table is not where the guard reads it'
+            'src/kernel/execute/pass.cpp: the core alias table is not where the guard reads it'
         )
     } else {
         for (const match of text.slice(start, end).matchAll(/\{"(std::[^"]+)",/g)) {
@@ -467,9 +467,9 @@ const PASS_NAMES = new Set()
     }
 }
 
-// A module's Camel passes: the declarations of `lib/<module>/<module>.cml` (one flat
-// `stdlib/<module>.cml` before the layout move), and the names the module registers (the loop
-// below).
+// A module's Camel passes: the declarations of `<module>.cml` at the root of `src/stdlib/` (the file
+// sat inside the module's directory before the 2026-11-22 move, `lib/<module>/<module>.cml`, and in
+// one flat `stdlib/` before the layout move), and the names the module registers (the loop below).
 //
 // What a pass is, and why the shape is tested rather than the head alone: a pass is a function of
 // the graph, so its declaration takes the graph function as its value and says so —
@@ -482,14 +482,15 @@ const PASS_NAMES = new Set()
 // operator (`docs/design/training/bytes.cn.md`), which the command line has never read as a pass:
 // only the head-plus-shape reading keeps the rule about passes and stops reporting operators.
 {
-    const LIBRARY = path.join(REPO_ROOT, 'lib')
+    const LIBRARY = path.join(REPO_ROOT, 'src', 'stdlib')
     for (const entry of fs.readdirSync(LIBRARY)) {
-        // `lib/std/` holds the core's own declarations (read above) and `lib/rulesets/` the dotted
-        // rulesets: neither is a module declaration of its own name.
-        if (entry === 'std') continue
-        if (!fs.existsSync(path.join(LIBRARY, entry, `${entry}.cml`))) continue
-        const module = entry
-        for (const match of read(`lib/${entry}/${entry}.cml`).matchAll(
+        // `src/stdlib/` holds the core's own declarations (read above, `std.cml` and `prelude.cml`)
+        // and `src/stdlib/rulesets/` the dotted rulesets: neither is a module declaration of its own
+        // name, and a directory is not one either -- the declaration is the file `<module>.cml`.
+        if (!entry.endsWith('.cml')) continue
+        const module = entry.slice(0, -'.cml'.length)
+        if (module === 'std' || module === 'prelude') continue
+        for (const match of read(`src/stdlib/${entry}`).matchAll(
             /^\s*export\s+func\s+([A-Za-z_][A-Za-z0-9_]*)\s*::\s*<([A-Za-z_][A-Za-z0-9_]*)>\s*\([^\n]*when\s+is_function::<\2>\(\)/gm
         )) {
             PASS_NAMES.add(`${module}::${match[1]}`)
@@ -533,7 +534,7 @@ function knownName(text) {
 
 // ---- Splitting a command line, the way the command line splits itself ----------------------
 
-// A shell word splitter: a quote is a delimiter, its content one word (`kernel/execute/pass_spec.cpp`
+// A shell word splitter: a quote is a delimiter, its content one word (`src/kernel/execute/pass_spec.cpp`
 // reads what the shell left, so the quoting of a page is undone here the same way).
 function shellSplit(text) {
     const tokens = []
@@ -570,7 +571,7 @@ function shellSplit(text) {
     return tokens
 }
 
-// `splitPassList` (kernel/execute/pass_spec.cpp): commas outside quotes separate passes. The quote
+// `splitPassList` (src/kernel/execute/pass_spec.cpp): commas outside quotes separate passes. The quote
 // characters stay, because the parser reads them as part of a value (`stats=""`).
 function splitPassList(text) {
     const out = []
@@ -600,7 +601,7 @@ function splitPassList(text) {
     return out
 }
 
-// `groupPassWords` (kernel/execute/pass_spec.cpp): a word whose text before `=` is a bare name
+// `groupPassWords` (src/kernel/execute/pass_spec.cpp): a word whose text before `=` is a bare name
 // continues the specification before it; every other word starts one.
 function groupPassWords(words, first = 0) {
     const out = []
@@ -615,7 +616,7 @@ function groupPassWords(words, first = 0) {
     return out
 }
 
-// `parseSpec` (kernel/execute/pass_spec.cpp): the name ends at the first space, the name may hold
+// `parseSpec` (src/kernel/execute/pass_spec.cpp): the name ends at the first space, the name may hold
 // no `(`, and every word after it is a `key=value` word whose key is a bare name with a value.
 // The word scanner is the parser's: a quote is part of the word it delimits, so `stats=""` is a
 // parameter whose value is the empty string literal, not a parameter with no value.

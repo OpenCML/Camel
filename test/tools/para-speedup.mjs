@@ -82,7 +82,7 @@
 // One reading is deliberately not offered: there is no switch that pins the parallel side to one
 // thread. `-t`/`--threads` would be the obvious one, and it does not reach the pass under
 // `--timeit` -- the context `--timeit` builds carries the recursion and macro limits but not
-// `maxThreads` (tools/camel-cli/timeit.cpp, next to tools/camel-cli/main.cpp, which sets it). A
+// `maxThreads` (src/tools/camel-cli/timeit.cpp, next to src/tools/camel-cli/main.cpp, which sets it). A
 // switch that silently measured the machine's whole width would be worse than none; the red this
 // guard is trusted against was planted by running both sides serially instead.
 

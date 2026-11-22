@@ -8,7 +8,7 @@
 # does not fit a worker.
 #
 # camel_taskflow_with_worker_stack(<target>) gives <target> a copy of the Taskflow headers in
-# which a worker's thread is camel::utils::BigStackThread (kernel/include/camel/utils/big_stack_thread.h:
+# which a worker's thread is camel::utils::BigStackThread (src/kernel/include/camel/utils/big_stack_thread.h:
 # 8 MiB on every platform) instead of std::thread. The copy is made at configure time from the
 # package Conan provides and put before it on the include path; three lines of two headers are
 # rewritten, and the configuration fails if one of them is not found (a new version of Taskflow:

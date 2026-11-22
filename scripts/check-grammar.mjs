@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The grammar of Camel is written once, as the production above each function of the parser
-// (parse/src/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
+// (src/parse/src/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
 // in step with it:
 //
 //   node scripts/check-grammar.mjs --write    regenerate the grammar blocks of the language
@@ -12,10 +12,10 @@
 //                                             section 2.4.1, both languages)
 //   node scripts/check-grammar.mjs --check    exit 1 unless
 //       - those blocks are what --write would produce,
-//       - every file at the top of parse/src/syntax was read, and a file under that directory
+//       - every file at the top of src/parse/src/syntax was read, and a file under that directory
 //         which writes a production and is not read is a failure, named by path,
 //       - every name used on a right-hand side is a production (or a token class),
-//       - every quoted literal is a token of parse/include/camel/parse/syntax/token_kinds.def, or a
+//       - every quoted literal is a token of src/parse/include/camel/parse/syntax/token_kinds.def, or a
 //         contextual keyword of scripts/context-keywords.mjs,
 //       - every production has a `parse` function or is listed as folded into another one,
 //       - every node kind of node_kinds.def names a production in its comment,
@@ -30,17 +30,25 @@ import { CONTEXT_KEYWORDS, renderContextKeywordTable } from './context-keywords.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // Where the parse block keeps its sources and its headers is a layout, not a path: the layout map
-// (docs/design/architecture/layout-map.cn.md, table B) moved `src/parse/` to `parse/src/` and
-// `include/camel/parse/` to `parse/include/camel/parse/`, and the two-install comparison runs this
+// (docs/design/architecture/layout-map.cn.md, table B) moved `src/parse/` to `src/parse/src/` and
+// `include/camel/parse/` to `src/parse/include/camel/parse/`, and the two-install comparison runs this
 // script in both trees, so both spellings are resolved here and everywhere else in this file asks
 // them for a directory. Which one the tree has decides; no rule below spells either.
 const firstOf = (candidates) =>
     candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0]
+// The parser's sources and the token table, newest layout first: since the 2026-11-22 move they are
+// `src/parse/src/` and `src/parse/include/camel/parse/` (the block moved under `src/` and kept its own
+// `src/` and `include/`), before it `parse/src/` and `parse/include/camel/parse/`, and before the
+// layout move `src/parse/` and `include/camel/parse/`. The plain block root is last: it exists in the
+// moved layout too, and naming it first pointed the walk at `src/parse/syntax`, a directory no layout
+// has.
 const PARSE_SOURCES = firstOf([
+    path.join(ROOT, 'src', 'parse', 'src'),
     path.join(ROOT, 'parse', 'src'),
     path.join(ROOT, 'src', 'parse'),
 ])
 const PARSE_HEADERS = firstOf([
+    path.join(ROOT, 'src', 'parse', 'include', 'camel', 'parse'),
     path.join(ROOT, 'parse', 'include', 'camel', 'parse'),
     path.join(ROOT, 'include', 'camel', 'parse'),
 ])
@@ -49,7 +57,7 @@ const PARSE_HEADERS = firstOf([
 // into a subdirectory, is read by nothing -- its productions are compared with nothing while every
 // check below stays green, which is the defect this script exists for (the shape that
 // `scripts/vjp-parity.mjs`'s ruleset directory and `test/tools/reading_refusal/check.py`'s walk of
-// `lib/transforms` were fixed for). So every file at the top of the directory is read, with no
+// `src/stdlib` were fixed for). So every file at the top of the directory is read, with no
 // name and no extension filter: a filter is the same silent decision, one level down.
 const PARSER_DIRECTORY = path.join(PARSE_SOURCES, 'syntax')
 // The directory as the reports name it, so a message reads the tree it was run in.
@@ -199,7 +207,7 @@ function readProductions() {
     return productions
 }
 
-/// The files under `parse/src/syntax` that write a production and are not in the read set.
+/// The files under `src/parse/src/syntax` that write a production and are not in the read set.
 ///
 /// The read set is the top of the directory, so a parser source that moves into a subdirectory
 /// stops being read while every check stays green -- the same defect, one level down, and the one

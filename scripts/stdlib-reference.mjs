@@ -73,12 +73,14 @@ import { refuseInstallNotOfThisTree } from './install-stamp.mjs'
 import { defaultCamel } from '../test/tools/camel-arg.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-// The library, in either layout. After the layout move it is one declaration per `lib/<name>/`:
-// `<name>.cml` beside the module's C++, the computed half in `<name>/signatures/`, and the two
-// declarations that have no module of their own (`std.cml`, `prelude.cml`) in `lib/std/`. A tree
-// that has not been moved keeps the same files flat in `stdlib/`. A reader that knew one layout
-// only would answer "not in the library" for every module of the other, so both are read, in that
-// order, and the first spelling that exists is the file a module reads.
+// The library, in any of the three layouts the tree has had. After the 2026-11-22 move it is
+// `src/stdlib/`: one declaration per module at its root (`<name>.cml`), the module's C++ in
+// `<name>/` beside it, the computed half in `<name>/signatures/`, and the one directory that is a
+// dotted prefix rather than a module in `rulesets/`. Before that move it was one declaration per
+// `lib/<name>/`, and before the layout move the same files were flat in `stdlib/`. A reader that knew
+// one layout only would answer "not in the library" for every module of the others, so all three are
+// read, in that order, and the first spelling that exists is the file a module reads.
+const SRC_LIBRARY = path.join(REPO_ROOT, 'src', 'stdlib')
 const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
 const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
 const firstThere = (candidates) => candidates.find((one) => fs.existsSync(one)) ?? candidates[0]
@@ -87,9 +89,11 @@ const firstThere = (candidates) => candidates.find((one) => fs.existsSync(one)) 
 // `out/latest`. Every install a run measures passes the build stamp of `scripts/install-stamp.mjs`,
 // named there or not.
 let camelPath = null
-/// The directory the library is walked from: `lib/` after the move, `stdlib/` before it. Walking
-/// either finds the same `.cml` files, which is what the match-type table reads.
-const STDLIB_DIR = [MOVED_LIBRARY, FLAT_LIBRARY].find((dir) => fs.existsSync(dir)) ?? FLAT_LIBRARY
+/// The directory the library is walked from: `src/stdlib/` after the 2026-11-22 move, `lib/` after
+/// the layout move, `stdlib/` before it. Walking any of them finds the same `.cml` files, which is
+/// what the match-type table reads.
+const STDLIB_DIR =
+    [SRC_LIBRARY, MOVED_LIBRARY, FLAT_LIBRARY].find((dir) => fs.existsSync(dir)) ?? FLAT_LIBRARY
 const DOC_PATH = path.join(REPO_ROOT, 'docs', 'stdlib-reference.md')
 const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
 
@@ -393,7 +397,7 @@ const MODULES = [
         title: '`rulesets.jvp`: how a forward transform lifts a value',
         kind: 'camel',
         // A ruleset is a module of the library, found under its dotted name: a dotted module name
-        // is a subdirectory of the library, so `rulesets.jvp` is `lib/rulesets/jvp.cml`. Its
+        // is a subdirectory of the library, so `rulesets.jvp` is `src/stdlib/rulesets/jvp.cml`. Its
         // declarations are Camel, and `--verify-docs` compiles their examples like any other
         // module's.
         source: 'rulesets/jvp.cml',
@@ -403,7 +407,7 @@ const MODULES = [
         title: '`rulesets.vmap`: how a batched transform lifts a value',
         kind: 'camel',
         // `Lift<T> = RowsOf<T>`: a batched value is the value with one dimension in front, so the
-        // elementwise tier's rule for a primitive is the primitive itself (`lib/rulesets/vmap.cml`).
+        // elementwise tier's rule for a primitive is the primitive itself (`src/stdlib/rulesets/vmap.cml`).
         source: 'rulesets/vmap.cml',
     },
     {
@@ -453,14 +457,18 @@ function announcePending() {
     }
 }
 
-// `source` is the file's name inside the library: `rewrite.cml` (the module's own directory),
-// `rulesets/jvp.cml` (a dotted prefix, which the moved layout keeps as `lib/rulesets/jvp.cml`),
-// `prelude.cml` (the one declaration in `lib/std/`). Every candidate is tried in the moved layout
-// first and the flat one second, so one reader serves a moved tree and an unmoved one.
+// `source` is the file's name inside the library: `rewrite.cml` (the module's own directory, flat at
+// the root of `src/stdlib/` since the 2026-11-22 move), `rulesets/jvp.cml` (a dotted prefix, the one
+// directory that keeps its name), `prelude.cml` (one of the two declarations that have no module of
+// their own). Every candidate is tried in the newest layout first and the older ones after it, so one
+// reader serves all three layouts of the tree.
 function sourceOf(module) {
     if (module.source) {
         const name = module.source
         return firstThere([
+            path.join(SRC_LIBRARY, name),
+            path.join(SRC_LIBRARY, module.name, name),
+            path.join(SRC_LIBRARY, 'std', name),
             path.join(MOVED_LIBRARY, name),
             path.join(MOVED_LIBRARY, module.name, name),
             path.join(MOVED_LIBRARY, 'std', name),
@@ -471,6 +479,7 @@ function sourceOf(module) {
     }
     return module.kind === 'camel'
         ? firstThere([
+            path.join(SRC_LIBRARY, `${module.name}.cml`),
             path.join(MOVED_LIBRARY, module.name, `${module.name}.cml`),
             path.join(FLAT_LIBRARY, `${module.name}.cml`),
         ])
@@ -478,27 +487,30 @@ function sourceOf(module) {
 }
 
 /// The computed half of a module's declarations: `signatures/<name>.cml` beside the module after
-/// the move, in the one flat directory before it.
+/// the layout move (under `src/stdlib/` since the 2026-11-22 move), in the one flat directory
+/// before both.
 /// A module with no computed half has no file, and `path.join` refuses `undefined`: the callers
 /// push the answer into a list they filter, so `null` is the shape they expect.
 function computedOf(module) {
     if (!module.computed) return null
     return firstThere([
+        path.join(SRC_LIBRARY, module.name, module.computed),
         path.join(MOVED_LIBRARY, module.name, module.computed),
         path.join(FLAT_LIBRARY, module.computed),
     ])
 }
 
-/// Every signature file on disk, in either layout. A file the module table does not name still has
-/// to be read, or a body written in it would go unchecked.
+/// Every signature file on disk, in any of the layouts. A file the module table does not name still
+/// has to be read, or a body written in it would go unchecked.
 function signatureFiles() {
     const out = new Set()
     const flat = path.join(FLAT_LIBRARY, 'signatures')
     if (fs.existsSync(flat)) for (const name of fs.readdirSync(flat)) if (name.endsWith('.cml')) out.add(path.join(flat, name))
-    if (fs.existsSync(MOVED_LIBRARY)) {
-        for (const entry of fs.readdirSync(MOVED_LIBRARY, { withFileTypes: true })) {
+    for (const library of [SRC_LIBRARY, MOVED_LIBRARY]) {
+        if (!fs.existsSync(library)) continue
+        for (const entry of fs.readdirSync(library, { withFileTypes: true })) {
             if (!entry.isDirectory()) continue
-            const dir = path.join(MOVED_LIBRARY, entry.name, 'signatures')
+            const dir = path.join(library, entry.name, 'signatures')
             if (!fs.existsSync(dir)) continue
             for (const name of fs.readdirSync(dir)) if (name.endsWith('.cml')) out.add(path.join(dir, name))
         }
@@ -507,10 +519,11 @@ function signatureFiles() {
 }
 
 /// The declaration files of the library, the way `scripts/collect-out.js` assembles the install:
-/// every `lib/<name>/<name>.cml`, the ones in `lib/std/`, the dotted `lib/rulesets/` and the
-/// signature files beside their modules -- or, in a tree that has not been moved, the same set in
-/// `stdlib/`, `lib/rulesets/` and `stdlib/signatures/`. The audit's "no module of the table
-/// reads this file" half is only worth reading if it walks the library the install is built from.
+/// every `.cml` at the root of `src/stdlib/`, the declared dotted `rulesets/` and the signature files
+/// beside their modules -- or, in the two layouts before the 2026-11-22 move, `lib/<name>/<name>.cml`
+/// with the ones in `lib/std/`, and the same set flat in `stdlib/` before the layout move. The audit's
+/// "no module of the table reads this file" half is only worth reading if it walks the library the
+/// install is built from.
 function libraryFiles() {
     const out = new Set()
     const push = (dir) => {
@@ -520,6 +533,14 @@ function libraryFiles() {
         }
     }
     for (const dir of [FLAT_LIBRARY, path.join(FLAT_LIBRARY, 'rulesets'), path.join(FLAT_LIBRARY, 'signatures')]) push(dir)
+    push(SRC_LIBRARY)
+    push(path.join(SRC_LIBRARY, 'rulesets'))
+    if (fs.existsSync(SRC_LIBRARY)) {
+        for (const entry of fs.readdirSync(SRC_LIBRARY, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue
+            push(path.join(SRC_LIBRARY, entry.name, 'signatures'))
+        }
+    }
     if (fs.existsSync(MOVED_LIBRARY)) {
         push(path.join(MOVED_LIBRARY, 'std'))
         push(path.join(MOVED_LIBRARY, 'rulesets'))
@@ -855,7 +876,7 @@ function readDeclarations(file, module, options = {}) {
         // above the declaration - above the tag, or between the tag and the declaration - is its
         // description. The line therefore does not end the pending comment, which is what the AST
         // builder does too (it reads the comment above the declaration's first token, and the tag
-        // is that token: parse/src/ast/builder.cpp, docOf). A `#op('module:function')` names the
+        // is that token: src/parse/src/ast/builder.cpp, docOf). A `#op('module:function')` names the
         // operator a C++ declaration implements when it does not follow the convention (design
         // principles 6.4, step 1). This used to end the comment for a module written
         // in Camel, which lost the description of every such declaration from the page.
@@ -1089,7 +1110,7 @@ function renderDoc() {
     out.push('# Standard Library Reference')
     out.push('')
     out.push('<!-- Generated by scripts/stdlib-reference.mjs --write. Do not edit: change the declarations')
-    out.push('     (lib/**/*.cml) or the comments of the library and')
+    out.push('     (src/stdlib/**/*.cml) or the comments of the library and')
     out.push('     regenerate. -->')
     out.push('')
     out.push('The functions of the core standard library, by module. The boundary is the one the design')
@@ -1341,7 +1362,7 @@ function typeWithoutDefault(type) {
 
 // The positions a declaration writes, in the order the operator registers them: the ordinary
 // parameters, then the `<>` ones (`OpDef::params`, written `withAfterNorm`; the protocol
-// `lib/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
+// `src/stdlib/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
 // axis form (design principles 7.3) is exactly this: `sum` declares one ordinary parameter and two
 // `with` ones, `sum<axis, keepdims>(t)`, and the operator registers three ports -- so the two lists
 // are one list when the counts add up. When they do not (a declaration may write a `with` parameter
@@ -2137,7 +2158,7 @@ function namesOfDeclaration(entry) {
 // every test returned `float32` rows, and nothing read the two statements against each other.
 //
 // The comparison is on the type, not on the spelling. The authority for which spellings name one
-// type is the compiler's own table (`initInnerTypes`, compile/src/gct/builder.cpp): `int` and
+// type is the compiler's own table (`initInnerTypes`, src/compile/src/gct/builder.cpp): `int` and
 // `i64` are Int64, `float` and `f64` are Float64, and `f32`, `i32`, `bf16`, `f16`, `c64`, `c128`,
 // `bool`, `string`, `Bytes`, `void` and `never` are their own. Two types are the same only when
 // their codes are, so `f32[...]` and `float[...]` stay two types here (design principles 5.1: no
@@ -2148,10 +2169,10 @@ function namesOfDeclaration(entry) {
 
 // A result written as one of these names is read; every other name makes the entry unreadable.
 // The middle column is the type the compiler holds for that spelling. The spellings are the
-// program's own names (compile/src/gct/builder.cpp, `initInnerTypes`), the explicit names of the
+// program's own names (src/compile/src/gct/builder.cpp, `initInnerTypes`), the explicit names of the
 // same types (`i64` for Int64, which the declaration files write as `int64`; `float64` for
 // Float64), and the names the tensor module writes an element type with (`dtypeName`,
-// lib/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
+// src/stdlib/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
 // those are what a kernel's own `resultDoc` says, so a claim of `float32[...]` and a declaration of
 // `f32[...]` are the same type here.
 const RESULT_SCALARS = new Map([
@@ -2309,7 +2330,7 @@ function canonicalResult(text) {
     }
     // `float` alone is the word the tensor module writes where an operator gives back a tensor of
     // its argument's element type: `softmax`, `layer_norm`, `linear` and `softmax_grad` return
-    // `dtypeOf<T>()` of the input (lib/tensor/kernels/reduce.cpp) and their `resultDoc` says
+    // `dtypeOf<T>()` of the input (src/stdlib/tensor/kernels/reduce.cpp) and their `resultDoc` says
     // `float[...]`, while an operator that returns f64 says `float64[...]` (`from_bytes_f64`,
     // `to_bytes_f64`). So a bare `float` in a claim is the element family, not one element type.
     return { text: `${known}${dimensions}`, opaque: false, family: base === 'float' }
@@ -2651,7 +2672,7 @@ function matchTypeVerdict(declaredText, operatorText) {
     }
 }
 
-// What a registered parameter says it takes (`lib/tensor/ops/op_def.cpp`, `kindText`). These
+// What a registered parameter says it takes (`src/stdlib/tensor/ops/op_def.cpp`, `kindText`). These
 // are not types but sets of them, and `float[...]` in one is the operator's spelling for "a tensor",
 // not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
 // it takes. A signature a resolver builds instead writes real types; those are compared as types.
@@ -2917,80 +2938,80 @@ const EXAMPLE_STOPS = {
     // is missing, so a member that enters this list says which example stopped and why, and one that
     // leaves says which example the marker no longer excuses.
     'a semantic error': {
-        'lib/fs/fs.cml#append_bytes#1':
+        'src/stdlib/fs.cml#append_bytes#1':
             'the example hands `encode(\'abc\')` to an operator that takes `Bytes`, and `encode` is `bytes`\'s name, which this page does not import',
-        'lib/fs/fs.cml#read_bytes#1':
+        'src/stdlib/fs.cml#read_bytes#1':
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'lib/fs/fs.cml#read_chunk#1':
+        'src/stdlib/fs.cml#read_chunk#1':
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
-        'lib/fs/fs.cml#write_bytes#1':
+        'src/stdlib/fs.cml#write_bytes#1':
             'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
-        'lib/state/state.cml#set#1':
+        'src/stdlib/state.cml#set#1':
             'the example writes through `r`, a handle the surrounding program holds: an example program has no box to write',
-        'lib/state/state.cml#update#1':
+        'src/stdlib/state.cml#update#1':
             'the example updates through `r`, a handle the surrounding program holds: an example program has no box to update',
-        'lib/graph/graph.cml#constant#1':
+        'src/stdlib/graph.cml#constant#1':
             '`n` is a node of the surrounding pass, and no example program has one',
-        'lib/graph/graph.cml#erase#1':
+        'src/stdlib/graph.cml#erase#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'lib/graph/graph.cml#eval#1':
+        'src/stdlib/graph.cml#eval#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'lib/graph/graph.cml#replace#1':
+        'src/stdlib/graph.cml#replace#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'lib/graph/graph.cml#name#1':
+        'src/stdlib/graph.cml#name#1':
             'the example reads the name of a graph, and reading it is a capability a declaration writes in its clause; an example program is a body with no declaration to write it in (design principles 9.5)',
-        'lib/graph/graph.cml#origin#1':
+        'src/stdlib/graph.cml#origin#1':
             'the example reads the origin of `n`, which is a node of the surrounding pass, and the reading needs the `spelling` capability no example program can declare (design principles 9.5)',
-        'lib/graph/graph.cml#show#1':
+        'src/stdlib/graph.cml#show#1':
             'the example prints a node, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'lib/graph/graph.cml#creation_id#1':
+        'src/stdlib/graph.cml#creation_id#1':
             'the example reads the creation number of a handle, which is its spelling: the reading needs the `spelling` capability, and an example program is a body with no declaration to write it in (design principles 9.5)',
-        'lib/graph/graph.cml#outline#1':
+        'src/stdlib/graph.cml#outline#1':
             '`t` is an open transaction and `ns` a group of its graph\'s nodes: a doc example has neither',
-        'lib/graph/graph.cml#order#1':
+        'src/stdlib/graph.cml#order#1':
             '`t` is an open transaction and `a`, `b` are nodes of its graph: a doc example has neither',
-        'lib/graph/graph.cml#inline#1':
+        'src/stdlib/graph.cml#inline#1':
             '`t` is an open transaction and `n` a node of its graph: a doc example has neither',
-        'lib/hash/hash.cml#sha256#1':
+        'src/stdlib/hash.cml#sha256#1':
             'the example builds its `Bytes` value with `encode(\'abc\')`, which is `bytes`\'s name',
-        'lib/std/prelude.cml#len#3':
+        'src/stdlib/prelude.cml#len#3':
             'the `Bytes` overload\'s example builds its value with `encode(\'h€\')`, which is `bytes`\'s name',
-        'lib/std/prelude.cml#slice#3':
+        'src/stdlib/prelude.cml#slice#3':
             'the `Bytes` overload\'s example names `encode`, which is `bytes`\'s, and a doc example is compiled with this module\'s names only',
-        'lib/std/prelude.cml#tee_note#1':
+        'src/stdlib/prelude.cml#tee_note#1':
             'the last operand is the stream a tee reads, and no example program has one',
-        'lib/python/python.cml#call#1':
+        'src/stdlib/python.cml#call#1':
             'the callable is a Python object from `attr`, and `sqrt` is a name the surrounding program binds',
-        'lib/rewrite/rewrite.cml#explain#1':
+        'src/stdlib/rewrite.cml#explain#1':
             'a run and two of its values come from the caller, and `a` is one of those values',
-        'lib/rewrite/rewrite.cml#explain_all#1':
+        'src/stdlib/rewrite.cml#explain_all#1':
             'a run comes from the caller, and `r` is it',
-        'lib/rewrite/rewrite.cml#extract#1':
+        'src/stdlib/rewrite.cml#extract#1':
             'the cost function comes from `rules`, and `rules::nodes` is not a name the page binds',
-        'lib/rewrite/rewrite.cml#rewrite#1':
+        'src/stdlib/rewrite.cml#rewrite#1':
             'a rule set comes from the caller, and `rules` is it',
-        'lib/rewrite/rewrite.cml#run#1':
+        'src/stdlib/rewrite.cml#run#1':
             'a rule set comes from the caller, and `rules` is it',
-        'lib/rewrite/rewrite.cml#saturate#1':
+        'src/stdlib/rewrite.cml#saturate#1':
             'a rule set comes from the caller, and `rules` is it',
-        'lib/rewrite/rewrite.cml#why_not#1':
+        'src/stdlib/rewrite.cml#why_not#1':
             'a run, a rule and a value come from the caller, and `target` is one of them',
-        'lib/vjp/vjp.cml#grad#1':
+        'src/stdlib/vjp.cml#grad#1':
             '`grad` is generic in the function it takes (`F`), so the checker can write no value for the parameter: the function whose first `with` parameter is differentiated is a declaration in the surrounding program',
-        'lib/autodiff/signatures/autodiff.cml#grad#1':
+        'src/stdlib/autodiff/signatures/autodiff.cml#grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
-        'lib/autodiff/signatures/autodiff.cml#grad#2':
+        'src/stdlib/autodiff/signatures/autodiff.cml#grad#2':
             'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
-        'lib/autodiff/signatures/autodiff.cml#with_grad#1':
+        'src/stdlib/autodiff/signatures/autodiff.cml#with_grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
-        'lib/autodiff/signatures/autodiff.cml#with_grad#2':
+        'src/stdlib/autodiff/signatures/autodiff.cml#with_grad#2':
             'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
-        'lib/transforms/signatures/transforms.cml#first_with_as_param#1':
+        'src/stdlib/transforms/signatures/transforms.cml#first_with_as_param#1':
             'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
-    // live dereference node, and then, while the split ABI moved, `lib/vjp/vjp.cml`'s example and the
+    // live dereference node, and then, while the split ABI moved, `src/stdlib/vjp.cml`'s example and the
     // two fragments beside it, which still destructured the pair `split(f)` no longer answers. The
     // step that lane recorded as pending has landed: every one of those examples compiles, so a run
     // that finds nothing in this class is the run this table asks for, and the class is removed
