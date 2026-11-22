@@ -18,12 +18,11 @@
  *     here would be a second place a graph can be read from, which is what the view exists to
  *     prevent.
  *
- * Why a base and not a rename (the graph lane's question of 2026-11-22, answered by the author:
- * a graph is a base class, and the two representations derive from it): there are two
- * representations this stage, and a draft's callee has to be nameable by the same `const Graph *` a
- * frozen graph's is. A rename would leave the draft side with no type to point at, and stage 3 --
- * which is where the two representations become one -- is the change that removes the seam, not
- * this one.
+ * Why a base and not a rename (design principles: a graph's identity is the value, and the two
+ * representations are two implementations of it): there are two representations this stage, and a
+ * draft's callee has to be nameable by the same `const Graph *` a frozen graph's is. A rename would
+ * leave the draft side with no type to point at, and stage 3 -- which is where the two
+ * representations become one -- is the change that removes the seam, not this one.
  *
  * Stage 3 deletes both representations in favour of one and this header goes with the adapters:
  * what remains is that a graph's identity is the value, which is then the single class itself.

@@ -90,14 +90,24 @@ std::string typeText(const camel::core::type::Type *type) {
 /// One region of each reading, field for field. The record is a value on both sides, so the fields
 /// are compared one by one to keep the line that reports a difference able to name the field.
 std::string regionDifference(const GraphView &draft, const GraphView &frozen, RegionId id) {
+    // A region with no node in it is a place neither reading can be taken through: a draft keeps a
+    // region for every arm and block it ever made, while an encoding writes the ones its nodes stand
+    // in, so the two need not agree about a place nothing stands in. A region that holds a node on
+    // either side is compared -- and if a node stands in a different region on the two sides, the
+    // per-node comparison below has already said so.
+    if (draft.regionNodes(id).empty() && frozen.regionNodes(id).empty()) {
+        return {};
+    }
     const RegionRecord left  = draft.region(id);
     const RegionRecord right = frozen.region(id);
     if (left.kind != right.kind) {
         return std::format(
-            "region {}: kind draft={} frozen={}",
+            "region {}: kind draft={} frozen={} nodes draft={} frozen={}",
             id,
             static_cast<int>(left.kind),
-            static_cast<int>(right.kind));
+            static_cast<int>(right.kind),
+            draft.regionNodes(id).size(),
+            frozen.regionNodes(id).size());
     }
     if (left.owner != right.owner) {
         return std::format("region {}: owner draft={} frozen={}", id, left.owner, right.owner);
@@ -131,6 +141,10 @@ std::string firstDifference(const GraphView &draft, const GraphView &frozen) {
             frozen.nodeSlotCount());
     }
     for (RegionId id = 0; id < draft.regionCount(); ++id) {
+        // A place nothing stands in is not compared: see regionDifference.
+        if (draft.regionNodes(id).empty() && frozen.regionNodes(id).empty()) {
+            continue;
+        }
         if (std::string difference; !(difference = regionDifference(draft, frozen, id)).empty()) {
             return difference;
         }

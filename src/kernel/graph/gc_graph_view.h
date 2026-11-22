@@ -4,8 +4,8 @@
 /*
  * FrozenGraphAdapter: `GraphView` over a frozen graph (`GCGraph`, camel/runtime/graph.h).
  *
- * The transitional adapter stage 2.1 asks for ("a frozen graph and a draft, one adapter each, in
- * the graph lane's directory; stage 3 deletes them"). Replaces
+ * The transitional adapter stage 2.1 asks for ("a frozen graph and a draft, one adapter each,
+ * deleted again by stage 3"). Replaces
  * `camel::compile::gir::FrozenGraphRead`
  * (`compile/include/camel/compile/gir/graph_read.h`): that class is the same idea stopped at the
  * facts the derivative lift asks, and it is deleted once its users are on this face.
@@ -69,8 +69,8 @@
  * `view()` on the graph (`camel/graph/graph.h`) hands out this adapter: a reader holding a
  * `const Graph *` -- the callee of a FUNC node, the anchor of a fact -- reads that graph again
  * through the view. The adapter answers every question but naming a callee, which needs the program
- * that holds the graphs (`CalleeGraphOf`); that one is reported to the author rather than guessed,
- * because a graph does not know its program.
+ * that holds the graphs (`CalleeGraphOf`); that one is refused rather than guessed, because a graph
+ * does not know its program.
  */
 
 #pragma once

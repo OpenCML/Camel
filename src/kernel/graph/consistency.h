@@ -20,8 +20,8 @@
  * presence, region, kind, type, constant, input lists, sync and order predecessors, callee kind,
  * the regions it owns and (for a LOOP) its form.
  *
- * What it cannot compare, and why -- each one is a field the interface review of 2026-11-22 took off
- * the face on purpose, so the check not naming it is the design, not a gap in the check:
+ * What it cannot compare, and why -- each one is a field the face left off on purpose, so the check
+ * not naming it is the design, not a gap in the check:
  *
  *  - the static area and a data index: which slot a value sits in belongs to the execution plan
  *    (section 13). The constants themselves are compared per node (`constantOf`), which is what a
