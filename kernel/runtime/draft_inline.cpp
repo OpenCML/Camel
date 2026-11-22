@@ -28,6 +28,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
@@ -494,7 +495,7 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             canonicalId           = withInputs.empty() ? kInvalidNodeRef : withInputs.front();
             continue;
         }
-        if (header->kind == GCNodeKind::Cast) {
+        if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
             // A CAST computes a value: `7 as float` is 7.0, not the bits of the integer 7.
             // Looking through it bound the unconverted constant to the parameter (f(i as
             // float) computed with 0.0...035 instead of 7.0). Only a CAST between equal
@@ -510,7 +511,8 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             canonicalId = normInputs.front();
             continue;
         }
-        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Dref) {
+        if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Clone ||
+            header->kind == GCNodeKind::Dref) {
             const auto normInputs = draft.normInputsOf(canonicalId);
             canonicalId           = normInputs.empty() ? kInvalidNodeRef : normInputs.front();
             continue;
@@ -1380,12 +1382,17 @@ bool specializeDirectFuncInDraft(
                 appendControlDependency(transaction, current, funcNodeId);
                 break;
             }
-            if (header->kind != GCNodeKind::Gate && header->kind != GCNodeKind::Copy &&
-                header->kind != GCNodeKind::Cast && header->kind != GCNodeKind::Dref) {
+            const camel::execute::OperShape oper = camel::execute::shapeOfKind(header->kind);
+            const bool carriesValue              = oper == camel::execute::OperShape::Clone ||
+                                                   oper == camel::execute::OperShape::Conversion ||
+                                                   header->kind == GCNodeKind::Dref;
+            if (header->kind != GCNodeKind::Gate && !carriesValue) {
                 break;
             }
-            // A gate answers through the kernel; Copy, Cast and Dref carry the value in their
-            // first input too, so the walk reads the same end for all four (it read the last).
+            // A gate answers through the kernel; a copy, a conversion and Dref carry the value in
+            // their first input too, so the walk reads the same end for all four (it read the
+            // last). Which of the four a node is is asked by its shape, not its kind (refactor
+            // stage 2.3).
             if (header->kind == GCNodeKind::Gate) {
                 current = forwardedInputOf(draft, current);
                 continue;

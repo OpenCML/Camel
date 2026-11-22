@@ -12,6 +12,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/effect_liveness.h"
@@ -66,24 +67,31 @@ std::string nodeText(const GraphTransaction &transaction, gc_node_ref_t id) {
         return "%" + std::to_string(id);
     }
     std::string text = "%" + std::to_string(id) + " ";
+    // The four operators the front end still builds as nodes of their own are named here by their
+    // shape, not by their kind (`camel/execute/shaped_operators.h`, refactor stage 2.3): that is
+    // the question this text asks, and it answers the same word either way.
+    switch (camel::execute::shapeOfKind(header->kind)) {
+    case camel::execute::OperShape::Conversion:
+        text += "cast";
+        break;
+    case camel::execute::OperShape::Clone:
+        text += "copy";
+        break;
+    case camel::execute::OperShape::Construction:
+        text += "fill";
+        break;
+    case camel::execute::OperShape::Access:
+        text += "access";
+        break;
+    case camel::execute::OperShape::None:
+        break;
+    }
     switch (header->kind) {
     case GCNodeKind::Data:
         text += "data";
         break;
     case GCNodeKind::Port:
         text += "port";
-        break;
-    case GCNodeKind::Cast:
-        text += "cast";
-        break;
-    case GCNodeKind::Copy:
-        text += "copy";
-        break;
-    case GCNodeKind::Fill:
-        text += "fill";
-        break;
-    case GCNodeKind::Accs:
-        text += "access";
         break;
     case GCNodeKind::Brch:
         text += "branch";
@@ -304,6 +312,13 @@ bool shapeTakesPart(
     const GraphTransaction &transaction, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
     std::span<const std::byte> payload) {
     const auto &draft = transaction.graph();
+    // A conversion and an access compute their value from what they read and change nothing (the
+    // same question asked of them by their shape, not their kind: refactor stage 2.3).
+    const camel::execute::OperShape oper = camel::execute::shapeOfKind(kind);
+    if (oper == camel::execute::OperShape::Conversion ||
+        oper == camel::execute::OperShape::Access) {
+        return true;
+    }
     switch (kind) {
     case GCNodeKind::Data: {
         if (dataIndex >= 0) {
@@ -317,9 +332,6 @@ bool shapeTakesPart(
         ty             = ty != nullptr ? ty : type;
         return ty != nullptr && !camel::core::type::isGCTraced(ty->code());
     }
-    case GCNodeKind::Cast:
-    case GCNodeKind::Accs:
-        return true;
     case GCNodeKind::Oper:
         return payload.size() >= sizeof(GCOperBody) &&
                camel::core::OperatorTable::instance().mayBeRecomputed(
