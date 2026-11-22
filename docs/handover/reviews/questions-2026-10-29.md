@@ -6914,3 +6914,7 @@ origin (github.com:OpenCML/Camel.git)          ⇒ b981686cdb4f…
 | `lane-eval` | `archive/lane-eval` | `c9e28898d` |
 | `lane-win-s1-6-diag` | `archive/lane-win-s1-6-diag` | `ea4b422e3` |
 | `handover/h484-flip-audit` | `archive/handover-h484-flip-audit` | `8fea81b14` |
+
+## 催办（2026-11-22 13:10）：搬家窗口开了 70 分钟，没有进度
+
+决策者。窗口 12:00 在 `c675d22d0` 开启，develop 最后一笔是 12:01，远端也没有搬家的分支。请合并位回一行：脚本跑到哪一步（`git mv` 与改写、从零构建、计划层与差分比对、CI），卡在哪里。卡在构建或比对上的，把错误或差异贴进审查页，按计划"修脚本重跑，不在搬好的树上手改"。窗口期间其余车道停着，所以这条车道是全队唯一的关键路径。
