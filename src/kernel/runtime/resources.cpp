@@ -2261,16 +2261,17 @@ std::optional<CommitViolation> orderIncomplete(
 
 std::optional<CommitViolation> commitViolation(
     const Program &program, const GCGraph &graph, std::span<const gc_node_ref_t> made,
-    std::span<const gc_node_ref_t> changed, const GCGraph *before, const Program *beforeProgram) {
+    std::span<const gc_node_ref_t> changed, const GCGraph *before, const Program *beforeProgram,
+    bool asksEffects, bool asksOrder) {
     // The tier first, and before any resolver runs: docs/design/graph-editing/README.cn.md 8.1's
-    // table decides which of the six checks a commit is asked, and what decides that is which
-    // edit the draft used -- not "did it make a node". A draft that made no node and changed
-    // none added no access and dropped no ordering, so it owes no answer about either, and a
-    // rewrite whose only interface is the graph module pays one size check per graph and nothing
-    // else. A draft that made no node but added an operand or swapped an operator is the last row
-    // of that table ("add an edge, change an operator"), which owes every one of the six: this is
-    // the shape that published an edit without asking, and the reason `made` alone is not the tier.
-    if (made.empty() && changed.empty()) {
+    // table decides which of the six checks a commit is asked, and what decides that is which edit
+    // the draft used -- read off the draft's edit record (`GraphDraft::editTier`) and not derived
+    // from "did it make a node". A record that names only the edits which keep both promises --
+    // `replace`, `erase`, `eval`, `order` and the two signature edits -- owes no answer about
+    // either, and a rewrite whose only interface is the graph module pays one size check per graph
+    // and nothing else. A record that names `inline` or a kernel primitive is asked both, because
+    // those can have changed them.
+    if (!asksEffects && !asksOrder) {
         return std::nullopt;
     }
     // One walk for the whole question: each callee's footprint is a finished fixpoint.
@@ -2308,41 +2309,55 @@ std::optional<CommitViolation> commitViolation(
             return beforeWalk.run(callee);
         });
         const NodeAccessTable beforeTable(*before, beforeResolver);
-        if (const auto beforeBeyond = effectBeyondDeclaration(
-                beforeIn,
-                *before,
-                beforeWalk,
-                beforeTable,
-                EffectReader::BeforeTheEdit)) {
-            throw GraphBeforeEditBeyondType(
-                std::format(
-                    "the graph '{}' a commit was asked to edit already reached past the type its "
-                    "own "
-                    "signature declares, before the edit: {}",
-                    before->name(),
-                    beforeBeyond->text));
+        // The effect half: the two readings of it (what the graph it started from declared, and
+        // what the graph it publishes declares) are one question, so the record answers for them
+        // together. A record that does not owe it asks neither -- today no edit but `inline` and a
+        // primitive can change what the body reaches, and a named edit's nodes are not in `changed`
+        // at all, so the skip is the one the table has always made.
+        if (asksEffects) {
+            if (const auto beforeBeyond = effectBeyondDeclaration(
+                    beforeIn,
+                    *before,
+                    beforeWalk,
+                    beforeTable,
+                    EffectReader::BeforeTheEdit)) {
+                throw GraphBeforeEditBeyondType(
+                    std::format(
+                        "the graph '{}' a commit was asked to edit already reached past the type "
+                        "its "
+                        "own "
+                        "signature declares, before the edit: {}",
+                        before->name(),
+                        beforeBeyond->text));
+            }
+            if (auto effect =
+                    effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
+                return effect;
+            }
         }
+        if (asksOrder) {
+            forEachUnorderedPair(
+                *before,
+                beforeTable,
+                changed,
+                [&alreadyUnordered](
+                    gc_node_ref_t /*x*/,
+                    gc_node_ref_t /*y*/,
+                    gc_node_ref_t first,
+                    gc_node_ref_t second,
+                    const ResourceConflict &) {
+                    alreadyUnordered.push_back(unorderedPairKey(first, second));
+                    return true;
+                });
+        }
+    } else if (asksEffects) {
         if (auto effect =
                 effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
             return effect;
         }
-        forEachUnorderedPair(
-            *before,
-            beforeTable,
-            changed,
-            [&alreadyUnordered](
-                gc_node_ref_t /*x*/,
-                gc_node_ref_t /*y*/,
-                gc_node_ref_t first,
-                gc_node_ref_t second,
-                const ResourceConflict &) {
-                alreadyUnordered.push_back(unorderedPairKey(first, second));
-                return true;
-            });
-    } else if (
-        auto effect =
-            effectBeyondDeclaration(program, graph, walk, table, EffectReader::Publishing)) {
-        return effect;
+    }
+    if (!asksOrder) {
+        return std::nullopt;
     }
     // The order reading answers for the regions the commit touched, and judges a pair when one side
     // stands for a node it touched: the nodes it made and the nodes it changed in place are the
