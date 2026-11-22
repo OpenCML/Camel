@@ -322,21 +322,33 @@ function collect(config, tag) {
     }
 
     // 复制 tools 下所有子目录的 exe 到 out/tag/bin/
-    const toolSubdirs = fs.readdirSync(toolsBuildDir, { withFileTypes: true })
-    for (const ent of toolSubdirs) {
-        if (!ent.isDirectory()) continue
-        const configDir = path.join(toolsBuildDir, ent.name, config)
-        if (!fs.existsSync(configDir)) continue
-        const files = fs.readdirSync(configDir)
-        for (const f of files) {
-            const srcPath = path.join(configDir, f)
-            if (!fs.statSync(srcPath).isFile()) continue
-            const copyExe = isWindows ? f.endsWith('.exe') : !/\.(o|a|obj|d|pdb)$/i.test(f)
-            const copyPdb = isWindows && config === 'Debug' && f.endsWith('.pdb')
-            if (copyExe || copyPdb) {
-                fs.copyFileSync(srcPath, path.join(binDir, f))
+    //
+    // The development tools are collected the same way from wherever their source directory put
+    // their build directory: `camel-parsecheck` moved to `test/tools/parsecheck/` on 2026-11-22, so
+    // its target builds under `build/test/tools/parsecheck/`. The plan that runs it
+    // (`feat/parse`) starts `out/latest/bin/camel-parsecheck`, so a build that left it only in the
+    // build tree made two cases fail with FileNotFoundError.
+    const collectTools = (dir) => {
+        if (!fs.existsSync(dir)) return
+        for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!ent.isDirectory()) continue
+            const configDir = path.join(dir, ent.name, config)
+            if (!fs.existsSync(configDir)) continue
+            const files = fs.readdirSync(configDir)
+            for (const f of files) {
+                const srcPath = path.join(configDir, f)
+                if (!fs.statSync(srcPath).isFile()) continue
+                const copyExe = isWindows ? f.endsWith('.exe') : !/\.(o|a|obj|d|pdb)$/i.test(f)
+                const copyPdb = isWindows && config === 'Debug' && f.endsWith('.pdb')
+                if (copyExe || copyPdb) {
+                    fs.copyFileSync(srcPath, path.join(binDir, f))
+                }
             }
         }
+    }
+    collectTools(toolsBuildDir)
+    for (const devTools of [path.join(BASEDIR, 'build', 'test', 'tools')]) {
+        collectTools(devTools)
     }
 
     const libPath = findBuiltLibcamel(config)
