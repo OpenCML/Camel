@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "split_internal.h"
+#include "node_operator.h"
 #include "refusal_readings.h"
 
 namespace camel::transforms {
@@ -434,11 +435,10 @@ tangentArgumentsOf(const rt::GCGraph &graph, const rt::Program *program, gc_node
 /// has it as the first component of what its own call answered.
 gc_node_ref_t
 pairTangentReadOf(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
-    if (ref >= graph.nodeCount() || graph.node(ref) == nullptr ||
-        graph.node(ref)->kind != rt::GCNodeKind::Accs) {
+    if (nodeOperatorOf(graph, ref) != NodeOperator::Accs) {
         return rt::kInvalidNodeRef;
     }
-    const auto *body = graph.nodeBodyAs<rt::GCAccsBody>(ref);
+    const auto *body = accsBodyOf(graph, ref);
     if (body == nullptr || body->accsKind != rt::GCAccsKind::TupleIndex || body->value != 1) {
         return rt::kInvalidNodeRef;
     }
@@ -491,8 +491,7 @@ std::vector<Residual> residualsOf(
     // forward half alone. A graph whose answer is not a shape `Lift` writes is not a lifted graph,
     // and there is no cut to compute residuals of.
     const gc_node_ref_t exit = ungated(&lifted, lifted.exitNodeRef());
-    if (exit >= lifted.nodeCount() || lifted.node(exit) == nullptr ||
-        lifted.node(exit)->kind != rt::GCNodeKind::Fill) {
+    if (nodeOperatorOf(lifted, exit) != NodeOperator::Fill) {
         return residuals;
     }
     const ExitHalves exitHalves =
@@ -1023,8 +1022,7 @@ std::vector<rt::GCGraph *>
 pairCalleesOnValueChain(const rt::GCGraph &graph, const rt::Program *program) {
     std::vector<rt::GCGraph *> callees;
     const gc_node_ref_t exit = ungated(&graph, graph.exitNodeRef());
-    if (exit >= graph.nodeCount() || graph.node(exit) == nullptr ||
-        graph.node(exit)->kind != rt::GCNodeKind::Fill || graph.funcType() == nullptr) {
+    if (nodeOperatorOf(graph, exit) != NodeOperator::Fill || graph.funcType() == nullptr) {
         return callees;
     }
     const ExitHalves answerHalves =
@@ -1705,8 +1703,8 @@ LoopReach loopBehindExit(const rt::GCGraph *function, gc_node_ref_t root) {
                 readsTheCell || (source != nullptr && source->kind == rt::GCNodeKind::Loop);
         }
         if (readsTheCell) {
-            const auto *body = function->nodeBodyAs<rt::GCAccsBody>(ref);
-            if (node->kind != rt::GCNodeKind::Accs || body == nullptr ||
+            const auto *body = accsBodyOf(*function, ref);
+            if (nodeOperatorOf(*function, ref) != NodeOperator::Accs || body == nullptr ||
                 body->accsKind != rt::GCAccsKind::TupleIndex || body->value > 1) {
                 return LoopReach{};
             }
@@ -1736,8 +1734,8 @@ ExitShape exitShapeOf(const rt::GCGraph *function, gc_node_ref_t exit, LoopCut &
     if (node == nullptr) {
         return ExitShape::NotAPair;
     }
-    if (node->kind == rt::GCNodeKind::Fill) {
-        const auto *fill = function->nodeBodyAs<rt::GCFillBody>(exit);
+    if (nodeOperatorOf(*function, exit) == NodeOperator::Fill) {
+        const auto *fill = fillBodyOf(*function, exit);
         if (fill != nullptr && fill->fillKind == rt::GCFillKind::Tuple &&
             function->withInputsOf(exit).size() == 2) {
             // The pair may be the loop cell itself pair of components, read through a chain above
@@ -2077,7 +2075,8 @@ SplitGraph buildSplitGraph(
                 for (gc_node_ref_t r = 0; r < function->nodeCount(); ++r) {
                     const rt::GCNode *n = function->node(r);
                     if (n == nullptr || function->nodeRegion(r) != region ||
-                        n->kind != rt::GCNodeKind::Fill || n->dataType() != pairType) {
+                        nodeOperatorOf(*function, r) != NodeOperator::Fill ||
+                        n->dataType() != pairType) {
                         continue;
                     }
                     yield = r;

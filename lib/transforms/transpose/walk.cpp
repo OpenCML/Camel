@@ -6,6 +6,7 @@
 #include "jvp.h"
 #include "lift.h"
 #include "node_order.h"
+#include "node_operator.h"
 #include "rule_expand.h"
 #include "split.h"
 #include "transpose/cotangent.h"
@@ -855,8 +856,8 @@ bool buildTransposeMember(
                 complete = false;
                 return rt::kInvalidNodeRef;
             }
-            if (node->kind == rt::GCNodeKind::Accs) {
-                const auto *accs = function->nodeBodyAs<rt::GCAccsBody>(ref);
+            if (nodeOperatorOf(*function, ref) == NodeOperator::Accs) {
+                const auto *accs = accsBodyOf(*function, ref);
                 const auto norm  = function->normInputsOf(ref);
                 if (accs == nullptr || norm.empty()) {
                     complete = false;
@@ -871,8 +872,8 @@ bool buildTransposeMember(
                 forwardOf[ref] = part;
                 return part;
             }
-            if (node->kind == rt::GCNodeKind::Fill) {
-                const auto *fill = function->nodeBodyAs<rt::GCFillBody>(ref);
+            if (nodeOperatorOf(*function, ref) == NodeOperator::Fill) {
+                const auto *fill = fillBodyOf(*function, ref);
                 // The slots of a Fill live after its header, in the payload: the payload is what
                 // has to be written, not the header alone, or the copy has no components.
                 const std::vector<std::byte> fillPayload = rt::makeFillPayload(
@@ -1153,7 +1154,7 @@ bool buildTransposeMember(
                         if (sourced->kind == rt::GCNodeKind::Data) {
                             return constantValue(value);
                         }
-                        if (sourced->kind == rt::GCNodeKind::Accs) {
+                        if (nodeOperatorOf(*function, value) == NodeOperator::Accs) {
                             // A residual read: the forward copy answers it -- a member of the tape
                             // element, or of the tuple a parameter carries -- which is where a
                             // `split` half's per-round values are read from. Nothing else is read
@@ -1491,7 +1492,8 @@ bool buildTransposeMember(
                     }
                     continue;
                 }
-                if (node->kind == rt::GCNodeKind::Cast || node->kind == rt::GCNodeKind::Copy) {
+                if (const NodeOperator family = nodeOperatorOf(*function, ref);
+                    family == NodeOperator::Cast || family == NodeOperator::Copy) {
                     // A conversion passes a cotangent along when both sides can hold one. A cast
                     // *to* an integer (`int(3x)`) ends the chain by its own type: the value it
                     // produces is a step function, and the cotangent of a step function's output is
@@ -1728,8 +1730,13 @@ bool buildTransposeMember(
                 // An arm's nodes are the arm's business; walking them here would run both arms.
                 continue;
             }
-            switch (node->kind) {
-            case rt::GCNodeKind::Port: {
+            // The four families stage 2.3 turns into ordinary operators are cases by
+            // operator; every other kind is a case by its kind (`node_operator.h`). The case is
+            // kept in a variable because a body shared by two labels (`Call`/`Func`) reads which
+            // of its two it is.
+            const NodeCase nodeCase = nodeCaseOf(*function, ref);
+            switch (nodeCase) {
+            case NodeCase::Port: {
                 // The answer is assembled below, one member per parameter the transposition answers
                 // for. A parameter's cotangent is a member of that tuple and never the exit itself
                 // -- so even a function of one parameter answers a one-long tuple, which is the
@@ -1750,9 +1757,9 @@ bool buildTransposeMember(
                 }
                 break;
             }
-            case rt::GCNodeKind::Data:
+            case NodeCase::Data:
                 break;
-            case rt::GCNodeKind::Accs: {
+            case NodeCase::Accs: {
                 // Reading one member of a tuple or of a struct. The cotangent of the aggregate is a
                 // value of the same shape: this place is what arrived here, and the other places
                 // are zero. Filling them is the whole point -- dropping the
@@ -1808,7 +1815,8 @@ bool buildTransposeMember(
                 if (nested != memberCotangents.end()) {
                     const auto *held  = function->node(holder);
                     const auto parts2 = function->withInputsOf(holder);
-                    if (held == nullptr || held->kind != rt::GCNodeKind::Fill ||
+                    if (held == nullptr ||
+                        nodeOperatorOf(*function, holder) != NodeOperator::Fill ||
                         member >= parts2.size()) {
                         refuse(TransposeRefusalCause::Component);
                         os << " node=" << ref << " holder=" << holder << '\n';
@@ -1846,7 +1854,8 @@ bool buildTransposeMember(
                 const camel::runtime::GCNode *holderNode = function->node(holder);
                 const auto holderParts                   = function->withInputsOf(holder);
                 Type *slotSpace                          = nullptr;
-                if (holderNode != nullptr && holderNode->kind == rt::GCNodeKind::Fill &&
+                if (holderNode != nullptr &&
+                    nodeOperatorOf(*function, holder) == NodeOperator::Fill &&
                     member < holderParts.size()) {
                     slotSpace = cotangentTypeOf(holderParts[member]);
                 } else if (
@@ -1869,7 +1878,7 @@ bool buildTransposeMember(
                 hasCotangent[holder] = true;
                 break;
             }
-            case rt::GCNodeKind::Fill: {
+            case NodeCase::Fill: {
                 // The value that holds a tuple hands each slot to the component it belongs to. The
                 // slots nobody read are zeros, not holes: a component that is not asked for pulls
                 // back nothing, and saying so with a zero is the same statement a parameter no
@@ -2028,15 +2037,15 @@ bool buildTransposeMember(
                 }
                 break;
             }
-            case rt::GCNodeKind::Cast:
-            case rt::GCNodeKind::Copy: {
+            case NodeCase::Cast:
+            case NodeCase::Copy: {
                 const auto norm = function->normInputsOf(ref);
                 if (!norm.empty()) {
                     addCotangent(norm.front(), cotangent[ref]);
                 }
                 break;
             }
-            case rt::GCNodeKind::Gate: {
+            case NodeCase::Gate: {
                 // The gate forwards its first input and waits on the rest (xit_gate.h): the
                 // cotangent goes to the value, never to a statement the gate waits on.
                 const gc_node_ref_t forwarded = valueBehindGates(*function, ref);
@@ -2045,7 +2054,7 @@ bool buildTransposeMember(
                 }
                 break;
             }
-            case rt::GCNodeKind::Join: {
+            case NodeCase::Join: {
                 // The cotangent of a join is the cotangent of the chain downstream of it; which arm
                 // produced the value decides which arm's chain receives it. Both arms are built,
                 // each in its own region, and the join picks one -- so the two arms' cotangents are
@@ -2190,7 +2199,7 @@ bool buildTransposeMember(
                 result = tupleOf({join}, {joinType}).first;
                 break;
             }
-            case rt::GCNodeKind::Oper: {
+            case NodeCase::Oper: {
                 // Where this rule's cotangent could go. A value whose type has no tangent space
                 // cannot receive one, and an output with none has no cotangent to hand out -- so a
                 // conversion whose only operand is an integer (`:op/ltod`, `float(n)`) stops here.
@@ -2570,7 +2579,7 @@ bool buildTransposeMember(
                 extentsValue = rt::kInvalidNodeRef;
                 break;
             }
-            case rt::GCNodeKind::Loop: {
+            case NodeCase::Loop: {
                 // A loop is rounds of a region, and the state it carries is the port the loop
                 // hands its own body -- so the k-th round's value has no name in the graph, and
                 // the round count is a value (the loop's first norm input), not a constant. The
@@ -2771,12 +2780,11 @@ bool buildTransposeMember(
                     // would be delivered to after it was passed, and the cotangent would stop
                     // there. A member is a node the fill was built from, so it always comes first.
                     const camel::runtime::GCNode *const resultNode = function->node(oldBodyResult);
-                    // The kind is asked before the payload is read: `nodeBodyAs` answers the bytes
-                    // a node has, and an OPER's bytes read as a FILL are some other number.
+                    // The family is asked before the payload is read, inside `fillBodyOf`: the raw
+                    // bytes of an OPER node read as a FILL are some other number
+                    // (`node_operator.h`).
                     const auto *resultFill =
-                        resultNode != nullptr && resultNode->kind == rt::GCNodeKind::Fill
-                            ? function->nodeBodyAs<rt::GCFillBody>(oldBodyResult)
-                            : nullptr;
+                        resultNode != nullptr ? fillBodyOf(*function, oldBodyResult) : nullptr;
                     const bool builtByAFill =
                         resultFill != nullptr && resultFill->fillKind == rt::GCFillKind::Array;
                     if (builtByAFill) {
@@ -3121,8 +3129,8 @@ bool buildTransposeMember(
                 }
                 break;
             }
-            case rt::GCNodeKind::Call:
-            case rt::GCNodeKind::Func: {
+            case NodeCase::Call:
+            case NodeCase::Func: {
                 // A call reaches its callee one of two ways in this graph model: a CALL node whose
                 // first input is the callee's value, or a FUNC node that is the call itself, with
                 // the arguments as its norm inputs. Both are one fact -- a graph is called here --
@@ -3131,7 +3139,7 @@ bool buildTransposeMember(
                 // function, so two calls of one function call one graph). The call site passes
                 // what the transposed callee takes, its own parameters as they stand -- they are
                 // the values the call already has -- and then the cotangent.
-                const bool isCall = node->kind == rt::GCNodeKind::Call;
+                const bool isCall = nodeCase == NodeCase::Call;
                 const auto inputs = function->normInputsOf(ref);
                 // Where the callee arrives from. A value kept in a `let` is a DATA node naming its
                 // graph and the call takes it as a `with` input, with only the arguments as norm

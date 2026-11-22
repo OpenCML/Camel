@@ -3,6 +3,8 @@
 
 #include "rule_expand.h"
 
+#include "node_operator.h"
+
 #include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
@@ -490,8 +492,8 @@ bool findRuleRightSide(
     // with the value, so the builder hands over the function value itself (`builder_calls.cpp`:
     // "if (hasClosure)"), a Data node over a static function slot. Same graph, no wrapper.
     gc_node_ref_t functionNode = rt::kInvalidNodeRef;
-    if (exit->kind == rt::GCNodeKind::Fill) {
-        const auto *fillBody = rhs->nodeBodyAs<rt::GCFillBody>(exitRef);
+    if (nodeOperatorOf(*rhs, exitRef) == NodeOperator::Fill) {
+        const auto *fillBody = fillBodyOf(*rhs, exitRef);
         if (fillBody == nullptr || fillBody->fillKind != rt::GCFillKind::FunctionClosure) {
             why = std::string("the rule's right side ends in a fill of kind ") +
                   (fillBody == nullptr ? std::string("?")
@@ -733,8 +735,8 @@ gc_node_ref_t expandRuleRightSide(
             why = "the rule's right side has no value to answer with";
             return rt::kInvalidNodeRef;
         }
-        if (exit->kind == rt::GCNodeKind::Fill) {
-            const auto *fillBody = body->nodeBodyAs<rt::GCFillBody>(answerRef);
+        if (nodeOperatorOf(*body, answerRef) == NodeOperator::Fill) {
+            const auto *fillBody = fillBodyOf(*body, answerRef);
             if (fillBody != nullptr && fillBody->fillKind == rt::GCFillKind::Tuple) {
                 const auto components = body->withInputsOf(answerRef);
                 if (position >= components.size()) {
@@ -1123,8 +1125,11 @@ gc_node_ref_t expandRuleRightSide(
             const bool isFunctionValue =
                 node->dataType() != nullptr &&
                 node->dataType()->code() == camel::core::type::TypeCode::Function;
-            switch (node->kind) {
-            case rt::GCNodeKind::Data: {
+            // The four families stage 2.3 turns into ordinary operators are cases by
+            // operator; every other kind is a case by its kind (`node_operator.h`).
+            const NodeCase nodeCase = nodeCaseOf(*body, ref);
+            switch (nodeCase) {
+            case NodeCase::Data: {
                 // A constant of the body: the same value, in this graph. A function value is not a
                 // constant to copy -- it is the closure this expansion exists to avoid.
                 if (isFunctionValue) {
@@ -1143,7 +1148,7 @@ gc_node_ref_t expandRuleRightSide(
                     rt::kGCNodeFlagConstant);
                 break;
             }
-            case rt::GCNodeKind::Oper: {
+            case NodeCase::Oper: {
                 const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref);
                 if (oper == nullptr) {
                     why = "the rule's right side has an operator node with no operator";
@@ -1160,8 +1165,8 @@ gc_node_ref_t expandRuleRightSide(
                 copied[ref] = made;
                 break;
             }
-            case rt::GCNodeKind::Cast:
-            case rt::GCNodeKind::Copy: {
+            case NodeCase::Cast:
+            case NodeCase::Copy: {
                 // A cast is how the builder states a value of the same meaning in another written
                 // type -- the mixed-type instance of a law uses one exactly where 5.4 says a
                 // rank-zero array is the element (`float[..]` reduced to `float`). The rule's right
@@ -1171,14 +1176,14 @@ gc_node_ref_t expandRuleRightSide(
                     why = "a cast on the rule's right side does not take one value";
                     return rt::kInvalidNodeRef;
                 }
-                const gc_node_ref_t made = node->kind == rt::GCNodeKind::Cast
+                const gc_node_ref_t made = nodeCase == NodeCase::Cast
                                                ? draft.addCastNode(node->dataType())
                                                : draft.addCopyNode(node->dataType());
                 draft.setNormInputs(made, inputs);
                 copied[ref] = made;
                 break;
             }
-            case rt::GCNodeKind::Func: {
+            case NodeCase::Func: {
                 // A call to a named function: what the rule's right side is for, and what stays a
                 // call.
                 if (isFunctionValue) {
@@ -1241,7 +1246,7 @@ gc_node_ref_t expandRuleRightSide(
                 copied[ref] = made;
                 break;
             }
-            case rt::GCNodeKind::Gate: {
+            case NodeCase::Gate: {
                 const gc_node_ref_t made = draft.addGateNode(
                     node->dataType(),
                     draft.allocateRuntimeSlot(node->dataType()));
