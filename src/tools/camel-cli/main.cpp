@@ -486,10 +486,12 @@ int runCommand(int argc, char *argv[]) {
             }
             if (Inspect::dumpTies) {
                 // The tie groups the canonical numbering met (design principles 9, "the graph
-                // interface does not see the spelling"). A part of a group too wide to enumerate
-                // is a known limitation of the numbering, and this is where it is reported: the
-                // numbering does not arrange such a part in the order the nodes were created in
-                // without saying so.
+                // interface does not see the spelling"). A part too wide to enumerate is ordered by
+                // the graph's own structure -- the node's fragment, then the shape it has among the
+                // nodes it reads and the nodes that read it -- and this is where a part those cuts
+                // leave equal is reported: the numbering has no criterion of the graph left for it,
+                // and it places that part in the order the nodes were created in rather than
+                // passing that order off as a compared minimum.
                 if (ctx->runtimeProgram()->root()) {
                     const camel::runtime::CanonicalProgram numbering(
                         *ctx->runtimeProgram(),

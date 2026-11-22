@@ -45,6 +45,11 @@ const camel::core::type::Type *staticTypeOf(const GCGraph &graph, const GCNode &
 /// a tie before it settles for the structural order its keys and fragments already give.
 constexpr size_t kMaxTieCandidates = 4096;
 
+/// How many times a part's shape is refined by its neighbours' shapes before the walk stops: a part
+/// the shape still leaves equal after that is one the graph does not separate as far as this
+/// classification can see, and it is reported instead of being arranged silently.
+constexpr size_t kShapeRounds = 16;
+
 } // namespace
 
 /// The canonical walk over one graph. It owns the numbering it produces and the temporary state a
@@ -435,8 +440,9 @@ class CanonicalWalk {
     /// the numbers their ports carry and the type of the value they make -- is the only part whose
     /// order the table has to decide, and that part is enumerated when it is no wider than
     /// kMaxTieWidth. A wider part is not enumerated; it is cut by what each node writes on its own
-    /// (its own fragment, and the numbers of the nodes that read it), and a part that is still
-    /// equal there is reported through `ties` instead of being arranged in the order it came in.
+    /// (its own fragment, and the numbers of the nodes that read it) and then by the shape it has in
+    /// the graph, and a part both leave equal is reported through `ties` instead of being arranged
+    /// in the order it came in.
     std::vector<gc_node_ref_t> smallestTable(const std::vector<gc_node_ref_t> &tied) {
         if (tied.size() <= 1) {
             return tied;
@@ -478,8 +484,10 @@ class CanonicalWalk {
                 sorted.begin() + static_cast<std::ptrdiff_t>(begin),
                 sorted.begin() + static_cast<std::ptrdiff_t>(end));
             tie.equalKeyWidth = std::max(tie.equalKeyWidth, run.size());
-            const bool enumerated = arrangeEqualKeyRun(run);
-            enumeratedAll        = enumeratedAll && enumerated;
+            size_t unresolved = 0;
+            const bool enumerated = arrangeEqualKeyRun(run, unresolved);
+            tie.unresolvedWidth   = std::max(tie.unresolvedWidth, unresolved);
+            enumeratedAll         = enumeratedAll && enumerated;
             result.insert(result.end(), run.begin(), run.end());
             begin = end;
         }
@@ -491,9 +499,11 @@ class CanonicalWalk {
     }
 
     /// Order one run of nodes whose keys are equal: by every arrangement when the run is narrow
-    /// enough, by the nodes' own fragments when it is not. Returns whether every arrangement was
-    /// compared.
-    bool arrangeEqualKeyRun(std::vector<gc_node_ref_t> &run) {
+    /// enough, by the graph's own structure when it is not. Returns whether every arrangement was
+    /// compared; `unresolved` is the width of the widest part the graph did not separate, which is
+    /// the part `ties` reports.
+    bool arrangeEqualKeyRun(std::vector<gc_node_ref_t> &run, size_t &unresolved) {
+        unresolved = 0;
         if (run.size() <= 1) {
             return true;
         }
@@ -501,26 +511,15 @@ class CanonicalWalk {
         // arrangements must not enumerate the inner ones again, which would multiply the two
         // widths' factorials.
         if (enumerating_ || run.size() > kMaxTieWidth) {
-            std::vector<std::string> fragments;
-            fragments.reserve(run.size());
-            for (gc_node_ref_t ref : run) {
-                fragments.push_back(fragmentKey(ref));
-            }
-            std::vector<size_t> order(run.size());
-            for (size_t i = 0; i < order.size(); ++i) {
-                order[i] = i;
-            }
-            std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
-                return fragments[a] < fragments[b];
-            });
-            std::vector<gc_node_ref_t> sorted;
-            sorted.reserve(run.size());
-            for (size_t i : order) {
-                sorted.push_back(run[i]);
-            }
-            run = std::move(sorted);
+            cutByFragmentAndShape(run, unresolved);
             return false;
         }
+        enumerateSmallestTable(run);
+        return true;
+    }
+
+    /// Order `run` by the smallest numbering table among its arrangements.
+    void enumerateSmallestTable(std::vector<gc_node_ref_t> &run) {
         std::vector<gc_node_ref_t> candidate = run;
         std::sort(candidate.begin(), candidate.end());
         std::vector<gc_node_ref_t> best = candidate;
@@ -537,7 +536,76 @@ class CanonicalWalk {
             }
         }
         run = std::move(best);
-        return true;
+    }
+
+    /// Order a run the node key left equal by the graph's structure, and count what the structure
+    /// leaves equal in `unresolved`.
+    ///
+    /// Two cuts, in the order of how much of the numbering they read. The fragment is the node's own
+    /// table plus the numbers of the readers already numbered: it reads the decisions this walk has
+    /// taken. The shape is the class `shapeLabels` gives the node, which reads no number at all. Both
+    /// are functions of the graph, so the order they leave is the same for two writings of one
+    /// graph, which is the property the numbering must have (design principles 9.5) and the one a
+    /// stable sort on the nodes' arrival used to break. What the two cuts leave equal is a part the
+    /// graph does not separate, and it is written back into `unresolved`: the walk has no criterion
+    /// left for it, so it says so rather than presenting the order it met the nodes in as the
+    /// graph's.
+    void cutByFragmentAndShape(std::vector<gc_node_ref_t> &run, size_t &unresolved) {
+        std::vector<std::pair<std::string, gc_node_ref_t>> keyed;
+        keyed.reserve(run.size());
+        for (gc_node_ref_t ref : run) {
+            keyed.emplace_back(fragmentKey(ref), ref);
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) {
+            return a.first < b.first;
+        });
+        for (size_t i = 0; i < run.size(); ++i) {
+            run[i] = keyed[i].second;
+        }
+        size_t begin = 0;
+        while (begin < run.size()) {
+            size_t end = begin + 1;
+            while (end < run.size() && keyed[end].first == keyed[begin].first) {
+                ++end;
+            }
+            if (end - begin > 1) {
+                cutPartByShape(run, begin, end, unresolved);
+            }
+            begin = end;
+        }
+    }
+
+    /// Cut `run[begin, end)` -- a part one fragment left equal -- by the shape its nodes have in the
+    /// graph. What is still equal is left to `unresolved`.
+    void cutPartByShape(std::vector<gc_node_ref_t> &run, size_t begin, size_t end, size_t &unresolved) {
+        const std::vector<std::string> &shapes = shapeLabels();
+        std::vector<std::pair<std::string, gc_node_ref_t>> keyed;
+        keyed.reserve(end - begin);
+        for (size_t i = begin; i < end; ++i) {
+            keyed.emplace_back(shapes[run[i]], run[i]);
+        }
+        std::stable_sort(keyed.begin(), keyed.end(), [](const auto &a, const auto &b) {
+            return a.first < b.first;
+        });
+        for (size_t i = 0; i < keyed.size(); ++i) {
+            run[begin + i] = keyed[i].second;
+        }
+        size_t at = begin;
+        while (at < end) {
+            size_t stop = at + 1;
+            while (stop < end && keyed[stop - begin].first == keyed[at - begin].first) {
+                ++stop;
+            }
+            if (stop - at > 1) {
+                // The part is not enumerated even when it is narrow: the tie it belongs to was too
+                // wide to enumerate, and comparing the arrangements of a part of it would rebuild
+                // the tables of everything below those nodes once per arrangement -- the cost the
+                // limit exists to refuse. Two cuts that leave it equal mean the walk has no
+                // criterion of the graph left for it, and it says so.
+                unresolved = std::max(unresolved, stop - at);
+            }
+            at = stop;
+        }
     }
 
     /// The table one arrangement of a tie writes: the nodes it emits, in numbering order, each
@@ -605,7 +673,12 @@ class CanonicalWalk {
     /// the type of the value it makes, the numbers its ports carry, and -- for a binder -- the
     /// numbers of the ports of the graph it binds, paired with the values it passes to them.
     /// Nothing the source spelled: not a name, not a position, not a NodeId.
-    std::string nodeKey(gc_node_ref_t ref) const {
+    ///
+    /// `withNumbers` false leaves every number out, which is what the shape a tie is cut by needs: a
+    /// number is a decision this walk has already taken, and a criterion that reads one is a
+    /// criterion about the numbering rather than about the graph. What remains is the node's kind,
+    /// what it carries and the type of its value; the edges are added by `shapeLabels`.
+    std::string nodeKey(gc_node_ref_t ref, bool withNumbers = true) const {
         const GCNode *node = graph_.node(ref);
         std::string key;
         key += static_cast<char>('A' + static_cast<int>(node->kind));
@@ -635,7 +708,7 @@ class CanonicalWalk {
         key += typeText(ref);
         const auto append = [&](gc_node_ref_t input) {
             key += ',';
-            key += input < places_.size() && places_[input] != kNoCanonicalNumber
+            key += withNumbers && input < places_.size() && places_[input] != kNoCanonicalNumber
                        ? std::to_string(places_[input])
                        : std::string("-");
         };
@@ -646,7 +719,10 @@ class CanonicalWalk {
             key += '|';
             append(input);
         }
-        const GCGraph *callee = boundGraphOf(ref);
+        // The binding is the pair (this value, that port of the bound graph), and the port's number
+        // is the bound graph's numbering: a key that leaves numbers out leaves the pair out too, and
+        // the binding is still in the shape, as the with inputs the closure value carries.
+        const GCGraph *callee = withNumbers ? boundGraphOf(ref) : nullptr;
         if (callee != nullptr) {
             const std::vector<uint32_t> *numbers = numbersOf(*callee);
             const std::span<const gc_node_ref_t> withs = graph_.withInputsOf(ref);
@@ -680,6 +756,171 @@ class CanonicalWalk {
             }
         }
         return key;
+    }
+
+    /// The class of every live node under a classification the graph alone decides: a node's key
+    /// with every number left out, refined round after round by the classes of the nodes it reads
+    /// and the nodes that read it, until no class splits. Two nodes of one class are the same thing
+    /// for everything this walk can ask the graph without numbering it, so a tie cut by this class
+    /// is cut by the graph and not by the order the nodes were created in.
+    ///
+    /// The refinement is what tells apart two nodes whose own keys agree but whose readers do not,
+    /// which is the case a tie wider than the enumeration limit most often holds: eight cells made
+    /// from one constant have one key between them, and what differs is what uses each of them. A
+    /// hash of a node's subtree cannot answer this -- two nodes with equal subtrees need not be
+    /// interchangeable (canonical.h) -- because the difference is downstream of them.
+    ///
+    /// Every class is a rank among the distinct descriptions of that round, so a label stays short
+    /// and two labels are equal exactly when the two nodes are in one class; the rank is read off
+    /// the sorted descriptions, never off the order the nodes came in.
+    const std::vector<std::string> &shapeLabels() {
+        if (shapeLabelsReady_) {
+            return shapeLabels_;
+        }
+        shapeLabels_.assign(places_.size(), std::string());
+        for (gc_node_ref_t ref : refs_) {
+            shapeLabels_[ref] = nodeKey(ref, false);
+        }
+        size_t classes = 0;
+        for (size_t round = 0; round < kShapeRounds; ++round) {
+            std::vector<std::string> described;
+            described.reserve(refs_.size());
+            for (gc_node_ref_t ref : refs_) {
+                std::string text = shapeLabels_[ref];
+                text += '<';
+                text += edgeText(ref, false);
+                text += '>';
+                text += edgeText(ref, true);
+                described.push_back(std::move(text));
+            }
+            const size_t refined = rankClasses(described);
+            // One class per node is as fine as this classification can get, and a round that splits
+            // nothing has reached its fixed point: what is still equal is what the graph, read this
+            // way, does not separate.
+            if (refined == classes || refined == refs_.size()) {
+                break;
+            }
+            classes = refined;
+        }
+        shapeLabelsReady_ = true;
+        return shapeLabels_;
+    }
+
+    /// The classes of `described` as text, one per `refs_` entry, and how many distinct ones there
+    /// are. A class is the rank of its description among the sorted distinct descriptions, so that
+    /// two nodes are in one class exactly when their descriptions are equal.
+    size_t rankClasses(std::vector<std::string> described) {
+        std::vector<std::string> distinct = described;
+        std::sort(distinct.begin(), distinct.end());
+        distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
+        for (size_t i = 0; i < refs_.size(); ++i) {
+            const size_t rank = static_cast<size_t>(
+                std::lower_bound(distinct.begin(), distinct.end(), described[i]) -
+                distinct.begin());
+            shapeLabels_[refs_[i]] = 'c' + std::to_string(rank);
+        }
+        return distinct.size();
+    }
+
+    /// The edges at one end of a node, as text: which port of which kind, and the class of the node
+    /// at the other end. Sorting them makes the text a description of the neighbourhood and not of
+    /// the order the graph stores its edges in.
+    std::string edgeText(gc_node_ref_t ref, bool users) const {
+        std::vector<std::string> edges;
+        const auto note = [&](char kind, size_t port, gc_node_ref_t other) {
+            edges.push_back(
+                std::string(1, kind) + std::to_string(port) + ':' +
+                (other < shapeLabels_.size() ? shapeLabels_[other] : std::string("-")));
+        };
+        size_t port = 0;
+        if (!users) {
+            for (gc_node_ref_t input : graph_.normInputsOf(ref)) {
+                note('n', port++, input);
+            }
+            port = 0;
+            for (gc_node_ref_t input : graph_.withInputsOf(ref)) {
+                note('w', port++, input);
+            }
+            port = 0;
+            for (gc_node_ref_t input : graph_.ctrlInputsOf(ref)) {
+                note('c', port++, input);
+            }
+            port = 0;
+            for (const GCGraphSyncEdge &edge : graph_.syncPredsOf(ref)) {
+                note('s', port++, edge.pred);
+            }
+            port = 0;
+            for (const GCGraphOrderEdge &edge : graph_.orderPredsOf(ref)) {
+                note('o', port++, edge.pred);
+            }
+        } else {
+            for (gc_node_ref_t user : graph_.normUsersOf(ref)) {
+                note('N', port++, user);
+            }
+            // A with user may be a binder, and a binder's with inputs are the binding itself: this
+            // value goes to that port of the graph the binder names. The port belongs to the graph
+            // that is numbered before this one, so its number is a fact about that graph and not a
+            // decision of this walk -- and it is what tells apart two values the nodes made
+            // identically and passed to two ports the body uses differently. The slot the value
+            // sits on is the order the source captured it in, which is spelling, so it is left out.
+            for (gc_node_ref_t user : graph_.withUsersOf(ref)) {
+                const std::string bound = bindingText(user, ref);
+                if (bound.empty()) {
+                    note('W', port++, user);
+                    continue;
+                }
+                edges.push_back(
+                    "B" + bound + ':' +
+                    (user < shapeLabels_.size() ? shapeLabels_[user] : std::string("-")));
+            }
+            port = 0;
+            for (gc_node_ref_t user : graph_.ctrlUsersOf(ref)) {
+                note('C', port++, user);
+            }
+            port = 0;
+            for (gc_node_ref_t user : graph_.syncUsersOf(ref)) {
+                note('S', port++, user);
+            }
+            port = 0;
+            for (gc_node_ref_t user : graph_.orderUsersOf(ref)) {
+                note('O', port++, user);
+            }
+        }
+        std::sort(edges.begin(), edges.end());
+        std::string text;
+        for (const std::string &edge : edges) {
+            text += edge;
+            text += ';';
+        }
+        return text;
+    }
+
+    /// The number of the port of the bound graph that this value is passed to, as text, or empty
+    /// when `user` binds no graph or does not take this value as one of its with inputs. The number
+    /// is the bound graph's own canonical number for that port, taken before this graph is numbered
+    /// (CanonicalProgram numbers the graphs a graph binds first), so it is a fact about that graph.
+    std::string bindingText(gc_node_ref_t user, gc_node_ref_t ref) const {
+        const GCGraph *callee = boundGraphOf(user);
+        const GCNode *record  = graph_.node(user);
+        if (callee == nullptr || record == nullptr) {
+            return {};
+        }
+        const std::vector<uint32_t> *numbers = numbersOf(*callee);
+        if (numbers == nullptr) {
+            return {};
+        }
+        const std::span<const gc_node_ref_t> ports =
+            record->kind == GCNodeKind::Func ? callee->withPorts() : callee->closureNodes();
+        const std::span<const gc_node_ref_t> withs = graph_.withInputsOf(user);
+        for (size_t i = 0; i < withs.size(); ++i) {
+            if (withs[i] != ref || i >= ports.size() || i >= numbers->size()) {
+                continue;
+            }
+            const uint32_t number = (*numbers)[ports[i]];
+            return number == kNoCanonicalNumber ? std::string()
+                                                : std::to_string(number);
+        }
+        return {};
     }
 
     /// The graph a node binds: the graph a FUNC calls, and the graph the function value of a
@@ -791,6 +1032,11 @@ class CanonicalWalk {
     std::vector<uint32_t> regions_;
     mutable std::vector<std::string> typeText_;
     mutable std::vector<bool> typeTextDone_;
+    // The class of every node under the classification `shapeLabels` refines: built once per walk,
+    // when a tie first needs it, and never from a number, so a comparison inside `tableOf` does not
+    // change it.
+    std::vector<std::string> shapeLabels_;
+    bool shapeLabelsReady_ = false;
 };
 
 // ---- the program -------------------------------------------------------------------------------
@@ -872,9 +1118,10 @@ const std::vector<uint32_t> &CanonicalProgram::numbers(const GCGraph &graph) con
 }
 
 std::string CanonicalProgram::tiesText() const {
-    size_t wide    = 0; // groups wider than one node
-    size_t widest  = 0;
-    size_t pending = 0; // groups an equal-key part of which was too wide to enumerate
+    size_t wide       = 0; // groups wider than one node
+    size_t widest     = 0;
+    size_t pending    = 0; // groups an equal-key part of which was too wide to enumerate
+    size_t unresolved = 0; // groups holding a part no criterion of the graph separated
     std::ostringstream os;
     for (const CanonicalTie &tie : ties_) {
         if (tie.width <= 1) {
@@ -885,8 +1132,15 @@ std::string CanonicalProgram::tiesText() const {
         if (!tie.enumerated) {
             ++pending;
         }
+        if (tie.unresolvedWidth > 1) {
+            ++unresolved;
+        }
         os << "tie width " << tie.width << " (equal keys " << tie.equalKeyWidth << ", "
-           << (tie.enumerated ? "enumerated" : "not enumerated") << ") in graph "
+           << (tie.enumerated ? "enumerated" : "not enumerated");
+        if (tie.unresolvedWidth > 1) {
+            os << ", unresolved " << tie.unresolvedWidth;
+        }
+        os << ") in graph "
            << (tie.graph != nullptr ? std::string(tie.graph->name()) : std::string("<none>"))
            << '\n';
     }
@@ -894,10 +1148,17 @@ std::string CanonicalProgram::tiesText() const {
     summary << "canonical ties: " << wide << " group(s) wider than one node, widest " << widest
             << ", over the limit " << pending << " (kMaxTieWidth " << kMaxTieWidth << ")\n";
     if (pending != 0) {
-        summary << "  an equal-key part wider than the limit is cut by each node's own fragment and "
-                   "by the numbers of the nodes that read it, and what stays equal is a known "
-                   "limitation: it is not enumerated, so the numbers of those nodes are their "
-                   "settled structural order and not a compared minimum\n";
+        summary << "  an equal-key part wider than the limit is not enumerated: it is cut by each "
+                   "node's own fragment, then by the shape the node has in the graph (its class "
+                   "among the nodes it reads and the nodes that read it, and the port of the graph "
+                   "it binds that a captured value is passed to)\n";
+    }
+    if (unresolved != 0) {
+        summary << "  " << unresolved << " group(s) hold a part no criterion of the graph "
+                   "separated, wider than the enumeration limit allows: those nodes are not a "
+                   "compared minimum either, and they are placed in the order the walk met them -- "
+                   "the order the graph was built in, which the numbering is not supposed to read "
+                   "(design principles 9.5)\n";
     }
     return summary.str() + os.str();
 }
