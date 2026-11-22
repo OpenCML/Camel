@@ -39,6 +39,7 @@
 #include "camel/ops/operator_record.h"
 
 #include <bit>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -120,9 +121,8 @@ void declare(
     std::optional<std::vector<FaultSpec>> faults) {
     const std::string uri = ":op/" + name + "_" + t.suffix;
     // An empty table is the statement "this operator can raise nothing" (the comment on
-    // declareBuiltinOperatorFaults says why that is written at all), and the record's `panic`
-    // states the same item: both are written here so the two cannot be stated apart.
-    const bool raisesNothing = faults.has_value() && faults->empty();
+    // declareBuiltinOperatorFaults says why that is written at all). The record's `panic` states
+    // the same item, from the list that names every such operator once.
     OperatorTable::instance().declareSemantics(
         uri,
         OperatorSemantics{
@@ -131,9 +131,6 @@ void declare(
             .binary  = binaryLaws(name, t),
             .faults  = std::move(faults),
         });
-    if (raisesNothing) {
-        stateNoFaultOperator(uri);
-    }
 }
 
 /// No rounding: integer arithmetic and float sign and comparison operations. A float one can
@@ -250,11 +247,23 @@ void declareElementCalls() {
     }
 }
 
+/// One operator the built-in module declares never to fault, as stated at the C++ entrance: the
+/// URI it answers on and the record's `panic` answer for it. The URI is the whole one (the empty
+/// prefix is the core), and both fields are literals, so a reader of the source can enumerate the
+/// statements: `scripts/check-operator-panic.mjs` compares this entrance with each operator's
+/// implementation and reads literals, not the values expressions are computed to.
+struct CppPanicStatement {
+    std::string_view uri;
+    bool panic; // false: a call of it raises nothing
+};
+
 /**
  * The fault table of the built-in operators (docs/design/op-semantics/README.cn.md 4.2): an operator
  * that can raise nothing declares an empty table, and that is the one place "never faults" is
  * written. declare above states the faults of the numeric operators; this states the empty
- * table of the operators that have no numeric semantics of their own.
+ * table of the operators that have no numeric semantics of their own, and the record's `panic`
+ * for the same operators -- the one item at the two entrances design principles 3.9 gives it,
+ * written from one list so that neither entrance can say one thing where the other says another.
  */
 void declareBuiltinOperatorFaults() {
     auto &table = OperatorTable::instance();
@@ -262,109 +271,148 @@ void declareBuiltinOperatorFaults() {
     // a declaration says "this can raise nothing", and it is the one place that is said --
     // design principles 3.3 leaves "may fault" undeclared-means-yes, and design principles 3.4
     // reads the answer when it decides whether a computation may be scheduled freely. The
-    // passes do act on it: `src/runtime/graph.cpp#nodeMayFault` reads the trait derived from
+    // passes do act on it: `src/kernel/runtime/graph.cpp#nodeMayFault` reads the trait derived from
     // this table, and `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or
     // recompute a node -- a computation left out of this table is a running the program
     // observes, so `std::opt` keeps it alive with `:op/keep` when a removal takes its last
-    // read (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Integer arithmetic wraps,
+    // read (`src/stdlib/std/cxx/opt/generic/rewrite.cpp#isObservedRun`). Integer arithmetic wraps,
     // floating-point arithmetic rounds and a comparison only compares; the predicates over a
     // collection walk one and build no value; `pow` of the scalar and complex types is the
     // library call of the same name, which returns inf or NaN outside its domain. Each entry
     // is one operator whose implementation is read against this table.
-    static constexpr std::string_view kNoFaultPath[] = {
-        "op/add_i",
-        "op/add_l",
-        "op/add_f",
-        "op/add_d",
-        "op/sub_i",
-        "op/sub_l",
-        "op/sub_f",
-        "op/sub_d",
-        "op/lt_i",
-        "op/lt_l",
-        "op/lt_f",
-        "op/lt_d",
-        "op/le_i",
-        "op/le_l",
-        "op/le_f",
-        "op/le_d",
-        "op/gt_i",
-        "op/gt_l",
-        "op/gt_f",
-        "op/gt_d",
-        "op/ge_i",
-        "op/ge_l",
-        "op/ge_f",
-        "op/ge_d",
-        "op/and",
-        "op/or",
-        "op/not",
-        "op/mul_i",
-        "op/neg_i",
-        "op/mul_l",
-        "op/neg_l",
-        "op/mul_f",
-        "op/neg_f",
-        "op/mul_d",
-        "op/neg_d",
-        "op/eq_i",
-        "op/eq_l",
-        "op/eq_f",
-        "op/eq_d",
-        "op/eq_b",
-        "op/eq_s",
-        "op/eq_c",
-        "op/eq_z",
-        "op/lt_s",
-        "op/le_s",
-        "op/gt_s",
-        "op/ge_s",
-        "op/add_bf",
-        "op/sub_bf",
-        "op/mul_bf",
-        "op/neg_bf",
-        "op/pow_bf",
-        "op/lt_bf",
-        "op/le_bf",
-        "op/gt_bf",
-        "op/ge_bf",
-        "op/add_f6",
-        "op/sub_f6",
-        "op/mul_f6",
-        "op/neg_f6",
-        "op/pow_f6",
-        "op/lt_f6",
-        "op/le_f6",
-        "op/gt_f6",
-        "op/ge_f6",
-        "op/pow_i",
-        "op/pow_l",
-        "op/pow_f",
-        "op/pow_d",
-        "op/pow_c",
-        "op/pow_c_i",
-        "op/pow_c_l",
-        "op/pow_z",
-        "op/pow_z_i",
-        "op/pow_z_l",
-        "struct/len_arr",
-        "struct/len_str",
-        "coll/len",
-        "coll/has",
-        "coll/set_contains",
-        "coll/eq",
-        "coll/set_is_subset",
-        "struct/contains_arr",
-        "struct/contains_str",
-        "struct/len_bytes",
-        "op/eq_bytes",
+    //
+    // The same list is the record's `panic`: each entry carries its whole URI and its answer as
+    // literals, because that entrance states one item per operator and a check reads it from the
+    // source. A registration written in a loop over bare names is a statement no check can see.
+    static constexpr CppPanicStatement kCppPanicStatements[] = {
+        // `+ - *` and negation, in every numeric type: the four scalar suffixes, the two complex
+        // ones (each part rounded once in its own type) and the two boxed ones.
+        {":op/add_i", false},
+        {":op/add_l", false},
+        {":op/add_f", false},
+        {":op/add_d", false},
+        {":op/add_c", false},
+        {":op/add_z", false},
+        {":op/add_bf", false},
+        {":op/add_f6", false},
+        {":op/sub_i", false},
+        {":op/sub_l", false},
+        {":op/sub_f", false},
+        {":op/sub_d", false},
+        {":op/sub_c", false},
+        {":op/sub_z", false},
+        {":op/sub_bf", false},
+        {":op/sub_f6", false},
+        {":op/mul_i", false},
+        {":op/mul_l", false},
+        {":op/mul_f", false},
+        {":op/mul_d", false},
+        {":op/mul_c", false},
+        {":op/mul_z", false},
+        {":op/mul_bf", false},
+        {":op/mul_f6", false},
+        {":op/neg_i", false},
+        {":op/neg_l", false},
+        {":op/neg_f", false},
+        {":op/neg_d", false},
+        {":op/neg_c", false},
+        {":op/neg_z", false},
+        {":op/neg_bf", false},
+        {":op/neg_f6", false},
+        // The comparisons: IEEE comparison on the float types, ordinary comparison on the rest,
+        // and content comparison on strings.
+        {":op/lt_i", false},
+        {":op/lt_l", false},
+        {":op/lt_f", false},
+        {":op/lt_d", false},
+        {":op/lt_s", false},
+        {":op/lt_bf", false},
+        {":op/lt_f6", false},
+        {":op/le_i", false},
+        {":op/le_l", false},
+        {":op/le_f", false},
+        {":op/le_d", false},
+        {":op/le_s", false},
+        {":op/le_bf", false},
+        {":op/le_f6", false},
+        {":op/gt_i", false},
+        {":op/gt_l", false},
+        {":op/gt_f", false},
+        {":op/gt_d", false},
+        {":op/gt_s", false},
+        {":op/gt_bf", false},
+        {":op/gt_f6", false},
+        {":op/ge_i", false},
+        {":op/ge_l", false},
+        {":op/ge_f", false},
+        {":op/ge_d", false},
+        {":op/ge_s", false},
+        {":op/ge_bf", false},
+        {":op/ge_f6", false},
+        // Equality: numbers by value, strings and bytes by content, complex numbers part by
+        // part.
+        {":op/eq_i", false},
+        {":op/eq_l", false},
+        {":op/eq_f", false},
+        {":op/eq_d", false},
+        {":op/eq_b", false},
+        {":op/eq_s", false},
+        {":op/eq_c", false},
+        {":op/eq_z", false},
+        // `pow` of the scalar and complex types is the library call of the same name, which
+        // returns inf or NaN outside its domain.
+        {":op/pow_i", false},
+        {":op/pow_l", false},
+        {":op/pow_f", false},
+        {":op/pow_d", false},
+        {":op/pow_c", false},
+        {":op/pow_c_i", false},
+        {":op/pow_c_l", false},
+        {":op/pow_z", false},
+        {":op/pow_z_i", false},
+        {":op/pow_z_l", false},
+        {":op/pow_bf", false},
+        {":op/pow_f6", false},
+        // Logic, and the two operators whose answer is a property of a value rather than a
+        // computation over one.
+        {":op/and", false},
+        {":op/or", false},
+        {":op/not", false},
+        {":op/extent_of", false},
+        {":op/copy", false},
+        // The predicates and measures over a collection walk one and build no value.
+        {":struct/len_arr", false},
+        {":struct/len_str", false},
+        {":struct/len_bytes", false},
+        {":struct/contains_arr", false},
+        {":struct/contains_str", false},
+        {":coll/len", false},
+        {":coll/has", false},
+        {":coll/set_contains", false},
+        {":coll/eq", false},
+        {":coll/set_is_subset", false},
+        {":op/eq_bytes", false},
     };
-    for (const std::string_view name : kNoFaultPath) {
-        const std::string uri = ":" + std::string(name);
-        table.declareFaults(uri, {});
-        // The same statement in the record (`panic`), so an operator that raises nothing is never
-        // left reading "nobody said, so a call may fail" there.
-        stateNoFaultOperator(uri);
+    for (const CppPanicStatement &statement : kCppPanicStatements) {
+        // The table the passes read and the record's `panic`: the same answer, written once.
+        // For the operators `declare` above already gave an empty table (the two complex types'
+        // `+ - *` and negation) this states the same empty table again, not a second one.
+        table.declareFaults(statement.uri, {});
+        camel::ops::CppRegistration registration(statement.uri, statement.panic);
+        camel::ops::Registry::instance().registerOperator(registration);
+        // Read both stores back, per operator. One item in two places is one statement only while
+        // the two agree, and a load that left them disagreeing would be read two different ways by
+        // two readers of one graph; this refuses the load and names the operator instead.
+        const std::optional<camel::core::OperatorTraits> traits = table.find(statement.uri);
+        const auto id     = table.lookup(statement.uri);
+        const camel::ops::Record *record = id ? table.recordOf(*id) : nullptr;
+        const bool tableAnswer           = traits.has_value() ? traits->mayFault : true;
+        const bool recordAnswer          = record == nullptr ? true : record->mayFault();
+        if (tableAnswer != recordAnswer) {
+            throw std::invalid_argument(
+                "The operator '" + std::string(statement.uri) +
+                "' states `panic` one way at the record and the other in its fault table.");
+        }
     }
     // `:op/tag_unwrap` is the one operator of the tagged forms that faults: a null where the tag has
     // already been read (`src/builtin/operators/tagged.cpp`). The fault is of no operand's value --
@@ -373,16 +421,6 @@ void declareBuiltinOperatorFaults() {
 }
 
 } // namespace
-
-void stateNoFaultOperator(std::string_view uri) {
-    // `CppRegistration`'s second argument is `panic`, and it has no default: a C++ operator states
-    // one of the two answers or it does not compile (camel/ops/operator_record.h). Registering an
-    // operator with that one item stated leaves every other item of its record to whoever states
-    // it next; nothing here is a second copy of the fault table, it is the same statement in the
-    // record the passes read.
-    camel::ops::CppRegistration registration(uri, false);
-    camel::ops::Registry::instance().registerOperator(registration);
-}
 
 void declareBuiltinOperatorSemantics() {
     const std::vector<FaultSpec> none;
