@@ -2528,11 +2528,11 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // The body keeps the `on nodes` tags of the generic declaration: they are the same for
         // every instance, and they were resolved once (tagFactsOf remembers by node).
         const TagFacts tags = tagFactsOf(tmpl->func, camel::core::tag::Func);
-        if (camel::core::tag::declaresMacro(tags.declaration)) {
-            graph->edit().setFlags(
-                static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
-        }
         buildFuncBody(tmpl->func, graph, funcType, instanceName, tags);
+        // The instance carries the generic declaration's facts on its exit node, the way a named
+        // function's graph does: `#macro` is one of them (design principles 8), read back by
+        // tag::declaresMacro rather than written as a flag.
+        camel::core::tag::markMacro(graph->edit(), tags.declaration);
         leaveScope();
     } catch (const BuildAbortException &) {
         markFailed();

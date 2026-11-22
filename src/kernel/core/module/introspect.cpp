@@ -162,11 +162,7 @@ void collectOperators(
             }
             if (const auto id = traits.lookup(uri)) {
                 d.semantics = traits.semantics(*id);
-            }
-            if (const auto declared = traits.find(uri)) {
-                d.purity = declared->pure        ? OperatorPurity::Pure
-                           : declared->stateOnly ? OperatorPurity::StateOnly
-                                                 : OperatorPurity::Effectful;
+                d.effect    = traits.effectOf(*id);
             }
             result.push_back(std::move(d));
         }
@@ -193,19 +189,6 @@ std::vector<OperatorDescription> describeOperators(const Module &module) {
         return std::tie(a.name, a.uri) < std::tie(b.name, b.uri);
     });
     return result;
-}
-
-std::string_view to_string(OperatorPurity purity) {
-    switch (purity) {
-    case OperatorPurity::Pure:
-        return "pure";
-    case OperatorPurity::Effectful:
-        return "effectful";
-    case OperatorPurity::StateOnly:
-        return "state";
-    default:
-        return "undeclared";
-    }
 }
 
 /// One access as JSON: the class and name of the resource, what binds it, and the mode the
@@ -254,7 +237,7 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
             os << "OPERATOR {\"module\":" << jsonString(d.module.empty() ? "<builtin>" : d.module)
                << ",\"name\":" << jsonString(d.name) << ",\"uri\":" << jsonString(d.uri)
                << ",\"with\":" << d.withCount << ",\"norm\":" << d.normCount
-               << ",\"purity\":" << jsonString(to_string(d.purity))
+               << ",\"purity\":" << jsonString(sem::effectName(d.effect))
                << ",\"signature\":" << jsonString(d.signature);
             // The access list and the two facts derived from it and from the fault table: what the
             // operator touches (each item with its read or write mode) and whether that reaches
@@ -283,7 +266,7 @@ size_t warnUndeclaredOperatorTraits(const Module &module) {
     size_t count = 0;
     std::string names;
     for (const OperatorDescription &d : describeOperators(module)) {
-        if (d.purity != OperatorPurity::Undeclared) {
+        if (d.effect != sem::Effect::Undeclared) {
             continue;
         }
         ++count;

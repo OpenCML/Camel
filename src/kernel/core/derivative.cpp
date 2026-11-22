@@ -7,6 +7,7 @@
 
 #include "camel/core/derivative.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/composite/struct.h"
@@ -60,13 +61,19 @@ std::vector<std::string> DerivativeRegistry::tangentSpaceDescriptions() const {
 }
 
 void DerivativeRegistry::setRule(std::string_view uri, VjpRule rule) {
+    // The module writes the operator's name; the map is keyed by the operator, which is what a
+    // reader holds when it stands at a node (camel/ops/operator_record.h: a rule's key "is an
+    // OperId like every other key in this file -- never the URI text a rule happens to be named
+    // after"). Interning here is what makes the two meet, including for a rule registered before
+    // the operator was first mentioned.
+    const OperId id = OperatorTable::instance().intern(uri);
     std::unique_lock lock(mutex_);
-    rules_.insert_or_assign(std::string(uri), rule);
+    rules_.insert_or_assign(id, rule);
 }
 
-VjpRule DerivativeRegistry::findRule(std::string_view uri) const {
+VjpRule DerivativeRegistry::findRule(OperId id) const {
     std::shared_lock lock(mutex_);
-    auto it = rules_.find(uri);
+    auto it = rules_.find(id);
     return it == rules_.end() ? nullptr : it->second;
 }
 

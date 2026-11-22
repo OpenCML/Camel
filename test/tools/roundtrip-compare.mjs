@@ -33,11 +33,13 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 
 /// The repository root: the first ancestor of this tool that holds the standard library. The runner
 /// copies a case into a scratch tree, so neither `process.cwd()` nor `HERE` can be assumed to be it.
-/// The library is `stdlib/std.cml` before the layout move and `src/stdlib/std.cml` after it, and this
-/// tool runs against both trees, so either marker answers.
+/// The library has had three spellings and this tool runs against all of them, so the marker that
+/// is present answers: `src/stdlib/std.cml` after our own sources moved under `src/`, `lib/std/std.cml`
+/// before that, and `stdlib/std.cml` in the flat tree.
 const ROOT_MARKERS = [
-    ['stdlib', 'std.cml'],
-    ['lib', 'std', 'std.cml']
+    ['src', 'stdlib', 'std.cml'],
+    ['lib', 'std', 'std.cml'],
+    ['stdlib', 'std.cml']
 ]
 const holdsLibrary = (dir) =>
     ROOT_MARKERS.some((parts) => {
