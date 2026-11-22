@@ -13,6 +13,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
@@ -94,29 +95,43 @@ bool mayFold(const GCGraph &graph) {
         const gc_node_ref_t ref = it.ref();
         const auto norm         = graph.normInputsOf(ref);
         const auto with         = graph.withInputsOf(ref);
+        // A conversion, a copy, a construction and a member read are asked by their shape, not by
+        // the node kind that still spells them: the shape is the question the operator record
+        // answers, and asking it here is what lets the four kinds go.
+        const camel::execute::OperShape shape = camel::execute::shapeOfKind((*it)->kind);
+        if (shape != camel::execute::OperShape::None) {
+            switch (shape) {
+            case camel::execute::OperShape::Access:
+                if (norm.size() == 1 &&
+                    (camel::execute::shapeOfKind(graph.node(norm[0])->kind) ==
+                         camel::execute::OperShape::Construction ||
+                     isConstantLike(graph, norm[0]))) {
+                    return true; // a projection of a tuple built here, or of a constant
+                }
+                break;
+            case camel::execute::OperShape::Construction:
+                if (norm.size() == 1 && isConstantLike(graph, norm[0]) &&
+                    std::ranges::all_of(with, [&](gc_node_ref_t in) {
+                        return isConstantLike(graph, in);
+                    })) {
+                    return true; // built from constants
+                }
+                break;
+            case camel::execute::OperShape::Conversion:
+                if (norm.size() == 1 && with.empty() && isConstantLike(graph, norm[0])) {
+                    return true; // a conversion of a constant
+                }
+                break;
+            case camel::execute::OperShape::Clone:
+            case camel::execute::OperShape::None:
+                break;
+            }
+            continue;
+        }
         switch ((*it)->kind) {
         case GCNodeKind::Brch:
             if (norm.size() == 1 && isConstantLike(graph, norm[0])) {
                 return true; // a static condition: the branch is replaced by its arm
-            }
-            break;
-        case GCNodeKind::Accs:
-            if (norm.size() == 1 &&
-                (graph.node(norm[0])->kind == GCNodeKind::Fill || isConstantLike(graph, norm[0]))) {
-                return true; // a projection of a tuple built here, or of a constant
-            }
-            break;
-        case GCNodeKind::Fill:
-            if (norm.size() == 1 && isConstantLike(graph, norm[0]) &&
-                std::ranges::all_of(with, [&](gc_node_ref_t in) {
-                    return isConstantLike(graph, in);
-                })) {
-                return true; // built from constants
-            }
-            break;
-        case GCNodeKind::Cast:
-            if (norm.size() == 1 && with.empty() && isConstantLike(graph, norm[0])) {
-                return true; // a conversion of a constant
             }
             break;
         case GCNodeKind::Oper: {
@@ -238,12 +253,13 @@ bool mayRemoveDead(const GCGraph &graph) {
         if (valueUsers[ref] != 0) {
             continue;
         }
+        // A value nothing reads is what the sweep may take when it is a gate or one of the four
+        // operators, and the four are asked by their shape.
+        if (camel::execute::shapeOfKind(node->kind) != camel::execute::OperShape::None) {
+            return true;
+        }
         switch (node->kind) {
         case GCNodeKind::Gate:
-        case GCNodeKind::Cast:
-        case GCNodeKind::Copy:
-        case GCNodeKind::Accs:
-        case GCNodeKind::Fill:
             return true;
         case GCNodeKind::Data:
             if (node->dataIndex < 0) {

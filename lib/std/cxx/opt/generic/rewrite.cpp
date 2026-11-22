@@ -7,6 +7,7 @@
 
 #include "rewrite.h"
 #include "camel/execute/pass/base.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/cycle.h"
 
@@ -94,13 +95,15 @@ bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_re
     if (!h) {
         return false;
     }
+    // A conversion, a copy, a construction and a member read are values for nothing but their
+    // reader, and they are asked by their shape (`camel/execute/shaped_operators.h`), not by the
+    // four node kinds that still spell them.
+    if (camel::execute::shapeOfKind(h->kind) != camel::execute::OperShape::None) {
+        return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+    }
     switch (h->kind) {
     case GCNodeKind::Data:
         return h->dataIndex < 0;
-    case GCNodeKind::Cast:
-    case GCNodeKind::Copy:
-    case GCNodeKind::Accs:
-    case GCNodeKind::Fill:
     case GCNodeKind::Oper:
         return camel::runtime::nodeIsFreelySchedulable(draft, id, true);
     default:
@@ -235,9 +238,13 @@ bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_
     if (header == nullptr) {
         return false;
     }
+    // A conversion runs when it is read, and may fail, so its running is observed like an
+    // operator's; the shape says it is one (`camel/execute/shaped_operators.h`).
+    if (camel::execute::shapeOfKind(header->kind) == camel::execute::OperShape::Conversion) {
+        return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
+    }
     switch (header->kind) {
     case GCNodeKind::Oper:
-    case GCNodeKind::Cast:
         return !camel::runtime::nodeIsFreelySchedulable(draft, id, true);
     case GCNodeKind::Call:
     case GCNodeKind::Func:

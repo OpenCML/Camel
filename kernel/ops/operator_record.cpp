@@ -10,15 +10,13 @@
  * entrance stating it twice, which is a defect of the registration and not the agreement between
  * two entrances that `Registry::complete` checks.
  *
- * --- what this file does not define, and why ---------------------------------
- * `kernel(void *)` has no definition here. It is the one declared member the reviewed header gives
- * no place to: this class's only state is `Record record_`, and `Record` has no kernel member --
- * operator_record.h says so in as many words ("Not part of the record: a target registers its own
- * against the same id") -- and no accessor hands the pointer to `Registry::registerOperator`.
- * Keeping it in a side table in this file would be a place nothing reads, which is not a definition
- * of the setter. The header needs the field and the reader before this setter can mean anything;
- * neither was added here because operator_record.h is reviewed and a `.cpp` does not get to widen
- * it.
+ * --- what this file states about the kernel ---------------------------------
+ * `kernel(void *)` states the one item that is not a record item. It writes the pointer into
+ * `kernel_`, the field the registry lane added to this class (待审, operator_record.h), and
+ * `Registry::registerOperator` -- the class's friend -- is the one reader: it keeps the pointer
+ * beside the record, per OperId, and `Registry::kernel(OperId)` hands it to a reader. The pointer
+ * does not enter the record, because operator_record.h says it does not ("Not part of the record: a
+ * target registers its own against the same id"), and it is not kept in a table nothing reads.
  *
  * Seven setters state an item the record keeps as a bare value with no "somebody stated it"
  * witness: `reusesOperand`, `elementwise`, `readsGraphs`, `macro`, `foldable`, `withAfterNorm` (a
@@ -249,6 +247,19 @@ CppRegistration &CppRegistration::definition(sem::Definition definition) {
         refuseSecondStatement(record_.key.uri(), "definition");
     }
     record_.definition = std::move(definition);
+    return *this;
+}
+
+// ---- The implementation ---------------------------------------------------------------------
+
+CppRegistration &CppRegistration::kernel(void *function) {
+    // The one item that is not a record item: it goes to `kernel_`, and `registerOperator` reads it
+    // once, when the rest of the registration is merged. Two kernels are one entrance stating one
+    // item twice, like any other setter.
+    if (kernel_ != nullptr) {
+        refuseSecondStatement(record_.key.uri(), "kernel");
+    }
+    kernel_ = function;
     return *this;
 }
 
