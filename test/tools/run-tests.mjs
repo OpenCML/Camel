@@ -3254,7 +3254,7 @@ function selectTier(plans, tier, namedPlans = new Set(), compileOnly = false) {
     // error, not a red test: the CLI refuses it while parsing, so the test would fail with an exit
     // code that says nothing about the program. Six entries of `jit_framed` were read that way for
     // a night (`--gc-check verify=1`, diagnosed as a GC defect). The domains live in
-    // `cli-arg-domains.mjs`, which checks itself against `tools/camel-cli/config.cpp`.
+    // `cli-arg-domains.mjs`, which checks itself against `src/tools/camel-cli/config.cpp`.
     //
     // The same shape, one field over: a regex that does not compile, an empty pattern, and two
     // assertions on one stdout are plan errors too (`assertionProblems`), found here so a run
@@ -4230,7 +4230,7 @@ async function main() {
             `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${selected.argProblems.length} problem(s) in ` +
                 'the plans this run selected make their verdict meaningless, so nothing was started: this ' +
                 'is a plan error, not a failing test. Option values are listed in ' +
-                'test/tools/cli-arg-domains.mjs (checked against tools/camel-cli/config.cpp); the stdout ' +
+                'test/tools/cli-arg-domains.mjs (checked against src/tools/camel-cli/config.cpp); the stdout ' +
                 'assertions are described in docs/test-plans.md.',
         )
         process.exitCode = 2

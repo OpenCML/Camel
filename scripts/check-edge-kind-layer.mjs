@@ -33,8 +33,8 @@
  * no longer exists under that name and this script refuses (exit 2) instead of passing over
  * nothing.
  *
- * For `orderPredsOf` and `syncPredsOf` that home is `kernel/include/camel/runtime/`,
- * `kernel/include/camel/runtime/graph.h` and `kernel/runtime/graph.cpp`. That is why `kernel/runtime/draft.cpp`
+ * For `orderPredsOf` and `syncPredsOf` that home is `src/kernel/include/camel/runtime/`,
+ * `src/kernel/include/camel/runtime/graph.h` and `src/kernel/runtime/graph.cpp`. That is why `src/kernel/runtime/draft.cpp`
  * -- a draft copying a frozen graph's order and sync edges -- is a crossing: the header is where
  * the vocabulary is declared and the class's own implementation is where it is defined, and a
  * reader elsewhere is neither.
@@ -45,7 +45,7 @@
  * it -- that is what "the kinds of an edge are enumerated in one place" means once it is written
  * down. Two things this rule therefore deliberately does *not* do:
  *
- *   - it does not treat `kernel/runtime/` as a whole as the semantic layer. Several files there read
+ *   - it does not treat `src/kernel/runtime/` as a whole as the semantic layer. Several files there read
  *     the side arrays (`canonical.cpp`, `draft*.cpp`, `graph_edges.cpp`, `resources.cpp`,
  *     `rules.cpp`) and the invariant's point is that they should not have to;
  *   - it does not guess at "the same kind of query" for you. Section 7 says this row covers them,
@@ -72,7 +72,10 @@ const NAME = 'check-edge-kind-layer'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The directories the scan covers by default, the same set the other source checks read. */
-const SCANNED = ['include', 'src', 'modules', 'tools']
+// `src` holds the five blocks and the standard library since the 2026-11-22 move, and the seven
+// tools are `src/tools`; a directory a checkout does not have is skipped rather than stat'ed, so a
+// tree of either layout is scanned instead of crashing on the way in.
+const SCANNED = ['src', 'src/tools', 'include', 'modules', 'tools']
 
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
@@ -203,11 +206,13 @@ for (let index = 0; index < argv.length; index += 1) {
 
 // The home is always derived from the whole tree, never from the sample: a sample is a place to
 // read findings from, and moving the boundary with it would make `--path` measure another rule.
-const TREE = SCANNED.map((name) => path.join(ROOT, name)).flatMap((target) => sourceFilesUnder(target))
+const TREE = SCANNED.map((name) => path.join(ROOT, name))
+    .filter((target) => fs.existsSync(target))
+    .flatMap((target) => sourceFilesUnder(target))
 const declaring = declaringFiles(TREE)
 const homeFiles = new Set([...declaring.values()].flat())
 // Only a header contributes its directory tree: the rule is "the tree of the header that declares
-// it", and letting an implementation file pull in its own directory would make all of `kernel/runtime`
+// it", and letting an implementation file pull in its own directory would make all of `src/kernel/runtime`
 // the semantic layer.
 const homeDirs = [
     ...new Set(
@@ -236,7 +241,7 @@ const isHome = (file) =>
     homeDirs.some((dir) => file.startsWith(dir + path.sep))
 
 const targets = paths.length > 0 ? paths : SCANNED.map((name) => path.join(ROOT, name))
-const scanned = targets.flatMap((target) => sourceFilesUnder(target))
+const scanned = targets.filter((target) => fs.existsSync(target)).flatMap((target) => sourceFilesUnder(target))
 if (scanned.length === 0) {
     console.error(
         `${NAME}: ${targets.join(', ')} holds no C++ source, so this check matched nothing and ` +

@@ -18,7 +18,7 @@
 // Exit status 2 when a target does not exist, the scan holds no source file, or no file uses a
 // name in the table: a check of nothing is refused, never reported as a pass.
 //
-// What is checked: every .h / .cpp under the four source roots (kernel/, parse/, compile/, lib/)
+// What is checked: every .h / .cpp under the four source roots (src/kernel/, src/parse/, src/compile/, src/stdlib/)
 // and tools/. For each file the
 // standard headers it reaches are collected: its own `#include <...>` lines and those of the
 // project headers it includes with `#include "..."`, transitively. Headers of third-party
@@ -38,8 +38,9 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // The blocks the layout map files the sources under (`docs/design/architecture/layout-map.cn.md`,
-// tables A and B): the four source roots and `tools/`. The flat `src/`, `include/`, `modules/` and
-// `stdlib/` of the tree before the move are gone, and naming them here would be a scan of nothing.
+// tables A and B): the four source roots and `tools/`, every one of them under `src/` since the
+// 2026-11-22 move. The flat `src/`, `include/`, `modules/` and `stdlib/` of the tree before the move
+// are gone, and naming them here would be a scan of nothing.
 //
 // A root that is not there is **not** left out. This list used to filter itself with `existsSync`,
 // which reads "the root is gone" as "there is nothing wrong under the root": with `tools/` moved
@@ -48,14 +49,14 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 // sentence, and the line claimed the tree had been checked. So the five are spelled here, and
 // `main` refuses (exit 2) when one of them is not in the tree, naming the root and the directory it
 // expected. A check that quietly scans a smaller tree reports on a tree it did not read.
-const SCAN_DIRS = ['kernel', 'parse', 'compile', 'lib', 'tools']
+const SCAN_DIRS = ['src/kernel', 'src/parse', 'src/compile', 'src/stdlib', 'src/tools']
 // Where `#include "a/b.h"` is looked up after the directory of the including file: every block
-// carries its own `include/` (`kernel/include`, `parse/include`, `compile/include`, and one per
-// module directory under `lib/`), and a tool names a header of another tool from the tree root.
+// carries its own `include/` (`src/kernel/include/camel`, `src/parse/include/camel/parse`, `src/compile/include/camel`, and one per
+// module directory under `src/stdlib/`), and a tool names a header of another tool from the tree root.
 // The list is read off the tree and not written down, so a block that gains or loses its
 // `include/` changes the lookup instead of silently leaving an include unresolved.
 function includeRoots() {
-    const roots = ['.', 'third_party', 'tools', 'tools/debugger']
+    const roots = ['.', 'third_party', 'src/tools', 'src/tools/debugger']
     const walk = (dir, depth) => {
         if (depth < 0) return
         let entries
@@ -71,7 +72,7 @@ function includeRoots() {
             else if (entry.name !== 'third_party' && entry.name !== 'node_modules') walk(full, depth - 1)
         }
     }
-    for (const block of ['kernel', 'parse', 'compile', 'lib']) {
+    for (const block of ['src/kernel', 'src/parse', 'src/compile', 'src/stdlib']) {
         walk(path.join(ROOT, block), 2)
     }
     return roots
@@ -335,7 +336,7 @@ function read(file) {
 function resolveInclude(from, name) {
     const candidates = [path.resolve(path.dirname(from), name)]
     for (const root of INCLUDE_ROOTS) candidates.push(path.resolve(ROOT, root, name))
-    // A module names its own headers from its directory (`lib/<name>/...`; `modules/<name>/...`
+    // A module names its own headers from its directory (`src/stdlib/<name>/...`; `modules/<name>/...`
     // before the layout move, which put a module's C++ and its declaration in one directory).
     const module = /^(lib\/[^/]+|tools\/[^/]+)\//.exec(rel(from))
     if (module) candidates.push(path.resolve(ROOT, module[1], name))

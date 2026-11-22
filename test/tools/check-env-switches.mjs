@@ -47,10 +47,12 @@ const HERE = path.dirname(url.fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(HERE, '..', '..')
 
 // The roots whose code a run links: the four block directories the layout map files the engine
-// under (`kernel/`, `parse/`, `compile/`, `lib/`) -- a header is compiled into the program as much
-// as a source file is, and the environment does not care which of them a read sits in. The tool and
-// the scripts are not: a tool's own switches are its command line.
-const ROOTS = ['kernel', 'parse', 'compile', 'lib']
+// under -- `src/kernel/`, `src/parse/`, `src/compile/`, `src/stdlib/` since the 2026-11-22 move, and
+// `kernel/`, `parse/`, `compile/`, `lib/` before it -- because a header is compiled into the program
+// as much as a source file is, and the environment does not care which of them a read sits in. The
+// tool and the scripts are not: a tool's own switches are its command line. The spellings of both
+// layouts are listed so a checkout of either is read; a root the tree does not have is skipped.
+const ROOTS = ['src/kernel', 'src/parse', 'src/compile', 'src/stdlib', 'kernel', 'parse', 'compile', 'lib']
 const SKIP_DIRS = new Set(['.git', 'out', 'node_modules', 'third_party', 'build', 'sdks'])
 const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.hh'])
 
@@ -68,36 +70,36 @@ const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.hh'])
 // `CAMEL_HOME` needs no line at all: it names the installation the run was started from.
 const LEDGER = [
     {
-        at: 'lib/std/cpp/include/camel/standalone/core.h:briefReports',
+        at: 'src/stdlib/std/cpp/include/camel/standalone/core.h:briefReports',
         reads: 'CAMEL_ERROR_FORMAT',
         owner: 'the environment-variable queue, core batch (lane-envsw)',
         why: 'a generated program reads whether its reports are one line: a diagnostic setting, and a switch still',
     },
     {
-        at: 'kernel/include/camel/utils/env.h:getEnvIfSet',
+        at: 'src/kernel/include/camel/utils/env.h:getEnvIfSet',
         reads: null,
         owner: 'none: it is the process environment itself',
         why: 'the one place where the process environment is read: the names come from the platform and from PATH, not from this program',
     },
     {
-        at: 'kernel/include/camel/utils/dll_path.h:setupLibrarySearchPathForHost',
+        at: 'src/kernel/include/camel/utils/dll_path.h:setupLibrarySearchPathForHost',
         reads: null,
         owner: 'none: it is the process environment itself',
         why: 'reads the PATH entries a helper was handed; the names are the platform spelling, not a switch',
     },    {
-        at: 'lib/tiles/src/cuda_backend.cpp:nvrtcPaths',
+        at: 'src/stdlib/tiles/src/cuda_backend.cpp:nvrtcPaths',
         reads: 'CAMEL_TILES_NVRTC',
         owner: 'none: it stays',
         why: 'where the CUDA toolchain is installed is configuration, not behaviour',
     },
     {
-        at: 'lib/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
+        at: 'src/stdlib/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
         reads: 'CAMEL_TILES_TEST_INVALIDATION',
         owner: 'the tiles line (its test pass)',
         why: 'a switch of the test pass itself',
     },
     {
-        at: 'lib/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
+        at: 'src/stdlib/tiles/src/region_test_pass.cpp:RegionOutlineTestPass',
         reads: 'CAMEL_TILES_TEST_I64',
         owner: 'the tiles line (its test pass)',
         why: 'a switch of the test pass itself',

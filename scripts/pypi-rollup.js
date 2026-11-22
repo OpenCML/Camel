@@ -52,7 +52,7 @@ function ensureDirSync(dir) {
 const isWin = process.platform === 'win32'
 
 /** Tools that are built for the test suite only and are not part of a release. */
-const TEST_ONLY_TOOLS = ['camel-parsecheck']
+const TEST_ONLY_TOOLS = ['camel-parsecheck', 'camel-oprecord']
 
 function isTestOnlyTool(fileName) {
     return TEST_ONLY_TOOLS.includes(fileName.replace(/[.]exe$/i, ''))
@@ -212,7 +212,7 @@ function nativePlatformTag(pyExe) {
 
 /**
  * The version the extension's stable ABI starts at: `Python3_add_library(... USE_SABI 3.10)` in
- * bindings/python/CMakeLists.txt and `Py_LIMITED_API=0x030A0000` are the same number. A wheel
+ * src/bindings/python/CMakeLists.txt and `Py_LIMITED_API=0x030A0000` are the same number. A wheel
  * named `cp310-abi3` is installable on every CPython 3.10 and later, so it must not be named after
  * the interpreter that happened to compile it.
  */
@@ -228,7 +228,7 @@ const SABI_MINOR = 10
  * in the name. Only the platform tag still comes from this machine, through `nativePlatformTag`.
  *
  * The interpreter is still read: it has to be 3.10 or newer, or the build would have no extension
- * to put in the interop wheel at all (bindings/python requires Python 3.10 development files).
+ * to put in the interop wheel at all (src/bindings/python requires Python 3.10 development files).
  *
  * @param {string} pyExe - absolute path or `python` / `python3`
  */
@@ -643,7 +643,7 @@ function main() {
             if (!layout) {
                 logFail(
                     `Compile-time Python is ${compile.major}.${compile.minor} (${compile.executable}), but no ` +
-                        `matching lib/python/sdks/python* and no full interpreter dev tree (headers/libs under ` +
+                        `matching src/stdlib/sdks/python* and no full interpreter dev tree (headers/libs under ` +
                         `sys.base_prefix / sysconfig). Install CPython with dev files, run sync-python-sdks, or ` +
                         `set CAMEL_PYPI_ALL_SDKS=1.`
                 )
@@ -682,7 +682,7 @@ function main() {
         return
     }
 
-    logWarn('No lib/python/sdks/python* trees — linking py_bridge from current interpreter (sys.base_prefix)')
+    logWarn('No src/stdlib/sdks/python* trees — linking py_bridge from current interpreter (sys.base_prefix)')
     let compile
     try {
         compile = probeCompilePythonInterpreter()

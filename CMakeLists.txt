@@ -38,15 +38,33 @@ elseif(UNIX)
     add_definitions(-DPLATFORM_LINUX)
 endif()
 
+# `src/` is the umbrella the blocks were moved under on 2026-11-22: `src/kernel`, `src/parse`,
+# `src/compile`, `src/bindings`, `src/tools` and the standard library `src/stdlib`. None of them is
+# collected here, and that is the point of the exclude below:
+#
+#   * `cmake/layout-blocks.cmake` globs every block's sources itself (`camel_layout_add_blocks`) and
+#     its objects are what libcamel is linked from;
+#   * a module directory under `src/stdlib/<module>/` is its own `.cmo` target (`CMakeLists.txt`,
+#     `CAMEL_ALL_MODULES`), not a part of libcamel;
+#   * `src/tools/` and `src/bindings/` are separate executables and the CPython extension, each of
+#     which links libcamel.
+#
+# A recursive glob over `src/` therefore compiles the same translation units a second time and the
+# link fails on duplicate symbols -- which is exactly what happened the day the move landed. So the
+# glob keeps only what no block claims: `third_party/`, and a source sitting directly in `src/`
+# (the `unplaced` block of `layout-blocks.cmake` applies the same rule, without recursing).
+# A block added under `src/` later has to be added to this list as well as to the layout.
 file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
-# A checkout older than the handwritten front end can still carry `parse/src/antlr/` on disk: that
+list(FILTER _ALL_SRC EXCLUDE REGEX
+    "^${PROJECT_SOURCE_DIR}/src/(kernel|parse|compile|bindings|tools|stdlib)/")
+# A checkout older than the handwritten front end can still carry `src/parse/src/antlr/` on disk: that
 # path was ignored for the ANTLR-generated sources until 2026-11-02, when the ignore rules went. This
-# filter is not a dependency on it and nothing in this tree needs it -- the glob above takes every
-# `src/**/*.cpp`, and this keeps a stale output directory out of a build that finds one.
-list(FILTER _ALL_SRC EXCLUDE REGEX "/parse/src/antlr/")
+# filter is not a dependency on it and nothing in this tree needs it -- the globs above take every
+# block, and this keeps a stale output directory out of a build that finds one.
+list(FILTER _ALL_SRC EXCLUDE REGEX "/src/parse/src/antlr/")
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
 find_package(fmt REQUIRED)
@@ -75,7 +93,7 @@ add_definitions(-DNOMINMAX)
 # which is always on arm64 and only with -mfma (or -march levels that imply it) on x86-64, so
 # the same source printed different numbers on macOS (docs/design-principles.cn.md 11.5: the
 # output is the same bytes on every platform). Applies to libcamel, the modules and the tools.
-# The tensor unary kernels opt back in (lib/tensor/CMakeLists.txt); the GEMM writes its
+# The tensor unary kernels opt back in (src/stdlib/tensor/CMakeLists.txt); the GEMM writes its
 # fused multiply-adds explicitly.
 add_compile_options(-ffp-contract=off)
 
@@ -90,20 +108,20 @@ include(${PROJECT_SOURCE_DIR}/cmake/layout-blocks.cmake)
 camel_layout_add_blocks()
 add_library(libcamel SHARED ${CAMEL_LAYOUT_ALL_OBJECTS})
 
-# Diagnostic codes are assigned in kernel/diagnostics/registry.tsv, not written by hand: the
+# Diagnostic codes are assigned in src/kernel/diagnostics/registry.tsv, not written by hand: the
 # headers and message tables under core/error/diagnostics/messages are generated from it, and
 # this step refuses a duplicate number, a number outside its section's range, a duplicate name
 # and a generated file that no longer matches the registry. It runs before libcamel_objects, so
 # no translation unit is compiled against a stale code table.
 find_program(CAMEL_DIAGNOSTICS_NODE NAMES node nodejs REQUIRED)
 set(_camel_diagnostic_sources
-    "${PROJECT_SOURCE_DIR}/kernel/diagnostics/registry.tsv"
+    "${PROJECT_SOURCE_DIR}/src/kernel/diagnostics/registry.tsv"
     "${PROJECT_SOURCE_DIR}/scripts/diagnostics-catalog.mjs"
-    "${PROJECT_SOURCE_DIR}/kernel/include/camel/core/error/diagnostics/base.h")
+    "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/core/error/diagnostics/base.h")
 foreach(_section internal lexical syntax semantic runtime)
     list(APPEND _camel_diagnostic_sources
-        "${PROJECT_SOURCE_DIR}/kernel/include/camel/core/error/diagnostics/messages/${_section}.h"
-        "${PROJECT_SOURCE_DIR}/kernel/core/error/diagnostics/messages/${_section}.cpp")
+        "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/core/error/diagnostics/messages/${_section}.h"
+        "${PROJECT_SOURCE_DIR}/src/kernel/core/error/diagnostics/messages/${_section}.cpp")
 endforeach()
 add_custom_command(
     OUTPUT "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp"
@@ -111,7 +129,7 @@ add_custom_command(
     COMMAND "${CMAKE_COMMAND}" -E touch "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp"
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     DEPENDS ${_camel_diagnostic_sources}
-    COMMENT "Checking kernel/diagnostics/registry.tsv against the generated code tables"
+    COMMENT "Checking src/kernel/diagnostics/registry.tsv against the generated code tables"
     VERBATIM)
 add_custom_target(camel_diagnostics_check DEPENDS "${PROJECT_BINARY_DIR}/diagnostics-registry.stamp")
 add_dependencies(camel_layout_blocks camel_diagnostics_check)
@@ -123,7 +141,7 @@ set_target_properties(libcamel PROPERTIES
     LINKER_LANGUAGE CXX
     PREFIX "")
 
-# The library carries the same two entries the tools carry (tools/libcamel_tool.cmake): the
+# The library carries the same two entries the tools carry (src/tools/libcamel_tool.cmake): the
 # directory it sits in, and `libs/` below it. A tool finds the collected install through its own
 # rpath, but a consumer that is not one of our tools -- the Python binding, anything that loads the
 # library directly -- has no entry to inherit and would then resolve libcamel's own dependencies,
@@ -183,7 +201,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Options.cmake)
 
 # The warning set is written once, in cmake/Warnings.cmake, and reaches a target by the interface
 # target that carries that target's list: camel_warnings_libcamel here, camel_warnings_tool for the
-# tools (tools/libcamel_tool.cmake), camel_warnings_module for the modules (cmake/camel_module.cmake).
+# tools (src/tools/libcamel_tool.cmake), camel_warnings_module for the modules (cmake/camel_module.cmake).
 # No file writes a warning flag of its own.
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Warnings.cmake)
 
@@ -231,7 +249,7 @@ camel_layout_block_taskflow()
 
 # External modules: compile python / pyplot / io and similar sources into .cmo.
 # Python embedding (python.cmo, pyplot.cmo, py_bridge*) requires Development headers and import libraries.
-# Without a venv/SDK, lib/python/CMakeLists.txt returns early; calling add_subdirectory(pyplot) anyway will fail on find_package(REQUIRED).
+# Without a venv/SDK, src/stdlib/python/CMakeLists.txt returns early; calling add_subdirectory(pyplot) anyway will fail on find_package(REQUIRED).
 # Set CAMEL_SKIP_PYTHON=1 or -DCAMEL_ENABLE_PYTHON=OFF to skip python + pyplot while building the rest normally (options live in cmake/Options.cmake and options.json).
 set(_camel_skip_python_modules FALSE)
 if(NOT CAMEL_ENABLE_PYTHON OR CAMEL_PACKAGE_MINIMAL)
@@ -240,12 +258,12 @@ if(NOT CAMEL_ENABLE_PYTHON OR CAMEL_PACKAGE_MINIMAL)
     if(CAMEL_PACKAGE_MINIMAL)
         set(_camel_skip_python_why " CAMEL_PACKAGE_MINIMAL is on.")
     endif()
-    message(STATUS "Skipping lib/python and modules/pyplot.${_camel_skip_python_why}")
+    message(STATUS "Skipping src/stdlib/python and src/stdlib/pyplot.${_camel_skip_python_why}")
 endif()
 if(NOT _camel_skip_python_modules)
-    add_subdirectory(lib/python)
+    add_subdirectory(src/stdlib/python)
     if(CAMEL_PYTHON_DEV_AVAILABLE)
-        add_subdirectory(lib/pyplot)
+        add_subdirectory(src/stdlib/pyplot)
     else()
         message(STATUS "Skipping modules/pyplot: no Python development environment (same condition as python.cmo).")
     endif()
@@ -296,7 +314,7 @@ if(NOT "${CAMEL_MODULES}" STREQUAL "")
 endif()
 
 foreach(_module IN LISTS _camel_modules)
-    add_subdirectory(lib/${_module})
+    add_subdirectory(src/stdlib/${_module})
 endforeach()
 
 # The link relations the modules declared, checked against the selected set. Each entry is
@@ -309,19 +327,19 @@ foreach(_entry IN LISTS _camel_module_links)
     list(GET _linked_pair 1 _needed)
     if(NOT _needed IN_LIST _camel_modules)
         message(FATAL_ERROR
-            "lib/${_dependent} links lib/${_needed} (LINK_MODULES in lib/${_dependent}/CMakeLists.txt), "
+            "src/stdlib/${_dependent} links src/stdlib/${_needed} (LINK_MODULES in src/stdlib/${_dependent}/CMakeLists.txt), "
             "and CAMEL_MODULES did not select it. Add ${_needed}, or drop ${_dependent} as well.")
     endif()
 endforeach()
 
 # The Python binding: the CPython extension `camel._camel`, a host of libcamel that a
-# Python project calls a Camel module through. Independent of lib/python (which embeds Python
+# Python project calls a Camel module through. Independent of src/stdlib/python (which embeds Python
 # in Camel, the other direction), so it is added whether or not CAMEL_ENABLE_PYTHON is on; the
 # directory itself returns early when Python's development files are absent.
 if(CAMEL_ENABLE_PYTHON_BINDINGS AND NOT CAMEL_PACKAGE_MINIMAL)
-    add_subdirectory(bindings/python)
+    add_subdirectory(src/bindings/python)
 else()
-    message(STATUS "Skipping bindings/python (CAMEL_ENABLE_PYTHON_BINDINGS=OFF or CAMEL_PACKAGE_MINIMAL=ON).")
+    message(STATUS "Skipping src/bindings/python (CAMEL_ENABLE_PYTHON_BINDINGS=OFF or CAMEL_PACKAGE_MINIMAL=ON).")
 endif()
 
 # ---------------------------------------------------------------------------------------------
@@ -347,7 +365,9 @@ file(GENERATE
     CONTENT "${_camel_cmo_manifest}")
 
 # CLI and tools: link the libcamel shell (camel-cli lives under tools).
-add_subdirectory(tools)
+add_subdirectory(src/tools)
+add_subdirectory(test/tools/parsecheck)
+add_subdirectory(test/tools/oprecord)
 camel_layout_append_catchall()
 
 # ---------------------------------------------------------------------------------------------
@@ -362,7 +382,7 @@ camel_layout_append_catchall()
 #
 # A target that links libcamel without registering its objects would still fail, but at its own
 # link and with the symbol named; the helpers in cmake/camel_module.cmake and
-# tools/libcamel_tool.cmake register every target they create.
+# src/tools/libcamel_tool.cmake register every target they create.
 if(WIN32)
     find_program(CAMEL_EXPORTS_NM NAMES llvm-nm REQUIRED)
     find_program(CAMEL_EXPORTS_NODE NAMES node nodejs REQUIRED)

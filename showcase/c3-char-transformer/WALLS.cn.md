@@ -349,7 +349,7 @@ Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true); 
 2. **复步参照 12 位一致**：用 `grow.py --exact`（`loss(x + ih)` 的虚部即导数，无相减抵消）重算，参照与引擎在 12 位上一个字都不差 ⇒ 原来的中心差分参照自己是误差源。
 3. **`matmulGradGemm` 的 dtype 门**：`lhs/rhs/dy` 任一不是 `Float32` 就 `return nullptr` ⇒ f64 物理上走不到那条 f32 快路（`modules/tensor/kernels/gradient.cpp#matmulGradGemm`）；且真有 f32 存货会给出 ~1e-7 相对（≈8e-10 绝对），比实测大一个量级。
 
-**关于 `grad` 的一条被更正的判断（2026-11-03）：这条被更正，因为** `grad` 有两个且泛型只对第一个 `with` 参数求导，我最初按"只接受单参数"记 —— 那是调用方式不对。：`grad` 有两个 —— `lib/vjp/vjp.cml#grad` 是**单 `float` 实例**（`(x: float) => float`），`lib/autodiff/signatures/autodiff.cml#grad` 是泛型，**只对函数的第一个 `with` 参数求导**（设计原则 9.9：权重是 `with` 参数，普通参数是数据）。我最初按"`grad` 只接受一个 float 参数"记，那是**调用方式不对**（导错了 `grad`、也没给 `with` 参数），不是签名限制，故不成墙。
+**关于 `grad` 的一条被更正的判断（2026-11-03）：这条被更正，因为** `grad` 有两个且泛型只对第一个 `with` 参数求导，我最初按"只接受单参数"记 —— 那是调用方式不对。：`grad` 有两个 —— `lib/vjp/vjp.cml#grad` 是**单 `float` 实例**（`(x: float) => float`），`src/stdlib/autodiff/signatures/autodiff.cml#grad` 是泛型，**只对函数的第一个 `with` 参数求导**（设计原则 9.9：权重是 `with` 参数，普通参数是数据）。我最初按"`grad` 只接受一个 float 参数"记，那是**调用方式不对**（导错了 `grad`、也没给 `with` 参数），不是签名限制，故不成墙。
 
 **第四项：闭式标量算术（2026-11-03，不用 `vjp`/`grad` 的矩阵路径）**：`A = [[1,2],[3,4]]`、`B = [[5,6],[7,8]]`、`dC = 全 1` 时纸面 `dL/dA = dC·Bᵀ = [[11,15],[11,15]]`、`dL/dB = Aᵀ·dC = [[4,4],[6,6]]`。用八个**单参数标量函数**（把待测元素当唯一参数、其余写死）跑 `grad`，逐个取该元素的导数：`dL/da00` 实测 **11.0**，与纸面逐位一致；其余七个在此树上撞到**另一堵**既有墙（`transforms: split does not build this function (an operand of the node is not reachable from the half's exit)`），与 `matmul_grad` 无关，故只报 1/8 已测。
 

@@ -1,0 +1,337 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+#pragma once
+
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "base.h"
+
+namespace camel::parse::ast {
+
+enum class TypeType {
+    Null,
+    Stream,
+    Expr,
+    Array,
+    ArrayDim,
+    Tuple,
+    Struct,
+    Func,
+    Spec,
+    Infer,
+    Ref,
+    Enum,
+    Match
+};
+
+/// One type parameter of a declaration's head (`::<T, ..A>`): its name and whether it was
+/// written with `..`, which makes it a pack and not one type (design principles 5.6). A pack is
+/// bound by a call to one type per member, and a type expression written `..E` over it is `E`
+/// written once per member.
+class TypeParam {
+  public:
+    TypeParam(std::string name, bool pack) : name_(std::move(name)), pack_(pack) {}
+
+    const std::string &name() const { return name_; }
+    bool pack() const { return pack_; }
+    std::string toString() const { return (pack_ ? "..." : "") + name_; }
+
+  private:
+    std::string name_;
+    bool pack_;
+};
+
+/// What a `TypeExprLoad` does, and `typeof` is the only one left. The reserved type operators
+/// (`A & B`, `A \ B`, `A + B`, `A ^ B`) and the older spelling of specialization had codes here;
+/// they are not in the language, so writing one where a type is expected is an ordinary syntax
+/// error and no load carries them.
+enum class TypeOp { TypeOf, Pack };
+
+std::string to_string(TypeType type);
+std::string to_string(TypeOp op);
+class TypeLoad : public Load {
+  public:
+    TypeLoad(TypeType type) : Load(LoadType::Type), typeType_(type) {}
+    const std::string toString() const override { return "TypeLoad"; }
+
+    TypeType typeType() const { return typeType_; }
+
+  private:
+    TypeType typeType_;
+};
+
+/// A type with one postfix mark: `T?` (may be null) or, when `fallible`, `T!` (may have failed).
+class NullableTypeLoad : public TypeLoad {
+  public:
+    NullableTypeLoad(bool fallible = false) : TypeLoad(TypeType::Null), fallible_(fallible) {}
+    bool fallible() const { return fallible_; }
+    const std::string toString() const override {
+        return fallible_ ? "FallibleType" : "NullableType";
+    }
+    const std::string geneCode() const override;
+
+  private:
+    bool fallible_;
+};
+
+/// The stream suffix `T..` (design principles 5.4): the elements of `T` that arrive one after
+/// another. One mark among the postfix marks, read left to right with `?` and `!`: `T?..` is
+/// the stream of `T?`, `T..?` is the possibly absent stream.
+class StreamTypeLoad : public TypeLoad {
+  public:
+    StreamTypeLoad() : TypeLoad(TypeType::Stream) {}
+    const std::string toString() const override { return "StreamType"; }
+    const std::string geneCode() const override;
+};
+
+class TypeExprLoad : public TypeLoad {
+  public:
+    TypeExprLoad(TypeOp op) : TypeLoad(TypeType::Expr), op_(op) {}
+    const std::string toString() const override { return "TypeExpr: " + to_string(op_); }
+    const std::string geneCode() const override;
+    TypeOp op() const { return op_; }
+
+  private:
+    TypeOp op_;
+};
+
+class SpecTypeLoad : public TypeLoad {
+  public:
+    SpecTypeLoad() : TypeLoad(TypeType::Spec) {}
+    const std::string toString() const override { return "SpecType"; }
+    const std::string geneCode() const override;
+};
+
+/// `match type T { case ... => U }` in a type position (design principles 5.6): children [0] the
+/// subject type, [1] Repeated TypeCase, each holding the type the case gives as its child.
+class MatchTypeTypeLoad : public TypeLoad {
+  public:
+    MatchTypeTypeLoad() : TypeLoad(TypeType::Match) {}
+    const std::string toString() const override { return "MatchTypeType"; }
+    const std::string geneCode() const override { return "match type"; }
+};
+
+/// How a dimension group ends (design principles 5.4): no pack, `..`, or `..name`.
+enum class DimPack { None, Anonymous, Named };
+
+/// One `[...]` of an array type or a shape argument: the extents written inside it and the pack
+/// that may follow them. An extent is the expression written for it; `nullptr` is `?`, the
+/// unknown extent. `packItem` is the position of the `..` among all the items and `itemCount`
+/// how many items were written, so a reader can tell a pack that is not last (or repeated) from
+/// one that is; the parser keeps such a group rather than dropping the rest of it.
+struct DimGroup {
+    std::vector<node_ptr_t> extents;
+    DimPack pack = DimPack::None;
+    std::string packName;
+    size_t packItem   = 0;
+    size_t itemCount  = 0;
+    bool packRepeated = false;
+
+    bool empty() const { return extents.empty() && pack == DimPack::None; }
+};
+
+class ArrayTypeLoad : public TypeLoad {
+  public:
+    explicit ArrayTypeLoad(std::vector<DimGroup> dims)
+        : TypeLoad(TypeType::Array), dims_(std::move(dims)) {}
+    const std::string toString() const override {
+        return "ArrayType: [" + std::to_string(dims_.size()) + "]";
+    }
+
+    const std::vector<DimGroup> &dims() const { return dims_; }
+    const std::string geneCode() const override;
+
+  private:
+    std::vector<DimGroup> dims_;
+};
+
+/// A `[extent, ...]` written as a type argument (`f32[n, 4]`): a shape, not a type.
+class ArrayDimLoad : public TypeLoad {
+  public:
+    explicit ArrayDimLoad(DimGroup dim) : TypeLoad(TypeType::ArrayDim), dim_(std::move(dim)) {}
+    const std::string toString() const override { return "ArrayDim"; }
+
+    const DimGroup &dim() const { return dim_; }
+    const std::string geneCode() const override;
+
+  private:
+    DimGroup dim_;
+};
+
+class TupleTypeLoad : public TypeLoad {
+  public:
+    TupleTypeLoad() : TypeLoad(TypeType::Tuple) {}
+    const std::string toString() const override { return "TupleType"; }
+    const std::string geneCode() const override;
+};
+
+/// `..E` in a type position is a `TypeExprLoad` with `TypeOp::Pack`: `E` written once for each
+/// member of a pack (design principles 5.6).
+class StructTypeLoad : public TypeLoad {
+  public:
+    StructTypeLoad() : TypeLoad(TypeType::Struct) {}
+    const std::string toString() const override { return "StructType"; }
+    const std::string geneCode() const override;
+};
+
+class FuncTypeLoad : public TypeLoad {
+  public:
+    FuncTypeLoad() : TypeLoad(TypeType::Func) {}
+    FuncTypeLoad(const std::string &uri) : TypeLoad(TypeType::Func), uri_(uri) {}
+    const std::string toString() const override;
+
+    const std::string uri() const { return uri_; }
+    void setUri(const std::string &uri) { uri_ = uri; }
+    const ModifierSet &modifiers() const { return modifiers_; }
+    void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
+    /// The type parameters a declaration declares at its head (design principles 5.5, 5.6):
+    /// `T` and `U` in `func first::<T, U>(xs: T[]): U`, and a pack `..A` in
+    /// `func zip::<..A>(..xs: ..A): (..ElementOf<A>)[]`. Empty for an ordinary function type and
+    /// for a declaration that is not generic.
+    const std::vector<TypeParam> &typeParams() const { return typeParams_; }
+    void setTypeParams(std::vector<TypeParam> typeParams) { typeParams_ = std::move(typeParams); }
+    /// The same, for a head written without a pack (`rule`, `fact` and a pass declare single
+    /// type parameters only).
+    void setTypeParamNames(std::vector<std::string> names) {
+        typeParams_.clear();
+        typeParams_.reserve(names.size());
+        for (std::string &name : names) {
+            typeParams_.emplace_back(std::move(name), false);
+        }
+    }
+    /// The names of the head parameters, pack or not, in the order they were written.
+    std::vector<std::string> typeParamNames() const {
+        std::vector<std::string> names;
+        names.reserve(typeParams_.size());
+        for (const TypeParam &param : typeParams_) {
+            names.push_back(param.name());
+        }
+        return names;
+    }
+    /// The head parameters some other part of the same declaration writes: a `rule`'s head is
+    /// written once, but its sides are three declarations of the compiler's making (`__lhs`,
+    /// `__rhs`, `__when`), so a name the rule writes on one side is not written on the others.
+    /// Carried here, from the rule's own text, so that the unused-parameter check reads the whole
+    /// declaration and not one of its sides (`multiply`'s law names its cotangent's type only on
+    /// the right, and a check that looked at the left alone would call it unused -- and the law
+    /// cannot be written without it).
+    const std::vector<std::string> &typeParamsWrittenElsewhere() const {
+        return typeParamsWrittenElsewhere_;
+    }
+    void setTypeParamsWrittenElsewhere(std::vector<std::string> names) {
+        typeParamsWrittenElsewhere_ = std::move(names);
+    }
+
+    const std::string geneCode() const override;
+
+  private:
+    ModifierSet modifiers_;
+    std::string uri_;
+    std::vector<TypeParam> typeParams_;
+    std::vector<std::string> typeParamsWrittenElsewhere_;
+};
+
+/// The resources a function type publishes (design effects plan 3.1): `pure` says a call
+/// touches none, `uses x, var fs` names the parameters and the resources it touches. Attached to
+/// the function type it is written after; a declaration's clause is attached to the function type
+/// of its signature, so a body-less declaration and a function type carry the same thing.
+class ResourceClauseLoad : public Load {
+  public:
+    ResourceClauseLoad() : Load(LoadType::ResourceClause) {}
+
+    /// One resource of the clause, as it was written (design principles 3.3): an entry without
+    /// `var` reads the resource and one with `var` writes it, the way a parameter is written.
+    /// `range` is where the entry stands, so the report that refuses it can offer the text to add.
+    struct Uses {
+        Reference resource;
+        bool write = false;
+        camel::core::error::TokenRange range;
+    };
+
+    bool pure() const { return pure_; }
+    void setPure(bool pure) { pure_ = pure; }
+
+    /// Whether the clause writes `panic`: a call of the operator this is declared on can fail
+    /// (design principles 3.9). It takes no list -- the kind of a fault is read
+    /// from what the call raises, not from the declaration -- and a declaration that leaves it out
+    /// promises that no call of it fails. It is carried here because it is written in this clause,
+    /// beside `pure`: the word belongs to the clause, and `panic` is not part of the function type
+    /// it follows.
+    bool panic() const { return panic_; }
+    void setPanic(bool panic) { panic_ = panic; }
+
+    /// Whether the clause writes `spelling`: the body may read the spelling of the program -- a
+    /// name, a source position, creation order and creation numbers, the text a node shows
+    /// (design principles 9.5). It is written in the same clause as `pure`/`uses` and carried by
+    /// the same type, so a declaration that does not write it promises its body reads none.
+    bool spelling() const { return spelling_; }
+    void setSpelling(bool spelling) { spelling_ = spelling; }
+
+    void addUse(Reference use, bool write, camel::core::error::TokenRange range) {
+        uses_.push_back(Uses{std::move(use), write, range});
+    }
+    const std::vector<Uses> &uses() const { return uses_; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    bool pure_     = false;
+    bool spelling_ = false;
+    bool panic_    = false;
+    std::vector<Uses> uses_;
+};
+
+class InferTypeLoad : public TypeLoad {
+  public:
+    InferTypeLoad(Reference ref) : TypeLoad(TypeType::Infer), ref_(ref) {}
+    const std::string toString() const override { return "InferType"; }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+};
+
+class RefTypeLoad : public TypeLoad {
+  public:
+    RefTypeLoad(Reference ref) : TypeLoad(TypeType::Ref), ref_(ref) {}
+    const std::string toString() const override { return "RefType: " + ref_.toString(); }
+
+    const Reference &ref() const { return ref_; }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+};
+
+/// How a variant of an enum carries its data (design principles 5.3): nothing, a tuple of
+/// fields in the order written, or named fields.
+enum class EnumVariantShape { Unit, Tuple, Struct };
+
+/// One variant of an enum declaration, as written: its name, its shape and, for a struct
+/// variant, the names of its fields. The field types themselves are the child nodes of the
+/// declaration, one list per variant, in the same order.
+struct EnumVariantDecl {
+    std::string name;
+    EnumVariantShape shape = EnumVariantShape::Unit;
+    std::vector<std::string> fieldNames;
+};
+
+/// `enum { ... }`: the right-hand side of an enum type declaration.
+class EnumTypeLoad : public TypeLoad {
+  public:
+    EnumTypeLoad() : TypeLoad(TypeType::Enum) {}
+    const std::string toString() const override { return "EnumType"; }
+    const std::string geneCode() const override;
+
+    std::vector<EnumVariantDecl> &variants() { return variants_; }
+    const std::vector<EnumVariantDecl> &variants() const { return variants_; }
+
+  private:
+    std::vector<EnumVariantDecl> variants_;
+};
+
+} // namespace camel::parse::ast

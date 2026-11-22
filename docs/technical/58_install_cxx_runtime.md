@@ -16,7 +16,7 @@ Two things, and only two:
 
 * **A relative rpath on every object that links `libcamel`.** `libcamel.so` carries
   `$ORIGIN:$ORIGIN/../libs` (`CMakeLists.txt`, `set_target_properties(libcamel ...)`), and every
-  tool carries `$ORIGIN:$ORIGIN/libs:$ORIGIN/../libs` (`tools/libcamel_tool.cmake`,
+  tool carries `$ORIGIN:$ORIGIN/libs:$ORIGIN/../libs` (`src/tools/libcamel_tool.cmake`,
   `target_link_libcamel_runtime`). The second entry is why `bin/camel` finds `libs/libstdc++.so.6`
   three directories up from itself, and the first is why a consumer that is not one of our tools --
   the Python binding, anything that loads the library directly -- resolves `libcamel`'s own
@@ -120,7 +120,7 @@ a wheel gains the same bytes before compression (the `docs/handover/pitfalls.cn.
 
 | what | where |
 | --- | --- |
-| the rpath entries | `CMakeLists.txt` (`libcamel`), `tools/libcamel_tool.cmake#target_link_libcamel_runtime` (tools) |
+| the rpath entries | `CMakeLists.txt` (`libcamel`), `src/tools/libcamel_tool.cmake#target_link_libcamel_runtime` (tools) |
 | the copy into `libs/`, and the distribution-directory rule | `scripts/collect-out.js#collectCxxRuntimeLibrary`, `#isSystemLibraryDir` |
 | the launcher | `scripts/cxx-runtime-guard.mjs#installCxxRuntimeGuard`, `#launcherText`, `#elfInterpreter` |
 | the check the launcher makes | `test/plans/feat/tools/install_runtime.plan.toml` |

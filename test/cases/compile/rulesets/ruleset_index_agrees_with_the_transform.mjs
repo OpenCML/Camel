@@ -20,6 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 // either spelling, and the case runs in both trees.
 function rulesetPath(dir) {
     for (const parts of [
+        ['src', 'stdlib', 'rulesets', 'vmap.cml'],
         ['lib', 'rulesets', 'vmap.cml'],
         ['stdlib', 'rulesets', 'vmap.cml'],
     ]) {

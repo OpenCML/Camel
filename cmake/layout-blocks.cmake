@@ -6,10 +6,18 @@
 # for the layout, and the first one is the one under review.
 #
 # Three blocks are the exception, and a regeneration would drop them: `kernel_ops`,
-# `kernel_facts` and `kernel_graph` own pure-header directories (`kernel/ops/`, `kernel/facts/`,
-# `kernel/graph/`) that the move table has no row for, so `blockOfTarget` still counts them as
+# `kernel_facts` and `kernel_graph` own pure-header directories (`src/kernel/`, `src/kernel/`,
+# `src/kernel/`) that the move table has no row for, so `blockOfTarget` still counts them as
 # `kernel_core` and `scripts/layout-move.mjs` does not emit them. Regenerate only after the three
 # rows are in the table and `LAYERS`, `deriveRoots` and `treesFor` know the names.
+#
+# 2026-11-22: the `src/` prefixes in this file were applied BY HAND, not by that generator -- it
+# stopped working when `src/stdlib/` was carved out of the move table, so there is nothing left to
+# regenerate with. The prefix is mechanical: `src/kernel/`, `src/parse/`, `src/compile/`, `src/bindings/python/` and
+# `tools/` became `src/...`, and `src/stdlib/...` became `src/stdlib/...` (`src/stdlib/<module>/` keeps its name as
+# `src/stdlib/<module>/`). A tree that still has the pre-move directories is a tree this file does
+# not describe -- the same sentence a regeneration would have produced, which is why the hand edit
+# is reviewable against the prefix rule rather than against the table.
 
 option(CAMEL_LAYOUT_TRANSITIONAL
     "Give every block the union of the include roots: a half-moved tree compiles, and the cross-layer references stay in the violation sheet instead of being compiled out."
@@ -38,137 +46,137 @@ set(CAMEL_LAYOUT_BLOCK_third_party_ROOTS
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_utils_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/utils
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/utils
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_core_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/abi
-    ${PROJECT_SOURCE_DIR}/kernel/core
-    ${PROJECT_SOURCE_DIR}/kernel/diagnostics
-    ${PROJECT_SOURCE_DIR}/kernel/execute
-    ${PROJECT_SOURCE_DIR}/kernel/include
-    ${PROJECT_SOURCE_DIR}/kernel/profile
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/abi
+    ${PROJECT_SOURCE_DIR}/src/kernel/core
+    ${PROJECT_SOURCE_DIR}/src/kernel/diagnostics
+    ${PROJECT_SOURCE_DIR}/src/kernel/execute
+    ${PROJECT_SOURCE_DIR}/src/kernel/include
+    ${PROJECT_SOURCE_DIR}/src/kernel/profile
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_ops_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/ops
-    ${PROJECT_SOURCE_DIR}/kernel/ops/include
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/ops
+    ${PROJECT_SOURCE_DIR}/src/kernel/ops/include
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_facts_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/facts
-    ${PROJECT_SOURCE_DIR}/kernel/facts/include
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/facts
+    ${PROJECT_SOURCE_DIR}/src/kernel/facts/include
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_graph_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/graph
-    ${PROJECT_SOURCE_DIR}/kernel/graph/include
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/graph
+    ${PROJECT_SOURCE_DIR}/src/kernel/graph/include
 )
 set(CAMEL_LAYOUT_BLOCK_kernel_runtime_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/runtime
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/runtime
 )
 set(CAMEL_LAYOUT_BLOCK_parse_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/parse/include
-    ${PROJECT_SOURCE_DIR}/parse/src
+    ${PROJECT_SOURCE_DIR}/src/parse/include
+    ${PROJECT_SOURCE_DIR}/src/parse/src
 )
 set(CAMEL_LAYOUT_BLOCK_compile_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/compile/include
-    ${PROJECT_SOURCE_DIR}/compile/semantic
-    ${PROJECT_SOURCE_DIR}/compile/src
+    ${PROJECT_SOURCE_DIR}/src/compile/include
+    ${PROJECT_SOURCE_DIR}/src/compile/semantic
+    ${PROJECT_SOURCE_DIR}/src/compile/src
 )
 set(CAMEL_LAYOUT_BLOCK_lib_std_ROOTS
-    ${PROJECT_SOURCE_DIR}/lib/std
-    ${PROJECT_SOURCE_DIR}/lib/std/builtin
-    ${PROJECT_SOURCE_DIR}/lib/std/cml
-    ${PROJECT_SOURCE_DIR}/lib/std/cml/include
-    ${PROJECT_SOURCE_DIR}/lib/std/cpp
-    ${PROJECT_SOURCE_DIR}/lib/std/cpp/include
-    ${PROJECT_SOURCE_DIR}/lib/std/cxx/opt
-    ${PROJECT_SOURCE_DIR}/lib/std/cxx/opt/include
-    ${PROJECT_SOURCE_DIR}/lib/std/exec
-    ${PROJECT_SOURCE_DIR}/lib/std/exec/include
-    ${PROJECT_SOURCE_DIR}/lib/std/fvm
-    ${PROJECT_SOURCE_DIR}/lib/std/gc
-    ${PROJECT_SOURCE_DIR}/lib/std/gir
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/dot
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/dot/include
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/include
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/json
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/json/include
-    ${PROJECT_SOURCE_DIR}/lib/std/macro
-    ${PROJECT_SOURCE_DIR}/lib/std/macro/include
-    ${PROJECT_SOURCE_DIR}/lib/std/nop
-    ${PROJECT_SOURCE_DIR}/lib/std/nvm
-    ${PROJECT_SOURCE_DIR}/lib/std/prl
-    ${PROJECT_SOURCE_DIR}/lib/std/profile
-    ${PROJECT_SOURCE_DIR}/lib/std/rulesets
-    ${PROJECT_SOURCE_DIR}/lib/std/selftest
-    ${PROJECT_SOURCE_DIR}/lib/std/stats
-    ${PROJECT_SOURCE_DIR}/lib/std/tns
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/builtin
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cml
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cml/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cpp
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cpp/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cxx/opt
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cxx/opt/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/exec
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/exec/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/fvm
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gc
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/dot
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/dot/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/json
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/json/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/macro
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/macro/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/nop
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/nvm
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/prl
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/profile
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/rulesets
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/selftest
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/stats
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/tns
 )
 set(CAMEL_LAYOUT_BLOCK_lib_module_ROOTS
     ${PROJECT_SOURCE_DIR}/.
-    ${PROJECT_SOURCE_DIR}/lib
-    ${PROJECT_SOURCE_DIR}/lib/array
-    ${PROJECT_SOURCE_DIR}/lib/autodiff
-    ${PROJECT_SOURCE_DIR}/lib/autodiff/signatures
-    ${PROJECT_SOURCE_DIR}/lib/bytes
-    ${PROJECT_SOURCE_DIR}/lib/ckpt
-    ${PROJECT_SOURCE_DIR}/lib/ckpt/include
-    ${PROJECT_SOURCE_DIR}/lib/ckpt/signatures
-    ${PROJECT_SOURCE_DIR}/lib/env
-    ${PROJECT_SOURCE_DIR}/lib/fs
-    ${PROJECT_SOURCE_DIR}/lib/graph
-    ${PROJECT_SOURCE_DIR}/lib/hash
-    ${PROJECT_SOURCE_DIR}/lib/io
-    ${PROJECT_SOURCE_DIR}/lib/json
-    ${PROJECT_SOURCE_DIR}/lib/math
-    ${PROJECT_SOURCE_DIR}/lib/nn
-    ${PROJECT_SOURCE_DIR}/lib/nn/signatures
-    ${PROJECT_SOURCE_DIR}/lib/onnx
-    ${PROJECT_SOURCE_DIR}/lib/opt
-    ${PROJECT_SOURCE_DIR}/lib/optim
-    ${PROJECT_SOURCE_DIR}/lib/para
-    ${PROJECT_SOURCE_DIR}/lib/perf
-    ${PROJECT_SOURCE_DIR}/lib/process
-    ${PROJECT_SOURCE_DIR}/lib/pyplot
-    ${PROJECT_SOURCE_DIR}/lib/python
-    ${PROJECT_SOURCE_DIR}/lib/random
-    ${PROJECT_SOURCE_DIR}/lib/re
-    ${PROJECT_SOURCE_DIR}/lib/rewrite
-    ${PROJECT_SOURCE_DIR}/lib/rules
-    ${PROJECT_SOURCE_DIR}/lib/rulesets
-    ${PROJECT_SOURCE_DIR}/lib/sim
-    ${PROJECT_SOURCE_DIR}/lib/state
-    ${PROJECT_SOURCE_DIR}/lib/statistics
-    ${PROJECT_SOURCE_DIR}/lib/str
-    ${PROJECT_SOURCE_DIR}/lib/stream
-    ${PROJECT_SOURCE_DIR}/lib/tensor
-    ${PROJECT_SOURCE_DIR}/lib/tensor/signatures
-    ${PROJECT_SOURCE_DIR}/lib/tensor_definitions
-    ${PROJECT_SOURCE_DIR}/lib/test
-    ${PROJECT_SOURCE_DIR}/lib/test/include
-    ${PROJECT_SOURCE_DIR}/lib/test_support
-    ${PROJECT_SOURCE_DIR}/lib/this
-    ${PROJECT_SOURCE_DIR}/lib/tiles
-    ${PROJECT_SOURCE_DIR}/lib/tiles/include
-    ${PROJECT_SOURCE_DIR}/lib/tiles/signatures
-    ${PROJECT_SOURCE_DIR}/lib/time
-    ${PROJECT_SOURCE_DIR}/lib/transforms
-    ${PROJECT_SOURCE_DIR}/lib/transforms/signatures
-    ${PROJECT_SOURCE_DIR}/lib/tree
-    ${PROJECT_SOURCE_DIR}/lib/types
-    ${PROJECT_SOURCE_DIR}/lib/verify
-    ${PROJECT_SOURCE_DIR}/lib/vjp
+    ${PROJECT_SOURCE_DIR}/src/stdlib
+    ${PROJECT_SOURCE_DIR}/src/stdlib/array
+    ${PROJECT_SOURCE_DIR}/src/stdlib/autodiff
+    ${PROJECT_SOURCE_DIR}/src/stdlib/autodiff/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/bytes
+    ${PROJECT_SOURCE_DIR}/src/stdlib/ckpt
+    ${PROJECT_SOURCE_DIR}/src/stdlib/ckpt/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/ckpt/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/env
+    ${PROJECT_SOURCE_DIR}/src/stdlib/fs
+    ${PROJECT_SOURCE_DIR}/src/stdlib/graph
+    ${PROJECT_SOURCE_DIR}/src/stdlib/hash
+    ${PROJECT_SOURCE_DIR}/src/stdlib/io
+    ${PROJECT_SOURCE_DIR}/src/stdlib/json
+    ${PROJECT_SOURCE_DIR}/src/stdlib/math
+    ${PROJECT_SOURCE_DIR}/src/stdlib/nn
+    ${PROJECT_SOURCE_DIR}/src/stdlib/nn/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/onnx
+    ${PROJECT_SOURCE_DIR}/src/stdlib/opt
+    ${PROJECT_SOURCE_DIR}/src/stdlib/optim
+    ${PROJECT_SOURCE_DIR}/src/stdlib/para
+    ${PROJECT_SOURCE_DIR}/src/stdlib/perf
+    ${PROJECT_SOURCE_DIR}/src/stdlib/process
+    ${PROJECT_SOURCE_DIR}/src/stdlib/pyplot
+    ${PROJECT_SOURCE_DIR}/src/stdlib/python
+    ${PROJECT_SOURCE_DIR}/src/stdlib/random
+    ${PROJECT_SOURCE_DIR}/src/stdlib/re
+    ${PROJECT_SOURCE_DIR}/src/stdlib/rewrite
+    ${PROJECT_SOURCE_DIR}/src/stdlib/rules
+    ${PROJECT_SOURCE_DIR}/src/stdlib/rulesets
+    ${PROJECT_SOURCE_DIR}/src/stdlib/sim
+    ${PROJECT_SOURCE_DIR}/src/stdlib/state
+    ${PROJECT_SOURCE_DIR}/src/stdlib/statistics
+    ${PROJECT_SOURCE_DIR}/src/stdlib/str
+    ${PROJECT_SOURCE_DIR}/src/stdlib/stream
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tensor
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tensor/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tensor_definitions
+    ${PROJECT_SOURCE_DIR}/src/stdlib/test
+    ${PROJECT_SOURCE_DIR}/src/stdlib/test/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/test_support
+    ${PROJECT_SOURCE_DIR}/src/stdlib/this
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tiles
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tiles/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tiles/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/time
+    ${PROJECT_SOURCE_DIR}/src/stdlib/transforms
+    ${PROJECT_SOURCE_DIR}/src/stdlib/transforms/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tree
+    ${PROJECT_SOURCE_DIR}/src/stdlib/types
+    ${PROJECT_SOURCE_DIR}/src/stdlib/verify
+    ${PROJECT_SOURCE_DIR}/src/stdlib/vjp
 )
 set(CAMEL_LAYOUT_BLOCK_unplaced_ROOTS
     ${PROJECT_SOURCE_DIR}/.
@@ -177,128 +185,128 @@ set(CAMEL_LAYOUT_BLOCK_unplaced_ROOTS
     ${PROJECT_SOURCE_DIR}/src
 )
 set(CAMEL_LAYOUT_BLOCK_tools_ROOTS
-    ${PROJECT_SOURCE_DIR}/tools
-    ${PROJECT_SOURCE_DIR}/tools/codegen/source
-    ${PROJECT_SOURCE_DIR}/tools/debugger/src
-    ${PROJECT_SOURCE_DIR}/tools/profiler/advanced
-    ${PROJECT_SOURCE_DIR}/tools/profiler/analysis
-    ${PROJECT_SOURCE_DIR}/tools/profiler/core
-    ${PROJECT_SOURCE_DIR}/tools/profiler/tracers
+    ${PROJECT_SOURCE_DIR}/src/tools
+    ${PROJECT_SOURCE_DIR}/src/tools/codegen/source
+    ${PROJECT_SOURCE_DIR}/src/tools/debugger/src
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/advanced
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/analysis
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/core
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/tracers
 )
 
 set(CAMEL_LAYOUT_CATCHALL_ROOTS
     ${PROJECT_SOURCE_DIR}/.
     ${PROJECT_SOURCE_DIR}/cmake
-    ${PROJECT_SOURCE_DIR}/compile/include
-    ${PROJECT_SOURCE_DIR}/compile/semantic
-    ${PROJECT_SOURCE_DIR}/compile/src
+    ${PROJECT_SOURCE_DIR}/src/compile/include
+    ${PROJECT_SOURCE_DIR}/src/compile/semantic
+    ${PROJECT_SOURCE_DIR}/src/compile/src
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/kernel
-    ${PROJECT_SOURCE_DIR}/kernel/abi
-    ${PROJECT_SOURCE_DIR}/kernel/core
-    ${PROJECT_SOURCE_DIR}/kernel/diagnostics
-    ${PROJECT_SOURCE_DIR}/kernel/execute
-    ${PROJECT_SOURCE_DIR}/kernel/facts
-    ${PROJECT_SOURCE_DIR}/kernel/facts/include
-    ${PROJECT_SOURCE_DIR}/kernel/graph
-    ${PROJECT_SOURCE_DIR}/kernel/graph/include
-    ${PROJECT_SOURCE_DIR}/kernel/include
-    ${PROJECT_SOURCE_DIR}/kernel/ops
-    ${PROJECT_SOURCE_DIR}/kernel/ops/include
-    ${PROJECT_SOURCE_DIR}/kernel/profile
-    ${PROJECT_SOURCE_DIR}/kernel/runtime
-    ${PROJECT_SOURCE_DIR}/kernel/utils
-    ${PROJECT_SOURCE_DIR}/lib
-    ${PROJECT_SOURCE_DIR}/lib/array
-    ${PROJECT_SOURCE_DIR}/lib/autodiff
-    ${PROJECT_SOURCE_DIR}/lib/autodiff/signatures
-    ${PROJECT_SOURCE_DIR}/lib/bytes
-    ${PROJECT_SOURCE_DIR}/lib/ckpt
-    ${PROJECT_SOURCE_DIR}/lib/ckpt/include
-    ${PROJECT_SOURCE_DIR}/lib/ckpt/signatures
-    ${PROJECT_SOURCE_DIR}/lib/env
-    ${PROJECT_SOURCE_DIR}/lib/fs
-    ${PROJECT_SOURCE_DIR}/lib/graph
-    ${PROJECT_SOURCE_DIR}/lib/hash
-    ${PROJECT_SOURCE_DIR}/lib/io
-    ${PROJECT_SOURCE_DIR}/lib/json
-    ${PROJECT_SOURCE_DIR}/lib/math
-    ${PROJECT_SOURCE_DIR}/lib/nn
-    ${PROJECT_SOURCE_DIR}/lib/nn/signatures
-    ${PROJECT_SOURCE_DIR}/lib/onnx
-    ${PROJECT_SOURCE_DIR}/lib/opt
-    ${PROJECT_SOURCE_DIR}/lib/optim
-    ${PROJECT_SOURCE_DIR}/lib/para
-    ${PROJECT_SOURCE_DIR}/lib/perf
-    ${PROJECT_SOURCE_DIR}/lib/process
-    ${PROJECT_SOURCE_DIR}/lib/pyplot
-    ${PROJECT_SOURCE_DIR}/lib/python
-    ${PROJECT_SOURCE_DIR}/lib/random
-    ${PROJECT_SOURCE_DIR}/lib/re
-    ${PROJECT_SOURCE_DIR}/lib/rewrite
-    ${PROJECT_SOURCE_DIR}/lib/rules
-    ${PROJECT_SOURCE_DIR}/lib/rulesets
-    ${PROJECT_SOURCE_DIR}/lib/sim
-    ${PROJECT_SOURCE_DIR}/lib/state
-    ${PROJECT_SOURCE_DIR}/lib/statistics
-    ${PROJECT_SOURCE_DIR}/lib/std
-    ${PROJECT_SOURCE_DIR}/lib/std/builtin
-    ${PROJECT_SOURCE_DIR}/lib/std/cml
-    ${PROJECT_SOURCE_DIR}/lib/std/cml/include
-    ${PROJECT_SOURCE_DIR}/lib/std/cpp
-    ${PROJECT_SOURCE_DIR}/lib/std/cpp/include
-    ${PROJECT_SOURCE_DIR}/lib/std/cxx/opt
-    ${PROJECT_SOURCE_DIR}/lib/std/cxx/opt/include
-    ${PROJECT_SOURCE_DIR}/lib/std/exec
-    ${PROJECT_SOURCE_DIR}/lib/std/exec/include
-    ${PROJECT_SOURCE_DIR}/lib/std/fvm
-    ${PROJECT_SOURCE_DIR}/lib/std/gc
-    ${PROJECT_SOURCE_DIR}/lib/std/gir
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/dot
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/dot/include
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/include
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/json
-    ${PROJECT_SOURCE_DIR}/lib/std/gir/json/include
-    ${PROJECT_SOURCE_DIR}/lib/std/macro
-    ${PROJECT_SOURCE_DIR}/lib/std/macro/include
-    ${PROJECT_SOURCE_DIR}/lib/std/nop
-    ${PROJECT_SOURCE_DIR}/lib/std/nvm
-    ${PROJECT_SOURCE_DIR}/lib/std/prl
-    ${PROJECT_SOURCE_DIR}/lib/std/profile
-    ${PROJECT_SOURCE_DIR}/lib/std/rulesets
-    ${PROJECT_SOURCE_DIR}/lib/std/selftest
-    ${PROJECT_SOURCE_DIR}/lib/std/stats
-    ${PROJECT_SOURCE_DIR}/lib/std/tns
-    ${PROJECT_SOURCE_DIR}/lib/str
-    ${PROJECT_SOURCE_DIR}/lib/stream
-    ${PROJECT_SOURCE_DIR}/lib/tensor
-    ${PROJECT_SOURCE_DIR}/lib/tensor/signatures
-    ${PROJECT_SOURCE_DIR}/lib/tensor_definitions
-    ${PROJECT_SOURCE_DIR}/lib/test
-    ${PROJECT_SOURCE_DIR}/lib/test/include
-    ${PROJECT_SOURCE_DIR}/lib/test_support
-    ${PROJECT_SOURCE_DIR}/lib/this
-    ${PROJECT_SOURCE_DIR}/lib/tiles
-    ${PROJECT_SOURCE_DIR}/lib/tiles/include
-    ${PROJECT_SOURCE_DIR}/lib/tiles/signatures
-    ${PROJECT_SOURCE_DIR}/lib/time
-    ${PROJECT_SOURCE_DIR}/lib/transforms
-    ${PROJECT_SOURCE_DIR}/lib/transforms/signatures
-    ${PROJECT_SOURCE_DIR}/lib/tree
-    ${PROJECT_SOURCE_DIR}/lib/types
-    ${PROJECT_SOURCE_DIR}/lib/verify
-    ${PROJECT_SOURCE_DIR}/lib/vjp
-    ${PROJECT_SOURCE_DIR}/parse/include
-    ${PROJECT_SOURCE_DIR}/parse/src
+    ${PROJECT_SOURCE_DIR}/src/kernel
+    ${PROJECT_SOURCE_DIR}/src/kernel/abi
+    ${PROJECT_SOURCE_DIR}/src/kernel/core
+    ${PROJECT_SOURCE_DIR}/src/kernel/diagnostics
+    ${PROJECT_SOURCE_DIR}/src/kernel/execute
+    ${PROJECT_SOURCE_DIR}/src/kernel/facts
+    ${PROJECT_SOURCE_DIR}/src/kernel/facts/include
+    ${PROJECT_SOURCE_DIR}/src/kernel/graph
+    ${PROJECT_SOURCE_DIR}/src/kernel/graph/include
+    ${PROJECT_SOURCE_DIR}/src/kernel/include
+    ${PROJECT_SOURCE_DIR}/src/kernel/ops
+    ${PROJECT_SOURCE_DIR}/src/kernel/ops/include
+    ${PROJECT_SOURCE_DIR}/src/kernel/profile
+    ${PROJECT_SOURCE_DIR}/src/kernel/runtime
+    ${PROJECT_SOURCE_DIR}/src/kernel/utils
+    ${PROJECT_SOURCE_DIR}/src/stdlib
+    ${PROJECT_SOURCE_DIR}/src/stdlib/array
+    ${PROJECT_SOURCE_DIR}/src/stdlib/autodiff
+    ${PROJECT_SOURCE_DIR}/src/stdlib/autodiff/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/bytes
+    ${PROJECT_SOURCE_DIR}/src/stdlib/ckpt
+    ${PROJECT_SOURCE_DIR}/src/stdlib/ckpt/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/ckpt/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/env
+    ${PROJECT_SOURCE_DIR}/src/stdlib/fs
+    ${PROJECT_SOURCE_DIR}/src/stdlib/graph
+    ${PROJECT_SOURCE_DIR}/src/stdlib/hash
+    ${PROJECT_SOURCE_DIR}/src/stdlib/io
+    ${PROJECT_SOURCE_DIR}/src/stdlib/json
+    ${PROJECT_SOURCE_DIR}/src/stdlib/math
+    ${PROJECT_SOURCE_DIR}/src/stdlib/nn
+    ${PROJECT_SOURCE_DIR}/src/stdlib/nn/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/onnx
+    ${PROJECT_SOURCE_DIR}/src/stdlib/opt
+    ${PROJECT_SOURCE_DIR}/src/stdlib/optim
+    ${PROJECT_SOURCE_DIR}/src/stdlib/para
+    ${PROJECT_SOURCE_DIR}/src/stdlib/perf
+    ${PROJECT_SOURCE_DIR}/src/stdlib/process
+    ${PROJECT_SOURCE_DIR}/src/stdlib/pyplot
+    ${PROJECT_SOURCE_DIR}/src/stdlib/python
+    ${PROJECT_SOURCE_DIR}/src/stdlib/random
+    ${PROJECT_SOURCE_DIR}/src/stdlib/re
+    ${PROJECT_SOURCE_DIR}/src/stdlib/rewrite
+    ${PROJECT_SOURCE_DIR}/src/stdlib/rules
+    ${PROJECT_SOURCE_DIR}/src/stdlib/rulesets
+    ${PROJECT_SOURCE_DIR}/src/stdlib/sim
+    ${PROJECT_SOURCE_DIR}/src/stdlib/state
+    ${PROJECT_SOURCE_DIR}/src/stdlib/statistics
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/builtin
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cml
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cml/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cpp
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cpp/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cxx/opt
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/cxx/opt/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/exec
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/exec/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/fvm
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gc
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/dot
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/dot/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/json
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/json/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/macro
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/macro/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/nop
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/nvm
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/prl
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/profile
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/rulesets
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/selftest
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/stats
+    ${PROJECT_SOURCE_DIR}/src/stdlib/std/tns
+    ${PROJECT_SOURCE_DIR}/src/stdlib/str
+    ${PROJECT_SOURCE_DIR}/src/stdlib/stream
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tensor
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tensor/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tensor_definitions
+    ${PROJECT_SOURCE_DIR}/src/stdlib/test
+    ${PROJECT_SOURCE_DIR}/src/stdlib/test/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/test_support
+    ${PROJECT_SOURCE_DIR}/src/stdlib/this
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tiles
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tiles/include
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tiles/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/time
+    ${PROJECT_SOURCE_DIR}/src/stdlib/transforms
+    ${PROJECT_SOURCE_DIR}/src/stdlib/transforms/signatures
+    ${PROJECT_SOURCE_DIR}/src/stdlib/tree
+    ${PROJECT_SOURCE_DIR}/src/stdlib/types
+    ${PROJECT_SOURCE_DIR}/src/stdlib/verify
+    ${PROJECT_SOURCE_DIR}/src/stdlib/vjp
+    ${PROJECT_SOURCE_DIR}/src/parse/include
+    ${PROJECT_SOURCE_DIR}/src/parse/src
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/third_party
-    ${PROJECT_SOURCE_DIR}/tools
-    ${PROJECT_SOURCE_DIR}/tools/codegen/source
-    ${PROJECT_SOURCE_DIR}/tools/debugger/src
-    ${PROJECT_SOURCE_DIR}/tools/profiler/advanced
-    ${PROJECT_SOURCE_DIR}/tools/profiler/analysis
-    ${PROJECT_SOURCE_DIR}/tools/profiler/core
-    ${PROJECT_SOURCE_DIR}/tools/profiler/tracers
+    ${PROJECT_SOURCE_DIR}/src/tools
+    ${PROJECT_SOURCE_DIR}/src/tools/codegen/source
+    ${PROJECT_SOURCE_DIR}/src/tools/debugger/src
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/advanced
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/analysis
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/core
+    ${PROJECT_SOURCE_DIR}/src/tools/profiler/tracers
 )
 
 if(CAMEL_LAYOUT_TRANSITIONAL)
@@ -321,117 +329,122 @@ function(camel_layout_add_blocks)
         endif()
         if(_block STREQUAL "kernel_utils")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/kernel/utils/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/utils/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "kernel_core")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/kernel/abi/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/core/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/diagnostics/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/execute/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/include/camel/common/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/include/camel/core/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/include/camel/execute/pass/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/include/camel/profile/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/include/camel/runtime/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/include/camel/utils/*.cpp"
-                "${PROJECT_SOURCE_DIR}/kernel/profile/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/abi/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/core/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/diagnostics/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/execute/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/common/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/core/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/execute/pass/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/profile/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/runtime/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/include/camel/utils/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/profile/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "kernel_ops")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/kernel/ops/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/ops/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "kernel_facts")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/kernel/facts/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/facts/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "kernel_graph")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/kernel/graph/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/graph/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "kernel_runtime")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/kernel/runtime/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/kernel/runtime/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "parse")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/parse/include/camel/parse/*.cpp"
-                "${PROJECT_SOURCE_DIR}/parse/src/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/parse/include/camel/parse/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/parse/src/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "compile")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/compile/include/camel/compile/*.cpp"
-                "${PROJECT_SOURCE_DIR}/compile/include/camel/service/*.cpp"
-                "${PROJECT_SOURCE_DIR}/compile/semantic/*.cpp"
-                "${PROJECT_SOURCE_DIR}/compile/src/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/compile/include/camel/compile/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/compile/include/camel/service/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/compile/semantic/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/compile/src/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "lib_std")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/lib/std/builtin/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/cml/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/cml/include/camel/passes/trans/cml/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/cpp/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/cpp/include/camel/standalone/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/cxx/opt/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/cxx/opt/include/camel/passes/opt/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/exec/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/fvm/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/gc/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/gir/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/gir/dot/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/gir/dot/include/camel/passes/trans/dot/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/gir/json/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/gir/json/include/camel/passes/trans/json/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/macro/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/macro/include/camel/passes/macro/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/nop/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/nvm/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/prl/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/profile/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/rulesets/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/selftest/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/stats/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/std/tns/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/builtin/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/cml/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/cml/include/camel/passes/trans/cml/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/cpp/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/cpp/include/camel/standalone/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/cxx/opt/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/cxx/opt/include/camel/passes/opt/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/exec/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/fvm/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/gc/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/dot/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/dot/include/camel/passes/trans/dot/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/json/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/gir/json/include/camel/passes/trans/json/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/macro/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/macro/include/camel/passes/macro/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/nop/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/nvm/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/prl/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/profile/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/rulesets/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/selftest/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/stats/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/std/tns/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "lib_module")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/lib/rulesets/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/test/*.cpp"
-                "${PROJECT_SOURCE_DIR}/lib/test/include/camel/passes/test/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/rulesets/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/test/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/stdlib/test/include/camel/passes/test/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "unplaced")
-            file(GLOB_RECURSE _sources
+            # Not recursive, and that is the whole change of 2026-11-22: `src/` is now the umbrella
+            # the blocks were moved under, so `GLOB_RECURSE` over it collected every block's sources
+            # into a second object library and the link of libcamel failed on duplicate symbols. A
+            # source is unplaced when it sits directly in `src/`; anything under `src/<block>/` is
+            # that block's, above, and the standard library's is a module target of its own.
+            file(GLOB _sources
                 "${PROJECT_SOURCE_DIR}/src/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()
         if(_block STREQUAL "tools")
             file(GLOB_RECURSE _sources
-                "${PROJECT_SOURCE_DIR}/tools/codegen/source/*.cpp"
-                "${PROJECT_SOURCE_DIR}/tools/profiler/advanced/*.cpp"
-                "${PROJECT_SOURCE_DIR}/tools/profiler/analysis/*.cpp"
-                "${PROJECT_SOURCE_DIR}/tools/profiler/core/*.cpp"
-                "${PROJECT_SOURCE_DIR}/tools/profiler/tracers/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/tools/codegen/source/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/tools/profiler/advanced/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/tools/profiler/analysis/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/tools/profiler/core/*.cpp"
+                "${PROJECT_SOURCE_DIR}/src/tools/profiler/tracers/*.cpp"
             )
             list(FILTER _sources EXCLUDE REGEX "/parse/src/src/antlr/")
         endif()

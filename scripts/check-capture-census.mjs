@@ -37,7 +37,7 @@
  *
  * --- the split: two kinds of port, and the one that has to reach zero --------------------
  * Not every by-reference port is the program's. A generator keeps the state it carries from one
- * `yield` to the next in cells of its own body (`compile/src/gct/builder.cpp#Builder::
+ * `yield` to the next in cells of its own body (`src/compile/src/gct/builder.cpp#Builder::
  * visitGeneratorBody`: `__gen_pc__`, and every local the body declares), and hands
  * those cells to its caller inside a closure the machine builds itself (`streamValue()`: an
  * unnamed function whose whole body is `return __gen_step__()`). The state carried a second
@@ -57,7 +57,7 @@
  *   capture_ports_generator  the port sits in a graph the generator machine built. Two markers,
  *                            both facts about the graph:
  *                            (a) the graph names itself `__gen_*`. The machine's step function is
- *                                `compile/src/gct/builder_func.cpp#Builder::visitGeneratorBody`'s
+ *                                `src/compile/src/gct/builder_func.cpp#Builder::visitGeneratorBody`'s
  *                                `stepName` (`const std::string stepName = "__gen_step__"`), and
  *                                nothing else in the compiler gives a graph that prefix (an
  *                                ordinary anonymous closure is `__g_<n>__`);
@@ -180,7 +180,7 @@ const FORMAT = 'camel.gir'
 
 /**
  * The prefix of the graphs the generator machine builds for itself: `__gen_step__`
- * (`compile/src/gct/builder_func.cpp#Builder::visitGeneratorBody`, `stepName`). It is matched on a
+ * (`src/compile/src/gct/builder_func.cpp#Builder::visitGeneratorBody`, `stepName`). It is matched on a
  * graph's `name`, never on a port's, and the header says why the graph is the reliable marker.
  */
 const GENERATOR_GRAPH = '__gen_'

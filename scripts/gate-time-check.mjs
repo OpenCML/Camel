@@ -5,7 +5,7 @@
 /**
  * The gate's build-side facts, measured on a machine that has the Release build tree:
  *
- *   node scripts/gate-time-check.mjs [--config Release] [--header kernel/include/camel/core/operator.h]
+ *   node scripts/gate-time-check.mjs [--config Release] [--header src/kernel/include/camel/core/operator.h]
  *
  * It runs on the build host (the gate host keeps out/latest), not on a workstation that cannot
  * build. Three checks, each of which can go red:
@@ -29,7 +29,7 @@
  *      and nothing else. The check rewrites the generated headers exactly as a reconfigure does
  *      when the pin in `build/footprint.json` moves, runs ninja for real, and names every object
  *      and link edge it saw. Red when a heavy translation unit includes `build_config.h` again:
- *      `tools/camel-cli/config.cpp` (17 s) and `tools/debugger/src/repl.cpp` (15 s) did, so any
+ *      `src/tools/camel-cli/config.cpp` (17 s) and `src/tools/debugger/src/repl.cpp` (15 s) did, so any
  *      stamp change cost 32 s of compilation for a string that reaches one `cout`.
  *      `--repeat N` measures the same change N times and prints the spread, because the build
  *      host is shared and a single number cannot tell a real difference from load.
@@ -56,7 +56,7 @@ function usage(message) {
     process.exit(2)
 }
 
-const options = { config: 'Release', header: 'kernel/include/camel/core/operator.h', stampRebuild: false, repeat: 1 }
+const options = { config: 'Release', header: 'src/kernel/include/camel/core/operator.h', stampRebuild: false, repeat: 1 }
 const argv = process.argv.slice(2)
 for (let i = 0; i < argv.length; i++) {
     const next = () => {
