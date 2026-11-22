@@ -76,7 +76,7 @@ Clang、CMake、Conan、Ninja 是构建本身需要的。Python 只用于 `pytho
 5. **提交前检查**
 
    ```bash
-   npm run format    # 格式化 src/、include/、modules/ 与 tools/ 下的 C++
+   npm run format    # 格式化 kernel/、parse/、compile/、lib/ 与 tools/ 下的 C++（旧布局的 src/、include/、modules/ 存在时同样带上）
    npm run test      # fast 测试层
    ```
 
@@ -86,16 +86,17 @@ Clang、CMake、Conan、Ninja 是构建本身需要的。Python 只用于 `pytho
 
 ### Style Guide
 
-- **C++ 代码**：使用 `clang-format` 格式化，对 `src/`、`include/`、`modules/` 与 `tools/` 下的 `.cpp`、`.h` 文件执行 `npm run format`
+- **C++ 代码**：使用 `clang-format` 格式化，对块根（`kernel/`、`parse/`、`compile/`、`lib/`、`tools/`；搬家前的树上是 `src/`、`include/`、`modules/`、`tools/`）下的 `.cpp`、`.h` 文件执行 `npm run format`。`scripts/format.js` 按树里**实际存在的目录**探测这些根，而不是假定某一套；一个都不存在时它以 1 退出并报出根名，而不是当作没有要格式化的文件。
 - **Camel 源码**：遵循项目既有的语法和风格
 - **文档**：Markdown 格式，保持与现有文档风格一致
 
 ### 文件结构
 
-- `src/`：C++ 实现
-- `include/`：C++ 头文件
-- `modules/`：库模块（如 `python`）
-- `stdlib/`：用 Camel 写的标准库
+- `kernel/`：C++ 图内核，唯一公开的 C++ API（公开头在 `kernel/include/`，其余头文件放在各自源文件旁边）
+- `parse/`：源码 → 语法树
+- `compile/`：语法树 → 图
+- `lib/<模块>/`：每个 Camel 模块一处，`.cml` 声明与 C++ 实现放在一起（如 `lib/python/`）；用 Camel 写的标准库在 `lib/std/`
+- `tools/`：命令行、调试器、语言服务器等独立程序
 - `test/`：测试用例
 - `docs/`：文档
 
