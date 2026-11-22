@@ -4,8 +4,6 @@
 
 ## 待接手
 
-- **D-1123-1** 开 `lane/stage2-frontend-oper`：前端改为生成 OPER，不再产出 Cast/Fill/Accs 节点（四个算子已在 `src/stdlib` 声明，`801e22a43`）。完成：前端不再产出这三种节点。
-- **D-1123-2** 开 `lane/stage3-facts`：五样分析（效应汇总、使用索引、执行计划、`ControlRegions` 的计算、写法提取）挪进事实框架，原缓存删除；33 处绕过事实层的纯度判断改问事实（`internal/plans/2026-11-22-refactor-stage3-graph-storage.cn.md` 3b）。
 - **D-1123-3** 变换车道查明 `GCNodeKind::{Cast,Fill,Accs}` 引用 144→146 是新增还是挪动；迁读者只许让这个数减少。
 - **D-1123-6** 把 `internal/archive/` 里 `pending-work.cn.md`、`pending-work-status.cn.md`、`red-baseline.cn.md`、`held-branches.cn.md` 中没做完的条目，以 `C-` 编号转进 `backlog.md`；本 inbox 的 D-1123-1 到 -4 接手后也进 backlog。完成：backlog 是协调者手上活的唯一清单。
 - **D-1123-8** 提交检查补两项（设计原则第 1 节红线 1、4、6，负责人 2026-11-23，与 ECOOP 稿的提交条件一致）：同一区域里两个冲突节点（访问同一资源、至少一个是写）之间必须有先后，遍可以颠倒、不能让它们无序；函数体访问的、图没绑定的资源必须写在签名的效应里。先核对现有提交校验做到了哪些，缺的补上，各配一条用例（删掉唯一的排序边被拒、颠倒顺序被接受）。归到图·写车道的发布检查里一起做。
@@ -13,10 +11,11 @@
 - **D-1123-12** 记号再统一六处（含⑤函数组合改为 `f <> g`：两边留空格，禁空尖括号表 `f<>`，删 `f..g` 与 `?..`，优先级与区间同级、比 `->` 松，设计原则 4.2；⑥算子 URI 一律 `模块:路径`，`:op/add` 写成 `std:op/add`，登记时检查冒号前的模块，诊断与调试器显示 Camel 名字而不是 URI，设计原则 9.3）（设计原则 4.4、4.2 区间、5.9，负责人 2026-11-23），与 D-1123-11 同一批改、`.cml` 只动一遍：① 返回类型一律 `=> 类型`（`func f(x: int) => int { … }`、`func (x) => int { … }`），`:` 不再写返回类型；② 切片改用区间写法 `t[a..b]`、`t[..b]`、`t[a..]`，带步长写 `t[range(a, b, s)]`；③ 按名字给的类型实参写 `f::<T: int>`；④ `static for … do …`（不再用 `=>`）。旧写法直接删除、不留诊断；语言参考、教程、格式化器、LSP、语法高亮、AST 记录同批改。
 - **D-1123-13** 空格规则（设计原则 4.1，负责人 2026-11-23）：紧贴的一律比留空格的绑得紧，乘方是唯一例外。① `camel-fmt` 按此排空格（`x->f` 紧贴、`f <> g` 留空格），对全部 `.cml` 跑一遍，与 D-1123-11/12 同批；② 语言参考 6.12 优先级表加一列"写法：紧贴/留空格"，并核对表与原则一致（`<>` 与区间同级、比 `->` 松）；③ 加一条检查：格式化后 `git diff` 为空。
 - **D-1123-14（流程）** inbox 里 13 条都还在，其中 D-1123-7（`.cml` 注释里的旧路径，`lane/cleanup-cml-comments` 已合）、D-1123-10（整枝合 fsh-dev）已经做完，却没删、也没进 backlog。请按 `internal/README.md`：接手一条就从 inbox 删掉、以同一编号进 `backlog.md`；做完的写上提交哈希。backlog 的状态列只用 `待做`/`在做`/`卡住（原因）`/`完成` 四个词（现在写的是 `open`，我的检查读不出来）。
-- **D-1123-15（错值，先做；已挂两轮没人接）** `jvp_max_axis`/`jvp_min_axis`（`src/stdlib/rulesets/jvp.cml` 373–380 行）的前向交出的是 `max_axis_stated(dxs, mask, …)`，而按 `tensor.cml` 的声明它的值就是 `max<axis>(dxs)`——"切向量的最大值"，不是"最大值处的切向量"。例：`xs = [1, 2]`、`dxs = [5, 0]`，应得 0，现在得 5。改成选中位置上切向量之和（`sum<axis, keepdims>(where(mask, dxs, 0))` 一类写法），这正好与现有反向律"乘以 mask"互为转置；并列时取各并列位置切向量之和，与反向"每个并列位置拿到整份余切"一致。补一条非均匀切向量的用例与一条并列用例，两种后端核对。这是用户可见的错值，按重构总方案第 5 节做最小修复。
-- **D-1123-16** 规范编号在宽度超过 6 的并列上回落到 `stable_sort`，让创建次序漏进编号（`src/kernel/runtime/canonical.cpp`），违反原则 9.5"编号与节点的创建顺序无关"。以 `C-` 记进 backlog，归图车道，随阶段 3c 新表示一起做，先补一条能红的用例。
 - **D-1123-17（流程）** 车道表写着 8 条在跑，backlog 却没有一条 `doing`：请把每条车道正在做的那几条 backlog 改成 `doing`，并在车道表那一行写上它们的编号（`internal/README.md` 的"每条在做的条目都要能在某条车道上找到"）。状态词用英文也行（open / doing / blocked / done），我的检查两种都读。
-- **D-1123-18（开车道，在跑的只剩 5 条）** 当轮开三条，开了在车道表加行、对应条目在 backlog 标 `doing`：
-  1. `lane/fix-extremum-jvp`：做 D-1123-15（错值，最小修复，带非均匀与并列两条用例）。只动 `src/stdlib/rulesets/jvp.cml` 与用例，和别的车道不冲突。
-  2. `lane/commit-checks`：做 D-1123-8（提交检查补"冲突访问有先后"与"未绑定资源在签名效应里"两项，各一条用例）。在 `src/kernel/graph` 的发布检查里，接着已合入的编辑会话两入口做。
-  3. `lane/notation`：做 D-1123-11/12/13 的记号改动，分两步：先让解析器认新写法、格式化器输出新写法（这一步不动 `.cml`）；再用格式化器对全部 `.cml` 做一次机械改写，单独一笔，等 `lane/stage2-panic` 的 `.cml` 改动合入后、在合并位排的空档里做，期间别的车道不合入 `.cml` 改动，改完重录 AST 记录。
+- **D-1123-19（开车道，在跑的只剩 3 条：图、前端·OPER、事实）** 当轮开五条，开了在车道表加行、条目在 backlog 标 `doing`：
+  1. `lane/commit-checks`：D-1123-8，提交检查补"冲突访问有先后"与"未绑定资源在签名效应里"。
+  2. `lane/notation`：D-1123-11/12/13 的记号改动（若 `lane/data-arg-migration` 就是这件，用它，并把它写进车道表——车道表里现在没有这一行）。
+  3. `lane/panic-record`：`panic` 收尾——余下没写的补上，`graph.cpp` 改为从算子记录读"会不会故障"，附改动前后一项不变的表。
+  4. `lane/3a-transforms`：阶段 3a（`internal/plans/2026-11-22-refactor-stage3-graph-storage.cn.md`），`src/stdlib/{transforms,autodiff,rewrite}` 与 `src/kernel/rewrite` 里直接读 `GCGraph`/`GraphDraft` 的地方改读 `GraphView`（`Graph::view()` 已可用）。
+  5. `lane/3a-exec`：同上，`src/stdlib/std/{nvm,fvm,prl,cpp,exec}` 与 `src/tools`。
+  3a 用一个只减不增的计数守着两个旧类型的直接引用，计数写进每次合入的说明。
