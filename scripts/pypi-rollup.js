@@ -52,7 +52,7 @@ function ensureDirSync(dir) {
 const isWin = process.platform === 'win32'
 
 /** Tools that are built for the test suite only and are not part of a release. */
-const TEST_ONLY_TOOLS = ['camel-parsecheck']
+const TEST_ONLY_TOOLS = ['camel-parsecheck', 'camel-oprecord']
 
 function isTestOnlyTool(fileName) {
     return TEST_ONLY_TOOLS.includes(fileName.replace(/[.]exe$/i, ''))
