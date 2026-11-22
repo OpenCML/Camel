@@ -40,7 +40,11 @@ bool isDeciding(RegionKind kind) {
 } // namespace
 
 RegionId decidingRegionOf(const GraphView &graph, camel::graph::NodeRef ref) {
-    if (!graph.contains(ref)) {
+    // A place the view holds is one the graph has a node at, whether or not the view prints that
+    // node: a JOIN is a place of its own (the view folds it into the BRCH) and it still runs
+    // somewhere, so the walk starts from its region like any other node's. A ref the graph does not
+    // hold has no region to start from.
+    if (ref == kNoNode || ref >= graph.nodeSlotCount()) {
         return 0;
     }
     // Region ids are not reused and a region's parent is always a region the graph holds (0 is
