@@ -465,6 +465,17 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         // ordinary operator the COPY node kind becomes. Its answer is the one the three backends'
         // COPY arms already give (`operators/copy.cpp`).
         {"op/copy", __copy__},
+        // The other three shapes plan 2.3, step 2 turns into operators -- a conversion, a
+        // construction and a member read. Their kernels answer what the CAST, FILL and ACCS arms of
+        // `lib/std/exec/shaped_operators.cpp` answer, with the parameters the node carried read
+        // from the call instead: the target type is the result type, the fill kind is the target
+        // type's, and the member's position or name is the call's first operand.
+        {"op/cast", __cast_value__},
+        {"op/fill", __fill_value__},
+        {"op/access", __access_value__},
+        // The member read by name is a second URI (prelude.cml says why): the same kernel, which
+        // reads the string operand as the key.
+        {"op/access_key", __access_value__},
     };
     for (const ConversionRegistration &conversion : kConversions) {
         map.emplace(conversion.name, conversion.impl);
@@ -745,6 +756,19 @@ void registerBuiltinOperatorTraits() {
     // `kAccessFree` and outside `kConversions`, so its three answers are written here with the
     // kernel they belong to.
     registry.set(":op/copy", {.pure = true, .elementwise = false, .mayFault = false});
+    // The three shapes plan 2.3, step 2 turns into operators (`operators/cast.cpp`,
+    // `operators/struct.cpp`). Each reads the values of its own call and writes nothing outside
+    // them, so each is pure and none is elementwise. Each may fault: a conversion checks the value
+    // when the pair's types make it unsafe, a construction checks that the template clones into the
+    // type it is made for, and a member read checks that the member is there. `mayFault` is stated
+    // per operator rather than per pair, which is the one thing the CAST arm could say and this
+    // record cannot: a conversion of a pair whose types make it safe is read as one that may fault,
+    // so a pass keeps it where it stands instead of moving it
+    // (`kernel/runtime/graph.cpp#nodeMayFault` asks this answer once the node is an OPER node).
+    registry.set(":op/cast", {.pure = true, .elementwise = false, .mayFault = true});
+    registry.set(":op/fill", {.pure = true, .elementwise = false, .mayFault = true});
+    registry.set(":op/access", {.pure = true, .elementwise = false, .mayFault = true});
+    registry.set(":op/access_key", {.pure = true, .elementwise = false, .mayFault = true});
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.

@@ -2102,15 +2102,26 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     extentOfResolver(),
                 },
             }),
-        // `copy::<T>(x: T): T`, a second name of a mutable value (plan 2.3, step 1). The group is
-        // empty on purpose and its rule is the declaration of `lib/std/prelude.cml`, the way `len`
-        // and `zip` are declared there: the signature is the declaration's own, one overload for
-        // every type, and the operator's kernel is `operators/copy.cpp`. The other three kinds the
-        // same plan turns into operators -- cast, fill, access -- take a compile-time parameter
-        // (a target type, a member position, a fill's kind and field names) that a record keyed by
-        // URI cannot carry yet, so they are not declared here (`docs/handover/plans/
-        // 2026-11-22-refactor-stage2-interfaces.cn.md` 2.3, and the reader inventory beside it).
+        // `copy::<T>(x: T): T`, a second name of a mutable value (plan 2.3, steps 1 and 2). The
+        // group is empty on purpose and its rule is the declaration of `lib/std/prelude.cml`, the
+        // way `len` and `zip` are declared there: the signature is the declaration's own, one
+        // overload for every type, and the operator's kernel is `operators/copy.cpp`.
         OperatorGroup::create("copy", {}),
+        // The other three shapes of plan 2.3, declared the same way and for the same reason. Their
+        // compile-time parameters are the node's own -- a conversion's target is the call's result
+        // type, a construction's kind is the type it makes and its field order is the call's, and a
+        // member read's position or name is the call's first operand -- so a record keyed by URI
+        // carries them after all, as the operands of the call rather than as payload. Their kernels
+        // are `operators/cast.cpp` (conversion) and `operators/struct.cpp` (construction, access).
+        // The names are the URI's own tail, which is the name `camel inspect --ops` reports for them
+        // (`copy` / `:op/copy`) and what `--verify-ops` compares a declaration with.
+        OperatorGroup::create("cast", {}),
+        OperatorGroup::create("fill", {}),
+        OperatorGroup::create("access", {}),
+        // The member read by name is its own group, and so its own URI: the two reads ask the
+        // value different questions (a position, a name), and a graph that holds the URI has said
+        // which it means without being asked the operand's type.
+        OperatorGroup::create("access_key", {}),
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
