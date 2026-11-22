@@ -7083,3 +7083,7 @@ CI `45001457388` 五腿全绿：`linux` / `linux-x64-nojit` / `ASan + UBSan` / `
 2. **GitHub Actions 只在三个时点手动跑一轮**：每天收工一次；搬家窗口关窗前；发版前。不再随每次合并触发。跨平台的红（Windows、macOS 特有的）在每天那一轮里集中处理。
 3. 之前我写的"每次合并后五条腿全绿才合下一条"、"窗口要等 CI 五腿全绿才关"，按这条改：前者改为本地闸门；后者保留（关窗前跑一轮）。
 4. 把省下来的时间放在开发上：20:55 派的车道（尤其图车道）请尽快开出来。
+
+## 小返工（2026-11-22 23:00）：`builder_decorators.cpp` 两处注释
+
+决策者。装饰器那处无条件的 `#macro` 已删，`OperatorPurity` 清零，好。顺手改两处注释：`src/compile/src/gir/builder_decorators.cpp:77` 还写着 "Decorators run at macro time"，与 99 行起的新说明相反，删掉或改成"按 `d` 自己的声明决定"；103 行 "Writing the flag here was a rule the principles never stated; it is gone." 是改动记录，按"代码里不留过程痕迹"删去，只留现在的规则与理由。
