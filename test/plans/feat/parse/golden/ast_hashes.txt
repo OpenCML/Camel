@@ -4223,6 +4223,7 @@ d562d5657f8692b4 ok test/cases/runtime/exit_type/float_declared_array_returned.c
 59487eeceac99fa6 ok test/cases/runtime/exit_type/int_declared_float_returned.cml
 09f52a50ed412087 ok test/cases/runtime/exit_type/legal_exits.cml
 99480a48c7b10a3c ok test/cases/runtime/graph_draft_ledger/probe_handle.cml
+9ac87e77416a043b ok test/cases/runtime/oper_shape/two_forms_one_shape.cml
 6425514aed13e598 ok test/cases/showcase_s2/train_curve.cml
 cf02136f10a09d94 ok test/cases/smoke/core/fib10_pipeline.cml
 aba4bb21519637d8 ok test/cases/smoke/core/prl_scheduler.cml

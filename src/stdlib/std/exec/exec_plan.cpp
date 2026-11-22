@@ -595,14 +595,15 @@ bool cellDeclaredHere(const GCGraph &graph, gc_node_ref_t cell) {
 /// another variable, a parameter -- has an owner the plan cannot see, so the variable's first update
 /// copies as well.
 ///
-/// The two that make their value here are asked about by shape, not by node kind (plan 2.3): what
-/// makes the answer true is that the operator clones or constructs, which is what the operator says.
+/// The two that make their value here are asked about by the operation, not by node kind (plan
+/// 2.3): what makes the answer true is that the operator clones or constructs, which is what the
+/// operator says -- whether the graph writes it as the kind or as the call.
 bool initialValueMadeHere(const GCGraph &graph, gc_node_ref_t init) {
     const GCNode *node = init == kInvalidNodeRef ? nullptr : graph.node(init);
     if (node == nullptr) {
         return false;
     }
-    switch (camel::execute::shapeOfKind(node->kind)) {
+    switch (camel::execute::shapeOfOperation(graph, init)) {
     case camel::execute::OperShape::Clone:
     case camel::execute::OperShape::Construction:
         return true;
@@ -687,9 +688,9 @@ bool valueMadeHere(const GCGraph &graph, const camel::core::OperatorTable &table
     if (node == nullptr) {
         return false;
     }
-    // A copy and a construction are values made for one holder (plan 2.3: the operator's shape is
-    // what makes the answer true, not the node kind it was built as).
-    switch (camel::execute::shapeOfKind(node->kind)) {
+    // A copy and a construction are values made for one holder (plan 2.3: the operation is what
+    // makes the answer true, not the node kind it was built as, so a call of one counts too).
+    switch (camel::execute::shapeOfOperation(graph, value)) {
     case camel::execute::OperShape::Clone:
     case camel::execute::OperShape::Construction:
         return true;
@@ -1110,7 +1111,7 @@ bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
     if (node == nullptr) {
         return false;
     }
-    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Construction) {
+    if (camel::execute::shapeOfOperation(graph, at) == camel::execute::OperShape::Construction) {
         return true;
     }
     if (node->kind == GCNodeKind::Func) {
@@ -1165,8 +1166,8 @@ bool passesWhatItReadsOn(
         return false;
     }
     // A field or element access writes what it read into its own slot, so the value the reference
-    // was packed into is still its holder (plan 2.3: asked by shape, not by node kind).
-    if (camel::execute::shapeOfKind(node->kind) == camel::execute::OperShape::Access) {
+    // was packed into is still its holder (plan 2.3: asked of the operation, not by node kind).
+    if (camel::execute::shapeOfOperation(graph, at) == camel::execute::OperShape::Access) {
         return true;
     }
     switch (node->kind) {

@@ -504,7 +504,10 @@ slot_t NodeVMSchedPass::call(
             // operator whose fast path is its own implementation's
             // (camel/execute/shaped_operators.h), and it writes the node's slot itself. The four
             // kinds stay in the graph until the front end builds them as OPER (plan 2.3, steps 1
-            // and 2), so `shapeOfKind` is where the node VM still reads them -- once, here.
+            // and 2), so `shapeOfKind` is where the node VM still reads them -- once, here. It is
+            // the kind's own question, not the operation's: what a node does is
+            // `shapeOfOperation`, and an OPER node that names one of the four runs below, on the
+            // ordinary operator path, as the operator it names.
             if (const camel::execute::OperShape shape = camel::execute::shapeOfKind(n->kind);
                 shape != camel::execute::OperShape::None) {
                 camel::execute::runShapedOperator(*currRuntimeGraph, en, *currFrame);

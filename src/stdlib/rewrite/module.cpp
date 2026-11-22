@@ -45,6 +45,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/shaped_operators.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/operator_instance.h"
@@ -2655,19 +2656,26 @@ class RefEvaluator {
         if (node == nullptr || node->kind == camel::runtime::GCNodeKind::Dead) {
             throw std::runtime_error("the reference reads a node that is not there");
         }
-        switch (node->kind) {
-        case camel::runtime::GCNodeKind::Data:
-            return constant(*node);
-        case camel::runtime::GCNodeKind::Port:
-            return argument(ref);
-        case camel::runtime::GCNodeKind::Cast:
-        case camel::runtime::GCNodeKind::Copy: {
+        // A conversion and a copy evaluate to what they were given: asked of the operation, because
+        // a graph may write them as the calls `cast` and `copy`, not only as the kinds the front end
+        // still builds (`camel/execute/shaped_operators.h`).
+        switch (camel::execute::shapeOfOperation(graph_, ref)) {
+        case camel::execute::OperShape::Conversion:
+        case camel::execute::OperShape::Clone: {
             const auto inputs = graph_.normInputsOf(ref);
             if (inputs.empty()) {
                 throw std::runtime_error("the reference reads a copy without an input");
             }
             return eval(inputs.front());
         }
+        default:
+            break;
+        }
+        switch (node->kind) {
+        case camel::runtime::GCNodeKind::Data:
+            return constant(*node);
+        case camel::runtime::GCNodeKind::Port:
+            return argument(ref);
         case camel::runtime::GCNodeKind::Oper:
             return operate(ref);
         default:
