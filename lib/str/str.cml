@@ -56,7 +56,7 @@ func split_kernel(s: string): string[]
 
 #op('str:repeat')
 with <count: int>
-func repeat_kernel(s: string): string
+func repeat_kernel(s: string): string panic
 
 // ---- searching ----
 

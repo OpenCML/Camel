@@ -942,15 +942,15 @@ any Formatter::visitResourceDecl(cst::ResourceDecl context) {
 }
 
 /*
-resourceClause : 'spelling'? ('uses' usesEntry (',' usesEntry)* | 'pure')+
+resourceClause : 'spelling'? ('pure' | 'panic')* ('uses' usesEntry (',' usesEntry)* | 'pure')*
 usesEntry : 'var'? identRef
 */
 any Formatter::visitResourceClause(cst::ResourceClause context) {
-    // `pure` has no name to print; `uses` prints every entry as it was written. The `var` of an
-    // entry is part of what the entry promises -- without it the call reads the resource, with it
-    // the call writes it (design principles 3.3) -- so it is written back, not dropped. A clause
-    // that says both is refused by the semantic check (PureAndUses), and formatting keeps what was
-    // written.
+    // `pure` and `panic` have no name to print; `uses` prints every entry as it was written. The
+    // `var` of an entry is part of what the entry promises -- without it the call reads the
+    // resource, with it the call writes it (design principles 3.3) -- so it is written back, not
+    // dropped. A clause that says both is refused by the semantic check (PureAndUses), and
+    // formatting keeps what was written.
     //
     // `spelling` is the clause's leading word (design principles 9.5) and stands where it was
     // written: a format that dropped it would print a body that no longer declares the capability
@@ -959,18 +959,34 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
     // printed by the loop below like any other.
     const auto entries = context->all<cst::UsesEntry>();
     const bool leading = context->firstToken() && context->firstToken()->text() == "spelling";
-    // `pure` is a token of the clause and no entry: an entry is a `cst::UsesEntry`, so a child
-    // that reads `pure` is the word itself and not a resource named that way.
+    // The words stand before the list, and that is what tells a word from a resource of the same
+    // name: `uses panic` names a resource called `panic` (the parser stops reading words at
+    // `uses`), so only a token standing before the `uses` keyword is the word itself. `pure` was
+    // read as any child that says it, which would have written a `uses pure` entry back as the
+    // word as well; the two are read the same way now.
     bool pure = false;
+    bool panicWord = false;
     for (size_t i = 0; i < context->childCount(); ++i) {
-        if (context->child(i)->text() == "pure") {
-            pure = true;
+        const auto child = context->child(i);
+        if (!child.isToken()) {
+            continue;
+        }
+        const auto text = child.text();
+        if (text == "uses") {
             break;
+        }
+        if (text == "pure") {
+            pure = true;
+        } else if (text == "panic") {
+            panicWord = true;
         }
     }
     string result = leading ? "spelling" : "";
     if (pure) {
         result += (result.empty() ? "" : " ") + string("pure");
+    }
+    if (panicWord) {
+        result += (result.empty() ? "" : " ") + string("panic");
     }
     if (!entries.empty()) {
         if (!result.empty()) {
