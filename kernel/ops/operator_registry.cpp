@@ -203,7 +203,7 @@ const std::string &uriText(Store &s, OperId id) {
 template <typename T, typename Equal, typename Describe>
 void mergeStated(
     std::string_view uri,
-    const char *item,
+    std::string_view item,
     Stated<T> &into,
     const Stated<T> &from,
     Equal equal,
@@ -235,7 +235,7 @@ void mergeStated(
 template <typename T, typename Equal, typename Describe>
 void mergeItem(
     std::string_view uri,
-    const char *item,
+    std::string_view item,
     T &into,
     const T &from,
     const T &unstated,
@@ -316,7 +316,7 @@ void mergeRecord(Record &into, const Record &from) {
         into.panic,
         from.panic,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     mergeStated(
         uri,
@@ -328,7 +328,7 @@ void mergeRecord(Record &into, const Record &from) {
         },
         [](const Signature &v) {
             return std::format(
-                "fallible={}, type={}", v.fallible, v.type != nullptr ? "stated" : "none");
+                "fallible={}, type={}", v.fallible, v.type != nullptr ? std::string_view("stated") : std::string_view("none"));
         });
 
     mergeStated(
@@ -338,7 +338,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.resolver,
         [](const type::resolver_ptr_t &a, const type::resolver_ptr_t &b) { return a == b; },
         [](const type::resolver_ptr_t &v) {
-            return v != nullptr ? "a type rule" : "no type rule";
+            return v != nullptr ? std::string_view("a type rule") : std::string_view("no type rule");
         });
 
     // A `TypeFolder` is a `std::function`: the first statement stands (file header, paragraph 3).
@@ -371,7 +371,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.reusesOperand,
         false,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     mergeItem(
         uri,
@@ -556,7 +556,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.elementwise,
         false,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     mergeItem(
         uri,
@@ -565,7 +565,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.callsGraphs,
         false,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     mergeItem(
         uri,
@@ -574,7 +574,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.readsGraphs,
         false,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     mergeItem(
         uri,
@@ -583,7 +583,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.macro,
         false,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     // `foldable` is true by default, so "the statement states true" and "the statement says
     // nothing" cannot be told apart -- the same reading the C++ entrance's setter takes.
@@ -594,7 +594,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.foldable,
         true,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 
     mergeItem(
         uri,
@@ -603,7 +603,7 @@ void mergeRecord(Record &into, const Record &from) {
         from.withAfterNorm,
         false,
         [](bool a, bool b) { return a == b; },
-        [](bool v) { return v ? "true" : "false"; });
+        [](bool v) { return v ? std::string_view("true") : std::string_view("false"); });
 }
 
 /// `intern`'s body; the caller holds the lock.

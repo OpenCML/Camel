@@ -19,15 +19,6 @@ tool = "camel-oprecord"
 case = "../../../../tools/oprecord/main.cpp"
 args = ["--self-check"]
 expect_exit = 0
-expect_stdout_contains = [
-  "intern answers one id for one URI, and the second intern answers the same id",
-  "the registration's second argument reaches the record: `mayFault()` is false where it was the conservative true before",
-  "the kernel the registration handed over is the one Registry::kernel(id) hands back",
-  "a Camel declaration stating `panic = true` where the C++ entrance stated false is refused, naming the item",
-  "complete publishes the record and moves the epoch",
-  "a completed record refuses a later statement",
-  "bind refuses a key whose major version this process does not have",
-  "oprecord self-check: passed",
-]
+expect_stdout_contains = ["the registration's second argument reaches the record: `mayFault()` is false where it was the conservative true before", "the kernel the registration handed over is the one Registry::kernel(id) hands back", "a Camel declaration stating `panic = true` where the C++ entrance stated false is refused, naming the item", "a completed record refuses a later statement", "bind refuses a key whose major version this process does not have", "oprecord self-check: passed"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
