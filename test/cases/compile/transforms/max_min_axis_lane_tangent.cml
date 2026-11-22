@@ -1,0 +1,92 @@
+// The tangent of a lane extremum, read one element at a time.
+//
+// `stdlib/tensor.cml` defines `max_axis_stated(t, mask, axis, keepdims, extents)` as **the value
+// `max<axis, keepdims>(t)`**, with `mask` holding `true` at every position that holds its lane's
+// largest element; the mask is read by the reverse law (`rulesets.transpose#max_axis_stated_t`) and
+// is no part of the value. So the tangent of `max<axis, keepdims>(xs)` is the tangent of the element
+// the lane selected -- and where the lane's extremum is tied, of every tied element, added, because
+// the reverse law gives the whole cotangent to each of them and its transpose sums their tangents.
+// The whole-tensor law writes exactly that shape (`jvp_max`: `sum(where(xs >= max(xs), dxs, 0.0))`),
+// and the axis form is its counterpart at the lane's shape.
+//
+// A seed that is one at a single element answers that element's column of the per-element gradient:
+// the tangent it returns is `(d lane 0 / d x[i][j], d lane 1 / d x[i][j])`. On
+//
+//     x = [[1.0, 2.0], [3.0, 4.0]]
+//     max<1, false>(x) = [2.0, 4.0]        both maxima in column 1
+//     min<1, false>(x) = [1.0, 3.0]        both minima in column 0
+//
+// so the four seeds answer `max` -> `[0, 0]`, `[1, 0]`, `[0, 0]`, `[0, 1]` and
+// `min` -> `[1, 0]`, `[0, 0]`, `[0, 1]`, `[0, 0]`; written out, the per-element gradient is
+// `[[0, 1], [0, 1]]` for the max and `[[1, 0], [1, 0]]` for the min.
+//
+// The tie is the other reading, on
+//
+//     x = [[2.0, 2.0], [1.0, 3.0]]
+//     max<1, false>(x) = [2.0, 3.0]        row 0's maximum is held twice
+//     min<1, false>(x) = [2.0, 1.0]        row 0's minimum is held twice
+//
+// A seed of ones reads `[2.0, 1.0]` for both: row 0's two tied elements contribute 1.0 each and
+// row 1's single selected element contributes its own 1.0. A law that selected the extremum without
+// the tie selection answers `[1.0, 1.0]` here -- the largest or smallest tangent of the lane, which
+// is a number, and a wrong one.
+//
+//     camel test/cases/compile/transforms/max_min_axis_lane_tangent.cml
+import { max, min } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+
+func lane_max(x: float[...]): float[...] {
+    return max<1, false>(x)
+}
+
+func lane_min(x: float[...]): float[...] {
+    return min<1, false>(x)
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let tied = [[2.0, 2.0], [1.0, 3.0]] as float[2, 2]
+    let e00 = [[1.0, 0.0], [0.0, 0.0]] as float[2, 2]
+    let e01 = [[0.0, 1.0], [0.0, 0.0]] as float[2, 2]
+    let e10 = [[0.0, 0.0], [1.0, 0.0]] as float[2, 2]
+    let e11 = [[0.0, 0.0], [0.0, 1.0]] as float[2, 2]
+    let ones = [[1.0, 1.0], [1.0, 1.0]] as float[2, 2]
+
+    let (max_value, max_00) = jvp(lane_max)(x, e00)
+    let (_mv1, max_01) = jvp(lane_max)(x, e01)
+    let (_mv2, max_10) = jvp(lane_max)(x, e10)
+    let (_mv3, max_11) = jvp(lane_max)(x, e11)
+    `max<1> no-tie forward={}`->format<max_value>->println
+    `max<1> no-tie d/dx[0][0]={}`->format<max_00>->println
+    `max<1> no-tie d/dx[0][1]={}`->format<max_01>->println
+    `max<1> no-tie d/dx[1][0]={}`->format<max_10>->println
+    `max<1> no-tie d/dx[1][1]={}`->format<max_11>->println
+
+    let (max_tied_value, max_tied_ones) = jvp(lane_max)(tied, ones)
+    let (_mt1, max_tied_00) = jvp(lane_max)(tied, e00)
+    let (_mt2, max_tied_10) = jvp(lane_max)(tied, e10)
+    `max<1> tie forward={}`->format<max_tied_value>->println
+    `max<1> tie d/dx=ones {}`->format<max_tied_ones>->println
+    `max<1> tie d/dx[0][0]={}`->format<max_tied_00>->println
+    `max<1> tie d/dx[1][0]={}`->format<max_tied_10>->println
+
+    let (min_value, min_00) = jvp(lane_min)(x, e00)
+    let (_nv1, min_01) = jvp(lane_min)(x, e01)
+    let (_nv2, min_10) = jvp(lane_min)(x, e10)
+    let (_nv3, min_11) = jvp(lane_min)(x, e11)
+    `min<1> no-tie forward={}`->format<min_value>->println
+    `min<1> no-tie d/dx[0][0]={}`->format<min_00>->println
+    `min<1> no-tie d/dx[0][1]={}`->format<min_01>->println
+    `min<1> no-tie d/dx[1][0]={}`->format<min_10>->println
+    `min<1> no-tie d/dx[1][1]={}`->format<min_11>->println
+
+    let (min_tied_value, min_tied_ones) = jvp(lane_min)(tied, ones)
+    let (_nt1, min_tied_00) = jvp(lane_min)(tied, e00)
+    let (_nt2, min_tied_10) = jvp(lane_min)(tied, e10)
+    `min<1> tie forward={}`->format<min_tied_value>->println
+    `min<1> tie d/dx=ones {}`->format<min_tied_ones>->println
+    `min<1> tie d/dx[0][0]={}`->format<min_tied_00>->println
+    `min<1> tie d/dx[1][0]={}`->format<min_tied_10>->println
+    return 0
+}
