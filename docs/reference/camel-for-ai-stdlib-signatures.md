@@ -101,37 +101,37 @@ string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
 error: (kind: string, message: string) => Error
-print: <fmt: string> (x: T, ...rest) => T
-print: (x: T, ...rest) => T
-print: () => void
-println: <fmt: string> (x: T, ...rest) => T
-println: (x: T, ...rest) => T
-println: () => void
-eprintln: <fmt: string> (x: T, ...rest) => T
-eprintln: (x: T, ...rest) => T
-eprintln: () => void
-format: <...args> (fmt: string) => string
+print: <fmt: string> (x: T, ...rest) => T panic
+print: (x: T, ...rest) => T panic
+print: () => void panic
+println: <fmt: string> (x: T, ...rest) => T panic
+println: (x: T, ...rest) => T panic
+println: () => void panic
+eprintln: <fmt: string> (x: T, ...rest) => T panic
+eprintln: (x: T, ...rest) => T panic
+eprintln: () => void panic
+format: <...args> (fmt: string) => string panic
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: A) => int when is_array::<A>()
 len: (x: Bytes) => int
 extent_of: () => int[] when is_array::<A>()
 copy: (x: T) => T
-range: (start: int, end: int, step: int) => int[]
-last: (xs: T[]) => T
-slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
-slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
-slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
+range: (start: int, end: int, step: int) => int[] panic
+last: (xs: T[]) => T panic
+slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[] panic
+slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string panic
+slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes panic
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
-zip: (...xs: ...A) => (...ElementOf<A>)[] when ...is_array::<A>()
+zip: (...xs: ...A) => (...ElementOf<A>)[] panic when ...is_array::<A>()
 append: <value: T> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
 reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
-fail: <Kind: string> (message: string) => never
+fail: <Kind: string> (message: string) => never panic
 attempt: (f: F) => F!
 len: (x: C) => int when is_map::<C>() || is_set::<C>()
 get: <key: K> (m: Map<K, V>) => V?
@@ -188,8 +188,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, var stderr when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! panic uses var fs when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! panic uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
@@ -607,7 +607,7 @@ update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
 
 ```text
 validate: (pattern: string) => string!
-find: <pattern: string, start: int = 0> (text: string) => Match?
+find: <pattern: string, start: int = 0> (text: string) => Match? panic
 has_match: <pattern: string> (text: string) => bool
 find_all: <pattern: string> (text: string) => Match[]
 replace_with: <pattern: string, by: (m: Match) => string> (text: string) => string
@@ -700,17 +700,17 @@ check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 **`rewrite`** — import { ... } from rewrite — 15 name(s)
 
 ```text
-rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! panic when is_function::<F>()
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! panic when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
-check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport panic when is_function::<F>()
 check_text: (r: CheckReport) => string
 coverage_table: string
 explain: <a: Node, b: Node> (r: Run<F>) => Proof!
 explain_all: (r: Run<F>) => Proof!
-why_not: <rule: Rule, v: Node> (r: Run<F>) => string!
+why_not: <rule: Rule, v: Node> (r: Run<F>) => string! panic
 rule_name: (r: Rule) => string
 rule_two_way: (r: Rule) => bool
 rule_needs: (r: Rule) => int
