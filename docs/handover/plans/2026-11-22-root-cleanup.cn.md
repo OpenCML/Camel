@@ -10,10 +10,9 @@ ABOUT  ZEN  AGENTS.md  llms.txt
 CMakeLists.txt  conanfile.txt  package.json  package-lock.json      （及 .github .husky .vscode 与点文件）
 
 src/                                                              我们自己的源码，统计代码量就数这一个目录
-    kernel/  parse/  compile/  lib/  tools/  bindings/
+    kernel/  parse/  compile/  lib/  tools/  bindings/        （tools/ 只放随 Camel 发布的工具）
 third_party/  cmake/                                              第三方源码与构建辅助
 packaging/                                                        发布配置（PyPI 等）
-editors/                                                          编辑器插件（去留待定：插件另有专门仓库）
 examples/  benchmarks/  test/  docs/  scripts/                    示例、基准、测试、文档、脚本
 internal/                                                         内部协作，公开时整体删除
 ```
@@ -22,7 +21,10 @@ internal/                                                         内部协作�
 
 | 现在 | 去处 | 说明 |
 |---|---|---|
-| `kernel/`、`parse/`、`compile/`、`lib/`、`tools/`、`bindings/` | `src/` 下同名目录 | 每块内部结构不变；包含根、构建目标、所有权表、违例清单、文档引用跟着加 `src/` 前缀 |
+| `kernel/`、`parse/`、`compile/`、`lib/`、`bindings/` | `src/` 下同名目录 | 每块内部结构不变；包含根、构建目标、所有权表、违例清单、文档引用跟着加 `src/` 前缀 |
+| `tools/` 里随 Camel 发布的七个：`camel-cli`、`debugger`、`format`、`profiler`、`lang-server`、`codegen`、`camel-cpp` | `src/tools/` | 产品源码，计入代码量（负责人 2026-11-22） |
+| `tools/` 里开发用的三个：`parsecheck`、`diff-gate`、`graph-diff` | `test/tools/` | 只给开发与测试用；根目录不再有 `tools/` |
+| `editors/vscode/` | 删除 | 插件有专门的仓库（负责人 2026-11-22："删了吧"）。同批改掉依赖它的：`test/plans/feat/tools/grammar.plan.toml` 删除；`scripts/context-keywords.mjs`、`scripts/install.js`、`scripts/source-package.mjs`、`test/tools/tree-guard.mjs` 去掉对它的引用；`docs/editor-support.*` 改为指向插件仓库，`docs/debugging.*` 里的插件安装步骤同样改指 |
 | `hello.cml` | `examples/hello.cml` | |
 | `logo.png` | 删除 | 与 `assets/logo.png` 逐字节相同；引用改指 `docs/assets/` |
 | `assets/` | `docs/assets/` | |
