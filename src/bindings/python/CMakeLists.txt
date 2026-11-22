@@ -35,7 +35,7 @@ if(NOT Python3_FOUND)
   return()
 endif()
 
-include(${PROJECT_SOURCE_DIR}/tools/libcamel_tool.cmake)
+include(${PROJECT_SOURCE_DIR}/src/tools/libcamel_tool.cmake)
 
 # Two steps, like every other target that links libcamel: the sources become an OBJECT
 # library whose undefined symbols can be read before libcamel links, and the extension module is
