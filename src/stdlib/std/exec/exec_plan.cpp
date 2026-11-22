@@ -1943,7 +1943,7 @@ void applyRefEntriesOfOpenLoops(camel::core::context::Frame *frame) noexcept {
     if (frame == nullptr) {
         return;
     }
-    const camel::runtime::GCGraph *graph = frame->graph();
+    const auto *graph = frame->graph();
     if (graph == nullptr) {
         return;
     }
