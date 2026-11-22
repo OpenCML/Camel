@@ -126,7 +126,14 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // module in `src/stdlib/std.cml` and `src/stdlib/rulesets/`. There is no single directory to name either
 // way, so the three spellings are resolved here and nowhere else, and this file measures whichever
 // tree it is run in.
-const MOVED_LIBRARY = path.join(REPO_ROOT, 'lib')
+// The library has had three spellings and this file measures whichever tree it runs in. The flat
+// one is a single `stdlib/` at the root. The other two keep one directory per module: `lib/` before
+// our own sources moved under `src/`, and `src/stdlib/` after. Naming only one of them would make
+// this read a directory that is not there and throw instead of reporting.
+const MOVED_LIBRARY = [
+    path.join(REPO_ROOT, 'src', 'stdlib'),
+    path.join(REPO_ROOT, 'lib'),
+].find((dir) => fs.existsSync(dir)) ?? path.join(REPO_ROOT, 'src', 'stdlib')
 const FLAT_LIBRARY = path.join(REPO_ROOT, 'stdlib')
 const FLAT = fs.existsSync(path.join(FLAT_LIBRARY, 'std.cml'))
 const firstOf = (files) => files.find((file) => fs.existsSync(file)) ?? files[0]
