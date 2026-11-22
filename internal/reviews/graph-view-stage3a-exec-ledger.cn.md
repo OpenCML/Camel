@@ -94,7 +94,14 @@ git grep -n 'GCGraph\|GraphDraft' -- 'src/stdlib/std/nvm/**' 'src/stdlib/std/fvm
 - **`trans` 的三红是既有红，且有别的车道在基线上量过**：`internal/lanes.md` 里 `lane/canonical-order-independent` 那一行写着"三红（`trans.pass_dump`、`trans.effect_trace`、`trans.cml`）把 src 暂存掉后在基线 `9680035a4` 上逐项同红"。原因也查得到：`effect_trace` 找 `REPO_ROOT/exemplars/05_effect_order`，而 `exemplars` 早已搬到 `internal/exemplars`（`3bd5e1e7f`）；`print_then_run` 的 8 个 case 里两个指向 `test/cases/src/**`，这条分支没有这个目录（`ROUNDTRIP … differs=2` 正是这两个 `unmeasurable`）；`pass_dump` 要 `tools/graph-diff/graph_diff.py`，同样不在分支里。
 - **`tools` 的六红**：`grammar.tables`、`grammar.files`（宿主没有 `editors/vscode/scripts`）、`load_class.tree`（同一原因的级联：它数的 `tools.grammar:*` 用例不存在）、`tools.member_init.sweep`（发现点在 `src/kernel/facts/include/camel/facts/facts.h`、`src/parse/include/camel/parse/ast/data.h`）、`portability.std_includes`（发现点在 `src/kernel/graph/consistency.cpp`、`draft_view.cpp`）、`compile_bench.smoke`（`benchmarks/compile/bench.py`）。这些文件本片一个都没有碰；fvm 笔与 exec/tools 笔两次读数逐项相同。
 
-全量 `feat/**` 的验收见最后一笔提交说明；没有合 `develop`，基线是 `d4b597106`。
+**全量验收**（`smoke + feat`，`-Jobs 8 -NoGpuWatch`）：`total: 9840, pass: 9743, fail: 32, skip: 24, known failures: 41`，`RUN_EXIT=1`。三十二红逐项归到既有红：
+
+- `trans` 三红、`tools` 六红（上面两组）；
+- `exemplars/0{1..8}` 八红，`gate.plan_inventory` 与 `gate.case_ledger` 两红——同一处：`plan-inventory: no such directory: exemplars`（报错原文），即 `exemplars` 搬到 `internal/exemplars` 之后没跟着改的路径；
+- `docs.*` 七红（`planted_page_is_red`、`planted_page_passes_the_page_rule`、`word_form_only`、`links.citations`、`every_laws_port_agrees_with_its_body`、`the_stated_lane_means_port_is_its_own_open_rank`、`headers.canonical`）与 `runner.backend_matrix`、`plan_validation`、`opt.writings.greedy_fusion_reads_no_writing`、`opt.writings.two_effects_wall_clock`、`runtime.graph_draft_ledger.never_rises`——`internal/lanes.md` 里 `lane/stage2-graph` 那一行已记这些在 `develop` 上同红；
+- `frontend.ast_snapshot`——只差 `src/stdlib/prelude.cml` 一行旧账。
+
+三十二红里没有一条的报错点名本片的六个目录。没有合 `develop`，基线是 `d4b597106`。
 
 ## 7 附录：四百九十七处逐行
 
