@@ -160,7 +160,7 @@ expectFailure('duplicate-name', {
     check('stale-header: exits 1', result.status === 1, `exit ${result.status}`)
     check(
         'stale-header: names the file and the repair',
-        result.stdout.includes('semantic.h is not what diagnostics/registry.tsv produces') &&
+        result.stdout.includes('semantic.h is not what kernel/diagnostics/registry.tsv produces') &&
             result.stdout.includes('--write'),
         result.stdout + result.stderr
     )
@@ -290,10 +290,10 @@ expectFailure('brace-help', {
     const afterHash = hashTree()
     const changed = [...afterHash.keys()].filter((file) => beforeHash.get(file) !== afterHash.get(file))
     const expectedChanged = [
-        'diagnostics/registry.tsv',
+        'kernel/diagnostics/registry.tsv',
         'docs/diagnostics.md',
-        'include/camel/core/error/diagnostics/messages/semantic.h',
-        'src/core/error/diagnostics/messages/semantic.cpp',
+        'kernel/include/camel/core/error/diagnostics/messages/semantic.h',
+        'kernel/core/error/diagnostics/messages/semantic.cpp',
     ]
     check(
         'one-line: only the registry and its generated files changed',

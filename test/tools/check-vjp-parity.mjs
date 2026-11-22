@@ -123,15 +123,17 @@ function buildCopy() {
         fs.copyFileSync(path.join(rulesets, name), path.join(scratch, 'lib', 'rulesets', name))
     }
     // The engine's own sources, so the table the copy is compared against is the tree's. `lib`
-    // cannot be linked whole -- the copy has a `lib/rulesets` of its own -- so its module
-    // directories are linked one by one beside it, and the other block roots are linked as they are.
+    // cannot be linked whole -- the copy owns `lib/rulesets` -- and the gate's walker descends real
+    // directories only, so a linked `lib/<module>` would be read as nothing at all. The copy
+    // therefore holds a copy of each module directory, which is the same bytes and the same
+    // reading; the other block roots are linked whole.
     for (const name of ['kernel', 'compile', 'parse']) {
         link(name)
     }
     fs.mkdirSync(path.join(scratch, 'lib'), { recursive: true })
     for (const entry of fs.readdirSync(path.join(ROOT, 'lib'), { withFileTypes: true })) {
         if (!entry.isDirectory() || entry.name === 'rulesets') continue
-        link(path.join('lib', entry.name))
+        fs.cpSync(path.join(ROOT, 'lib', entry.name), path.join(scratch, 'lib', entry.name), { recursive: true })
     }
     // One law, filed under a name neither table has: the shape of `pick_at` on the day the library
     // answered it and the engine's table had no row.
